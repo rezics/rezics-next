@@ -33,7 +33,8 @@ shelf continuation, reconciliation, membership or Board consumers.
 Label and cover each independently admit available, empty, concealed and unavailable states. Available labels
 carry their native language. Available covers use the shared Cover and image-credit rendering, including credit
 obligations. A selected picker item contributes only its original identity; neither its title, types nor its image
-becomes native review presentation. Starting another inspection removes former presentation immediately. Original
+becomes native review presentation. Starting another inspection removes former presentation immediately, including the metadata used by a later
+saved-retry shelf reconciliation. That metadata can change without changing the sealed command input. Original
 and current Subject references remain separate, and commands continue to address the original Subject.
 
 Decision: use a neutral selected-work heading when the current label is not available, with separate label and cover state text.

@@ -119,6 +119,8 @@ export function createPublicationDraft(
     const target = selected ?? request?.target;
     if (!target) return;
     const read = ++reading;
+    // Display metadata is replaceable; the original command input remains sealed.
+    if (request) request.target = identity(request.target);
     update({ ...state, target: identity(target), preparation: null, preparationState: 'loading' });
     if (!current(ticket)) return;
     let result: PublicationPreparationResult;
@@ -138,25 +140,27 @@ export function createPublicationDraft(
       update({ ...state, target: null, preparation: null, preparationState: result.kind });
       return;
     }
+    const display: PublicationTarget = {
+      ...identity(target),
+      ...(result.preparation.subject.presentation.label.state === 'available'
+        ? {
+            title: result.preparation.subject.presentation.label.value,
+            label: result.preparation.subject.presentation.label.value,
+            labels: {
+              [result.preparation.subject.presentation.label.language]:
+                result.preparation.subject.presentation.label.value,
+            },
+          }
+        : {}),
+      cover:
+        result.preparation.subject.presentation.cover.state === 'available'
+          ? structuredClone(result.preparation.subject.presentation.cover.value)
+          : null,
+    };
+    if (request) request.target = display;
     update({
       ...state,
-      target: {
-        ...identity(target),
-        ...(result.preparation.subject.presentation.label.state === 'available'
-          ? {
-              title: result.preparation.subject.presentation.label.value,
-              label: result.preparation.subject.presentation.label.value,
-              labels: {
-                [result.preparation.subject.presentation.label.language]:
-                  result.preparation.subject.presentation.label.value,
-              },
-            }
-          : {}),
-        cover:
-          result.preparation.subject.presentation.cover.state === 'available'
-            ? structuredClone(result.preparation.subject.presentation.cover.value)
-            : null,
-      },
+      target: display,
       preparation: structuredClone(result.preparation),
       preparationState: 'ready',
     });

@@ -120,6 +120,35 @@ test('installed preparation uses one authenticated generated GET and preserves i
   expect(touches).toBe(0);
 });
 
+test('a saved original retry reconciles only the latest inspected disclosure', async () => {
+  let payload = await shape();
+  let saved = false;
+  const writes: unknown[] = [];
+  const reconciled: unknown[] = [];
+  const draft = createPublicationDraft(
+    realmId,
+    async (input) => {
+      writes.push(input);
+      return saved ? { kind: 'saved', head } : { kind: 'unavailable' };
+    },
+    (_input, target) => reconciled.push(target),
+    () => [],
+    true,
+    undefined,
+    async () => ({ kind: 'ready', preparation: payload }),
+  );
+  await draft.choose(work);
+  await draft.change('publish');
+  payload = await shape('adopt', { label: { state: 'concealed' }, cover: { state: 'concealed' } });
+  await draft.inspect();
+  expect(draft.getSnapshot().outcome?.kind).toBe('unavailable');
+  saved = true;
+  await draft.retry();
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toEqual(writes[0]);
+  expect(reconciled).toEqual([{ id: subjectId, title: '', label: '', labels: {}, types: [], cover: null }]);
+});
+
 test('mounted selected review renders only current generated disclosure, seals unknown intent, reinspects conflicts and retires late focus', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
