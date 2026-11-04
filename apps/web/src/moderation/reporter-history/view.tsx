@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { viewerExposureLifetime, viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
@@ -133,7 +133,7 @@ function ReporterHistoryVisit({
   }, [journey, registerRetire, visitKey]);
   const result = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.serverSnapshot);
   const boundary = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (result.state !== 'loading' && result.state !== 'retired' && boundary.current)
       focus?.arrive(boundary.current, journey.operands(), journey.isConnected);
   }, [focus, journey, result]);
@@ -338,7 +338,7 @@ function HistoryEntry({
   const targetLabel = summary.state === 'available' ? summary.label || m.reporter_status_target() : null;
   const statusHref = selected ? localizeHref(reporterHistoryStatusHref(entry.id, query.cursor)) : undefined;
   return (
-    <li className="rounded-lg border p-4 sm:p-5" data-selected={selected || undefined}>
+    <li className="min-w-0 break-words rounded-lg border p-4 sm:p-5" data-selected={selected || undefined}>
       <article className="space-y-4">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
