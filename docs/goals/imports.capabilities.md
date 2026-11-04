@@ -1203,7 +1203,7 @@ without a native alternate-name statement.
 
 The production cross-media planner now streams the acquired `chars_names` and
 `chars_alias` COPY tables and joins only exact selected character IDs from
-`chars_vns`. `cross-media-entities@7` preserves localized `schema:name` facts,
+`chars_vns`. `cross-media-entities@8` preserves localized `schema:name` facts,
 unqualified Romanized alternate names and alias alternate names with their
 exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
 whole alias. Qualified text does not enter bootstrap labels or aliases, and
@@ -1258,6 +1258,33 @@ projection and digest.
   `services/kernel/test/imports/bangumi-subject-names.test.ts` authors the
   ordinary production-caller review, adoption, reopen and facts-fence journey;
   its native execution remains controller-owned.
+
+## Bangumi character source names
+
+Selected default Bangumi character records retain their exact `infobox` payload
+through `planCrossMediaSeed` and the shared `cross-media-entities@8` converter.
+The reviewed `Crt` grammar supplies cited `schema:name` facts from `name`,
+`name_cn` and `简体中文名`, plus cited `schema:alternateName` facts from its
+labelled `别名` rows. A malformed alias group is withheld as a whole; usable
+names and summary remain independent. Unsupported custom labels are omitted
+with bounded diagnostics while known labels remain usable. The source character ID alone binds the
+native Character. Names do not resolve performers, merge identities, or change
+appearance and voice-credit qualification. The common publication manifest
+owns acceptance/adoption and current public reads; this local journey does not
+claim Search indexing.
+
+Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level `name` stays `und`, `name_cn` stays `zh`, and `简体中文名` is a `zh-Hans` preferred name; within nicknames only the observed full-width comma splits entries and slash sequences stay intact.
+
+- Touches: one default-selected character payload, up to 16 preferred names,
+  64 alternate names and 83 ordinary converter commands.
+- Bound: 1 MiB source line; 32 KiB infobox; depth 2; 64 fields and aliases;
+  4 KiB/500 codepoints per name; 16 diagnostics; existing 65,536-byte
+  normalized record cap. Unsupported nested fields are not interpreted.
+- Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
+  pins alias language and refresh behavior. The real Auth/Access default-seed
+  and common-publication scenario is
+  `services/kernel/test/imports/bangumi-character-names.test.ts`; broader native
+  acceptance remains controller-owned.
 
 ## Default Bangumi anime Episodes
 

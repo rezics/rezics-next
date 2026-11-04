@@ -12,6 +12,11 @@ import {
 } from '@rezics/definitions/bulk';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import {
+  bangumiCharacterNameScalar,
+  bangumiCharacterNameLimits,
+  parseBangumiCharacterInfoboxNames,
+} from './bangumi-character-names.ts';
+import {
   canonicalLanguageTag,
   commandKey,
   inLanguageTag,
@@ -26,7 +31,9 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@7';
+export const converter_revision = 'cross-media-entities@8';
+export const bangumiCharacterNameCommandLimit =
+  2 + bangumiCharacterNameLimits.maxNameFacts + bangumiCharacterNameLimits.maxAlternateNameFacts + 1;
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxClassificationAssociations: 64,
@@ -1091,6 +1098,60 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       identifier: expected,
       maxCommands: vndbCharacterNameLimits.maxCommands,
       diagnostics: characterNames.withheld,
+    };
+  }
+  if (kind === 'bangumi-character') {
+    const nameInput = bangumiCharacterNameScalar(own(raw, 'name', '/name'));
+    const chineseInput = bangumiCharacterNameScalar(own(raw, 'name_cn', '/name_cn'));
+    const infoboxNames = parseBangumiCharacterInfoboxNames(own(raw, 'infobox', '/infobox'));
+    const nameFacts: { language: string; text: string }[] = [];
+    const alternateNames = [...infoboxNames.alternateNames];
+    const labels: Record<string, string> = Object.create(null);
+    const aliases: Record<string, string[]> = Object.create(null);
+    const diagnostics: ConversionDiagnostic[] = [];
+
+    if (nameInput.status === 'admitted') nameFacts.push({ language: 'und', text: nameInput.text });
+    else if (nameInput.status === 'invalid') diagnostics.push({ pointer: '/name', code: 'invalid_source_name' });
+    if (chineseInput.status === 'admitted') nameFacts.push({ language: 'zh', text: chineseInput.text });
+    else if (chineseInput.status === 'invalid')
+      diagnostics.push({ pointer: '/name_cn', code: 'invalid_source_name' });
+    nameFacts.push(...infoboxNames.names);
+    diagnostics.push(...infoboxNames.diagnostics);
+
+    for (const nameFact of nameFacts) {
+      if (labels[nameFact.language] === undefined) labels[nameFact.language] = nameFact.text;
+      else if (labels[nameFact.language] !== nameFact.text)
+        (aliases[nameFact.language] ??= []).push(nameFact.text);
+    }
+    for (const alias of alternateNames) {
+      if (labels[alias.language] === alias.text) continue;
+      if (!(aliases[alias.language] ??= []).includes(alias.text)) aliases[alias.language]!.push(alias.text);
+    }
+
+    const normalized: Normalized = {
+      id: nativeId,
+      ...(nameInput.status === 'admitted' ? { name: nameInput.text } : {}),
+      ...(chineseInput.status === 'admitted' ? { name_cn: chineseInput.text } : {}),
+      ...(nameInput.status === 'invalid' ? { name_source: nameInput } : {}),
+      ...(chineseInput.status === 'invalid' ? { name_cn_source: chineseInput } : {}),
+      infobox_source: infoboxNames.source,
+    };
+    const characterKind = own(raw, 'type', '/type');
+    if (characterKind !== undefined) normalized.type = characterKind;
+    const summary = own(raw, 'summary', '/summary');
+    if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
+    projectEntityLinks(kind, raw, expected, normalized);
+    if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > 65_536) fail('', 'invalid_record_byte_limit');
+    return {
+      normalized,
+      type,
+      labels,
+      ...(Object.keys(aliases).length ? { aliases } : {}),
+      names: nameFacts,
+      alternateNames,
+      identifier: expected,
+      maxCommands: bangumiCharacterNameCommandLimit,
+      ...(diagnostics.length ? { diagnostics: diagnostics.slice(0, bangumiCharacterNameLimits.maxDiagnostics) } : {}),
     };
   }
   const name = own(raw, 'name', '/name');
