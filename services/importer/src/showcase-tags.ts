@@ -474,7 +474,7 @@ export async function prepareShowcaseTags(input: {
   selectedVids: readonly string[];
   port: CrossMediaPort;
   known?: VndbPublicTagKnownBindings;
-  fetch?: typeof fetch;
+  fetch?: VndbTagRatingFetch;
 }) {
   const known = input.known ?? { schemes: [], concepts: [] };
   const projected = await projectShowcaseTagTables(

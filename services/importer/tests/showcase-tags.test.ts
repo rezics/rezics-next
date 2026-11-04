@@ -24,6 +24,7 @@ import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../src/vndb-tables.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
 import {
   importShowcaseTags,
   knownShowcaseTagBindings,
@@ -54,7 +55,7 @@ const associationCopy = [
   '2026-10-24\tg900\tv999\tu9001\t3\t0\tf\tf\t\\N',
 ];
 const parentCopy = ['g311\tg12\tt'];
-const unavailableKanaFetch: typeof fetch = async () => {
+const unavailableKanaFetch: VndbTagRatingFetch = async () => {
   throw new Error('Kana unavailable in authored test');
 };
 
@@ -210,7 +211,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
         more: false,
         results: [{ id: 'v410', tags: [{ id: 'g311', rating, spoiler, lie: false }, { id: 'g44', rating: 0.75, spoiler: 0, lie: false }] }],
       });
-    const fetchRatings: typeof fetch = async (input, init) => {
+    const fetchRatings: VndbTagRatingFetch = async (input, init) => {
       expect(String(input)).toBe(vndbTagsRatingEndpoint);
       expect(JSON.parse(String(init?.body))).toEqual({
         filters: ['id', '=', 'v410'],
