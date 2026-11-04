@@ -2146,6 +2146,7 @@
   "settings_verification_read_unavailable": "현재 인증 상태를 다시 불러오세요. 다시 불러와도 인증 신청을 제출하거나 철회하지 않습니다.",
   "settings_verification_loading": "인증 상태를 불러오는 중…",
   "settings_verification_organization": "조직",
+  "settings_verification_approving": "{subject} 인증 요청을 승인 중입니다.",
   "settings_verification_pending": "{subject} 인증 요청을 검토 중입니다.",
   "settings_verification_person": "인물",
   "settings_verification_rejected": "요청 거부: {reason}",

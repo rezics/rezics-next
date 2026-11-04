@@ -17,6 +17,7 @@ import {
   finishAgentVerification,
   mergeVerifiedAgent,
   readAgentVerificationWorkflowRequest,
+  readAgentVerificationStatus,
   readLatestAgentVerificationRequest,
   recordPendingAgentVerification,
 } from '../../src/access/agent-verification.ts';
@@ -353,6 +354,9 @@ test('person and organization manager requests, withdrawal, pending page, reject
   const ownLatest = await get(`/v1/accounts/${person.id}/verification`, personBearer);
   expect(ownLatest.response.status).toBe(200);
   expect(ownLatest.body.verificationRequest.id).toBe(created.body.verificationRequest.id);
+  expect(ownLatest.body.viewerActions).toEqual([
+    { action: 'account:update', operations: ['account.withdraw_verification'] },
+  ]);
 
   const withdrawn = await post(`/v1/accounts/${person.id}:withdrawVerification`, personBearer, {});
   expect(withdrawn.response.status).toBe(200);
@@ -370,6 +374,9 @@ test('person and organization manager requests, withdrawal, pending page, reject
   const organizationLatest = await get(`/v1/accounts/${organization.id}/verification`, managerBearer);
   expect(organizationLatest.response.status).toBe(200);
   expect(organizationLatest.body.verificationRequest.id).toBe(organizationRequest.body.verificationRequest.id);
+  expect(organizationLatest.body.viewerActions).toEqual([
+    { action: 'account:manage', operations: ['account.withdraw_verification'] },
+  ]);
 
   const resubmitted = await request(person, personCatalogue, personBearer);
   expect(resubmitted.response.status).toBe(201);
@@ -539,21 +546,36 @@ test('A retained terminal organization verification request with an erased reque
     retainedOrganization.id,
   );
   expect(native).toEqual({ ...rejected.body.verificationRequest, requestedBy: null });
+  const nativeStatus = await readAgentVerificationStatus(
+    pool,
+    access,
+    { pool, actor, deadline: Date.now() + 10_000 },
+    retainedOrganization.id,
+  );
   const read = await get(path, successorBearer);
   expect(read.response.status).toBe(200);
-  expect(read.body).toEqual({ verificationRequest: native });
+  expect(read.body).toEqual(nativeStatus);
+  expect(nativeStatus.verificationRequest).toEqual(native);
   expect(Object.hasOwn(read.body.verificationRequest, 'requestedBy')).toBe(true);
   expect(read.body.verificationRequest.requestedBy).toBeNull();
 
   const route = kernel.routes.find((route) => route.hooks.detail?.operationId === 'account.read_verification_request');
   const schema = (route!.hooks.response as Record<number, TSchema>)[200]!;
   expect(Value.Check(schema, read.body)).toBe(true);
-  expect(Value.Check(schema, { verificationRequest: { ...native, requestedBy: manager.id } })).toBe(true);
+  expect(
+    Value.Check(schema, {
+      verificationRequest: { ...native, requestedBy: manager.id },
+      viewerActions: read.body.viewerActions,
+    }),
+  ).toBe(true);
+  expect(Value.Check(schema, { verificationRequest: native })).toBe(false);
   for (const requestedBy of ['not-a-uuid', '', 42, false, {}, [], undefined])
-    expect(Value.Check(schema, { verificationRequest: { ...native, requestedBy } })).toBe(false);
+    expect(
+      Value.Check(schema, { verificationRequest: { ...native, requestedBy }, viewerActions: [] }),
+    ).toBe(false);
   const missingRequester = { ...read.body.verificationRequest };
   delete missingRequester.requestedBy;
-  expect(Value.Check(schema, { verificationRequest: missingRequester })).toBe(false);
+  expect(Value.Check(schema, { verificationRequest: missingRequester, viewerActions: [] })).toBe(false);
 
   const outsider = await get(path, await bearer(otherAccount));
   expect(outsider.response.status).toBe(403);
@@ -566,6 +588,79 @@ test('A retained terminal organization verification request with an erased reque
   const revoked = await get(path, successorBearer);
   expect(revoked.response.status).toBe(403);
   expect(revoked.body).toMatchObject({ code: 'forbidden' });
+});
+
+test('private verification status projects request and withdraw advice across unrelated request histories', async () => {
+  const applicant = await seedAccount('status_applicant');
+  const orgManager = await seedAccount('status_org_manager');
+  const org = await seedAccount('status_org', { kind: 'organization' });
+  const reviewer = await seedAccount('status_reviewer');
+  await pool.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES ($1, $2, $3, 'account:manage', '(,)', $3)`,
+    [accountRoute, org.id, orgManager.id],
+  );
+  for (const [account, kind] of [
+    [applicant, 'person'],
+    [org, 'organization'],
+    [reviewer, 'person'],
+  ] as const)
+    await ensureAccountAgent(pool, {
+      account: account.id,
+      kind,
+      name: account.displayName,
+      language: 'en',
+    });
+  const personSubject = await catalogueSubject('schema:Person', 'Status Person');
+  const orgSubject = await catalogueSubject('schema:Organization', 'Status Organization');
+  const otherSubject = await catalogueSubject('schema:Person', 'Status Other');
+
+  const applicantBearer = await bearer(applicant);
+  const empty = await get(`/v1/accounts/${applicant.id}/verification`, applicantBearer);
+  expect(empty.response.status).toBe(200);
+  expect(empty.body.verificationRequest).toBeNull();
+  expect(empty.body.viewerActions).toEqual([
+    { action: 'account:update', operations: ['account.request_verification'] },
+  ]);
+
+  const created = await request(applicant, personSubject, applicantBearer);
+  expect(created.response.status).toBe(201);
+  const pending = await get(`/v1/accounts/${applicant.id}/verification`, applicantBearer);
+  expect(pending.body.verificationRequest.state).toBe('pending');
+  expect(pending.body.viewerActions).toEqual([
+    { action: 'account:update', operations: ['account.withdraw_verification'] },
+  ]);
+
+  const readOnly = await get(
+    `/v1/accounts/${applicant.id}/verification`,
+    await bearer(applicant, ['account:read', 'gate:any']),
+  );
+  expect(readOnly.response.status).toBe(200);
+  expect(readOnly.body.verificationRequest.id).toBe(pending.body.verificationRequest.id);
+  expect(readOnly.body.viewerActions).toEqual([]);
+
+  const managerBearer = await bearer(orgManager);
+  const orgCreated = await request(org, orgSubject, managerBearer);
+  expect(orgCreated.response.status).toBe(201);
+  const withdrawn = await post(`/v1/accounts/${org.id}:withdrawVerification`, managerBearer, {});
+  expect(withdrawn.response.status).toBe(200);
+  const terminal = await get(`/v1/accounts/${org.id}/verification`, managerBearer);
+  expect(terminal.body.verificationRequest.state).toBe('withdrawn');
+  expect(terminal.body.viewerActions).toEqual([
+    { action: 'account:manage', operations: ['account.request_verification'] },
+  ]);
+
+  const reviewerBearer = await bearer(reviewer);
+  const otherCreated = await request(reviewer, otherSubject, reviewerBearer);
+  expect(otherCreated.response.status).toBe(201);
+  await pool.query(
+    `UPDATE access.agent_verification_request SET state = 'approving', updated_at = statement_timestamp()
+     WHERE request_id = $1`,
+    [otherCreated.body.verificationRequest.id],
+  );
+  const approving = await get(`/v1/accounts/${reviewer.id}/verification`, reviewerBearer);
+  expect(approving.body.verificationRequest.state).toBe('approving');
+  expect(approving.body.viewerActions).toEqual([]);
 });
 
 test('automated accounts cannot request verification and a refused semantic merge leaves the account unverified', async () => {

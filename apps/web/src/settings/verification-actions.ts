@@ -74,14 +74,14 @@ export const readVerificationState = createServerFn({ method: 'GET' })
     if (accountId !== expectedAccountId) throw new Error(m.settings_verification_identity_changed());
     const client = kernelClient();
     const { readVerification, VerificationReadError } = await import('./verification-core');
-    let verificationRequest;
+    let status;
     try {
-      verificationRequest = await readVerification(client, accountId, authorization, request.signal);
+      status = await readVerification(client, accountId, authorization, request.signal);
     } catch (error) {
       if (error instanceof VerificationReadError) return { ok: false as const, failure: error.failure };
       throw error;
     }
-    return { ok: true as const, value: { accountId, verificationRequest, subjectTitle: null } };
+    return { ok: true as const, value: { accountId, ...status, subjectTitle: null } };
   });
 
 export const readVerificationSubjectTitle = createServerFn({ method: 'GET' })

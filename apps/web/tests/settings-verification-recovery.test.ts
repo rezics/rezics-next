@@ -27,7 +27,12 @@ mock.module('@tanstack/react-start/server', () => ({
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { VerificationCard } = await import('../src/settings/verification');
 
-const empty: VerificationSnapshot = { accountId: 'alice', verificationRequest: null, subjectTitle: null };
+const empty: VerificationSnapshot = {
+  accountId: 'alice',
+  verificationRequest: null,
+  viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
+  subjectTitle: null,
+};
 const noCommand = async (): Promise<never> => {
   throw new Error('Unexpected verification command');
 };
@@ -42,7 +47,10 @@ test('Keep verification status observation separate from its private read preser
       expect(request.method).toBe('GET');
       expect(new URL(request.url).pathname).toBe('/v1/accounts/alice/verification');
       expect(request.headers.get('authorization')).toBe('Bearer alice-only');
-      return Response.json({ verificationRequest: null });
+      return Response.json({
+        verificationRequest: null,
+        viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
+      });
     }) as typeof fetch,
   });
   let notifications = 0;
@@ -58,7 +66,7 @@ test('Keep verification status observation separate from its private read preser
         ok: true,
         value: {
           ...empty,
-          verificationRequest: await readVerification(native, 'alice', 'Bearer alice-only'),
+          ...(await readVerification(native, 'alice', 'Bearer alice-only')),
         },
       }),
   };
@@ -194,6 +202,27 @@ test('the current card announces loading, native read failure and explicit empty
     client.clear();
     overwriteServerAsyncLocalStorage(previous);
   }
+});
+
+test('readable status with no admitted command never unlocks Request', async () => {
+  const denied: VerificationSnapshot = { ...empty, viewerActions: [] };
+  const controller = new VerificationRecovery('alice', {
+    read: async () => denied,
+    request: noCommand,
+    withdraw: noCommand,
+  });
+  await controller.reload();
+  expect(canRequestVerification(controller.snapshot().current)).toBe(false);
+  const html = renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(VerificationCard, { controller, csrfToken: 'current-csrf' }),
+    ),
+  );
+  expect(html).toContain(m.settings_verification_read_empty());
+  expect(html).not.toContain(`>${m.settings_verification_submit()}<`);
+  controller.deactivate();
 });
 
 test('empty and failed reads never settle an unknown original command, and retired readers cannot publish a late result', async () => {

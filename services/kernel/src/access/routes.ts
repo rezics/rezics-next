@@ -59,7 +59,7 @@ import {
   AgentVerificationConflictError,
   AgentVerificationDeniedError,
   createAgentVerificationCommands,
-  readLatestAgentVerificationRequest,
+  readAgentVerificationStatus,
   readPendingAgentVerificationRequests,
   type AgentVerificationRequest,
   type PendingVerificationPage,
@@ -191,8 +191,15 @@ const agentVerificationRequest = t.Unsafe<AgentVerificationRequest>(
     closed,
   ),
 );
+const agentVerificationViewerAction = t.Object(
+  { action: t.String(), operations: t.Array(t.String(), { minItems: 1, uniqueItems: true }) },
+  closed,
+);
 const agentVerificationRequestEnvelope = t.Object(
-  { verificationRequest: t.Union([agentVerificationRequest, t.Null()]) },
+  {
+    verificationRequest: t.Union([agentVerificationRequest, t.Null()]),
+    viewerActions: t.Array(agentVerificationViewerAction),
+  },
   closed,
 );
 const pendingVerificationEnvelope = t.Unsafe<PendingVerificationPage>(
@@ -708,7 +715,7 @@ export function accessRoutes(
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         try {
           const value = await admission.run('normal', job, () =>
-            readLatestAgentVerificationRequest(
+            readAgentVerificationStatus(
               dependencies.pool,
               dependencies.access(),
               { pool: dependencies.pool, actor, deadline: job.deadline },
@@ -716,7 +723,7 @@ export function accessRoutes(
             ),
           );
           set.headers['cache-control'] = 'private, no-store';
-          return { verificationRequest: value };
+          return value;
         } catch (error) {
           verificationDenied(error);
         }

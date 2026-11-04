@@ -606,7 +606,12 @@ request its own actor account; an organization's manager may request that organi
 `account:manage` authority. The catalogue subject must be a visible `schema:Person` or `schema:Organization` when the
 request is approved. Statements contain 1–2000 characters; links follow the account profile limits. Only one request
 per account may be pending or in approval. `GET /v1/accounts/{accountId}/verification` returns that account's latest
-request, and `POST /v1/accounts/{accountId}:withdrawVerification` withdraws its pending request.
+request plus closed `viewerActions` for `account.request_verification` and
+`account.withdraw_verification`. Advice reuses verification account authority, live target kind/state, and the
+command's current request conditions. Empty `viewerActions` is a complete negative: a readable status may admit no
+command, and `account:read` never becomes `account:update`. Missing authority preparation returns the latest request
+with empty advice and is never treated as no request. Advice is advisory; command-time checks remain authoritative.
+`POST /v1/accounts/{accountId}:withdrawVerification` withdraws its pending request.
 
 Platform governance reviews `GET /v1/verification-requests?state=pending`, which returns
 `{ verificationRequests, next }` with an opaque `encodeListCursor` cursor bound to the route, governance viewer,

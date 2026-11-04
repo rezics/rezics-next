@@ -30,6 +30,14 @@ export function setFakeVerificationState(state: 'none' | 'pending' | 'approved' 
         };
 }
 
+function verificationViewerActions(current: Record<string, unknown> | null) {
+  if (!current || current.state === 'withdrawn' || current.state === 'failed' || current.state === 'rejected')
+    return [{ action: 'account:update', operations: ['account.request_verification'] }];
+  if (current.state === 'pending')
+    return [{ action: 'account:update', operations: ['account.withdraw_verification'] }];
+  return [];
+}
+
 async function body(request: Request): Promise<Record<string, unknown>> {
   const value: unknown = await request
     .clone()
@@ -41,8 +49,16 @@ async function body(request: Request): Promise<Record<string, unknown>> {
 const read: FakeRoute = {
   method: 'GET',
   path: verificationPath,
-  story: () => ({ status: 200, verificationRequest: request }),
-  fixture: () => ({ status: 200, verificationRequest: request }),
+  story: () => ({
+    status: 200,
+    verificationRequest: request,
+    viewerActions: verificationViewerActions(request),
+  }),
+  fixture: () => ({
+    status: 200,
+    verificationRequest: request,
+    viewerActions: verificationViewerActions(request),
+  }),
 };
 
 const subject: FakeRoute = {

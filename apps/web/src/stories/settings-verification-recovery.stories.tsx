@@ -41,7 +41,12 @@ function CurrentStatusCard({
             message: m.settings_unavailable_text(),
             requestId: 'illustrative-status-read',
           });
-        return { accountId: currentAccountId, verificationRequest: null, subjectTitle: null };
+        return {
+          accountId: currentAccountId,
+          verificationRequest: null,
+          viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
+          subjectTitle: null,
+        };
       },
       request: async () => {
         throw new Error('This status-read story does not send commands');
@@ -217,7 +222,16 @@ function readRecoveryTransport(fallback: typeof fetch) {
           },
           { status: 503, headers: { 'retry-after': '2' } },
         );
-      return Response.json({ verificationRequest: current });
+      return Response.json({
+        verificationRequest: current,
+        viewerActions: current
+          ? current.state === 'pending'
+            ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
+            : ['withdrawn', 'failed', 'rejected'].includes(current.state)
+              ? [{ action: 'account:update', operations: ['account.request_verification'] }]
+              : []
+          : [{ action: 'account:update', operations: ['account.request_verification'] }],
+      });
     }
     if (request.method === 'POST' && url.pathname === '/v1/accounts/story-viewer:requestVerification') {
       const draft = (await request.json()) as Omit<VerificationInput, 'idempotencyKey'>;

@@ -81,7 +81,11 @@ test('stalled released eligibility retries a fresh read; title failure cannot ch
     const client = createKernelClient('https://kernel.test', {
       fetch: (async (url, init) => {
         const path = new URL(new Request(url, init).url).pathname;
-        if (path.endsWith('/verification')) return Response.json({ verificationRequest: request });
+        if (path.endsWith('/verification'))
+          return Response.json({
+            verificationRequest: request,
+            viewerActions: [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
+          });
         if (path.endsWith('/active')) return Response.json({ digest: 'current' });
         if (path.includes('/releases/'))
           return ++releaseReads === 1
@@ -91,10 +95,14 @@ test('stalled released eligibility retries a fresh read; title failure cannot ch
       }) as typeof fetch,
     });
     const confirmed = await readVerification(client, 'alice', 'Bearer current');
+    const confirmedRequest = confirmed.verificationRequest;
     await expect(readVerificationEligibility(client, 'Bearer current')).rejects.toThrow('timed out');
     expect((await readVerificationEligibility(client, 'Bearer current')).types).toHaveProperty('schema:Person');
     expect(await readVerificationTitle(client, input.subject, 'Bearer current', ['en'])).toBeNull();
-    expect(confirmed).toEqual(request);
+    expect(confirmedRequest).toEqual(request);
+    expect(confirmed.viewerActions).toEqual([
+      { action: 'account:update', operations: ['account.withdraw_verification'] },
+    ]);
     expect(releaseReads).toBe(2);
   }));
 
@@ -106,7 +114,15 @@ test('review and lost submission recover explicitly with exact input, identity a
     const controller = new VerificationRecovery('alice', {
       read: async () => {
         if (++reads === 1 || reads === 4) return never();
-        return { accountId: 'alice', verificationRequest: reads === 2 ? null : request, subjectTitle: null };
+        return {
+          accountId: 'alice',
+          verificationRequest: reads === 2 ? null : request,
+          viewerActions:
+            reads === 2
+              ? [{ action: 'account:update', operations: ['account.request_verification'] }]
+              : [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
+          subjectTitle: null,
+        };
       },
       request: async (_account, draft) => {
         sent.push(draft);

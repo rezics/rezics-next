@@ -45,7 +45,12 @@ const page = {
   notifications: { reply: true, mention: false },
 };
 const collection = { id: 'owned', title: 'Reading', visibility: 'private' as const, revision: 7 };
-const empty: VerificationSnapshot = { accountId: 'alice', verificationRequest: null, subjectTitle: null };
+const empty: VerificationSnapshot = {
+  accountId: 'alice',
+  verificationRequest: null,
+  viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
+  subjectTitle: null,
+};
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((yes) => {
@@ -672,6 +677,7 @@ test('Verification withdrawal uses the original explicit token and keeps its exa
   const tokens: string[] = [];
   const current: VerificationSnapshot = {
     ...empty,
+    viewerActions: [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
     verificationRequest: {
       id: 'original-request',
       accountId: 'alice',

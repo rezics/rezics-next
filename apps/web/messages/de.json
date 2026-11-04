@@ -2146,6 +2146,7 @@
   "settings_verification_read_unavailable": "Versuche, den aktuellen Verifizierungsstatus neu zu laden. Dabei wird kein Verifizierungsantrag gesendet oder zurückgezogen.",
   "settings_verification_loading": "Verifizierungsstatus wird geladen …",
   "settings_verification_organization": "Organisation",
+  "settings_verification_approving": "Anfrage für {subject} wird genehmigt.",
   "settings_verification_pending": "Anfrage für {subject} wird geprüft.",
   "settings_verification_person": "Person",
   "settings_verification_rejected": "Anfrage abgelehnt: {reason}",

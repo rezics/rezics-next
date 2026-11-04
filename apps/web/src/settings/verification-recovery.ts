@@ -3,6 +3,7 @@ import { withVerificationDeadline } from './verification-request-deadline';
 import {
   VerificationReadError,
   type AgentVerificationRequest,
+  type AgentVerificationViewerAction,
   type VerificationCommandResult,
   type VerificationFailure,
   type VerificationInput,
@@ -12,6 +13,7 @@ import { preferenceRetryDeadline } from './preference-failure-retry';
 export type VerificationSnapshot = {
   accountId: string;
   verificationRequest: AgentVerificationRequest | null;
+  viewerActions: AgentVerificationViewerAction[];
   subjectTitle: string | null;
 };
 export type VerificationAttempt = Readonly<
@@ -59,13 +61,30 @@ export function observeVerificationRead(
       changed();
   });
 }
+const REQUEST_OPERATION = 'account.request_verification';
+const WITHDRAW_OPERATION = 'account.withdraw_verification';
+
+function admitsVerificationOperation(current: VerificationSnapshot | null, operation: string): boolean {
+  return !!current?.viewerActions.some((entry) => entry.operations.includes(operation));
+}
+
 export function canRequestVerification(current: VerificationSnapshot | null): boolean {
-  const request = current?.verificationRequest;
-  return !!current && (!request || ['withdrawn', 'failed', 'rejected'].includes(request.state));
+  return admitsVerificationOperation(current, REQUEST_OPERATION);
 }
 export function canWithdrawVerification(current: VerificationSnapshot | null): boolean {
-  // The native withdrawal command accepts pending requests only.
-  return current?.verificationRequest?.state === 'pending';
+  return admitsVerificationOperation(current, WITHDRAW_OPERATION);
+}
+
+/** Bind withdrawal confirmation to this observation; a newer request, state, or advice is a different command. */
+export function verificationWithdrawalObservation(current: VerificationSnapshot | null): string | null {
+  const request = current?.verificationRequest;
+  if (!current || !request) return null;
+  return JSON.stringify({
+    id: request.id,
+    state: request.state,
+    updatedAt: request.updatedAt,
+    viewerActions: current.viewerActions,
+  });
 }
 function frozen<T extends object>(value: T): T {
   Object.values(value).forEach((part) => {
