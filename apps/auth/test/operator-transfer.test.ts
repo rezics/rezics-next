@@ -456,6 +456,7 @@ test('The default operator-transfer page supports request and acceptance file ha
 
     await mount(stories.SourceRequest);
     const beforeImport = saved();
+    expect(beforeImport).toMatchObject({ side: 'source', phase: 'approve' });
     const writesBeforeImport = mutations.length;
     await select('acceptance', [new File([reference], 'response.bin')]);
     expect(raw('transfer-acceptance')).toBe(reference);
@@ -473,6 +474,7 @@ test('The default operator-transfer page supports request and acceptance file ha
     expect(mutations).toHaveLength(writesBeforeImport);
     await confirm();
     await click(m.auth_transfer_submit());
+    expect(mutations).toHaveLength(writesBeforeImport + 2);
     expect(mutations.at(-1)).toEqual({
       path: '/account-operations/execute',
       body: {
