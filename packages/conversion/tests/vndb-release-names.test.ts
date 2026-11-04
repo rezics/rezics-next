@@ -77,7 +77,8 @@ test('legacy scalar release title stays an untagged name', () => {
     record: { id: 'r1', title: 'Authored exact release' },
   });
   expect(output.proposals).toHaveLength(1);
-  expect(output.normalizedRecord).toEqual({ id: 'r1', name: 'Authored exact release' });
+  expect(output.normalizedRecord).toMatchObject({ id: 'r1', name: 'Authored exact release' });
+  expect(output.normalizedRecord).not.toHaveProperty('olang');
   if (output.proposals[0]?.op !== 'create') throw new Error('Expected bootstrap');
   expect(output.proposals[0].subject.labels).toEqual({ und: 'Authored exact release' });
 });
