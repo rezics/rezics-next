@@ -6798,7 +6798,8 @@ enumerations:
           status: existing
           term: rezics:crossMediaCounterpart
           'on': schema:TVSeries
-          meaning: The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
+          meaning:
+            The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
             holder.
           sources:
             - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml

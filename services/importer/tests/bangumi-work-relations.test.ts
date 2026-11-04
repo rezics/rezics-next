@@ -82,8 +82,20 @@ test('production graph journals immutable relation commands and retries without 
       sourceEndpoint: '11',
       mappingRevision: 'bangumi-relation-2@2:12:6',
       evidence: [
-        { path: '/subject-relations/10/11', code: 12, sourceSubject: '10', sourceEndpoint: '11', digest: 'a'.repeat(64) },
-        { path: '/subject-relations/11/10', code: 6, sourceSubject: '11', sourceEndpoint: '10', digest: 'b'.repeat(64) },
+        {
+          path: '/subject-relations/10/11',
+          code: 12,
+          sourceSubject: '10',
+          sourceEndpoint: '11',
+          digest: 'a'.repeat(64),
+        },
+        {
+          path: '/subject-relations/11/10',
+          code: 6,
+          sourceSubject: '11',
+          sourceEndpoint: '10',
+          digest: 'b'.repeat(64),
+        },
       ],
     },
   };
@@ -132,7 +144,12 @@ test('production graph journals immutable relation commands and retries without 
     });
 
   graph.remember([draft]);
-  const initialSnapshot = { currentKeys: [graphEdgeKey(draft)], scope: ['10', '11'], digest: 'd'.repeat(64), complete: true };
+  const initialSnapshot = {
+    currentKeys: [graphEdgeKey(draft)],
+    scope: ['10', '11'],
+    digest: 'd'.repeat(64),
+    complete: true,
+  };
   const first = await deliver(initialSnapshot);
   const firstRow = database
     .query('SELECT status, command_payload FROM cross_media_graph WHERE edge_key=?')
@@ -159,10 +176,19 @@ test('production graph journals immutable relation commands and retries without 
   const changed = {
     ...draft,
     property: 'wdt:P361',
-    relation: { ...changedRelation, mappingRevision: 'bangumi-relation-2@2:12:one-sided', evidence: [draft.relation!.evidence[0]!] },
+    relation: {
+      ...changedRelation,
+      mappingRevision: 'bangumi-relation-2@2:12:one-sided',
+      evidence: [draft.relation!.evidence[0]!],
+    },
   };
   reopened.remember([changed]);
-  const changedSnapshot = { currentKeys: [graphEdgeKey(changed)], scope: ['10', '11'], digest: 'e'.repeat(64), complete: true };
+  const changedSnapshot = {
+    currentKeys: [graphEdgeKey(changed)],
+    scope: ['10', '11'],
+    digest: 'e'.repeat(64),
+    complete: true,
+  };
   expect((await deliver(changedSnapshot)).proposed).toHaveLength(1);
   const preserved = reopenedDatabase
     .query('SELECT command_payload FROM cross_media_graph WHERE edge_key=?')
@@ -181,7 +207,15 @@ test('production graph journals immutable relation commands and retries without 
       sourceSubject: '12',
       sourceEndpoint: '13',
       path: '/subject-relations/12/13',
-      evidence: [{ path: '/subject-relations/12/13', code: 12, sourceSubject: '12', sourceEndpoint: '13', digest: 'c'.repeat(64) }],
+      evidence: [
+        {
+          path: '/subject-relations/12/13',
+          code: 12,
+          sourceSubject: '12',
+          sourceEndpoint: '13',
+          digest: 'c'.repeat(64),
+        },
+      ],
     },
   };
   reopened.remember([fencedDraft]);
@@ -200,18 +234,25 @@ test('production graph journals immutable relation commands and retries without 
     holder: '14',
     target: '999',
     record: { subject_id: 14, related_subject_id: 999, relation_type: 12 },
-    relation: { ...fencedDraft.relation!, sourceSubject: '14', sourceEndpoint: '999', path: '/subject-relations/14/999' },
+    relation: {
+      ...fencedDraft.relation!,
+      sourceSubject: '14',
+      sourceEndpoint: '999',
+      path: '/subject-relations/14/999',
+    },
   };
   reopened.remember([missingDraft]);
   const missing = await reopened.deliver({
-    claim: ({ external_id }) => external_id === '999' ? { state: 'pending' } : claim({ external_id }),
+    claim: ({ external_id }) => (external_id === '999' ? { state: 'pending' } : claim({ external_id })),
     nativeType: () => 'schema:TVSeries',
     fence: async ({ externalId }) => ({ fenced: externalId === '12' || externalId === '13', securityRevision: null }),
     batch: async () => {
       throw new Error('Missing endpoint reached the write transport');
     },
   });
-  expect(missing.unresolved.map(({ reason }) => reason).sort()).toEqual(['fenced_relation_holder', 'missing_endpoint:999'].sort());
+  expect(missing.unresolved.map(({ reason }) => reason).sort()).toEqual(
+    ['fenced_relation_holder', 'missing_endpoint:999'].sort(),
+  );
   reopenedDatabase.close();
   await rm(directory, { recursive: true, force: true });
 });

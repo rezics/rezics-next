@@ -35,7 +35,11 @@ export type GraphEdgeDraft = {
 };
 export type UnresolvedEdge = GraphEdgeDraft & { reason: string };
 export type ProposedEdge = { key: string; holder: string; target: string; property: string; subject: string };
-export type GraphMappingGap = SourceVocabularyGap & { sourceSubject: string; sourceEndpoint: string; record: Record<string, unknown> };
+export type GraphMappingGap = SourceVocabularyGap & {
+  sourceSubject: string;
+  sourceEndpoint: string;
+  record: Record<string, unknown>;
+};
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -68,11 +72,15 @@ export class CrossMediaGraph {
       retraction_key TEXT,
       retraction_payload TEXT
     ) WITHOUT ROWID`);
-    const columns = new Set((database.query('PRAGMA table_info(cross_media_graph)').all() as { name: string }[]).map((row) => row.name));
+    const columns = new Set(
+      (database.query('PRAGMA table_info(cross_media_graph)').all() as { name: string }[]).map((row) => row.name),
+    );
     if (!columns.has('command_payload')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN command_payload TEXT');
-    if (!columns.has('native_candidate')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN native_candidate TEXT');
+    if (!columns.has('native_candidate'))
+      database.exec('ALTER TABLE cross_media_graph ADD COLUMN native_candidate TEXT');
     if (!columns.has('retraction_key')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN retraction_key TEXT');
-    if (!columns.has('retraction_payload')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN retraction_payload TEXT');
+    if (!columns.has('retraction_payload'))
+      database.exec('ALTER TABLE cross_media_graph ADD COLUMN retraction_payload TEXT');
   }
 
   remember(drafts: readonly GraphEdgeDraft[]): void {
@@ -105,9 +113,9 @@ export class CrossMediaGraph {
   }
 
   private command(edgeKey: string): { key: string; bytes: string | null } | null {
-    return this.database.prepare('SELECT command_key AS key, command_payload AS bytes FROM cross_media_graph WHERE edge_key=?').get(edgeKey) as
-      | { key: string; bytes: string }
-      | null;
+    return this.database
+      .prepare('SELECT command_key AS key, command_payload AS bytes FROM cross_media_graph WHERE edge_key=?')
+      .get(edgeKey) as { key: string; bytes: string } | null;
   }
 
   private retainCommand(edgeKey: string, command: BatchCommand): { key: string; bytes: string } {
@@ -115,7 +123,8 @@ export class CrossMediaGraph {
     const bytes = JSON.stringify({ commands: [command] });
     const prior = this.command(edgeKey);
     if (prior?.bytes) {
-      if (prior.key !== key || prior.bytes !== bytes) throw new TypeError('Cross-media relation command changed after journaling');
+      if (prior.key !== key || prior.bytes !== bytes)
+        throw new TypeError('Cross-media relation command changed after journaling');
       return { key: prior.key, bytes: prior.bytes };
     }
     this.database
@@ -127,7 +136,11 @@ export class CrossMediaGraph {
   async deliver(input: {
     claim(owner: { source: string; external_id: string }): Claim | null;
     nativeType(externalId: string): string | undefined;
-    fence(input: { source: string; externalId: string; fieldGroup: 'facts' }): Promise<{ fenced: boolean; securityRevision: string | null }>;
+    fence(input: {
+      source: string;
+      externalId: string;
+      fieldGroup: 'facts';
+    }): Promise<{ fenced: boolean; securityRevision: string | null }>;
     batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult>;
     journal?: {
       prepare(command: BatchCommand): { bytes: string };
@@ -218,7 +231,9 @@ export class CrossMediaGraph {
                 endpointCode: draft.relation!.sourceEndpoint,
                 family: draft.relation!.family,
                 code: draft.relation!.code,
-                ...(draft.relation!.reciprocalCode === undefined ? {} : { reciprocalCode: draft.relation!.reciprocalCode }),
+                ...(draft.relation!.reciprocalCode === undefined
+                  ? {}
+                  : { reciprocalCode: draft.relation!.reciprocalCode }),
               },
             ],
           });
@@ -231,7 +246,8 @@ export class CrossMediaGraph {
               : firstProposal.subject === endpointClaim.subject
                 ? draft.relation.sourceEndpoint
                 : undefined;
-          if (ownerExternalId === undefined) throw new TypeError('Cross-media relation mapper returned an unbound holder');
+          if (ownerExternalId === undefined)
+            throw new TypeError('Cross-media relation mapper returned an unbound holder');
           if (firstProposal.source.external_id !== ownerExternalId) mapped = mapRelation(ownerExternalId);
         }
         for (const gap of mapped.gaps)
@@ -246,13 +262,18 @@ export class CrossMediaGraph {
           continue;
         }
         const mappedCommand = mapped.proposals[0]!;
-        if (mappedCommand.op !== 'propose') throw new TypeError('Bangumi relation mapper returned a non-proposal command');
+        if (mappedCommand.op !== 'propose')
+          throw new TypeError('Bangumi relation mapper returned a non-proposal command');
         const command: BatchCommand = mappedCommand;
         const sourceIsHolder = command.source.external_id === draft.relation.sourceSubject;
         const sourceIsEndpoint = command.source.external_id === draft.relation.sourceEndpoint;
         const actualHolder = sourceIsHolder ? sourceClaim : sourceIsEndpoint ? endpointClaim : null;
         const actualTarget = sourceIsHolder ? endpointClaim : sourceIsEndpoint ? sourceClaim : null;
-        if (actualHolder?.state !== 'bound' || actualTarget?.state !== 'bound' || command.subject !== actualHolder.subject)
+        if (
+          actualHolder?.state !== 'bound' ||
+          actualTarget?.state !== 'bound' ||
+          command.subject !== actualHolder.subject
+        )
           throw new TypeError('Cross-media relation mapper did not preserve the canonical holder binding');
         const value = command.statement.value;
         if (value.type !== 'value' || value.content !== actualTarget.subject)
@@ -328,9 +349,11 @@ export class CrossMediaGraph {
             throw new TypeError('Cross-media relation replay omitted its native candidate receipt');
           this.database
             .transaction(() => {
-              if (entry.draft.relation && receipt && 'value' in receipt) input.journal?.acknowledge(entry.command, receipt);
+              if (entry.draft.relation && receipt && 'value' in receipt)
+                input.journal?.acknowledge(entry.command, receipt);
               if (entry.draft.relation && receipt && 'value' in receipt && 'candidate' in receipt.value)
-                this.database.prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
+                this.database
+                  .prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
                   .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
               else mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
             })
@@ -338,14 +361,16 @@ export class CrossMediaGraph {
           continue;
         }
         if (status !== 201) throw new TypeError(`Cross-media relation write failed: ${status}`);
-        if (!receipt || !('value' in receipt)) throw new TypeError('Cross-media relation write omitted its native receipt');
+        if (!receipt || !('value' in receipt))
+          throw new TypeError('Cross-media relation write omitted its native receipt');
         if (entry.draft.relation && !('candidate' in receipt.value))
           throw new TypeError('Cross-media relation proposal returned no candidate');
         this.database
           .transaction(() => {
             if (entry.draft.relation) input.journal?.acknowledge(entry.command, receipt);
             if (entry.draft.relation && 'candidate' in receipt.value)
-              this.database.prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
+              this.database
+                .prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
                 .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
             else mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
           })
@@ -393,13 +418,23 @@ export class CrossMediaGraph {
       const hasPendingRetraction = row.retraction_payload !== null;
       if (!hasPendingRetraction && currentKeys.has(row.edge_key)) continue;
       const draft = JSON.parse(row.payload) as GraphEdgeDraft;
-      if (!draft.relation || (!hasPendingRetraction && (!snapshot.complete || (!scope.has(draft.holder) && !scope.has(draft.target)))))
+      if (
+        !draft.relation ||
+        (!hasPendingRetraction && (!snapshot.complete || (!scope.has(draft.holder) && !scope.has(draft.target))))
+      )
         continue;
       const original = (JSON.parse(row.command_payload) as { commands: BatchCommand[] }).commands[0];
       if (!original || original.op !== 'propose') continue;
       const command: BatchCommand = {
         op: 'retract',
-        key: commandKey([draft.alias, row.edge_key, row.native_candidate, 'relation-retract', snapshot.digest, bangumiVocabularyRevision]),
+        key: commandKey([
+          draft.alias,
+          row.edge_key,
+          row.native_candidate,
+          'relation-retract',
+          snapshot.digest,
+          bangumiVocabularyRevision,
+        ]),
         source: {
           source: original.source.source,
           external_id: original.source.external_id,
@@ -416,7 +451,8 @@ export class CrossMediaGraph {
       const pendingCommand = savedBytes
         ? (JSON.parse(savedBytes) as { commands: [BatchCommand] }).commands[0]
         : command;
-      if (!pendingCommand || pendingCommand.op !== 'retract') throw new TypeError('Cross-media relation retraction journal is invalid');
+      if (!pendingCommand || pendingCommand.op !== 'retract')
+        throw new TypeError('Cross-media relation retraction journal is invalid');
       if (row.retraction_key && row.retraction_key !== pendingCommand.key)
         throw new TypeError('Cross-media relation retraction key changed after journaling');
       const retained = this.database
@@ -424,7 +460,8 @@ export class CrossMediaGraph {
           const prepared = input.journal?.prepare(pendingCommand);
           const exact = prepared?.bytes ?? savedBytes ?? JSON.stringify({ commands: [pendingCommand] });
           const value = JSON.parse(exact) as { commands: [BatchCommand] };
-          if (value.commands[0]?.op !== 'retract') throw new TypeError('Cross-media relation retraction journal is invalid');
+          if (value.commands[0]?.op !== 'retract')
+            throw new TypeError('Cross-media relation retraction journal is invalid');
           this.database
             .prepare('UPDATE cross_media_graph SET retraction_key=?, retraction_payload=? WHERE edge_key=?')
             .run(value.commands[0].key, exact, row.edge_key);
@@ -445,7 +482,9 @@ export class CrossMediaGraph {
         this.database
           .transaction(() => {
             input.journal?.acknowledge(entry.command, receipt);
-            this.database.prepare(`UPDATE cross_media_graph SET status='retracted' WHERE edge_key=?`).run(entry.edgeKey);
+            this.database
+              .prepare(`UPDATE cross_media_graph SET status='retracted' WHERE edge_key=?`)
+              .run(entry.edgeKey);
           })
           .immediate();
       }

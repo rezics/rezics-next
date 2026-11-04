@@ -41,9 +41,7 @@ const relation = (
 });
 
 test('live-action adaptation uses the admitted Movie profile and keeps a one-sided row', () => {
-  const mapped = mapBangumiVocabulary(
-    input([relation(native(10, 'schema:Movie'), native(11, 'schema:Book'), 1, 6)]),
-  );
+  const mapped = mapBangumiVocabulary(input([relation(native(10, 'schema:Movie'), native(11, 'schema:Book'), 1, 6)]));
   expect(mapped.gaps).toEqual([]);
   expect(mapped.proposals).toHaveLength(1);
   expect(mapped.proposals[0]).toMatchObject({
@@ -82,6 +80,11 @@ test('unknown, unreviewed music, missing endpoint, and unavailable profile remai
     { code: '3001', reason: 'unsupported_source_case', property: 'relation.3' },
     { code: '3999', reason: 'unknown_code', property: 'relation.3' },
     { code: '1', endpoint: '411', reason: 'missing_identity', property: 'rezics:crossMediaCounterpart' },
-    { code: '1', reason: 'property_not_admitted', property: 'rezics:crossMediaCounterpart', requiredProfile: 'schema:Person' },
+    {
+      code: '1',
+      reason: 'property_not_admitted',
+      property: 'rezics:crossMediaCounterpart',
+      requiredProfile: 'schema:Person',
+    },
   ]);
 });

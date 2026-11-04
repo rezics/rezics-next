@@ -310,11 +310,15 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
     }
     case 'relation': {
       const code = environment.sourceCode(row.code);
-      const family = row.family === 1 || row.family === 2 || row.family === 3 || row.family === 4 || row.family === 6 ? row.family : undefined;
+      const family =
+        row.family === 1 || row.family === 2 || row.family === 3 || row.family === 4 || row.family === 6
+          ? row.family
+          : undefined;
       const numberCode = typeof row.code === 'number' && Number.isSafeInteger(row.code) ? row.code : undefined;
-      const inventory = family === undefined || numberCode === undefined
-        ? undefined
-        : mapSourceEnumeration('bangumi', `relation.${family}`, numberCode);
+      const inventory =
+        family === undefined || numberCode === undefined
+          ? undefined
+          : mapSourceEnumeration('bangumi', `relation.${family}`, numberCode);
       if (!code || !family || numberCode === undefined || !inventory) {
         environment.pushGap({
           path,

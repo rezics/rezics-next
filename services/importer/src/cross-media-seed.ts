@@ -234,10 +234,11 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   }
   if (relationOverflow)
     gap('bangumi', 'subject-relations', { limit: RELATION_CAP }, 'Selected source relation limit exceeded');
-  relationRows.sort((left, right) =>
-    number(left, 'subject_id') - number(right, 'subject_id') ||
-    number(left, 'related_subject_id') - number(right, 'related_subject_id') ||
-    Number(left.relation_type) - Number(right.relation_type),
+  relationRows.sort(
+    (left, right) =>
+      number(left, 'subject_id') - number(right, 'subject_id') ||
+      number(left, 'related_subject_id') - number(right, 'related_subject_id') ||
+      Number(left.relation_type) - Number(right.relation_type),
   );
   plan.relationScope = [
     ...new Set([
@@ -260,7 +261,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     for (const row of rows) {
       const sid = number(row, 'subject_id');
       const rid = number(row, 'related_subject_id');
-      if (!familyIds.has(sid) && !familyIds.has(rid) && !referencedWorks.has(sid) && !referencedWorks.has(rid)) continue;
+      if (!familyIds.has(sid) && !familyIds.has(rid) && !referencedWorks.has(sid) && !referencedWorks.has(rid))
+        continue;
       const family = types.get(sid);
       const code = row.relation_type;
       const mapping = family === undefined ? undefined : bangumiRelation(family, code);
@@ -322,7 +324,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       const prior = canonicalEdges.get(key);
       if (prior?.relation) {
         const combined = [...prior.relation.evidence, ...evidence].filter(
-          (item, index, all) => all.findIndex((other) => other.path === item.path && other.code === item.code) === index,
+          (item, index, all) =>
+            all.findIndex((other) => other.path === item.path && other.code === item.code) === index,
         );
         prior.relation.evidence = combined;
         prior.fields = [...new Set([...prior.fields, ...fieldsOf('subject-relations', row)])].sort();
@@ -1078,7 +1081,8 @@ export async function seedCrossMedia(
           { source: registration.source },
         );
         const bootstrap = conversion.proposals.find((command) => command.op === 'create');
-        if (bootstrap?.op === 'create') nativeTypes.set(`${crossMediaAliases[provider]}\u0000${record.key}`, bootstrap.subject.type);
+        if (bootstrap?.op === 'create')
+          nativeTypes.set(`${crossMediaAliases[provider]}\u0000${record.key}`, bootstrap.subject.type);
       }
       async function* records() {
         yield* plan.records[provider];
@@ -1134,7 +1138,10 @@ export async function seedCrossMedia(
       reason: edge.reason,
     }));
     return {
-      status: plan.gaps.length || delivered.gaps.length || unresolved.length ? ('imported-with-gaps' as const) : ('imported' as const),
+      status:
+        plan.gaps.length || delivered.gaps.length || unresolved.length
+          ? ('imported-with-gaps' as const)
+          : ('imported' as const),
       franchises: plan.franchises,
       members: plan.members,
       runs,
