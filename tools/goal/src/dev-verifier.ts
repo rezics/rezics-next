@@ -20,6 +20,7 @@ import { Database as SqliteDatabase } from 'bun:sqlite';
 import { readdirSync } from 'node:fs';
 import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierResult, DevVerifierRun } from './types.ts';
 import { firstFailure, gateEnvironment } from './merge.ts';
+import { repositoryBun } from '../../../scripts/remote-check.ts';
 
 const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
@@ -261,16 +262,6 @@ function packageManagerPinAt(checkout: string, commit?: string): string | undefi
     return undefined;
   }
 }
-function repositoryBun(tree: string, fallbackRoot = tree, bootstrap = false): string {
-  const pinnedVersion = packageManagerPinAt(tree);
-  for (const root of [...new Set([tree, fallbackRoot])]) {
-    if (pinnedVersion && packageManagerPinAt(root) !== pinnedVersion) continue;
-    const executable = join(root, 'node_modules/.bin/bun');
-    if (existsSync(executable)) return executable;
-  }
-  if (pinnedVersion && !bootstrap) throw new Error(`Pinned Bun ${pinnedVersion} is not installed for verifier checks.`);
-  return bootstrap ? process.execPath : 'bun';
-}
 function toolchainIdentity(settings: Settings, commit?: string): unknown {
   let remoteHosts: string | null = null;
   const pinnedBun = packageManagerPinAt(settings.mainCheckout, commit);
@@ -391,14 +382,14 @@ function checkInput(settings: Settings, commit: string, check: Check): string | 
 function installDependencies(
   tree: string,
   stateDirectory: string,
-  fallbackRoot: string,
   policy = defaultPolicy,
 ): boolean {
   if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
   const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
   for (let attempt = 0; attempt < policy.verifier.installAttempts; attempt++) {
     try {
-      const executable = repositoryBun(tree, fallbackRoot, true);
+      // Bootstrap installs dependencies; official check runs resolve the candidate artifact after installation.
+      const executable = process.execPath;
       appendFileSync(installLog, `$ ${executable} install --frozen-lockfile (attempt ${attempt + 1})\n`);
       const result = runBoundedInstallProcess({
         command: executable,
@@ -580,7 +571,7 @@ function installDependenciesCached(
     const previousLogs = new Set(
       readdirSync(stateDirectory).filter((name) => name.startsWith(logPrefix) && name.endsWith(logSuffix)),
     );
-    const passed = installDependencies(tree, stateDirectory, options.settings.mainCheckout, options.settings.policy);
+    const passed = installDependencies(tree, stateDirectory, options.settings.policy);
     const logName = readdirSync(stateDirectory).find(
       (name) => name.startsWith(logPrefix) && name.endsWith(logSuffix) && !previousLogs.has(name),
     );
@@ -717,16 +708,21 @@ function evidence(
 }
 
 export function withTreeBun(command: readonly string[], tree: string, fallbackRoot = tree): string[] {
-  const executable = repositoryBun(tree, fallbackRoot);
-  if (executable === 'bun') return [...command];
   let index = command[0] === 'env' ? 1 : 0;
   while (command[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[index]!)) index++;
+  let executable: string | undefined;
+  if (command[index] === 'bun') {
+    const artifactRoot = existsSync(join(tree, 'node_modules/bun/package.json')) ? tree : fallbackRoot;
+    executable = repositoryBun(tree, artifactRoot).binary;
+  }
   const bins = [...new Set([join(tree, 'node_modules/.bin'), join(fallbackRoot, 'node_modules/.bin')])];
   const path = [...bins, process.env.PATH ?? ''].filter(Boolean).join(':');
   return [
     'env',
     `PATH=${path}`,
-    ...command.map((argument, position) => (position === index && argument === 'bun' ? executable : argument)),
+    ...command.map((argument, position) =>
+      position === index && argument === 'bun' && executable ? executable : argument,
+    ),
   ];
 }
 

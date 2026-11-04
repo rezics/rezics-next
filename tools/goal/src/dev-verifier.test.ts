@@ -1,6 +1,15 @@
 import { afterEach, expect, test } from 'bun:test';
 import { readControlPolicy } from './policy.ts';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -20,6 +29,11 @@ import {
 import type { DevVerifierFinding, DevVerifierRun, Settings, Task } from './types.ts';
 
 const roots: string[] = [];
+const repositoryRoot = join(import.meta.dir, '../../..');
+const repositoryPackageManager = (JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as {
+  packageManager: string;
+}).packageManager;
+const repositoryBunPackage = join(repositoryRoot, 'node_modules/bun');
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -38,10 +52,22 @@ function repo() {
   writeFileSync(join(root, 'services', 'kernel', 'base.ts'), 'export const base = true;\n');
   mkdirSync(join(root, 'scripts'), { recursive: true });
   writeFileSync(join(root, 'scripts', 'typecheck.ts'), 'process.exit(0);\n');
+  writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
+  writeFileSync(
+    join(root, 'package.json'),
+    JSON.stringify({ name: 'verifier-fixture', packageManager: repositoryPackageManager }),
+  );
+  const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (lock.status !== 0) throw new Error(lock.stderr);
   git(root, 'add', '.');
   git(root, 'commit', '-m', 'base');
   git(root, 'branch', 'dev');
   git(root, 'branch', 'dev-verified');
+  mkdirSync(join(root, 'node_modules'), { recursive: true });
+  symlinkSync(repositoryBunPackage, join(root, 'node_modules/bun'), 'dir');
   return root;
 }
 function commit(root: string, path: string, content: string, message: string): string {
@@ -114,6 +140,13 @@ test('classifies check outcomes and runs Web tests from their workspace', () => 
   expect(classifyRun({ passed: true, timedOut: false, output: '' })).toBe('pass');
   expect(classifyRun({ passed: false, timedOut: false, output: 'assertion failed' })).toBe('fail');
   expect(classifyRun({ passed: false, timedOut: true, output: 'ETIMEDOUT' })).toBe('infrastructure');
+  expect(
+    classifyRun({
+      passed: false,
+      timedOut: false,
+      output: `pinned Bun: absent installed package for ${repositoryPackageManager}`,
+    }),
+  ).toBe('infrastructure');
   const result = { passed: false, timedOut: false, output: 'error: first assertion\nerror: second assertion' };
   expect(classifyRun(result, readControlPolicy({ verifier: { findingAssertions: 1 } }).verifier)).toBe(
     'infrastructure',
@@ -132,28 +165,47 @@ test('classifies check outcomes and runs Web tests from their workspace', () => 
   });
 });
 
-test('selects the repository Bun executable for verifier checks', () => {
+test('uses the candidate pinned Bun and falls back to the installed producer artifact only when absent', () => {
   const root = mkdtempSync(join(tmpdir(), 'goal-pinned-bun-'));
   roots.push(root);
-  mkdirSync(join(root, 'node_modules/.bin'), { recursive: true });
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: 'bun@1.4.4-canary.test' }));
-  writeFileSync(join(root, 'node_modules/.bin/bun'), '');
+  const candidate = join(root, 'candidate');
+  const producer = join(root, 'producer');
+  mkdirSync(candidate, { recursive: true });
+  writeFileSync(join(candidate, 'package.json'), JSON.stringify({ packageManager: repositoryPackageManager }));
+  mkdirSync(join(candidate, 'node_modules'), { recursive: true });
+  symlinkSync(repositoryBunPackage, join(candidate, 'node_modules/bun'), 'dir');
+  mkdirSync(join(producer, 'node_modules'), { recursive: true });
+  symlinkSync(repositoryBunPackage, join(producer, 'node_modules/bun'), 'dir');
 
-  const command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], root);
+  let command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], candidate, producer);
   expect(command[0]).toBe('env');
-  expect(command[2]).toBe(join(root, 'node_modules/.bin/bun'));
-  expect(command[1]).toContain(`PATH=${join(root, 'node_modules/.bin')}:`);
+  expect(command[2]).toBe(join(candidate, 'node_modules/bun/bin/bun.exe'));
+  expect(command[1]).toContain(
+    `PATH=${join(candidate, 'node_modules/.bin')}:${join(producer, 'node_modules/.bin')}:`,
+  );
+
+  rmSync(join(candidate, 'node_modules/bun'));
+  command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], candidate, producer);
+  expect(command[2]).toBe(join(producer, 'node_modules/bun/bin/bun.exe'));
+});
+
+test('reports unavailable candidate Bun instead of falling back to the ambient command', () => {
+  const root = mkdtempSync(join(tmpdir(), 'goal-unavailable-bun-'));
+  roots.push(root);
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: repositoryPackageManager }));
+  expect(() => withTreeBun(['bun', 'test'], root)).toThrow('absent installed package');
 });
 
 test.each([false, true])('bootstraps a fresh pinned tree (install fails: %s)', async (fails) => {
   const root = repo(),
     base = git(root, 'rev-parse', 'dev-verified');
   mkdirSync(join(root, 'toolchain'));
+  mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
   writeFileSync(
     join(root, 'toolchain/package.json'),
-    JSON.stringify({ name: 'bun', version: Bun.version, bin: './bun' }),
+    JSON.stringify({ name: 'bun', version: Bun.version, bin: { bun: 'bin/bun.exe' } }),
   );
-  writeFileSync(join(root, 'toolchain/bun'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
+  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
   writeFileSync(
     join(root, 'package.json'),
     JSON.stringify({ packageManager: `bun@${Bun.version}`, dependencies: { bun: 'file:./toolchain' } }),
@@ -173,7 +225,7 @@ test.each([false, true])('bootstraps a fresh pinned tree (install fails: %s)', a
   const ctx = setup(root);
   let checks = 0;
   const runGate = async (command: readonly string[], cwd: string) => {
-    expect(command).toContain(join(cwd, 'node_modules/.bin/bun'));
+    expect(command).toContain(join(cwd, 'node_modules/bun/bin/bun.exe'));
     const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
     checks++;
     return { passed: result.status === 0, output: result.stdout + result.stderr, timedOut: false };
