@@ -89,6 +89,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - The owner compares the reports and records the decision in the owner document before briefing implementation.
   The owner is the Goal's manager, or the supermanager for a cross-cutting design. Implementation briefs link the
   decision.
+- Research reports are records. Keep a valuable report unchanged under `docs/research/`. No prompt loads it by
+  default: owner documents link it, and an agent reads it only when its question needs it. Delete a report with no
+  lasting value.
 
 ## Managers
 
