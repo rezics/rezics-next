@@ -209,7 +209,7 @@ export function yearlyCompletionGoalRoutes(
           403: forbidden,
           503: unavailable,
         },
-        detail: detail('library.yearly_goal.read', 'progress_session:list'),
+        detail: detail('library_yearly_goal.read', 'progress_session:list'),
       },
       async ({ actor, admission, job, query, request }) => {
         const owner = requireAccount(actor);
@@ -267,7 +267,7 @@ export function yearlyCompletionGoalRoutes(
           410: problemSchema('command_result_erased'),
           503: unavailable,
         },
-        detail: detail('library.yearly_goal.change', 'progress_session:update', true),
+        detail: detail('library_yearly_goal.update', 'progress_session:update', true),
       },
       async ({ actor, admission, job, body, headers }) => {
         const owner = requireAccount(actor);
