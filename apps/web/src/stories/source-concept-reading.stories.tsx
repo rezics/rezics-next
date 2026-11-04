@@ -29,13 +29,19 @@ type State =
 
 /** Finite native response fixtures demonstrate caller states; they do not assert producer success. */
 function fixture(state: State, locale: string) {
-  const part = (property: string, content: string, data_type = 'wikibase-item') => ({
+  type Statement = SubjectRead['subject']['statements'][string][number];
+  const part = (
+    property: string,
+    content: string,
+    data_type: Statement['property']['data_type'] = 'wikibase-item',
+  ): Statement => ({
     id: crypto.randomUUID(),
     rank: 'normal' as const,
     property: { id: property, data_type },
     value: { type: 'value' as const, content },
     qualifiers: [],
     references: [],
+    rezics: { release: 'sha256:original-source-release', revision: 1 },
   });
   const source: SubjectRead = {
     subject: {
@@ -120,13 +126,14 @@ function fixture(state: State, locale: string) {
           },
         }),
       } as unknown as KernelClient;
+      const { relation: _inverse, ...withoutInverse } = bundledRelease.properties['skos:broader']!;
       const release =
         state === 'unsupported'
           ? {
               ...bundledRelease,
               properties: {
                 ...bundledRelease.properties,
-                'skos:broader': { ...bundledRelease.properties['skos:broader']!, relation: undefined },
+                'skos:broader': withoutInverse,
               },
             }
           : bundledRelease;
