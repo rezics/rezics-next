@@ -7963,5 +7963,9 @@
   "moderation_directory_unavailable": "Die Moderationsübersicht ist derzeit nicht verfügbar.",
   "moderation_directory_open_scope": "{label} öffnen",
   "profile_contribution_context_unavailable": "Der ursprüngliche Kontext ist nicht verfügbar. Öffne den Beitrag, um seinen aktuellen Kontext zu lesen.",
-  "profile_contribution_historical_citation": "Dieses Zitat hält die Bewertung bei Veröffentlichung fest; es ist keine aktuelle Bewertung."
+  "profile_contribution_historical_citation": "Dieses Zitat hält die Bewertung bei Veröffentlichung fest; es ist keine aktuelle Bewertung.",
+  "prq_actions_current": "Aktuell erlaubte Aktionen:",
+  "prq_actions_unavailable": "Erlaubte Aktionen konnten nicht gelesen werden. Aktualisiere diese Seite, um es erneut zu versuchen.",
+  "prq_selection_separate": "Die Auswahl erfordert die separate Kandidatenprüfung.",
+  "prq_selection_not_allowed": "Die Auswahl ist in diesem Kontext derzeit nicht erlaubt."
 }

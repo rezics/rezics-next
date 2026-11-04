@@ -65,12 +65,12 @@ export const contextViewerActionResource: ViewerActionResource = {
         return Object.fromEntries(
           keys.map((id) => [
             id,
-            Object.fromEntries(
+            { ...Object.fromEntries(
               ['context:read', 'context:create', 'context:delete', 'context:restore'].map((action) => [
                 action,
                 available[id]?.includes(action) ?? false,
               ]),
-            ),
+            ), 'context:accept': visible.get(id)?.state === 'active', 'context:adopt': visible.get(id)?.state === 'active' },
           ]),
         );
       },

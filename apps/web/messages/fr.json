@@ -7963,5 +7963,9 @@
   "moderation_directory_unavailable": "La liste des files de modération est actuellement indisponible.",
   "moderation_directory_open_scope": "Ouvrir {label}",
   "profile_contribution_context_unavailable": "Le contexte d’origine est indisponible. Ouvrez la contribution pour lire son contexte actuel.",
-  "profile_contribution_historical_citation": "Cette citation conserve la note au moment de la publication ; ce n’est pas une note actuelle."
+  "profile_contribution_historical_citation": "Cette citation conserve la note au moment de la publication ; ce n’est pas une note actuelle.",
+  "prq_actions_current": "Opérations actuellement autorisées :",
+  "prq_actions_unavailable": "Impossible de lire les opérations autorisées. Actualisez cette page pour réessayer.",
+  "prq_selection_separate": "La sélection nécessite la visite distincte de révision du candidat.",
+  "prq_selection_not_allowed": "La sélection n’est actuellement pas autorisée dans ce contexte."
 }

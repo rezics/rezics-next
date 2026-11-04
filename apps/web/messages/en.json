@@ -8038,5 +8038,9 @@
   "moderation_directory_unavailable": "Moderation queue discovery is unavailable right now.",
   "moderation_directory_open_scope": "Open {label}",
   "profile_contribution_context_unavailable": "Original context is unavailable. Open the contribution to read its current context.",
-  "profile_contribution_historical_citation": "This citation records the rating at publication; it is not a current rating."
+  "profile_contribution_historical_citation": "This citation records the rating at publication; it is not a current rating.",
+  "prq_actions_current": "Current allowed operations:",
+  "prq_actions_unavailable": "Allowed operations could not be read. Refresh this page to retry.",
+  "prq_selection_separate": "Selection requires the separate candidate review visit.",
+  "prq_selection_not_allowed": "Selection is not currently allowed in this Context."
 }

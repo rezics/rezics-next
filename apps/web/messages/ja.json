@@ -7963,5 +7963,9 @@
   "moderation_directory_unavailable": "現在、モデレーションキューの一覧を取得できません。",
   "moderation_directory_open_scope": "{label} を開く",
   "profile_contribution_context_unavailable": "元の文脈を表示できません。投稿を開くと現在の文脈を確認できます。",
-  "profile_contribution_historical_citation": "この引用は公開時の評価を記録したもので、現在の評価ではありません。"
+  "profile_contribution_historical_citation": "この引用は公開時の評価を記録したもので、現在の評価ではありません。",
+  "prq_actions_current": "現在許可されている操作：",
+  "prq_actions_unavailable": "許可されている操作を取得できませんでした。ページを更新して再試行してください。",
+  "prq_selection_separate": "選択には候補の個別レビュー画面での操作が必要です。",
+  "prq_selection_not_allowed": "このコンテキストでは現在、選択は許可されていません。"
 }

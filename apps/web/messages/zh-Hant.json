@@ -7963,5 +7963,9 @@
   "moderation_directory_unavailable": "目前無法探索審核佇列。",
   "moderation_directory_open_scope": "開啟 {label}",
   "profile_contribution_context_unavailable": "原始上下文暫時無法顯示。開啟貢獻可查看目前的上下文。",
-  "profile_contribution_historical_citation": "此引用記錄發佈時的評分，並非目前的評分。"
+  "profile_contribution_historical_citation": "此引用記錄發佈時的評分，並非目前的評分。",
+  "prq_actions_current": "目前允許的操作：",
+  "prq_actions_unavailable": "無法讀取允許的操作。請重新整理此頁面再試。",
+  "prq_selection_separate": "選取需要前往獨立的候選審核頁面。",
+  "prq_selection_not_allowed": "目前語境不允許選取。"
 }

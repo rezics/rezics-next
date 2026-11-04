@@ -4,6 +4,11 @@ This module owns subject facts and their item projections, partition paging, and
 
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
+Provider queue pages retain `context:read` and `context:accept` admission and include an independent current
+`actions` component. It projects only installed accept/reject/adopt operations through `readViewerActions` on the
+exact native Context anchor, once per bounded page. A failed action read is explicitly unavailable; it never grants
+controls or claims a confirmed denial. Commands still reauthorize. Selection requires the existing candidate workspace
+and independent `context:adopt`; neither acceptance nor queue membership implies selection authority.
 Native candidate reads preserve `abstained` separately from no decision (`null`); both remain pending review,
 and statement/adoption DTOs retain `normal`, `preferred` and `deprecated` ranks without changing write admission.
 The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ordinary multilingual corrections and

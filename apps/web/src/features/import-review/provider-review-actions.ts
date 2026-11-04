@@ -11,6 +11,8 @@ export type ProviderDecisionRow = {
   href: string;
   propertyLabel: string;
   related: SubjectRead['related'];
+  /** Confirmed native page operations; mounted queues always provide this field. */
+  operations?: readonly string[];
   /** Only this page's exact authenticated Context read; absence is not an empty selection. */
   reading?: ProviderReading['result'];
 };
@@ -84,6 +86,11 @@ export function providerRowIsSelectable(row: ProviderDecisionRow, scope: Provide
   );
 }
 
+export function providerRowAllows(row: ProviderDecisionRow, operation: ProviderDecision['operation']): boolean {
+  return (row.operations === undefined || row.operations.includes(`subject.${operation}_candidate`)) &&
+    (operation === 'accept' ? row.candidate.decision !== 'accepted' : row.candidate.decision !== 'rejected');
+}
+
 export function providerRowIsConcealed(row: ProviderDecisionRow): boolean {
   return !!row.reading && !row.reading.ok && (row.reading.reason === 'denied' || row.reading.reason === 'missing');
 }
@@ -101,7 +108,7 @@ export function prepareProviderBatch(
   if (!wanted.size || wanted.size > providerSelectionLimit) return null;
   const rows = new Map(visible.map((row) => [providerRowKey(row), row]));
   const chosen = [...wanted].map((id) => rows.get(id));
-  if (chosen.some((row) => !row || !providerRowIsSelectable(row, scope))) return null;
+  if (chosen.some((row) => !row || !providerRowIsSelectable(row, scope) || !providerRowAllows(row, operation))) return null;
   return {
     scope: { ...scope },
     attempts: chosen.map((row) => ({
@@ -184,6 +191,7 @@ export async function decideProviderCandidate(
     if (
       acceptance.context !== command.context ||
       acceptance.candidate !== command.candidate ||
+      !Number.isSafeInteger(acceptance.head) || acceptance.head < 1 ||
       acceptance.decision !== command.operation
     )
       return providerFailure(503);

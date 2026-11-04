@@ -249,3 +249,25 @@ test('unknown-write failed reread retains original intent and native confirmed s
   expect(retried.attempts[0]!.command).toEqual(original.attempts[0]!.command);
   expect(retried.attempts[1]!.command.session).toBe('original-native-session');
 });
+
+test('fresh decisions require native operations independently of queue eligibility; sealed retries retain their operands', async () => {
+  const { scope, rows } = visible();
+  const row = { ...rows[0]!, operations: [] as string[] };
+  const selected = [providerRowKey(row)];
+  expect(prepareProviderBatch(scope, [row], selected, 'accept')).toBeNull();
+  expect(prepareProviderBatch(scope, [row], selected, 'reject')).toBeNull();
+  row.operations = ['subject.accept_candidate'];
+  const sealed = prepareProviderBatch(scope, [row], selected, 'accept')!;
+  expect(sealed.attempts).toHaveLength(1);
+  expect(prepareProviderBatch(scope, [row], selected, 'reject')).toBeNull();
+  const unknown = await runProviderBatch(sealed, async () => ({ ok: false, reason: 'unavailable' }));
+  row.operations = [];
+  row.candidate.head = 99;
+  const retried: ProviderDecision[] = [];
+  await runProviderBatch(unknown, async (command) => {
+    retried.push(command);
+    return { ok: false, reason: 'denied' };
+  });
+  expect(retried).toEqual(sealed.attempts.map(({ command }) => command));
+  expect(prepareProviderBatch(scope, [row], selected, 'accept')).toBeNull();
+});

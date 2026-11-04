@@ -20,6 +20,7 @@ import {
   prepareProviderBatch,
   providerRowKey,
   providerRowIsSelectable,
+  providerRowAllows,
   providerRowIsConcealed,
   providerScopeKey,
   providerSelectionInScope,
@@ -211,7 +212,7 @@ export function ProviderReviewActions({
   const enabled = useRef(!disabled);
   if (enabled.current && disabled) visit.retire();
   enabled.current = !disabled;
-  const pageAddress = page?.pageAddress ?? '';
+  const pageAddress = JSON.stringify([page?.pageAddress ?? '', page?.rows.map((row) => [providerRowKey(row), row.candidate.head, row.operations])]);
   const [selection, setSelection] = useState<{ scope: string; page: string; ids: string[] }>({
     scope,
     page: pageAddress,
@@ -270,7 +271,7 @@ export function ProviderReviewActions({
       confirmation.attempts.some(
         ({ row }) =>
           concealed(row) ||
-          !visible.some((current) => providerRowKey(current) === providerRowKey(row) && !concealed(current)),
+          !visible.some((current) => providerRowKey(current) === providerRowKey(row) && current.candidate.head === row.candidate.head && providerRowAllows(current, confirmation.attempts[0]!.command.operation) && !concealed(current)),
       ))
   ) {
     confirmationOwner.current = null;
@@ -400,7 +401,7 @@ export function ProviderReviewActions({
                 <Button
                   variant="outline"
                   className="min-h-11"
-                  disabled={locked || !selected.length}
+                  disabled={locked || !selected.length || visible.some((row) => selected.includes(providerRowKey(row)) && !providerRowAllows(row, 'accept'))}
                   onClick={() => review('accept')}
                 >
                   {m.candidate_accept({}, o)}
@@ -408,7 +409,7 @@ export function ProviderReviewActions({
                 <Button
                   variant="outline"
                   className="min-h-11"
-                  disabled={locked || !selected.length}
+                  disabled={locked || !selected.length || visible.some((row) => selected.includes(providerRowKey(row)) && !providerRowAllows(row, 'reject'))}
                   onClick={() => review('reject')}
                 >
                   {m.candidate_reject({}, o)}
@@ -467,6 +468,7 @@ export function ProviderReviewActions({
                             locked ||
                             !row.reading?.ok ||
                             !providerRowIsSelectable(row, page.scope) ||
+                            (!providerRowAllows(row, 'accept') && !providerRowAllows(row, 'reject')) ||
                             (!checked && selected.length >= providerSelectionLimit)
                           }
                           onCheckedChange={(value) => {

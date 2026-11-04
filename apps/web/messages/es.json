@@ -7963,5 +7963,9 @@
   "moderation_directory_unavailable": "La lista de colas de moderación no está disponible en este momento.",
   "moderation_directory_open_scope": "Abrir {label}",
   "profile_contribution_context_unavailable": "El contexto original no está disponible. Abre la contribución para leer su contexto actual.",
-  "profile_contribution_historical_citation": "Esta cita conserva la valoración al publicarse; no es una valoración actual."
+  "profile_contribution_historical_citation": "Esta cita conserva la valoración al publicarse; no es una valoración actual.",
+  "prq_actions_current": "Operaciones permitidas actualmente:",
+  "prq_actions_unavailable": "No se pudieron leer las operaciones permitidas. Actualiza esta página para reintentar.",
+  "prq_selection_separate": "La selección requiere la revisión independiente del candidato.",
+  "prq_selection_not_allowed": "La selección no está permitida actualmente en este contexto."
 }

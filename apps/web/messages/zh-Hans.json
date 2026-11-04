@@ -7963,5 +7963,9 @@
   "moderation_directory_unavailable": "目前无法发现审核队列。",
   "moderation_directory_open_scope": "打开 {label}",
   "profile_contribution_context_unavailable": "原始上下文暂不可用。打开贡献可查看当前上下文。",
-  "profile_contribution_historical_citation": "此引用记录发布时的评分，并非当前评分。"
+  "profile_contribution_historical_citation": "此引用记录发布时的评分，并非当前评分。",
+  "prq_actions_current": "当前允许的操作：",
+  "prq_actions_unavailable": "无法读取允许的操作。请刷新此页面重试。",
+  "prq_selection_separate": "选择需要前往独立的候选审核页面。",
+  "prq_selection_not_allowed": "当前语境不允许选择。"
 }

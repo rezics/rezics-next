@@ -75,7 +75,7 @@ test('A filtered queue with only deleted rows and a real next cursor shows prepa
     headers: { authorization: 'Bearer fixture' },
   });
   expect(native.status).toBe(200);
-  expect(native.data).toEqual({
+  expect(native.data).toMatchObject({
     candidates: [fixture.deleted],
     next: fixture.next,
     freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
@@ -187,4 +187,18 @@ test('unrelated Contexts Subjects candidates and revisions do not enlarge the ex
     expect(new URL(fixture.calls[0]!.path, 'https://queue.test').searchParams.get('limit')).toBe('20');
     expect(fixture.calls[2]!.session).toBe('queue-session');
   }
+});
+
+test('unavailable action hydration preserves comparisons but grants no fresh queue decisions', () => {
+  const fixture = providerQueueFixture();
+  if (fixture.initial.state !== 'ready') throw new Error('Expected page');
+  const initial = structuredClone(fixture.initial);
+  initial.page.actions = { state: 'unavailable' };
+  const html = renderToStaticMarkup(createElement(ProviderQueue, {
+    transport: fixture.transport, initial, initialScope: fixture.scope,
+  }));
+  expect(html).toContain(m.prq_actions_unavailable());
+  expect(html).toContain(fixture.native.publicRead.subject.labels.en!);
+  expect(html).toMatch(/role="checkbox"[^>]*disabled/);
+  expect(html).not.toContain(m.prq_selection_not_allowed());
 });
