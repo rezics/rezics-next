@@ -20,6 +20,25 @@ let owner: Person;
 let other: Person;
 const links = [{ label: 'Home', url: 'https://example.test/profile' }];
 
+function expectedEditing(
+  viewerId: string,
+  targetId: string,
+  kind: 'actor' | 'organization' = 'actor',
+) {
+  const identity = {
+    displayName: { applicable: true, maxLength: 4096 },
+    biography: { applicable: true, maxLength: 4096 },
+    avatar: { applicable: true },
+    links: { applicable: true, maxItems: 5, labelMaxLength: 64, urlMaxLength: 2048 },
+    publicViews: { applicable: true, flags: ['posts', 'reviews', 'collections', 'realms'] },
+  };
+  return {
+    viewer: { accountId: viewerId },
+    target: { accountId: targetId, kind },
+    fields: kind === 'organization' ? { ...identity, speakersListed: { applicable: true } } : identity,
+  };
+}
+
 async function call(accountId: string, bearer?: string, patch?: unknown) {
   const response = await kernel.handle(
     new Request(`https://kernel.test/v1/accounts/${accountId}${patch === undefined ? '/profile' : ''}`, {
@@ -103,6 +122,7 @@ test('a handleless owner reads and reloads editable source fields without consum
       avatar: null,
       publicViews: { posts: false, reviews: true, collections: false, realms: false },
     },
+    editing: expectedEditing(owner.accountId, owner.accountId),
   });
   expect((await call(owner.accountId, owner.bearer, { biography: null })).status).toBe(200);
   expect((await call(owner.accountId, owner.bearer)).body.profile).toEqual({ ...read.body.profile, bio: null });
@@ -112,6 +132,7 @@ test('a handleless owner reads and reloads editable source fields without consum
   const actor = await kernel.testAccess.authenticate(owner.bearer, context);
   expect(await readEditableAccountProfile(kernel.testAccess, { ...context, actor }, owner.accountId)).toEqual({
     profile: { ...read.body.profile, bio: null },
+    editing: expectedEditing(owner.accountId, owner.accountId),
   });
   expect((await pool.query('SELECT count(*)::int AS count FROM core.receipt')).rows).toEqual(afterPatch.rows);
   // Missing media resolves through Content to null, never to the stored URL.
@@ -137,6 +158,7 @@ test('the current operator reads a managed target with management scope and an e
   const read = await call(bot.accountId, other.bearer);
   expect(read.status).toBe(200);
   expect(read.body.profile).toMatchObject({ id: bot.accountId, displayName: 'Managed', publicViews: { posts: false } });
+  expect(read.body.editing).toEqual(expectedEditing(other.accountId, bot.accountId));
   expect((await call(bot.accountId, await signed(other.bearer, { scope: 'account:update' }))).status).toBe(403);
   expect((await call(bot.accountId, owner.bearer)).status).toBe(403);
   // Old operator authority cannot authorize the new operator's subject.
