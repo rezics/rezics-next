@@ -8036,5 +8036,21 @@
   "home_owner_description_unavailable": "Descripción no disponible.",
   "home_owner_curator_unavailable": "Información del curador no disponible.",
   "home_owner_carrier_unavailable": "Presentación del Realm no disponible.",
-  "home_owner_follow_context": "Seguir no otorga acceso ni pertenencia a un Realm."
+  "home_owner_follow_context": "Seguir no otorga acceso ni pertenencia a un Realm.",
+  "search_context_about": "Acerca de estos resultados",
+  "search_context_current": "La observación nativa no indica retrasos de indexación.",
+  "search_context_catching_up": "Las actualizaciones siguen indexándose.",
+  "search_context_unavailable": "La actualidad del índice no está disponible.",
+  "search_context_query": "Consulta ejecutada: {query}",
+  "search_context_scope": "Ámbito buscado: {scope}",
+  "search_context_languages": "Preferencias de idioma de resultados: {languages}",
+  "search_context_default_languages": "Preferencias de idioma predeterminadas",
+  "search_context_kinds": "Tipos de resultado: {kinds}",
+  "search_context_filtered_scope": "Ámbito de recursos seleccionado",
+  "search_context_predicates": "Se aplican las condiciones avanzadas ejecutadas y los filtros guardados. Las ediciones pendientes no cambian estos resultados.",
+  "search_context_limits": "Los resultados visibles y los recuentos no prueban una indexación completa. Una página vacía o final tampoco la garantiza. La visibilidad actual puede eliminar resultados; la indexación no concede acceso.",
+  "search_context_refresh_help": "Actualizar repite esta búsqueda para el lector actual desde la primera página, conserva ámbito y filtros y descarta los cursores anteriores.",
+  "search_context_refresh": "Actualizar estos resultados",
+  "search_context_rating_question": "Pregunta de valoración: {id}",
+  "search_context_owner": "Se aplican las condiciones privadas seleccionadas del lector actual."
 }

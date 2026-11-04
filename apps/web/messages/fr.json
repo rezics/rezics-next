@@ -8036,5 +8036,21 @@
   "home_owner_description_unavailable": "Description indisponible.",
   "home_owner_curator_unavailable": "Informations sur le curateur indisponibles.",
   "home_owner_carrier_unavailable": "Présentation du Realm indisponible.",
-  "home_owner_follow_context": "Suivre ne donne ni accès ni adhésion à un Realm."
+  "home_owner_follow_context": "Suivre ne donne ni accès ni adhésion à un Realm.",
+  "search_context_about": "À propos de ces résultats",
+  "search_context_current": "L’observation native ne signale aucun retard d’indexation.",
+  "search_context_catching_up": "Des mises à jour sont encore en cours d’indexation.",
+  "search_context_unavailable": "La fraîcheur de l’index est indisponible.",
+  "search_context_query": "Requête exécutée : {query}",
+  "search_context_scope": "Périmètre recherché : {scope}",
+  "search_context_languages": "Préférences linguistiques des résultats : {languages}",
+  "search_context_default_languages": "Préférences linguistiques par défaut",
+  "search_context_kinds": "Types de résultats : {kinds}",
+  "search_context_filtered_scope": "Périmètre de ressources sélectionné",
+  "search_context_predicates": "Les conditions avancées exécutées et les filtres enregistrés s’appliquent. Les modifications en attente ne changent pas ces résultats.",
+  "search_context_limits": "Les résultats visibles et les décomptes ne prouvent pas une indexation complète. Une page vide ou finale ne la garantit pas. La visibilité actuelle peut retirer des résultats ; l’indexation ne donne aucun accès.",
+  "search_context_refresh_help": "Actualiser répète cette recherche pour le lecteur actuel depuis la première page, conserve périmètre et filtres et abandonne les anciens curseurs.",
+  "search_context_refresh": "Actualiser ces résultats",
+  "search_context_rating_question": "Question de notation : {id}",
+  "search_context_owner": "Les conditions privées sélectionnées du lecteur actuel s’appliquent."
 }

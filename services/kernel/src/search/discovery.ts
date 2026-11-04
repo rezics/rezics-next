@@ -166,6 +166,7 @@ export type DiscoveryPage = {
   kinds: { values: DiscoveryKindMetadata[]; next: string | null };
   next: string | null;
   as_of: string;
+  freshness?: import('./search-context.ts').SearchFreshness;
   /** One current private envelope, present on the installed HTTP response and never cached publicly. */
   viewerFacts?:
     | Exclude<ViewerFactsPage, { state: 'current' }>

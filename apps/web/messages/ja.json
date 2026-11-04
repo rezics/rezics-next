@@ -8036,5 +8036,21 @@
   "home_owner_description_unavailable": "説明を利用できません。",
   "home_owner_curator_unavailable": "キュレーターの情報を利用できません。",
   "home_owner_carrier_unavailable": "Realm の紹介を利用できません。",
-  "home_owner_follow_context": "フォローしてもアクセス権や Realm のメンバー資格は付与されません。"
+  "home_owner_follow_context": "フォローしてもアクセス権や Realm のメンバー資格は付与されません。",
+  "search_context_about": "この検索結果について",
+  "search_context_current": "ネイティブ観測ではインデックス作成の遅延は報告されていません。",
+  "search_context_catching_up": "更新内容をインデックスに反映中です。",
+  "search_context_unavailable": "インデックスの鮮度は確認できません。",
+  "search_context_query": "実行した検索：{query}",
+  "search_context_scope": "検索範囲：{scope}",
+  "search_context_languages": "結果の言語設定：{languages}",
+  "search_context_default_languages": "既定の言語設定",
+  "search_context_kinds": "結果の種類：{kinds}",
+  "search_context_filtered_scope": "選択したリソース範囲",
+  "search_context_predicates": "実行した詳細条件と保存済みフィルターが適用されています。未適用の編集はこの結果を変更しません。",
+  "search_context_limits": "表示結果や件数はインデックスの完全性を示しません。空のページや最終ページも完全性を保証しません。現在の公開判定で結果が除外される場合があります。インデックスはアクセス権を与えません。",
+  "search_context_refresh_help": "更新すると、現在の閲覧者で同じ検索を最初のページから実行します。範囲とフィルターを保持し、以前のカーソルを破棄します。",
+  "search_context_refresh": "この検索結果を更新",
+  "search_context_rating_question": "評価の質問：{id}",
+  "search_context_owner": "現在の閲覧者が選択した非公開条件が適用されます。"
 }

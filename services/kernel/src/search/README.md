@@ -1907,3 +1907,29 @@ The lifecycle unit regressions are authored; native population, factory, receivi
 remain separate acceptance obligations. The dedicated retained-lifetime regressions cover expiry
 during successful and refused owner reads, delayed timer delivery, caller deadline mutation and
 late native final completion. These unit cases remain authored UNRUN.
+
+## Reader coverage and freshness
+
+Catalogue and mixed result pages optionally publish `freshness.state`: `current`, `catching-up`, or `unavailable`.
+It projects the same generation-bound native observation used for `as_of`, once per response lifecycle, before the
+existing final disclosure/context guards. `current` means native `catchingUp` is false (including lag below sixty
+seconds), not that every source is indexed. `as_of` retains its native meaning: database observation time when no
+partition is behind, otherwise the oldest unprocessed envelope time. It is never a globally complete watermark.
+Missing or malformed presentation evidence is unavailable; it cannot make a result ready. Catalogue's existing
+five-minute stale public-filter refusal remains authoritative. The ordered Realm reader currently supplies only its
+native timestamp: its freshness capability is explicitly unavailable rather than inferred or measured twice.
+
+Decision: first-page Refresh uses the existing reader-owned retry; continuation Refresh navigates to the same
+executed first-page URL, retiring the document and its requests, with no scope, predicate or credential repair.
+The explanation reads executed predicates, Boolean/qualifier structure, resource scope and result language
+preferences, separately from pending form edits. Language preferences select result text, not an implicit language
+predicate. Count evidence retains exact/lower-bound/unavailable semantics. Empty and terminal pages prove neither
+index completeness nor permission; current final native disclosure still removes stale or concealed results.
+
+Cost: reuse one coalesced `createFreshness` observation per pinned generation. The existing SQL aggregates at most
+4,096 fixed partition rows, left-joins checkpoints by full `(partition_no, consumer)` key and does at most 4,096
+outbox seeks by `(partition_no, position, event_seq=0)` with `LIMIT 1`, returning one aggregate row. No new outbox
+scan or request polling exists. One read runs per reader; arrivals share the following read. Catalogue retains its
+bounded reader cache; mixed retains one cache entry (in-flight readers keep their generation). The public addition
+is at most 35 UTF-8 JSON bytes (`freshness` object plus separator), constant per page, without consumer, partition,
+backlog, raw event time or relay detail. Existing request deadlines and result fan-out limits are unchanged.
