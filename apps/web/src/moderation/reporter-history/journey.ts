@@ -78,7 +78,12 @@ export function createReporterHistoryJourney(
     return owner.healthy();
   };
   const snapshot = (): ReporterHistoryState => {
-    if (!healthy()) return retired;
+    if (!healthy()) {
+      result = retired;
+      serverResult = retired;
+      source = null;
+      return retired;
+    }
     if (result.state === 'loaded' && !owner.available()) return unavailable;
     return result;
   };
@@ -113,11 +118,20 @@ export function createReporterHistoryJourney(
     snapshot,
     // Admission remains mandatory on the browser, even after a server rendering.
     serverSnapshot: () => serverResult,
-    retire: owner.retire,
+    retire: () => {
+      owner.retire();
+      publish(retired);
+      source = null;
+    },
     isCurrent: () => current() && owner.available() && snapshot().state === 'loaded',
     subscribe(listener: () => void) {
       listeners.add(listener);
-      const stop = owner.subscribe(listener);
+      const stop = owner.subscribe(() => {
+        if (!owner.healthy()) {
+          source = null;
+          publish(retired);
+        } else listener();
+      });
       return () => {
         listeners.delete(listener);
         generation++;
