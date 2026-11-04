@@ -59,7 +59,11 @@ test('visibility options follow native advice and logical built-ins remain read-
 });
 
 test('current owner advice remains usable when the retry target already matches', () => {
-  const current = { ...privateCurated, visibility: 'public' as const, allowedVisibilityActions: ['private', 'unlisted'] as const };
+  const current = {
+    ...privateCurated,
+    visibility: 'public' as const,
+    allowedVisibilityActions: ['private', 'unlisted'] as const,
+  };
   const editor = new CollectionPrivacyEditor(current, io);
   expect(editor.hasCurrentUpdateAdvice()).toBe(true);
   editor.receive({ ...current, allowedVisibilityActions: [] });

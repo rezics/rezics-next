@@ -97,7 +97,11 @@ test('empty current update advice blocks a retained original replay and refreshe
     {
       save: async (input) => {
         commands.push(input);
-        return { ok: false, reason: 'unavailable', failure: { status: 503, ...(commands.length === 1 ? { retryAfter: '60' } : {}) } };
+        return {
+          ok: false,
+          reason: 'unavailable',
+          failure: { status: 503, ...(commands.length === 1 ? { retryAfter: '60' } : {}) },
+        };
       },
       read: async () => ({
         ok: true,

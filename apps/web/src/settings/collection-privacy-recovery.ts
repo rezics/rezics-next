@@ -216,12 +216,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     });
   }
   private async send(recovering: boolean) {
-    if (
-      !this.live() ||
-      !this.canWrite() ||
-      this.commandWaiting() ||
-      (recovering && !this.hasCurrentUpdateAdvice())
-    )
+    if (!this.live() || !this.canWrite() || this.commandWaiting() || (recovering && !this.hasCurrentUpdateAdvice()))
       return;
     const attempt = this.state.attempt;
     if (!attempt) return;
