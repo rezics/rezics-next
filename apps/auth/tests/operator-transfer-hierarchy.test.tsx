@@ -535,7 +535,6 @@ for (const attempt of [
     expect(calls).toEqual([
       '/session',
       '/session',
-      '/session',
       OPERATOR_TRANSFER_PAGE_PATH,
       ...(attempt?.phase === 'approve' ? ['/session', OPERATOR_TRANSFER_PAGE_PATH] : []),
     ]);
