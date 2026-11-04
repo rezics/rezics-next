@@ -111,6 +111,15 @@ function diagnosticsSink() {
   return {
     diagnostics,
     add(pointer: string, code: string) {
+      const hardLimit =
+        code === 'infobox_byte_limit' ||
+        code === 'infobox_depth_limit' ||
+        code === 'infobox_field_limit' ||
+        code === 'quantity_length_limit';
+      if (overflow && hardLimit && diagnostics.at(-1)?.code === 'additional_infobox_omissions') {
+        diagnostics[diagnostics.length - 1] = { pointer, code };
+        return;
+      }
       if (diagnostics.length < bangumiCharacterMeasurementLimits.maxDiagnostics - 1) {
         diagnostics.push({ pointer, code });
       } else if (!overflow) {
