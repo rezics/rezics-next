@@ -10,8 +10,12 @@ let f: Awaited<ReturnType<typeof createThreadReadingPageFixture>>;
 setDefaultTimeout(120_000);
 const anonymous = { kind: 'anonymous' } as const;
 const deadline = () => Date.now() + 120_000;
-beforeAll(async () => { f = await createThreadReadingPageFixture(); }, 240_000);
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await createThreadReadingPageFixture();
+}, 240_000);
+afterAll(async () => {
+  await f?.close();
+});
 let window = 0;
 beforeEach(async () => {
   // Keep ordinary production rate budgets; each journey starts in a fresh minute.
@@ -49,9 +53,15 @@ test('mounted personas retain exact opening/reply revisions, cursor, guest contr
   const suspended = await f.page(thread.id, f.system.actors.suspended.bearer);
   expect(suspended.response.status, suspended.text).toBe(401);
   expect(suspended.value.code).toBe('invalid_credentials');
-  await f.checked('POST', `/v1/threads/${thread.id}:takeDown`, {
-    bearer: moderator.bearer, body: { reason: 'Conceal the reading target' },
-  }, 200);
+  await f.checked(
+    'POST',
+    `/v1/threads/${thread.id}:takeDown`,
+    {
+      bearer: moderator.bearer,
+      body: { reason: 'Conceal the reading target' },
+    },
+    200,
+  );
   const concealed = await f.page(thread.id);
   const missing = await f.page(newId(routeOf(thread.id)!));
   expect(concealed.response.status).toBe(404);
@@ -66,25 +76,38 @@ test('native signed reply cursors bind account, client and authentication epoch'
   const actor = f.system.actors.author.actor;
   const clientId = `reading-page-${crypto.randomUUID()}`;
   await f.system.nativeAuth.internal.registerClient({
-    clientId, firstParty: true, scopes: [...f.system.auth.ordinaryScopes],
+    clientId,
+    firstParty: true,
+    scopes: [...f.system.auth.ordinaryScopes],
   });
   const otherClient = await f.system.auth.issue({
-    accountId: actor.accountId, clientId, scopes: f.system.auth.ordinaryScopes,
+    accountId: actor.accountId,
+    clientId,
+    scopes: f.system.auth.ordinaryScopes,
   });
   const selected = await listThreadPosts(f.dependencies, thread.id, { actor, deadline: deadline() }, undefined, 1);
   expect(selected.nextCursor).not.toBeNull();
-  for (const switched of [
-    f.system.actors.other.actor,
-    otherClient.actor,
-  ]) {
-    await expect(listThreadPosts(f.dependencies, thread.id, { actor: switched, deadline: deadline() }, selected.nextCursor!, 1))
-      .rejects.toThrow('Invalid content cursor');
+  for (const switched of [f.system.actors.other.actor, otherClient.actor]) {
+    await expect(
+      listThreadPosts(f.dependencies, thread.id, { actor: switched, deadline: deadline() }, selected.nextCursor!, 1),
+    ).rejects.toThrow('Invalid content cursor');
   }
-  await expect(listThreadPosts(
-    f.dependencies, thread.id,
-    { actor: { ...actor, authnEpoch: actor.authnEpoch + 1 }, deadline: deadline() }, selected.nextCursor!, 1,
-  )).rejects.toThrow();
-  const resumed = await listThreadPosts(f.dependencies, thread.id, { actor, deadline: deadline() }, selected.nextCursor!, 1);
+  await expect(
+    listThreadPosts(
+      f.dependencies,
+      thread.id,
+      { actor: { ...actor, authnEpoch: actor.authnEpoch + 1 }, deadline: deadline() },
+      selected.nextCursor!,
+      1,
+    ),
+  ).rejects.toThrow();
+  const resumed = await listThreadPosts(
+    f.dependencies,
+    thread.id,
+    { actor, deadline: deadline() },
+    selected.nextCursor!,
+    1,
+  );
   expect(resumed.entries).toHaveLength(1);
 });
 
@@ -92,17 +115,27 @@ test('selected exact cards detect ancestor changes and keep original keys on ret
   const thread = await f.thread();
   const parent = await f.post(thread.id, 'Original parent');
   const child = await f.post(thread.id, 'Selected child', parent.id);
-  const selected: SelectedReadingCardReference[] = [{
-    type: 'content.post', id: child.id, threadId: thread.id, placeId: f.boardId,
-    threadRevisionId: thread.firstPost.revisionId, sourceRevisionId: child.revisionId,
-  }];
+  const selected: SelectedReadingCardReference[] = [
+    {
+      type: 'content.post',
+      id: child.id,
+      threadId: thread.id,
+      placeId: f.boardId,
+      threadRevisionId: thread.firstPost.revisionId,
+      sourceRevisionId: child.revisionId,
+    },
+  ];
   const prepare = () => createContentReadingCardBatch(f.dependencies, selected, anonymous, deadline());
   const pending = await prepare();
   await f.revise(parent.id, parent.revisionId, 'Revised ancestor');
   await expect(pending.finish()).rejects.toMatchObject({ code: 'dependency_unavailable' });
   expect(pending.selected).toEqual(selected);
   const retry = await (await prepare()).finish();
-  expect(retry.selected[0]).toMatchObject({ reference: selected[0], state: 'current', source: { sourceRevisionId: child.revisionId } });
+  expect(retry.selected[0]).toMatchObject({
+    reference: selected[0],
+    state: 'current',
+    source: { sourceRevisionId: child.revisionId },
+  });
   expect(retry.anchors.length).toBeGreaterThan(0);
   const beforeEdit = await prepare();
   await f.revise(child.id, child.revisionId, 'New selected revision');
@@ -117,16 +150,23 @@ test('mounted withheld and erased replies disclose no protected body, identity o
   const erased = await f.post(thread.id, 'Erased reply bytes');
   const moderator = f.system.actors.moderator;
   await f.grant(hidden.id, moderator.actor.accountId, ['moderation:takedown']);
-  await f.checked('POST', `/v1/posts/${hidden.id}:takeDown`, {
-    bearer: moderator.bearer, body: { reason: 'Hide exact reply' },
-  }, 200);
+  await f.checked(
+    'POST',
+    `/v1/posts/${hidden.id}:takeDown`,
+    {
+      bearer: moderator.bearer,
+      body: { reason: 'Hide exact reply' },
+    },
+    200,
+  );
   await f.checked('DELETE', `/v1/posts/${erased.id}`, { bearer: f.author.bearer }, 204);
   const page = await f.page(thread.id);
   expect(page.response.status, page.text).toBe(200);
   for (const id of [hidden.id, erased.id]) {
     const entry = page.value.replies.items.find((post: any) => post.id === id);
     expect(entry).toMatchObject({ body: null, sha256: null, removed: true });
-    for (const key of ['authorId', 'revisionId', 'decisionId', 'reactions', 'viewerReaction']) expect(entry).not.toHaveProperty(key);
+    for (const key of ['authorId', 'revisionId', 'decisionId', 'reactions', 'viewerReaction'])
+      expect(entry).not.toHaveProperty(key);
     expect(page.value.actions.references.some((reference: any) => reference.id === id)).toBe(false);
   }
   expect(JSON.stringify(page.value)).not.toContain('Hidden reply bytes');
@@ -145,7 +185,9 @@ test('a raw invisible candidate inserted during hydration cannot certify a diffe
     pending = f.page(thread.id);
     await Promise.race([
       barrier.entered,
-      pending.then((result) => { throw new Error(`Reading page missed hydration barrier: ${result.response.status} ${result.text}`); }),
+      pending.then((result) => {
+        throw new Error(`Reading page missed hydration barrier: ${result.response.status} ${result.text}`);
+      }),
     ]);
     await f.setTime(now + 15_000);
     await f.post(thread.id, 'Invisible draft candidate', undefined, 'draft');

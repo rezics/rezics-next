@@ -1,21 +1,22 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/reading-page.ts",
-    "services/kernel/src/content/reads.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/*reading-page*.ts",
-    "services/kernel/test/content/support/*reading-page*.ts"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [],
-  "estimate": { "lines": 700, "files": 5 },
-  "acceptance": { "failing": true }
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/reading-page.ts',
+      'services/kernel/src/content/reads.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/*reading-page*.ts',
+      'services/kernel/test/content/support/*reading-page*.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 700, 'files': 5 },
+  'acceptance': { 'failing': true },
 }
 ---
 

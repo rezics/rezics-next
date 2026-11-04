@@ -15,12 +15,7 @@ export async function createThreadReadingPageFixture() {
     commandTime = instant;
     await system.clock.setCommandTime(new Date(instant).toISOString());
   };
-  const checked = async (
-    method: string,
-    path: string,
-    options: Parameters<typeof f.call>[2] = {},
-    status = 201,
-  ) => {
+  const checked = async (method: string, path: string, options: Parameters<typeof f.call>[2] = {}, status = 201) => {
     const result = await f.call(method, path, options);
     if (result.response.status !== status)
       throw new Error(`${method} ${path}: expected ${status}, received ${result.response.status} ${result.text}`);
@@ -76,7 +71,13 @@ export async function createThreadReadingPageFixture() {
     return (
       await checked('POST', `/v1/threads/${threadId}/posts`, {
         bearer: f.author.bearer,
-        body: { body: fromPlainText(text), licence: 'CC0-1.0', subjectIds: [], visibility, ...(parentId ? { parentId } : {}) },
+        body: {
+          body: fromPlainText(text),
+          licence: 'CC0-1.0',
+          subjectIds: [],
+          visibility,
+          ...(parentId ? { parentId } : {}),
+        },
       })
     ).post;
   };
@@ -96,10 +97,17 @@ export async function createThreadReadingPageFixture() {
   const grant = async (id: string, accountId: string, actions: string[]) => {
     await checked('POST', '/v1/grants', {
       bearer: f.governance.bearer,
-      body: { resource: { route: routeOf(id), id }, subject: { kind: 'account', id: accountId }, actions, valid: '(,)' },
+      body: {
+        resource: { route: routeOf(id), id },
+        subject: { kind: 'account', id: accountId },
+        actions,
+        valid: '(,)',
+      },
     });
   };
   const page = (threadId: string, bearer?: string, cursor?: string) =>
-    f.call('GET', `/v1/threads/${threadId}/reading-page${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { bearer });
+    f.call('GET', `/v1/threads/${threadId}/reading-page${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
+      bearer,
+    });
   return { ...f, checked, dependencies, setTime, thread, post, revise, grant, page };
 }

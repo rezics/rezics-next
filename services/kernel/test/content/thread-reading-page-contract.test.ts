@@ -128,8 +128,11 @@ test('selected post rechecks accept repeated observations and reject changed sou
   const witness = readingPageEntryWitness(selected);
   expect(readingPageEntryWitness(structuredClone(selected))).toBe(witness);
   for (const change of [
-    { revisionId: id('6') }, { securityRevision: '2' }, { parentId: id('7') },
-    { authorId: id('8') }, { boardId: id('9') },
+    { revisionId: id('6') },
+    { securityRevision: '2' },
+    { parentId: id('7') },
+    { authorId: id('8') },
+    { boardId: id('9') },
   ])
     expect(readingPageEntryWitness({ ...selected, ...change })).not.toBe(witness);
 });
