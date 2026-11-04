@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  createPurchaseReaderOrigin,
+  purchaseReaderOriginHref,
+  purchaseReaderOriginIsCurrent,
+} from '../src/checkout/purchase-return';
 import type { ContentEditionState } from '../src/content-editions/edition-model';
 import { ContentEditionReader } from '../src/content-editions/edition-view';
 import { m } from '../src/paraglide/messages.js';
@@ -65,4 +70,27 @@ test('missing reader origin offers only a current inventory restart and reveals 
   expect(markup).not.toContain('order-0123');
   expect(markup).not.toContain('entitlement-0456');
   expect(markup).not.toContain('ordersCursor');
+});
+
+test('account replacement removes the private return before a published reader can disclose it', () => {
+  const origin = createPurchaseReaderOrigin({
+    kind: 'entitlement',
+    recordId: 'private-entitlement-0456',
+    editionId,
+    locale: 'en',
+    history: { ordersCursor: 'private-orders-position' },
+    viewer: { current: true, subject: 'buyer-a', readId: 42 },
+  })!;
+  const admitted = purchaseReaderOriginIsCurrent(origin, editionId, 'en', {
+    current: true,
+    subject: 'buyer-b',
+    readId: 43,
+  });
+  const markup = render(published, admitted ? { kind: origin.kind, href: purchaseReaderOriginHref(origin) } : undefined);
+
+  expect(markup).toContain('href="/en/orders"');
+  expect(markup).toContain(m.content_edition_purchases());
+  expect(markup).not.toContain(m.content_edition_return_entitlement());
+  expect(markup).not.toContain(origin.recordId);
+  expect(markup).not.toContain('private-orders-position');
 });
