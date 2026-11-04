@@ -2,7 +2,8 @@ import { afterAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { readPublicAccountByHandle } from '../../src/access/account-data.ts';
+import { readPublicAccountByHandle, readPublicIdentityObservations } from '../../src/access/account-data.ts';
+import { readAvatarSummaries } from '../../src/content/avatar.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
@@ -59,6 +60,41 @@ async function media(owner: string, purpose = 'avatar', state = 'available') {
   );
   return id;
 }
+
+test('Content media admission stays separate from current public actor observation', async () => {
+  const { id } = await account();
+  const avatar = await media(id);
+  const replacement = await media(id);
+  await commands.updateAccount(await context(id), { accountId: id, key: key(), patch: { avatar } });
+  const client = await pool.connect();
+  try {
+    const before = await readPublicIdentityObservations(client, [id]);
+    const admitted = await readAvatarSummaries(client, [before[0]!.avatarMediaId!]);
+    expect(admitted.get(avatar)).toMatchObject({ media: avatar });
+    await commands.updateAccount(await context(id), {
+      accountId: id,
+      key: key(),
+      patch: { avatar: replacement, displayName: 'Changed' },
+    });
+    const after = await readPublicIdentityObservations(client, [id]);
+    expect(after[0]).not.toEqual(before[0]);
+    expect(after[0]).toMatchObject({ avatarMediaId: replacement, displayName: 'Changed' });
+    expect(
+      before.filter((old) =>
+        after.some((current) => current.id === old.id && JSON.stringify(current) === JSON.stringify(old)),
+      ),
+    ).toEqual([]);
+    await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
+      routeOf(id),
+      id,
+    ]);
+    expect(await readPublicIdentityObservations(client, [id])).toMatchObject([
+      { state: 'active', nativeState: 'suspended', authnFenced: false, avatarMediaId: null },
+    ]);
+  } finally {
+    client.release();
+  }
+});
 
 test('profile patch sets owned avatar media, handle returns the cover summary, and null clears it', async () => {
   const { id, handle } = await account();
@@ -157,6 +193,17 @@ test('fencing and deletion clear avatar and all views without erasing the media'
     await commands.updateAccount(await context(id), { accountId: id, key: key(), patch: { avatar } });
     if (deleted) await commands.tombstone(await context(id), { accountId: id, key: key() });
     else await internal.raiseFence({ accountId: id, key: key() });
+    if (!deleted) {
+      await pool.query('UPDATE access.account SET avatar=$3 WHERE route=$1 AND account_id=$2', [
+        routeOf(id),
+        id,
+        avatar,
+      ]);
+      expect(await readPublicIdentityObservations(pool, [id])).toMatchObject([
+        { id, avatarMediaId: null, nativeState: 'active', authnFenced: true },
+      ]);
+      await pool.query('UPDATE access.account SET avatar=NULL WHERE route=$1 AND account_id=$2', [routeOf(id), id]);
+    }
     expect(
       (
         await pool.query('SELECT avatar, public_views FROM access.account WHERE route=$1 AND account_id=$2', [
