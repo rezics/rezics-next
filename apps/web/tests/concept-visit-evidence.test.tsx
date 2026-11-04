@@ -145,11 +145,12 @@ async function mounted(
     await run({
       host,
       client,
-      render: (node) =>
-        act(async () => {
+      render: async (node) => {
+        await act(async () => {
           root.render(h(QueryClientProvider, { client }, node));
-          await tick();
-        }),
+        });
+        await act(tick);
+      },
       click: (name) =>
         act(async () => {
           const button = [...host.querySelectorAll('button')].find((node) => node.textContent?.trim() === name);
