@@ -174,6 +174,10 @@ type PostPath = Omit<GeneratedPostPath, 'revisions'> & { revisions: PostHistoryP
 type PostsClient = Omit<GeneratedKernelClient['posts'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['posts']>) => PostPath);
 
+type ReadingPageCall = ReturnType<ReturnType<GeneratedKernelClient['threads']>['reading-page']['get']>;
+/** Response declared by the mounted thread reading route. */
+export type ReadingPageResponse = NonNullable<Awaited<ReadingPageCall>['data']>;
+
 type BoardPageCall = ReturnType<ReturnType<GeneratedKernelClient['boards']>['page']['get']>;
 /** Response declared by the mounted GET /v1/boards/:id/page route. */
 export type BoardPageResponse = NonNullable<Awaited<BoardPageCall>['data']>;

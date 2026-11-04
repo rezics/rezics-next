@@ -1,6 +1,6 @@
 import { ThreadPageCursorError } from './thread-page-errors';
 export { isThreadPageCursorError } from './thread-page-errors';
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, ReadingPageResponse } from '@rezics/client';
 import type { DocumentMentions } from '@rezics/ui/document-body';
 import { boardProblemCode } from './board-reading';
 import { readDocumentMentions } from '../kernel/mentions';
@@ -18,7 +18,7 @@ type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
-export type ReadingPage = NonNullable<Awaited<ReturnType<ThreadResource['reading-page']['get']>>['data']>;
+export type ReadingPage = ReadingPageResponse;
 export type ThreadPost = ReadingPage['thread']['firstPost'] | ReadingPage['replies']['items'][number];
 export type ThreadPageAuthor = ReadingPage['authors']['items'][number];
 export type ThreadPageObservation = Pick<
