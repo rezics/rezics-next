@@ -19,7 +19,7 @@ import { useSubjectCommunityReading } from '../../pages/subject-community-lifeti
 import { spoilerLevel } from '../../pages/shared';
 import { SpoilerGate } from '../../pages/values';
 import { historicalStatement } from '../release-fidelity/model';
-import { musicReleaseDate } from '../music-release-reader/model';
+import { gameDatePresentation } from './date';
 import { profileSourceRecords } from '../music-reader';
 import type { GameReaderAddress, GameReaderRead, GameReaderReady, GameReaderTransport, GameStatement } from './model';
 
@@ -97,6 +97,8 @@ function GameWindow({
   const pending = useRef<GameReaderAddress>({ id, context, type });
   const inFlight = useRef(false);
   const sequence = useRef(0);
+  const acceptedCursors = useRef(new Set<string>());
+  const successfulWindows = useRef(initial?.ok ? 1 : 0);
   const origin = useRef<HTMLAnchorElement | null>(null);
   const navigate = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!current()) {
@@ -122,8 +124,20 @@ function GameWindow({
     inFlight.current = true;
     pending.current = address;
     const turn = ++sequence.current;
-    setPage(undefined);
+    // A continuation replaces only its bounded release window. Keep the work reading available
+    // while the new window loads or its transport fails; never retain the old release destinations.
+    setPage((previous) => (address.cursor && previous ? { ...previous, editions: [], next: null } : undefined));
     setFailure(undefined);
+    if (address.cursor && (acceptedCursors.current.has(address.cursor) || successfulWindows.current >= 64)) {
+      inFlight.current = false;
+      setBusy(false);
+      setFailure({ ok: false, reason: 'restart' });
+      return;
+    }
+    if (!address.cursor) {
+      acceptedCursors.current.clear();
+      successfulWindows.current = 0;
+    }
     setBusy(true);
     let result: GameReaderRead;
     try {
@@ -139,9 +153,15 @@ function GameWindow({
       result.public.subject.id === id &&
       result.public.subject.context === context &&
       result.public.subject.type === type
-    )
+    ) {
+      successfulWindows.current++;
+      if (address.cursor) acceptedCursors.current.add(address.cursor);
       setPage(result);
-    else setFailure(result.ok ? { ok: false, reason: 'withheld' } : result);
+    } else {
+      const refused = result.ok || result.reason === 'withheld' || result.reason === 'invalid';
+      if (refused) setPage(undefined);
+      setFailure(result.ok ? { ok: false, reason: 'withheld' } : result);
+    }
     if (
       keyboard &&
       trigger &&
@@ -194,24 +214,32 @@ function GameWindow({
     ) : (
       body
     );
+  const failureNotice =
+    failure && !failure.ok ? (
+      <div role="alert">
+        <p>
+          {failure.reason === 'restart'
+            ? m.game_reader_window_restart({}, o)
+            : failure.reason === 'withheld'
+              ? m.game_reader_withheld({}, o)
+              : m.game_reader_unavailable({}, o)}
+        </p>
+        <button
+          type="button"
+          className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+          disabled={busy}
+          onClick={request(failure.reason === 'restart' ? { id, context, type } : pending.current)}
+        >
+          {failure.reason === 'restart' ? m.game_reader_refresh({}, o) : m.album_tracks_retry({}, o)}
+        </button>
+      </div>
+    ) : null;
   return (
     <div className="min-w-0 space-y-5" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">{m.game_reader_scope({}, o)}</p>
       <p className="text-sm text-muted-foreground">{m.game_reader_return({}, o)}</p>
-      {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
-      {failure ? (
-        <div role="alert">
-          <p>{m.game_reader_unavailable({}, o)}</p>
-          <button
-            type="button"
-            className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-            disabled={busy}
-            onClick={request(pending.current)}
-          >
-            {m.album_tracks_retry({}, o)}
-          </button>
-        </div>
-      ) : null}
+      {busy && !page ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
+      {!page ? failureNotice : null}
       {page ? (
         <>
           <p>
@@ -263,7 +291,11 @@ function GameWindow({
               <section className="space-y-3" data-slot="game-editions">
                 <h3 className="font-semibold">{m.subject_editions({}, o)}</h3>
                 <p>{m.game_reader_editions_scope({}, o)}</p>
-                {!page.editionsAdmitted ? (
+                {busy ? (
+                  <p role="status">{m.candidate_loading({}, o)}</p>
+                ) : failure ? (
+                  failureNotice
+                ) : !page.editionsAdmitted ? (
                   <p role="status">{m.game_reader_editions_unsupported({}, o)}</p>
                 ) : (
                   <>
@@ -325,10 +357,15 @@ function GameWindow({
                         );
                       })}
                     </ul>
+                    <p className="text-sm text-muted-foreground">{m.game_reader_total_unknown({}, o)}</p>
                     <p className="text-sm text-muted-foreground">
-                      {page.next ? m.game_reader_more_available({}, o) : m.album_tracks_complete({}, o)}
+                      {page.next
+                        ? m.game_reader_more_available({}, o)
+                        : page.caughtUp
+                          ? m.game_reader_window_complete({}, o)
+                          : m.work_parts_pending({}, o)}
                     </p>
-                    {!page.caughtUp ? <p role="status">{m.work_parts_pending({}, o)}</p> : null}
+                    {!page.caughtUp && page.next ? <p role="status">{m.work_parts_pending({}, o)}</p> : null}
                     {page.next ? (
                       <button
                         type="button"
@@ -387,19 +424,13 @@ type FactProps = {
 function GameFact(props: FactProps & { date: boolean }) {
   const { statement, page, related, locale, link: Link } = props;
   const o = { locale: locale as never };
-  const date = props.date ? musicReleaseDate(statement, page.digest, locale) : undefined;
+  const date = props.date ? gameDatePresentation(statement, page.digest, locale) : undefined;
   const content = statement.value.type === 'value' ? statement.value.content : undefined;
   return (
     <div className="space-y-2">
       {date ? (
         <p data-date-kind={date.kind}>
-          {date.kind === 'tba'
-            ? m.release_fidelity_date_tba({}, o)
-            : date.kind === 'none'
-              ? m.release_fidelity_date_none({}, o)
-              : date.kind === 'unknown'
-                ? m.subject_value_unknown({}, o)
-                : date.text}
+          {date.structuredDate ? <time dateTime={date.structuredDate}>{date.text}</time> : date.text}
         </p>
       ) : statement.property.data_type === 'wikibase-item' &&
         typeof content === 'string' &&

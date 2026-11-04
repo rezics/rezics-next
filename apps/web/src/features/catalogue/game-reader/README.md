@@ -18,8 +18,15 @@ opener, or the reader heading if the opener disappeared, without overriding move
 The mounted reader observes the existing session and exposure caches without starting another session read. Source,
 reader, locale, Context, Realm, Type or spoiler-setting replacement retires current facts, cursors, pending results,
 reveal consent and focus intent. The same retired source cannot revive after an authority transition. A replacement
-source establishes a new observation. Refresh and continuation remove the preceding window before fetching; failed
-reads retry only their exact address. No edit, candidate selection, provider login or private Library action occurs.
+source establishes a new observation. Refresh removes the prior reading; continuation removes its release window
+before fetching but retains work facts on transport failure. Withheld readings remove both sections. Failed reads
+retry their exact address; native cursor refusal, a repeated accepted token or 64 accepted windows offers an explicit
+fresh reading instead. An absent next token never supplies a catalogue total. No edit, candidate selection, provider
+login or private Library action occurs.
+
+Game dates consume shared time presentation plus release-fidelity's explicit TBA meaning. Only an absent calendar
+uses the native Gregorian default; explicit non-Gregorian calendars stay unsupported. Signed years, precision,
+timezone and uncertainty are shown even when the shared helper intentionally omits a structured date.
 
 ## Cost
 
@@ -29,7 +36,8 @@ refill or write. Release admission uses the existing definition reader's 4 MiB/1
 to 2 MiB, each association to 128 KiB and the page to 20 × 128 KiB + 64 KiB. Oversized responses are unavailable,
 not truncated into a different assertion. Cursors are opaque, at most 4,096 characters and cannot repeat themselves.
 Duplicate or mismatched association identities are refused. Retention is one Subject, one immutable definition
-observation, one 20-row window and one pending address, independent of catalogue size. Continuation is explicit and
+observation, one 20-row window, at most 63 accepted continuation tokens and one pending address, independent of
+catalogue size. Continuation is explicit and
 replaces the window; an empty native page with a following token still offers More. Counts are not inferred from
 disclosed rows. Browser retention is private to the mounted visit; the server response is private/no-store.
 

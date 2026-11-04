@@ -11,7 +11,7 @@ type Links = NonNullable<Awaited<ReturnType<Endpoint['links']['get']>>['data']>;
 export type GameStatement = SubjectRead['subject']['statements'][string][number];
 export type GameReaderAddress = { id: string; context: string; type: string; cursor?: string };
 export type GameReaderRead =
-  | { ok: false; reason: 'unavailable' | 'withheld' | 'invalid' }
+  | { ok: false; reason: 'unavailable' | 'withheld' | 'invalid' | 'restart' }
   | {
       ok: true;
       public: SubjectRead;
@@ -161,6 +161,9 @@ export async function readGameReader(
         ...(address.cursor ? { cursor: address.cursor } : {}),
       },
     });
+    // The links owner currently reports both stale and invalid cursors as invalid_request.
+    // Neither means that the native stream is exhausted or that retrying the token will help.
+    if (response.status === 400 && address.cursor) return { ok: false, reason: 'restart' };
     if (response.status !== 200 || !response.data) return failure(response.status);
     const page = response.data;
     if (

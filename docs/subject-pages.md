@@ -88,6 +88,14 @@ companion own edition details and correction.
 Decision: Game destinations open in a new tab to preserve the source window, with keyboard return to its surviving
 opener or reader heading; replaced authority or source retires old results, cursors, reveal and focus intent.
 
+Decision: a failed release continuation retires release destinations while retaining the work reading; native cursor
+refusal, a repeated accepted cursor or 64 accepted windows requires an explicit fresh reading, never an exhaustion claim.
+Refresh retires the whole prior reading. A withheld reading removes both work and release facts. An empty window with
+continuation still offers More; an absent continuation does not establish a catalogue total. Game dates use the shared
+time presentation and release-fidelity TBA interpretation, retain the native absent-calendar Gregorian interpretation,
+and name explicit non-Gregorian calendars unsupported. Precision, signed years and uncertainty remain visible even
+when a date cannot be emitted as a structured date.
+
 **Cost:** At most four native reads per explicit window (Subject, active pointer, immutable Release, one 20-row links
 page), no target hydration or writes. The [reader Cost](../apps/web/src/features/catalogue/game-reader/README.md#cost)
 bounds bytes, cursors and retained windows. Shared Subject wiring adds no View enum or route ownership.
