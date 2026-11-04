@@ -6,6 +6,18 @@ import { VndbResultPage } from '../library/personal-list-import/results';
 import { ImportLibraryView } from '../library/showcase-import-return/view';
 import { PatternStory } from './page';
 import { m } from '../paraglide/messages.js';
+import recordedLibrary from '../kernel/recorded/library-entries.json';
+import type { ImportLibrarySnapshot } from '../library/showcase-import-return/browser';
+
+// Reuse the recorded native Library rows; their identities are unrelated to this import acknowledgement.
+const retainedLibrary: ImportLibrarySnapshot = {
+  visible: { state: 'current', page: { libraryEntries: recordedLibrary.libraryEntries.slice(0, 8), next: null } },
+  cursor: null,
+  pending: null,
+  failed: { intent: { cursor: null, kind: 'refresh' }, result: { state: 'unavailable' } },
+  revision: 2,
+  retired: false,
+};
 
 // Illustrative native-format states; these do not claim a seeded running-product pass.
 const noop = () => {};
@@ -113,7 +125,7 @@ function Example({ completed = false }: { completed?: boolean }) {
         {completed ? (
           <>
             <VndbResultPage snap={results} busy={false} onResume={noop} onReview={noop} onDiscard={noop} />
-            <ImportLibraryView result={null} busy={false} onRead={noop} />
+            <ImportLibraryView result={null} snapshot={retainedLibrary} busy={false} onRead={noop} />
           </>
         ) : (
           <VndbReviewPage

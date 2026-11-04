@@ -1,5 +1,37 @@
 # Saved Library views
 
+## Current Library after VNDB import
+
+The import results acknowledgement and current Library are independent sections. A completed, partial or uncertain
+import neither identifies a preview row nor proves that a source score or progress survived. The current section
+reads one native FULL page of at most eight entries with the original prepared reader, opaque cursor and
+`lastActivity desc` order. It never dispatches an import command, resolves an XML title to a Subject, hydrates a row,
+or overlays imported values. Original native Entry/Subject associations and repeated rows keep their positions.
+Released profile labels describe the current state; an unknown label uses the existing Other presentation.
+Progress appears only when the native page supplies its active session. This reader supplies no rating projection;
+the Work and full Library retain those controls.
+
+Decision: retain one replacement page and one previous address, retry the exact failed page, and open the full
+Library at its first page with explicit recent-activity order and the preview's supported layout and grid size.
+
+Next and Previous replace the current window rather than appending history. A pending or failed continuation keeps
+the independently read page visible and explicitly says that completion has not been established. Retry retains the
+failed cursor and navigation intent; Refresh deliberately rereads the visible window; Restart reads the first page.
+An expired cursor is explicit and never silently converted into a first-page success. Native denial, sign-out or
+closure withdraws visible private results. A sparse page retains Next; an empty first page, empty final window and
+unavailable read have separate presentation. No private Library cursor is placed in a public Work link, Auth return,
+local storage or an import receipt.
+
+List, grid and table share the same native page order. Presentation changes do not read or write anything. The
+Open Library address uses `shelfHref` and explicitly carries layout, size and chronological order so saved defaults
+cannot change the intent. Its first-page read belongs to the existing Library owner and keeps score fences intact.
+Work links use the existing Subject visit return facility with only the localized import landmark. The production
+Subject return action brings the visitor back there; browser Back returns from Library. A still-mounted current
+visit can retain its page; a lost visit offers a new current read without reconstructing source or command authority.
+Ready import results can leave for browsing without cancellation commands; uncertain intent retains the existing
+departure protection. Any session, credential, browser observation, source, locale, admission or visit replacement
+retires pending reads permanently, including A/B/A and equal successful observation replacements.
+
 ## My uploaded media
 
 `/library/media` reads one native `GET /v1/media` page for the admitted account and its opaque cursor. Sparse empty

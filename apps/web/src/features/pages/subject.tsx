@@ -942,7 +942,9 @@ export function SubjectPage({
                   className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
                   href={visitReturn}
                 >
-                  {m.recording_reader_return({}, { locale: locale as never })}
+                  {visitReturn.endsWith('/library/import-vndb#vndb-current-library')
+                    ? m.library_vndb_browse_back({}, { locale: locale as never })
+                    : m.recording_reader_return({}, { locale: locale as never })}
                 </a>
               </p>
             ) : null}

@@ -39,17 +39,17 @@ function download(xml: string) {
   URL.revokeObjectURL(url);
 }
 
-export function PersonalVndbImportPage({ visit }: { visit?: VndbVisit | null }) {
+export function PersonalVndbImportPage({ visit, libraryReturn = false }: { visit?: VndbVisit | null; libraryReturn?: boolean }) {
   const observed = useVndbVisit();
   const current = visit === undefined ? observed : visit;
   useEffect(() => () => current?.retire(), [current]);
   if (!current) return <VndbSignedOut />;
-  return <VndbImportAccess visit={current} />;
+  return <VndbImportAccess visit={current} libraryReturn={libraryReturn} />;
 }
 
 const importOperations = ['library_entry.put'] as const;
 
-function VndbImportAccess({ visit }: { visit: VndbVisit }) {
+function VndbImportAccess({ visit, libraryReturn }: { visit: VndbVisit; libraryReturn: boolean }) {
   const { store, value } = useLibraryWorkspaceAdmission(importOperations);
   const version = value.dispatch[0];
   const scoped = useMemo<VndbVisit>(() => {
@@ -72,10 +72,10 @@ function VndbImportAccess({ visit }: { visit: VndbVisit }) {
   }, [visit, store, version]);
   const identity = [visit.subject, visit.csrfToken, getLocale(), version].join(':');
   if (!value.allowed[0]) return <VndbUnavailable />;
-  return <VndbImportSession key={identity} visit={scoped} />;
+  return <VndbImportSession key={identity} visit={scoped} libraryReturn={libraryReturn} />;
 }
 
-function VndbImportSession({ visit }: { visit: VndbVisit }) {
+function VndbImportSession({ visit, libraryReturn }: { visit: VndbVisit; libraryReturn: boolean }) {
   const port = useVndbImportPort(visit);
   const journey = useRef<VndbJourney | null>(null);
   const main = useRef<HTMLElement>(null);
@@ -98,6 +98,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
   return (
     <main ref={main} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
       <PageHeading>{m.library_vndb_title()}</PageHeading>
+      {libraryReturn && snap.stage === 'upload' ? <CurrentImportLibrary visit={visit} returned /> : null}
       {noticeText(snap.notice) ? (
         <p role="status" aria-live="polite">
           {noticeText(snap.notice)}
@@ -168,6 +169,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
           <CurrentImportLibrary
             key={`${snap.uploadId}:${snap.outcomes.map((row) => `${row.reviewId}:${row.status}`).join(',')}`}
             visit={visit}
+            returned={libraryReturn}
           />
         </>
       ) : null}
@@ -212,7 +214,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
         </div>
       ) : null}
       <VndbDeparture
-        active={!!snap.uploadId && snap.stage !== 'removed'}
+        active={!!snap.uploadId && snap.stage !== 'removed' && (snap.stage !== 'results' || locked)}
         locked={locked}
         onLeave={async () => {
           if (snap.retryCommand || snap.busy) return false;

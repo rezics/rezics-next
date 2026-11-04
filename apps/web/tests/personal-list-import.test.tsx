@@ -430,3 +430,37 @@ test('the installed generated VNDB methods send state review and apply without v
     { path: `/v1/libraryImports/vndb/${uploadId}:apply`, body: { rows: [{ ordinal: 0, reviewId: reviewIds[0] }] } },
   ]);
 });
+
+test('Library page reads never replay an uncertain import; its original command survives browsing until visit retirement', async () => {
+  const { createImportLibraryBrowser } = await import('../src/library/showcase-import-return/browser');
+  const current = visit();
+  const commands: VndbCommand[] = [];
+  const journey = createVndbJourney({ visit: current, port: makePort({
+    preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+    page: async () => ({ kind: 'page', value: pageValue([row(0)]) }),
+    review: async (command) => ({ kind: 'reviewed', value: {
+      reviewId: reviewIds[0]!, status: 'skipped', targetId: null, state: null, baseline: null, replace: false, action: 'state',
+    } }),
+    apply: async (command) => { commands.push(command); return { kind: 'unknown', command }; },
+  }) });
+  await journey.preview('<vndb-export version="1.0"/>');
+  await journey.review({ ordinal: 0, action: 'skip' });
+  journey.openConfirm();
+  await journey.confirm();
+  const original = commands[0];
+  const browser = createImportLibraryBrowser({ current: current.current, read: async () => ({
+    state: 'current', page: { libraryEntries: [], next: null },
+  }) });
+  await browser.first();
+  await browser.refresh();
+  await browser.restart();
+  expect(commands).toHaveLength(1);
+  expect(journey.snapshot().retryCommand).toBe('apply');
+  await journey.retryUnknown();
+  expect(commands[1]).toBe(original);
+  current.retire();
+  expect(browser.current()).toBe(false);
+  await journey.retryUnknown();
+  expect(commands).toHaveLength(2);
+  expect(browser.snapshot().visible).toBeNull();
+});

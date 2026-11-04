@@ -11,6 +11,7 @@ const musicContextDestination = new RegExp(
 );
 const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realms/${uuid}$`);
 const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
+const importDestination = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\/library\/import-vndb$/;
 const returnAddressCap = 32768;
 const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
 const subjectCommunityFragment = /^#subject-community-[A-Za-z0-9_-]{1,64}$/u;
@@ -372,6 +373,17 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     )
       return;
     const url = new URL(value, 'https://rezics.invalid');
+    const importPath = importDestination.exec(url.pathname);
+    if (importPath) {
+      // A public work may return to the import landmark, never its private page, upload, reader or credential.
+      if (
+        url.origin !== 'https://rezics.invalid' ||
+        (locale !== undefined && importPath[1] !== locale) ||
+        url.search ||
+        url.hash !== '#vndb-current-library'
+      ) return;
+      return `${url.pathname}${url.hash}`;
+    }
     const collection = collectionReturn(url, locale);
     if (collection) return collection;
     const quotation = subjectDestination.exec(url.pathname);
