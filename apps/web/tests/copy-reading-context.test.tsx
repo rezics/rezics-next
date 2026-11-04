@@ -11,32 +11,26 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const id = (tail: string) => `019a1b2c-3d4e-7f00-8a00-${tail.padStart(12, '0')}`;
-const work = { id: id('1'), label: 'Shared work' };
-const readingContext = (editionId: string): CopyReadingContext => ({
-  association: 'available',
-  work: [work],
-  edition: { id: editionId, label: 'The Same Title' },
-  facts: [],
-});
+const work = { id: id('1'), label: 'Shared work', labelLanguage: 'en' };
 
-test('same-title releases keep distinct destinations and return only to the same inventory address', async () => {
+test('available Work links return to the exact localized inventory address', async () => {
   const returnTo = copyInventoryReturnHref({ subjectId: id('9'), cursor: 'opaque-next' }, 'en')!;
-  const html = renderToStaticMarkup(
-    <>
-      <CopyReadingContextView context={readingContext(id('2'))} returnTo={returnTo} locale="en" />
-      <CopyReadingContextView context={readingContext(id('3'))} returnTo={returnTo} locale="en" />
-    </>,
-  );
+  const context: CopyReadingContext = { state: 'available', work: [work], facts: [] };
   const window = new Window({ url: 'https://rezics.test' });
   try {
     const root = window.document.createElement('main');
-    root.innerHTML = html;
-    const editions = [...root.querySelectorAll('a')].filter((link) => link.textContent === 'The Same Title');
-    expect(editions).toHaveLength(2);
-    expect(editions.map((link) => new URL(link.href).pathname.split('/')[3])).toEqual([id('2'), id('3')]);
-    for (const link of editions) {
+    root.innerHTML = renderToStaticMarkup(
+      <>
+        <CopyReadingContextView context={context} returnTo={returnTo} locale="en" />
+        <CopyReadingContextView context={context} returnTo={returnTo} locale="en" />
+      </>,
+    );
+    const links = [...root.querySelectorAll('a')];
+    expect(links.map((link) => link.textContent)).toEqual(['Shared work', 'Shared work']);
+    for (const link of links) {
       const destination = new URL(link.href);
       const via = new URL(destination.searchParams.get('via')!, 'https://rezics.test');
+      expect(destination.pathname.split('/').at(-1)).toBe(work.id);
       expect(via.pathname).toBe('/en/library/copies');
       expect([...via.searchParams.keys()]).toEqual(['subjectId', 'cursor']);
       expect(via.searchParams.get('subjectId')).toBe(id('9'));
@@ -49,15 +43,31 @@ test('same-title releases keep distinct destinations and return only to the same
   }
 });
 
-test('unavailable work association stays explicit and adds no inferred destination', async () => {
+test('every native state is distinct and hidden states render no nested identity', async () => {
+  const states: Array<[CopyReadingContext, string]> = [
+    [{ state: 'available', work: [work], facts: [] }, m.library_copy_reading_context_available()],
+    [{ state: 'unsupported', facts: [] }, m.library_copy_reading_context_unsupported()],
+    [{ state: 'scope' }, m.library_copy_reading_context_scope()],
+    [{ state: 'withheld' }, m.library_copy_reading_context_withheld()],
+    [{ state: 'missing' }, m.library_copy_reading_context_missing()],
+    [{ state: 'unavailable' }, m.library_copy_reading_context_unavailable()],
+  ];
   const window = new Window({ url: 'https://rezics.test' });
   try {
     const root = window.document.createElement('main');
     root.innerHTML = renderToStaticMarkup(
-      <CopyReadingContextView context={{ association: 'unavailable', work: [], facts: [] }} locale="en" />,
+      <>
+        {states.map(([context]) => <CopyReadingContextView key={context.state} context={context} locale="en" />)}
+        <CopyReadingContextView locale="en" />
+      </>,
     );
-    expect(root.textContent).toContain(m.library_copy_reading_context_unavailable());
-    expect(root.querySelector('a')).toBeNull();
+    const entries = [...root.querySelectorAll<HTMLElement>('[data-slot="copy-reading-context"]')];
+    expect(entries.map((entry) => entry.querySelector('p')?.textContent)).toEqual([
+      ...states.map(([, label]) => label),
+      m.library_copy_reading_context_unavailable(),
+    ]);
+    expect(entries.slice(2).every((entry) => entry.querySelector('a') === null)).toBe(true);
+    expect(entries.map((entry) => entry.textContent).join(' ')).not.toContain(id('1'));
   } finally {
     await window.happyDOM.close();
   }

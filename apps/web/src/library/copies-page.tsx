@@ -19,7 +19,6 @@ import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy, readCopySubject, readCopyDetail } from './copies-actions';
 import { copyStatusChange, type CopiesPageData, type CopyItem } from './copies-read';
-import type { CopyReadingContext } from './copy-reading-context/types';
 import { CopyReadingContextView } from './copy-reading-context/view';
 import { copyInventoryReturnHref } from './copy-reading-context/navigation';
 import { subjectHref } from '../subject/subject-href';
@@ -926,13 +925,11 @@ export function CopyRow({
   copy,
   onEdit,
   ratio,
-  readingContext,
   returnTo,
 }: {
   copy: CopyItem;
   onEdit: () => void;
   ratio: CoverRatio;
-  readingContext?: CopyReadingContext | undefined;
   returnTo?: string | undefined;
 }) {
   const pageLocale = locale();
@@ -972,7 +969,7 @@ export function CopyRow({
               ]}
             />
           </p>
-          <CopyReadingContextView context={readingContext} returnTo={returnTo} locale={pageLocale} />
+          <CopyReadingContextView context={copy.readingContext} returnTo={returnTo} locale={pageLocale} />
           {copy.acquiredOn ? (
             <p className="text-sm text-muted-foreground">
               <span>{m.library_copy_acquired()}: </span>
@@ -1242,7 +1239,6 @@ function LoadedCopiesPage({
                 key={`${copy.id}:${copy.revision}`}
                 copy={copy}
                 ratio={rowRatio([copy.subject])}
-                readingContext={copy.subject ? page.readingContexts?.[copy.subject.id] : undefined}
                 returnTo={returnTo}
                 onEdit={() => void inspect(copy)}
               />

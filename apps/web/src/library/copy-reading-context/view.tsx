@@ -1,11 +1,28 @@
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { withSubjectVisitReturn } from '../../features/pages/subject-visit-navigation';
-import type { CopyReadingContext as CopyReadingContextData, CopyReadingIdentity } from './types';
+import type { CopyReadingContext, CopyReadingIdentity } from './types';
 
 function destination(identity: CopyReadingIdentity, returnTo: string | undefined, locale: string): string {
   const href = subjectHref({ id: identity.id, label: identity.label }, locale).href;
   return withSubjectVisitReturn(href, returnTo ?? '', locale);
+}
+
+function stateLabel(context: CopyReadingContext | undefined) {
+  switch (context?.state ?? 'unavailable') {
+    case 'available':
+      return m.library_copy_reading_context_available();
+    case 'unsupported':
+      return m.library_copy_reading_context_unsupported();
+    case 'scope':
+      return m.library_copy_reading_context_scope();
+    case 'withheld':
+      return m.library_copy_reading_context_withheld();
+    case 'missing':
+      return m.library_copy_reading_context_missing();
+    case 'unavailable':
+      return m.library_copy_reading_context_unavailable();
+  }
 }
 
 export function CopyReadingContextView({
@@ -13,78 +30,56 @@ export function CopyReadingContextView({
   returnTo,
   locale,
 }: {
-  context?: CopyReadingContextData | undefined;
+  context?: CopyReadingContext | undefined;
   returnTo?: string | undefined;
   locale: string;
 }) {
-  const hasDetails = !!context && (context.work.length > 0 || !!context.edition || context.facts.length > 0);
-  if (!context || !hasDetails)
-    return (
-      <p data-slot="copy-reading-context" className="mt-2 text-sm text-muted-foreground">
-        {m.library_copy_reading_context_unavailable()}
-      </p>
-    );
+  const work = context?.state === 'available' ? context.work : [];
+  const facts = context?.state === 'available' || context?.state === 'unsupported' ? context.facts : [];
 
   return (
     <div data-slot="copy-reading-context" className="mt-2 space-y-1 text-sm">
-      <dl className="space-y-1">
-        {context.work.length ? (
-          <div className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
-            <dt className="text-muted-foreground">{m.subject_work()}</dt>
-            <dd className="min-w-0 break-words">
-              {context.work.map((work, index) => (
-                <span key={work.id}>
-                  {index ? ', ' : null}
+      <p className="text-muted-foreground">{stateLabel(context)}</p>
+      {work.length || facts.length ? (
+        <dl className="space-y-1">
+          {work.length ? (
+            <div className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
+              <dt className="text-muted-foreground">{m.subject_work()}</dt>
+              <dd className="min-w-0 break-words">
+                {work.map((identity, index) => (
+                  <span key={`${identity.id}:${index}`}>
+                    {index ? ', ' : null}
+                    <a
+                      href={destination(identity, returnTo, locale)}
+                      lang={identity.labelLanguage}
+                      className="text-primary underline underline-offset-4"
+                    >
+                      {identity.label}
+                    </a>
+                  </span>
+                ))}
+              </dd>
+            </div>
+          ) : null}
+          {facts.map((fact, index) => (
+            <div key={`${fact.property}:${fact.subject?.id ?? fact.text}:${index}`} className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
+              <dt className="text-muted-foreground">{fact.label}</dt>
+              <dd className="min-w-0 break-words">
+                {fact.subject ? (
                   <a
-                    href={destination(work, returnTo, locale)}
-                    lang={work.labelLanguage}
+                    href={destination(fact.subject, returnTo, locale)}
+                    lang={fact.subject.labelLanguage}
                     className="text-primary underline underline-offset-4"
                   >
-                    {work.label}
+                    {fact.text}
                   </a>
-                </span>
-              ))}
-            </dd>
-          </div>
-        ) : null}
-        {context.edition ? (
-          <div className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
-            <dt className="text-muted-foreground">{m.library_copy_edition()}</dt>
-            <dd className="min-w-0 break-words">
-              <a
-                href={destination(context.edition, returnTo, locale)}
-                lang={context.edition.labelLanguage}
-                className="text-primary underline underline-offset-4"
-              >
-                {context.edition.label}
-              </a>
-            </dd>
-          </div>
-        ) : null}
-        {context.facts.map((fact, index) => (
-          <div
-            key={`${fact.label}:${fact.subject?.id ?? fact.value ?? index}`}
-            className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]"
-          >
-            <dt className="text-muted-foreground">{fact.label}</dt>
-            <dd className="min-w-0 break-words">
-              {fact.subject ? (
-                <a
-                  href={destination(fact.subject, returnTo, locale)}
-                  lang={fact.subject.labelLanguage}
-                  className="text-primary underline underline-offset-4"
-                >
-                  {fact.subject.label}
-                </a>
-              ) : (
-                fact.value
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {context.association === 'unavailable' ? (
-        <p className="text-muted-foreground">{m.library_copy_reading_context_unavailable()}</p>
+                ) : (
+                  <span lang={fact.language}>{fact.text}</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
       ) : null}
     </div>
   );

@@ -4,7 +4,8 @@ import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CopyProfile } from './copies-profiles';
-import type { CopyReadingContexts } from './copy-reading-context/types';
+import type { CopyReadingContext, NativeCopyListContext } from './copy-reading-context/types';
+import { copyListContextFromNativeRow } from './copy-reading-context/read';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
 import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy } from './copies-server';
@@ -49,7 +50,11 @@ export type CopyItem = {
         statuses?: { id: string; label: string; labelLanguage?: string }[];
       }
     | undefined;
+  readingContext?: CopyReadingContext | undefined;
 };
+
+type LoadedCopyItem = CopyItem & { nativeReadingContext?: NativeCopyListContext };
+export type LoadedCopiesPageData = Omit<CopiesPageData, 'copies'> & { copies: LoadedCopyItem[] };
 
 export type CopiesPageData = {
   signedIn: boolean;
@@ -58,8 +63,6 @@ export type CopiesPageData = {
   requestedCursor?: string | null;
   cursorRestarted?: boolean;
   copies: CopyItem[];
-  /** Bounded Semantic facts for this visible window, keyed by admitted subject id and separate from copy data. */
-  readingContexts?: CopyReadingContexts;
   next: string | null;
   addKey: string;
   profile?: CopyProfile | undefined;
@@ -262,6 +265,10 @@ function present(copy: RawCopy): CopyItem {
   };
 }
 
+function presentListCopy(copy: RawCopy): LoadedCopyItem {
+  return { ...present(copy), nativeReadingContext: copyListContextFromNativeRow(copy) };
+}
+
 function saved(copy: SavedCopy): SavedCopy {
   return {
     id: copy.id,
@@ -334,7 +341,7 @@ export async function loadCopiesPage(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { subjectId?: string; cursor?: string },
-): Promise<CopiesPageData> {
+): Promise<LoadedCopiesPageData> {
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
   const subjectId = copiesSubjectId(input.subjectId) ?? null;
@@ -348,7 +355,7 @@ export async function loadCopiesPage(
   // The activated profile choice is part of every current copy create request,
   // including an empty filtered page. Do not infer producer support from rows.
   const sendKind = true;
-  const copies = page.copies.map(present);
+  const copies = page.copies.map(presentListCopy);
   return {
     signedIn: true,
     subjectId,

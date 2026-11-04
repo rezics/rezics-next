@@ -3,7 +3,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes, readRelease } from '../subject/definitions';
 import { resolveCopyProfile, type CopySubjectResult } from './copies-profiles';
-import { readCopyReadingContexts } from './copy-reading-context/read';
+import { presentCopyListContext, unavailableCopyListContext } from './copy-reading-context/read';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import { readSessionIdentity } from '../session/state';
 import { getLocale } from '../paraglide/runtime.js';
@@ -131,13 +131,10 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
   if (page.signedIn) {
     await nameSubjectTypes(page.copies.map((copy) => copy.subject));
     const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
-    page.readingContexts = await readCopyReadingContexts(
-      kernelClient(),
-      page.copies.flatMap((copy) => (copy.subject ? [copy.subject] : [])),
-      origin?.authorization ?? null,
-      release,
-      requested.locale,
-    ).catch(() => ({}));
+    page.copies = page.copies.map(({ nativeReadingContext, ...copy }) => ({
+      ...copy,
+      readingContext: presentCopyListContext(nativeReadingContext ?? unavailableCopyListContext(), release, requested.locale),
+    }));
     const pageSubject = page.subjectId
       ? (page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject ??
         (await readCopySubjectSummary(page.subjectId, origin?.authorization ?? null)))

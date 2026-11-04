@@ -50,9 +50,9 @@ unavailable reader and recovery without score preparation or vote reads; chronol
 
 # Copy reading context
 
-Copy rows compose a bounded Semantic projection for the visible copy window, keyed by the admitted subject identity. Commerce continues to own copy revisions, profile meaning, private source/location/date/note fields and allowed actions. The projection uses only currently admitted directed relations and identifying facts; context failure does not change copy readability or authority. Work and edition destinations return to the same localized inventory address using only its subject filter and opaque cursor.
+Each FULL copy row carries its own bounded native context from the same page request. Commerce continues to own copy revisions, profile meaning, private source/location/acquisition-date/note fields and allowed actions. Web renders `available`, `unsupported`, `scope`, `withheld`, `missing` and `unavailable` as distinct states. It shows selected property-keyed facts for `unsupported`, but only `available` supplies Work links. Qualified `schema:datePublished` values retain their recorded calendar precision; `schema:author` remains an author fact, `acquiredOn` remains private acquisition metadata, and a profile release digest is never an edition fact. Context does not change copy readability or authority, and the page does not hydrate Subjects per row. Work destinations return to the same localized inventory address using only its subject filter and opaque cursor.
 
-Decision: Only an admitted `schema:exampleOfWork` fact establishes an exact edition-to-work relationship; missing or withheld facts remain unavailable, and return links include only locale, subject filter and opaque cursor.
+Decision: Render every native context state separately; only available Work identities are linked, while unsupported property-keyed facts remain visible without asserting a Work or edition association.
 
 # Library selection review
 
