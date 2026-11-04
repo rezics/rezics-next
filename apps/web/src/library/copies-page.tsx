@@ -142,10 +142,17 @@ export function CopyForm({
   const [confirming, setConfirming] = useState(false);
   const fieldsId = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const validationTarget = useRef<string | null>(null);
   const [validationAttempt, setValidationAttempt] = useState(0);
   const invalidFields = showFieldErrors ? invalidCopyFields(draft) : [];
   useLayoutEffect(() => {
-    if (validationAttempt) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    if (!validationAttempt) return;
+    const requested = validationTarget.current ? document.getElementById(validationTarget.current) : null;
+    const control =
+      requested && formRef.current?.contains(requested)
+        ? requested
+        : formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    control?.focus();
   }, [validationAttempt]);
   const confirmationId = useId();
   const deleteControl = useRef<HTMLButtonElement>(null);
@@ -299,6 +306,7 @@ export function CopyForm({
       return;
     if (!intent.current) {
       if (invalidCopyFields(draft).length) {
+        validationTarget.current = null;
         setMore(true);
         setShowFieldErrors(true);
         setValidationAttempt((attempt) => attempt + 1);
@@ -527,7 +535,16 @@ export function CopyForm({
           </div>
         </section>
       ) : null}
-      <CopyValidationSummary fields={invalidFields} prefix={fieldsId} />
+      <CopyValidationSummary
+        fields={invalidFields}
+        prefix={fieldsId}
+        onFocusField={(field) => {
+          if (!current()) return;
+          validationTarget.current = `${fieldsId}-${field}`;
+          setMore(true);
+          setValidationAttempt((attempt) => attempt + 1);
+        }}
+      />
       <input type="hidden" name="intent" value={copy ? 'update' : 'create'} />
       <input type="hidden" name="idempotencyKey" value={copy?.idempotencyKey ?? addKey} />
       <input

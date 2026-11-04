@@ -45,7 +45,15 @@ export function invalidCopyFields(draft: CopyDraft): CopyTextField[] {
 }
 
 /** Both the inline form and the dialog use the existing Unicode field grammar. */
-export function CopyValidationSummary({ fields, prefix }: { fields: CopyTextField[]; prefix: string }) {
+export function CopyValidationSummary({
+  fields,
+  prefix,
+  onFocusField,
+}: {
+  fields: CopyTextField[];
+  prefix: string;
+  onFocusField: (field: CopyTextField) => void;
+}) {
   if (!fields.length) return null;
   return (
     <section
@@ -64,7 +72,7 @@ export function CopyValidationSummary({ fields, prefix }: { fields: CopyTextFiel
               href={`#${prefix}-${field}`}
               onClick={(event) => {
                 event.preventDefault();
-                document.getElementById(`${prefix}-${field}`)?.focus();
+                onFocusField(field);
               }}
             >
               {fieldMessage(field, true)}
