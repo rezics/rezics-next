@@ -130,7 +130,19 @@ async function mounted(
       unlabelled: 'Unlabelled', spoilerShow: 'Reveal', relations: {}, sections: {},
       ...(context ? { context: { id: context, population: { kind: 'global' } } } : {}),
     } as any;
-    await act(async () => root.render(h(QueryClientProvider, { client }, h(OverviewContext.Provider, { value }, h(SubjectConnections, { page: next, viewer: { state: 'signed-out', csrfToken: null }, read }))));
+    await act(async () =>
+      root.render(
+        h(
+          QueryClientProvider,
+          { client },
+          h(
+            OverviewContext.Provider,
+            { value },
+            h(SubjectConnections, { page: next, viewer: { state: 'signed-out', csrfToken: null }, read }),
+          ),
+        ),
+      ),
+    );
   };
   try {
     await run(host, render, client, browser);
