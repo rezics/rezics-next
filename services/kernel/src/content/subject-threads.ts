@@ -19,26 +19,31 @@ import {
 } from './subject-threads-cards.ts';
 import type { ReactionCountFreshness } from './reads.ts';
 import { selectSubjectThreadConversationActivity } from './subject-threads-conversation-activity.ts';
+import type { ContentCommandDependencies } from './commands.ts';
+import { prepareSubjectThreadEntry, type SubjectThreadEntry } from './subject-entry.ts';
 
 export type SubjectThreadKind = 'discussion' | 'review';
 export type SubjectThreadPageInput = {
   place: string;
   kind: SubjectThreadKind;
+  boardId?: string;
   cursor?: string;
   limit?: number;
 };
 export type SubjectThreadPage = {
   context: SubjectThreadContext;
+  entry: SubjectThreadEntry;
   entries: readonly SubjectThreadCardEntry[];
   reactionsAsOf: ReactionCountFreshness | null;
   nextCursor: string | null;
   anchor: AnchoredPosition;
   anchors: readonly AnchoredPosition[];
 };
-export type SubjectThreadDependencies = SubjectThreadCardDependencies & {
+export type SubjectThreadDependencies = SubjectThreadCardDependencies &
+  Pick<ContentCommandDependencies, 'realmParticipation'> & {
   /** Trusted service configuration, independent of authentication's wall clock. */
   cursorNow?: () => number;
-};
+  };
 
 type SubjectThreadKey = { lastActivityAt: string; threadId: string };
 type Candidate = SubjectThreadKey;
@@ -74,6 +79,7 @@ function binding(subjectId: string, input: SubjectThreadPageInput, actor: Actor)
       placeId: input.place,
       kind: input.kind,
       viewer: actor.kind === 'account' ? actor.accountId : null,
+      ...(input.boardId === undefined ? {} : { boardId: input.boardId }),
     },
   };
 }
@@ -176,6 +182,7 @@ export async function listSubjectThreads(
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const scope = binding(subjectId, input, context.actor);
   const pageContext = await prepareSubjectThreadContext(dependencies, subjectId, input.place, input.kind, context);
+  const entryPage = await prepareSubjectThreadEntry(dependencies, pageContext.initial, input.boardId, context);
   const candidates = await pageCandidates(dependencies, subjectId, input, context, limit * SCAN_FACTOR, scope, now);
   const entries: ThreadView[] = [];
   const anchors: AnchoredPosition[] = [candidates.anchor];
@@ -198,6 +205,7 @@ export async function listSubjectThreads(
   );
   const projected = await projectSubjectThreadReactions(dependencies, subjectId, input.place, entries, context);
   let finalContext: SubjectThreadContext | undefined;
+  let finalEntry: SubjectThreadEntry | undefined;
   const composed = await projectSubjectThreadCards(
     dependencies,
     subjectId,
@@ -207,12 +215,16 @@ export async function listSubjectThreads(
     conversationActivity,
     projected.reactionsAsOf,
     async () => {
+      const entry = await entryPage.finish();
+      finalEntry = entry.entry;
+      anchors.push(...entry.anchors);
       finalContext = await pageContext.finish();
     },
   );
   anchors.push(...projected.anchors, ...composed.anchors);
   return {
     context: finalContext!,
+    entry: finalEntry!,
     entries: composed.entries,
     reactionsAsOf: composed.reactionsAsOf,
     anchor: candidates.anchor,

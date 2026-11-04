@@ -1645,6 +1645,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               {
                 place: query.place,
                 kind: query.kind,
+                ...(query.board === undefined ? {} : { boardId: query.board }),
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
               },
@@ -1653,6 +1654,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
             return {
+              entry: page.entry,
               threads: [...page.entries],
               next: page.nextCursor,
               context: page.context,

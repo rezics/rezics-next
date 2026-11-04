@@ -122,6 +122,7 @@ test('subject thread listing is mounted as a subject read and conceals unknown o
   const operation = openApiDocument(app).paths['/v1/subjects/{id}/threads']?.get;
   expect(operation?.operationId).toBe('subject_threads.list');
   expect(operation?.['x-action']).toBe('subject:read');
+  expect(operation?.parameters).toContainEqual(expect.objectContaining({ name: 'board', in: 'query' }));
   expect(app.routes.filter((route) => route.path === '/v1/subjects/:id/threads')).toHaveLength(1);
 
   const unknown = newId(subjectRoute);
@@ -136,6 +137,7 @@ test('subject thread listing is mounted as a subject read and conceals unknown o
   expect(empty.body).toMatchObject({
     threads: [],
     next: null,
+    entry: { state: 'not_selected', request: { subjectId: readable, placeId: GLOBAL_CONTEXT, kind: 'review' } },
     context: {
       subject: { id: readable, label: null, source: { partition: subjectRoute >> 4 } },
       place: { kind: 'global', id: GLOBAL_CONTEXT },
@@ -154,6 +156,52 @@ test('subject thread listing is mounted as a subject read and conceals unknown o
     { place: GLOBAL_CONTEXT, kind: 'discussion', limit: '1.5' },
   ])
     await invalid(path(readable, values));
+});
+
+test('explicit Subject Board entry requires the exact current Subject, place and purpose', async () => {
+  const subjectId = await subject();
+  const boardId = await board(subjectId);
+  const otherSubject = await subject();
+  const unrelatedBoard = await board(otherSubject);
+  const hiddenBoard = await board(subjectId, 'taken_down');
+  const firstThread = await thread(subjectId, boardId, { activityAt: '2026-10-27T02:00:00.000Z' });
+  await thread(subjectId, boardId, { activityAt: '2026-10-27T01:59:00.000Z' });
+
+  const query = { place: GLOBAL_CONTEXT, kind: 'discussion', limit: '1' };
+  const plain = await get(path(subjectId, query));
+  const selected = await get(path(subjectId, { ...query, board: boardId }));
+  expect(selected.response.status).toBe(200);
+  expect(selected.body.entry).toMatchObject({
+    state: 'current',
+    request: { subjectId, placeId: GLOBAL_CONTEXT, kind: 'discussion', selectedBoardId: boardId },
+    board: { id: boardId, realmId: null, purpose: 'discussion' },
+    actions: { createThread: 'sign-in' },
+    observations: {
+      subject: { partition: subjectRoute >> 4, epoch: expect.any(Number), position: expect.any(String) },
+      place: { kind: 'global', id: GLOBAL_CONTEXT },
+      board: { initial: { position: expect.any(String) }, final: { position: expect.any(String) } },
+      access: { initial: [expect.objectContaining({ position: expect.any(String) })] },
+    },
+  });
+  expect(selected.body.threads).toEqual(plain.body.threads);
+  expect(selected.body.threads[0].id).toBe(firstThread);
+  expect(selected.body.context).toEqual(plain.body.context);
+
+  for (const selectedBoard of [unrelatedBoard, hiddenBoard]) {
+    const concealed = await get(path(subjectId, { ...query, board: selectedBoard }));
+    expect(concealed.response.status).toBe(200);
+    expect(concealed.body.entry).toMatchObject({ state: 'concealed' });
+    expect(concealed.body.entry).not.toHaveProperty('board');
+    expect(concealed.body.threads).toEqual(plain.body.threads);
+  }
+  const wrongPurpose = await get(
+    path(subjectId, { place: GLOBAL_CONTEXT, kind: 'review', board: boardId }),
+  );
+  expect(wrongPurpose.body.entry).toMatchObject({ state: 'concealed' });
+  await invalid(path(subjectId, { ...query, board: 'not-a-content-id' }));
+  await invalid(
+    path(subjectId, { ...query, cursor: plain.body.next, board: boardId }),
+  );
 });
 
 test('subject thread pages sort by activity, bind signed cursors, and skip hidden or out-of-place candidates', async () => {

@@ -1914,6 +1914,22 @@ in this producer task. The source candidate API remains available to existing in
 
 ## Subject threads
 
+Decision: The mounted Subject page accepts an optional `board` ContentId; omission returns `not_selected`, while a supplied Board is admitted only when its exact Subject, Global/Realm place, purpose, parent read and current `thread:create` advice remain stable through final observation.
+
+### Explicit selected Board entry
+
+The existing `/v1/subjects/{subjectId}/threads` read accepts the optional `board` query operand. It is an untrusted exact Board identity from an existing caller; it is never a work relationship, directory lookup, membership grant or command credential. `board` is included in the signed cursor scope only when supplied, preserving the previous cursor binding and expiry for callers that omit it.
+
+The closed `entry` response union reports `not_selected`, `concealed`, `unavailable` or `current`. Omission never selects a default. An unreadable Board, a different Subject, a different Global/Realm place or an incompatible discussion/review purpose is concealed while independently readable thread cards remain available. Missing native advice or a changed final witness is unavailable. A current entry carries the exact request, admitted Board record, current `createThread` advice and the Subject, place, Board and Access observations. `allowed`, `denied`, `sign-in` and `unavailable` remain distinct action advice. The current Board read and `readBoardPageActionEvidence` supply disclosure and `thread:create`; Realm participation is evaluated by the same installed participation callback used by the Board page. Thread commands still reauthorize in their existing writers.
+
+Entry work starts from the original Subject/place context and finishes after cards, citations, media and action work. It repeats exact Board identity/read and action observations, then the existing Subject/place finalizer runs. Any changed Board or authority witness withholds entry advice; no merged Subject, other Board or new cursor frontier is adopted. No-selection pages do not run Board entry reads.
+
+### Cost: explicit Board entry
+
+- Touches: omission adds no Board work to the existing Subject page. With a selection, the page performs two rounds of exact `readBoard`, one keyed Board-to-Subject identity read, current Board parent/read admission and `readBoardPageActionEvidence`; a Realm selection also evaluates the installed Realm participation check when the viewer is signed in. The second round runs after the existing thread, reaction, card, citation, author, parent, media and Access work. Original Subject and Realm context preparation/finalization, the Subject-thread index selection, and all existing card work remain charged to their existing homes.
+- Bound: each round names one Board UUID and reads at most one matching Board row in that Board partition. Entry adds no catalogue, Board-directory, thread-row or Realm-inventory scan. It retains at most the current Board record and the action factory's exact anchors; the response adds one closed entry record and at most one Board action anchor per round. The query operand is one ContentId. Existing selection remains at most 80 raw Subject-thread keys for 20 returned cards, with the original sparse frontier and no refill after privacy reduction.
+- Growth: unrelated Board rows do not expand the keyed identity query or action target set; no-selection cost is unchanged. The focused growth family continues to measure the complete Subject list call and its raw frontier. A selected-Board run must account for both rounds, Board and Realm/Space parent work, current Access preparation, and the original Subject final observation; a SQL `LIMIT` alone does not certify examined work.
+
 `GET /v1/subjects/{subjectId}/threads?place={id}&kind=discussion|review&limit=&cursor=` returns a subject's threads
 for one Global Context or Realm and one kind. `limit` is 1–20, default 20. Results are ordered by last activity,
 newest first, with the indexed thread id as a stable tie-breaker. The signed keyset cursor binds the subject, place,
