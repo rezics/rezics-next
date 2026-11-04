@@ -12,6 +12,7 @@ import { prepareSession, sessionSubject, viewerCredential } from '../session/req
 import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
 import { readThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
+import { readingConversationActivity, type ConversationActivityDisplay } from './activity';
 
 type ThreadResource = ReturnType<KernelClient['threads']>;
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -38,6 +39,7 @@ export type LoadedThreadPage = {
   posts: Omit<PostPage, 'posts'> & { posts: ThreadPost[] };
   /** Present only on the installed composed current-page read. */
   composed?: ThreadPageObservation;
+  conversationActivity?: ConversationActivityDisplay;
   authors: import('../identity/read').PageAuthors;
   mentions: DocumentMentions;
   documentMedia?: ThreadDocumentMedia;
@@ -195,6 +197,7 @@ export async function loadThreadPage(
   return {
     authors,
     composed: { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf },
+    conversationActivity: readingConversationActivity(readingPage),
     mentions,
     documentMedia,
     thread,

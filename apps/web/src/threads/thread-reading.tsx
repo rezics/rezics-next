@@ -36,6 +36,7 @@ import { csrfHeaders, draftFetch } from './composer';
 import { ThreadReplyComposer } from './reply-context-composer';
 import { AuthorErasureEntry } from './author-erasure-entry';
 import { authorErasureSessionSource } from './author-erasure-lifetime';
+import { ThreadActivity } from './thread-activity/view';
 
 export type ThreadReadingPage = LoadedThreadPage & {
   authors: PageAuthors;
@@ -384,6 +385,13 @@ export function ThreadReading({
       >
         <div data-slot="thread-reading-column" className="mx-auto w-full min-w-0 max-w-3xl space-y-5">
           {renderHeader(displayTitle, page)}
+          <ThreadActivity
+            key={pageCallbackRevision}
+            activity={page.conversationActivity}
+            current={pageCurrent && observationMatches}
+            isCurrent={isPageCallbackCurrent}
+            onRetry={refreshPage}
+          />
           <section aria-labelledby="thread-posts-heading" className="min-w-0 space-y-3">
             <ContentItemHeading
               level={2}
@@ -538,7 +546,7 @@ export function ThreadReading({
                       : [...current.posts, post],
                   }));
                   setReplyTarget((current) => ({ ...current, parentId: null }));
-                  if (isPageCallbackCurrent()) void onMutation();
+                  if (isPageCallbackCurrent()) void refreshPage().catch(() => {});
                 }}
               />
             </section>

@@ -3,7 +3,8 @@ export type ThreadActivity = { replyCount: number | null; lastActivityAt: string
 export type ConversationReplyCount = { kind: 'exact' | 'lower-bound'; value: number };
 export type ConversationActivityDisplay =
   | { state: 'current'; count: ConversationReplyCount; lastActivityAt: string | null }
-  | { state: 'withheld' };
+  | { state: 'withheld' }
+  | { state: 'unavailable'; retryable: true };
 
 /**
  * The reply count and last activity time of a thread row. The kernel adds them to thread reads as `replyCount` and
@@ -27,6 +28,7 @@ function record(value: unknown): value is Record<string, unknown> {
 export function conversationActivity(value: unknown): ConversationActivityDisplay {
   if (!record(value)) return { state: 'withheld' };
   if (value.state === 'withheld') return { state: 'withheld' };
+  if (value.state === 'unavailable' && value.retryable === true) return { state: 'unavailable', retryable: true };
   if (value.state !== 'current' || !record(value.count)) return { state: 'withheld' };
   const { kind, value: count } = value.count;
   const lastActivityAt = value.lastActivityAt;
@@ -44,6 +46,13 @@ export function conversationActivity(value: unknown): ConversationActivityDispla
 /** Minimal adapter for the feed summary emitted by the native source contract. */
 export function feedConversationActivity(summary: unknown): ConversationActivityDisplay {
   return conversationActivity(record(summary) ? summary.conversationActivity : undefined);
+}
+
+/** Additive activity on the existing native page uses the same closed display rules as Feed. */
+export function readingConversationActivity(page: unknown): ConversationActivityDisplay {
+  if (!record(page) || !Object.hasOwn(page, 'conversationActivity'))
+    return { state: 'unavailable', retryable: true };
+  return conversationActivity(page.conversationActivity);
 }
 
 export function formatConversationReplyCount(count: ConversationReplyCount, locale: string): string {
