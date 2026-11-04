@@ -52,7 +52,7 @@ import { useMemo, type ComponentProps, type ReactNode } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
 import { accountOf } from './account-read';
-import type { Reader } from '../../subject/reader';
+import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { accountHref, canonicalRedirect, subjectHref } from '../../subject/subject-href';
@@ -64,7 +64,7 @@ import { layoutComponents, PageHost, PageRoot, pageDefinitions } from './layout'
 import { CompositionRender, type PageDocument } from './render';
 import { linkClass, linkColor, PlainLink, type PageLink } from './shared';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
-import { boundedProfileRelations, type ViewTab } from './views';
+import { boundedProfileRelations, profileRelationWindows, type ViewTab } from './views';
 import type { SubjectCommunity } from './subject-community';
 import { SubjectCommunityContext, SubjectCommunityVerificationContext } from './subject-community-view';
 import type { VerificationConfig } from '../../report/turnstile';
@@ -72,6 +72,9 @@ import { subjectUrlForView } from '../../subject/subject-href';
 import { ContextNavigation, contextHref } from './context-navigation';
 import { candidateContext } from '../../subject/candidates';
 import { subjectVisitReturn, withSubjectVisitReturn } from './subject-visit-navigation';
+import { MangaReaderEntry } from '../catalogue/manga-reader/entry';
+import { isMangaReaderType } from '../catalogue/manga-reader/model';
+import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -85,6 +88,7 @@ function createPageComponents() {
   return { page, framed: { ...page, SubjectHeader: FramedIdentity, AccountIdentity: FramedIdentity } };
 }
 let componentSets: ReturnType<typeof createPageComponents> | undefined;
+const EMPTY_RELATION_DEFINITIONS: Record<string, RelationDefinition> = {};
 function pageComponents(framed: boolean) {
   componentSets ??= createPageComponents();
   return framed ? componentSets.framed : componentSets.page;
@@ -542,16 +546,27 @@ export function SubjectPage({
   const overview = view === 'overview';
   const read = subjectBody(page);
   const visitReturn = subjectVisitReturn(returnTo, locale);
+  const mangaSubject = read && !page.account && isMangaReaderType(read.subject.type) ? read.subject : undefined;
+  const mangaReturn = mangaSubject
+    ? mangaReaderAddress({
+        id: mangaSubject.id,
+        label: subjectPageTitle(page, locale),
+        locale,
+        view,
+        realm: subjectPageRealm(page),
+        continuation: page.continuation,
+      })
+    : undefined;
   const returnSource = catalogueFileSourceId(fileSource);
   const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
   const realm = subjectPageRealm(page);
   const ContextLink = useMemo(() => {
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
-      const href = withSubjectVisitReturn(props.href, visitReturn ?? '', locale);
+      const href = withSubjectVisitReturn(props.href, mangaReturn ?? visitReturn ?? '', locale);
       return <Link {...props} href={contextHref(href, realm)} />;
     };
-  }, [link, locale, realm, visitReturn]);
+  }, [link, locale, mangaReturn, realm, visitReturn]);
   const renderedActions =
     read && !page.account && !realm ? (
       <>
@@ -756,6 +771,23 @@ export function SubjectPage({
                 locale={locale}
               />
             )}
+            {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
+              <MangaReaderEntry
+                source={page}
+                subject={mangaSubject}
+                label={subjectPageTitle(page, locale)}
+                locale={locale}
+                view={view}
+                context={page.context?.id ?? mangaSubject.context ?? null}
+                realm={realm}
+                continuation={page.continuation}
+                viewer={page.requestedReader ?? null}
+                definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
+                windows={profileRelationWindows(page)}
+                reader={reader ?? defaultReader}
+                link={ContextLink}
+              />
+            ) : null}
             {visitReturn && !framed ? (
               <p>
                 <a

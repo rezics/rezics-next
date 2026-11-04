@@ -1,5 +1,5 @@
 import { SubjectConnections } from '../../features/pages/subject-connections-view';
-import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
+import { subjectRouteSearchLimit, subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { contextHref } from '../../features/pages/context-navigation';
 import { PendingPage } from '../../shell/pending';
@@ -69,7 +69,7 @@ const readSubject = createServerFn({ method: 'GET', strict: false })
       typeof input.locale !== 'string' ||
       !('search' in input) ||
       typeof input.search !== 'string' ||
-      input.search.length > 2048 ||
+      input.search.length > subjectRouteSearchLimit(input.search) ||
       !('loadCollections' in input) ||
       typeof input.loadCollections !== 'boolean' ||
       !('slotResult' in input) ||

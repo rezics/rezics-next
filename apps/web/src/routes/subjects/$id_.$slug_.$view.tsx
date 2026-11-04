@@ -30,7 +30,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
 import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
-import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
+import { subjectRouteSearchLimit, subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { SubjectViewError } from '../../subject/view-error';
 import { env } from 'cloudflare:workers';
@@ -70,7 +70,7 @@ const readView = createServerFn({ method: 'GET', strict: false })
       !('search' in input) ||
       typeof input.search !== 'string' ||
       input.search.length >
-        2048 + ('cursor' in input && typeof input.cursor === 'string' ? encodeURIComponent(input.cursor).length : 0)
+        subjectRouteSearchLimit(input.search, 'cursor' in input && typeof input.cursor === 'string' ? input.cursor : undefined)
     )
       throw notFound();
     const cursor = validateViewCursor('cursor' in input ? input.cursor : undefined);

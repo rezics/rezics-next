@@ -47,6 +47,14 @@ export type ProfileRelationPage = {
   complete: boolean;
 };
 
+/** A relation node in the current composition, including its failed or withheld read state. */
+export type ProfileRelationWindow = ProfileRelationPage & {
+  node: string;
+  status?: number;
+  valid: boolean;
+  count?: Count;
+};
+
 /** The view a `SubjectList` previews, by the property it lists. A list of any other property belongs to no view. */
 const LIST_VIEWS: Readonly<Record<string, View>> = {
   'schema:exampleOfWork': 'editions',
@@ -73,14 +81,14 @@ export function listView(property: unknown): View | undefined {
 }
 
 /** Relation rows already disclosed by this composed read. No target hydration or follow-up read is implied. */
-export function profileRelationPages(page: {
+export function profileRelationWindows(page: {
   subject: string | null;
   context?: SelectedContext | undefined;
   continuation?: PageContinuation | undefined;
   account?: { id: string; handle: string } | undefined;
   document: unknown;
   reads: Record<string, Read>;
-}): ProfileRelationPage[] {
+}): ProfileRelationWindow[] {
   const document = page.document as CompositionDocument;
   const plan = planReads(platformRegistry, document, {
     subject: page.subject,
@@ -88,7 +96,7 @@ export function profileRelationPages(page: {
     ...(page.context ? { context: page.context } : {}),
     ...(page.continuation ? { continuation: page.continuation } : {}),
   });
-  const pages: ProfileRelationPage[] = [];
+  const pages: ProfileRelationWindow[] = [];
   const seen = new Set<string>();
   for (const node of walk(document.content)) {
     const property = typeof node.props.property === 'string' ? node.props.property : undefined;
@@ -98,24 +106,47 @@ export function profileRelationPages(page: {
     if (key === undefined) continue;
     const planned = plan.reads[key];
     const result = page.reads[key];
-    if (!planned || !result || result.status !== 200 || !isRecord(result.body)) continue;
-    const body = result.body;
+    if (!planned || (planned.kind !== 'links' && planned.kind !== 'relations')) continue;
+    const body = result?.status === 200 && isRecord(result.body) ? result.body : undefined;
     const direction = planned.kind === 'links' ? 'inverse' : planned.kind === 'relations' ? 'forward' : undefined;
-    const rows = planned.kind === 'links' ? body.links : planned.kind === 'relations' ? body.relations : undefined;
-    if (!direction || !Array.isArray(rows)) continue;
+    const rows = body ? (planned.kind === 'links' ? body.links : body.relations) : undefined;
+    const valid = Array.isArray(rows);
+    const admittedRows = valid ? rows : [];
+    if (!direction) continue;
     const identity = key;
     if (seen.has(identity)) continue;
     seen.add(identity);
-    const next = typeof body.next === 'string' ? body.next : undefined;
+    const next = body && typeof body.next === 'string' ? body.next : undefined;
+    const nativeCount = body && isRecord(body.count) && typeof body.count.value === 'number'
+      ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, admittedRows.length)
+      : undefined;
     pages.push({
+      node: typeof node.props.id === 'string' ? node.props.id : '',
       property,
       direction,
-      rows,
+      rows: admittedRows,
+      ...(result?.status !== undefined ? { status: result.status } : {}),
+      valid,
       ...(next ? { next } : {}),
-      complete: body.next === null,
+      complete: !!body && valid && body.next === null,
+      ...(nativeCount ? { count: nativeCount } : {}),
     });
   }
   return pages;
+}
+
+/** Successfully admitted relation pages; existing readers retain their previous failure handling. */
+export function profileRelationPages(page: {
+  subject: string | null;
+  context?: SelectedContext | undefined;
+  continuation?: PageContinuation | undefined;
+  account?: { id: string; handle: string } | undefined;
+  document: unknown;
+  reads: Record<string, Read>;
+}): ProfileRelationPage[] {
+  return profileRelationWindows(page)
+    .filter((window) => window.status === 200 && window.valid)
+    .map(({ node: _node, status: _status, valid: _valid, count: _count, ...window }) => window);
 }
 
 /** Loaded relation pages on this composed read. A following page never implies a complete list. */

@@ -1,5 +1,13 @@
 # Subject page composition
 
+## Manga reading
+
+Decision: present only released Manga part semantics through the ordinary Subject and existing contents/edition views; use generic facts/relations when a specialized chapter structure is unsupported. No new chapter type/property/profile is adopted by this interface.
+
+The Manga reader is a public projection of the current composed Subject page. It groups admitted membership and edition rows by their native relation property, direction and statement identity, keeps source order, and links to exact disclosed subject IDs. Partial dates stay with the existing generic Subject fact and heading readers; relation summaries do not supply dates. The existing contents/edition views own their bounded windows and continuation. A current `via` address preserves the same localized subject, context, view and opaque window on a deliberate part visit. Public relation counts remain separate from private progress, copy ownership and parent state.
+
+The existing generic facts, contents, editions and Relations readers remain reachable when specialized chapter configuration is unavailable. The reader does not infer a parent from a title or a row position, request each target, or read private session state for public presentation. Existing Manga correction and configured Library controls keep their owners.
+
 Subject templates place review and discussion regions through the shared community reader. The native page owns
 identity, order, continuation and disclosure. Web requires its Subject/place/kind context to match the exact
 `planReads` descriptor before showing cards. Global and Realm remain independent native places, including on empty
