@@ -153,16 +153,18 @@ test('pagehide after registration dispatch restores an unknown review without pu
   expect(host.textContent).toContain(m.auth_security_passkey_registration_unknown());
   expect(registrationPaths(calls)).toBe(1);
 
-  await flush(() => calls[1]!.resolve(Response.json({ id: 'late-native-id', name: 'Late key', created_at: '2026-11-01' }, { status: 201 })));
+  await flush(() =>
+    calls[1]!.resolve(
+      Response.json({ id: 'late-native-id', name: 'Late key', created_at: '2026-11-01' }, { status: 201 }),
+    ),
+  );
   expect(host.textContent).not.toContain('Late key');
   expect(host.textContent).not.toContain(m.auth_security_passkey_added());
 
   await flush(() => button(host, m.auth_security_passkey_check_current())!.click());
   expect(reviewedAccounts).toEqual([initial.kind === 'ready' ? initial.accountId : '']);
   expect(host.textContent).toContain(m.auth_security_passkey_registration_checking());
-  await flush(() =>
-    reviews[0]!.resolve({ kind: 'ready', passkeys: [], truncated: true }),
-  );
+  await flush(() => reviews[0]!.resolve({ kind: 'ready', passkeys: [], truncated: true }));
   expect(host.textContent).toContain(m.auth_security_inventory_truncated());
   expect(host.textContent).toContain(m.auth_security_passkey_registration_reviewed());
   expect(host.textContent).not.toContain(m.auth_security_passkey_added());
@@ -215,7 +217,11 @@ test('a replacement account gets no review action or private result from the ear
   expect(host.querySelector<HTMLInputElement>('#security-passkey-name')?.value).toBe('');
   expect(button(host, m.auth_security_passkey_add())?.disabled).toBe(false);
   expect(registrationPaths(calls)).toBe(1);
-  await flush(() => calls[1]!.resolve(Response.json({ id: 'old-account-row', name: 'Old account key', created_at: '2026-11-01' }, { status: 201 })));
+  await flush(() =>
+    calls[1]!.resolve(
+      Response.json({ id: 'old-account-row', name: 'Old account key', created_at: '2026-11-01' }, { status: 201 }),
+    ),
+  );
   expect(host.textContent).not.toContain('Old account key');
   expect(registrationPaths(calls)).toBe(1);
 });

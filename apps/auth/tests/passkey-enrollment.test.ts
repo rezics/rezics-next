@@ -51,9 +51,12 @@ function install(create: () => Promise<Credential | null>, register: () => Promi
 
 test('browser cancellation before dispatch sends no registration request', async () => {
   const phases: string[] = [];
-  const paths = install(async () => {
-    throw Object.assign(new Error('dismissed'), { name: 'NotAllowedError' });
-  }, async () => Response.json({}));
+  const paths = install(
+    async () => {
+      throw Object.assign(new Error('dismissed'), { name: 'NotAllowedError' });
+    },
+    async () => Response.json({}),
+  );
   const result = await addPasskey('Travel key', undefined, (phase) => phases.push(phase));
   expect(result).toEqual({ ok: false, reason: 'cancelled' });
   expect(paths).toEqual(['/passkeys/register/options']);
@@ -62,9 +65,12 @@ test('browser cancellation before dispatch sends no registration request', async
 
 test('dispatch is reported at transport handoff and a lost response stays unknown', async () => {
   const phases: string[] = [];
-  const paths = install(async () => credential() as unknown as Credential, async () => {
-    throw new TypeError('connection lost');
-  });
+  const paths = install(
+    async () => credential() as unknown as Credential,
+    async () => {
+      throw new TypeError('connection lost');
+    },
+  );
   const result = await addPasskey('Travel key', undefined, (phase) => phases.push(phase));
   expect(result).toEqual({ ok: false, reason: 'unknown' });
   expect(paths).toEqual(['/passkeys/register/options', '/passkeys/register']);
@@ -73,8 +79,10 @@ test('dispatch is reported at transport handoff and a lost response stays unknow
 
 test('a valid 201 response is confirmed only after its body validates', async () => {
   const phases: string[] = [];
-  const paths = install(async () => credential() as unknown as Credential, async () =>
-    Response.json({ id: 'native-id', name: 'Travel key', created_at: '2026-11-01T00:00:00Z' }, { status: 201 }),
+  const paths = install(
+    async () => credential() as unknown as Credential,
+    async () =>
+      Response.json({ id: 'native-id', name: 'Travel key', created_at: '2026-11-01T00:00:00Z' }, { status: 201 }),
   );
   const result = await addPasskey('Travel key', undefined, (phase) => phases.push(phase));
   expect(result).toMatchObject({ ok: true, passkey: { id: 'native-id', name: 'Travel key' } });

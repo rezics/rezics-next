@@ -36,9 +36,9 @@ export function PasskeyEnrollmentView({
                 ? m.auth_security_passkey_registration_reviewed()
                 : state.phase === 'changed-account'
                   ? m.auth_security_passkey_account_changed()
-              : state.phase === 'authority-unavailable'
-                ? m.auth_security_passkey_authority_retired()
-                  : m.auth_security_passkey_registration_unknown();
+                  : state.phase === 'authority-unavailable'
+                    ? m.auth_security_passkey_authority_retired()
+                    : m.auth_security_passkey_registration_unknown();
 
   return (
     <div className="auth-login-form" aria-busy={reading || state.phase === 'saving' || state.phase === 'reviewing'}>
