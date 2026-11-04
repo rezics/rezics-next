@@ -12,7 +12,11 @@ import { isScreenType, screenReaderVisit, type ScreenReaderVisit } from './scree
 import { screenGroupLabel } from './screen-profile-fields';
 import type { ScreenGroup } from './screen-profile';
 import { loadScreenProfileForReader } from './screen-episode-reader/actions';
-import { screenEpisodeCursor, screenEpisodeReturnHref, type ScreenEpisodeOrigin } from './screen-episode-reader/navigation';
+import {
+  screenEpisodeCursor,
+  screenEpisodeReturnHref,
+  type ScreenEpisodeOrigin,
+} from './screen-episode-reader/navigation';
 import { ScreenEpisodeList } from './screen-episode-reader/view';
 import type { ScreenEpisodeRead } from './screen-episode-reader/read';
 import { ProfileBoundNotes, ProfileLibraryNote, ProfileReaderGroups, ProfileSourceList } from './music-reader-view';
@@ -198,9 +202,7 @@ export function ScreenProfileOverview({
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
   const episodeRead = query.data?.episodes;
   const returnHref =
-    publicRead.subject.type === 'schema:Episode'
-      ? screenEpisodeReturnHref(locale, location.searchStr)
-      : undefined;
+    publicRead.subject.type === 'schema:Episode' ? screenEpisodeReturnHref(locale, location.searchStr) : undefined;
   return (
     <ScreenProfileReader
       locale={locale}

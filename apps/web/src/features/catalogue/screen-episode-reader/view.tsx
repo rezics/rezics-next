@@ -3,11 +3,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { PlainLink, type PageLink } from '../../pages/shared';
 import type { ScreenEpisodeRead } from './read';
-import {
-  screenEpisodeContinuationHref,
-  screenEpisodeSubjectHref,
-  type ScreenEpisodeOrigin,
-} from './navigation';
+import { screenEpisodeContinuationHref, screenEpisodeSubjectHref, type ScreenEpisodeOrigin } from './navigation';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
@@ -65,9 +61,7 @@ export function ScreenEpisodeList({
       ) : null}
       {!loading && !read ? <p role="alert">{m.screen_reader_unavailable({}, o)}</p> : null}
       {read?.ok && read.state === 'empty' ? <p role="status">{m.screen_reader_empty({}, o)}</p> : null}
-      {read?.ok && read.state === 'withheld' ? (
-        <p role="status">{m.screen_episode_reader_withheld({}, o)}</p>
-      ) : null}
+      {read?.ok && read.state === 'withheld' ? <p role="status">{m.screen_episode_reader_withheld({}, o)}</p> : null}
       {read?.ok && read.entries.length ? (
         <ul aria-label={m.screen_episode_reader_title({}, o)} className="grid min-w-0 gap-2">
           {read.entries.map((entry) => {
@@ -114,4 +108,3 @@ export function ScreenEpisodeList({
     </section>
   );
 }
-

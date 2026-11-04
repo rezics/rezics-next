@@ -67,4 +67,3 @@ export function screenEpisodeReturnHref(locale: string, searchStr: string): stri
   target.hash = 'screen-episode-list';
   return `${target.pathname}${target.search}${target.hash}`;
 }
-

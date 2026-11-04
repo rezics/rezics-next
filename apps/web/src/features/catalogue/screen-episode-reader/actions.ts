@@ -40,4 +40,3 @@ export const loadScreenProfileForReader = createServerFn({ method: 'GET', strict
     setResponseHeader('cache-control', 'private, no-store');
     return readScreenProfileForReader(kernelClient(), data);
   });
-

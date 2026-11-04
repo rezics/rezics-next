@@ -27,7 +27,13 @@ export type ScreenProfileReaderLoad = { profile: ScreenRead; episodes?: ScreenEp
 
 type PageCount = { value: number; exact?: boolean } | undefined;
 
-function rowEntries(rows: readonly Part[], parentType: string, release: Release, locale: string, positionAllowed: boolean) {
+function rowEntries(
+  rows: readonly Part[],
+  parentType: string,
+  release: Release,
+  locale: string,
+  positionAllowed: boolean,
+) {
   return rows.flatMap((row): ScreenEpisodeEntry[] => {
     const summary = row.summary;
     if (!summary || !summary.id) return [];
@@ -61,8 +67,7 @@ function pageState(
   next: string | null,
   cursor: string | undefined,
 ): ScreenEpisodeRead {
-  if (!count || !Number.isSafeInteger(count.value) || count.value < 0)
-    return { ok: false, reason: 'unavailable' };
+  if (!count || !Number.isSafeInteger(count.value) || count.value < 0) return { ok: false, reason: 'unavailable' };
   if (!cursor && !entries.length && !rowCount && !next && count.exact === true && count.value === 0)
     return { ok: true, state: 'empty', entries, next };
   const withheld =
@@ -88,12 +93,12 @@ export async function readScreenEpisodePage(
   cursor?: string,
 ): Promise<ScreenEpisodeRead> {
   const parentType = parent.subject.type;
-  if (parentType !== 'schema:TVSeries' && parentType !== 'schema:TVSeason')
-    return { ok: false, reason: 'invalid' };
+  if (parentType !== 'schema:TVSeries' && parentType !== 'schema:TVSeason') return { ok: false, reason: 'invalid' };
   const streams = partStreams(release, parentType, locale);
   const stream =
-    streams.find((candidate) => candidate.direction === 'inverse' && candidate.property === episodeMembershipProperty) ??
-    streams[0];
+    streams.find(
+      (candidate) => candidate.direction === 'inverse' && candidate.property === episodeMembershipProperty,
+    ) ?? streams[0];
   if (!stream) return { ok: false, reason: 'unavailable' };
   const definition = release.properties[stream.property];
   if (!definition?.relation) return { ok: false, reason: 'unavailable' };
@@ -172,4 +177,3 @@ export async function readScreenProfileForReader(
     ),
   };
 }
-

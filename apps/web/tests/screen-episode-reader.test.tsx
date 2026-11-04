@@ -76,9 +76,7 @@ test('screen work parts keep canonical season and special identities, native pos
 
   const list = subjectHref({ id: profile.public.subject.id, label: 'The Observatory' }, 'en').href;
   const origin = { pathname: list, searchStr: `?realm=${realmId}&screenCursor=opaque-page-two` };
-  const html = renderToStaticMarkup(
-    <ScreenEpisodeList locale="en" read={read} origin={origin} />,
-  );
+  const html = renderToStaticMarkup(<ScreenEpisodeList locale="en" read={read} origin={origin} />);
   expect(html).toContain(`/en/subjects/${seasonId}/season-one`);
   expect(html).toContain(`/en/subjects/${specialId}/the-special`);
   expect(html).toContain('SP 1');
@@ -89,7 +87,5 @@ test('screen work parts keep canonical season and special identities, native pos
   if (!specialHrefValue) throw new Error('Expected a canonical Episode link');
   const specialHref = new URL(specialHrefValue.replaceAll('&amp;', '&'), 'https://site.invalid');
   const returnHref = screenEpisodeReturnHref('en', specialHref.search);
-  expect(returnHref).toBe(
-    `${list}?screenCursor=opaque-page-two&realm=${realmId}#screen-episode-list`,
-  );
+  expect(returnHref).toBe(`${list}?screenCursor=opaque-page-two&realm=${realmId}#screen-episode-list`);
 });
