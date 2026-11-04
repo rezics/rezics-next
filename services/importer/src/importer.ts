@@ -106,7 +106,11 @@ export interface ImportIdentifierLookup {
 }
 export type ImportIdentifierResolution =
   | Readonly<Record<string, string>>
-  | Readonly<{ status: 'unavailable'; preserveProperties: readonly string[] }>;
+  | Readonly<{
+      status: 'unavailable';
+      preserveProperties: readonly string[];
+      resolvedReferences?: Readonly<Record<string, string>>;
+    }>;
 
 type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
 export type ImportRunResult = {
@@ -1926,7 +1930,7 @@ export class Importer {
           if ('status' in resolution && resolution.status === 'unavailable') {
             lookupUnavailable = true;
             preserveProperties = new Set(resolution.preserveProperties);
-            resolvedReferences = undefined;
+            resolvedReferences = resolution.resolvedReferences;
           } else resolvedReferences = resolution as Readonly<Record<string, string>>;
         }
         const vocabulary = this.options.vocabularyAdmission?.request?.({ owner, conversion, subject });
@@ -2149,7 +2153,8 @@ export class Importer {
     let resolvedReferences = ownReferences?.resolvedReferences;
     if (lookup) {
       const resolution = await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal });
-      if ('status' in resolution && resolution.status === 'unavailable') resolvedReferences = undefined;
+      if ('status' in resolution && resolution.status === 'unavailable')
+        resolvedReferences = resolution.resolvedReferences;
       else resolvedReferences = resolution as Readonly<Record<string, string>>;
     }
     const context = {

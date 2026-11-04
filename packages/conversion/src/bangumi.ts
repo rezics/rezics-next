@@ -7,11 +7,15 @@ import {
   type FieldGroup,
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
-import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
+import { ConversionError, type ConversionDiagnostic, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
+import {
+  bangumiGameSourceGenreKey,
+  convertBangumiGameSourceGenres,
+} from './bangumi-game-source-genres.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -24,7 +28,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@9';
+export const converter_revision = 'bangumi@10';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -183,6 +187,14 @@ function retainedFieldDiagnostics(
   return [...retained, ...nameDiagnostics];
 }
 
+function boundedGameDiagnostics(diagnostics: readonly ConversionDiagnostic[]): ConversionDiagnostic[] {
+  if (diagnostics.length <= 16) return [...diagnostics];
+  const bounded = [...diagnostics.slice(0, 15)];
+  if (!bounded.some((item) => item.code === 'additional_infobox_omissions'))
+    bounded.push({ pointer: '/infobox', code: 'additional_infobox_omissions' });
+  return bounded.slice(0, 16);
+}
+
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
 export function convertBangumi(
   input: ConversionInput,
@@ -308,7 +320,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
   }
   const television = bangumiTelevisionRun(record);
-  const playerCount = bangumiGamePlayerCount(record);
+  const playerCount = bangumiGamePlayerCount(record, { handledFields: [bangumiGameSourceGenreKey] });
+  const gameSourceGenres = convertBangumiGameSourceGenres(record, metadata, recordUrl, context);
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -356,6 +369,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         : fact(item.property, item.content);
       proposals.push(propose(statement, 'facts', item.field));
     }
+    proposals.push(...gameSourceGenres.proposals);
     if (document) {
       proposals.push({
         ...propose(fact('schema:abstract', { language: 'und', document }), 'summary', 'summary'),
@@ -412,15 +426,19 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     normalizedRecord: record,
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
-    diagnostics: [
+    diagnostics: (() => {
+      const combined = [
       ...retainedFieldDiagnostics(
         record,
         extractedNames.diagnostics,
-        television.handledInfobox || playerCount.handledInfobox,
+        television.handledInfobox || playerCount.handledInfobox || gameSourceGenres.handledInfobox,
       ),
       ...television.diagnostics,
       ...playerCount.diagnostics,
-    ],
+        ...gameSourceGenres.diagnostics,
+      ];
+      return record.type === 4 ? boundedGameDiagnostics(combined) : combined;
+    })(),
     coverAssets,
     mediaImportIntents,
     sourceMetadata,

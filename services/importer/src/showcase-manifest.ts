@@ -341,6 +341,8 @@ export function buildShowcaseManifest(input: {
   reviewedVocabulary?: readonly ShowcaseVocabularyRecord[];
   currentBangumiGenreCandidateIds?: readonly string[];
   bangumiGenreOwnerKeys?: readonly string[];
+  currentBangumiGameGenreCandidateIds?: readonly string[];
+  bangumiGameGenreOwnerKeys?: readonly string[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
   const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
@@ -353,6 +355,8 @@ export function buildShowcaseManifest(input: {
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
   const currentBangumiGenreCandidateIds = new Set(input.currentBangumiGenreCandidateIds ?? []);
   const bangumiGenreOwnerKeys = new Set(input.bangumiGenreOwnerKeys ?? []);
+  const currentBangumiGameGenreCandidateIds = new Set(input.currentBangumiGameGenreCandidateIds ?? []);
+  const bangumiGameGenreOwnerKeys = new Set(input.bangumiGameGenreOwnerKeys ?? []);
   for (const requirement of input.vocabularyRequirements ?? []) {
     if (vocabularyRequirements.length >= showcaseLimits.vocabulary) {
       omissions.push({
@@ -422,6 +426,14 @@ export function buildShowcaseManifest(input: {
         ack.command.op === 'propose' &&
         ack.command.statement.property.id === 'schema:keywords' &&
         !currentBangumiGenreCandidateIds.has(ack.candidateId ?? '')
+      )
+        continue;
+      if (
+        provider === 'bangumi' &&
+        bangumiGameGenreOwnerKeys.has(row.key) &&
+        ack.command.op === 'propose' &&
+        ack.command.statement.property.id === 'schema:genre' &&
+        !currentBangumiGameGenreCandidateIds.has(ack.candidateId ?? '')
       )
         continue;
       const assertion = candidateAssertion(ack);

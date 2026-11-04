@@ -781,7 +781,7 @@ uses five metadata-only native envelopes and the ordinary account-key CLI: an ex
 subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@9` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+`bangumi@10` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
 five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
@@ -1442,7 +1442,7 @@ bounds belong to the linked owners; conversion itself has no purge work.
 ### Import authored Bangumi Game player count
 
 - Touches: one admitted type-4 Game infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@9` converter, and ordinary public
+  registration, the shared `bangumi@10` converter, and ordinary public
   batch/fence/candidate paths on that VideoGame. Selected-family seed reuses the
   same converter; this adds no publisher.
 - Bound: at most 64 infobox keys, 8 examined count occurrences and one player
@@ -1653,7 +1653,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@9` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@10` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2136,7 +2136,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@9`.
+selected release payload and convert them through `cross-media-entities@10`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2209,8 +2209,8 @@ for these source Concepts.
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@9`.
+`cross-media-entities@10` revision while the ordinary caller uses `bangumi@8`.
+`cross-media-entities@8` revision while the ordinary caller uses `bangumi@10`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2251,10 +2251,9 @@ date is not completion or access authority.
 ### Bangumi Game player count
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through `bangumi@9`, advancing the `bangumi@8` TVAnime
+`游玩人数` on type 4 through `bangumi@10`, preserving the `bangumi@8` TVAnime
 original-run mapping. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@8` registration; this journey adds no
-publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
+combined `cross-media-entities@10` registration. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
 Decision: Game-template `游玩人数` admits only an entire-field unqualified
@@ -2272,6 +2271,41 @@ positive integer or inclusive range; a lone count invents no minimum.
   selected-family caller is
   `services/kernel/test/imports/bangumi-game-player-count.test.ts`; native
   execution remains controller-owned.
+
+### Bangumi Game source genres
+
+Decision: each complete Game-template `游戏类型` occurrence remains one exact literal; separators are not guessed, and structured or continued values are withheld.
+Decision: ordinary Bangumi imports may opt into a finite binding-profile file; configured IDs remain hints and ordinary credentials remain proposal-only.
+
+The ordinary Bangumi registration and selected-family default caller convert
+exact scalar occurrences of `游戏类型` on the pinned type-4 Game template to
+`schema:genre`. Conversion proposals require an exact current binding to a
+public `skos:Concept` associated with the current `skos:ConceptScheme` whose
+URL is `https://rezics.com/schemes/bangumi/genres`. Configured IDs are lookup
+hints; the local showcase adapter reads the Scheme and used Concepts through
+the authenticated current public API before proposing. A transient read outage
+keeps only exact prior acknowledged genre candidates for recovery and cannot
+create or publish a new one.
+
+The explicit local showcase command accepts
+`--bangumi-game-genre-bindings <json>` with `schemeId`, the exact `schemeUri`,
+and at most 256 `{ literal, id, sourceUri }` Concept rows. Native review and
+adoption remain a separate local showcase step. Ordinary importer credentials
+remain proposal-only. The ordinary `rezics-import --source bangumi` command
+accepts the same shape through `--bangumi-game-genre-bindings-file <path>`; the
+file is capped at 256 KiB. Both callers re-read the current Scheme and used
+Concepts before proposing. No public-tag catalogue or canonical-equivalence
+claim is added.
+
+- Touches: one selected Game and at most 16 source genre proposals with exact
+  record citations.
+- Bound: the existing 65,536-character, 64-field Game infobox parser, 16
+  occurrences and sanitized omissions, a 256 KiB finite binding profile, and
+  the common command/journal limits.
+- Growth check: importer and Kernel focused scenarios cover ordinary and
+  selected-family registration, current binding checks, separate review and
+  adoption, current public read and same-UUID recovery. Source-shaped examples
+  are authored fixtures, not verified real-dump observations.
 
 ### Bangumi creator and voice credits
 
@@ -2398,7 +2432,8 @@ cross-media result manifest for the common vocabulary publisher.
 Decision: vocabulary profile UUIDs are lookup hints only; the publication worker emits them after acknowledgement, and the importer rereads each selected Scheme and Concept from current public state before use.
 
 The development seed reads an optional profile path from
-`REZICS_DEV_VNDB_CHARACTER_VOCABULARY`. The common publisher consumes
+`REZICS_DEV_VNDB_CHARACTER_VOCABULARY` and an optional exact Game genre binding
+profile from `REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS`. The common publisher consumes
 `characterVocabulary.requirements` from the result manifest and emits
 `traits.schemeId`, `traits.concepts[{code,id}]`, `roles.schemeId`, and
 `roles.concepts[{code,id}]` only after native command acknowledgement. The
@@ -2482,7 +2517,7 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@6`.
+`cross-media-entities@10` revision while the ordinary caller uses `bangumi@6`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the

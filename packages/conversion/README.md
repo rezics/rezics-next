@@ -275,7 +275,7 @@ access authority.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-Bangumi revision `bangumi@9` converts pinned Game infobox `游玩人数` on type 4
+Bangumi revision `bangumi@10` converts pinned Game infobox `游玩人数` on type 4
 through the same bound proposal path, preserving `bangumi@8` TVAnime original-run
 mapping. A single stated maximum emits only `schema:numberOfPlayers`. An
 inclusive lower/upper range emits the upper endpoint as the exact unit-1 amount
@@ -288,8 +288,9 @@ dump bytes refresh under this revision without inventing a native record
 revision.
 Decision: Game-template `游玩人数` admits only an entire-field unqualified
 positive integer or inclusive range; a lone count invents no minimum.
-Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
-unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
+Decision: Game source-genre admission advances `bangumi@9` to `bangumi@10` so
+unchanged dumps offer the new fact; player count and TVAnime original-run
+mapping are preserved.
 
 Cross-media entity revision `cross-media-entities@6` retains an admitted
 Bangumi `person.summary` for the source-selected `schema:Person` or
@@ -398,7 +399,7 @@ exact `0` is never a measured zero.
 
 ### VNDB release titles
 
-`cross-media-entities@9` projects admitted `releases_titles` rows onto
+`cross-media-entities@10` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -420,7 +421,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@9` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@10` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -499,7 +500,7 @@ Decision: platform and medium projections advance the converter from `@6` to `@7
 
 ### VNDB character names and aliases
 
-`cross-media-entities@9` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@10` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -520,7 +521,7 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@9` reads only the selected character's `name`, `name_cn`
+`cross-media-entities@10` reads only the selected character's `name`, `name_cn`
 and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
 `name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
 preferred name. Every supported `别名` row is an alternate name; its exact label
@@ -549,7 +550,18 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@9` preserves the current Bangumi physical profile, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi character names.
+Combined revision decision: `cross-media-entities@10` preserves the current Bangumi physical profile, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi Game source genres.
+
+### Bangumi Game source genres
+
+Decision: each complete Game-template `游戏类型` occurrence is one exact literal; separators are not guessed, so compound values stay intact and structured or continued values are withheld.
+
+Type-4 `{{Infobox Game` conversion emits `schema:genre` only after the caller supplies the exact Concept UUID resolved for the pinned source scheme `https://rezics.com/schemes/bangumi/genres`. The conversion preserves source spelling, uses the exact Bangumi Game record URL as its citation and does not claim canonical taxonomy equivalence. Missing references withhold only the affected genre occurrence; no title, platform, public tag or label lookup supplies a genre.
+The ordinary importer profile and selected-family caller both obtain those references through current public Scheme and Concept reads before invoking this pure converter.
+
+- Touches: one selected Game, at most 16 exact `schema:genre` proposals, each cited to its Bangumi Game record.
+- Bound: the shared 65,536-character infobox and 64-field parser, at most 16 genre occurrences and 16 sanitized omissions, 200 code units and 1,024 UTF-8 bytes per literal, and the existing 64 KiB command envelope.
+- Growth check: `services/importer/tests/bangumi-game-source-genres.test.ts` covers exact occurrence conversion and binding omissions; `services/kernel/test/imports/bangumi-game-source-genres.test.ts` covers current finite binding, separate review/adoption, current public read, unavailable binding recovery and stable Game identity. Fixtures are authored examples, not observed source-dump records.
 
 ### VNDB native alternate-name contract
 
@@ -937,7 +949,7 @@ omission diagnostics.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@9` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@10` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an

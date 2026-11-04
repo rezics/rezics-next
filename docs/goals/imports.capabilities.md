@@ -1299,10 +1299,10 @@ positive integer or inclusive range. A range stores its upper endpoint as
 `schema:numberOfPlayers` and its lower endpoint as `schema:minValue`; a lone
 count invents no minimum. Mode, platform, edition or condition text withholds
 the whole occurrence.
-Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
-unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
+Decision: Game source-genre admission advances `bangumi@9` to `bangumi@10` so
+unchanged dumps offer the new fact; player count and TVAnime original-run mapping are preserved.
 
-`bangumi@9` converts pinned Game `游玩人数` through the ordinary Bangumi
+`bangumi@10` converts pinned Game `游玩人数` through the ordinary Bangumi
 registration used by JSON-lines dumps and the selected family, preserving
 `bangumi@8` original-run mapping. Native read is on the acknowledged VideoGame.
 DoujinGame templates, quantity uncertainty bounds and inferred minimums stay
@@ -1319,6 +1319,21 @@ bun run --cwd services/kernel check test/imports/bangumi-game-player-count.test.
 
 This delivery does not claim that native command passed.
 
+## Bangumi Game source genres
+
+Decision: each complete Game-template `游戏类型` occurrence remains one exact literal; separators are not guessed, and structured or continued values are withheld.
+
+`bangumi@10` converts the pinned type-4 Game field to `schema:genre` only when the caller supplies an exact Concept UUID with current public evidence for the Concept, its source URI and membership in the pinned Bangumi genre Scheme. `cross-media-entities@10` carries the same conversion through selected-family seeding while preserving the combined converter's prior mappings. Ordinary import and the explicit local showcase use finite binding profiles; configured UUIDs are hints and cannot authorize a proposal by themselves. The ordinary importer accepts `--bangumi-game-genre-bindings-file <path>` up to 256 KiB. Transient read failures preserve only exact prior genre candidates for recovery.
+
+The focused authored scenarios are:
+
+- `ordinary Game conversion preserves the exact infobox literal and withholds unavailable or wrong-scheme bindings` in the importer workspace.
+- `selected Game genre binding is reviewed and adopted separately, read publicly, and recovered after an unavailable binding without changing its UUID or sealed intent` in the Kernel workspace.
+
+- Touches: one selected VideoGame and at most 16 exact, cited `schema:genre` occurrences.
+- Bound: the shared 65,536-character infobox cap, 64 fields, at most 16 genre occurrences and 16 sanitized omissions, a finite profile of at most 256 Concepts, the existing operation-local current-read cache and the command envelope.
+- Growth check: `services/importer/tests/bangumi-game-source-genres.test.ts` and `services/kernel/test/imports/bangumi-game-source-genres.test.ts` use authored source-shaped fixtures; no real source-dump observation is claimed. Integration checks remain controller-owned.
+
 ## VNDB character names and qualified aliases
 
 Decision: language-less aliases use `und`; explicit Romanized cells use the
@@ -1327,7 +1342,7 @@ without a native alternate-name statement.
 
 The production cross-media planner now streams the acquired `chars_names` and
 `chars_alias` COPY tables and joins only exact selected character IDs from
-`chars_vns`. `cross-media-entities@9` preserves localized `schema:name` facts,
+`chars_vns`. `cross-media-entities@10` preserves localized `schema:name` facts,
 unqualified Romanized alternate names and alias alternate names with their
 exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
 whole alias. Qualified text does not enter bootstrap labels or aliases, and
@@ -1389,7 +1404,7 @@ projection and digest.
 ## Bangumi character source names
 
 Selected default Bangumi character records retain their exact `infobox` payload
-through `planCrossMediaSeed` and the shared `cross-media-entities@9` converter.
+through `planCrossMediaSeed` and the shared `cross-media-entities@10` converter.
 The reviewed `Crt` grammar supplies cited `schema:name` facts from `name`,
 `name_cn` and `简体中文名`, plus cited `schema:alternateName` facts from its
 labelled `别名` rows. A malformed alias group is withheld as a whole; usable
@@ -1440,7 +1455,7 @@ additional selected source key as an explicit omission.
 
 Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
 
-The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@9` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
+The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@10` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
 
 - Touches: one selected Character record, at most one released height and one weight fact, bounded source evidence, and sanitized field-path diagnostics. Existing names, kind, appearance and licensed summary handling remain on their current paths.
 - Bound: 65,536 UTF-8 source bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 quantity facts and 16 diagnostics. Unsupported or oversized values do not create partial quantities; the existing converter command ceiling and common publication manifest remain authoritative.
