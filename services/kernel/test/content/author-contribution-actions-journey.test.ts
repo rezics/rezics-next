@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, setDefaultTimeout, test } from
 import { fromPlainText } from '@rezics/document';
 import { readAuthorContributionActions } from '../../src/content/author-contribution-actions.ts';
 import counts from '../../src/content/reaction-count-page.sql';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createAuthorContributionActionsFixture } from './support/author-contribution-actions-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
 
@@ -223,4 +223,121 @@ test('publication withdrawal during finish fails the selected cohort without mov
     },
     200,
   );
+});
+
+for (const view of ['discussion', 'posts'] as const) {
+  test(`${view}: exact report and reply commands recover their own original receipts`, async () => {
+    const thread = await f.thread();
+    const source = view === 'posts' ? await f.post(thread.id, 'Selected reply target') : thread.firstPost;
+    const selected = await f.admit(view, null, 1);
+    await f.grant(thread.id, f.other.accountId, ['post:create']);
+    const advice = await selected.read(f.other.bearer);
+    status(advice, 200);
+    expect(advice.value.selected[0].reply).toEqual({ state: 'available' });
+    const target = { kind: view === 'posts' ? 'post' : 'thread', id: view === 'posts' ? source.id : thread.id };
+    const reportAdvice = advice.value.actions.references.find(
+      (item: any) => item.type === `content.${target.kind}` && item.id === target.id,
+    );
+    expect(reportAdvice.operations).toContainEqual(
+      expect.objectContaining({ operationId: 'report.create', state: 'available' }),
+    );
+    const commands = [
+      { path: '/v1/reports', body: { target, revisionId: source.revisionId, reason: 'spam' }, field: 'reportId' },
+      {
+        path: `/v1/threads/${thread.id}/posts`,
+        body: {
+          body: fromPlainText('Reply to the exact selected contribution'),
+          licence: 'CC0-1.0',
+          subjectIds: [],
+          visibility: 'published',
+          parentId: source.id,
+        },
+        field: 'post',
+      },
+    ];
+    for (const command of commands) {
+      const sender = Object.freeze({ bearer: f.other.bearer, key: crypto.randomUUID(), body: command.body });
+      const send = () => f.call('POST', command.path, sender);
+      let committed: unknown;
+      await expect(
+        send().then((response) => {
+          status(response, 201);
+          committed = response.value[command.field];
+          throw new Error('Committed response delivery lost');
+        }),
+      ).rejects.toThrow('Committed response delivery lost');
+      const readback = await selected.read(sender.bearer);
+      status(readback, 200);
+      expect(readback.value.selected.map((item: any) => item.reference)).toEqual(selected.input.references);
+      expect(readback.value).not.toHaveProperty('receipt');
+      const recovered = await send();
+      status(recovered, 201);
+      expect(recovered.value[command.field]).toEqual(committed);
+      const receipts = await f.admin.query(
+        'SELECT count(*)::int AS count FROM core.receipt WHERE principal_id=$1 AND idempotency_key=$2',
+        [f.other.accountId, sender.key],
+      );
+      expect(receipts.rows).toEqual([{ count: 1 }]);
+      if (command.field === 'post') {
+        expect(recovered.value.post).toMatchObject({ threadId: thread.id, parentId: source.id });
+      } else {
+        const report = await f.call('GET', `/v1/reports/${recovered.value.reportId}`, { bearer: sender.bearer });
+        status(report, 200);
+        expect(report.value.report).toMatchObject({ target, revisionId: source.revisionId });
+      }
+    }
+    status(await f.call('PUT', `/v1/threads/${thread.id}/watch`, { bearer: f.other.bearer }), 204);
+    const watched = await selected.read(f.other.bearer);
+    status(watched, 200);
+    expect(watched.value.watch.items).toEqual([{ threadId: thread.id, state: 'current', watching: true }]);
+  });
+}
+
+test('parent revision replacement during finish withholds the entire original selection', async () => {
+  const thread = await f.thread();
+  const parent = await f.post(thread.id, 'Original parent');
+  const child = await f.post(thread.id, 'Unchanged selected child', parent.id);
+  const selected = await f.admit('posts', null, 1);
+  expect(selected.input.references[0]!.id).toBe(child.id);
+  const original = JSON.stringify({ input: selected.input, next: selected.page.value.next });
+  const replaced = await f.duringAssembly(selected, () => f.revise(parent.id, parent.revisionId, 'Replaced parent'));
+  status(replaced, 503);
+  expect(replaced.value.code).toBe('dependency_unavailable');
+  expect(replaced.text).not.toContain('operations');
+  expect(JSON.stringify({ input: selected.input, next: selected.page.value.next })).toBe(original);
+});
+
+test('a source epoch change during finish cannot inherit the previous source observation', async () => {
+  const thread = await f.thread();
+  const selected = await f.admit('discussion', null, 1);
+  const partition = partitionOf(routeOf(thread.id)!);
+  const replaced = await f.duringAssembly(selected, () =>
+    f.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partition]),
+  );
+  status(replaced, 503);
+  expect(replaced.value.code).toBe('dependency_unavailable');
+  expect(replaced.text).not.toContain('operations');
+});
+
+test('replacement viewer credentials retain the public selection and revoked credentials disclose no advice', async () => {
+  await f.thread();
+  const selected = await f.admit('discussion', null, 1);
+  const replacement = await f.system.auth.issue({
+    accountId: f.other.accountId,
+    clientId: f.system.auth.ordinaryClient.id,
+    scopes: f.system.auth.ordinaryScopes,
+  });
+  expect(replacement.bearer).not.toBe(f.other.bearer);
+  const current = await selected.read(replacement.bearer);
+  status(current, 200);
+  expect(current.value.viewer).toEqual({ kind: 'account', id: f.other.accountId });
+  expect(current.value.selected.map((item: any) => item.reference)).toEqual(selected.input.references);
+  await f.system.nativeAuth.internal.revokeSessions(f.other.accountId);
+  for (const bearer of [f.other.bearer, replacement.bearer]) {
+    const revoked = await selected.read(bearer);
+    status(revoked, 401);
+    expect(revoked.value.code).toBe('invalid_credentials');
+    expect(revoked.text).not.toContain('operations');
+  }
+  status(await selected.read(), 200);
 });

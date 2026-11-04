@@ -141,10 +141,12 @@ publisher installs the real method/DTO. It must consume this route, without impo
 - Touches: proof verification; two single-account Accounts publicViews/partition transactions; two complete
   native anonymous source rounds; one complete retained reading-card selection and finish under the actor.
   Distinct thread observations share their round's native read. Each selected reply additionally performs the
-  existing native exact post/ancestor disclosure. Auth, Board/Realm/Subject/Access preparation and evaluations,
+  existing native exact post/ancestor disclosure and one native read per distinct immediate parent in each
+  round. Parent digests, source partition identity/epoch and nondecreasing positions are compared across assembly.
+  Auth, Board/Realm/Subject/Access preparation and evaluations,
   both native batch authority rounds, owner lookups, transaction controls and all pools/runners remain charged.
 - Bound: `S<=20`, distinct threads/boards `<=S`. Token and cursor are each at most 4 KiB; the closed request
-  bounds selected keys before enrichment. No history, membership, reaction or watch enumeration is added.
+  bounds selected keys before enrichment; distinct immediate parents `<=S`. No history, membership, reaction or watch enumeration is added.
   The original source bodies retain native 2 MiB-per-body and ancestry limits; hashing serializes each admitted
   body and retains only a 64-character digest after its round. Charge these raw bodies, comparison copies and
   serialization separately from the shared batch's own finite retention/envelope bounds. Its internal identity,
@@ -158,9 +160,12 @@ The native action journey uses independently created review subjects so each fix
 author/subject live-review slot. AuthHost and fixture cleanup share one physical Auth pool close, including
 construction failure; setup errors are reported before any journey outcome is counted. The prepared journey
 covers Posts/Discussion/Reviews, anonymous and signed advice, unavailable aggregates, original-key reaction
-recovery, thread watch, exact-source replacement, concealed ancestry and publication withdrawal. Execution and
-the remaining complete native command/effect and physical-growth outcomes retain controller ownership.
+recovery, exact report/reply receipt recovery, containing-thread watch, credential replacement/revocation,
+exact-source and immediate-parent replacement, source epoch changes, concealed ancestry and publication withdrawal.
+The remaining command/effect, finish-time identity/credential, sparse-frontier and physical-growth outcomes remain open.
 Selection issuance and private admission use the same configured native clock for the existing cursor lifetime.
+
+Decision: immediate parent observations fence one private assembly; they do not extend the public selection or its frontier.
 
 `author_posts.list` adds `parentContext` and `conversationActivity`; `author_threads.list` adds
 `conversationActivity`. These additive public fields use the existing Web contribution renderers. They never

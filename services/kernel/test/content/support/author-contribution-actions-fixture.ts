@@ -70,10 +70,14 @@ export async function createAuthorContributionActionsFixture() {
         });
       return { page, input, read };
     };
-    const duringAssembly = async (selected: Awaited<ReturnType<typeof admit>>, mutate: () => Promise<unknown>) => {
+    const duringAssembly = async (
+      selected: Awaited<ReturnType<typeof admit>>,
+      mutate: () => Promise<unknown>,
+      bearer = f.other.bearer,
+    ) => {
       const observer = observeSql(f.system.database.pool);
       const gate = observer.hold({ statement: counts.sql }, 'before');
-      const pending = selected.read(f.other.bearer);
+      const pending = selected.read(bearer);
       try {
         await Promise.race([
           gate.entered,

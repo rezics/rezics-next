@@ -169,6 +169,7 @@ async function sources(
 ) {
   const context = { actor: { kind: 'anonymous' as const }, deadline };
   const threads = new Map<string, Awaited<ReturnType<typeof readThread>>>();
+  const parents = new Map<string, string>();
   const selected: AuthorContextReference[] = [];
   const anchors: AnchoredPosition[] = [];
   for (const reference of references) {
@@ -207,10 +208,37 @@ async function sources(
       )
         throw changed();
       selected.push({ thread, post: post.value });
+      // Disclosure of the child proves access to its ancestry, but does not
+      // retain a parent's revision. Observe each immediate parent once so a
+      // replacement during private assembly cannot silently pass that fence.
+      const parentId = post.value.parentId;
+      if (parentId && !parents.has(parentId)) {
+        const parent = await readPost(dependencies, threadId, parentId, context);
+        anchors.push(parent.anchor);
+        if (!parent.value) throw changed();
+        parents.set(parentId, hash(parent.value));
+      }
     }
   }
   if (JSON.stringify(referencesOf(selected)) !== JSON.stringify(references)) throw changed();
-  return { witness: observation(selected), anchors };
+  return { witness: observation(selected), parents: hash([...parents]), anchors };
+}
+
+function confirmSources(initial: Awaited<ReturnType<typeof sources>>, final: Awaited<ReturnType<typeof sources>>) {
+  if (initial.witness !== final.witness || initial.parents !== final.parents) throw changed();
+  if (initial.anchors.length !== final.anchors.length) throw changed();
+  for (let index = 0; index < initial.anchors.length; index++) {
+    const before = initial.anchors[index]!;
+    const after = final.anchors[index]!;
+    if (
+      before.partition.partitionNo !== after.partition.partitionNo ||
+      before.partition.node !== after.partition.node ||
+      before.epoch !== after.epoch ||
+      after.partition.writeState === 'moved' ||
+      after.position < before.position
+    )
+      throw changed();
+  }
 }
 
 /** One admitted page, one retained native batch, and complete public disclosure on both sides of assembly. */
@@ -229,6 +257,7 @@ export async function readAuthorContributionActions(
   const result = await batch.finish();
   const final = await sources(dependencies, accountId, input.view, selected.references, deadline);
   if (final.witness !== selected.witness) throw changed();
+  confirmSources(initial, final);
   let lastPublication: AnchoredPosition;
   try {
     lastPublication = await publication(dependencies, accountId, input.view, selected.epoch, deadline);
