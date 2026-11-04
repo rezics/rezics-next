@@ -1549,7 +1549,9 @@ scheme (`https://rezics.com/schemes/vndb/release-types`, complete/partial/trial;
 the importer does not publish a scheme URI for `releases_vn.rtype`, so this
 platform scheme URI is the reversible binding used by native seed/adoption), and
 the Bangumi episode-type scheme (`https://rezics.com/schemes/bangumi/episode-types`,
-codes 0–6). Seeds carry `schema:url` for importer bindings and `schema:sameAs` for
+codes 0–6), plus the VNDB character-trait scheme with i23/i30 and the VNDB public
+content-tag scheme with g105/g249. The six VNDB entries carry ODbL-1.0 metadata
+and cite the VNDB dictionary. Seeds carry `schema:url` for importer bindings and `schema:sameAs` for
 the existing correspondence pattern. Unreviewed provider codes are not published.
 
 `schema:creativeWorkStatus` is admitted only on `schema:VideoGame` (and thus

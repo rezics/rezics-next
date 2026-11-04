@@ -184,8 +184,9 @@ class ReviewedBindingFencedError extends Error {
     this.name = 'ReviewedBindingFencedError';
   }
 }
-function slot(property: string, content: string) {
-  return { property, ...(property === 'schema:sameAs' ? {} : { target: content }), context: globalContext, limit: 100 };
+/** Reviewed scalar and classification facts share the ordinary unkeyed property bucket. */
+export function reviewedCatalogueSlot(property: string) {
+  return { property, context: globalContext, limit: 100 };
 }
 function currentSource(source: unknown, seed: Seed): boolean {
   return sameJson(source, envelope(seed));
@@ -199,7 +200,7 @@ async function select(
   signal?: AbortSignal,
 ): Promise<ReviewedCatalogueReceipt> {
   ensure(proposed.value.type === 'value' && typeof proposed.value.content === 'string');
-  const query = slot(proposed.property.id, proposed.value.content);
+  const query = reviewedCatalogueSlot(proposed.property.id);
   let page = await port.reviewedCandidates(subject, query, signal);
   ensure(page.next === null, 'Reviewed catalogue candidate page exceeds its bound');
   const row = page.candidates.find((c) => c.id === candidate);
@@ -239,7 +240,6 @@ async function select(
     {
       context: globalContext,
       property: query.property,
-      ...(query.target ? { target: query.target } : {}),
       mode: 'replace',
       selection: [{ candidate, rank: 'preferred' }],
       expected_head: page.adoption?.head ?? null,
@@ -434,11 +434,7 @@ export async function inspectReviewedBangumiBinding(
       for (const fact of seed.facts) {
         const expected = statement(fact, subjects);
         ensure(expected.value.type === 'value' && typeof expected.value.content === 'string');
-        const page = await port.reviewedCandidates(
-          subjects[seed.key]!,
-          slot(fact.property, expected.value.content),
-          signal,
-        );
+        const page = await port.reviewedCandidates(subjects[seed.key]!, reviewedCatalogueSlot(fact.property), signal);
         if (page.next !== null) return { state: 'unavailable' };
         if (page.adoption?.mode !== 'replace') return { state: 'withdrawn' };
         const content = expected.value.content;

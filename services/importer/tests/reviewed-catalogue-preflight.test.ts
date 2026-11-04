@@ -5,6 +5,7 @@ import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
 import {
   reviewedCatalogueOwner,
   reviewedCatalogueKey,
+  reviewedCatalogueSlot,
   seedReviewedCatalogue,
   type ReviewedCataloguePort,
 } from '../src/reviewed-catalogue.ts';
@@ -66,5 +67,15 @@ test('reviewed metadata accepts the public transport null-prototype JSON snapsho
     expect(creates).toBe(1);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('reviewed scalar and classification facts use their ordinary unkeyed candidate bucket', () => {
+  for (const property of ['schema:url', 'schema:sameAs', 'skos:inScheme', 'skos:closeMatch']) {
+    expect(reviewedCatalogueSlot(property)).toEqual({
+      property,
+      context: '00000000-0000-8000-8000-000000000000',
+      limit: 100,
+    });
   }
 });

@@ -700,5 +700,195 @@
         ]
       }
     ]
+  },
+  {
+    "key": "vndb-character-traits-scheme",
+    "schemeURI": "https://rezics.com/schemes/vndb/character-traits",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "VNDB character traits"
+    },
+    "metadata": {
+      "name": "VNDB character traits",
+      "url": "https://rezics.com/schemes/vndb/character-traits",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/character-traits",
+        "citations": [
+          "https://vndb.org/d14"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "vndb-character-traits-i23",
+    "schemeURI": "https://rezics.com/schemes/vndb/character-traits",
+    "literalMember": "i23",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Waist Length+"
+    },
+    "metadata": {
+      "name": "Waist Length+",
+      "url": "https://vndb.org/i23",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/character-traits/i23",
+        "citations": [
+          "https://vndb.org/i23"
+        ]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-character-traits-scheme",
+        "citations": [
+          "https://vndb.org/i23"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "vndb-character-traits-i30",
+    "schemeURI": "https://rezics.com/schemes/vndb/character-traits",
+    "literalMember": "i30",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Straight"
+    },
+    "metadata": {
+      "name": "Straight",
+      "url": "https://vndb.org/i30",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/character-traits/i30",
+        "citations": [
+          "https://vndb.org/i30"
+        ]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-character-traits-scheme",
+        "citations": [
+          "https://vndb.org/i30"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "vndb-public-tags-cont-scheme",
+    "schemeURI": "https://rezics.com/schemes/vndb/public-tags/cont",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "VNDB content tags"
+    },
+    "metadata": {
+      "name": "VNDB content tags",
+      "url": "https://rezics.com/schemes/vndb/public-tags/cont",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/public-tags/cont",
+        "citations": [
+          "https://vndb.org/d14"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "vndb-public-tags-cont-g105",
+    "schemeURI": "https://rezics.com/schemes/vndb/public-tags/cont",
+    "literalMember": "g105",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Science Fiction"
+    },
+    "metadata": {
+      "name": "Science Fiction",
+      "url": "https://vndb.org/g105",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/public-tags/cont/g105",
+        "citations": [
+          "https://vndb.org/g105"
+        ]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-public-tags-cont-scheme",
+        "citations": [
+          "https://vndb.org/g105"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "vndb-public-tags-cont-g249",
+    "schemeURI": "https://rezics.com/schemes/vndb/public-tags/cont",
+    "literalMember": "g249",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Time Travel"
+    },
+    "metadata": {
+      "name": "Time Travel",
+      "url": "https://vndb.org/g249",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/public-tags/cont/g249",
+        "citations": [
+          "https://vndb.org/g249"
+        ]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-public-tags-cont-scheme",
+        "citations": [
+          "https://vndb.org/g249"
+        ]
+      }
+    ]
   }
 ]

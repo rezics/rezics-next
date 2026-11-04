@@ -81,11 +81,19 @@ test('authored Bangumi person summaries preserve profile, document rights and re
   expect(organizationBootstrap?.op).toBe('create');
   if (organizationBootstrap?.op !== 'create') throw new Error('Missing organization identity');
   expect(organizationBootstrap.subject.type).toBe('schema:Organization');
-  const organizationBiography = summary(convert(biography, 2));
+  const organization = convert(biography, 2);
+  const organizationBiography = summary(organization);
   expect(organizationBiography?.op).toBe('propose');
   if (!organizationBiography || organizationBiography.op !== 'propose')
     throw new Error('Missing organization biography proposal');
   expect(checkBatchWrite({ commands: [organizationBiography] }, bundledRelease)).toEqual([]);
+  expect(
+    organization.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P6298',
+    ),
+  ).toBe(false);
+  expect(organization.diagnostics).toContainEqual({ pointer: '/id', code: 'unadmitted_organization_identifier' });
+  expect(checkBatchWrite({ commands: organization.proposals }, bundledRelease)).toEqual([]);
   const identifier = person.proposals.find(
     (command): command is Extract<BatchCommand, { op: 'propose' }> =>
       command.op === 'propose' && command.statement.property.id === 'wdt:P6298',

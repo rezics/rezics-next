@@ -6,6 +6,14 @@ import { createImportTransport } from '../../services/importer/src/import-client
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { fetchCrossMediaDumps } from './fetch-dumps.ts';
 
+/** Exact development roots: Steins;Gate/CLANNAD VNDB VNs; Steins;Gate anime/book and CLANNAD anime in Bangumi. */
+export const developmentShowcaseSelection = {
+  bangumi: [10380, 84148, 51],
+  vndb: ['v2002', 'v4'],
+  includeReleases: false,
+  peoplePerProvider: 64,
+} as const;
+
 function requiredEnvironment(name: string, env: NodeJS.ProcessEnv): string {
   const value = env[name]?.trim();
   if (!value) throw new Error(`Missing ${name}; configure the local development persona and origins first`);
@@ -69,6 +77,8 @@ export async function runDevelopmentSeed(
   if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
   await (options.runSeed ?? runCrossMediaSeedCli)(args, {
     episodeCatalogueSubjects: reviewedCatalogue.subjects,
+    reviewedCatalogueSubjects: reviewedCatalogue.subjects,
+    selection: developmentShowcaseSelection,
   });
 }
 if (import.meta.main) {

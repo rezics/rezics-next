@@ -1605,12 +1605,13 @@ function convert(
   });
   const profile = profiles[kind];
   const identifierContent = kind === 'bangumi-episode' ? url : projected.identifier;
+  const omitOrganizationIdentifier = kind === 'bangumi-person' && projected.type === 'schema:Organization';
   const names =
     projected.names ??
     projected.nameFacts ??
     Object.entries(projected.labels).map(([language, value]) => ({ language, text: value }));
   const facts: BatchStatement[] = [
-    fact(profile.identifier, identifierContent),
+    ...(omitOrganizationIdentifier ? [] : [fact(profile.identifier, identifierContent)]),
     ...names.map((name) => fact('schema:name', name)),
     ...(projected.alternateNames ?? []).map((name) => fact('schema:alternateName', name)),
 
@@ -1627,6 +1628,8 @@ function convert(
     })),
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
+  if (omitOrganizationIdentifier)
+    diagnostics.push({ pointer: '/id', code: 'unadmitted_organization_identifier' });
   const measurementCommandKeys = new Map<number, string>();
   for (const measurement of projected.characterMeasurements?.measurements ?? []) {
     if (!releasedCharacterQuantity(measurement.property, measurement.quantity)) {

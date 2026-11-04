@@ -26,6 +26,7 @@ import {
   planShowcaseTags,
   prepareShowcaseVndbPublicTagVocabulary,
   readShowcaseVndbPublicTagVocabulary,
+  projectShowcaseTagTables,
   showcaseTagWeightGapReason,
   showcaseTagWeightProperty,
 } from '../src/showcase-tags.ts';
@@ -661,3 +662,36 @@ test('reopening a pre-repair journal recovers sealed sends and original Concept 
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('reviewed tag association bounds let one association from each selected work through voter duplicates', async () => {
+  const repeated = Array.from({ length: 300 }, () => ({
+    date: '2026-10-24',
+    tag: 'g311',
+    vid: 'v410',
+    uid: 'u9001',
+    vote: '3',
+    spoiler: '0',
+    ignore: 'f',
+    lie: 'f',
+    notes: null,
+  }));
+  const input = {
+    async *rows(provider: 'bangumi' | 'vndb', table: string) {
+      if (provider !== 'vndb') return;
+      if (table === 'tags_vn') yield* [...repeated, { ...repeated[0]!, vid: 'v999' }];
+      if (table === 'tags') yield* parseAuthoredVndbCopy('tags', tagsHeader, [tagsCopy[0]!]);
+      if (table === 'vn') yield* [{ id: 'v410' }, { id: 'v999' }];
+      if (table === 'vn_titles')
+        yield* [
+          { id: 'v410', official: 't', lang: 'en', title: 'First work', latin: null },
+          { id: 'v999', official: 't', lang: 'en', title: 'Second work', latin: null },
+        ];
+      if (table === 'entry_meta') yield* [{ id: 'v410', revision: 1 }, { id: 'v999', revision: 1 }];
+    },
+  };
+  const projected = await projectShowcaseTagTables(input, ['v410', 'v999'], new Set(['g311']));
+  const associations: Record<string, unknown>[] = [];
+  for await (const row of projected.tables.rows('vndb', 'tags_vn')) associations.push(row);
+  expect(associations.map((row) => row.vid)).toEqual(['v410', 'v999']);
+  expect(projected.truncated).toBe(false);
+});

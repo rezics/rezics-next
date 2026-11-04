@@ -2256,35 +2256,35 @@ The default real-dump seed also runs
 That adapter keeps the documented Book Girl novel family (series 499, first
 volume 26) from the pinned dump relation check, walks only 1002/1003 novel
 members, and delivers authors through the existing creator-credit helper.
-Steins;Gate remains the required VN/anime showcase; this book family is a
-separate actual source family. Decision: type 1 Book/BookSeries dispatch uses
-the current `bangumi@12` converter, preserving Book names, TVAnime original-run
+The ordinary broad CLI retains this separate Book Girl source family.
+`task seed:dev` elects its directly selected Bangumi Official Book root as part
+of the five-work showcase. Decision: type 1 Book/BookSeries dispatch uses the
+current `bangumi@12` converter, preserving Book names, TVAnime original-run
 and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
 identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
 selected Book Girl records join the common showcase manifest; book review
 gaps stay in the seed books section so they do not fail Steins;Gate
 publication.
 
-The default real-dump seed now acquires `tags`, `tags_parents` and `tags_vn`
-from the same checksum-verified current VNDB archive and runs
-[`showcase-tags.ts`](src/showcase-tags.ts) after the selected-family import.
-That adapter streams only the selected VN associations, closes their tag
-parents inside the dictionary cap, and feeds the existing public-tag
-coordinator. Default `task seed:dev` publishes selected dictionary
-ConceptScheme records, then Concepts, through the current importer and the
-common journal, rereads current native type/`schema:url`/`skos:inScheme`, and
-only then admits exact work associations. Optional `--vndb-public-tag-bindings`
-remains an explicit UUID override; adopted usable bindings are those the
-current public read actually discloses. Publication consumes the finite
-vocabulary records and exact source URIs from this adapter; it does not invent
-another tag publisher. Concept labels keep the exact `tags.name` spelling under
-`und` when that COPY column has no language; Han-only, kana and Latin names are
-not assigned a guessed locale. Already sealed Concept identities and command
-bytes stay unrepaired; a later name proposal is a separate reviewed command.
-Decision: `tags_vn.vote` remains the public-association
-admission filter (integer 1–3). It is not native weight. Public VNDB
-`tags.rating` and released `rezics:sourceTagWeight` belong to the
-aggregate-weight owner, so this journey keeps one bounded weight gap. Parent
+The real-dump seed acquires `tags`, `tags_parents` and `tags_vn` from the same
+checksum-verified current VNDB archive. The ordinary broad CLI runs
+[`showcase-tags.ts`](src/showcase-tags.ts) after the selected-family import;
+the bounded `task seed:dev` path composes its two reviewed content-tag concepts
+with elected works in the single reconciliation run. Association projection
+keeps at most one admitted row per selected work/tag before the cap, so voter
+duplicates cannot starve a later work. The broad adapter closes tag parents
+inside its dictionary cap and feeds the existing public-tag coordinator.
+Optional `--vndb-public-tag-bindings` remains an explicit UUID override;
+adopted usable bindings are those the current public read actually discloses.
+Publication consumes finite vocabulary records and exact source URIs without
+inventing another publisher. Concept labels preserve the exact `tags.name`
+spelling under `und` when COPY has no language; Han-only, kana and Latin names
+are not assigned a guessed locale. Sealed Concept identities and command bytes
+stay unrepaired; later name proposals are separate reviewed commands.
+Decision: `tags_vn.vote` remains the public-association admission filter
+(integer 1–3), not native weight. Public VNDB `tags.rating` and released
+`rezics:sourceTagWeight` belong to the aggregate-weight owner, so this journey
+keeps one bounded weight gap. Parent
 `tags_parents` edges stay review gaps until Semantic admits `skos:broader`
 for these source Concepts.
 
@@ -2473,17 +2473,22 @@ explicit omission.
 
 ### VNDB character traits and selected work appearances
 
-The default family seed now acquires the verified `traits`, `traits_parents`,
+The default family seed acquires the verified `traits`, `traits_parents`,
 `chars_traits`, and `chars_vns` COPY tables. It keeps character identity in the
 VNDB source namespace, selects only characters attached to the chosen VNDB
 family works, and imports supported traits as `schema:keywords` and appearances
 as `schema:character` with the exact role Concept and source spoiler level.
 Association citations retain their table keys. False-positive, unsupported,
-missing-qualifier, and release-scoped rows remain review gaps. Default
-`task seed:dev` publishes the bounded needed trait dictionary, parent closure
-and admitted appearance-role terms through the current importer and the common
-journal, rereads current native type/`schema:url`/`skos:inScheme`/`skos:broader`,
-and only then admits exact character and per-work associations. Optional
+missing-qualifier, and release-scoped rows remain review gaps. For
+`task seed:dev`, reviewed trait Concepts i23 and i30 are checked against current
+public reads and composed with selected works in the same reconciliation run.
+Its optional vocabulary profile supplies appearance-role bindings; other
+character traits remain withheld unless they have reviewed Concepts. The
+ordinary broad publisher emits the bounded needed trait dictionary, parent
+closure and admitted appearance-role terms through the current importer and
+common journal, rereads current native type/`schema:url`/`skos:inScheme`/
+`skos:broader`, and only then admits exact character and per-work associations.
+Optional
 `--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` remains
 an explicit UUID override; adopted usable bindings are those the current public
 read actually discloses. Publication consumes the finite vocabulary records and
@@ -2494,7 +2499,9 @@ translation. Mapping revisions stay `character-trait@1` and `appearance-role@1`
 on those associations; vocabulary create/propose identity uses
 `vndb-character-vocabulary@1`.
 
-Decision: vocabulary profile UUIDs are lookup hints only; the default seed emits them after acknowledgement, and the importer rereads each selected Scheme and Concept from current public state before use.
+Decision: vocabulary profile UUIDs are lookup hints only; the broad publication
+worker emits them after acknowledgement, and the importer rereads each
+selected Scheme and Concept from current public state before use.
 
 Decision: bounded `traits_parents` edges publish as `skos:broader` on the child Concept; a later URI, type, inScheme or taxonomy-parent contradiction withholds only that term and leaves independently admitted character names and blood-type facts intact.
 
@@ -2530,12 +2537,14 @@ Decision: the local seed stores finite reviewed-catalogue journal identities in 
 
 Decision: selected Bangumi covers use the pinned subject API and keep its response receipt separate from the unchanged archive revision/digest in the existing showcase journal.
 
-`task seed:dev` reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from the selected dump family, its current source reads, and those exact candidate identities. It reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
+Decision: `task seed:dev` uses one exact five-work selection with direct cast and episodes and at most 64 people or organizations per provider; Bangumi Organization `wdt:P6298` is omitted with an explicit conversion gap because the released Organization profile has no property that preserves Bangumi-ID semantics.
+
+`task seed:dev` elects Bangumi Steins;Gate anime/book (10380, 84148) and CLANNAD anime (51), plus VNDB Steins;Gate (v2002) and CLANNAD (v4). It adds direct cast and episodes, omits recursive work expansion and releases, and skips the separate Book Girl importer. It reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from those selected source records, current reads, and exact candidate identities. It reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
 
 The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and the final facts are checked with a tokenless Global-context reader. Source ConceptScheme and Concept records are eligible only when their source create commands are acknowledged and their current source URI and scheme association are present. No canonical equivalence is inferred. The default cross-media seed consumes only the exact Bangumi editor `meta_tags` literal `后宫` and adapts its trusted alias to the existing lookup. Unsupported or withdrawn genre bindings produce bounded addressable diagnostics while independent source facts remain usable; source-tag removal retracts only the importer-owned keyword candidate. The pinned `GET /v0/subjects/{id}` response is validated against the selected work and required image fields before `images.large` is admitted. Its SHA-256 and optional ETag are sealed beside the archive revision/digest in the showcase journal. A missing or invalid cover stays an addressable gap while independent metadata remains useful. Pending reservations resume from their original bytes and key, and only available media enters the separately accepted/adopted cover candidate. Covers retain `(c) rights holder`, `via Bangumi`, unknown image licence, cover-only use, private original retention and public re-encoded variants. Prose stays private without admitted rights. Public visibility makes no Search-index claim.
 
 - Touches: at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, 256 selected Bangumi covers, and 256 result omissions or genre diagnostics.
-- Bound: work is limited to selected records, four finite reviewed Bangumi vocabulary identities, exact local candidate IDs and required current subject/property reads. Cover lookup is sequential across at most 256 selected Bangumi works with a shared 1 MiB response cap; media send/status uses the ordinary authenticated transport, exact importer bindings and current cover fence. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
+- Bound: work is limited to the exact five roots, their direct cast and episodes, at most 64 people/organizations per provider, reviewed VNDB trait/tag codes i23/i30 and g105/g249, exact local candidate IDs and required current subject/property reads. Cover lookup remains sequential over selected Bangumi roots with a shared 1 MiB response cap; media send/status uses the ordinary authenticated transport, exact importer bindings and current cover fence. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-media.test.ts` covers source validation and same-state media recovery; `services/importer/tests/showcase-publication.test.ts` retains candidate journal coverage; `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution. The native showcase media and genre checks in `services/kernel/test/imports/` remain controller-owned; no native pass or database growth series is claimed here.
 
 ### Bangumi character physical profile

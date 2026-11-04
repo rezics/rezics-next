@@ -28,6 +28,7 @@ const BANGUMI_TABLES = [
   'episode.jsonlines',
 ];
 export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
+  chars_traits: ['id', 'tid', 'spoil', 'lie'],
   chars_alias: ['id', 'spoil', 'name', 'latin'],
   chars_names: ['id', 'lang', 'name', 'latin'],
   extlinks: ['id', 'site', 'value'],
@@ -41,6 +42,7 @@ export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
   tags: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'],
   tags_parents: ['id', 'parent', 'main'],
   tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
+  traits: ['id', 'gid', 'gorder', 'defaultspoil', 'sexual', 'searchable', 'applicable', 'name', 'alias', 'description'],
 };
 /** Required COPY fields for the selected character vocabulary path. Archive-added fields remain valid. */
 export const VNDB_DUMP_REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {

@@ -77,6 +77,7 @@ test('VNDB dump cache requires admitted character-name, external-link, and relea
     ]),
   );
   expect(VNDB_DUMP_HEADERS).toMatchObject({
+    chars_traits: ['id', 'tid', 'spoil', 'lie'],
     extlinks: ['id', 'site', 'value'],
     staff_extlinks: ['id', 'link'],
     producers_extlinks: ['id', 'link'],
@@ -85,6 +86,7 @@ test('VNDB dump cache requires admitted character-name, external-link, and relea
     tags: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'],
     tags_parents: ['id', 'parent', 'main'],
     tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
+    traits: ['id', 'gid', 'gorder', 'defaultspoil', 'sexual', 'searchable', 'applicable', 'name', 'alias', 'description'],
     releases_media: ['id', 'medium', 'qty'],
     releases_platforms: ['id', 'platform'],
   });

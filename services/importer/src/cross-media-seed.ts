@@ -106,6 +106,7 @@ const patterns: Record<Franchise, RegExp> = {
 };
 export const crossMediaAliases = { bangumi: 'bangumi_cross_media', vndb: 'vndb_cross_media' } as const;
 const FAMILY_CAP = 256;
+const SHOWCASE_PEOPLE_PER_PROVIDER = 64;
 const CREDIT_ASSOCIATIONS_PER_WORK = 64;
 const CREDIT_ASSOCIATIONS = 8192;
 const RELATION_CAP = 4096;
@@ -426,10 +427,39 @@ function parentReaches(from: string, to: string, edges: Map<string, Set<string>>
  * Ported selection/incident-edge shape: legacy-final:scripts/datasets/{bangumi,vndb}.ts.
  * Title matching locates records only; identities bind only through cited provider URLs.
  */
+export type CrossMediaSelection = {
+  bangumi: readonly number[];
+  vndb: readonly string[];
+  includeReleases?: boolean;
+  peoplePerProvider?: number;
+};
+
 export async function planCrossMediaSeed(
   input: CrossMediaTables,
-  options: { deferVndbCharacterAppearances?: boolean } = {},
+  options: { deferVndbCharacterAppearances?: boolean; selection?: CrossMediaSelection } = {},
 ): Promise<CrossMediaPlan> {
+  const selection = options.selection;
+  if (selection) {
+    ensure(
+      selection.bangumi.length > 0 &&
+        new Set(selection.bangumi).size === selection.bangumi.length &&
+        selection.bangumi.every((id) => Number.isSafeInteger(id) && id > 0),
+      'Invalid selected Bangumi work identities',
+    );
+    ensure(
+      selection.vndb.length > 0 &&
+        new Set(selection.vndb).size === selection.vndb.length &&
+        selection.vndb.every((id) => /^v[1-9][0-9]*$/u.test(id)),
+      'Invalid selected VNDB work identities',
+    );
+    if (selection.peoplePerProvider !== undefined)
+      ensure(
+        Number.isSafeInteger(selection.peoplePerProvider) &&
+          selection.peoplePerProvider > 0 &&
+          selection.peoplePerProvider <= SHOWCASE_PEOPLE_PER_PROVIDER,
+        'Selected people limit must be between 1 and 64',
+      );
+  }
   const plan = emptyCrossMediaPlan();
   plan.characterAppearances ??= [];
   const gap = (
@@ -451,6 +481,7 @@ export async function planCrossMediaSeed(
   const titled = new Map<number, Franchise>();
   for await (const row of input.rows('bangumi', 'subject')) {
     const id = number(row, 'id');
+    if (selection && !selection.bangumi.includes(id)) continue;
     ensure(!types.has(id), 'Duplicate selected Bangumi subject');
     types.set(id, row.type as number);
     const family = crossMediaFranchise(row.name, row.name_cn);
@@ -458,12 +489,13 @@ export async function planCrossMediaSeed(
   }
   const familyIds = new Map<number, Franchise>(titled);
   const referencedWorks = new Map<number, Franchise>();
-  let grew = true;
+  let grew = selection === undefined;
   while (grew) {
     grew = false;
     for await (const row of input.rows('bangumi', 'subject-relations')) {
       const sid = number(row, 'subject_id');
       const rid = number(row, 'related_subject_id');
+      if (selection && (!familyIds.has(sid) || !familyIds.has(rid))) continue;
       const known = familyIds.get(sid) ?? familyIds.get(rid);
       if (!known) continue;
       const holderType = types.get(sid);
@@ -538,6 +570,7 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'subject-relations')) {
     const sid = number(row, 'subject_id');
     const rid = number(row, 'related_subject_id');
+    if (selection && (!familyIds.has(sid) || !familyIds.has(rid))) continue;
     if (!familyIds.has(sid) && !familyIds.has(rid) && !referencedWorks.has(sid) && !referencedWorks.has(rid)) continue;
     if (relationRows.length < RELATION_CAP) relationRows.push(row);
     else relationOverflow = true;
@@ -980,6 +1013,7 @@ export async function planCrossMediaSeed(
   const corePersons = new Set(persons),
     coreCharacters = new Set(characters);
   for await (const row of input.rows('bangumi', 'person-relations')) {
+    if (selection) continue;
     ensure(row.person_type === 'prsn' || row.person_type === 'crt', 'Unknown Bangumi person_type');
     const core = row.person_type === 'prsn' ? corePersons : coreCharacters;
     if (!core.has(row.person_id as number) && !core.has(row.related_person_id as number)) continue;
@@ -1016,6 +1050,7 @@ export async function planCrossMediaSeed(
   const vnIds = new Set<string>();
   const vnFamily = new Map<string, Franchise>();
   for await (const row of input.rows('vndb', 'vn_titles')) {
+    if (selection && !selection.vndb.includes(text(row, 'id'))) continue;
     const family = crossMediaFranchise(row.title, row.latin);
     if (!family) continue;
     const id = text(row, 'id');
@@ -1028,12 +1063,13 @@ export async function planCrossMediaSeed(
     vnFamily.set(id, family);
     if (!plan.franchises[family].vndb.includes(id)) plan.franchises[family].vndb.push(id);
   }
-  let vnGrew = true;
+  let vnGrew = selection === undefined;
   while (vnGrew) {
     vnGrew = false;
     for await (const row of input.rows('vndb', 'vn_relations')) {
       const id = text(row, 'id');
       const vid = text(row, 'vid');
+      if (selection && (!vnFamily.has(id) || !vnFamily.has(vid))) continue;
       const known = vnFamily.get(id) ?? vnFamily.get(vid);
       if (!known) continue;
       const mapping = mapSourceEnumeration('vndb', 'vn_relation', text(row, 'relation'));
@@ -1098,6 +1134,7 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('vndb', 'vn_relations')) {
     const id = text(row, 'id');
     const vid = text(row, 'vid');
+    if (selection && (!vnIds.has(id) || !vnIds.has(vid))) continue;
     if (!vnIds.has(id) && !vnIds.has(vid)) continue;
     const mapping = mapSourceEnumeration('vndb', 'vn_relation', text(row, 'relation'));
     if (!mapping?.term || mapping.status === 'omitted') {
@@ -1132,7 +1169,7 @@ export async function planCrossMediaSeed(
     chars = new Set<string>(),
     aliases = new Set<string>();
   for await (const row of input.rows('vndb', 'releases_vn'))
-    if (vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
+    if (selection?.includeReleases !== false && vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
   for await (const row of input.rows('vndb', 'releases_vn')) {
     if (!releases.has(text(row, 'id'))) continue;
     edge({
@@ -1509,7 +1546,7 @@ export async function planCrossMediaSeed(
     ensure(!producerRows.has(id), 'Duplicate selected VNDB producer');
     producerRows.set(id, row);
   }
-  let producerGrew = true;
+  let producerGrew = selection === undefined;
   while (producerGrew) {
     producerGrew = false;
     for await (const row of input.rows('vndb', 'producers_relations')) {
@@ -1551,6 +1588,7 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('vndb', 'producers_relations')) {
     const id = text(row, 'id');
     const pid = text(row, 'pid');
+    if (selection && (!producers.has(id) || !producers.has(pid))) continue;
     if (!producers.has(id) && !producers.has(pid)) continue;
     const code = text(row, 'relation');
     const mapping = mapSourceEnumeration('vndb', 'producer_relation', code);
@@ -1745,8 +1783,45 @@ export async function planCrossMediaSeed(
     entity.payload = { ...(entity.payload as object), [entry.table]: joins, extlinks };
   }
 
-  for (const family of Object.keys(patterns) as Franchise[])
-    ensure(anime.has(family) && plan.franchises[family].vndb.length, `Missing anime/VN pair for ${family}`);
+  if (selection) {
+    const peopleLimit = selection.peoplePerProvider ?? SHOWCASE_PEOPLE_PER_PROVIDER;
+    for (const provider of ['bangumi', 'vndb'] as const) {
+      let people = 0;
+      const omitted = new Set<string>();
+      plan.entities[provider] = [...plan.entities[provider]]
+        .sort((left, right) => left.key.localeCompare(right.key))
+        .filter((row) => {
+          const isPerson =
+            provider === 'bangumi'
+              ? row.key.startsWith('person:')
+              : /^[sp][1-9][0-9]*$/u.test(row.key);
+          if (!isPerson || people++ < peopleLimit) return true;
+          omitted.add(row.key);
+          gap(provider, 'people', { id: row.key }, 'Development showcase people limit exceeded');
+          return false;
+        });
+      plan.members = plan.members.filter((row) => row.source !== provider || !omitted.has(row.key));
+      plan.edges = plan.edges.filter(
+        (row) => row.source !== provider || (!omitted.has(row.holder) && !omitted.has(row.target)),
+      );
+      if (provider === 'bangumi') plan.credits = plan.credits.filter((row) => !omitted.has(row.person));
+    }
+    for (const id of selection.bangumi)
+      ensure(
+        [...plan.records.bangumi, ...plan.entities.bangumi].some((row) => row.key === String(id)),
+        `Missing selected Bangumi work: ${id}`,
+      );
+    for (const id of selection.vndb)
+      ensure(plan.records.vndb.some((row) => row.key === id), `Missing selected VNDB work: ${id}`);
+    ensure(
+      plan.records.bangumi.length + plan.entities.bangumi.length + plan.records.vndb.length + plan.entities.vndb.length <=
+        showcaseLimits.records,
+      'Selected showcase record limit exceeded',
+    );
+  } else {
+    for (const family of Object.keys(patterns) as Franchise[])
+      ensure(anime.has(family) && plan.franchises[family].vndb.length, `Missing anime/VN pair for ${family}`);
+  }
   for (const provider of ['bangumi', 'vndb'] as const) {
     const registration = createSourceRegistration(provider, {
       source: crossMediaAliases[provider],
@@ -2628,6 +2703,8 @@ async function readPriorShowcasePublication(
 
 export type CrossMediaSeedCliOptions = {
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
+  reviewedCatalogueSubjects?: Readonly<Record<string, string>>;
+  selection?: CrossMediaSelection;
 };
 
 export async function runCrossMediaSeedCli(
@@ -2642,7 +2719,6 @@ export async function runCrossMediaSeedCli(
     profileFromCharacterVocabularyBindings,
     readShowcaseCharacterVocabulary,
   } = await import('./showcase-character-vocabulary.ts');
-  const { importVndbCharacterTraits } = await import('./vndb-character-traits.ts');
   const optionalFlags = [
     '--bangumi-character-bindings',
     '--vndb-public-tag-bindings',
@@ -2690,7 +2766,10 @@ export async function runCrossMediaSeedCli(
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
-  let plan = await planCrossMediaSeed(input, { deferVndbCharacterAppearances: true });
+  let plan = await planCrossMediaSeed(input, {
+    deferVndbCharacterAppearances: true,
+    ...(options.selection ? { selection: options.selection } : {}),
+  });
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
   const { parseVndbReleaseStateBindings, seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
@@ -2798,6 +2877,95 @@ export async function runCrossMediaSeedCli(
   const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
   try {
+    const reviewedSubjects = options.reviewedCatalogueSubjects;
+    const reviewedSelection = Boolean(options.selection && reviewedSubjects);
+    const {
+      importShowcaseTags,
+      knownShowcaseTagBindings,
+      parseShowcaseTagKnownBindings,
+      prepareShowcaseTags,
+      prepareShowcaseVndbPublicTagVocabulary,
+      readShowcaseVndbPublicTagVocabulary,
+    } = await import('./showcase-tags.ts');
+    const { importVndbCharacterTraits } = await import('./vndb-character-traits.ts');
+    const selectedVids = plan.members
+      .filter((member) => member.source === 'vndb' && member.kind === 'work')
+      .map((member) => member.key);
+    let preparedPublicTags: Awaited<ReturnType<typeof prepareShowcaseTags>> | undefined;
+    let tagVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>>['requirements'] = [];
+    let vocabularyAdmissions: NonNullable<ImporterOptions['vocabularyAdmission']>[] = [];
+    let vndbBindings: SourceVocabularyBindings | undefined;
+    if (options.selection && reviewedSubjects) {
+      const plannedKeys = new Set([...plan.records.vndb, ...plan.entities.vndb].map((row) => row.key));
+      for (const row of [...characterVocabulary.plan.records.vndb, ...characterVocabulary.plan.entities.vndb]) {
+        if (plannedKeys.has(row.key)) continue;
+        plannedKeys.add(row.key);
+        plan.entities.vndb.push(row);
+      }
+      const memberKeys = new Set(plan.members.map((row) => `${row.source}\0${row.key}`));
+      for (const entry of characterVocabulary.plan.members) {
+        const key = `${entry.source}\0${entry.key}`;
+        if (memberKeys.has(key)) {
+          const current = plan.members.find((row) => row.source === entry.source && row.key === entry.key);
+          if (current?.membership !== 'family' && entry.membership === 'family') Object.assign(current, entry);
+          continue;
+        }
+        memberKeys.add(key);
+        plan.members.push(entry);
+      }
+      ensure(
+        plan.records.bangumi.length +
+          plan.entities.bangumi.length +
+          plan.records.vndb.length +
+          plan.entities.vndb.length <=
+          showcaseLimits.records,
+        'Selected showcase record limit exceeded after character selection',
+      );
+
+      let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
+      if (tagBindingsPath) {
+        const bytes = await readFile(tagBindingsPath);
+        ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
+        knownTagBindings = parseShowcaseTagKnownBindings(JSON.parse(bytes.toString('utf8')));
+      } else {
+        knownTagBindings = parseShowcaseTagKnownBindings({
+          schemes: [{ category: 'cont', id: reviewedSubjects['vndb-public-tags-cont-scheme'] }],
+          concepts: ['g105', 'g249'].map((code) => ({
+            category: 'cont',
+            code,
+            id: reviewedSubjects[`vndb-public-tags-cont-${code}`],
+          })),
+        });
+      }
+      preparedPublicTags = await prepareShowcaseTags({ tables: input, selectedVids, port, known: knownTagBindings });
+
+      const { vndbCharacterVocabularyAdmission, appearanceRoleTaxonomy } = await import('./vndb-character-traits.ts');
+      const roleRequirements = {
+        ...characterVocabulary.requirements,
+        terms: characterVocabulary.requirements.terms.filter((term) => term.taxonomy === appearanceRoleTaxonomy),
+      };
+      const characterAdmissions: NonNullable<ImporterOptions['vocabularyAdmission']>[] = [];
+      const roleBindings = await composeVndbCharacterVocabularyBindings(port, vndbVocabularyProfile, roleRequirements);
+      const { prepareShowcaseVndbTraits } = await import('./showcase-vndb-traits.ts');
+      const reviewedTraits = await prepareShowcaseVndbTraits(
+        plan,
+        characterVocabulary.plan,
+        port,
+        reviewedSubjects,
+      );
+      characterAdmissions.push(reviewedTraits.vocabularyAdmission);
+      characterAdmissions.push(
+        vndbCharacterVocabularyAdmission(roleBindings, { ...characterVocabulary.plan, traits: [] }),
+      );
+      vndbBindings = {
+        releaseDigest: bundledDigest,
+        schemes: [...reviewedTraits.bindings.schemes, ...roleBindings.schemes],
+        concepts: [...reviewedTraits.bindings.concepts, ...roleBindings.concepts],
+      };
+      vocabularyAdmissions = [preparedPublicTags.vocabularyAdmission, ...characterAdmissions];
+    }
+    const episodeCatalogueSubjects = options.reviewedCatalogueSubjects ?? options.episodeCatalogueSubjects;
+
     if (journal) plan = await acquireBangumiCoverSources(plan, { journal });
     let publicationPlan = structuredClone(plan);
     let result = await seedShowcaseVndbReleases({
@@ -2810,7 +2978,8 @@ export async function runCrossMediaSeedCli(
       extras: {
         ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
         vndbCharacterProfileBindings: characterProfileBindings,
-        ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
+        ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
+        ...(vocabularyAdmissions.length ? { vocabularyAdmissions } : {}),
         bangumiGenrePort: importPort,
         ...(journal && publicClient
           ? {
@@ -2836,79 +3005,74 @@ export async function runCrossMediaSeedCli(
       },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
-    const {
-      importShowcaseTags,
-      knownShowcaseTagBindings,
-      parseShowcaseTagKnownBindings,
-      prepareShowcaseVndbPublicTagVocabulary,
-      readShowcaseVndbPublicTagVocabulary,
-    } = await import('./showcase-tags.ts');
-    const selectedVids = plan.members
-      .filter((member) => member.source === 'vndb' && member.kind === 'work')
-      .map((member) => member.key);
-    let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
-    let tagVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>>['requirements'] =
-      [];
-    if (tagBindingsPath) {
-      const bytes = await readFile(tagBindingsPath);
-      ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
-      knownTagBindings = parseShowcaseTagKnownBindings(JSON.parse(bytes.toString('utf8')));
-    } else if (journal && publicClient) {
-      const schemes = await prepareShowcaseVndbPublicTagVocabulary({
-        tables: input,
-        selectedVids,
-        plan: publicationPlan,
-        port,
-        journal,
-        stage: 'schemes',
-      });
-      if (schemes.requirements.length)
-        await publishShowcase({
-          plan: publicationPlan,
-          result,
-          aliases: crossMediaAliases,
-          journal,
-          review: importPort,
-          publicClient,
-          vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...schemes.requirements],
-        });
-      const concepts = await prepareShowcaseVndbPublicTagVocabulary({
-        tables: input,
-        selectedVids,
-        plan: publicationPlan,
-        port,
-        journal,
-        stage: 'concepts',
-      });
-      if (concepts.requirements.length)
-        await publishShowcase({
-          plan: publicationPlan,
-          result,
-          aliases: crossMediaAliases,
-          journal,
-          review: importPort,
-          publicClient,
-          vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...concepts.requirements],
-        });
-      tagVocabularyRequirements = concepts.requirements;
-      knownTagBindings = knownShowcaseTagBindings(
-        await readShowcaseVndbPublicTagVocabulary({
+    let publicTags:
+      | Awaited<ReturnType<typeof importShowcaseTags>>
+      | Awaited<ReturnType<typeof prepareShowcaseTags>>;
+    if (preparedPublicTags) {
+      publicTags = preparedPublicTags;
+    } else {
+      let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
+      if (tagBindingsPath) {
+        const bytes = await readFile(tagBindingsPath);
+        ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
+        knownTagBindings = parseShowcaseTagKnownBindings(JSON.parse(bytes.toString('utf8')));
+      } else if (journal && publicClient) {
+        const schemes = await prepareShowcaseVndbPublicTagVocabulary({
           tables: input,
           selectedVids,
           plan: publicationPlan,
           port,
           journal,
-        }),
-      );
+          stage: 'schemes',
+        });
+        if (schemes.requirements.length)
+          await publishShowcase({
+            plan: publicationPlan,
+            result,
+            aliases: crossMediaAliases,
+            journal,
+            review: importPort,
+            publicClient,
+            vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...schemes.requirements],
+          });
+        const concepts = await prepareShowcaseVndbPublicTagVocabulary({
+          tables: input,
+          selectedVids,
+          plan: publicationPlan,
+          port,
+          journal,
+          stage: 'concepts',
+        });
+        if (concepts.requirements.length)
+          await publishShowcase({
+            plan: publicationPlan,
+            result,
+            aliases: crossMediaAliases,
+            journal,
+            review: importPort,
+            publicClient,
+            vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...concepts.requirements],
+          });
+        tagVocabularyRequirements = concepts.requirements;
+        knownTagBindings = knownShowcaseTagBindings(
+          await readShowcaseVndbPublicTagVocabulary({
+            tables: input,
+            selectedVids,
+            plan: publicationPlan,
+            port,
+            journal,
+          }),
+        );
+      }
+      publicTags = await importShowcaseTags({
+        tables: input,
+        selectedVids,
+        path: statePath,
+        port,
+        known: knownTagBindings,
+        destination: { origin: api },
+      });
     }
-    const publicTags = await importShowcaseTags({
-      tables: input,
-      selectedVids,
-      path: statePath,
-      port,
-      known: knownTagBindings,
-      destination: { origin: api },
-    });
     let showcase: ShowcasePublicationResult | undefined;
     let bangumiVocabularyRequirements:
       | Awaited<ReturnType<typeof prepareShowcaseBangumiSelectedCharacterVocabulary>>['requirements']
@@ -2969,7 +3133,8 @@ export async function runCrossMediaSeedCli(
         ...(vndbReleaseStateBindings?.groups.length ? { groups: vndbReleaseStateBindings.groups } : {}),
         extras: {
           ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
-          ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
+          ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
+          vocabularyAdmissions,
           bangumiGenrePort: importPort,
           ...(journal && publicClient
             ? {
@@ -3029,99 +3194,113 @@ export async function runCrossMediaSeedCli(
     let characterVocabularyRequirements: Awaited<
       ReturnType<typeof prepareShowcaseCharacterVocabulary>
     >['requirements'] = [];
-    if (!vocabularyPath && journal && publicClient) {
-      const schemes = await prepareShowcaseCharacterVocabulary({
-        tables: input,
-        selectedPlan: publicationPlan,
-        port,
-        journal,
-        stage: 'schemes',
-      });
-      if (schemes.requirements.length)
-        await publishShowcase({
-          plan: publicationPlan,
-          result,
-          aliases: crossMediaAliases,
-          journal,
-          review: importPort,
-          publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...(bangumiVocabularyRequirements ?? []),
-            ...tagVocabularyRequirements,
-            ...schemes.requirements,
-          ],
-        });
-      const concepts = await prepareShowcaseCharacterVocabulary({
-        tables: input,
-        selectedPlan: publicationPlan,
-        port,
-        journal,
-        stage: 'concepts',
-      });
-      if (concepts.requirements.length)
-        await publishShowcase({
-          plan: publicationPlan,
-          result,
-          aliases: crossMediaAliases,
-          journal,
-          review: importPort,
-          publicClient,
-          vocabularyRequirements: [
-            ...(result.creditVocabularyRequirements ?? []),
-            ...(bangumiVocabularyRequirements ?? []),
-            ...tagVocabularyRequirements,
-            ...concepts.requirements,
-          ],
-        });
-      characterVocabularyRequirements = concepts.requirements;
-      vndbVocabularyProfile = profileFromCharacterVocabularyBindings(
-        await readShowcaseCharacterVocabulary({
+    let characterResult: Awaited<ReturnType<typeof importVndbCharacterTraits>> | undefined;
+    if (!reviewedSelection) {
+      if (!vocabularyPath && journal && publicClient) {
+        const schemes = await prepareShowcaseCharacterVocabulary({
           tables: input,
           selectedPlan: publicationPlan,
           port,
           journal,
-        }),
+          stage: 'schemes',
+        });
+        if (schemes.requirements.length)
+          await publishShowcase({
+            plan: publicationPlan,
+            result,
+            aliases: crossMediaAliases,
+            journal,
+            review: importPort,
+            publicClient,
+            vocabularyRequirements: [
+              ...(result.creditVocabularyRequirements ?? []),
+              ...(bangumiVocabularyRequirements ?? []),
+              ...tagVocabularyRequirements,
+              ...schemes.requirements,
+            ],
+          });
+        const concepts = await prepareShowcaseCharacterVocabulary({
+          tables: input,
+          selectedPlan: publicationPlan,
+          port,
+          journal,
+          stage: 'concepts',
+        });
+        if (concepts.requirements.length)
+          await publishShowcase({
+            plan: publicationPlan,
+            result,
+            aliases: crossMediaAliases,
+            journal,
+            review: importPort,
+            publicClient,
+            vocabularyRequirements: [
+              ...(result.creditVocabularyRequirements ?? []),
+              ...(bangumiVocabularyRequirements ?? []),
+              ...tagVocabularyRequirements,
+              ...concepts.requirements,
+            ],
+          });
+        characterVocabularyRequirements = concepts.requirements;
+        vndbVocabularyProfile = profileFromCharacterVocabularyBindings(
+          await readShowcaseCharacterVocabulary({
+            tables: input,
+            selectedPlan: publicationPlan,
+            port,
+            journal,
+          }),
+        );
+      }
+      vndbBindings = await composeVndbCharacterVocabularyBindings(
+        port,
+        vndbVocabularyProfile,
+        characterVocabulary.requirements,
       );
+      characterResult = await importVndbCharacterTraits({
+        tables: input,
+        path: statePath,
+        port,
+        bindings: vndbBindings,
+        selectedWorkIds: characterVocabulary.requirements.selectedWorkIds,
+        destination: { origin: api },
+      });
     }
-    const vndbBindings = await composeVndbCharacterVocabularyBindings(
-      port,
-      vndbVocabularyProfile,
-      characterVocabulary.requirements,
-    );
-    const characterResult = await importVndbCharacterTraits({
-      tables: input,
-      path: statePath,
-      port,
-      bindings: vndbBindings,
-      selectedWorkIds: characterVocabulary.requirements.selectedWorkIds,
-      destination: { origin: api },
-    });
+    ensure(vndbBindings, 'Selected VNDB character vocabulary bindings are missing');
     const separator = String.fromCharCode(0);
     const readings = new Map<string, (typeof result.readings)[number]>();
-    for (const reading of [...result.readings, ...publicTags.readings, ...characterResult.readings])
+    for (const reading of [
+      ...result.readings,
+      ...('readings' in publicTags ? publicTags.readings : []),
+      ...(characterResult?.readings ?? []),
+    ])
       readings.set(reading.source + separator + reading.externalId, reading);
     const members = new Map<string, (typeof result.members)[number]>();
-    for (const member of [...result.members, ...characterResult.members]) {
+    for (const member of [...result.members, ...(characterResult?.members ?? [])]) {
       const key = member.source + separator + member.key;
       const previous = members.get(key);
       if (!previous || member.membership === 'family') members.set(key, member);
     }
+    const gaps = [
+      ...result.gaps,
+      ...(characterResult?.gaps ?? []),
+      ...characterVocabulary.plan.gaps,
+      ...publicTags.gaps,
+    ];
     const combinedResult = {
       ...result,
       status:
-        result.status === 'imported-with-gaps' || characterResult.status === 'imported-with-gaps'
+        result.status === 'imported-with-gaps' || characterResult?.status === 'imported-with-gaps' || gaps.length
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
       readings: [...readings.values()],
       members: [...members.values()].sort(
         (left, right) => left.source.localeCompare(right.source) || left.key.localeCompare(right.key),
       ),
-      gaps: [...result.gaps, ...characterResult.gaps],
-      characterDiagnostics: [...result.characterDiagnostics, ...characterResult.characterDiagnostics],
+      gaps,
+      characterDiagnostics: [...result.characterDiagnostics, ...(characterResult?.characterDiagnostics ?? [])],
       runs: {
         ...result.runs,
-        ...(characterResult.runs.vndb ? { vndbCharacterVocabulary: characterResult.runs.vndb } : {}),
+        ...(characterResult?.runs.vndb ? { vndbCharacterVocabulary: characterResult.runs.vndb } : {}),
       },
       publicTags: {
         admitted: publicTags.admitted,
@@ -3146,45 +3325,50 @@ export async function runCrossMediaSeedCli(
       },
     };
     const { importShowcaseBooks, showcaseBooksToCrossMediaPlan } = await import('./showcase-books.ts');
-    const books = await importShowcaseBooks({
-      tables: input,
-      path: statePath,
-      port,
-      destination: { origin: api },
-    });
-    const bookCross = showcaseBooksToCrossMediaPlan(books.planned);
-    for (const target of [plan, publicationPlan]) {
-      const existingRecordKeys = new Set(
-        [...target.records.bangumi, ...target.entities.bangumi].map((row) => `${row.source}\0${row.key}`),
-      );
-      target.records.bangumi.push(
-        ...bookCross.records.bangumi.filter((row) => !existingRecordKeys.has(`${row.source}\0${row.key}`)),
-      );
-      target.entities.bangumi.push(
-        ...bookCross.entities.bangumi.filter((row) => !existingRecordKeys.has(`${row.source}\0${row.key}`)),
-      );
-      const existingMemberKeys = new Set(target.members.map((row) => `${row.source}\0${row.key}`));
-      target.members.push(...bookCross.members.filter((row) => !existingMemberKeys.has(`${row.source}\0${row.key}`)));
-      const existingCreditKeys = new Set(
-        target.credits.map((row) => `${row.kind}\0${row.work}\0${row.person}\0${row.roleCode}`),
-      );
-      target.credits.push(
-        ...bookCross.credits.filter(
-          (row) => !existingCreditKeys.has(`${row.kind}\0${row.work}\0${row.person}\0${row.roleCode}`),
-        ),
-      );
-      const existingEdgeKeys = new Set(
-        target.edges.map((row) => `${row.source}\0${row.holder}\0${row.target}\0${row.property}`),
-      );
-      target.edges.push(
-        ...bookCross.edges.filter(
-          (row) => !existingEdgeKeys.has(`${row.source}\0${row.holder}\0${row.target}\0${row.property}`),
-        ),
-      );
+    const books = options.selection
+      ? undefined
+      : await importShowcaseBooks({
+          tables: input,
+          path: statePath,
+          port,
+          destination: { origin: api },
+        });
+    if (books) {
+      const bookCross = showcaseBooksToCrossMediaPlan(books.planned);
+      for (const target of [plan, publicationPlan]) {
+        const existingRecordKeys = new Set(
+          [...target.records.bangumi, ...target.entities.bangumi].map((row) => `${row.source}\0${row.key}`),
+        );
+        target.records.bangumi.push(
+          ...bookCross.records.bangumi.filter((row) => !existingRecordKeys.has(`${row.source}\0${row.key}`)),
+        );
+        target.entities.bangumi.push(
+          ...bookCross.entities.bangumi.filter((row) => !existingRecordKeys.has(`${row.source}\0${row.key}`)),
+        );
+        const existingMemberKeys = new Set(target.members.map((row) => `${row.source}\0${row.key}`));
+        target.members.push(...bookCross.members.filter((row) => !existingMemberKeys.has(`${row.source}\0${row.key}`)));
+        const existingCreditKeys = new Set(
+          target.credits.map((row) => `${row.kind}\0${row.work}\0${row.person}\0${row.roleCode}`),
+        );
+        target.credits.push(
+          ...bookCross.credits.filter(
+            (row) => !existingCreditKeys.has(`${row.kind}\0${row.work}\0${row.person}\0${row.roleCode}`),
+          ),
+        );
+        const existingEdgeKeys = new Set(
+          target.edges.map((row) => `${row.source}\0${row.holder}\0${row.target}\0${row.property}`),
+        );
+        target.edges.push(
+          ...bookCross.edges.filter(
+            (row) => !existingEdgeKeys.has(`${row.source}\0${row.holder}\0${row.target}\0${row.property}`),
+          ),
+        );
+      }
     }
+    const separator = String.fromCharCode(0);
     const publicationReadings = [...combinedResult.readings];
     const seenReadings = new Set(publicationReadings.map((row) => row.source + separator + row.externalId));
-    for (const reading of books.readings) {
+    for (const reading of books?.readings ?? []) {
       const key = reading.source + separator + reading.externalId;
       if (seenReadings.has(key)) continue;
       seenReadings.add(key);
@@ -3219,14 +3403,18 @@ export async function runCrossMediaSeedCli(
           },
           ...(bangumiGenrePublication ? { bangumiGenreDiagnostics: bangumiGenrePublication.diagnostics } : {}),
           ...(showcase ? { showcase } : {}),
-          books: {
+          ...(books
+            ? {
+                books: {
             family: books.family,
             selected: books.selected,
             conversions: books.conversions,
             identities: books.identities,
             gaps: books.gaps,
             creditGaps: books.creditGaps,
-          },
+                },
+              }
+            : {}),
           sourceDigests: Object.fromEntries(input.digests),
         },
         null,
@@ -3236,7 +3424,7 @@ export async function runCrossMediaSeedCli(
     process.stdout.write(
       showcase
         ? 'Imported ' +
-            (combinedResult.readings.length + books.readings.length) +
+            (combinedResult.readings.length + (books?.readings.length ?? 0)) +
             ' records; publication ' +
             showcase.status +
             '; ' +
@@ -3245,14 +3433,14 @@ export async function runCrossMediaSeedCli(
             resultPath +
             '\n'
         : 'Imported ' +
-            (combinedResult.readings.length + books.readings.length) +
+            (combinedResult.readings.length + (books?.readings.length ?? 0)) +
             ' records; ' +
             (combinedResult.gaps.length +
               combinedResult.characterDiagnostics.length +
               combinedResult.vndbCreditDiagnostics.length +
               combinedResult.episodeDiagnostics.length +
               publicTags.gaps.length +
-              books.gaps.length) +
+              (books?.gaps.length ?? 0)) +
             ' review gaps. Result: ' +
             resultPath +
             '\n',

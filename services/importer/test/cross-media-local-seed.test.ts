@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { runDevelopmentSeed } from '../../../scripts/datasets/cross-media-seed.ts';
+import { developmentShowcaseSelection, runDevelopmentSeed } from '../../../scripts/datasets/cross-media-seed.ts';
 import { cacheDumpAsset } from '../../../scripts/datasets/fetch-dumps.ts';
 import { normalizeCrossMediaSeedOrigin } from '../src/cross-media-seed.ts';
 
@@ -46,6 +46,7 @@ test('development seed fetches the shared cache once and passes the local person
   const root = resolve(import.meta.dir, '../../..');
   const key = join(root, '.temp', 'persona.key');
   const args: string[] = [];
+  let passedOptions: unknown;
   let fetches = 0;
   await runDevelopmentSeed({
     root,
@@ -67,8 +68,9 @@ test('development seed fetches the shared cache once and passes the local person
         vndbArchive: '/shared/dumps/vndb.tar.zst',
       };
     },
-    runSeed: async (argv) => {
+    runSeed: async (argv, seedOptions) => {
       args.push(...argv);
+      passedOptions = seedOptions;
     },
   });
   const option = (name: string) => args[args.indexOf(name) + 1];
@@ -81,4 +83,5 @@ test('development seed fetches the shared cache once and passes the local person
   expect(option('--account')).toBe('local-importer');
   expect(option('--client')).toBe('local-cli');
   expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
+  expect(passedOptions).toMatchObject({ selection: developmentShowcaseSelection });
 });
