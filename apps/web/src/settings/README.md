@@ -82,6 +82,10 @@ uncertain original patch or its retry.
 **Decision:** Retained unsupported choices stay local until explicitly changed or discarded; new patches are admitted
 as a whole against current advice, uncertain originals retry unchanged, and a singleton suitability choice is read-only.
 
+**Decision:** A current Reading read rebases fields without local intent onto native values. A matching receipt consumes
+only that command's fields. Edits outside the command or after dispatch, including an edit back to an earlier value,
+stay for review; Use current clears them. A clean read does not open review or save.
+
 **Decision:** Reset PATCHes the admitted native defaults with the reviewed version; missing or malformed choice/default
 advice leaves reset unavailable. Viewer state and read/update actions live as additive siblings of the notification
 catalogue `page` on the same preference 200, without a second preference version. Catalogue `page.actions` use the same

@@ -33,6 +33,7 @@ import {
   readingMutation,
   readingReset,
   readReading,
+  rebaseReading,
   sameReading,
   sendReading,
   type ReadingIO,
@@ -89,6 +90,8 @@ function withoutReadingAdvice(preferences: ReadingPreferences): ReadingPreferenc
 export class ReadingDraftRecovery {
   private state: ReadingState;
   private listeners = new Set<() => void>();
+  // Value comparisons alone cannot distinguish a later edit back to an earlier value.
+  private laterEdits: Partial<ReadingValues> = {};
   constructor(
     initial: ReadingPreferences,
     private io: ReadingIO,
@@ -131,6 +134,16 @@ export class ReadingDraftRecovery {
   }
   private commandWaiting() {
     return this.state.commandRetryAt > Date.now();
+  }
+  private afterDispatch() {
+    return this.state.pending !== null || this.state.confirmedReceipt !== null || this.state.phase === 'saving';
+  }
+  private adoptDraft(current: ReadingValues, base: ReadingValues): ReadingValues {
+    const merged = rebaseReading(base, this.state.draft, current);
+    return {
+      spoilerLevel: this.laterEdits.spoilerLevel !== undefined ? this.laterEdits.spoilerLevel : merged.spoilerLevel,
+      suitability: this.laterEdits.suitability !== undefined ? this.laterEdits.suitability : merged.suitability,
+    };
   }
   private async send(recovering: boolean) {
     const input = this.state.pending;
@@ -191,14 +204,15 @@ export class ReadingDraftRecovery {
       return;
     }
     const { preferences, receipt } = result;
-    // Controls always keep the latest draft, including edits made while saving or resolving a response.
-    const matches = sameReading(this.state.draft, preferences) && preferences.version === receipt.version;
+    const draft = this.adoptDraft(preferences, receipt);
+    this.laterEdits = {};
     this.update({
       known: preferences,
+      draft,
       knownCurrent: true,
       pending: null,
       confirmedReceipt: withoutReadingAdvice(receipt),
-      phase: matches ? 'saved' : 'review',
+      phase: sameReading(draft, preferences) ? 'saved' : 'review',
       failure: undefined,
       advice: preferences.advice,
       commandRetryAt: 0,
@@ -230,6 +244,7 @@ export class ReadingDraftRecovery {
       this.update({ phase: 'idle' });
       return;
     }
+    this.laterEdits = {};
     this.update({ pending: input });
     await this.send(false);
   }
@@ -238,6 +253,7 @@ export class ReadingDraftRecovery {
     const supported = this.state.advice?.reading.supported;
     if (next.spoilerLevel !== undefined && supported && !supported.spoilerLevels.includes(next.spoilerLevel)) return;
     if (next.suitability !== undefined && supported && !supported.suitability.includes(next.suitability)) return;
+    if (this.afterDispatch()) this.laterEdits = { ...this.laterEdits, ...next };
     const autosave = this.state.phase === 'idle' || this.state.phase === 'saved';
     this.update({ draft: { ...this.state.draft, ...next } });
     if (autosave && !this.state.pending) await this.submit();
@@ -264,9 +280,11 @@ export class ReadingDraftRecovery {
     const defaults = readingDefaults(this.state.advice);
     const input = readingReset(this.state.known);
     if (!input || !defaults) {
+      this.laterEdits = {};
       this.update({ phase: 'idle', draft: this.state.known });
       return;
     }
+    this.laterEdits = {};
     this.update({ draft: defaults, pending: input });
     await this.send(false);
   }
@@ -278,6 +296,7 @@ export class ReadingDraftRecovery {
       this.state.phase === 'reloading'
     )
       return;
+    const adoptReceipt = this.state.confirmedReceipt !== null && !this.state.knownCurrent && this.state.pending === null;
     this.update({
       phase: 'reloading',
       knownCurrent: false,
@@ -315,12 +334,22 @@ export class ReadingDraftRecovery {
       });
       return;
     }
-    // A current-value read only updates the comparison baseline. Even a definitely rejected
-    // write leaves a draft that the person must explicitly save or discard after review.
+    const pending = this.state.pending;
+    const receipt = this.state.confirmedReceipt;
+    const base = pending ? this.state.known : adoptReceipt && receipt ? receipt : this.state.known;
+    const draft = this.adoptDraft(result.preferences, base);
+    if (!pending) this.laterEdits = {};
     this.update({
       known: result.preferences,
+      draft,
       knownCurrent: true,
-      phase: this.state.pending ? 'uncertain' : 'review',
+      phase: pending
+        ? 'uncertain'
+        : sameReading(draft, result.preferences)
+          ? adoptReceipt
+            ? 'saved'
+            : 'idle'
+          : 'review',
       reason: undefined,
       failure: undefined,
       failureOrigin: undefined,
@@ -333,6 +362,7 @@ export class ReadingDraftRecovery {
     if (!this.owner.canRead() || this.state.pending || this.state.phase !== 'review' || !this.state.knownCurrent)
       return;
     // Discard is deliberate and local; it cannot settle an unresolved original or submit a write.
+    this.laterEdits = {};
     this.update({
       draft: this.state.known,
       phase: 'idle',

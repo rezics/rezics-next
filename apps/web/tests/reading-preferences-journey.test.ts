@@ -106,8 +106,9 @@ test('an unavailable or closed readback never turns an original retry into succe
   const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
   expect(await sendReading(fixture.io, input, false, latest)).toMatchObject({ kind: 'uncertain' });
   expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({
-    kind: 'uncertain',
+    kind: 'confirmed-read-failed',
     reason: 'unavailable',
+    receipt: { spoilerLevel: 1, version: 1 },
   });
   expect(fixture.calls[1]).toBe(input);
   expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
@@ -183,7 +184,7 @@ test('a notification update arriving during recovery GET cannot confirm an older
   fixture.concurrent();
   version = fixture.current().version;
   releaseRead();
-  expect(await result).toMatchObject({ kind: 'uncertain', reason: 'unavailable' });
+  expect(await result).toMatchObject({ kind: 'confirmed-read-failed', reason: 'unavailable' });
   expect(await sendReading(fixture.io, original, true, () => version)).toMatchObject({
     kind: 'confirmed',
     preferences: { version: 2 },
