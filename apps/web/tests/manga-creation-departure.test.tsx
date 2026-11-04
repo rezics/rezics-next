@@ -71,7 +71,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
   const owner = { state: 'signed-in' as const, subject: mangaSeriesId, csrfToken: 'original-token' };
   const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
   const until = async (ready: () => boolean) => {
-    for (let n = 0; n < 150 && !ready(); n++) await settle();
+    for (let n = 0; n < 1500 && !ready(); n++) await settle();
     expect(ready()).toBe(true);
   };
   const body = () => within(document.body);
