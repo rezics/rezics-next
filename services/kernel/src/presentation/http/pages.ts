@@ -345,7 +345,7 @@ export function pageRoutes<App>(
       let account: PageAccount | null = null;
       let resolved: ResolvedTemplate;
       let views: View[] | null = null;
-      let definitionRelease: Awaited<ReturnType<typeof activeRelease>> = undefined;
+      let definitionRelease: Awaited<ReturnType<typeof activeRelease>> | undefined;
       if ('route' in target) {
         resolved = resolveTemplate(active.profile, { route: target.route });
       } else {
