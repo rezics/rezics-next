@@ -100,7 +100,7 @@ export function NotificationsCard({
   const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');
   const localEdit = !!state.pending || readFailed || ['conflict', 'review', 'reloading'].includes(state.phase);
   const canEdit = state.currentAdvice ? preferencePageAllows(state.currentAdvice, 'edit') : false;
-  const canDraft = localEdit && preferencePageAllows(state.known.page, 'edit');
+  const canDraft = localEdit && !state.currentAdvice && preferencePageAllows(state.known.page, 'edit');
   const canRetryOriginal = notificationOriginalAllowed(state.pending?.input ?? null, state.currentAdvice);
   const canSubmitReview =
     state.currentAdvice !== null &&
@@ -445,11 +445,11 @@ export function NotificationsCard({
                   <p role="status">{m.settings_notifications_review_unavailable()}</p>
                 ) : null}
                 <div className="flex min-w-0 flex-wrap gap-2">
-                  {state.intent !== undefined ? (
+                  {canSubmitReview ? (
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={commandWaiting || disabled || !canSubmitReview}
+                      disabled={commandWaiting || disabled}
                       aria-describedby={waitDescription}
                       onClick={() => void editor.submit(version)}
                     >

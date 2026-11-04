@@ -64,9 +64,12 @@ test('native kind forms own each field once; hydration retains choices and recov
   const initial = { reply: true, mention: false, weekly_digest: true };
   const current = { reply: false, mention: true, weekly_digest: false };
   const initialPage = settingsPage(initial, 7);
-  const currentPage = settingsPage(current, 9);
-  const readOnlyCurrentPage = { ...currentPage, actions: [] };
-  const editOnlyCurrentPage = { ...currentPage, actions: [{ name: 'edit' as const, expectedVersion: 9 }] };
+  const initialCurrentPage = settingsPage(current, 9);
+  const recoveredCurrentPage = settingsPage(current, 10);
+  let currentPage = initialCurrentPage;
+  const receiptPage = settingsPage(current, 9);
+  const readOnlyCurrentPage = { ...initialCurrentPage, actions: [] };
+  const editOnlyCurrentPage = { ...recoveredCurrentPage, actions: [{ name: 'edit' as const, expectedVersion: 10 }] };
   const calls: NotificationChange[] = [];
   let refuseCurrentRead = false;
   let currentReadPage: PreferencePage = currentPage;
@@ -80,8 +83,9 @@ test('native kind forms own each field once; hydration retains choices and recov
       }
       if (calls.length === 1) return { ok: false as const, reason: 'invalid' as const };
       if (calls.length === 3) throw new Error('response lost');
+      if (calls.length === 4) return { ok: true as const, version: 9, notifications: current, page: receiptPage };
       if (calls.length === 6) return { ok: false as const, reason: 'conflict' as const, page: currentPage };
-      return { ok: true as const, version: 9, notifications: current, page: currentPage };
+      return { ok: true as const, version: currentPage.version, notifications: current, page: currentPage };
     },
     read: async () =>
       refuseCurrentRead
@@ -93,7 +97,7 @@ test('native kind forms own each field once; hydration retains choices and recov
           }
         : {
             signedIn: true as const,
-            preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 9 },
+            preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: currentReadPage.version },
             notifications: current,
             page: currentReadPage,
             securityHref: null,
@@ -160,15 +164,19 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Reload');
     expect(host.textContent).toContain('current account access does not allow changes');
     expect(host.textContent).toContain('Current account access does not allow this retained operation');
-    const reviewedSave = () =>
-      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent === 'Save reviewed choices' && !button.closest('[hidden]'),
-      )!;
-    expect(reviewedSave().disabled).toBe(true);
-    await click('Save reviewed choices');
+    expect(
+      [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].some(
+        (button) => button.textContent === 'Save reviewed choices',
+      ),
+    ).toBe(false);
+    expect(host.textContent).toContain('Review action unavailable');
     expect(calls).toHaveLength(1);
     currentReadPage = currentPage;
     await click('Reload');
+    const reviewedSave = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].find(
+        (button) => button.textContent === 'Save reviewed choices',
+      );
     expect(reviewedSave().disabled).toBe(false);
     await click('Save reviewed choices');
     expect(calls[1]!.notifications).toEqual({ reply: false });
@@ -177,20 +185,30 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Retry original save');
     expect(calls[3]).toBe(calls[2]);
     expect(calls[3]!.notifications).toBeNull();
+    expect(host.textContent).toContain('The original save was confirmed');
     expect(host.textContent).toContain('This sign-in does not have access to read notification settings');
     expect(host.querySelector('[data-response-status="403"]')).not.toBeNull();
     expect(
-      [...host.querySelectorAll('button')].find(
+      [...host.querySelectorAll('button')].some(
         (button) => button.textContent === 'Retry original save' && !button.closest('[hidden]'),
-      )?.disabled,
-    ).toBe(true);
+      ),
+    ).toBe(false);
     refuseCurrentRead = false;
+    currentPage = recoveredCurrentPage;
+    currentReadPage = recoveredCurrentPage;
     await click('Reload');
     expect(host.textContent).toContain('Review current settings');
     expect(host.textContent).toContain('Restore defaults');
-    await click('Retry original save');
-    expect(calls[4]).toBe(calls[2]);
+    expect(calls).toHaveLength(4);
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry original save' && !button.closest('[hidden]'),
+      ),
+    ).toBe(false);
+    await click('Use current values');
+    await click('Restore defaults');
     expect(calls[4]!.notifications).toBeNull();
+    expect(calls[4]!.expectedVersion).toBe(10);
     expect(host.textContent).toContain('Saved');
     await click('Restore defaults');
     await click('Reload');
@@ -206,10 +224,10 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Restore defaults');
     expect(host.textContent).toContain('Current account access does not allow this retained operation');
     const reviewedRestore = () =>
-      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent === 'Restore defaults' && !button.closest('[hidden]'),
-      )!;
-    expect(reviewedRestore().disabled).toBe(true);
+      [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].find(
+        (button) => button.textContent === 'Restore defaults',
+      );
+    expect(reviewedRestore()).toBeUndefined();
     await click('Restore defaults');
     expect(calls).toHaveLength(8);
     currentReadPage = currentPage;

@@ -2390,6 +2390,7 @@
   "settings_notifications_use_current": "Utiliser les valeurs actuelles",
   "settings_notifications_reading": "Chargement des paramètres de notification actuels…",
   "settings_notifications_read_failed": "Les paramètres de notification actuels n’ont pas pu être chargés",
+  "settings_notifications_confirmed_text": "L’enregistrement initial a été confirmé, mais les paramètres de notification actuels restent indisponibles. Rechargez-les pour vérifier les dernières valeurs.",
   "settings_notifications_read_unavailable": "Les paramètres de notification sont temporairement indisponibles. Essayez de les charger à nouveau.",
   "settings_notifications_read_denied": "Cette connexion ne permet pas de lire les paramètres de notification. Vérifiez votre accès au compte avant de réessayer.",
   "settings_notifications_read_closed": "Les paramètres de notification ne peuvent pas être chargés pour le moment. Rechargez-les plus tard pour vérifier les valeurs actuelles.",

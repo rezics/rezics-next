@@ -44,9 +44,10 @@ policy and draft. Uncertain saves keep the original patch and key. A confirmed m
 **Decision:** Notification edit/reset advice follows the current `account:update` observation; commands still recheck
 authority before receipt lookup.
 
-**Decision:** A failed current read retires action advice but keeps the last confirmed catalogue/values and unresolved
-command available for inspection; local drafts stay local, and a successful reacquisition must be reviewed before the
-original can be replayed.
+**Decision:** A failed current read retires action advice and keeps a transport-uncertain original available for
+inspection; only a successful reacquisition that supplies current advice can permit its exact replay. A validated
+replay receipt ends replay actionability even if its follow-up read fails: retain it as historical confirmation, allow
+deliberate read recovery only, then review current native values and later local edits.
 
 **Decision:** Reviewed Save/Restore stays visible but disabled until current native advice admits its exact retained intent; the unavailable state explains the denial and offers deliberate Reload to reacquire current advice.
 

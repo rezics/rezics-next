@@ -2390,6 +2390,7 @@
   "settings_notifications_use_current": "현재 값 사용",
   "settings_notifications_reading": "현재 알림 설정을 불러오는 중…",
   "settings_notifications_read_failed": "현재 알림 설정을 불러오지 못했습니다",
+  "settings_notifications_confirmed_text": "원래 저장은 확인되었지만 현재 알림 설정은 아직 이용할 수 없습니다. 다시 불러와 최신 값을 확인하세요.",
   "settings_notifications_read_unavailable": "알림 설정을 일시적으로 이용할 수 없습니다. 다시 불러와 주세요.",
   "settings_notifications_read_denied": "현재 로그인으로는 알림 설정을 읽을 권한이 없습니다. 계정 접근 권한을 확인한 후 다시 시도해 주세요.",
   "settings_notifications_read_closed": "현재 알림 설정을 불러올 수 없습니다. 나중에 다시 불러와 현재 설정을 확인하세요.",

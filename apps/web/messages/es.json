@@ -2390,6 +2390,7 @@
   "settings_notifications_use_current": "Usar los valores actuales",
   "settings_notifications_reading": "Cargando los ajustes de notificaciones actuales…",
   "settings_notifications_read_failed": "No se pudieron cargar los ajustes de notificaciones actuales",
+  "settings_notifications_confirmed_text": "Se confirmó el guardado original, pero los ajustes de notificaciones actuales siguen sin estar disponibles. Vuelve a cargarlos para revisar los valores más recientes.",
   "settings_notifications_read_unavailable": "Los ajustes de notificaciones no están disponibles temporalmente. Intenta cargarlos de nuevo.",
   "settings_notifications_read_denied": "Esta sesión no tiene acceso para leer los ajustes de notificaciones. Comprueba el acceso a tu cuenta antes de volver a intentarlo.",
   "settings_notifications_read_closed": "No se pueden cargar ahora los ajustes de notificaciones. Vuelve a cargarlos más tarde para comprobar la configuración actual.",

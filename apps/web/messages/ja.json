@@ -2390,6 +2390,7 @@
   "settings_notifications_use_current": "現在の値を使う",
   "settings_notifications_reading": "現在の通知設定を読み込み中…",
   "settings_notifications_read_failed": "現在の通知設定を読み込めませんでした",
+  "settings_notifications_confirmed_text": "元の保存は確認されましたが、現在の通知設定はまだ利用できません。再読み込みして最新の値を確認してください。",
   "settings_notifications_read_unavailable": "通知設定を一時的に利用できません。もう一度読み込んでください。",
   "settings_notifications_read_denied": "現在のログインでは通知設定を読み込む権限がありません。アカウントへのアクセス権を確認してから、もう一度お試しください。",
   "settings_notifications_read_closed": "現在、通知設定を読み込めません。後で再読み込みして現在の設定を確認してください。",
