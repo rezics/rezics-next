@@ -255,7 +255,11 @@ export async function completeSuggestionWorkContext<T extends Readonly<{ id: str
 
   const snapshot = await readContexts(
     page.subjects.map(({ id }) => id),
-    { reader: options.reader, languages: options.languages, deadline: options.deadline },
+    {
+      ...(options.reader ? { reader: options.reader } : {}),
+      languages: options.languages,
+      deadline: options.deadline,
+    },
   );
   const contextual: ContextualSuggestionPage<T> = {
     ...page,
