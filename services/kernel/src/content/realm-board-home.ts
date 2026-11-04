@@ -78,5 +78,14 @@ export function createRealmHomeBoardObservationReader(deps: ContentBoardDependen
 }
 
 export function realmHomeBoardResponse(page: RealmHomeBoardPage) {
-  return { items: page.items.map((board) => ({ ...board })), next: page.next };
+  return {
+    items: page.items.map((board) => ({
+      ...board,
+      recent:
+        board.recent.state === 'current'
+          ? { ...board.recent, threads: board.recent.threads.map((thread) => ({ ...thread })) }
+          : { ...board.recent },
+    })),
+    next: page.next,
+  };
 }
