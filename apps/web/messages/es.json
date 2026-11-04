@@ -8040,5 +8040,11 @@
   "home_owner_description_unavailable": "Descripción no disponible.",
   "home_owner_curator_unavailable": "Información del curador no disponible.",
   "home_owner_carrier_unavailable": "Presentación del Realm no disponible.",
-  "home_owner_follow_context": "Seguir no otorga acceso ni pertenencia a un Realm."
+  "home_owner_follow_context": "Seguir no otorga acceso ni pertenencia a un Realm.",
+  "following_kind_label": "Tipo de destino",
+  "following_kind_all": "Todos los tipos",
+  "following_kind_subject": "Temas",
+  "following_kind_collection": "Colecciones",
+  "following_kind_space": "Espacios",
+  "following_kind_unavailable": "Este tipo de seguimiento no está disponible actualmente. Vuelve a todos los tipos para continuar."
 }

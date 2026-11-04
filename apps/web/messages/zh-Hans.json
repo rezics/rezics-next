@@ -8040,5 +8040,11 @@
   "home_owner_description_unavailable": "说明暂不可用。",
   "home_owner_curator_unavailable": "策展者信息暂不可用。",
   "home_owner_carrier_unavailable": "Realm 展示信息暂不可用。",
-  "home_owner_follow_context": "关注不会授予访问权限或 Realm 成员资格。"
+  "home_owner_follow_context": "关注不会授予访问权限或 Realm 成员资格。",
+  "following_kind_label": "目标类型",
+  "following_kind_all": "所有类型",
+  "following_kind_subject": "主题",
+  "following_kind_collection": "收藏集",
+  "following_kind_space": "空间",
+  "following_kind_unavailable": "此类型的关注暂不可用。请返回所有类型以继续。"
 }

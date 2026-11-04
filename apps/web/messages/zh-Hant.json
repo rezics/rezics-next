@@ -8040,5 +8040,11 @@
   "home_owner_description_unavailable": "說明暫時無法取得。",
   "home_owner_curator_unavailable": "策展者資訊暫時無法取得。",
   "home_owner_carrier_unavailable": "Realm 展示資訊暫時無法取得。",
-  "home_owner_follow_context": "追蹤不會授予存取權限或 Realm 成員資格。"
+  "home_owner_follow_context": "追蹤不會授予存取權限或 Realm 成員資格。",
+  "following_kind_label": "目標類型",
+  "following_kind_all": "所有類型",
+  "following_kind_subject": "主題",
+  "following_kind_collection": "收藏集",
+  "following_kind_space": "空間",
+  "following_kind_unavailable": "此類型的關注暫不可用。請返回所有類型以繼續。"
 }

@@ -1,3 +1,4 @@
+import { followingKind } from './following-kind-navigation/address';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
@@ -23,6 +24,7 @@ export type MineFollowingPage = {
   follows: MineFollow[];
   next: string | null;
   addressInvalid?: true;
+  kindUnavailable?: true;
   /** A successful native stale-cursor fallback; the requested address remains unchanged. */
   cursorReset?: true;
 };
@@ -45,14 +47,17 @@ export async function loadMineFollowingPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { cursor?: string; invalidAddress?: true },
+  input: { cursor?: string; invalidAddress?: true; kind?: unknown },
 ): Promise<MineFollowingPage> {
   if (await prepareSession(request, sessionEnv)) return { signedIn: false, follows: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, follows: [], next: null };
-  if (input.invalidAddress || !personalDirectoryAddress(input.cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid)
+  const kind = followingKind(input.kind);
+  if (!kind || input.invalidAddress || !personalDirectoryAddress(input.cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid)
     return { signedIn: true, follows: [], next: null, addressInvalid: true };
+  // Never approximate whole-population filtering using the current mixed page.
+  if (kind !== 'all') return { signedIn: true, follows: [], next: null, kindUnavailable: true };
   const read = async (cursor?: string) => {
     const result = await client.follows.get({
       query: libraryListQuery(cursor, 20),

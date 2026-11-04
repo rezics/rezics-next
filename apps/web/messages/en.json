@@ -8115,5 +8115,11 @@
   "home_owner_description_unavailable": "Description unavailable.",
   "home_owner_curator_unavailable": "Curator information unavailable.",
   "home_owner_carrier_unavailable": "Realm presentation unavailable.",
-  "home_owner_follow_context": "Following does not grant access or Realm membership."
+  "home_owner_follow_context": "Following does not grant access or Realm membership.",
+  "following_kind_label": "Target kind",
+  "following_kind_all": "All kinds",
+  "following_kind_subject": "Subjects",
+  "following_kind_collection": "Collections",
+  "following_kind_space": "Spaces",
+  "following_kind_unavailable": "This kind of following is currently unavailable. Return to all kinds to continue."
 }

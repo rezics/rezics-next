@@ -1,3 +1,4 @@
+import { followingKind, type FollowingKind } from './following-kind-navigation/address';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -9,7 +10,7 @@ import { sessionSubject } from '../session/request';
 import { loadMineFollowingPage, type MineFollowingPage, unfollowFollow } from './mine-following';
 import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
 
-type MineFollowingInput = { cursor?: string; invalidAddress?: true };
+type MineFollowingInput = { cursor?: string; invalidAddress?: true; kind?: FollowingKind };
 
 function validateInput(input: unknown): MineFollowingInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid follows cursor');
@@ -17,11 +18,13 @@ function validateInput(input: unknown): MineFollowingInput {
     'cursor' in input ? input.cursor : undefined,
     PERSONAL_DIRECTORY_CURSOR_LIMITS.following,
   );
+  const kind = followingKind('kind' in input ? input.kind : undefined);
+  const filter = kind ? { kind } : { invalidAddress: true as const };
   return address.valid
     ? address.cursor
-      ? { cursor: address.cursor }
-      : {}
-    : { ...(typeof address.cursor === 'string' ? { cursor: address.cursor } : {}), invalidAddress: true };
+      ? { ...filter, cursor: address.cursor }
+      : filter
+    : { ...filter, ...(typeof address.cursor === 'string' ? { cursor: address.cursor } : {}), invalidAddress: true };
 }
 
 export type MineFollowingRead = {
@@ -29,6 +32,7 @@ export type MineFollowingRead = {
   /** The original requested cursor, even when the reader retries a stale cursor at the first page. */
   cursor: string | null;
   locale: string;
+  kind?: FollowingKind;
   page: MineFollowingPage;
 };
 
@@ -42,7 +46,7 @@ async function readFollowingRequest(data: MineFollowingInput): Promise<MineFollo
   const page = subject ? loaded : { signedIn: false, follows: [], next: null };
   if (!page.addressInvalid)
     await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
-  return { subject, cursor: data.cursor ?? null, locale: requestLocale(request) ?? 'en', page };
+  return { subject, kind: data.kind ?? 'all', cursor: data.cursor ?? null, locale: requestLocale(request) ?? 'en', page };
 }
 
 export const readMineFollowingPage = createServerFn({ method: 'GET' })

@@ -1,3 +1,4 @@
+import type { FollowingKind } from './following-kind-navigation/address';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -40,15 +41,16 @@ export const mineFollowingQuery = (
   cursor: string | null,
   locale: string,
   origin?: HistoryOrigin & { key: string },
+  kind: FollowingKind = 'all',
 ) =>
   queryOptions({
     ...personalRead,
-    queryKey: ['mine-following', subject, 'follow.list', true, cursor, locale, ...(origin ? [origin.key] : [])],
+    queryKey: ['mine-following', subject, 'follow.list', true, cursor, locale, kind, ...(origin ? [origin.key] : [])],
     queryFn: async ({ signal }) => {
       const current = origin?.isCurrent ?? (() => true);
       assertHistoryCurrent(current, signal);
       try {
-        const result = await readMineFollowingForViewer({ data: { cursor: cursor ?? undefined } });
+        const result = await readMineFollowingForViewer({ data: { cursor: cursor ?? undefined, kind } });
         assertHistoryCurrent(current, signal);
         return result;
       } catch (error) {
@@ -65,13 +67,14 @@ export const mineFollowingQuery = (
     refetchOnReconnect: false,
   });
 
-function matches(read: MineFollowingRead, subject: string, cursor: string | null, locale: string): boolean {
+function matches(read: MineFollowingRead, subject: string, cursor: string | null, locale: string, kind: FollowingKind = 'all'): boolean {
   return (
     read.page.signedIn &&
     !read.page.addressInvalid &&
     read.subject === subject &&
     read.cursor === cursor &&
-    read.locale === locale
+    read.locale === locale &&
+    (read.kind ?? 'all') === kind
   );
 }
 
@@ -79,18 +82,20 @@ function matches(read: MineFollowingRead, subject: string, cursor: string | null
 export function CurrentViewerMineFollowingPage({
   initial,
   cursor,
+  kind = 'all',
   invalidAddress = false,
 }: {
   initial: MineFollowingRead;
   cursor?: string | undefined;
   invalidAddress?: boolean;
+  kind?: FollowingKind;
 }) {
   useOperation('follow.list');
   const locale = getLocale();
   const requestedAddress = personalDirectoryAddress(cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const addressInvalid = invalidAddress || !requestedAddress.valid;
-  const address = useHistoryAddress('/library/following', requestedAddress.cursor ?? undefined, locale);
-  const originAddress = addressInvalid ? `${address.key}:invalid` : address.key;
+  const address = useHistoryAddress(null, requestedAddress.cursor ?? undefined, locale);
+  const originAddress = JSON.stringify([address.key, kind, addressInvalid]);
   const origin = useHistoryCurrentOrigin(
     originAddress,
     followingOperations,
@@ -101,7 +106,7 @@ export function CurrentViewerMineFollowingPage({
     lifetime: origin.boundary.lifetime,
     key: origin.lifetime(0),
     isCurrent: current,
-  });
+  }, kind);
   const read = useQuery(
     {
       ...options,
@@ -112,7 +117,7 @@ export function CurrentViewerMineFollowingPage({
         !!origin.subject &&
         origin.allowed[0] === true &&
         address.isCurrent(),
-      ...(!addressInvalid && origin.seed && origin.subject && matches(initial, origin.subject, address.cursor, locale)
+      ...(!addressInvalid && origin.seed && origin.subject && matches(initial, origin.subject, address.cursor, locale, kind)
         ? { initialData: initial }
         : {}),
     },
@@ -122,7 +127,7 @@ export function CurrentViewerMineFollowingPage({
     origin.client,
     options.queryKey,
     (value) =>
-      !!value && !!origin.subject && matches(value as MineFollowingRead, origin.subject, address.cursor, locale),
+      !!value && !!origin.subject && matches(value as MineFollowingRead, origin.subject, address.cursor, locale, kind),
   );
   const previousLoader = useRef(initial);
   useEffect(() => {
@@ -136,7 +141,7 @@ export function CurrentViewerMineFollowingPage({
     origin.subject &&
     origin.retained[0] === true &&
     address.isCurrent() &&
-    matches(read.data, origin.subject, address.cursor, locale)
+    matches(read.data, origin.subject, address.cursor, locale, kind)
       ? read.data.page
       : retiredPage;
   const rowOrigin: HistoryOrigin = {
@@ -154,6 +159,7 @@ export function CurrentViewerMineFollowingPage({
     <div hidden={origin.hydrated && !origin.allowed[0]}>
       <MineFollowingPageView
         page={page}
+        kind={kind}
         cursor={address.cursor}
         invalidAddress={addressInvalid}
         origin={rowOrigin}
@@ -169,7 +175,7 @@ export function CurrentViewerMineFollowingPage({
             result.isError ||
             !result.data ||
             !origin.subject ||
-            !matches(result.data, origin.subject, address.cursor, locale) ||
+            !matches(result.data, origin.subject, address.cursor, locale, kind) ||
             origin.client.getQueryState(options.queryKey)?.status !== 'success' ||
             origin.client.getQueryData(options.queryKey) !== result.data
           )
@@ -194,6 +200,7 @@ export function CurrentViewerMineFollowingPage({
 export function MineFollowingPageView({
   page,
   cursor,
+  kind = 'all',
   invalidAddress = false,
   origin,
   status,
@@ -205,6 +212,7 @@ export function MineFollowingPageView({
   page: MineFollowingPage;
   cursor?: string | null | undefined;
   invalidAddress?: boolean;
+  kind?: FollowingKind;
   origin?: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
   onRetry?: (() => void) | undefined;
@@ -213,11 +221,12 @@ export function MineFollowingPageView({
   readSpace?: FollowingSpaceReader | undefined;
 }) {
   const requestedAddress = personalDirectoryAddress(cursor ?? undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
-  const addressRejected = invalidAddress || page.addressInvalid || !requestedAddress.valid;
+  const addressRejected = invalidAddress || page.addressInvalid || page.kindUnavailable || !requestedAddress.valid;
   const requestedCursor = requestedAddress.cursor;
   // This key tracks follow-command identity. Replaced summaries or Community advice retire reading
   // through page-object identity while the existing FollowTargetControl keeps its uncertain intent.
   const lifetime = JSON.stringify({
+    kind,
     signedIn: page.signedIn,
     next: page.next,
     addressInvalid: page.addressInvalid,
@@ -253,6 +262,7 @@ export function MineFollowingPageView({
     <MineFollowingPageState
       key={row.id}
       page={page}
+      kind={kind}
       cursor={requestedCursor}
       addressRejected={addressRejected}
       origin={originating}
@@ -267,6 +277,7 @@ export function MineFollowingPageView({
 
 function MineFollowingPageState({
   page,
+  kind,
   cursor,
   addressRejected,
   origin,
@@ -278,6 +289,7 @@ function MineFollowingPageState({
 }: {
   page: MineFollowingPage;
   cursor: string | null;
+  kind: FollowingKind;
   addressRejected: boolean;
   origin: HistoryOrigin;
   status?: 'unavailable' | 'preparing' | undefined;
@@ -325,6 +337,16 @@ function MineFollowingPageState({
           {m.library_following_heading()}
         </PageHeading>
       </header>
+      <nav aria-label={m.following_kind_label()} className="flex flex-wrap gap-2">
+        {(['all', 'subject', 'collection', 'space'] as const).map((value) => (
+          <Link key={value} to="/library/following" search={value === 'all' ? {} : { kind: value }}
+            aria-current={kind === value ? 'page' : undefined}
+            className={buttonVariants({ variant: kind === value ? 'default' : 'outline', className: 'min-h-11' })}>
+            {value === 'all' ? m.following_kind_all() : value === 'subject' ? m.following_kind_subject() :
+              value === 'collection' ? m.following_kind_collection() : m.following_kind_space()}
+          </Link>
+        ))}
+      </nav>
       {!addressRejected && status ? (
         <div className="space-y-3">
           <p role="status">{status === 'preparing' ? m.library_follow_loading() : m.library_follow_unavailable()}</p>
@@ -337,7 +359,7 @@ function MineFollowingPageState({
       ) : null}
       {addressRejected ? (
         <div className="space-y-3">
-          <p role="alert">{m.library_directory_address_invalid()}</p>
+          <p role="alert">{page.kindUnavailable ? m.following_kind_unavailable() : m.library_directory_address_invalid()}</p>
           <a href={`/${getLocale()}/library/following`} className={buttonVariants({ variant: 'outline' })}>
             {m.library_directory_address_first_page()}
           </a>
@@ -462,7 +484,7 @@ function MineFollowingPageState({
             {page.next ? (
               <Link
                 to="/library/following"
-                search={{ cursor: page.next }}
+                search={{ cursor: page.next, ...(kind === 'all' ? {} : { kind }) }}
                 onClick={(event) => {
                   if (!origin.isCurrent()) event.preventDefault();
                 }}
@@ -474,7 +496,7 @@ function MineFollowingPageState({
             {restart ? (
               <Link
                 to="/library/following"
-                search={{}}
+                search={kind === 'all' ? {} : { kind }}
                 onClick={(event) => {
                   if (!origin.isCurrent()) event.preventDefault();
                 }}

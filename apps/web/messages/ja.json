@@ -8040,5 +8040,11 @@
   "home_owner_description_unavailable": "説明を利用できません。",
   "home_owner_curator_unavailable": "キュレーターの情報を利用できません。",
   "home_owner_carrier_unavailable": "Realm の紹介を利用できません。",
-  "home_owner_follow_context": "フォローしてもアクセス権や Realm のメンバー資格は付与されません。"
+  "home_owner_follow_context": "フォローしてもアクセス権や Realm のメンバー資格は付与されません。",
+  "following_kind_label": "対象の種類",
+  "following_kind_all": "すべての種類",
+  "following_kind_subject": "主題",
+  "following_kind_collection": "コレクション",
+  "following_kind_space": "スペース",
+  "following_kind_unavailable": "この種類のフォローは現在利用できません。すべての種類に戻って続けてください。"
 }

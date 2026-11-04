@@ -3,7 +3,7 @@
 Following renders one native FULL page in supplied order, at most twenty rows. Its summary identities and exact target
 index are prepared once per page in O(N); inspection selects by exact target ID in O(1). Local confirmed removal
 leaves a sparse page. Next uses the opaque cursor and replaces the page; a stale continuation retains the existing
-explicit restart. There is no accumulated list, global search, type filter, favorite command or hidden refill.
+explicit restart. There is no accumulated list, global search, page-local type filter, favorite command or hidden refill.
 
 Subject links use `subjectHref`; Collection links use the localized Collection reader when `collection.get` is
 exposed. A missing summary retains the follow and its exact target reference, with identity unavailable and no link.
@@ -61,3 +61,6 @@ the retained base requested one hundred rows and grouped them by type.
 
 Decision: route only current supplied Realm membership actions to the canonical Realm owner; unsupported Community
 actions stay unavailable in Following.
+
+
+Kind navigation is owned by [Following kind navigation](../following-kind-navigation/README.md).

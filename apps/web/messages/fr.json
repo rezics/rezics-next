@@ -8040,5 +8040,11 @@
   "home_owner_description_unavailable": "Description indisponible.",
   "home_owner_curator_unavailable": "Informations sur le curateur indisponibles.",
   "home_owner_carrier_unavailable": "Présentation du Realm indisponible.",
-  "home_owner_follow_context": "Suivre ne donne ni accès ni adhésion à un Realm."
+  "home_owner_follow_context": "Suivre ne donne ni accès ni adhésion à un Realm.",
+  "following_kind_label": "Type de cible",
+  "following_kind_all": "Tous les types",
+  "following_kind_subject": "Sujets",
+  "following_kind_collection": "Collections",
+  "following_kind_space": "Espaces",
+  "following_kind_unavailable": "Ce type de suivi est actuellement indisponible. Revenez à tous les types pour continuer."
 }
