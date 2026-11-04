@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent } from 'storybook/test';
 import { useEffect, useMemo, useState } from 'react';
 import {
   catalogueFileReaderVisit,
@@ -11,7 +12,15 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { PatternStory } from './page';
 
-function CatalogueFileReaderStory({ unsupported = false }: { unsupported?: boolean }) {
+function CatalogueFileReaderStory({
+  unsupported = false,
+  longValue = false,
+  empty = false,
+}: {
+  unsupported?: boolean;
+  longValue?: boolean;
+  empty?: boolean;
+}) {
   const locale = getLocale();
   const fixture = useMemo(
     () => catalogueFileProfileFixture(unsupported ? 'unreleased' : 'ready', locale),
@@ -22,27 +31,37 @@ function CatalogueFileReaderStory({ unsupported = false }: { unsupported?: boole
     let live = true;
     void fixture.read(unsupported ? undefined : 'forward:schema:encodesCreativeWork').then((result) => {
       if (!live || !result.ok) return;
+      const publicRead = structuredClone(result.public);
+      if (longValue) {
+        const codec = publicRead.subject.statements['rezics:codec']?.[0];
+        if (codec) codec.value = { type: 'value', content: `unknown-codec-${'x'.repeat(96)}` };
+      }
+      if (empty) {
+        publicRead.subject.statements = {};
+        publicRead.subject.sourceRecords = [];
+      }
       const stream = result.stream;
-      const relationPages = stream
-        ? [
-            {
-              property: stream.property,
-              direction: stream.direction,
-              rows: result.rows.map((row) => ({
+      const relationPages =
+        stream && !empty
+          ? [
+              {
                 property: stream.property,
-                subject: row.holder,
-                statement: row.statement,
-                summary: row.summary,
-                related: row.related,
-              })),
-              complete: result.next === null,
-            },
-          ]
-        : [];
+                direction: stream.direction,
+                rows: result.rows.map((row) => ({
+                  property: stream.property,
+                  subject: row.holder,
+                  statement: row.statement,
+                  summary: row.summary,
+                  related: row.related,
+                })),
+                complete: result.next === null,
+              },
+            ]
+          : [];
       setVisit(
         catalogueFileReaderVisit({
           locale,
-          public: result.public,
+          public: publicRead,
           release: result.release,
           digest: result.digest,
           relationPages,
@@ -52,7 +71,7 @@ function CatalogueFileReaderStory({ unsupported = false }: { unsupported?: boole
     return () => {
       live = false;
     };
-  }, [fixture, locale, unsupported]);
+  }, [empty, fixture, locale, longValue, unsupported]);
   if (!visit) {
     return (
       <PatternStory path={`/subjects/${catalogueFile}/episode-file`} visitor="Signed Out">
@@ -68,7 +87,11 @@ function CatalogueFileReaderStory({ unsupported = false }: { unsupported?: boole
     <PatternStory path={`/subjects/${catalogueFile}/episode-file`} visitor="Signed Out">
       <AppShell>
         <div className="mx-auto max-w-4xl p-4 sm:p-6">
-          <CatalogueFileReader visit={visit} />
+          <CatalogueFileReader
+            visit={visit}
+            currentHref={`/${locale}/subjects/${catalogueFile}/episode-file`}
+            recoverCurrentPage={async () => {}}
+          />
         </div>
       </AppShell>
     </PatternStory>
@@ -96,5 +119,41 @@ const meta = {
 } satisfies Meta<typeof CatalogueFileReaderStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const AdmittedFile: Story = {};
-export const UnsupportedFileType: Story = { args: { unsupported: true } };
+const inspectByKeyboard: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  const trigger = canvasElement.querySelector<HTMLButtonElement>('[data-inspection-kind="association"]');
+  if (!trigger) throw new Error('Expected an admitted association inspection control');
+  trigger.focus();
+  await userEvent.keyboard('{Enter}');
+  const heading = canvasElement.querySelector<HTMLElement>('#catalogue-file-inspection-heading');
+  await expect(heading).toHaveFocus();
+  const close = canvasElement.querySelector<HTMLButtonElement>('[data-slot="catalogue-file-inspection"] button');
+  if (!close) throw new Error('Expected a close control in the selected inspection');
+  await userEvent.click(close);
+  await expect(trigger).toHaveFocus();
+};
+
+export const AdmittedFile: Story = {
+  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+};
+export const TraditionalChinesePhoneDark: Story = {
+  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'phone390' } },
+};
+export const SimplifiedChineseDesktopLight: Story = {
+  globals: { locale: 'zh-Hans', theme: 'light', viewport: { value: 'desktop1280' } },
+};
+export const JapaneseDesktopDark: Story = {
+  globals: { locale: 'ja', theme: 'dark', viewport: { value: 'desktop1280' } },
+};
+export const UnsupportedFileType: Story = {
+  args: { unsupported: true },
+  globals: { locale: 'en', theme: 'dark', viewport: { value: 'phone390' } },
+};
+export const LongMetadataAndKeyboardInspection: Story = {
+  args: { longValue: true },
+  globals: { locale: 'de', theme: 'light', viewport: { value: 'phone390' } },
+  play: inspectByKeyboard,
+};
+export const AdmittedEmptyPage: Story = {
+  args: { empty: true },
+  globals: { locale: 'es', theme: 'dark', viewport: { value: 'desktop1280' } },
+};
