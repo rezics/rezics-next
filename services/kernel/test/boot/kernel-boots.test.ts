@@ -90,6 +90,27 @@ async function startKernelWorker(databaseUrl: string) {
   };
   const worker = await startWorker(readWorkerConfig(workerKeys), undefined, workerKeys);
   await worker.stop();
+  // Enqueue through the real SDK after stopping consumers: queue controls must
+  // survive persistence, not merely match a structural client double.
+  const { createWorkClient } = await import('../../src/work/client.ts');
+  const { enqueueReviewDiscoveryWork, REVIEW_DISCOVERY_WORKFLOW } =
+    await import('../../src/content/review-discovery-work.ts');
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: databaseUrl });
+  const client = await createWorkClient(databaseUrl);
+  const ref = { route: 160, id: '00000000-0000-8000-8000-00a000000001' };
+  try {
+    await enqueueReviewDiscoveryWork({ client }, ref);
+    const row = (
+      await pool.query('SELECT queue_partition_key FROM dbos.workflow_status WHERE workflow_uuid=$1', [
+        `${REVIEW_DISCOVERY_WORKFLOW}:${ref.route}:${ref.id}`,
+      ])
+    ).rows[0];
+    expect(row.queue_partition_key).toBe('10');
+  } finally {
+    await client.close();
+    await pool.end();
+  }
 }
 
 const OPERATION_ID = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;

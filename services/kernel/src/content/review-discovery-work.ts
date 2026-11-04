@@ -23,7 +23,7 @@ export async function enqueueReviewDiscoveryWork(
       workflowID: `${REVIEW_DISCOVERY_WORKFLOW}:${ref.route}:${ref.id}`,
       workflowIDReusePolicy: 'return-existing',
       queueName: 'effects',
-      enqueueOptions: { queuePartitionKey: String(partitionOf(ref.route)) },
+      queuePartitionKey: String(partitionOf(ref.route)),
     },
     ref,
   );

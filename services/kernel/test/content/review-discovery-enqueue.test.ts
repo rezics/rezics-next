@@ -17,7 +17,7 @@ test('review invalidation children enter the source partition of the partitioned
   expect(calls[0]).toEqual(calls[1]);
   expect(calls[0]?.[0]).toMatchObject({
     queueName: 'effects',
-    enqueueOptions: { queuePartitionKey: '10' },
+    queuePartitionKey: '10',
     workflowIDReusePolicy: 'return-existing',
   });
   expect(calls[0]?.[1]).toBe(ref);
