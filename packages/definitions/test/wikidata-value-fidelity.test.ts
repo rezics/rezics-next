@@ -66,7 +66,7 @@ test('exact quantity schema and pinned Gregorian time releases retain their hist
       unit: { enum: [] },
     },
   });
-  const historical = structuredClone(bundledRelease) as Release;
+  const historical = JSON.parse(JSON.stringify(bundledRelease)) as Release;
   const oldTimeSchema = {
     type: 'object',
     required: ['time', 'precision', 'calendarmodel'],
