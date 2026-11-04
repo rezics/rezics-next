@@ -49,6 +49,84 @@ function matchDelimited(source: string, start: number, open: string, close: stri
   return source.length;
 }
 
+function blankComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => ' '.repeat(block.length))
+    .replace(/(?<!:)\/\/.*$/gm, (line) => ' '.repeat(line.length));
+}
+
+function bodyBrace(source: string, from: number): number {
+  let paren = 0;
+  let angle = 0;
+  let quote: string | undefined;
+  let escape = false;
+  for (let index = from; index < source.length; index += 1) {
+    const character = source[index]!;
+    if (quote) {
+      if (escape) escape = false;
+      else if (character === '\\') escape = true;
+      else if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === '"' || character === "'" || character === '`') {
+      quote = character;
+      continue;
+    }
+    if (character === '(') paren += 1;
+    else if (character === ')') paren -= 1;
+    else if (character === '<') angle += 1;
+    else if (character === '>') angle -= 1;
+    else if (character === '{' && paren === 0 && angle === 0) return index;
+  }
+  return -1;
+}
+
+function functionBodies(source: string): Array<{ name: string; nameIndex: number; start: number; end: number }> {
+  const bodies: Array<{ name: string; nameIndex: number; start: number; end: number }> = [];
+  const pattern = /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g;
+  for (const match of source.matchAll(pattern)) {
+    const open = (match.index ?? 0) + match[0].length - 1;
+    const paramsEnd = matchDelimited(source, open, '(', ')');
+    const brace = bodyBrace(source, paramsEnd + 1);
+    if (brace === -1) continue;
+    bodies.push({
+      name: match[1]!,
+      nameIndex: (match.index ?? 0) + match[0].indexOf(match[1]!),
+      start: match.index ?? 0,
+      end: matchDelimited(source, brace, '{', '}'),
+    });
+  }
+  return bodies;
+}
+
+function expandServerRanges(source: string, ranges: Array<[number, number]>): Array<[number, number]> {
+  const bodies = functionBodies(source);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const body of bodies) {
+      if (covered(body.start, ranges)) continue;
+      const pattern = new RegExp(`(?<![.\\w$])${body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
+      let onlyServer = true;
+      let used = false;
+      for (const match of source.matchAll(pattern)) {
+        const index = match.index ?? 0;
+        if (index === body.nameIndex) continue;
+        used = true;
+        if (!covered(index, ranges)) {
+          onlyServer = false;
+          break;
+        }
+      }
+      if (used && onlyServer) {
+        ranges.push([body.start, body.end]);
+        changed = true;
+      }
+    }
+  }
+  return ranges;
+}
+
 function serverRanges(source: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   for (const token of ['.server(', 'createServerOnlyFn(', '.handler(', 'server: {']) {
@@ -62,7 +140,7 @@ function serverRanges(source: string): Array<[number, number]> {
       from = index + token.length;
     }
   }
-  return ranges;
+  return expandServerRanges(source, ranges);
 }
 
 function covered(index: number, ranges: Array<[number, number]>): boolean {
@@ -109,9 +187,7 @@ function usedOutsideServer(
   importSpan: [number, number],
 ): boolean {
   if (names.length === 0) return !covered(importSpan[0], ranges);
-  const body = source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => ' '.repeat(block.length))
-    .replace(/(?<!:)\/\/.*$/gm, (line) => ' '.repeat(line.length));
+  const body = blankComments(source);
   return names.some((name) => {
     const pattern = new RegExp(`(?<![.\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
     for (const match of body.matchAll(pattern)) {

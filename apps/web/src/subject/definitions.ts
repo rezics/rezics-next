@@ -1,8 +1,7 @@
 import type { LibraryProfile, LibraryProfileReference, TypeDefinition } from '@rezics/definitions';
 import type { FilterRelease } from '@rezics/filter';
 import { parseCoverRatio, type CoverRatio } from '@rezics/ui/cover';
-import { env } from 'cloudflare:workers';
-import { requestLocale } from '../kernel/client.ts';
+import { configuredKernelOrigin, requestLocale } from '../kernel/client.ts';
 import { relationDefinitions, type RelationDefinition } from './relations.ts';
 import type { KernelClient } from '@rezics/client';
 import { fetchGuideRelease, type GuideRelease } from '../features/catalogue/definition-guide';
@@ -100,7 +99,7 @@ async function cachedDefinition<T>(url: string, ttl?: number): Promise<T> {
 }
 
 function kernelOrigin(): string {
-  const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+  const origin = configuredKernelOrigin();
   if (origin) return origin;
   if (import.meta.env.DEV) return 'http://kernel.local';
   throw new Error('KERNEL_ORIGIN is required to read definitions');
