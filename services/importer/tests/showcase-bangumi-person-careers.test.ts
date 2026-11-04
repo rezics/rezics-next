@@ -98,7 +98,7 @@ test('selected actual Persons use bounded API career fallback and sealed source 
         journal: reopened,
         fetch: (async () => {
           throw new Error('sealed career source unexpectedly fetched again');
-        }) as typeof globalThis.fetch,
+        }) as unknown as typeof globalThis.fetch,
         sleep: async () => {},
       });
       expect(replay.entities.bangumi.find(({ key }) => key === 'person:8101')?.payload).toHaveProperty(
