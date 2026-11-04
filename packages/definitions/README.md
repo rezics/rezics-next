@@ -183,6 +183,27 @@ boundary and remaining acceptance.
 `releaseDigest(release)` returns `sha256:` followed by the SHA-256 digest of its
 RFC 8785 canonical JSON. Validate first: the digest function does not validate.
 
+`createReleasedRelationDirectionResolver(release, digest)` is the pure released
+relation rule exported by both the default and browser roots. It checks the release
+pin and admits only the canonical forward property and inverse metadata already in
+that release, including sorted type bounds and declared qualifier meanings. It does
+not create inverse properties. Native callers still own currentness, disclosure,
+selection, role and qualifier interpretation, spoiler and citation handling, and
+viewer actions or access; resolver success grants none of these.
+
+For one factory call, let `B` be the canonical UTF-8 release bytes, `T` the Types,
+`P` the Properties, `M` all type-property, property-target and qualifier memberships,
+and `E` the base edges. Full canonicalization, UTF-8 encoding and SHA-256 hashing
+cost `O(B)` time and temporary memory on every invocation. The source-owner and
+inverse indexes add `O(T + P + M)` time and memory. No digest cache or refresh is
+added. For one resolve, sorting and materializing the returned qualifier meanings
+costs at most `O(M log M + M + L)`, where `L` is the returned qualifier-label bytes.
+Each subtype walk uses a visited set and costs at most `O(T + E)` time and `O(T)`
+temporary memory, but separate source, target and qualifier roots can each walk the
+same graph. The worst case is therefore `O(M(T + E) + M log M + L)` time and
+`O(T + M + L)` result/temporary memory, not constant work. Existing release limits
+continue to bound inputs; no new traversal or cache is introduced.
+
 ### Wikidata time values
 
 Decision: Preserve signed 4–16 digit years at year, month and day precision on Gregorian and Julian calendars, with optional safe-integer timezone minutes and optional nonnegative safe-integer `before`/`after` fields; all other Wikibase time specializations remain explicitly unsupported.

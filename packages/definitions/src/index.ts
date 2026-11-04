@@ -1,7 +1,5 @@
 /// <reference path="./recheck.d.ts" />
 import { createFilterConstruction, type FilterValidationError } from '@rezics/filter';
-import canonicalize from 'canonicalize';
-import { createHash } from 'node:crypto';
 import { safePattern } from './pattern-safety.ts';
 import { constructionValidator } from './publication-construction.ts';
 export { publicationLimits, PUBLICATION_LIMITS } from './publication-construction.ts';
@@ -22,10 +20,6 @@ const historicalTimeSchema = {
     calendarmodel: { const: 'http://www.wikidata.org/entity/Q1985727' },
   },
 };
-
-export function releaseDigest(release: Release): string {
-  return `sha256:${createHash('sha256').update(canonicalize(release)!, 'utf8').digest('hex')}`;
-}
 
 const validator = constructionValidator;
 const own = (value: object, key: string) => Object.hasOwn(value, key);
