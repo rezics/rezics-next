@@ -25,7 +25,7 @@ const occurrenceOne = '00000000-0000-4000-8000-000000000004';
 const occurrenceTwo = '00000000-0000-4000-8000-000000000005';
 const targetId = '00000000-0000-4000-8000-000000000006';
 const receivingCollectionId = '00000000-0000-4000-8000-000000000007';
-const deadline = '2099-01-01T00:00:00.000Z';
+const deadline = new Date(Date.now() + 60 * 60 * 1_000).toISOString();
 const target: EntityPickerSubject = {
   id: targetId,
   title: 'Current canonical Subject',
