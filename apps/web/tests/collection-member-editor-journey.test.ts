@@ -185,6 +185,8 @@ test('Curator can add and edit Collection members without an always-open form wa
   expect(built.success, built.logs.map(String).join('\n')).toBe(true);
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.stack ?? error.message));
   try {
     await page.route('https://site.test/**', (route) =>
       route.fulfill({
@@ -194,7 +196,11 @@ test('Curator can add and edit Collection members without an always-open form wa
     );
     await page.goto(`https://site.test/en/collections/${id}`);
     await page.addScriptTag({ type: 'module', content: await built.outputs[0]!.text() });
-    await page.getByRole('button', { name: m.library_collection_add_items(), exact: true }).click();
+    try {
+      await page.getByRole('button', { name: m.library_collection_add_items(), exact: true }).click({ timeout: 10_000 });
+    } catch (error) {
+      throw new Error(`${String(error)}\nPage errors: ${pageErrors.join('\n')}\nBody: ${await page.locator('body').innerText()}`);
+    }
     const search = page.getByRole('combobox', { name: m.library_collection_find_subject() });
     await search.fill('Snow');
     await page.getByRole('option', { name: /Snow Country/ }).click();
