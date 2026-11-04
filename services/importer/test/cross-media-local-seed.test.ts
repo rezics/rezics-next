@@ -81,4 +81,26 @@ test('development seed fetches the shared cache once and passes the local person
   expect(option('--account')).toBe('local-importer');
   expect(option('--client')).toBe('local-cli');
   expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
+  const defaultArgs: string[] = [];
+  await runDevelopmentSeed({
+    root,
+    env: {
+      REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
+      REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
+      REZICS_DEV_PERSONA_CLIENT: 'local-cli',
+      KERNEL_PORT: '4100',
+      AUTH_ORIGIN: 'http://localhost:4300',
+    },
+    fetchDumps: async () => ({
+      cacheRoot: '/shared/dumps',
+      bangumi: '/shared/dumps/bangumi',
+      vndb: '/shared/dumps/vndb',
+      bangumiArchive: '/shared/dumps/bangumi.zip',
+      vndbArchive: '/shared/dumps/vndb.tar.zst',
+    }),
+    runSeed: async (argv) => {
+      defaultArgs.push(...argv);
+    },
+  });
+  expect(defaultArgs.includes('--vndb-character-vocabulary')).toBe(false);
 });

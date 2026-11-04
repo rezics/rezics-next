@@ -1,6 +1,15 @@
-import { bundledDigest } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import {
+  BATCH_LIMIT,
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchReference,
+  type BatchStatement,
+} from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
+import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { vndbAppearanceRoleCodes } from '@rezics/conversion/vndb-vocabulary';
+import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
 import {
   appearanceRoleConceptUri,
   appearanceRoleSchemeUri,
@@ -13,6 +22,13 @@ import {
   type VndbCharacterTraitPlan,
 } from './vndb-character-traits.ts';
 import type { CrossMediaPlan, CrossMediaPort, CrossMediaTables } from './cross-media-seed.ts';
+import {
+  showcaseDigest,
+  showcaseLimits,
+  showcaseVocabularyExternalId,
+  type ShowcaseVocabularyRequirement,
+} from './showcase-manifest.ts';
+import type { ShowcaseJournal } from './showcase-publication.ts';
 import { VNDB_CHARACTER_TRAIT_DICTIONARY_COLUMNS, VNDB_CHARACTER_TRAIT_PARENT_COLUMNS } from './vndb-tables.ts';
 
 const CODE = /^i[1-9][0-9]*$/u;
@@ -21,6 +37,17 @@ const SELECTED_WORK_CAP = 64;
 const PARENT_EDGE_CAP = 256;
 const PARENT_DEPTH_CAP = 12;
 const GAP_CAP = 32;
+const adapterRevision = 'vndb-character-vocabulary@1';
+const schemeCitation = {
+  [characterTraitTaxonomy]: 'https://vndb.org/i',
+  [appearanceRoleTaxonomy]: 'https://vndb.org/c',
+} as const;
+const schemeLabel = {
+  [characterTraitTaxonomy]: 'VNDB character traits',
+  [appearanceRoleTaxonomy]: 'VNDB appearance roles',
+} as const;
+type LabelLanguage = 'en' | 'ja' | 'zh-Hant';
+type CharacterTaxonomy = typeof characterTraitTaxonomy | typeof appearanceRoleTaxonomy;
 
 export type ShowcaseCharacterTerm = Readonly<{
   provider: 'vndb';
@@ -43,6 +70,7 @@ export type VndbCharacterVocabularyRequirements = Readonly<{
   selectedWorkIds: readonly string[];
   terms: readonly ShowcaseCharacterTerm[];
   parents: readonly ShowcaseCharacterParent[];
+  associatedCodes: readonly string[];
 }>;
 
 /** IDs are only lookup hints. composeVndbCharacterVocabularyBindings verifies every current public subject. */
@@ -54,6 +82,12 @@ export type VndbCharacterVocabularyProfile = Readonly<{
 export type ShowcaseCharacterVocabularyPlan = Readonly<{
   plan: VndbCharacterTraitPlan;
   requirements: VndbCharacterVocabularyRequirements;
+}>;
+
+export type ShowcaseCharacterVocabularyPublication = Readonly<{
+  requirements: ShowcaseVocabularyRequirement[];
+  bindings: SourceVocabularyBindings;
+  truncated: boolean;
 }>;
 
 function ensure(value: unknown, message: string): asserts value {
@@ -252,25 +286,80 @@ export async function planShowcaseCharacterVocabulary(
   const termCodes = new Set(terms.filter((term) => term.taxonomy === characterTraitTaxonomy).map((term) => term.code));
   const supportedParents = parents.filter((edge) => termCodes.has(edge.childCode) && termCodes.has(edge.parentCode));
   supportedParents.sort((a, b) => a.childCode.localeCompare(b.childCode) || a.parentCode.localeCompare(b.parentCode));
-  return { plan, requirements: { selectedWorkIds: works, terms, parents: supportedParents } };
+  return {
+    plan,
+    requirements: {
+      selectedWorkIds: works,
+      terms,
+      parents: supportedParents,
+      associatedCodes: [...observedTraits, ...observedRoles.keys()].sort(),
+    },
+  };
 }
 
-/** Resolve only selected term IDs, then verify their current public type, URI and adopted scheme membership. */
+function emptyBindings(): SourceVocabularyBindings {
+  return { releaseDigest: bundledDigest, schemes: [], concepts: [] };
+}
+
+function adoptedValues(read: unknown, property: string): string[] {
+  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
+    .subject?.statements?.[property];
+  if (!Array.isArray(statements)) return [];
+  return statements.flatMap((statement) => (typeof statement.value?.content === 'string' ? [statement.value.content] : []));
+}
+
+async function withholdContradictoryTraitParents(
+  port: Pick<CrossMediaPort, 'readReviewedSubject'>,
+  bindings: SourceVocabularyBindings,
+  parents: readonly ShowcaseCharacterParent[],
+): Promise<SourceVocabularyBindings> {
+  if (!parents.length) return bindings;
+  const byCode = new Map(
+    bindings.concepts.filter((concept) => concept.taxonomy === characterTraitTaxonomy).map((concept) => [concept.code, concept]),
+  );
+  const omitted = new Set<string>();
+  for (const edge of parents) {
+    if (omitted.has(edge.childCode)) continue;
+    const child = byCode.get(edge.childCode);
+    const parent = byCode.get(edge.parentCode);
+    if (!child || !parent) {
+      if (child) omitted.add(edge.childCode);
+      continue;
+    }
+    let read;
+    try {
+      read = await port.readReviewedSubject(child.id);
+    } catch {
+      omitted.add(edge.childCode);
+      continue;
+    }
+    if (!adoptedValues(read, 'skos:broader').includes(parent.id)) omitted.add(edge.childCode);
+  }
+  if (!omitted.size) return bindings;
+  return {
+    ...bindings,
+    concepts: bindings.concepts.filter(
+      (concept) => concept.taxonomy !== characterTraitTaxonomy || !omitted.has(concept.code),
+    ),
+  };
+}
+
+/** Resolve only selected term IDs, then verify their current public type, URI, adopted scheme membership and taxonomy parents. */
 export async function composeVndbCharacterVocabularyBindings(
   port: Pick<CrossMediaPort, 'readReviewedSubject'>,
   profile: VndbCharacterVocabularyProfile | undefined,
   requirements: VndbCharacterVocabularyRequirements,
 ): Promise<SourceVocabularyBindings> {
-  if (!profile) return { releaseDigest: bundledDigest, schemes: [], concepts: [] };
+  if (!profile) return emptyBindings();
   const traits = new Set(
     requirements.terms.filter((term) => term.taxonomy === characterTraitTaxonomy).map((term) => term.code),
   );
   const roles = new Set(
     requirements.terms.filter((term) => term.taxonomy === appearanceRoleTaxonomy).map((term) => term.code),
   );
-  if (!traits.size && !roles.size) return { releaseDigest: bundledDigest, schemes: [], concepts: [] };
-  return readVndbCharacterVocabularyBindings(port, {
-    ...(traits.size
+  if (!traits.size && !roles.size) return emptyBindings();
+  const bindings = await readVndbCharacterVocabularyBindings(port, {
+    ...(traits.size && profile.traits
       ? {
           traits: {
             schemeId: profile.traits.schemeId,
@@ -278,7 +367,7 @@ export async function composeVndbCharacterVocabularyBindings(
           },
         }
       : {}),
-    ...(roles.size
+    ...(roles.size && profile.roles
       ? {
           roles: {
             schemeId: profile.roles.schemeId,
@@ -287,4 +376,352 @@ export async function composeVndbCharacterVocabularyBindings(
         }
       : {}),
   });
+  return withholdContradictoryTraitParents(port, bindings, requirements.parents);
+}
+
+function ownerKeyFor(plan: CrossMediaPlan, selectedWorkIds: readonly string[]): string | undefined {
+  const selected = new Set(selectedWorkIds);
+  return [...plan.records.vndb, ...plan.entities.vndb].find((row) => selected.has(row.key))?.key;
+}
+
+function vocabularyKey(taxonomy: CharacterTaxonomy, code?: string): string {
+  return code === undefined ? taxonomy : `${taxonomy}:${code}`;
+}
+
+function sourceNameLanguage(name: string): LabelLanguage {
+  if (/[\u3040-\u30ff]/u.test(name)) return 'ja';
+  if (/\p{Script=Han}/u.test(name)) return 'zh-Hant';
+  return 'en';
+}
+
+function sourceFor(sourceKey: string, uri: string, citations: readonly string[]) {
+  return sourceEnvelope(
+    {
+      source: 'vndb_cross_media',
+      external_id: showcaseVocabularyExternalId(sourceKey),
+      record_revision: null,
+      converter_revision: adapterRevision,
+      digest: sourceDigest({ sourceKey, uri, citations, adapterRevision }),
+    },
+    'facts',
+  );
+}
+
+function references(uri: string, citation: string): BatchReference[] {
+  return [
+    {
+      parts: [uri, citation].map((content) => ({
+        property: { id: 'schema:url' },
+        value: { type: 'value' as const, content },
+      })),
+    },
+  ];
+}
+
+function termCitation(term: ShowcaseCharacterTerm): string {
+  if (term.taxonomy === characterTraitTaxonomy) return vndbRecordUrl(term.code);
+  const match = /^\/chars_vns\/c[1-9][0-9]*\/(v[1-9][0-9]*)$/u.exec(term.sourcePath);
+  return match ? vndbRecordUrl(match[1]!) : vndbRecordUrl(term.code);
+}
+
+function requirementFor(
+  ownerKey: string,
+  sourceKey: string,
+  sourceUri: string,
+  citation: string,
+  nativeType: 'skos:ConceptScheme' | 'skos:Concept',
+  schemeId?: string,
+): ShowcaseVocabularyRequirement {
+  return {
+    provider: 'vndb',
+    ownerKey,
+    sourceKey,
+    source: sourceFor(sourceKey, sourceUri, [sourceUri, citation]),
+    sourceUri,
+    nativeType,
+    ...(schemeId ? { schemeId } : {}),
+  };
+}
+
+function vocabularyCommands(input: {
+  sourceKey: string;
+  sourceUri: string;
+  citation: string;
+  nativeType: 'skos:ConceptScheme' | 'skos:Concept';
+  labels: Record<string, string>;
+  schemeId?: string;
+  broaderIds?: readonly string[];
+  subjectId?: string;
+}): BatchCommand[] {
+  const source = sourceFor(input.sourceKey, input.sourceUri, [input.sourceUri, input.citation]);
+  const create: BatchCommand = {
+    op: 'create',
+    key: `vndb-character-vocabulary:${commandKey([JSON.stringify(source), 'create', input.nativeType, JSON.stringify(input.labels)])}`,
+    source,
+    subject: { type: input.nativeType, labels: input.labels },
+  };
+  const subjectId = input.subjectId;
+  if (!subjectId) return [create];
+  const statements: BatchStatement[] = [
+    {
+      property: { id: 'schema:url' },
+      value: { type: 'value', content: input.sourceUri },
+      references: references(input.sourceUri, input.citation),
+    },
+  ];
+  if (input.nativeType === 'skos:Concept' && input.schemeId) {
+    statements.push({
+      property: { id: 'skos:inScheme' },
+      value: { type: 'value', content: input.schemeId },
+      references: references(input.sourceUri, input.citation),
+    });
+  }
+  if (input.nativeType === 'skos:Concept')
+    for (const broaderId of input.broaderIds ?? [])
+      statements.push({
+        property: { id: 'skos:broader' },
+        value: { type: 'value', content: broaderId },
+        references: references(input.sourceUri, input.citation),
+      });
+  return statements.map((statement) => ({
+    op: 'propose' as const,
+    key: `vndb-character-vocabulary:${commandKey([JSON.stringify(source), subjectId, 'propose', JSON.stringify(statement)])}`,
+    source,
+    subject: subjectId,
+    statement,
+  }));
+}
+
+function ackedCreates(journal: ShowcaseJournal): Map<string, string> {
+  return new Map(
+    journal
+      .acknowledgedCommands()
+      .flatMap((ack) =>
+        ack.command.op === 'create' &&
+        ack.subjectId &&
+        ack.command.source.source === 'vndb_cross_media' &&
+        ack.command.source.converter_revision === adapterRevision
+          ? [[ack.command.source.external_id, ack.subjectId] as const]
+          : [],
+      ),
+  );
+}
+
+async function sendMissing(input: {
+  port: Pick<CrossMediaPort, 'batch'>;
+  journal: ShowcaseJournal;
+  commands: readonly BatchCommand[];
+}): Promise<void> {
+  const acknowledged = new Map(input.journal.acknowledgedCommands().map((ack) => [ack.command.key, ack.commandDigest]));
+  const commands = input.commands.filter((command) => {
+    const digest = acknowledged.get(command.key);
+    if (digest === undefined) return true;
+    if (digest !== showcaseDigest(command))
+      throw new TypeError('VNDB character vocabulary ACK changed its command body');
+    return false;
+  });
+  for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
+    const page = commands.slice(offset, offset + BATCH_LIMIT);
+    if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
+      throw new TypeError('VNDB character vocabulary commands failed portable validation');
+    await input.port.batch({ commands: [...page] });
+  }
+}
+
+function neededSchemes(terms: readonly ShowcaseCharacterTerm[]): CharacterTaxonomy[] {
+  const seen = new Set<CharacterTaxonomy>();
+  for (const term of terms) seen.add(term.taxonomy);
+  return [...seen].sort();
+}
+
+function identityProfile(requirements: VndbCharacterVocabularyRequirements, journal: ShowcaseJournal): VndbCharacterVocabularyProfile {
+  const creates = ackedCreates(journal);
+  const traitSchemeId = creates.get(showcaseVocabularyExternalId(vocabularyKey(characterTraitTaxonomy)));
+  const roleSchemeId = creates.get(showcaseVocabularyExternalId(vocabularyKey(appearanceRoleTaxonomy)));
+  const traits = requirements.terms.flatMap((term) => {
+    if (term.taxonomy !== characterTraitTaxonomy) return [];
+    const id = creates.get(showcaseVocabularyExternalId(vocabularyKey(term.taxonomy, term.code)));
+    return id ? [{ code: term.code, id }] : [];
+  });
+  const roles = requirements.terms.flatMap((term) => {
+    if (term.taxonomy !== appearanceRoleTaxonomy) return [];
+    const id = creates.get(showcaseVocabularyExternalId(vocabularyKey(term.taxonomy, term.code)));
+    return id ? [{ code: term.code, id }] : [];
+  });
+  return {
+    ...(traitSchemeId ? { traits: { schemeId: traitSchemeId, concepts: traits } } : {}),
+    ...(roleSchemeId ? { roles: { schemeId: roleSchemeId, concepts: roles } } : {}),
+  };
+}
+
+/** Map journal-acknowledged vocabulary identities into the optional profile-file shape. */
+export function profileFromCharacterVocabularyBindings(
+  bindings: SourceVocabularyBindings,
+): VndbCharacterVocabularyProfile | undefined {
+  const traitScheme = bindings.schemes.find((scheme) => scheme.taxonomy === characterTraitTaxonomy);
+  const roleScheme = bindings.schemes.find((scheme) => scheme.taxonomy === appearanceRoleTaxonomy);
+  if (!traitScheme && !roleScheme) return undefined;
+  return {
+    ...(traitScheme
+      ? {
+          traits: {
+            schemeId: traitScheme.id,
+            concepts: bindings.concepts
+              .filter((concept) => concept.taxonomy === characterTraitTaxonomy)
+              .map((concept) => ({ code: concept.code, id: concept.id })),
+          },
+        }
+      : {}),
+    ...(roleScheme
+      ? {
+          roles: {
+            schemeId: roleScheme.id,
+            concepts: bindings.concepts
+              .filter((concept) => concept.taxonomy === appearanceRoleTaxonomy)
+              .map((concept) => ({ code: concept.code, id: concept.id })),
+          },
+        }
+      : {}),
+  };
+}
+
+function truncatedFrom(plan: VndbCharacterTraitPlan): boolean {
+  return plan.gaps.some((gap) => gap.reason.includes('parent closure exceeded'));
+}
+
+/** Stage only trait/role schemes then Concepts demanded by selected character rows. */
+export async function prepareShowcaseCharacterVocabulary(input: {
+  tables: CrossMediaTables;
+  selectedPlan: CrossMediaPlan;
+  port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'>;
+  journal: ShowcaseJournal;
+  stage: 'schemes' | 'concepts';
+}): Promise<ShowcaseCharacterVocabularyPublication> {
+  const vocabulary = await planShowcaseCharacterVocabulary(input.tables, input.selectedPlan);
+  const ownerKey = ownerKeyFor(input.selectedPlan, vocabulary.requirements.selectedWorkIds);
+  if (!ownerKey || !vocabulary.requirements.terms.length)
+    return { requirements: [], bindings: emptyBindings(), truncated: truncatedFrom(vocabulary.plan) };
+  const schemes = neededSchemes(vocabulary.requirements.terms);
+  const schemeCommands = schemes.flatMap((taxonomy) =>
+    vocabularyCommands({
+      sourceKey: vocabularyKey(taxonomy),
+      sourceUri: taxonomy === characterTraitTaxonomy ? characterTraitSchemeUri : appearanceRoleSchemeUri,
+      citation: schemeCitation[taxonomy],
+      nativeType: 'skos:ConceptScheme',
+      labels: { en: schemeLabel[taxonomy] },
+    }),
+  );
+  if (schemeCommands.length) await sendMissing({ port: input.port, journal: input.journal, commands: schemeCommands });
+  const schemeCreates = ackedCreates(input.journal);
+  const schemeProposals = schemes.flatMap((taxonomy) => {
+    const subjectId = schemeCreates.get(showcaseVocabularyExternalId(vocabularyKey(taxonomy)));
+    return subjectId
+      ? vocabularyCommands({
+          sourceKey: vocabularyKey(taxonomy),
+          sourceUri: taxonomy === characterTraitTaxonomy ? characterTraitSchemeUri : appearanceRoleSchemeUri,
+          citation: schemeCitation[taxonomy],
+          nativeType: 'skos:ConceptScheme',
+          labels: { en: schemeLabel[taxonomy] },
+          subjectId,
+        })
+      : [];
+  });
+  if (schemeProposals.length) await sendMissing({ port: input.port, journal: input.journal, commands: schemeProposals });
+  const schemeRequirements = schemes.map((taxonomy) =>
+    requirementFor(
+      ownerKey,
+      vocabularyKey(taxonomy),
+      taxonomy === characterTraitTaxonomy ? characterTraitSchemeUri : appearanceRoleSchemeUri,
+      schemeCitation[taxonomy],
+      'skos:ConceptScheme',
+    ),
+  );
+  const profile = identityProfile(vocabulary.requirements, input.journal);
+  if (input.stage === 'schemes')
+    return {
+      requirements: schemeRequirements,
+      bindings: await composeVndbCharacterVocabularyBindings(input.port, profile, vocabulary.requirements),
+      truncated: truncatedFrom(vocabulary.plan),
+    };
+
+  const current = await composeVndbCharacterVocabularyBindings(input.port, profile, vocabulary.requirements);
+  const currentSchemes = new Map(current.schemes.map((entry) => [entry.taxonomy, entry.id]));
+  const budget = Math.max(0, showcaseLimits.vocabulary - schemeRequirements.length);
+  const associatedCodes = new Set(vocabulary.requirements.associatedCodes);
+  const admitted = vocabulary.requirements.terms.filter((term) => currentSchemes.has(term.taxonomy));
+  const associated = admitted.filter((term) => associatedCodes.has(term.code));
+  const parentTerms = admitted.filter((term) => !associatedCodes.has(term.code));
+  const conceptEntries = [...associated, ...parentTerms].slice(0, budget);
+  const truncated = truncatedFrom(vocabulary.plan) || admitted.length > conceptEntries.length;
+  const conceptCommands = conceptEntries.flatMap((term) =>
+    vocabularyCommands({
+      sourceKey: vocabularyKey(term.taxonomy, term.code),
+      sourceUri: term.uri,
+      citation: termCitation(term),
+      nativeType: 'skos:Concept',
+      labels: { [sourceNameLanguage(term.label)]: term.label },
+    }),
+  );
+  if (conceptCommands.length) await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
+  const conceptCreates = ackedCreates(input.journal);
+  const parentIds = new Map<string, string[]>();
+  for (const edge of vocabulary.requirements.parents) {
+    const parentId = conceptCreates.get(
+      showcaseVocabularyExternalId(vocabularyKey(characterTraitTaxonomy, edge.parentCode)),
+    );
+    if (!parentId) continue;
+    const existing = parentIds.get(edge.childCode) ?? [];
+    if (!existing.includes(parentId)) parentIds.set(edge.childCode, [...existing, parentId]);
+  }
+  const conceptProposals = conceptEntries.flatMap((term) => {
+    const subjectId = conceptCreates.get(showcaseVocabularyExternalId(vocabularyKey(term.taxonomy, term.code)));
+    const schemeId = currentSchemes.get(term.taxonomy);
+    return subjectId && schemeId
+      ? vocabularyCommands({
+          sourceKey: vocabularyKey(term.taxonomy, term.code),
+          sourceUri: term.uri,
+          citation: termCitation(term),
+          nativeType: 'skos:Concept',
+          labels: { [sourceNameLanguage(term.label)]: term.label },
+          schemeId,
+          ...(term.taxonomy === characterTraitTaxonomy && parentIds.has(term.code)
+            ? { broaderIds: parentIds.get(term.code) }
+            : {}),
+          subjectId,
+        })
+      : [];
+  });
+  if (conceptProposals.length)
+    await sendMissing({ port: input.port, journal: input.journal, commands: conceptProposals });
+  const conceptRequirements = conceptEntries.map((term) =>
+    requirementFor(
+      ownerKey,
+      vocabularyKey(term.taxonomy, term.code),
+      term.uri,
+      termCitation(term),
+      'skos:Concept',
+      currentSchemes.get(term.taxonomy),
+    ),
+  );
+  const resolved = identityProfile(vocabulary.requirements, input.journal);
+  return {
+    requirements: [...schemeRequirements, ...conceptRequirements],
+    bindings: await composeVndbCharacterVocabularyBindings(input.port, resolved, vocabulary.requirements),
+    truncated,
+  };
+}
+
+/** Resolve only journal-acknowledged UUIDs after exact current public vocabulary checks. */
+export async function readShowcaseCharacterVocabulary(input: {
+  tables: CrossMediaTables;
+  selectedPlan: CrossMediaPlan;
+  port: Pick<CrossMediaPort, 'readReviewedSubject'>;
+  journal: ShowcaseJournal;
+}): Promise<SourceVocabularyBindings> {
+  const vocabulary = await planShowcaseCharacterVocabulary(input.tables, input.selectedPlan);
+  return composeVndbCharacterVocabularyBindings(
+    input.port,
+    identityProfile(vocabulary.requirements, input.journal),
+    vocabulary.requirements,
+  );
 }

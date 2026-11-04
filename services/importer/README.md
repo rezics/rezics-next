@@ -1518,6 +1518,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: existing source-vocabulary row/command/gap caps (64/100/64) and sequential CrossMedia seed conversion so appearance rows reuse already bound character identities. No catalogue scan, voter, identity-merge or classification write.
 - Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
 
+### Default VNDB character-trait showcase seed
+
+- Touches: streamed `traits`, `traits_parents`, `chars_traits` and `chars_vns` COPY rows for the selected family, at most 64 works, 64 trait associations, 64 appearances, 256 parent edges through depth 12, dictionary ConceptScheme/Concept create and `schema:url`/`skos:inScheme`/`skos:broader` proposals through the existing importer and showcase journal, current disclosed scheme/concept point reads, admitted `schema:keywords`/`schema:character` associations, and the common publishShowcase accept/adopt/public-read path. Gender variants, BWH and birthday cells stay unprojected.
+- Bound: O(file bytes) stream plus O((W+T+A+P+V) log R) importer work for selected works W, closed dictionary T, associations A, parent edges P≤256 and vocabulary records V≤512. Dictionary schemes publish before Concepts; current type/`schema:url`/`skos:inScheme` and taxonomy-parent `skos:broader` are reread before association admission. Deduplicated current reads stay inside their existing freshness lifetime. Unrelated VN/character/trait rows are not materialized. No catalogue scan or identity merge.
+- Growth check: `tests/showcase-character-vocabulary.test.ts` covers default dictionary publication without a UUID file, spoiler-qualified associations, lying/release-qualified withholding, retracted URI/inScheme/parent contradiction and parent-closure overflow, plus refresh identity. The connected native file `services/kernel/test/imports/showcase-character-vocabulary.test.ts` is registered and not executed in this attempt.
+
 ### Import VNDB character height and weight
 
 - Touches: the selected-family `chars` COPY row already acquired for appearance, existing identity bootstrap/proposals, and independent accept/adopt/read of `schema:height` and `schema:weight`.
@@ -2471,38 +2477,24 @@ VNDB source namespace, selects only characters attached to the chosen VNDB
 family works, and imports supported traits as `schema:keywords` and appearances
 as `schema:character` with the exact role Concept and source spoiler level.
 Association citations retain their table keys. False-positive, unsupported,
-missing-qualifier, and release-scoped rows remain review gaps. The adapter
-publishes finite trait, role, and bounded parent-closure requirements in the
-cross-media result manifest for the common vocabulary publisher.
+missing-qualifier, and release-scoped rows remain review gaps. Default
+`task seed:dev` publishes the bounded needed trait dictionary, parent closure
+and admitted appearance-role terms through the current importer and the common
+journal, rereads current native type/`schema:url`/`skos:inScheme`/`skos:broader`,
+and only then admits exact character and per-work associations. Optional
+`--vndb-character-vocabulary` / `REZICS_DEV_VNDB_CHARACTER_VOCABULARY` remains
+an explicit UUID override; adopted usable bindings are those the current public
+read actually discloses. Publication consumes the finite vocabulary records and
+exact source URIs from this adapter; it does not invent another vocabulary
+publisher. Trait labels use the exact `traits.name` (ja when kana is present,
+zh-Hant when Han is present without kana, otherwise en) and never a minted
+translation. Mapping revisions stay `character-trait@1` and `appearance-role@1`
+on those associations; vocabulary create/propose identity uses
+`vndb-character-vocabulary@1`.
 
-Decision: vocabulary profile UUIDs are lookup hints only; the publication worker emits them after acknowledgement, and the importer rereads each selected Scheme and Concept from current public state before use.
+Decision: vocabulary profile UUIDs are lookup hints only; the default seed emits them after acknowledgement, and the importer rereads each selected Scheme and Concept from current public state before use.
 
-The development seed reads an optional profile path from
-`REZICS_DEV_VNDB_CHARACTER_VOCABULARY`. The common publisher consumes
-`characterVocabulary.requirements` from the result manifest and emits
-`traits.schemeId`, `traits.concepts[{code,id}]`, `roles.schemeId`, and
-`roles.concepts[{code,id}]` only after native command acknowledgement. The
-consumer checks adopted source URIs, Concept types, scheme membership, and the
-bundled release through the existing VNDB admission helper. An absent or stale
-profile withholds only the affected facts; it does not resolve labels or infer
-VNDB/Bangumi character identity. After publishing the profile, rerun the default
-seed with its path in the environment variable.
-
-- Touches: verified archive headers; at most 64 selected VNDB works, 64 trait
-  associations, 64 appearance associations, and 256 parent edges through depth
-  12; existing identity, vocabulary-admission, source-journal, and public-read
-  paths.
-- Bound: dictionary and association files stream through the dump adapter;
-  selected trait closure, diagnostics, and current source bindings are capped.
-  Only selected term IDs are reread, with no catalogue label scan. Missing
-  qualifiers withhold the whole association, and independent provider
-  identities remain separate.
-- Growth check: `tests/showcase-character-vocabulary.test.ts` covers default
-  family planning, COPY-shaped rows, bounded parent closure, unsupported roles,
-  and selected current bindings. The ordinary native public-read scenario is
-  `../kernel/test/imports/showcase-character-vocabulary.test.ts`. These focused
-  tests make no physical-growth claim; broader native acceptance remains
-  controller-owned.
+Decision: bounded `traits_parents` edges publish as `skos:broader` on the child Concept; a later URI, type, inScheme or taxonomy-parent contradiction withholds only that term and leaves independently admitted character names and blood-type facts intact.
 
 ### Bangumi person biographies
 
