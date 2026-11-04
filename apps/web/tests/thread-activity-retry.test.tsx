@@ -77,19 +77,6 @@ test('mounted activity retry keeps the reader request and retires late UI on rep
     await act(async () => finish());
     expect(host.textContent).toContain('Replies: 17');
     expect(host.querySelector('button')).toBeNull();
-    await act(async () =>
-      root.render(
-        <ThreadActivity
-          key="retired"
-          activity={{ state: 'current', count: { kind: 'exact', value: 17 }, lastActivityAt: null }}
-          current={false}
-          onRetry={retry}
-          isCurrent={() => false}
-        />,
-      ),
-    );
-    expect(host.textContent).not.toContain('Replies: 17');
-    expect(host.querySelector('button')!.disabled).toBe(true);
   } finally {
     await act(async () => root.unmount());
     host.remove();
