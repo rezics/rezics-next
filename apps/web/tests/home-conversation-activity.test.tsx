@@ -76,7 +76,10 @@ test('Home retries the exact failed frontier and retires late activity after sel
   await retry.load({ stream: 'home', cursor });
   expect(retry.snapshot().input).toEqual({ stream: 'home', cursor });
   await retry.load(retry.snapshot().input);
-  expect(calls).toEqual([{ stream: 'home', cursor }, { stream: 'home', cursor }]);
+  expect(calls).toEqual([
+    { stream: 'home', cursor },
+    { stream: 'home', cursor },
+  ]);
 
   let resolve!: (result: HomeFeedResult) => void;
   const window = createHomeFeedWindow(ready, () => new Promise((done) => (resolve = done)));
