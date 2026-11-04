@@ -78,7 +78,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   const { createRoot } = await import('react-dom/client');
   const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useBlocker } =
     await import('@tanstack/react-router');
-  const { deLocalizeUrl, getLocale, localizeUrl, setLocale } = await import('../src/paraglide/runtime.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const { LocaleNavigationProvider } = await import('../src/shell/locale-navigation/context');
   const { AppearanceControls } = await import('../src/shell/appearance-controls');
   const storybook = createRequire(require.resolve('storybook/test'));
@@ -123,7 +123,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   });
   const subjectRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: '/subjects/$id',
+    path: '/$locale/subjects/$id',
     loader: () => {
       admissions.push(getLocale());
     },
@@ -132,7 +132,6 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   const router = createRouter({
     routeTree: rootRoute.addChildren([subjectRoute]),
     history: createBrowserHistory(),
-    rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   setLocale('en', { reload: false });
   const root = createRoot(host);
@@ -223,7 +222,7 @@ test('navigation failure offers the current safe reader and an obsolete completi
     japanese.focus();
     await act(async () => user.keyboard('{Enter}'));
     const failure = await body.findByRole('alert');
-    expect(failure.textContent).toContain('Japanese');
+    expect(failure.textContent).toContain('日本語');
     expect(failure.querySelector('a')?.getAttribute('href')).toBe(entry);
     expect(window.document.cookie).toContain('rezics_locale=en');
 
