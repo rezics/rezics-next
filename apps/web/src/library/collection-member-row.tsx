@@ -12,6 +12,8 @@ import { pageText } from '../features/pages/shared';
 import { libraryTitleValue } from './title';
 import {
   collectionViewerFactForMember,
+  collectionViewerActionsState,
+  collectionViewerHasPersonalAction,
   collectionViewerVoteCurrent,
   type CollectionViewerMember,
   type CollectionViewerProjection,
@@ -170,7 +172,16 @@ export function CollectionMemberViewerDetails({
           )}
         </>
       ) : null}
-      {actionHref ? (
+      {projection.state === 'current' ? (
+        <p className="text-muted-foreground" data-viewer-actions={collectionViewerActionsState(row)}>
+          {collectionViewerActionsState(row) === 'unavailable'
+            ? m.collection_viewer_actions_unavailable()
+            : !collectionViewerHasPersonalAction(row, question)
+              ? m.collection_viewer_no_actions()
+              : null}
+        </p>
+      ) : null}
+      {actionHref && projection.state === 'current' && collectionViewerHasPersonalAction(row, question) ? (
         <a
           href={actionHref}
           className="inline-flex min-h-11 max-w-full items-center text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

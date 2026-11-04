@@ -918,6 +918,8 @@
   "collection_viewer_unavailable": "Your private Library facts are unavailable.",
   "collection_viewer_entry_unavailable": "Your Entry state is unavailable.",
   "collection_viewer_score_unavailable": "Your personal rating is unavailable.",
+  "collection_viewer_actions_unavailable": "Your personal controls are unavailable.",
+  "collection_viewer_no_actions": "No personal actions are currently available.",
   "collection_viewer_action": "Open your Library controls",
   "library_entry_copies": "Copies",
   "library_entry_progress": "Reading progress",

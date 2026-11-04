@@ -908,6 +908,8 @@
   "collection_viewer_unavailable": "あなたの非公開ライブラリ情報を利用できません。",
   "collection_viewer_entry_unavailable": "エントリーの状態を利用できません。",
   "collection_viewer_score_unavailable": "あなたの評価を利用できません。",
+  "collection_viewer_actions_unavailable": "個人用の操作を利用できません。",
+  "collection_viewer_no_actions": "現在利用できる個人用の操作はありません。",
   "collection_viewer_action": "ライブラリの操作を開く",
   "library_entry_copies": "コピー",
   "library_entry_progress": "読書の進捗",

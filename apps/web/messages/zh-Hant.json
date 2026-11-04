@@ -908,6 +908,8 @@
   "collection_viewer_unavailable": "你的私人收藏庫資訊暫時無法使用。",
   "collection_viewer_entry_unavailable": "你的條目狀態暫時無法使用。",
   "collection_viewer_score_unavailable": "你的個人評分暫時無法使用。",
+  "collection_viewer_actions_unavailable": "你的個人操作暫時無法使用。",
+  "collection_viewer_no_actions": "目前沒有可用的個人操作。",
   "collection_viewer_action": "開啟你的收藏庫操作",
   "library_entry_copies": "複本",
   "library_entry_progress": "閱讀進度",

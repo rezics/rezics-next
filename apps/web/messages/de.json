@@ -908,6 +908,8 @@
   "collection_viewer_unavailable": "Deine privaten Bibliotheksdaten sind nicht verfügbar.",
   "collection_viewer_entry_unavailable": "Der Status deines Eintrags ist nicht verfügbar.",
   "collection_viewer_score_unavailable": "Deine persönliche Bewertung ist nicht verfügbar.",
+  "collection_viewer_actions_unavailable": "Deine persönlichen Aktionen sind nicht verfügbar.",
+  "collection_viewer_no_actions": "Derzeit sind keine persönlichen Aktionen verfügbar.",
   "collection_viewer_action": "Bibliothekssteuerung öffnen",
   "library_entry_copies": "Exemplare",
   "library_entry_progress": "Lesefortschritt",
