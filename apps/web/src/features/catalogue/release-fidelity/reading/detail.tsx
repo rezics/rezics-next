@@ -46,17 +46,16 @@ export function ReleaseSelectedDetail({
 }) {
   const read = page.read;
   const o = { locale: locale as never };
-  const summaryLabels = row?.summary?.label
-    ? { [row.summary.label.language]: row.summary.label.value }
-    : {};
+  const summaryLabels = row?.summary?.label ? { [row.summary.label.language]: row.summary.label.value } : {};
   const heading = pickText(detail?.subject.labels ?? summaryLabels, locale);
   const type = detail ? pickText(read.release.types[detail.subject.type]?.labels ?? {}, locale) : undefined;
   const scalar = detail ? { release: read.release, public: { related: detail.related } } : undefined;
-  const facts = detail && isReleaseType(read.release, detail.subject.type)
-    ? releaseGroups(read.release, detail.subject.type)
-    : undefined;
+  const facts =
+    detail && isReleaseType(read.release, detail.subject.type)
+      ? releaseGroups(read.release, detail.subject.type)
+      : undefined;
   const groups = facts
-    ? [
+    ? ([
         ['work', facts.work],
         ['classification', facts.classification],
         ['credits', facts.credits],
@@ -64,7 +63,7 @@ export function ReleaseSelectedDetail({
         ['identifiers', facts.identifiers],
         ['facts', facts.facts],
         ['relations', facts.relations],
-      ] as const
+      ] as const)
     : [];
   const displayGroups = groups.flatMap(([id, properties]) => {
     const rows = properties.flatMap((property) => {
@@ -98,7 +97,11 @@ export function ReleaseSelectedDetail({
         <p className="break-words" lang={heading.lang ?? undefined}>
           {heading.text || m.subject_value_unlabelled({}, o)}
         </p>
-        {type?.text && <p className="text-sm text-muted-foreground" lang={type.lang ?? undefined}>{type.text}</p>}
+        {type?.text && (
+          <p className="text-sm text-muted-foreground" lang={type.lang ?? undefined}>
+            {type.text}
+          </p>
+        )}
         <p className="text-sm text-muted-foreground" data-slot="release-selected-occurrence">
           {m.release_fidelity_selected_relation({}, o)}
         </p>
@@ -106,9 +109,7 @@ export function ReleaseSelectedDetail({
 
       {row?.statement && (
         <section className="min-w-0 space-y-3" data-slot="release-occurrence-evidence">
-          <h4 className="font-semibold">
-            {propertyLabel(read, occurrence.relation, locale)}
-          </h4>
+          <h4 className="font-semibold">{propertyLabel(read, occurrence.relation, locale)}</h4>
           <PropertyStatement
             property={occurrence.relation}
             statement={row.statement}
@@ -135,9 +136,7 @@ export function ReleaseSelectedDetail({
           {displayGroups.length ? (
             displayGroups.map((group) => (
               <section key={group.id} className="min-w-0 space-y-3">
-                <h4 className="font-semibold">
-                  {groupLabel(group.id)}
-                </h4>
+                <h4 className="font-semibold">{groupLabel(group.id)}</h4>
                 {group.rows.map((fact) => (
                   <div key={fact.property} className="min-w-0 space-y-2 rounded-md border p-3">
                     <p className="break-words text-sm text-muted-foreground" lang={fact.label.lang ?? undefined}>
@@ -191,9 +190,7 @@ export function ReleaseSelectedDetail({
       {detail && !facts && <p role="status">{m.release_fidelity_not_release({}, o)}</p>}
       {detail?.subject.sourceRecords.length ? (
         <section className="min-w-0 space-y-2">
-          <h4 className="font-semibold">
-            {m.release_fidelity_sources({}, o)}
-          </h4>
+          <h4 className="font-semibold">{m.release_fidelity_sources({}, o)}</h4>
           <ul className="space-y-2">
             {detail.subject.sourceRecords.map((source) => (
               <li key={source.url} className="min-w-0">
@@ -201,7 +198,9 @@ export function ReleaseSelectedDetail({
                   {source.name}
                 </a>
                 {source.licence?.id && <p className="break-words text-sm text-muted-foreground">{source.licence.id}</p>}
-                {source.attribution && <p className="break-words text-sm text-muted-foreground">{source.attribution}</p>}
+                {source.attribution && (
+                  <p className="break-words text-sm text-muted-foreground">{source.attribution}</p>
+                )}
               </li>
             ))}
           </ul>
@@ -263,7 +262,11 @@ function SafePartValue({
   locale: string;
 }) {
   const definition = read.release.properties[part.property.id];
-  if (definition?.datatype === 'wikibase-item' && part.value.type === 'value' && typeof part.value.content === 'string') {
+  if (
+    definition?.datatype === 'wikibase-item' &&
+    part.value.type === 'value' &&
+    typeof part.value.content === 'string'
+  ) {
     const visibility = relatedReadable(read.public.related, part.value.content);
     if (visibility !== 'readable') {
       const o = { locale: locale as never };
@@ -285,7 +288,11 @@ function ReleaseDateValue({ value, locale }: { value: unknown; locale: string })
   if (reading.state === 'somevalue') return m.release_fidelity_date_tba({}, o);
   if (reading.state === 'novalue') return m.release_fidelity_date_none({}, o);
   return reading.state === 'supported' ? (
-    reading.structuredDate ? <time dateTime={reading.structuredDate}>{reading.text}</time> : reading.text
+    reading.structuredDate ? (
+      <time dateTime={reading.structuredDate}>{reading.text}</time>
+    ) : (
+      reading.text
+    )
   ) : (
     reading.text
   );

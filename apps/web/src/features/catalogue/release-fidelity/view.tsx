@@ -175,7 +175,8 @@ function ReleaseFidelityLive({
   const streamFailure =
     !!read?.stream && ['withheld', 'unsupported', 'unavailable', 'denied'].includes(read.streamState);
   const busy = query.isFetching || reader.kind.startsWith('loading');
-  const readable = !!read && !readFailureState && !streamFailure && !query.isFetching && lifetime.active() && slice.active();
+  const readable =
+    !!read && !readFailureState && !streamFailure && !query.isFetching && lifetime.active() && slice.active();
   const blocker = useCatalogueEditorNavigation(() => !!draft);
   async function startRead(
     intent: ReleaseReadIntent,
@@ -194,7 +195,11 @@ function ReleaseFidelityLive({
       intent.kind === 'selection'
         ? {
             kind: 'selection',
-            page: { ...intent.page, revision, ...(retained?.address.session ? { session: retained.address.session } : {}) },
+            page: {
+              ...intent.page,
+              revision,
+              ...(retained?.address.session ? { session: retained.address.session } : {}),
+            },
             selection: intent.selection,
           }
         : intent;
@@ -219,7 +224,7 @@ function ReleaseFidelityLive({
           const boundary =
             outcome === 'slice'
               ? request.kind === 'selection'
-                ? detailHeading.current ?? sliceStatus.current
+                ? (detailHeading.current ?? sliceStatus.current)
                 : sliceStatus.current
               : readFailure.current;
           return boundary?.closest('[hidden]') ? null : boundary;
@@ -300,8 +305,10 @@ function ReleaseFidelityLive({
     const address = 'admitted' in current ? current.admitted.address : undefined;
     const page = current.kind === 'loading-page' ? current.intent : undefined;
     const selected = intent?.kind === 'selection' ? intent.page : undefined;
-    const stream = address?.stream ?? page?.stream ?? selected?.stream ?? (intent?.kind === 'page' ? intent.stream : undefined);
-    const session = address?.session ?? page?.session ?? selected?.session ?? (intent?.kind === 'page' ? intent.session : undefined);
+    const stream =
+      address?.stream ?? page?.stream ?? selected?.stream ?? (intent?.kind === 'page' ? intent.stream : undefined);
+    const session =
+      address?.session ?? page?.session ?? selected?.session ?? (intent?.kind === 'page' ? intent.session : undefined);
     void startRead({ kind: 'page', ...(stream ? { stream } : {}), ...(session ? { session } : {}) }, event);
   }
   function clearSelection() {
@@ -379,9 +386,7 @@ function ReleaseFidelityLive({
       ? subjectHref({ id: read.work.id, label: read.work.label?.text ?? '' }, locale).href
       : undefined;
   const selectedSlot =
-    detailRow && read?.stream
-      ? relationSlot(detailRow, read.stream, read.public.subject.context)
-      : undefined;
+    detailRow && read?.stream ? relationSlot(detailRow, read.stream, read.public.subject.context) : undefined;
   return (
     <section className="flex flex-col gap-4" data-slot="release-fidelity" aria-busy={busy}>
       {!readable && (
@@ -425,8 +430,8 @@ function ReleaseFidelityLive({
                 id={`${headingId}-recovery-stream`}
                 value={
                   reader.kind === 'loading-page'
-                    ? reader.intent.stream ?? ''
-                    : read?.stream?.key ?? priorPage?.read.stream?.key ?? ''
+                    ? (reader.intent.stream ?? '')
+                    : (read?.stream?.key ?? priorPage?.read.stream?.key ?? '')
                 }
                 disabled={!!draft}
                 onChange={(event) => {
@@ -543,7 +548,7 @@ function ReleaseFidelityLive({
                 ) : read.date.kind === 'unsupported' ? (
                   m.release_fidelity_date_unsupported({}, o)
                 ) : (
-                  read.date.text ?? m.release_fidelity_date_absent({}, o)
+                  (read.date.text ?? m.release_fidelity_date_absent({}, o))
                 )}
               </p>
               {read.date.historical && (
@@ -647,8 +652,8 @@ function ReleaseFidelityLive({
                     id={`${headingId}-stream`}
                     value={
                       reader.kind === 'loading-page'
-                        ? reader.intent.stream ?? read.stream?.key ?? ''
-                        : read.stream?.key ?? ''
+                        ? (reader.intent.stream ?? read.stream?.key ?? '')
+                        : (read.stream?.key ?? '')
                     }
                     disabled={!!draft}
                     onChange={(event) => {
@@ -683,9 +688,15 @@ function ReleaseFidelityLive({
                   const isSelected = !!occurrence && occurrence.key === selection?.key;
                   const summaryLabel = row.summary?.label?.value || m.subject_value_unlabelled({}, o);
                   const companion =
-                    row.readability === 'readable' && row.summary?.label?.value && read.stream?.kind === 'file' && target
+                    row.readability === 'readable' &&
+                    row.summary?.label?.value &&
+                    read.stream?.kind === 'file' &&
+                    target
                       ? `${subjectHref({ id: target, label: summaryLabel }, locale).href}/file`
-                      : row.readability === 'readable' && row.summary?.label?.value && read.stream?.kind === 'release' && target
+                      : row.readability === 'readable' &&
+                          row.summary?.label?.value &&
+                          read.stream?.kind === 'release' &&
+                          target
                         ? `${subjectHref({ id: target, label: summaryLabel }, locale).href}/release`
                         : undefined;
                   return (

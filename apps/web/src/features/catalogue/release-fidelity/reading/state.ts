@@ -54,7 +54,12 @@ export type ReleaseReadingState =
   | { kind: 'selection-concealed'; admitted: AdmittedReleasePage; selection: ReleaseOccurrence }
   | { kind: 'selection-unreadable'; admitted: AdmittedReleasePage; selection: ReleaseOccurrence }
   | { kind: 'selection-stale'; admitted: AdmittedReleasePage; selection: ReleaseOccurrence }
-  | { kind: 'failed'; intent: ReleaseReadIntent; failure: Extract<ReleaseFidelityRead, { ok: false }>; revision: number };
+  | {
+      kind: 'failed';
+      intent: ReleaseReadIntent;
+      failure: Extract<ReleaseFidelityRead, { ok: false }>;
+      revision: number;
+    };
 
 /** Only navigation intent is kept while the existing correction is open. */
 export type ReleaseReturnReceipt = {
@@ -69,10 +74,7 @@ export function rowTarget(row: ReleaseRow, stream: ReleaseStream): string | unde
   return stream.direction === 'inverse' ? row.holder : row.statement ? relatedTarget(row.statement) : undefined;
 }
 
-export function occurrenceFor(
-  row: ReleaseRow,
-  stream: ReleaseStream,
-): ReleaseOccurrence | undefined {
+export function occurrenceFor(row: ReleaseRow, stream: ReleaseStream): ReleaseOccurrence | undefined {
   const target = rowTarget(row, stream);
   if (!target) return;
   const identity = [stream.key, stream.property, stream.direction, row.holder, row.statementId, target];
@@ -99,7 +101,7 @@ export function admittedPage(
     address: {
       ...((read.stream?.key ?? prior.stream) ? { stream: read.stream?.key ?? prior.stream } : {}),
       ...(prior.cursor ? { cursor: prior.cursor } : {}),
-      ...(read.session ?? prior.session ? { session: read.session ?? prior.session } : {}),
+      ...((read.session ?? prior.session) ? { session: read.session ?? prior.session } : {}),
       digest: read.digest,
       revision,
     },
@@ -119,10 +121,7 @@ export function selectionIntent(page: ReleasePageAddress, selection: ReleaseOccu
   return { kind: 'selection', page, selection };
 }
 
-export function admittedRow(
-  page: AdmittedReleasePage,
-  occurrence: ReleaseOccurrence,
-): ReleaseRow | undefined {
+export function admittedRow(page: AdmittedReleasePage, occurrence: ReleaseOccurrence): ReleaseRow | undefined {
   const stream = page.read.stream;
   if (
     !stream ||

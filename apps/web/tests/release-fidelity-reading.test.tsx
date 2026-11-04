@@ -18,7 +18,10 @@ const { m } = await import('../src/paraglide/messages.js');
 const options = { locale: 'en' as never };
 
 type ReadAddress = Parameters<ReleaseFidelityTransport['read']>;
-type PendingRead = { address: ReadAddress; resolve: (value: Awaited<ReturnType<ReleaseFidelityTransport['read']>>) => void };
+type PendingRead = {
+  address: ReadAddress;
+  resolve: (value: Awaited<ReturnType<ReleaseFidelityTransport['read']>>) => void;
+};
 type RelationReadCall = {
   holder: string;
   context: string | undefined;
@@ -114,7 +117,10 @@ async function mount(
       />
     ),
   });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en/subjects/release'] }) });
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: ['/en/subjects/release'] }),
+  });
   await act(async () => router.load());
   await act(async () => {
     root.render(
@@ -158,7 +164,18 @@ async function mount(
       else Reflect.deleteProperty(globalThis, key);
     await window.happyDOM.close();
   };
-  return { host, window, rows, click, byLabel, selectStream, pendingReads: hooks.pendingReads, close, unmount, waitFor };
+  return {
+    host,
+    window,
+    rows,
+    click,
+    byLabel,
+    selectStream,
+    pendingReads: hooks.pendingReads,
+    close,
+    unmount,
+    waitFor,
+  };
 }
 
 async function chooseLaterBasedOnPage(visit: Awaited<ReturnType<typeof mount>>) {
@@ -176,7 +193,11 @@ async function chooseLaterBasedOnPage(visit: Awaited<ReturnType<typeof mount>>) 
 
 test('a later page inspects one exact repeated occurrence and returns from its existing correction', async () => {
   const fixture = releaseFidelityFixture('ready', 'en', 22);
-  const hooks = { reads: [] as ReadAddress[], relationReads: [] as RelationReadCall[], pendingReads: [] as PendingRead[] };
+  const hooks = {
+    reads: [] as ReadAddress[],
+    relationReads: [] as RelationReadCall[],
+    pendingReads: [] as PendingRead[],
+  };
   const visit = await mount(fixture, hooks);
   try {
     await chooseLaterBasedOnPage(visit);
@@ -227,9 +248,9 @@ test('a later page inspects one exact repeated occurrence and returns from its e
     expect(hooks.relationReads[0]?.slot?.target).not.toBe('00000000-0000-4000-8000-00000000a118');
     await visit.click(visit.byLabel(m.work_parts_draft_close({}, options)));
     await visit.waitFor(() => expect(visit.host.querySelector(`[aria-label="${relationLabel}"]`)).toBeNull());
-    expect(visit.rows().find((row) => row.getAttribute('aria-current') === 'location')?.dataset.selectedOccurrence).toBe(
-      JSON.stringify(identity),
-    );
+    expect(
+      visit.rows().find((row) => row.getAttribute('aria-current') === 'location')?.dataset.selectedOccurrence,
+    ).toBe(JSON.stringify(identity));
     expect(visit.window.document.activeElement?.id).toBe('release-selected-detail-heading');
     expect(visit.host.textContent).toContain('978-1-11-000020-0');
   } finally {
@@ -239,13 +260,19 @@ test('a later page inspects one exact repeated occurrence and returns from its e
 
 test('detail failure retries the exact current page and occurrence without losing its list context', async () => {
   const fixture = releaseFidelityFixture('ready', 'en', 22);
-  const hooks = { reads: [] as ReadAddress[], relationReads: [] as RelationReadCall[], pendingReads: [] as PendingRead[] };
+  const hooks = {
+    reads: [] as ReadAddress[],
+    relationReads: [] as RelationReadCall[],
+    pendingReads: [] as PendingRead[],
+  };
   const visit = await mount(fixture, hooks);
   try {
     await chooseLaterBasedOnPage(visit);
     fixture.setScenario('detail-unavailable');
     await visit.click(visit.rows()[1]!.querySelector('button') as HTMLButtonElement);
-    await visit.waitFor(() => expect(visit.host.textContent).toContain(m.release_fidelity_detail_unavailable({}, options)));
+    await visit.waitFor(() =>
+      expect(visit.host.textContent).toContain(m.release_fidelity_detail_unavailable({}, options)),
+    );
     expect(visit.rows()).toHaveLength(2);
     const failedAddress = hooks.reads.at(-1)!;
     expect(failedAddress).toEqual([
@@ -270,7 +297,11 @@ test('detail failure retries the exact current page and occurrence without losin
 
 test('equal replacement, A/B/A return and unmount retire late selected details', async () => {
   const fixture = releaseFidelityFixture('ready', 'en', 22);
-  const hooks = { reads: [] as ReadAddress[], relationReads: [] as RelationReadCall[], pendingReads: [] as PendingRead[] };
+  const hooks = {
+    reads: [] as ReadAddress[],
+    relationReads: [] as RelationReadCall[],
+    pendingReads: [] as PendingRead[],
+  };
   let holdCount = 0;
   const visit = await mount(fixture, {
     reads: hooks.reads,
