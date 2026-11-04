@@ -67,8 +67,8 @@ test('aliased native reads keep a continuation attached only to its supplied nod
   const document: CompositionDocument = {
     format: 'rezics.composition.v1',
     content: [
-      { type: 'SubjectList', props: { id: 'members-primary', title: 'Members', property: 'wdt:P179', limit: 12 } },
-      { type: 'SubjectList', props: { id: 'members-alias', title: 'Other members', property: 'wdt:P179', limit: 12 } },
+      { type: 'SubjectList', props: { id: 'members-primary', title: 'Members', property: 'wdt:P179', limit: 12, paged: true } },
+      { type: 'SubjectList', props: { id: 'members-alias', title: 'Other members', property: 'wdt:P179', limit: 12, paged: true } },
     ],
   };
   const continuation = { node: 'members-primary', cursor: 'primary-only-cursor' };

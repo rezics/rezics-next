@@ -69,11 +69,11 @@ test('all admitted membership and Edition streams stay discoverable while one ex
       },
     ],
   };
-  const editionForwardAssertion = literaryStatement('schema:workExample', literaryIds.edition);
+  const editionForwardAssertion = literaryStatement('schema:exampleOfWork', literaryIds.edition);
   const editionForward: ProfileRelationWindow = {
     ...firstMember,
     node: 'edition-forward',
-    property: 'schema:workExample',
+    property: 'schema:exampleOfWork',
     direction: 'forward',
     rows: [
       {
@@ -93,7 +93,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
     windows: [...memberWindows, ...editionWindows],
     directions: [
       ...memberInput.directions!,
-      literaryDirection('schema:workExample', 'forward'),
+      literaryDirection('schema:exampleOfWork', 'forward'),
     ],
   };
   let input: ReturnType<typeof literaryGrainExample> & {
@@ -136,7 +136,7 @@ test('all admitted membership and Edition streams stay discoverable while one ex
       ['members-first', 'wdt:P179', 'inverse'],
       ['members-second', 'wdt:P179', 'inverse'],
       ['edition-inverse', 'schema:exampleOfWork', 'inverse'],
-      ['edition-forward', 'schema:workExample', 'forward'],
+      ['edition-forward', 'schema:exampleOfWork', 'forward'],
     ]);
     expect(host.querySelectorAll('[data-slot="literary-window"]')).toHaveLength(2);
     const memberRows = host.querySelectorAll<HTMLElement>(
