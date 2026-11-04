@@ -202,7 +202,13 @@ export function mergeListImportMetadataConfirmation(
   } = current;
   const annotationInput = currentAnnotationInput ?? next.annotationInput,
     provenanceInput = currentProvenanceInput ?? next.provenanceInput,
-    sourceObservationDigest = currentSourceObservationDigest ?? next.sourceObservationDigest;
+    sourceObservationDigest = currentSourceObservationDigest ?? next.sourceObservationDigest,
+    annotationReceiptDigest = current.annotationReceiptDigest ?? next.annotationReceiptDigest,
+    provenanceReceiptDigest = current.provenanceReceiptDigest ?? next.provenanceReceiptDigest,
+    provenanceKind = current.provenanceKind ?? next.provenanceKind,
+    annotationStatus = mergePhaseStatus(current.annotationStatus, next.annotationStatus),
+    provenanceStatus = mergePhaseStatus(current.provenanceStatus, next.provenanceStatus),
+    outcome = current.outcome ?? next.outcome;
   return {
     ...preserved,
     annotationStarted: current.annotationStarted || next.annotationStarted,
@@ -215,13 +221,13 @@ export function mergeListImportMetadataConfirmation(
           ...(sourceObservationDigest === undefined ? {} : { sourceObservationDigest }),
         }
       : {}),
-    annotationReceiptDigest: current.annotationReceiptDigest ?? next.annotationReceiptDigest,
-    provenanceReceiptDigest: current.provenanceReceiptDigest ?? next.provenanceReceiptDigest,
-    provenanceKind: current.provenanceKind ?? next.provenanceKind,
-    annotationStatus: mergePhaseStatus(current.annotationStatus, next.annotationStatus),
-    provenanceStatus: mergePhaseStatus(current.provenanceStatus, next.provenanceStatus),
+    ...(annotationReceiptDigest === undefined ? {} : { annotationReceiptDigest }),
+    ...(provenanceReceiptDigest === undefined ? {} : { provenanceReceiptDigest }),
+    ...(provenanceKind === undefined ? {} : { provenanceKind }),
+    ...(annotationStatus === undefined ? {} : { annotationStatus }),
+    ...(provenanceStatus === undefined ? {} : { provenanceStatus }),
     ...(fieldOutcomes.size ? { fieldOutcomes: [...fieldOutcomes.values()] } : {}),
-    outcome: current.outcome ?? next.outcome,
+    ...(outcome === undefined ? {} : { outcome }),
   };
 }
 

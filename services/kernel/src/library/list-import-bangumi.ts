@@ -49,9 +49,11 @@ import {
   type BangumiReview,
   type BangumiRow,
   type BangumiScoreCurrentVote,
+  type BangumiScoreChoice,
   type BangumiScoreQuestion,
   type BangumiScoreReview,
   type BangumiScoreSelection,
+  type BangumiGuard,
 } from './list-import-bangumi-model.ts';
 
 type NativeVotes = Pick<ReturnType<typeof createVoteCommands>, 'readOwnVote' | 'readRatingQuestion'>;
@@ -703,7 +705,8 @@ export function createBangumiImport(deps: Dependencies) {
         return row(tx, a, id, ordinal);
       });
       const review = original.review;
-      if (!review || review.token !== sourceReviewToken || !review.guard) throw new ProblemError('conflict');
+      if (!review || review.token !== sourceReviewToken || !review.guard || !review.target)
+        throw new ProblemError('conflict');
       const history = review.metadata ?? [];
       assertListImportMetadataReviewAvailable(history);
       const account = owner(actor),

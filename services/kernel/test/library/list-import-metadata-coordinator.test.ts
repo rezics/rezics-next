@@ -90,7 +90,6 @@ test('expiry merge keeps receipt authority and completed outcomes without restor
         expectedPriority: null,
       },
       annotationStatus: 'unattempted' as const,
-      outcome: undefined,
     },
     completed = {
       ...pending,
