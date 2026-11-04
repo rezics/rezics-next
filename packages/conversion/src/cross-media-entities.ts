@@ -456,9 +456,10 @@ function projectStaffNames(
       [...aliasName].length > vndbStaffNameLimits.maxNameChars
     )
       fail(`${pointer}/name`);
+    const admittedName = aliasName as string;
     if (seen.has(aid)) fail(`${pointer}/aid`, 'duplicate_alias_key');
-    seen.set(aid, aliasName);
-    aliases.push({ id: expected, aid, name: aliasName });
+    seen.set(aid, admittedName);
+    aliases.push({ id: expected, aid, name: admittedName });
   }
   aliases.sort((left, right) => Number(left.aid) - Number(right.aid) || compareText(left.name, right.name));
   let preferred: string | undefined;
