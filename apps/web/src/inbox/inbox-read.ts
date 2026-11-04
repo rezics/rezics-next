@@ -343,9 +343,10 @@ export async function resolveInboxItems(page: NoticePage): Promise<ResolvedInbox
       const native = notice.actor && notice.target && notice.actions;
       const actorName = notice.actor?.state === 'available' ? notice.actor.displayName.trim() : undefined;
       const context = inboxTargetContext(notice.target);
+      const href = inboxOpenHref(notice);
       return {
         ...notice,
-        ...(inboxOpenHref(notice) ? { href: inboxOpenHref(notice) } : {}),
+        ...(href ? { href } : {}),
         text: notice.summary ?? '',
         unavailable: !native || notice.target?.state === 'withheld',
         ...(actorName ? { actorName } : {}),
