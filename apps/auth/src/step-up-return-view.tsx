@@ -49,9 +49,21 @@ export function StepUpReturnView({
               ? m.auth_step_up_return_no_continue()
               : ''}
       </p>
-      {review.kind === 'unavailable' ? <ErrorAlert tabIndex={-1} ref={alertRef}>{m.auth_failure_unavailable()}</ErrorAlert> : null}
-      {review.kind === 'changed' ? <ErrorAlert tabIndex={-1} ref={alertRef}>{m.auth_step_up_continuation_changed()}</ErrorAlert> : null}
-      {review.kind === 'account-changed' ? <ErrorAlert tabIndex={-1} ref={alertRef}>{m.auth_step_up_account_changed()}</ErrorAlert> : null}
+      {review.kind === 'unavailable' ? (
+        <ErrorAlert tabIndex={-1} ref={alertRef}>
+          {m.auth_failure_unavailable()}
+        </ErrorAlert>
+      ) : null}
+      {review.kind === 'changed' ? (
+        <ErrorAlert tabIndex={-1} ref={alertRef}>
+          {m.auth_step_up_continuation_changed()}
+        </ErrorAlert>
+      ) : null}
+      {review.kind === 'account-changed' ? (
+        <ErrorAlert tabIndex={-1} ref={alertRef}>
+          {m.auth_step_up_account_changed()}
+        </ErrorAlert>
+      ) : null}
       {review.kind === 'continue' ? (
         <Button type="button" disabled={continuing} aria-busy={continuing} onClick={onContinue}>
           {m.auth_step_up_return_continue()}

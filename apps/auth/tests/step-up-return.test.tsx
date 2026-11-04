@@ -154,9 +154,7 @@ test('a failed Continue recheck requires a fresh advice read before authenticati
   const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     if (String(input) === '/recovery/page') {
       reads++;
-      return reads === 2
-        ? Promise.resolve(new Response('', { status: 503 }))
-        : Promise.resolve(nativeAdvice());
+      return reads === 2 ? Promise.resolve(new Response('', { status: 503 })) : Promise.resolve(nativeAdvice());
     }
     return original(input, init);
   });

@@ -153,7 +153,10 @@ function notify(callback: (() => void) | undefined): void {
   }
 }
 
-function observeResult(result: SignInResult | { ok: false; reason: 'cancelled' }, observer?: StepUpAttemptObserver): void {
+function observeResult(
+  result: SignInResult | { ok: false; reason: 'cancelled' },
+  observer?: StepUpAttemptObserver,
+): void {
   if (result.ok) notify(observer?.onAcknowledged);
   else if (result.reason === 'credentials' || result.reason === 'rate-limited') notify(observer?.onRefused);
 }

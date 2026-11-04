@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadAccountSession } from './account-operations';
 import { accountOperationSessionMatches } from './account-operation-step-up';
-import { loadManagementSession, managementProfileSessionMatches, managementSessionMatches } from './management-operations';
+import {
+  loadManagementSession,
+  managementProfileSessionMatches,
+  managementSessionMatches,
+} from './management-operations';
 import { organizationDeleteSessionMatches } from './organization-delete-step-up';
 import { loadRecoveryPage, type RecoveryPageResult } from './recovery-page';
 import {
@@ -100,11 +104,7 @@ export async function inspectStepUpReturn(
   prepareForContinue = false,
 ): Promise<StepUpReturnState | null> {
   if (!isCurrent() || signal.aborted) return null;
-  if (
-    advice.kind !== 'ready' ||
-    advice.page.stage !== 'step-up' ||
-    !advice.page.actions.authenticate
-  )
+  if (advice.kind !== 'ready' || advice.page.stage !== 'step-up' || !advice.page.actions.authenticate)
     return advice.kind === 'unavailable' ? { kind: 'unavailable' } : { kind: 'none' };
 
   const management = selectManagementOperationStepUp(query);
@@ -224,4 +224,3 @@ export function useStepUpReturnReview(
 
   return { state, recheck, retire };
 }
-

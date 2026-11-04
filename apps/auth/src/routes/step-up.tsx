@@ -30,7 +30,8 @@ const passwordId = 'step-up-password';
 const passwordErrorId = 'step-up-password-error';
 
 function clearStepUpFields() {
-  for (const field of document.querySelectorAll<HTMLInputElement>('#step-up-email, #step-up-password')) field.value = '';
+  for (const field of document.querySelectorAll<HTMLInputElement>('#step-up-email, #step-up-password'))
+    field.value = '';
 }
 
 export const Route = createFileRoute('/step-up')({
@@ -296,8 +297,7 @@ function StepUpForm({
     if (returning) {
       if (['unavailable', 'changed', 'account-changed'].includes(returnReview.state.kind)) alert.current?.focus();
       else returnStatus.current?.focus();
-    }
-    else if (emailError) emailInput.current?.focus();
+    } else if (emailError) emailInput.current?.focus();
     else if (passwordError) document.getElementById(passwordId)?.focus();
     else if (message) alert.current?.focus();
   }, [advice.state, emailError, message, passwordError, returnReview.state, returning]);
@@ -374,7 +374,14 @@ function StepUpForm({
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    const outcome = await confirmStepUp(email, password, completion.query, completion.origin, completion.isCurrent, observer);
+    const outcome = await confirmStepUp(
+      email,
+      password,
+      completion.query,
+      completion.origin,
+      completion.isCurrent,
+      observer,
+    );
     if (!completion.finish(outcome.ok)) return;
     passwordValue.current = '';
     setPassword('');
@@ -398,11 +405,11 @@ function StepUpForm({
             review={returnReview.state}
             canAuthenticate={Boolean(
               !reviewRequiresFreshRead &&
-                !continuing &&
-                returnReview.state.kind !== 'checking' &&
-                returnReview.state.kind !== 'unavailable' &&
-                page?.actions.authenticate &&
-                (page.methods.password || (passkeys && page.methods.passkey)),
+              !continuing &&
+              returnReview.state.kind !== 'checking' &&
+              returnReview.state.kind !== 'unavailable' &&
+              page?.actions.authenticate &&
+              (page.methods.password || (passkeys && page.methods.passkey)),
             )}
             continuing={continuing}
             statusRef={returnStatus}
@@ -417,87 +424,87 @@ function StepUpForm({
         ) : (
           <>
             {history ? <StepUpHistoryNotice history={history} /> : null}
-        {advice.state.kind === 'loading' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
-        {advice.state.kind === 'unavailable' ? (
-          <>
-            <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
-            <Button type="button" onClick={advice.retry}>
-              {m.auth_login_retry()}
-            </Button>
-          </>
-        ) : null}
-        {page?.viewer.kind === 'signed-in' ? (
-          <p>{m.auth_login_current_account({ account: page.viewer.email ?? page.viewer.account_id })}</p>
-        ) : null}
-        <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
-          <p>{m.auth_step_up_explanation()}</p>
-          {page?.continuation === 'authenticate-before-review' ? <p>{m.auth_step_up_review_required()}</p> : null}
-          <Field data-invalid={Boolean(emailError)}>
-            <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
-            <Input
-              ref={emailInput}
-              id={emailId}
-              name="email"
-              type="email"
-              maxLength={page?.requirements.email_max_length}
-              autoComplete="username"
-              value={email}
-              onChange={(event) => {
-                emailValue.current = event.target.value;
-                setEmail(event.target.value);
-                setEmailError('');
-              }}
-              aria-invalid={emailError ? true : undefined}
-              aria-describedby={emailError ? emailErrorId : undefined}
-              readOnly={pending && !passkeyPending}
-              required
-            />
-            {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
-          </Field>
-          <Field data-invalid={Boolean(passwordError)}>
-            <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
-            <PasswordInput
-              name="password"
-              autoComplete="current-password"
-              required
-              readOnly={pending && !passkeyPending}
-              id={passwordId}
-              value={password}
-              onChange={(event) => {
-                passwordValue.current = event.target.value;
-                setPassword(event.target.value);
-                setPasswordError('');
-              }}
-              aria-invalid={passwordError ? true : undefined}
-              aria-describedby={passwordError ? passwordErrorId : undefined}
-            />
-            {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
-          </Field>
-          {message ? (
-            <ErrorAlert tabIndex={-1} ref={alert}>
-              {message}
-            </ErrorAlert>
-          ) : null}
-          <Button
-            type="submit"
-            disabled={(pending && !passkeyPending) || !page?.actions.authenticate || !page.methods.password}
-            aria-busy={pending && !passkeyPending}
-          >
-            {m.auth_step_up_heading()}
-          </Button>
-          {passkeys && page?.methods.passkey && page.actions.authenticate ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              aria-busy={passkeyPending}
-              onClick={() => void submitPasskey()}
-            >
-              <KeyRound aria-hidden="true" />
-              {m.auth_step_up_passkey()}
-            </Button>
-          ) : null}
-        </form>
+            {advice.state.kind === 'loading' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
+            {advice.state.kind === 'unavailable' ? (
+              <>
+                <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
+                <Button type="button" onClick={advice.retry}>
+                  {m.auth_login_retry()}
+                </Button>
+              </>
+            ) : null}
+            {page?.viewer.kind === 'signed-in' ? (
+              <p>{m.auth_login_current_account({ account: page.viewer.email ?? page.viewer.account_id })}</p>
+            ) : null}
+            <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
+              <p>{m.auth_step_up_explanation()}</p>
+              {page?.continuation === 'authenticate-before-review' ? <p>{m.auth_step_up_review_required()}</p> : null}
+              <Field data-invalid={Boolean(emailError)}>
+                <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
+                <Input
+                  ref={emailInput}
+                  id={emailId}
+                  name="email"
+                  type="email"
+                  maxLength={page?.requirements.email_max_length}
+                  autoComplete="username"
+                  value={email}
+                  onChange={(event) => {
+                    emailValue.current = event.target.value;
+                    setEmail(event.target.value);
+                    setEmailError('');
+                  }}
+                  aria-invalid={emailError ? true : undefined}
+                  aria-describedby={emailError ? emailErrorId : undefined}
+                  readOnly={pending && !passkeyPending}
+                  required
+                />
+                {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
+              </Field>
+              <Field data-invalid={Boolean(passwordError)}>
+                <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
+                <PasswordInput
+                  name="password"
+                  autoComplete="current-password"
+                  required
+                  readOnly={pending && !passkeyPending}
+                  id={passwordId}
+                  value={password}
+                  onChange={(event) => {
+                    passwordValue.current = event.target.value;
+                    setPassword(event.target.value);
+                    setPasswordError('');
+                  }}
+                  aria-invalid={passwordError ? true : undefined}
+                  aria-describedby={passwordError ? passwordErrorId : undefined}
+                />
+                {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
+              </Field>
+              {message ? (
+                <ErrorAlert tabIndex={-1} ref={alert}>
+                  {message}
+                </ErrorAlert>
+              ) : null}
+              <Button
+                type="submit"
+                disabled={(pending && !passkeyPending) || !page?.actions.authenticate || !page.methods.password}
+                aria-busy={pending && !passkeyPending}
+              >
+                {m.auth_step_up_heading()}
+              </Button>
+              {passkeys && page?.methods.passkey && page.actions.authenticate ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending}
+                  aria-busy={passkeyPending}
+                  onClick={() => void submitPasskey()}
+                >
+                  <KeyRound aria-hidden="true" />
+                  {m.auth_step_up_passkey()}
+                </Button>
+              ) : null}
+            </form>
           </>
         )}
         <AlertDialog

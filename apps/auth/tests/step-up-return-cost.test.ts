@@ -13,15 +13,23 @@ test('ordinary and retained reviews stay within their existing whole-call reads'
   const calls: { path: string; method: string; body: unknown }[] = [];
   const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const path = String(input);
-    calls.push({ path, method: String(init?.method ?? 'GET'), body: init?.body ? JSON.parse(String(init.body)) : null });
+    calls.push({
+      path,
+      method: String(init?.method ?? 'GET'),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
     if (path === '/recovery/page')
       return Promise.resolve(
         Response.json(
-          recoveryPage('step-up', { minPasswordLength: 8, maxPasswordLength: 128 }, {
-            kind: 'signed-in',
-            account_id: accountId,
-            email: 'current@example.test',
-          }),
+          recoveryPage(
+            'step-up',
+            { minPasswordLength: 8, maxPasswordLength: 128 },
+            {
+              kind: 'signed-in',
+              account_id: accountId,
+              email: 'current@example.test',
+            },
+          ),
         ),
       );
     if (path === '/session')
@@ -38,7 +46,12 @@ test('ordinary and retained reviews stay within their existing whole-call reads'
     throw new Error(`unexpected request ${path}`);
   });
 
-  const ordinary = await recheckStepUpReturn('?return_to=%2Fsecurity', 'https://auth.test', new AbortController().signal, () => true);
+  const ordinary = await recheckStepUpReturn(
+    '?return_to=%2Fsecurity',
+    'https://auth.test',
+    new AbortController().signal,
+    () => true,
+  );
   expect(ordinary).toEqual({ kind: 'continue', target: 'https://auth.test/security' });
   expect(calls).toEqual([{ path: '/recovery/page', method: 'POST', body: { stage: 'step-up' } }]);
 

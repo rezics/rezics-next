@@ -78,7 +78,11 @@ test('a dispatched password remains generically uncertain after cached form reti
           recoveryPage(
             'step-up',
             { minPasswordLength: 8, maxPasswordLength: 128 },
-            { kind: 'signed-in', account_id: '00000000-0000-4000-8000-000000000001', email: 'replacement@example.test' },
+            {
+              kind: 'signed-in',
+              account_id: '00000000-0000-4000-8000-000000000001',
+              email: 'replacement@example.test',
+            },
           ),
         ),
       );
