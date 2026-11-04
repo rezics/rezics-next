@@ -376,7 +376,7 @@ export function CollectionPage(props: CollectionPageProps) {
       (props.isCurrent?.() ?? true)
     );
   }
-  const returnOwner = useRef<string | undefined>(admission.owner);
+  const returnOwner = useRef<CollectionAdmission['owner'] | undefined>(admission.owner);
   if (returnOwner.current !== admission.owner) returnOwner.current = undefined;
   // Permission renewals retire callbacks; the owning viewer/address alone owns drafts and uncertain keys.
   return (
