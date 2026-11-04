@@ -61,6 +61,7 @@ function EligibilityCopy({
   now: number;
 }) {
   const locale = getLocale();
+  if (policy?.admissionState === 'pending') return <p>{m.slow_mode_preparing()}</p>;
   if (waitUntil !== null && waitUntil > now) {
     return (
       <>
@@ -139,7 +140,7 @@ function PointEligibility({ boardId, refusal }: EligibilityProps) {
   const now = useDisplayNow(waitUntil);
   const showInterval = policy && policy.intervalSeconds > 0;
   const waiting = waitUntil !== null && waitUntil > now;
-  const empty = read?.kind === 'available' && !showInterval && !waiting && refusal?.reason !== 'rate-limited';
+  const empty = read?.kind === 'available' && !showInterval && policy?.admissionState !== 'pending' && !waiting && refusal?.reason !== 'rate-limited';
   if (empty || (!preparing && read === undefined && !waiting && refusal?.reason !== 'rate-limited')) return null;
   return (
     <div className="mb-4 min-w-0 space-y-2 text-sm [overflow-wrap:anywhere]" data-slot="board-slow-mode" role="status">
@@ -204,21 +205,23 @@ function SlowModeSettingForm({
   const [pending, setPending] = useState(false);
   const [needsReview, setNeedsReview] = useState(false);
   const commandKey = useRef(crypto.randomUUID());
-  const exact = useRef<{ interval: SlowModeInterval; key: string } | null>(null);
+  const exact = useRef<{ interval: SlowModeInterval; key: string; sender: typeof port.change } | null>(null);
   const policy = read?.kind === 'available' ? read.policy : undefined;
   const selected = draft ?? policy?.intervalSeconds ?? 0;
-  const busy = pending || preparing || needsReview;
+  const busy = pending || preparing || needsReview || outcome?.kind === 'unknown';
+  // Keep a nonpreset current policy selectable without offering unvalidated free text.
+  const intervals = [...new Set<number>([...SLOW_MODE_INTERVALS, ...(policy ? [policy.intervalSeconds] : [])])];
 
   async function save(retry = false) {
-    if (!visit.current() || pending || (needsReview && !retry)) return;
-    const command = retry ? exact.current : { interval: selected, key: commandKey.current };
+    if (!visit.current() || pending || !policy?.canChange || (needsReview && !retry) || (!retry && outcome?.kind === 'unknown')) return;
+    const command = retry ? exact.current : { interval: selected, key: commandKey.current, sender: port.change.bind(port) };
     if (!command) return;
     if (!retry) exact.current = command;
     setPending(true);
     setOutcome(null);
     const owner = visit.controller.signal;
     try {
-      const result = await port.change({
+      const result = await command.sender({
         boardId: visit.boardId,
         intervalSeconds: command.interval,
         idempotencyKey: command.key,
@@ -280,11 +283,11 @@ function SlowModeSettingForm({
               value={String(selected)}
               onValueChange={(value) => {
                 const next = Number(value);
-                if (next === 0 || next === 30 || next === 60 || next === 300) setDraft(next);
+                if (intervals.includes(next)) setDraft(next);
               }}
               aria-labelledby={`${ids}-legend`}
             >
-              {SLOW_MODE_INTERVALS.map((interval) => (
+              {intervals.map((interval) => (
                 <Field key={interval} orientation="horizontal" className="min-h-11 items-center">
                   <RadioGroupItem id={`${ids}-${interval}`} value={String(interval)} />
                   <FieldLabel htmlFor={`${ids}-${interval}`} className="min-h-11 items-center">

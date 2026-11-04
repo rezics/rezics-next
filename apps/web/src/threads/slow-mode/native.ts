@@ -11,48 +11,28 @@ import {
   type SlowModeRead,
 } from './contract';
 
-type NativeOptions = { headers: { authorization: string; 'idempotency-key'?: string } };
-type NativeResult = Promise<{
-  data?: unknown;
-  error?: unknown;
-  status: number;
-  response?: { headers?: Headers };
-  headers?: Headers;
-}>;
-
-type NativeSlowMode = {
-  get: (options: NativeOptions) => NativeResult;
-  put: (body: { intervalSeconds: SlowModeInterval }, options: NativeOptions) => NativeResult;
-};
-
-/** Bind generated Content methods when present. Do not invent a path or a successful body. */
-export function nativeBoardSlowMode(client: KernelClient, boardId: string): NativeSlowMode | undefined {
-  const board = client.boards({ id: boardId }) as ReturnType<KernelClient['boards']> & {
-    slowMode?: NativeSlowMode;
-    'slow-mode'?: NativeSlowMode;
-  };
-  const resource = board.slowMode ?? board['slow-mode'];
-  if (!resource || typeof resource.get !== 'function' || typeof resource.put !== 'function') return undefined;
-  return resource;
+/** Direct installed method, with no legacy route aliases or optional generated casts. */
+export function nativeBoardSlowMode(client: KernelClient, boardId: string) {
+  return client.boards({ id: boardId }).slowMode;
 }
 
 function readOutcome(status: number, body: unknown): SlowModeRead {
   if (status === 401 || status === 403) return { kind: 'denied' };
-  if (status === 200 || status === 204) {
+  if (status === 200) {
     const policy = parseSlowModePolicy(body);
     return policy ? { kind: 'available', policy } : { kind: 'unavailable' };
   }
   return { kind: 'unavailable' };
 }
 
-function changeOutcome(status: number, body: unknown): SlowModeChange {
+function changeOutcome(status: number, body: unknown, intervalSeconds: number): SlowModeChange {
   if (status === 401 || status === 403) return { kind: 'denied' };
   if (status === 409 || status === 412) return { kind: 'conflict' };
-  if (status === 200 || status === 204) {
+  if (status === 200) {
     const policy = parseSlowModePolicy(body);
-    return policy ? { kind: 'applied', policy } : { kind: 'unavailable' };
+    return policy?.intervalSeconds === intervalSeconds ? { kind: 'applied', policy } : { kind: 'unknown' };
   }
-  return { kind: 'unavailable' };
+  return { kind: 'unknown' };
 }
 
 export async function readBoardSlowModeRequest(
@@ -95,16 +75,10 @@ export async function changeBoardSlowModeRequest(
     if (!resource) return { kind: 'unavailable' };
     const result = await resource.put(
       { intervalSeconds: input.intervalSeconds },
-      { headers: { authorization, 'idempotency-key': input.idempotencyKey } },
+      { headers: { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) } },
     );
-    if (result.error) return changeOutcome(result.status, result.error);
-    const applied = changeOutcome(result.status, result.data);
-    if (applied.kind === 'unavailable' && (result.status === 200 || result.status === 204)) {
-      const current = await resource.get({ headers: { authorization } });
-      if (current.error) return changeOutcome(current.status, current.error);
-      return changeOutcome(current.status, current.data);
-    }
-    return applied;
+    if (result.error) return changeOutcome(result.status, result.error.value, input.intervalSeconds);
+    return changeOutcome(result.status, result.data, input.intervalSeconds);
   } catch (error) {
     if (isPlatformClosedError(error)) return { kind: 'unavailable' };
     return { kind: 'unknown' };
