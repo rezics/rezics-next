@@ -609,6 +609,9 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () =>
       user.click(within(workSection()).getByRole('button', { name: m.correction_remove_reference() })),
     );
+    await act(async () =>
+      user.click(within(workSection()).getByRole('button', { name: m.contribution_confirm() })),
+    );
     expect(recoveryButton().disabled).toBe(false);
     await click(m.catalogue_create_review_new());
     await create();
