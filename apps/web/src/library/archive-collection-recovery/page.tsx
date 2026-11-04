@@ -138,6 +138,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
         <ArchiveCollectionRecoveryUpload
           busy={snapshot.busy}
           locked={locked}
+          isCurrent={() => visit.current()}
           onUpload={(archiveBase64) => journey.upload(archiveBase64)}
         />
       ) : null}

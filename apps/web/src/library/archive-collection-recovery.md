@@ -33,6 +33,8 @@ but cannot be selected. Source privacy is never copied; destination privacy is a
 
 ## Private visit and retry boundaries
 
+Decision: disable the file chooser while preparing one selected archive; keep a failed read selected for explicit retry or replacement.
+
 The upload, current page, selected operands and previews live only in mounted page memory. The upload uses a same-site
 no-store server function and the current viewer/CSRF session; neither archive bytes, continuation cursors nor source
 IDs enter the URL or persistent browser storage. Current session, CSRF credential epoch, route unmount or native
@@ -58,6 +60,7 @@ total, hydrate each row, reconstruct rank keys, or load the archive into the bro
 after an explicit search term. Native apply independently caps each request at 25 commands and total selected work
 at `3R + 2` attempts.
 
-Stories cover upload, reviewed selection, stale conflict and partial result. Focused Web acceptance exercises the
-mounted journey and bounded/source-session behavior; native HTTP producer acceptance remains owned by Commerce.
+Stories cover upload, local preparation, file-read failure, reviewed selection, stale conflict and partial result.
+Focused Web acceptance exercises the mounted journey and bounded/source-session behavior; native HTTP producer
+acceptance remains owned by Commerce.
 Preparation decoders and producer implementation are not Web delivery; this guide describes the delivered consumer.

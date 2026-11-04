@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
+import { expect, userEvent, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import { ArchiveCollectionChooser, ArchiveRecoveryReview } from '../library/archive-collection-recovery/review';
 import { ArchiveRecoveryConflict, ArchiveRecoveryResults } from '../library/archive-collection-recovery/results';
 import { ArchiveCollectionRecoveryUpload } from '../library/archive-collection-recovery/upload';
@@ -165,12 +167,40 @@ const outcomes: RecoveryOutcomesPage = {
 const meta = {
   title: 'Pages/Library/Archive Collection recovery',
   component: ArchiveCollectionRecoveryUpload,
-  args: { busy: false, locked: false, onUpload: async () => undefined },
+  args: { busy: false, locked: false, isCurrent: () => true, onUpload: async () => undefined },
 } satisfies Meta<typeof ArchiveCollectionRecoveryUpload>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Upload: Story = {};
+
+export const PreparingArchive: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const file = new File(['{}'], 'library.json', { type: 'application/json' });
+    Object.defineProperty(file, 'arrayBuffer', { value: () => new Promise<ArrayBuffer>(() => undefined) });
+    await userEvent.upload(canvas.getByLabelText(m.library_archive_recovery_file()), file);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_recovery_upload_action() }));
+    await expect(await canvas.findByRole('status')).toHaveTextContent(m.library_archive_recovery_preparing());
+  },
+};
+
+export const ArchiveReadFailed: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const file = new File(['{}'], 'library.json', { type: 'application/json' });
+    Object.defineProperty(file, 'arrayBuffer', {
+      value: async () => {
+        throw new Error('File read failed');
+      },
+    });
+    await userEvent.upload(canvas.getByLabelText(m.library_archive_recovery_file()), file);
+    await userEvent.click(canvas.getByRole('button', { name: m.library_archive_recovery_upload_action() }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_archive_recovery_upload_read_failed());
+    await expect(canvas.getByLabelText(m.library_archive_recovery_file())).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: m.library_archive_recovery_upload_action() })).toBeEnabled();
+  },
+};
 
 export const Review: Story = {
   render: () => (

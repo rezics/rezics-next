@@ -5,15 +5,16 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
-import type {
-  RecoveryCollection,
-  RecoveryCollectionsPage,
-  RecoveryOccurrence,
-  RecoveryOccurrencesPage,
-  RecoveryOutcomesPage,
-  RecoveryPort,
-  RecoveryReview,
-  RecoveryStatus,
+import {
+  RECOVERY_UPLOAD_BYTES,
+  type RecoveryCollection,
+  type RecoveryCollectionsPage,
+  type RecoveryOccurrence,
+  type RecoveryOccurrencesPage,
+  type RecoveryOutcomesPage,
+  type RecoveryPort,
+  type RecoveryReview,
+  type RecoveryStatus,
 } from '../src/library/archive-collection-recovery/contract';
 import type { RecoveryVisit } from '../src/library/archive-collection-recovery/visit';
 
@@ -244,7 +245,9 @@ function visit(subject = 'viewer-a', csrfToken = 'epoch-a'): RecoveryVisit {
   };
 }
 
-function fakePort(options: { uncertainApply?: boolean; staleReview?: boolean; sourceRecordCount?: number } = {}) {
+function fakePort(
+  options: { uncertainApply?: boolean; uncertainUpload?: boolean; staleReview?: boolean; sourceRecordCount?: number } = {},
+) {
   const calls: {
     upload: unknown[];
     collections: unknown[];
@@ -264,6 +267,8 @@ function fakePort(options: { uncertainApply?: boolean; staleReview?: boolean; so
   const port: RecoveryPort = {
     async upload(command) {
       calls.upload.push(structuredClone(command));
+      if (options.uncertainUpload && calls.upload.length === 1)
+        return { kind: 'unknown', command: structuredClone(command) };
       return { kind: 'ok', value: status('preview', { sourceRecordCount: options.sourceRecordCount ?? 64 }) };
     },
     async status() {
@@ -361,16 +366,163 @@ async function click(element: Element) {
   });
 }
 
-async function uploadSmallFile(host: HTMLElement) {
+async function selectFile(host: HTMLElement, file: File) {
   const input = host.querySelector('input[type=file]') as HTMLInputElement;
-  Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['{}'], 'library.json')] });
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] });
   await act(async () => input.dispatchEvent(new window.Event('change', { bubbles: true })));
+  return input;
+}
+
+async function submitFile(host: HTMLElement) {
+  const input = host.querySelector('input[type=file]') as HTMLInputElement;
   const form = input.closest('form')!;
   await act(async () => {
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
+
+async function uploadSmallFile(host: HTMLElement, file = new window.File(['{}'], 'library.json')) {
+  await selectFile(host, file);
+  await submitFile(host);
+}
+
+function delayedFile(name: string) {
+  let finish!: (bytes: ArrayBuffer) => void;
+  let reads = 0;
+  const file = new window.File(['{}'], name);
+  Object.defineProperty(file, 'arrayBuffer', {
+    value: () => {
+      reads++;
+      return new Promise<ArrayBuffer>((resolve) => {
+        finish = resolve;
+      });
+    },
+  });
+  return {
+    file,
+    get reads() {
+      return reads;
+    },
+    finish: () => finish(new Uint8Array([123, 125]).buffer as ArrayBuffer),
+  };
+}
+
+test('delayed preparation admits one selected file and suppresses duplicate submit work', async () => {
+  const fake = fakePort();
+  const view = await mount(fake.port);
+  const archive = delayedFile('chosen.json');
+  try {
+    const input = await selectFile(view.host, archive.file);
+    const form = input.closest('form')!;
+    await act(async () => {
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(archive.reads).toBe(1);
+    expect(view.host.querySelector('[role=status]')?.textContent).toContain(m.library_archive_recovery_preparing());
+    expect(input.disabled).toBe(true);
+    expect(button(view.host, m.library_archive_recovery_preparing()).disabled).toBe(true);
+    await act(async () => {
+      archive.finish();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(fake.calls.upload).toHaveLength(1);
+    expect(fake.calls.upload[0]).toMatchObject({ body: { archiveBase64: 'e30=' } });
+  } finally {
+    await view.close();
+  }
+});
+
+test('replacement, read failure, and retired visits cannot hand off a stale archive', async () => {
+  const fake = fakePort();
+  const view = await mount(fake.port);
+  try {
+    const old = delayedFile('old.json');
+    const input = await selectFile(view.host, old.file);
+    await submitFile(view.host);
+    const replacement = new window.File(['next'], 'new.json');
+    Object.defineProperty(replacement, 'arrayBuffer', {
+      value: async () => new Uint8Array([110, 101, 120, 116]).buffer as ArrayBuffer,
+    });
+    await selectFile(view.host, replacement);
+    old.finish();
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(fake.calls.upload).toHaveLength(0);
+    expect((input.files?.[0] as File).name).toBe('new.json');
+    await submitFile(view.host);
+    expect(fake.calls.upload).toHaveLength(1);
+    expect(fake.calls.upload[0]).toMatchObject({ body: { archiveBase64: 'bmV4dA==' } });
+
+    const retryView = await mount(fake.port);
+    try {
+      const reads = { count: 0 };
+      const retryFile = new window.File(['{}'], 'retry.json');
+      Object.defineProperty(retryFile, 'arrayBuffer', {
+        value: async () => {
+          if (++reads.count === 1) throw new Error('read failed');
+          return new Uint8Array([123, 125]).buffer as ArrayBuffer;
+        },
+      });
+      const retryInput = await selectFile(retryView.host, retryFile);
+      await submitFile(retryView.host);
+      expect(retryView.host.querySelector('[role=alert]')?.textContent).toContain(m.library_archive_recovery_upload_read_failed());
+      expect((retryInput.files?.[0] as File).name).toBe('retry.json');
+      await submitFile(retryView.host);
+      expect(reads.count).toBe(2);
+      expect(fake.calls.upload).toHaveLength(2);
+    } finally {
+      await retryView.close();
+    }
+
+    const retiredRead = delayedFile('retired.json');
+    const retiredView = await mount(fake.port, visit('viewer-a', 'epoch-a'));
+    await selectFile(retiredView.host, retiredRead.file);
+    await submitFile(retiredView.host);
+    await retiredView.replaceVisit(visit('viewer-b', 'epoch-b'));
+    retiredRead.finish();
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(fake.calls.upload).toHaveLength(2);
+    expect(retiredView.host.textContent).not.toContain(m.library_archive_recovery_preparing());
+    await retiredView.close();
+
+    const routeRead = delayedFile('route.json');
+    const routeView = await mount(fake.port);
+    await selectFile(routeView.host, routeRead.file);
+    await submitFile(routeView.host);
+    await routeView.close();
+    routeRead.finish();
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(fake.calls.upload).toHaveLength(2);
+  } finally {
+    await view.close();
+  }
+});
+
+test('empty and over-limit files remain local without a read or native upload', async () => {
+  const fake = fakePort();
+  const view = await mount(fake.port);
+  let reads = 0;
+  try {
+    const empty = new window.File([], 'empty.json');
+    Object.defineProperty(empty, 'arrayBuffer', { value: () => (reads++, Promise.resolve(new ArrayBuffer(0))) });
+    const input = await selectFile(view.host, empty);
+    await submitFile(view.host);
+    expect(view.host.querySelector('[role=alert]')?.textContent).toContain(m.library_archive_recovery_upload_empty());
+
+    const oversized = new window.File(['x'], 'large.json');
+    Object.defineProperty(oversized, 'size', { value: RECOVERY_UPLOAD_BYTES + 1 });
+    Object.defineProperty(oversized, 'arrayBuffer', { value: () => (reads++, Promise.resolve(new ArrayBuffer(1))) });
+    await selectFile(view.host, oversized);
+    await submitFile(view.host);
+    expect(view.host.querySelector('[role=alert]')?.textContent).toContain(m.library_archive_recovery_upload_too_large());
+    expect(input.disabled).toBe(false);
+    expect(reads).toBe(0);
+    expect(fake.calls.upload).toHaveLength(0);
+  } finally {
+    await view.close();
+  }
+});
 
 async function chooseCurrentTarget(host: HTMLElement) {
   const input = [...host.querySelectorAll('input')].find(
@@ -388,11 +540,25 @@ async function chooseCurrentTarget(host: HTMLElement) {
   await click(option!);
 }
 
-test('mounted visit preserves duplicate occurrences, refreshes a stale review, confirms a private result and retries the exact uncertain command', async () => {
-  const fake = fakePort({ uncertainApply: true, staleReview: true });
+test('mounted visit retries uncertain upload and apply commands while preserving duplicate occurrences', async () => {
+  const fake = fakePort({ uncertainApply: true, uncertainUpload: true, staleReview: true });
   const view = await mount(fake.port);
+  const archive = new window.File(['{}'], 'library.json');
+  let reads = 0;
+  Object.defineProperty(archive, 'arrayBuffer', {
+    value: async () => {
+      reads++;
+      return new Uint8Array([123, 125]).buffer as ArrayBuffer;
+    },
+  });
   try {
-    await uploadSmallFile(view.host);
+    await uploadSmallFile(view.host, archive);
+    const originalUpload = fake.calls.upload[0];
+    expect(view.host.textContent).toContain(m.library_archive_recovery_uncertain());
+    await click(button(view.host, m.library_archive_recovery_retry_original()));
+    expect(fake.calls.upload).toHaveLength(2);
+    expect(fake.calls.upload[1]).toEqual(originalUpload);
+    expect(reads).toBe(1);
     await click(button(view.host, m.library_archive_recovery_choose_collection()));
     const rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
     expect(rows).toHaveLength(2);
