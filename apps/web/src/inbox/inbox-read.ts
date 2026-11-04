@@ -20,6 +20,17 @@ type NativeNotice = NonNullable<NoticeRead['data']>['items'][number];
 type NativeActor = NativeNotice['actor'];
 type NativeTarget = NativeNotice['target'];
 type NativeActions = NativeNotice['actions'];
+type NativeNoticeDetail = Readonly<{ viewer: Readonly<{ state: 'current' }>; notice: NativeNotice }>;
+export type InboxNoticeDetailWire = NativeNoticeDetail;
+type NativeNoticeDetailResult = Readonly<{
+  data?: NativeNoticeDetail | null;
+  error?: unknown;
+  status: number;
+  headers?: HeadersInit;
+}>;
+type NativeNoticeDetailRoute = Readonly<{
+  get(options: { headers: HeadersInit; fetch?: { signal?: AbortSignal } }): Promise<NativeNoticeDetailResult>;
+}>;
 
 /** Optional composed fields keep presentational test seams small; native decoding requires every field. */
 export type InboxNotice = {
@@ -65,6 +76,10 @@ export type InboxPage =
       state: 'closed' | 'preparing' | 'unavailable';
       failure: NativeInboxFailure;
     };
+export type InboxNoticePage =
+  | { signedIn: false }
+  | { signedIn: true; state: 'ready'; notice: ResolvedNotice }
+  | { signedIn: true; state: 'unavailable'; failure: NativeInboxFailure };
 
 class InboxReadError extends Error {
   constructor(readonly failure: NativeInboxFailure) {
@@ -113,6 +128,14 @@ export function inboxReadFailure(error: unknown): Extract<InboxPage, { failure: 
       ? error.failure
       : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
   return { signedIn: true, state: failureState(failure), failure };
+}
+
+export function inboxNoticeFailure(error: unknown): Extract<InboxNoticePage, { failure: NativeInboxFailure }> {
+  const failure =
+    error instanceof InboxReadError
+      ? error.failure
+      : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+  return { signedIn: true, state: 'unavailable', failure };
 }
 
 /** The native DTO declares string IDs; require a nonempty, unambiguous route segment. */
@@ -310,6 +333,21 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
   return { items, next: value.next as string | null };
 }
 
+/** The exact response has the same strict closed item as the list and binds it to the current viewer. */
+export function decodeInboxNoticeDetail(value: unknown, accountId: string, expectedId: string): NativeNotice {
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ['viewer', 'notice']) ||
+    !isRecord(value.viewer) ||
+    !exactKeys(value.viewer, ['state']) ||
+    value.viewer.state !== 'current' ||
+    !validNotice(value.notice, accountId) ||
+    value.notice.id !== expectedId
+  )
+    throw new InboxReadError({ status: 200 });
+  return projectNativeNotice(value.notice);
+}
+
 /** Convert only native action identities to existing localized routes; never consume a supplied URL. */
 export function inboxOpenHref(item: InboxNotice): string | undefined {
   const open = item.actions?.open;
@@ -393,6 +431,54 @@ export async function loadInboxPage(
   return resolveInboxItems(await readNoticePage(client, accountId, authorization, cursor, signal));
 }
 
+/** Keep the generated route invocation narrow; the shared strict decoder validates its closed DTO. */
+function exactNoticeRoute(client: KernelClient, accountId: string, noticeId: string): NativeNoticeDetailRoute {
+  const account = client.accounts({ accountId }) as unknown as {
+    notifications: (params: { noticeId: string }) => NativeNoticeDetailRoute;
+  };
+  return account.notifications({ noticeId });
+}
+
+export async function loadInboxNotice(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  viewerId: string,
+  requestedNoticeId: string,
+  signal?: AbortSignal,
+): Promise<InboxNoticePage> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId) return { signedIn: false };
+    if (accountId !== viewerId) {
+      return {
+        signedIn: true,
+        state: 'unavailable',
+        failure: { status: 404, code: 'not_found', retryable: false },
+      };
+    }
+    const result = await exactNoticeRoute(client, accountId, requestedNoticeId).get({
+      headers: authHeaders(authorization),
+      ...(signal ? { fetch: { signal } } : {}),
+    });
+    if (result.error || result.status !== 200 || !result.data)
+      throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
+    const native = decodeInboxNoticeDetail(result.data, accountId, requestedNoticeId);
+    const resolved = await resolveInboxItems({ items: [native], next: null });
+    const notice = resolved.items[0];
+    if (!notice) throw new InboxReadError({ status: result.status });
+    return { signedIn: true, state: 'ready', notice };
+  } catch (error) {
+    return {
+      signedIn: true,
+      state: 'unavailable',
+      failure: error instanceof InboxReadError ? error.failure : nativeFailure(error),
+    };
+  }
+}
+
 export const setInboxResponsePolicy = createServerFn({ method: 'GET' }).handler(() => {
   setResponseHeader('cache-control', 'private, no-store');
   return null;
@@ -424,6 +510,39 @@ export const readInboxPage = createServerFn({ method: 'GET' })
       };
     } catch (error) {
       return inboxReadFailure(error);
+    }
+  });
+
+export const readInboxNotice = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    const value = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+    if (
+      typeof value.viewerId !== 'string' ||
+      !noticeId(value.viewerId) ||
+      typeof value.noticeId !== 'string' ||
+      !noticeId(value.noticeId)
+    )
+      throw new Error('Invalid notice identity');
+    return { viewerId: value.viewerId, noticeId: value.noticeId };
+  })
+  .handler(async ({ data }): Promise<InboxNoticePage> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    try {
+      const request = getRequest();
+      return await loadInboxNotice(
+        kernelClient(),
+        request,
+        env as Partial<SessionEnv>,
+        data.viewerId,
+        data.noticeId,
+        request.signal,
+      );
+    } catch (error) {
+      return {
+        signedIn: true,
+        state: 'unavailable',
+        failure: error instanceof InboxReadError ? error.failure : nativeFailure(error),
+      };
     }
   });
 

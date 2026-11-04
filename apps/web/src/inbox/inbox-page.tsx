@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
 import { RelativeTime } from '@rezics/ui/relative-time';
-import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import { Bell, Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import {
   inboxPageQuery,
@@ -15,13 +15,13 @@ import {
 import { inboxViewerCsrfToken, useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { InboxEntryState, retryInboxSession } from './inbox-entry-state';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { initials } from '../threads/initials';
 import { usePreferenceRetry } from '../settings/preference-failure-retry';
 import {
   confirmLoadedInboxSeen,
   confirmInboxNoticeSeen,
-  emptyInboxPagination,
+  inboxPaginationAt,
   nextInboxPage,
   readableInboxPage,
   receiveInboxPage,
@@ -65,6 +65,7 @@ export function InboxRows({
   uncertainNoticeId,
   acknowledgementBlocked = false,
   confirmedNoticeId,
+  inspectHref,
 }: {
   page: ResolvedInboxPage;
   onLoadMore?: () => void;
@@ -75,6 +76,7 @@ export function InboxRows({
   uncertainNoticeId?: string | null;
   acknowledgementBlocked?: boolean;
   confirmedNoticeId?: string | null;
+  inspectHref?: (item: ResolvedInboxPage['items'][number]) => string | undefined;
 }) {
   const locale = getLocale();
   const exactDate = new Intl.DateTimeFormat(locale, {
@@ -108,6 +110,7 @@ export function InboxRows({
                       (item.reportId || item.kind === 'moderation_decision'
                         ? m.inbox_actor_moderation()
                         : m.inbox_actor_unknown());
+          const actorHandle = item.actor?.state === 'available' && item.actor.handle ? `@${item.actor.handle}` : null;
           const kind = kindLabel(item);
           const text =
             item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();
@@ -155,9 +158,14 @@ export function InboxRows({
                 primaryLinkLabel: [text, context, actor, kind, explanation, readState, date].filter(Boolean).join('. '),
               } satisfies Pick<ContentItemProps, 'primaryLinkLabel'>)
             : {};
-          const visual = actorId ? (
+          const visual = item.actor?.state === 'available' ? (
             <Avatar aria-hidden="true" size="sm" className="mt-0.5 shrink-0">
-              <AvatarFallback>{initials(actorId)}</AvatarFallback>
+              {item.actor.avatarUrl ? <AvatarImage src={item.actor.avatarUrl} alt="" /> : null}
+              <AvatarFallback>{initials(item.actor.displayName)}</AvatarFallback>
+            </Avatar>
+          ) : actorId ? (
+            <Avatar aria-hidden="true" size="sm" className="mt-0.5 shrink-0">
+              <AvatarFallback>{initials(actor)}</AvatarFallback>
             </Avatar>
           ) : (
             <span
@@ -176,6 +184,20 @@ export function InboxRows({
               )}
             </span>
           );
+          const detailHref = hasComposedDisclosure ? inspectHref?.(item) : undefined;
+          const rowActions = chosenAction || detailHref ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {chosenAction}
+              {detailHref ? (
+                <a
+                  href={detailHref}
+                  className="inline-flex min-h-11 max-w-full items-center whitespace-normal underline underline-offset-4"
+                >
+                  {m.inbox_inspect_notice()}
+                </a>
+              ) : null}
+            </div>
+          ) : null;
           return (
             <ContentItem
               key={item.id}
@@ -190,6 +212,7 @@ export function InboxRows({
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span data-notice-byline="true" aria-hidden={href ? true : undefined}>
                     {actor}
+                    {actorHandle ? <span> · {actorHandle}</span> : null}
                     <span aria-hidden="true"> · </span>
                     {kind}
                   </span>
@@ -209,7 +232,7 @@ export function InboxRows({
                   {confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}
                 </span>
               }
-              actions={chosenAction}
+              actions={rowActions}
               data-notice-id={item.id}
               data-unread={item.unread}
               data-kind={item.reportId ? 'report_outcome' : item.kind}
@@ -249,9 +272,15 @@ type NoticeSeenStoryTransport = (attempt: InboxNoticeSeenAttempt, csrfToken: str
 export function InboxPageView({
   loadPage,
   acknowledgeNotice,
+  initialCursor,
+  initialUnreadOnly = false,
+  onSelectionChange,
 }: {
   loadPage?: InboxPageLoader;
   acknowledgeNotice?: NoticeSeenStoryTransport;
+  initialCursor?: string;
+  initialUnreadOnly?: boolean;
+  onSelectionChange?: (selection: Readonly<{ cursor: string | undefined; view: 'all' | 'unread' }>) => void;
 } = {}) {
   const { state, csrfToken, viewer, sessionRead } = useInboxViewer();
   if (viewer)
@@ -262,6 +291,9 @@ export function InboxPageView({
         csrfToken={csrfToken}
         loadPage={loadPage}
         acknowledgeNotice={acknowledgeNotice}
+        initialCursor={initialCursor}
+        initialUnreadOnly={initialUnreadOnly}
+        onSelectionChange={onSelectionChange}
       />
     );
   return (
@@ -279,15 +311,21 @@ export function ViewerInboxPage({
   csrfToken,
   loadPage,
   acknowledgeNotice,
+  initialCursor,
+  initialUnreadOnly = false,
+  onSelectionChange,
 }: {
   viewer: InboxViewer;
   csrfToken: string | null;
   loadPage?: InboxPageLoader | undefined;
   acknowledgeNotice?: NoticeSeenStoryTransport | undefined;
+  initialCursor?: string | undefined;
+  initialUnreadOnly?: boolean | undefined;
+  onSelectionChange?: ((selection: Readonly<{ cursor: string | undefined; view: 'all' | 'unread' }>) => void) | undefined;
 }) {
   const queryClient = useQueryClient();
-  const [pagination, setPagination] = useState(emptyInboxPagination);
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [pagination, setPagination] = useState(() => inboxPaginationAt(initialCursor));
+  const [unreadOnly, setUnreadOnly] = useState(initialUnreadOnly);
   const boundaryId = useId();
   const boundary = useRef<HTMLHeadingElement>(null);
   const continuation = useRef<{ cursor: string } | null>(null);
@@ -425,7 +463,7 @@ export function ViewerInboxPage({
       setNoticePendingId(attempt.noticeId);
       try {
         if (acknowledgeNotice) await acknowledgeNotice(attempt, token);
-        else await markInboxViewerNoticeSeen(queryClient, viewer, attempt, token);
+        else await markInboxViewerNoticeSeen(queryClient, viewer, attempt, token, undefined, () => active.current);
         if (!active.current || !viewer.isCurrent()) return;
         setPagination((current) => {
           if (!active.current || !viewer.isCurrent()) return current;
@@ -574,7 +612,10 @@ export function ViewerInboxPage({
     setContinuing(true);
     setContinuationMessage(m.inbox_page_loading());
     if (next === received) void pageQuery.refetch();
-    else setPagination(next);
+    else {
+      onSelectionChange?.({ cursor: next.cursor, view: unreadOnly ? 'unread' : 'all' });
+      setPagination(next);
+    }
   };
   const startAtFirstPage = () => {
     if (
@@ -591,6 +632,7 @@ export function ViewerInboxPage({
     // Retire cached pages and any stale responses before observing the native first-page query.
     void queryClient.cancelQueries({ queryKey: inboxViewerQueryKey(viewer) });
     queryClient.removeQueries({ queryKey: inboxViewerQueryKey(viewer) });
+    onSelectionChange?.({ cursor: undefined, view: unreadOnly ? 'unread' : 'all' });
     setPagination(first);
   };
   const retryPage = () => {
@@ -763,7 +805,10 @@ export function ViewerInboxPage({
                   variant="outline"
                   aria-pressed={!unreadOnly}
                   className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
-                  onClick={() => setUnreadOnly(false)}
+                  onClick={() => {
+                    setUnreadOnly(false);
+                    onSelectionChange?.({ cursor, view: 'all' });
+                  }}
                 >
                   {m.inbox_triage_filter_all()}
                 </Button>
@@ -772,7 +817,10 @@ export function ViewerInboxPage({
                   variant="outline"
                   aria-pressed={unreadOnly}
                   className="h-auto min-h-11 min-w-0 max-w-full whitespace-normal py-2"
-                  onClick={() => setUnreadOnly(true)}
+                  onClick={() => {
+                    setUnreadOnly(true);
+                    onSelectionChange?.({ cursor, view: 'unread' });
+                  }}
                 >
                   {m.inbox_triage_filter_unread()}
                 </Button>
@@ -844,6 +892,11 @@ export function ViewerInboxPage({
                 }}
                 onMarkSeen={markNoticeSeen}
                 onRetrySeen={retryNoticeSeen}
+                inspectHref={(item) => {
+                  const query = new URLSearchParams({ noticeId: item.id, view: unreadOnly ? 'unread' : 'all' });
+                  if (cursor !== undefined) query.set('cursor', cursor);
+                  return localizeHref(`/inbox/notice?${query.toString()}`);
+                }}
                 pendingNoticeId={noticePendingId}
                 uncertainNoticeId={noticeFailure ? (noticeAttemptView?.noticeId ?? null) : null}
                 acknowledgementBlocked={

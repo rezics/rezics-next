@@ -11,6 +11,7 @@ import {
   type NoticeActor,
   type NoticeCandidate,
   type NoticeOpenAction,
+  type NoticeProjection,
   type NoticeTarget,
 } from './notice-disclosure.ts';
 
@@ -41,6 +42,11 @@ export type InboxItem = Readonly<{
     markSeen: Readonly<{ method: 'POST'; path: string }>;
   }>;
   unread: boolean;
+}>;
+
+export type InboxNoticeDetail = Readonly<{
+  viewer: Readonly<{ state: 'current' }>;
+  notice: InboxItem;
 }>;
 
 export type UnreadNoticeSummary = Readonly<{
@@ -124,6 +130,30 @@ function unreadSql(): string {
            (n.created_at,n.notice_id) > (s.seen_created_at,s.seen_notice_id))`;
 }
 
+function buildInboxItem(accountId: string, row: NoticeCandidate, projection: NoticeProjection): InboxItem {
+  return {
+    id: row.notice_id,
+    kind: row.kind,
+    createdAt: new Date(row.created_at).toISOString(),
+    actorId: projection.actorId,
+    actor: projection.actor,
+    threadId: projection.target.state === 'available' ? projection.target.threadId : null,
+    postId: projection.target.state === 'available' ? projection.target.postId : null,
+    decisionId: projection.decisionId,
+    reportId: projection.reportId,
+    target: projection.target,
+    summary: projection.summary,
+    actions: {
+      open: projection.open,
+      markSeen: {
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/notifications/${row.notice_id}:markSeen`,
+      },
+    },
+    unread: row.unread,
+  };
+}
+
 export async function listNoticeInbox(
   dependencies: InboxDependencies,
   accountId: string,
@@ -189,27 +219,7 @@ export async function listNoticeInbox(
     lastScanned = row;
     const projection = projections.get(row.notice_id);
     if (projection) {
-      items.push({
-        id: row.notice_id,
-        kind: row.kind,
-        createdAt: new Date(row.created_at).toISOString(),
-        actorId: projection.actorId,
-        actor: projection.actor,
-        threadId: projection.target.state === 'available' ? projection.target.threadId : null,
-        postId: projection.target.state === 'available' ? projection.target.postId : null,
-        decisionId: projection.decisionId,
-        reportId: projection.reportId,
-        target: projection.target,
-        summary: projection.summary,
-        actions: {
-          open: projection.open,
-          markSeen: {
-            method: 'POST',
-            path: `/v1/accounts/${accountId}/notifications/${row.notice_id}:markSeen`,
-          },
-        },
-        unread: row.unread,
-      });
+      items.push(buildInboxItem(accountId, row, projection));
       if (items.length === input.limit) break;
     }
   }
@@ -224,6 +234,38 @@ export async function listNoticeInbox(
         )
       : null;
   return { items, next };
+}
+
+/** Read one owned identity without scanning the rolling page or changing its read state. */
+export async function readNoticeInboxItem(
+  dependencies: InboxDependencies,
+  accountId: string,
+  noticeId: string,
+): Promise<InboxNoticeDetail> {
+  const accountRoute = route(accountId);
+  if (routeOf(noticeId) !== accountRoute) throw new RangeError('Unknown notice');
+  await assertCurrentInboxViewer(dependencies, accountId);
+  const rows = await withConnection(dependencies.pool, async (client) => {
+    const result = await client.query(
+      `SELECT n.notice_id, n.kind, n.created_at, n.created_at::text AS created_at_key,
+              n.source_id, n.actor_id, n.thread_id, n.post_id, n.decision_id, n.report_id,
+              ${unreadSql()} AS unread
+       FROM content.notice AS n
+       LEFT JOIN content.notice_seen AS s ON s.route=n.route AND s.account_id=n.recipient_id
+       WHERE n.route=$1 AND n.notice_id=$3 AND n.recipient_id=$2
+       LIMIT 1`,
+      [accountRoute, accountId, noticeId],
+    );
+    return result.rows as NoticeCandidate[];
+  });
+  const row = rows[0];
+  if (!row) throw new RangeError('Unknown notice');
+  const projection = (
+    await discloseNoticeCandidates(dependenciesForDisclosure(dependencies), accountId, [row], { actorLimit: 1 })
+  ).get(row.notice_id);
+  await assertCurrentInboxViewer(dependencies, accountId);
+  if (!projection) throw new RangeError('Unknown notice');
+  return { viewer: { state: 'current' }, notice: buildInboxItem(accountId, row, projection) };
 }
 
 export async function countUnreadNotices(

@@ -24,6 +24,8 @@ thread page; board subscription management remains in the existing Settings Watc
 **Decision:** Page reads and target navigation never imply acknowledgement; only the selected-item command or the
 existing explicit bulk frontier may mark notices read.
 
+**Decision:** Notice details use a private `/inbox/notice` child route keyed by `noticeId`; it carries the current opaque cursor and all/unread selection back to Inbox, which reloads that range before rendering.
+
 **Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. A
 successful continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed
 continuation it retains only the prior 20-row window. A chosen or bulk acknowledgement dispatches one native command,

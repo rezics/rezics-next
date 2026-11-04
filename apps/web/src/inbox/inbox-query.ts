@@ -2,12 +2,14 @@ import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import { personalRead, readQueryKey } from '../kernel/query';
 import {
   InboxSeenError,
+  readInboxNotice,
   markInboxItemSeen,
   markInboxSeen,
   readInboxPage,
   readUnreadCount,
   type InboxPage,
   type InboxNoticeSeenAttempt,
+  type InboxNoticePage,
   type InboxSeenAttempt,
   type InboxSeenResult,
 } from './inbox-read';
@@ -20,9 +22,16 @@ export function inboxViewerQueryKey(viewer: InboxViewer) {
 }
 
 export type InboxPageLoader = (cursor?: string, signal?: AbortSignal) => Promise<InboxPage>;
+export type InboxNoticeLoader = (
+  viewerId: string,
+  noticeId: string,
+  signal?: AbortSignal,
+) => Promise<InboxNoticePage>;
 
 const loadNativeInboxPage: InboxPageLoader = (cursor, signal) =>
   readInboxPage({ data: cursor ? { cursor } : {}, ...(signal ? { signal } : {}) });
+const loadNativeInboxNotice: InboxNoticeLoader = (viewerId, noticeId, signal) =>
+  readInboxNotice({ data: { viewerId, noticeId }, ...(signal ? { signal } : {}) });
 
 export function inboxPageQuery(viewer: InboxViewer, cursor?: string, loadPage: InboxPageLoader = loadNativeInboxPage) {
   return queryOptions({
@@ -32,6 +41,22 @@ export function inboxPageQuery(viewer: InboxViewer, cursor?: string, loadPage: I
     retry: false,
     gcTime: 0,
     enabled: personalRead.enabled && viewer.isCurrent(),
+  });
+}
+
+export function inboxNoticeQuery(
+  viewer: InboxViewer,
+  noticeId: string,
+  loadNotice: InboxNoticeLoader = loadNativeInboxNotice,
+) {
+  return queryOptions({
+    ...personalRead,
+    queryKey: [...inboxViewerQueryKey(viewer), 'notice', noticeId] as const,
+    queryFn: ({ signal }) => forInboxViewer(viewer, () => loadNotice(viewer.subject, noticeId, signal), signal),
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    enabled: personalRead.enabled && noticeId.length > 0 && viewer.isCurrent(),
   });
 }
 
@@ -73,10 +98,13 @@ export async function markInboxViewerNoticeSeen(
   attempt: InboxNoticeSeenAttempt,
   csrfToken: string,
   send: NoticeSeenTransport = markInboxItemSeen,
+  isActive: () => boolean = () => true,
 ) {
   if (attempt.accountId !== viewer.subject) throw new InboxSeenError({ status: 403, code: 'forbidden' });
   return forInboxViewer(viewer, async () => {
+    if (!isActive()) throw new DOMException('Inbox notice owner unmounted', 'AbortError');
     const result = await forInboxViewer(viewer, () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }));
+    if (!isActive()) throw new DOMException('Inbox notice owner unmounted', 'AbortError');
     if ('failure' in result) throw new InboxSeenError(result.failure);
     if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
     await Promise.all([

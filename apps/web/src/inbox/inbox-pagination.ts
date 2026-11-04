@@ -15,6 +15,10 @@ export const emptyInboxPagination: InboxPagination = {
   result: undefined,
 };
 
+export function inboxPaginationAt(cursor: string | undefined): InboxPagination {
+  return cursor === undefined ? emptyInboxPagination : { ...emptyInboxPagination, cursor };
+}
+
 /** A confirmed item action changes only that notice in the retained page window. */
 export function confirmInboxNoticeSeen(state: InboxPagination, noticeId: string): InboxPagination {
   const mark = (page: ResolvedInboxPage | null) => {
