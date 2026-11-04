@@ -600,7 +600,7 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@12` reads only the selected character's `name`, `name_cn`
+`cross-media-entities@14` reads only the selected character's `name`, `name_cn`
 and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
 `name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
 preferred name. Every supported `别名` row is an alternate name; its exact label
@@ -632,7 +632,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@13` retains replayable Bangumi character infobox input, so durable reconversion keeps aliases and measurements under the original digest. It preserves Bangumi character names, physical profiles and person biographies while adding bounded Person careers, Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
+Combined revision decision: `cross-media-entities@14` encodes VNDB alias spoiler levels as released dimensionless quantities and retains replayable Bangumi character infobox input, so durable reconversion keeps aliases and measurements under the original digest. It preserves Bangumi character names, physical profiles and person biographies while adding bounded Person careers, Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
 
 ### Bangumi Person careers
 
@@ -1093,7 +1093,7 @@ not retract independently adopted assertions.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@12` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@13` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an

@@ -36,7 +36,7 @@ import {
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
 
-export const converter_revision = 'cross-media-entities@13';
+export const converter_revision = 'cross-media-entities@14';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
@@ -1660,7 +1660,7 @@ function convert(
       qualifiers: [
         {
           property: { id: 'rezics:spoilerLevel' },
-          value: { type: 'value' as const, content: name.spoilerLevel },
+          value: { type: 'value' as const, content: { amount: `+${name.spoilerLevel}`, unit: '1' } },
         },
       ],
     })),
