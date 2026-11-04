@@ -118,7 +118,7 @@ async function readingExample(canvasElement: HTMLElement) {
   await expect(canvas.getByText('Not in your Library.')).toBeVisible();
   await expect(canvas.getByText('Your personal rating is unavailable.')).toBeVisible();
   await expect(canvas.queryByRole('link', { name: 'Open your Library controls' })).toBeNull();
-  await expect(canvas.getAllByText('Your Library actions are unavailable.')).toHaveLength(3);
+  await expect(canvas.getAllByText('Your personal controls are unavailable.')).toHaveLength(3);
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 
