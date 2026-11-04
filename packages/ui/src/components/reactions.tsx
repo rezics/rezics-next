@@ -79,6 +79,8 @@ export interface ReactionsProps {
   signInHref?: string;
   /** The kinds the target admits, in display order. Other kinds are neither shown nor offered. Defaults to all. */
   kinds?: readonly ReactionKind[];
+  /** Native action advice. Counts and the selected kind remain visible independently. */
+  allowedKinds?: readonly ReactionKind[];
   /**
    * Below the `sm` breakpoint the row shows only this many kinds, the most used ones, plus the viewer's own; the
    * other kinds stay in the picker, which lists the counts there. Wider screens show every kind.
@@ -120,6 +122,7 @@ interface CurrentReactionProps {
   disabled: boolean | undefined;
   signInHref: string | undefined;
   kinds: readonly ReactionKind[] | undefined;
+  allowedKinds: readonly ReactionKind[] | undefined;
   optimistic: boolean | undefined;
 }
 
@@ -132,6 +135,7 @@ interface AdmissionSignal {
   disabled: boolean;
   signInHref: string | undefined;
   kinds: string;
+  allowedKinds: string;
   optimistic: boolean;
 }
 
@@ -144,6 +148,7 @@ function admissionSignal(props: ReactionsProps): AdmissionSignal {
     disabled: props.disabled === true,
     signInHref: props.signInHref,
     kinds: admittedKinds(props.kinds).join('\u001f'),
+    allowedKinds: admittedKinds(props.allowedKinds).join('\u001f'),
     optimistic: props.optimistic !== false,
   };
 }
@@ -153,6 +158,7 @@ function sameAdmission(left: AdmissionSignal, right: AdmissionSignal): boolean {
     left.disabled === right.disabled &&
     left.signInHref === right.signInHref &&
     left.kinds === right.kinds &&
+    left.allowedKinds === right.allowedKinds &&
     left.optimistic === right.optimistic
   );
 }
@@ -228,6 +234,7 @@ export const Reactions = (props: ReactionsProps) => {
     disabled: props.disabled,
     signInHref: props.signInHref,
     kinds: props.kinds,
+    allowedKinds: props.allowedKinds,
     optimistic: props.optimistic,
   });
   const failedLabelRef = React.useRef(labels.failed);
@@ -253,10 +260,20 @@ export const Reactions = (props: ReactionsProps) => {
       disabled: props.disabled,
       signInHref: props.signInHref,
       kinds: props.kinds,
+      allowedKinds: props.allowedKinds,
       optimistic: props.optimistic,
     };
     failedLabelRef.current = labels.failed;
-  }, [props.counts, props.value, props.disabled, props.signInHref, props.kinds, props.optimistic, labels.failed]);
+  }, [
+    props.counts,
+    props.value,
+    props.disabled,
+    props.signInHref,
+    props.kinds,
+    props.allowedKinds,
+    props.optimistic,
+    labels.failed,
+  ]);
 
   const isCurrent = (candidate: ReactionQueue, kind?: ReactionKind) => {
     const current = currentPropsRef.current;
@@ -267,7 +284,10 @@ export const Reactions = (props: ReactionsProps) => {
       current.signInHref !== undefined
     )
       return false;
-    return kind === undefined || admittedKinds(current.kinds).includes(kind);
+    return (
+      kind === undefined ||
+      (admittedKinds(current.kinds).includes(kind) && admittedKinds(current.allowedKinds).includes(kind))
+    );
   };
 
   const publish = (candidate: ReactionQueue) => {
@@ -405,7 +425,7 @@ export const Reactions = (props: ReactionsProps) => {
         aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
         aria-pressed={pressed}
         className={className}
-        disabled={disabled}
+        disabled={disabled || !admittedKinds(props.allowedKinds).includes(kind)}
         onClick={() => select(kind)}
       >
         <Icon aria-hidden className={cn('size-5', pressed && 'fill-current')} />
@@ -484,7 +504,7 @@ export const Reactions = (props: ReactionsProps) => {
             className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
             data-pressed={pressed ? 'true' : 'false'}
             data-slot="reaction-chip"
-            disabled={disabled}
+            disabled={disabled || !admittedKinds(props.allowedKinds).includes(kind)}
             key={kind}
             onClick={() => select(kind)}
             size="sm"
@@ -519,7 +539,7 @@ export const Reactions = (props: ReactionsProps) => {
                     aria-label={`${labels[kind]} ${formatAccessibleCount(props.locale, count)}`}
                     aria-pressed={pressed}
                     className={cn('relative w-full justify-start px-3 transition-none', pressed && pressedClass)}
-                    disabled={disabled}
+                    disabled={disabled || !admittedKinds(props.allowedKinds).includes(kind)}
                     key={kind}
                     onClick={() => select(kind)}
                     size="sm"

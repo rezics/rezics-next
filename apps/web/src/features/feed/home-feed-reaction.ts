@@ -1,8 +1,14 @@
 import type { FeedItem, FeedPage } from '../pages/home-feed-read';
-import type { ReactionKind } from '@rezics/ui/reactions';
+import { reactionKinds, type ReactionKind } from '@rezics/ui/reactions';
 import type { FeedReaction } from './vote-control';
 
 type FeedOrigin = { key: string; reader: string | null; isCurrent(): boolean };
+// Flip only when the serial publisher installs this field in KernelClient's response.
+// The conditional makes an accidental enabling against the old publication a type error.
+type ContentRow = Extract<FeedItem, { key: { owner: 'content' } }>;
+export const homeNativeReactionAdviceInstalled: 'reactionAdvice' extends keyof ContentRow['summary'] ? true : false =
+  false;
+const isReactionKind = (value: unknown): value is ReactionKind => reactionKinds.some((kind) => kind === value);
 const subjectKinds = new Set<ReactionKind>(['like', 'love', 'laugh', 'insightful', 'sad']);
 const record = (value: unknown): Record<string, unknown> | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -76,16 +82,53 @@ export function homeFeedReaction(
   const destinationMatches =
     (item.destination.kind === 'thread' && target.targetKind === 'thread' && target.targetId === item.destination.id) ||
     (item.destination.kind === 'post' && target.targetKind === 'post' && target.targetId === item.destination.postId);
-  if (!destinationMatches || (input.signedIn && !Object.hasOwn(summary, 'viewerReaction'))) return;
+  if (
+    item.key.owner !== 'content' ||
+    item.key.id !== target.targetId ||
+    summary.id !== target.targetId ||
+    !destinationMatches ||
+    (input.signedIn && !Object.hasOwn(summary, 'viewerReaction'))
+  )
+    return;
   return {
     target: { kind: target.targetKind, id: target.targetId },
     counts: summary.reactions,
     value: input.signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
     ...(input.origin ? { reactionOrigin: input.origin } : {}),
     sourceWatermark: input.reactionsAsOf,
-    // The installed Content feed projection carries no native action advice. Keep its
-    // disclosed counts and selection visible, but do not treat them as permission.
-    personalReady: !input.signedIn,
+    ...nativeAdvice(item, input),
+  };
+}
+
+/** Receive only closed native advice; facts never fill in a missing action slot. */
+function nativeAdvice(item: FeedItem, input: { signedIn: boolean; origin?: FeedOrigin }): Partial<FeedReaction> {
+  const unavailable = { personalReady: false, signInAllowed: false };
+  if (!homeNativeReactionAdviceInstalled || (input.origin && !input.origin.isCurrent())) return unavailable;
+  const summary = record(item.summary);
+  const advice = record(summary?.reactionAdvice);
+  const target = record(advice?.target);
+  const expected = record(summary?.reactionTarget);
+  if (
+    !advice ||
+    !target ||
+    !expected ||
+    Object.keys(target).length !== 2 ||
+    target.targetKind !== expected.targetKind ||
+    target.targetId !== expected.targetId
+  )
+    return unavailable;
+  if (advice.state === 'sign_in' && Object.keys(advice).length === 2)
+    return { personalReady: !input.signedIn, signInAllowed: !input.signedIn };
+  if (advice.state !== 'current' || !input.signedIn || Object.keys(advice).length !== 3) return unavailable;
+  const allowed = advice.allowed;
+  if (!Array.isArray(allowed) || !allowed.every(isReactionKind) || new Set(allowed).size !== allowed.length)
+    return unavailable;
+  return {
+    personalReady: allowed.length > 0,
+    signInAllowed: false,
+    allowedKinds: allowed,
+    optimistic: false,
+    allowDiscard: true,
   };
 }
 
@@ -97,7 +140,11 @@ export function homeFeedReactionStatus(
   input: { signedIn: boolean; reaction: FeedReaction | undefined },
 ): HomeFeedReactionStatus | undefined {
   if (item.destination.kind === 'thread' || item.destination.kind === 'post')
-    return input.signedIn ? 'unavailable' : undefined;
+    return input.reaction?.allowedKinds?.length === 0
+      ? 'denied'
+      : input.reaction?.personalReady
+        ? undefined
+        : 'unavailable';
   if (item.destination.kind !== 'subject') return;
 
   const projection = record(homeFeedSubjectReactionProjection(item));

@@ -1290,6 +1290,7 @@
   "reaction_react": "Réagir",
   "reaction_reactions": "Réactions",
   "reaction_sad": "Triste",
+  "reaction_discard": "Abandonner la nouvelle tentative",
   "reaction_unavailable": "Cette réaction n’a pas pu être enregistrée. Veuillez réessayer.",
   "reaction_upvote": "Pour",
   "realm_banned": "Vous êtes banni de cette communauté. Vous pouvez toujours lire ce qui y est public, mais vous ne pouvez ni la rejoindre ni y publier.",

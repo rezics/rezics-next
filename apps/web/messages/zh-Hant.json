@@ -1290,6 +1290,7 @@
   "reaction_react": "表態",
   "reaction_reactions": "表態",
   "reaction_sad": "難過",
+  "reaction_discard": "放棄重試",
   "reaction_unavailable": "無法儲存這項表態，請稍後再試。",
   "reaction_upvote": "推",
   "realm_banned": "你已被這個社群封鎖。你仍可閱讀這裡公開的內容，但無法加入或發文。",

@@ -243,7 +243,14 @@ export function HomeFeedActions({
       href={href}
       title={homeFeedTitle(item, locale)}
       signedIn={signedIn}
-      reaction={reaction}
+      reaction={
+        reaction && {
+          ...reaction,
+          onMutation: async () => {
+            if (origin?.isCurrent() ?? true) onRetry?.();
+          },
+        }
+      }
       reactionStatus={reactionStatus}
       reactionPresentation={kind === 'subject' ? 'chips' : undefined}
       subjectReactionProjection={homeFeedSubjectReactionProjection(item)}

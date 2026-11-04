@@ -1307,6 +1307,7 @@
   "reaction_react": "React",
   "reaction_reactions": "Reactions",
   "reaction_sad": "Sad",
+  "reaction_discard": "Discard retry",
   "reaction_unavailable": "This reaction could not be saved. Please try again.",
   "reaction_upvote": "Upvote",
   "realm_banned": "You are banned from this Realm. You can still read what is public here, but you can't join or post.",
