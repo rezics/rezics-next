@@ -729,6 +729,11 @@ function SessionEditor({
     );
   }
 
+  // Descendants consult the retained reader during rendering as well as in async callbacks.
+  // Event-handler custody changes at commit; reader custody changes only with its source.
+  const currentReader = lifetime.current;
+  const readerIsCurrent = () => isCurrent(currentReader);
+
   const pendingCommand =
     lifetime.current?.custody.retry !== undefined || lifetime.current?.custody.flight !== undefined;
   const baseline = draftBaseline.current;
@@ -1089,7 +1094,7 @@ function SessionEditor({
           <IndependentMeasuresVisit
             session={session}
             credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
-            isCurrent={() => canHandle() && (commandGuards.record?.isCurrent() ?? true)}
+            isCurrent={() => readerIsCurrent() && (commandGuards.record?.isCurrent() ?? true)}
             onAcknowledged={(snapshot) => {
               if (!canHandle()) return;
               setSession((current) => mergeIndependentSnapshot(current, snapshot));
@@ -1108,7 +1113,7 @@ function SessionEditor({
             revision: session.revision,
           })}
           credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
-          isCurrent={() => canHandle() && (commandGuards.record?.isCurrent() ?? true)}
+          isCurrent={() => readerIsCurrent() && (commandGuards.record?.isCurrent() ?? true)}
           onRevision={(revision) => {
             if (!canHandle()) return;
             setSession((current) => (revision > current.revision ? { ...current, revision } : current));
@@ -1416,7 +1421,7 @@ function SessionEditor({
       </header>
       <PrivateOccurrenceControls
         session={session}
-        isCurrent={canHandle}
+        isCurrent={readerIsCurrent}
         lifetime={originating?.lifetime ?? originating}
       />
       {unsupported || session.recordingState === 'unsupported' ? (
