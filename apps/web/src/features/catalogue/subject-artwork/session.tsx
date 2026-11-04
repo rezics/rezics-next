@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import { useSession } from '../../../session/query';
-import { browserObservation } from '../../../session/observation';
+import { browserObservation } from '../../../session';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { loadSubjectArtwork } from './actions';
 import type { ArtworkTransport } from './read';

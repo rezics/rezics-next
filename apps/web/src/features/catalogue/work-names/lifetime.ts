@@ -1,6 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useRef, useSyncExternalStore } from 'react';
-import { browserObservation, type BrowserObservationSnapshot } from '../../../session/observation';
+import { browserObservation, type BrowserObservationSnapshot } from '../../../session';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 
 // Weak query identities survive a route visit without retaining past callers or credentials.

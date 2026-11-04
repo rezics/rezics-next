@@ -28,7 +28,7 @@ export function collectionViewerProjection(
 ): CollectionViewerProjection {
   if (!current || !viewerId || provenance?.mode !== 'session' || provenance.viewerId !== viewerId)
     return { state: 'withheld' };
-  if (!facts || facts.state === 'unavailable') return { state: 'unavailable' };
+  if (!facts || facts.state !== 'current') return { state: 'unavailable' };
   return { state: 'current', question: facts.question, rows: facts.rows };
 }
 
@@ -59,75 +59,19 @@ export function collectionViewerVoteCurrent(row: CollectionViewerFact, question:
   );
 }
 
-/** Named receiving seam until Commerce's closed member schema is published by Content.
- * Inspect only supplied grants; omission and malformed projections never grant an operation.
+/** The installed members.get row has no actions field. Facts never imply a grant.
+ * Keep controls unavailable until the producer publishes its typed occurrence/account-bound closure.
  */
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+export function collectionViewerActionsState(_row: CollectionViewerFact | undefined): 'current' | 'unavailable' {
+  return 'unavailable';
 }
 
-function suppliedActions(row: CollectionViewerFact | undefined): unknown[] | undefined {
-  if (!row || !('actions' in row) || !record(row.actions)) return undefined;
-  const actions = row.actions;
-  if (actions.state !== 'current' || !Array.isArray(actions.allowed)) return undefined;
-  if (
-    !actions.allowed.every(
-      (grant: unknown) =>
-        record(grant) &&
-        typeof grant.action === 'string' &&
-        grant.action.length > 0 &&
-        Array.isArray(grant.operations) &&
-        grant.operations.every((operation: unknown) => typeof operation === 'string'),
-    )
-  )
-    return undefined;
-  return actions.allowed;
-}
-
-export function collectionViewerActionsState(row: CollectionViewerFact | undefined): 'current' | 'unavailable' {
-  return suppliedActions(row) === undefined ? 'unavailable' : 'current';
-}
-
-/** Navigation reaches the existing Subject writers, which independently readmit every command. */
-export function collectionViewerHasPersonalAction<Row extends CollectionViewerFact>(
-  row: Row | undefined,
-  question: CollectionViewerQuestion,
+/** The original Subject hosts remain the only Entry/progress/vote writers. */
+export function collectionViewerHasPersonalAction(
+  _row: CollectionViewerFact | undefined,
+  _question: CollectionViewerQuestion,
 ): boolean {
-  const actions = suppliedActions(row);
-  if (!actions || !row) return false;
-  return actions.some((grant) => {
-    if (!record(grant) || !Array.isArray(grant.operations)) return false;
-    return grant.operations.some((operation: unknown) => {
-      switch (grant.action) {
-        case 'library_entry:update':
-          return row.entry.state !== 'unavailable' && operation === 'library_entry.put';
-        case 'library_entry:delete':
-          return row.entry.state === 'present' && operation === 'library_entry.delete';
-        case 'progress_session:create':
-          return row.entry.state === 'present' && operation === 'progress_session.create';
-        case 'progress_session:update':
-          return (
-            row.entry.state === 'present' &&
-            [
-              'progress_session.record',
-              'progress_session.record_episodes',
-              'progress_session.complete',
-              'progress_session.abandon',
-              'progress_session.reopen',
-              'progress_session.retire',
-              'progress_session_journal.update',
-            ].includes(String(operation))
-          );
-        case 'rating:vote':
-          return (
-            collectionViewerVoteCurrent(row, question) &&
-            (operation === 'rating.vote_put' || operation === 'rating.vote_delete')
-          );
-        default:
-          return false;
-      }
-    });
-  });
+  return false;
 }
 
 const localOrigin = 'https://rezics.invalid';

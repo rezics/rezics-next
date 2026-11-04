@@ -11,7 +11,7 @@ import { ScreenProfileEntry } from './screen-profile-entry';
 import { isScreenType, screenReaderVisit, type ScreenReaderVisit } from './screen-profile';
 import { screenGroupLabel } from './screen-profile-fields';
 import type { ScreenGroup } from './screen-profile';
-import { browserObservation } from '../../session/observation';
+import { browserObservation } from '../../session';
 import { loadScreenProfileFactsForReader, loadScreenProfileForReader } from './screen-episode-reader/actions';
 import {
   screenEpisodeCursorIntent,

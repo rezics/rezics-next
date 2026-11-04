@@ -5,7 +5,7 @@ import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import { CandidateValue } from '../../pages/data';
 import { contextHref } from '../../pages/context-navigation';
-import { addressLease, type AddressLease } from '../../../reader/lease';
+import { addressLease, type AddressLease } from '../../../session';
 import { useArcLifetime } from './reading/use-lifetime';
 import { useArcWindow } from './reading/use-window';
 import { linkClass, linkColor, spoilerLevel, type PageLink } from '../../pages/shared';

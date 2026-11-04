@@ -7,7 +7,7 @@ import {
   type CandidateSessionLease,
 } from '../../subject/candidate-lifetime';
 import { sessionQuery, useSession } from '../../session/query';
-import { browserObservation } from '../../session/observation';
+import { browserObservation } from '../../session';
 import { normalizeSessionObservation } from '../../session/browser-state';
 import { loadSubjectChange, loadSubjectChanges } from './subject-changes-actions';
 import { SubjectChanges, SubjectChangesPage } from './subject-changes-page';

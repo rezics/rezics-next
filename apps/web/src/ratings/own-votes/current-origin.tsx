@@ -1,13 +1,13 @@
 import { useQuery, useQueryClient, queryOptions } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
-import { useWorkspaceAdmission } from '../../reader/workspace-admission';
 import {
+  useWorkspaceAdmission,
   assertReaderCurrent,
   useReaderAddress,
   useReaderCurrentOrigin,
   useReaderResponseOrigin,
-} from '../../reader/current-origin';
+} from '../../session';
 import { personalRead } from '../../kernel/query';
 import { readOwnVotesForViewer, type OwnVotesRead } from './actions';
 import type { OwnVotesPage } from './types';

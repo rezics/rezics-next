@@ -4,6 +4,8 @@ import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } f
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import type { CollectionVisibility } from './reads';
+import type { CollectionViewerActions, ViewerActionsInput } from './collection-viewer/contract';
+export type { CollectionViewerActions } from './collection-viewer/contract';
 
 export type CollectionWriteResult =
   | { ok: true; id: string; revision?: number; undo?: CollectionMemberUndo }
@@ -26,9 +28,6 @@ export type CollectionWriteResult =
 export type CollectionMemberUndo = { collectionId: string; memberId: string; deletionId: string; revision: number };
 export type CollectionPresentationSelection = { presentationKind?: string | null; coverMediaId?: string | null };
 
-type ViewerAction = { action: string; operations: string[] };
-export type CollectionViewerActions = { state: 'ready'; actions: ViewerAction[] } | { state: 'unavailable' };
-
 /** One exact-resource native action read, using the same credential as the Collection read. */
 export async function readCollectionViewerActions(
   client: KernelClient,
@@ -36,8 +35,9 @@ export async function readCollectionViewerActions(
   authorization: string | null,
 ): Promise<CollectionViewerActions> {
   try {
+    const input: ViewerActionsInput = { resources: [{ type: 'library.collection', id }] };
     const result = await client.viewerActions.post(
-      { resources: [{ type: 'library.collection', id }] },
+      input,
       authorization ? { headers: { authorization } } : {},
     );
     if (result.error || result.status !== 200) return { state: 'unavailable' };

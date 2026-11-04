@@ -30,3 +30,16 @@ lease only refuses stale dispatch/completion; it never reconstructs, upgrades or
 Native authorization, disclosure and prepared authenticated requests retain their existing owners.
 
 Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed.
+
+## Public module entry
+
+`session/index.ts` is the public browser adapter entry for observation, read/operation/address leases,
+workspace admission and current-response/address composition. `reader/` contains its existing implementations;
+these are Web runtime adapters, not Library infrastructure. Lease descriptors in `reader/lease.ts` have no
+runtime imports. Authentication and request preparation retain their server-only entries.
+
+Subject personal preferences and ratings subscribe to the shared observation only while mounted. Their local
+registry owns response epochs and rating write arbitration, and releases its listener and retained scopes when
+its last page observer leaves. Session incarnation comparison and session cache observation belong exclusively
+to `browserObservation`. Equal successful replacement retires a personal query even when its account and token
+are unchanged. Ratings inventory, Library naming adapters and catalogue readers use this public entry.

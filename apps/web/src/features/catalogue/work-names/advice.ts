@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BrowserObservationSnapshot } from '../../../session/observation';
+import type { BrowserObservationSnapshot } from '../../../session';
 import type { TermsPageAuthority } from '../subject-terms';
 import { peopleNamesAdvice, type NamesAdvice } from '../people-names/model';
 

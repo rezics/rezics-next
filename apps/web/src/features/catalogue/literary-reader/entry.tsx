@@ -2,7 +2,7 @@ import { useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { PageContinuation, SelectedContext } from '@rezics/composition';
 import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
-import { browserObservation } from '../../../session/observation';
+import { browserObservation } from '../../../session';
 import type { Subject, Related } from '../../../subject/types';
 import type { Reader } from '../../../subject/reader';
 import { defaultReader } from '../../../subject/reader';

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { addressLease, readLease, browserObservation, type BrowserSession, type BrowserCacheEvent } from '../../session';
 import { personalRead } from '../../kernel/query';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { SubjectOwnRating } from './subject-ratings';
@@ -10,11 +11,7 @@ import {
   type SubjectPersonalReadTransport,
 } from './subject-queries';
 
-type SessionAdmission = {
-  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
-  csrfToken: string | null;
-  subject?: string | null;
-};
+type SessionAdmission = BrowserSession;
 
 type LeaseState = {
   active: boolean;
@@ -86,10 +83,6 @@ type PersonalScope = {
   incarnation: number;
 };
 
-function sessionData(client: QueryClient): SessionAdmission | undefined {
-  return client.getQueryData<SessionAdmission>(['session']);
-}
-
 function metaString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
@@ -99,19 +92,31 @@ class SubjectPersonalReaderRegistry {
   private readonly listeners = new Set<() => void>();
   private readonly scopes = new Map<string, ScopeState>();
   private nextIncarnation = 0;
-  private sessionHealthy: boolean;
-  private sessionVersion: number;
+  private stopCache: (() => void) | undefined;
+  private readonly observation;
 
   constructor(private readonly client: QueryClient) {
-    const queryState = client.getQueryState(['session']);
-    this.sessionHealthy = queryState?.status === 'success';
-    this.sessionVersion = this.sessionHealthy ? 1 : 0;
-    client.getQueryCache().subscribe((event) => this.onCacheEvent(event));
+    this.observation = browserObservation(client);
   }
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    if (!this.stopCache) {
+      this.stopCache = this.observation.subscribeCache(this.onCacheEvent);
+      // Subscribing enrolls the existing browser observation on the first mount.
+      this.notify();
+    }
+    return () => {
+      this.listeners.delete(listener);
+      if (this.listeners.size !== 0) return;
+      this.stopCache?.();
+      this.stopCache = undefined;
+      for (const scope of this.scopes.values()) {
+        this.retireWrites(scope);
+        scope.retired = true;
+      }
+      this.scopes.clear();
+    };
   };
 
   getSnapshot = () => this.version;
@@ -122,31 +127,10 @@ class SubjectPersonalReaderRegistry {
     for (const listener of this.listeners) listener();
   }
 
-  private onCacheEvent(
-    event: Parameters<ReturnType<QueryClient['getQueryCache']>['subscribe']>[0] extends (event: infer T) => void
-      ? T
-      : never,
-  ) {
-    const queryKey = event.query.queryKey;
-    if (queryKey[0] === 'session') {
-      if (event.type === 'removed') {
-        this.sessionVersion++;
-        this.sessionHealthy = false;
-        this.notify();
-        return;
-      }
-      if (event.type === 'updated' && event.action.type === 'error') {
-        this.sessionVersion++;
-        this.sessionHealthy = false;
-        this.notify();
-        return;
-      }
-      if (event.type === 'updated' && event.action.type === 'success') {
-        this.sessionVersion++;
-        this.sessionHealthy = true;
-        this.notify();
-        return;
-      }
+  private onCacheEvent = (event: BrowserCacheEvent) => {
+    if (event.query.queryKey.length === 1 && event.query.queryKey[0] === 'session') {
+      this.notify();
+      return;
     }
 
     const meta = event.query.meta as Record<string, unknown> | undefined;
@@ -179,27 +163,15 @@ class SubjectPersonalReaderRegistry {
       scopeState.writeState = createRatingWriteState();
       this.notify();
     }
-  }
-
-  getAdmission() {
-    return this.sessionVersion;
-  }
+  };
 
   currentSession(session: SessionAdmission) {
-    const state = this.client.getQueryState(['session']);
-    const cached = sessionData(this.client);
+    const snapshot = this.observation.getSnapshot();
+    const reader = snapshot.state === 'signed-in' ? snapshot.observation.subject : null;
     const ready =
-      this.sessionHealthy &&
-      state?.status === 'success' &&
-      cached !== undefined &&
-      cached.state === session.state &&
-      (cached.subject ?? null) === (session.subject ?? null) &&
-      cached.csrfToken === session.csrfToken;
-    const reader =
-      ready && cached?.state === 'signed-in' && typeof cached.subject === 'string' && cached.subject
-        ? cached.subject
-        : null;
-    return { ready, reader, admission: this.sessionVersion };
+      (snapshot.state === 'signed-in' && session.state === 'signed-in' && reader === session.subject) ||
+      (snapshot.state === 'signed-out' && session.state === 'signed-out');
+    return { ready, reader, admission: snapshot.state === 'signed-in' ? snapshot.observation.id : 0 };
   }
 
   getCacheEpoch(scopeKey: string) {
@@ -266,22 +238,16 @@ class SubjectPersonalReaderRegistry {
   }
 
   isQueryCurrent(scope: PersonalScope) {
-    const current = sessionData(this.client);
+    const current = this.observation.getSnapshot();
     return (
       this.hasLiveObserver(scope.scopeKey, scope.cacheEpoch, scope.errorEpoch, scope.incarnation) &&
-      this.sessionHealthy &&
-      this.client.getQueryState(['session'])?.status === 'success' &&
-      this.sessionVersion === scope.admission &&
-      current?.state === 'signed-in' &&
-      current.subject === scope.reader &&
+      current.state === 'signed-in' &&
+      current.observation.id === scope.admission &&
+      current.observation.subject === scope.reader &&
       this.getCacheEpoch(scope.scopeKey) === scope.cacheEpoch &&
       this.getErrorEpoch(scope.scopeKey) === scope.errorEpoch &&
       this.getIncarnation(scope.scopeKey) === scope.incarnation
     );
-  }
-
-  isScopeCurrent(scope: PersonalScope, isDesired: () => boolean) {
-    return isDesired() && this.isQueryCurrent(scope);
   }
 
   getWriteRevision(scopeKey: string, cacheEpoch: number, errorEpoch: number, incarnation: number) {
@@ -380,7 +346,9 @@ class SubjectPersonalReaderRegistry {
     };
     scopeState.observers.add(observer);
     scopeState.retirement++;
-    const isCurrent = () => observer.active && this.isScopeCurrent(scope, isDesired);
+    const address = addressLease(() => observer.active && isDesired());
+    const reading = readLease(scope.reader, address, () => this.isQueryCurrent(scope));
+    const isCurrent = reading.current;
     const writeState = () => scopeState.writeState;
     const key = JSON.stringify([
       scope.scopeKey,
@@ -413,6 +381,7 @@ class SubjectPersonalReaderRegistry {
     const retire = () => {
       if (!observer.active) return;
       observer.active = false;
+      address.retire();
       scopeState.observers.delete(observer);
       let restoreRating = false;
       for (const [id, state] of observer.operations) if (this.releaseOperation(state, id)) restoreRating = true;

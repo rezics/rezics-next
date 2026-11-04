@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { addressLease } from '../../../../reader/lease';
+import { addressLease } from '../../../../session';
 import type { ArcAddress, ArcRead, ArcTransport } from '../model';
 
 export type Ready = Extract<ArcRead, { ok: true }>;
