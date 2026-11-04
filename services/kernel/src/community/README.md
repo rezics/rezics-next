@@ -1961,7 +1961,7 @@ writer, asset picker or upload/lifecycle engine here.
   the additive composition of the retained component equations:
 
   ```text
-  S_get = S_auth
+  C_get = S_auth
         + (28 + b_locator + b_initial + b_final + Σ_outer(P_o + Q_o))
         + Σ_(j=1..2)(27 + m_j + 2*a_j + b_locator_j + b_final_j
                       + Σ_media_j(P_m + Q_m))
@@ -1972,7 +1972,10 @@ writer, asset picker or upload/lifecycle engine here.
   This is the unflattened source ceiling, not a sampled total. It preserves the
   fixed local/eligibility coefficient of at most 273 while keeping every outer,
   media and rules preparation, formula, auth statement and variable ban term
-  explicit. The successful two-image/two-rules path opens at most fourteen
+  explicit. The SQL-only statement ceiling `N_sql` is this expression with
+  `Q_o`, `Q_m` and `F_t` omitted; they are formula evaluations, not statements.
+  The successful
+  two-image/two-rules path opens at most fourteen
   read-only snapshots and runs at most twenty-eight transaction controls; each
   opened snapshot ends in one COMMIT or one ROLLBACK. Failed/withheld paths pay
   the dispatched prefix and replace a reached COMMIT with ROLLBACK. Cold
