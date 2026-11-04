@@ -1,4 +1,6 @@
 import type { PurchaseHistoryPosition } from './purchase-return';
+import { createPurchaseReaderOrigin } from './purchase-return';
+import { useRouter } from '@tanstack/react-router';
 import { useCallback, useState, type ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
@@ -23,6 +25,7 @@ type PageProps<T> = {
   retry?: () => void;
   continuation?: boolean;
   history?: PurchaseHistoryPosition | undefined;
+  onOpenReader?: (editionId: string, href: string) => boolean;
 };
 type CurrentProps<T extends Page> = {
   initial: BuyerEntitlementsCurrentRead<T>;
@@ -136,6 +139,28 @@ function EntitlementsRead<T extends Page>({
   history,
 }: CurrentProps<T> & { subject: string; hydrated: boolean; seed: boolean; origin: BuyerCurrentOrigin }) {
   const [lifetime] = useState(() => crypto.randomUUID());
+  const router = useRouter();
+  const onOpenReader = useCallback(
+    (editionId: string, href: string) => {
+      if (address.kind !== 'detail' || !origin.isCurrent()) return false;
+      const purchaseOrigin = createPurchaseReaderOrigin({
+        kind: 'entitlement',
+        recordId: address.id,
+        editionId,
+        locale: address.locale,
+        history,
+        viewer: {
+          current: origin.isCurrent(),
+          subject: origin.observed.subject,
+          readId: origin.observed.readId,
+        },
+      });
+      if (!purchaseOrigin) return false;
+      void router.navigate({ href, state: { purchaseOrigin } as never });
+      return true;
+    },
+    [address, history, origin, router],
+  );
   const [initialData] = useState<Outcome<T> | undefined>(() =>
     seed && matches(initial, subject, address) ? { kind: 'accepted', value: initial } : undefined,
   );
@@ -182,6 +207,7 @@ function EntitlementsRead<T extends Page>({
       continuation={address.kind === 'list' && address.cursor !== null}
       retry={retry}
       history={history}
+      {...(address.kind === 'detail' ? { onOpenReader } : {})}
     />
   );
 }

@@ -19,4 +19,7 @@ export const Unavailable: Story = { ...pattern.Unavailable };
 export const Retryrecovers: Story = { ...pattern.Retryrecovers };
 export const Refused: Story = { ...pattern.Refused };
 export const Withdrawn: Story = { ...pattern.Withdrawn };
-export const Versionmismatch: Story = { ...pattern.Versionmismatch };
+export const Versionmismatch: Story = {
+  ...pattern.Versionmismatch,
+  name: 'Version mismatch restarts current purchases when no same-tab origin is admitted',
+};

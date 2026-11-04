@@ -21,7 +21,8 @@ export const Route = createFileRoute('/orders/$id')({
     return { ...purchaseHistorySearch(search), ...(checkout ? { checkout } : {}) };
   },
   loader: ({ params }) => readOrder({ data: { id: params.id, locale: getLocale() } }),
-  staleTime: 60_000,
+  // Reader returns must re-admit this private detail before presenting its selected receipt.
+  staleTime: 0,
   head: ({ loaderData, match }) =>
     pageHead(
       {

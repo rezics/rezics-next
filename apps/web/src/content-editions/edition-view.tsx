@@ -7,17 +7,24 @@ import { subjectHref } from '../subject/subject-href';
 import type { ContentEditionState } from './edition-model';
 import { NativeDocumentImage } from './edition-media';
 
+export type ContentEditionReturnOrigin = {
+  kind: 'order' | 'entitlement';
+  href: string;
+};
+
 /** A fixed document reader has no shadcn equivalent; controls and document typography retain their shared owners. */
 export function ContentEditionReader({
   editionId,
   page,
   onRetry,
   retrying = false,
+  returnOrigin,
 }: {
   editionId: string;
   page: ContentEditionState;
   onRetry?: () => void;
   retrying?: boolean;
+  returnOrigin?: ContentEditionReturnOrigin | undefined;
 }) {
   const locale = getLocale();
   if (page.state === 'published' && (page.metadata.editionId !== editionId || page.metadata.state !== 'published'))
@@ -43,6 +50,22 @@ export function ContentEditionReader({
         {m.content_edition_retry()}
       </Button>
     ) : null;
+  const returnHref = returnOrigin?.href ?? `/${locale}/orders`;
+  const returnLabel = returnOrigin
+    ? returnOrigin.kind === 'order'
+      ? m.content_edition_return_order()
+      : m.content_edition_return_entitlement()
+    : m.content_edition_purchases();
+  const returnContext = returnOrigin
+    ? returnOrigin.kind === 'order'
+      ? m.content_edition_from_order()
+      : m.content_edition_from_entitlement()
+    : null;
+  const returnLink = (className: string) => (
+    <a href={returnHref} className={className}>
+      {returnLabel}
+    </a>
+  );
   return (
     <article
       className="mx-auto w-full max-w-3xl space-y-8 text-foreground [overflow-wrap:anywhere]"
@@ -56,6 +79,11 @@ export function ContentEditionReader({
           </p>
         ) : null}
         <p className="text-sm font-medium text-muted-foreground">{m.content_edition_fixed()}</p>
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium">{m.content_edition_identifier()}:</span>{' '}
+          <span className="break-all font-mono">{editionId}</span>
+        </p>
+        {returnContext ? <p className="text-sm text-muted-foreground">{returnContext}</p> : null}
         {subject ? (
           <a
             className="inline-flex min-h-11 items-center text-sm underline underline-offset-4"
@@ -85,15 +113,12 @@ export function ContentEditionReader({
             </a>
           ) : null}
           {recoverable ? retry : null}
-          <a
-            href={`/${locale}/orders`}
-            className={buttonVariants({
+          {returnLink(
+            buttonVariants({
               variant: signIn || (recoverable && onRetry) ? 'outline' : 'default',
               className: 'min-h-11',
-            })}
-          >
-            {m.content_edition_purchases()}
-          </a>
+            }),
+          )}
           {page.state === 'version-mismatch' ? retry : null}
         </div>
       ) : null}
@@ -108,6 +133,7 @@ export function ContentEditionReader({
           />
           <footer className="space-y-4 border-t border-border pt-6 text-sm text-muted-foreground">
             <p>{m.content_edition_attribution()}</p>
+          {returnLink('inline-flex min-h-11 items-center text-primary underline underline-offset-4')}
             <dl>
               <dt className="font-medium text-foreground">{m.content_edition_licence()}</dt>
               <dd>{published.metadata.licence}</dd>

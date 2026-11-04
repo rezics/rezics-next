@@ -13,11 +13,13 @@ export function EntitlementPage({
   locale,
   retry,
   history = {},
+  onOpenReader,
 }: {
   page: BuyerEntitlementPage;
   locale: string;
   retry?: () => void;
   history?: PurchaseHistoryPosition | undefined;
+  onOpenReader?: (editionId: string, href: string) => boolean;
 }) {
   const record = page.kind === 'ready' ? page.data : null;
   const subject = record
@@ -60,6 +62,7 @@ export function EntitlementPage({
             creatorName={page.creatorName}
             active={record.active && record.revokedAt === null && record.revokeReason === null}
             locale={locale}
+            onOpenReader={onOpenReader}
           />
           <dl className="grid min-w-0 grid-cols-1 gap-y-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-6 sm:gap-y-4 [&>dt]:text-muted-foreground [&>dd]:mb-3 [&>dd]:break-words sm:[&>dd]:mb-0">
             <dt>{m.entitlements_granted()}</dt>
