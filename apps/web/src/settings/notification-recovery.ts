@@ -304,7 +304,8 @@ export class NotificationEditor {
       (this.state.phase !== 'uncertain' && this.state.phase !== 'review') ||
       !page ||
       !notificationOriginalAllowed(this.state.pending.input, page)
-    ) return;
+    )
+      return;
     await this.send(true);
   }
   private async send(recovering: boolean) {

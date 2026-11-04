@@ -446,14 +446,16 @@ export function NotificationsCard({
                   >
                     {state.intent === null ? m.settings_notifications_restore() : m.settings_notifications_save_draft()}
                   </Button>
-                  {!state.pending ? <Button
-                    className={preferenceActionClassName}
-                    type="button"
-                    variant="outline"
-                    onClick={() => editor.useCurrent()}
-                  >
-                    {m.settings_notifications_use_current()}
-                  </Button> : null}
+                  {!state.pending ? (
+                    <Button
+                      className={preferenceActionClassName}
+                      type="button"
+                      variant="outline"
+                      onClick={() => editor.useCurrent()}
+                    >
+                      {m.settings_notifications_use_current()}
+                    </Button>
+                  ) : null}
                 </div>
               </AlertDescription>
             </Alert>
