@@ -16,6 +16,7 @@ import {
   InvalidInboxCursorError,
   listNoticeInbox,
   markNoticesSeen,
+  readNoticeInboxItem,
 } from './notice-inbox.ts';
 import { strictContentSchema } from './schemas.ts';
 
@@ -114,6 +115,13 @@ const item = t.Object({
   ),
   unread: t.Boolean(),
 });
+const noticeDetail = t.Object(
+  {
+    viewer: t.Object({ state: t.Literal('current') }, { additionalProperties: false }),
+    notice: item,
+  },
+  { additionalProperties: false },
+);
 const countResponse = t.Object(
   {
     count: t.Integer({ minimum: 0, maximum: 100 }),
@@ -211,6 +219,43 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         } catch (error) {
           if (error instanceof InvalidInboxCursorError) throw new ProblemError('invalid_cursor');
           if (error instanceof InboxViewerUnavailableError) throw new ProblemError('not_found');
+          throw error;
+        }
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/notifications/:noticeId',
+      {
+        params: noticeParams,
+        response: { 200: withHeaders(noticeDetail, sessionHeader), ...failures },
+        detail: {
+          operationId: 'notifications.read_notice',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params: { accountId, noticeId }, actor, admission, job }) => {
+        requireViewer(actor, accountId);
+        try {
+          return await admission.run('normal', job, () =>
+            readNoticeInboxItem(
+              {
+                pool: dependencies.pool,
+                tokens: dependencies.tokens,
+                access: dependencies.access,
+                routeKey: dependencies.routeKey,
+                actor,
+                deadline: job.deadline,
+                ...(dependencies.clock === undefined ? {} : { now: dependencies.clock }),
+              },
+              accountId,
+              noticeId,
+            ),
+          );
+        } catch (error) {
+          if (error instanceof RangeError || error instanceof InboxViewerUnavailableError)
+            throw new ProblemError('not_found');
           throw error;
         }
       },

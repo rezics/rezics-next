@@ -319,7 +319,7 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
         markSeen: { method: string; path: string };
       };
     }>;
-    const publicNotice = restoredItems.find((item) => item.target.postId === publicReply.id)!;
+    const publicNotice = restoredItems.find((item) => item.currentTarget.postId === publicReply.id)!;
     expect(publicNotice.currentActor).toMatchObject({ state: 'available', accountId: people.replier.id });
     expect(publicNotice.currentActor.displayName.length).toBeGreaterThan(0);
     expect(publicNotice.currentTarget).toMatchObject({
@@ -340,6 +340,27 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
       method: 'POST',
       path: `/v1/accounts/${people.author.id}/notifications/${publicNotice.id}:markSeen`,
     });
+
+    const exact = await driver.readNotice(people.author.id, publicNotice.id, people.author);
+    expect(exact.response.status).toBe(200);
+    expect(exact.value).toMatchObject({
+      viewer: { state: 'current' },
+      notice: {
+        id: publicNotice.id,
+        unread: true,
+        currentActor: { state: 'available', accountId: people.replier.id },
+        currentTarget: { state: 'available', threadId: publicThread.id, postId: publicReply.id },
+        actions: { open: { kind: 'thread_post', threadId: publicThread.id, postId: publicReply.id } },
+      },
+    });
+    const stillUnread = await driver.inbox(people.author.id, people.author, { limit: 50 });
+    expect(stillUnread.value?.items.find((item) => item.id === publicNotice.id)?.unread).toBe(true);
+    const foreign = await driver.readNotice(people.author.id, publicNotice.id, people.replier);
+    expect(foreign.response.status).toBe(404);
+    expect(foreign.value).toBeNull();
+    const unknown = await driver.readNotice(people.author.id, newId(routeOf(people.author.id)!), people.author);
+    expect(unknown.response.status).toBe(404);
+    expect(unknown.value).toBeNull();
   } finally {
     await driver.close();
   }

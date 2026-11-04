@@ -53,6 +53,10 @@ export interface Inbox {
   items: Notice[];
   next: string | null;
 }
+export interface InboxNoticeDetail {
+  viewer: { state: 'current' };
+  notice: Notice & { currentActor: unknown; currentTarget: unknown; summary: string; actions: unknown };
+}
 export interface Decision {
   id: string;
   target: Target;
@@ -118,6 +122,7 @@ export interface ContentNotificationDriver {
   /** Ordinary content read response, including its current security revision. */
   readTarget(target: Target, actor: Persona): Promise<ApiResult<{ id: string; securityRevision: string }>>;
   inbox(accountId: string, actor: Persona, query?: { limit?: number; cursor?: string }): Promise<ApiResult<Inbox>>;
+  readNotice(accountId: string, noticeId: string, actor: Persona): Promise<ApiResult<InboxNoticeDetail>>;
   unread(accountId: string, actor: Persona): Promise<ApiResult<{ count: number; capped: boolean }>>;
   markSeen(accountId: string, noticeId: string, options: WriteOptions): Promise<ApiResult<unknown>>;
   takedown(target: Target, reason: string, options: WriteOptions): Promise<ApiResult<{ securityRevision: string }>>;
