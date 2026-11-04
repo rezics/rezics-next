@@ -27,7 +27,11 @@ import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
 import { SectionsNavigation, settingsSections, type SettingsSection } from './sections-navigation';
 import { ManagedAccountDetail } from './managed-account-detail';
-import { managedAccountTarget, managedAccountsBackHref } from './managed-account-detail-read';
+import {
+  managedAccountTarget,
+  managedAccountsBackHref,
+  selectAdmittedManagedAccountTarget,
+} from './managed-account-detail-read';
 import { readSettingsPage, saveNotifications, savePreferences } from './actions';
 import type { ReadingIO } from './reading-preferences';
 import type { NotificationEditorIO } from './notification-recovery';
@@ -41,6 +45,27 @@ type PreferenceIO = {
     csrfToken: string,
   ) => ReturnType<NotificationEditorIO['save']>;
 };
+
+export function ManagedAccountSelectionUnavailable({ backHref }: { backHref: string }) {
+  return (
+    <Card className="min-w-0 max-w-full">
+      <CardHeader className="min-w-0">
+        <a
+          className="inline-flex min-h-11 max-w-full items-center rounded-2xl px-3 py-2 text-sm leading-5 whitespace-normal break-words text-primary underline underline-offset-4 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          href={backHref}
+        >
+          {m.managed_back()}
+        </a>
+        <CardTitle>
+          <h2 id="settings-account-heading">{m.managed_detail_title()}</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p role="status">{m.settings_managed_navigation_unavailable()}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 const nativePreferences: PreferenceIO = {
   read: () => readSettingsPage(),
@@ -230,7 +255,10 @@ function SettingsSections({
     );
   });
   const notificationError = new URL(location.publicHref, 'https://rezics.local').searchParams.has('notificationError');
-  const managedTarget = managedAccountTarget(location.publicHref);
+  const requestedManagedTarget = managedAccountTarget(location.publicHref);
+  // The official generated native viewer/navigation callable is not installed yet.
+  const managedTarget = selectAdmittedManagedAccountTarget(requestedManagedTarget, null);
+  const managedSelectionUnavailable = requestedManagedTarget !== undefined && managedTarget === undefined;
   useEffect(() => {
     if (owner.readCurrent() && 'preferences' in page)
       setVersion((current) => Math.max(current, page.preferences.version));
@@ -341,6 +369,8 @@ function SettingsSections({
       <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
         {managedTarget !== undefined ? (
           <ManagedAccountDetail accountId={managedTarget} backHref={managedAccountsBackHref(location.publicHref)} />
+        ) : managedSelectionUnavailable ? (
+          <ManagedAccountSelectionUnavailable backHref={managedAccountsBackHref(location.publicHref)} />
         ) : (
           <>
             <AccountSafetySection
@@ -528,7 +558,10 @@ export function SettingsPageView({
   // Match the server snapshot on first hydration; later renders require the live browser identity.
   // A loader page or a seeded cache alone never establishes this route-bound session.
   const session = hydrated ? browserSession : (requestSession ?? browserSession);
-  const managedTarget = managedAccountTarget(location.publicHref);
+  const requestedManagedTarget = managedAccountTarget(location.publicHref);
+  // A direct or stale query parameter cannot substitute for native admission.
+  const managedTarget = selectAdmittedManagedAccountTarget(requestedManagedTarget, null);
+  const managedSelectionUnavailable = requestedManagedTarget !== undefined && managedTarget === undefined;
   const signedOut =
     !retrying && (session.state === 'signed-out' || (!hydrated && !page.signedIn && session.state === 'unknown'));
   const ready =
@@ -573,21 +606,9 @@ export function SettingsPageView({
             retryFailed={retryFailed}
             onRetry={retry}
           />
-          {page.signedIn && managedTarget !== undefined ? (
+          {page.signedIn && managedSelectionUnavailable ? (
             <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
-              <Card>
-                <CardHeader>
-                  <a
-                    className="inline-flex min-h-11 max-w-full items-center rounded-2xl px-3 py-2 text-sm leading-5 whitespace-normal break-words text-primary underline underline-offset-4 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-                    href={managedAccountsBackHref(location.publicHref)}
-                  >
-                    {m.managed_back()}
-                  </a>
-                  <CardTitle>
-                    <h2 id="settings-account-heading">{m.managed_detail_title()}</h2>
-                  </CardTitle>
-                </CardHeader>
-              </Card>
+              <ManagedAccountSelectionUnavailable backHref={managedAccountsBackHref(location.publicHref)} />
             </section>
           ) : null}
         </div>

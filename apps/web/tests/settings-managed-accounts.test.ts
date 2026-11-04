@@ -10,6 +10,7 @@ import {
   type ManagedAccountsPage,
   type ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { managedAccountTarget, selectAdmittedManagedAccountTarget } from '../src/settings/managed-account-detail-read';
 import { MediaProblem } from '../src/media/kernel';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 
@@ -69,6 +70,15 @@ test('A signed-in human can reach their own identity, independent organization m
   expect(href.searchParams.get('panel')).toBe('compact');
   expect(href.searchParams.get('managedAccount')).toBe(operated);
   expect(href.hash).toBe('#account');
+});
+
+test('a managed-account URL opens detail only for the exact native admitted target', () => {
+  const requested = managedAccountTarget(`/en/settings?managedAccount=${organization}#account`);
+  expect(requested).toBe(organization);
+  expect(selectAdmittedManagedAccountTarget(requested, undefined)).toBeUndefined();
+  expect(selectAdmittedManagedAccountTarget(requested, operated)).toBeUndefined();
+  expect(selectAdmittedManagedAccountTarget(requested, organization)).toBe(organization);
+  expect(selectAdmittedManagedAccountTarget(null, organization)).toBeUndefined();
 });
 
 test('each feed retains its opaque cursor and usable page across transient failure, then replaces that page', async () => {

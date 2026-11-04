@@ -70,6 +70,14 @@ export function managedAccountTarget(href: string): string | null | undefined {
       : null;
 }
 
+/** A URL selection opens detail only when the native navigation observation independently admits it. */
+export function selectAdmittedManagedAccountTarget(
+  requested: string | null | undefined,
+  admitted: string | null | undefined,
+): string | undefined {
+  return typeof requested === 'string' && requested === admitted ? requested : undefined;
+}
+
 export function managedAccountsBackHref(href: string): string {
   const url = new URL(href, 'https://rezics.local');
   url.searchParams.delete('managedAccount');

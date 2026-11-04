@@ -42,6 +42,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
 const { within } = await import('storybook/test');
 const { ManagedAccountsSection } = await import('../src/settings/managed-accounts');
+const { ManagedAccountSelectionUnavailable } = await import('../src/settings/settings-page');
 const { managedAccountsFailure } = await import('../src/settings/managed-accounts-read');
 const { sessionQuery } = await import('../src/session/query');
 const { managedAccountsExample, managedViewer } = await import('../src/stories/patterns/managed-accounts.fixtures');
@@ -247,6 +248,28 @@ test('two mounted inventories name their independent feeds and retain exact spar
     associations(a);
   } finally {
     await view.close();
+  }
+});
+
+test('an unadmitted managed-account selection stays unavailable and returns to the settings account list', async () => {
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(<ManagedAccountSelectionUnavailable backHref="/en/settings?panel=compact#account" />);
+    await tick();
+  });
+  try {
+    expect(within(host).getByRole('status').textContent).toBe(m.settings_managed_navigation_unavailable());
+    expect(within(host).getByRole('link', { name: m.managed_back() }).getAttribute('href')).toBe(
+      '/en/settings?panel=compact#account',
+    );
+  } finally {
+    await act(async () => {
+      root.unmount();
+      await tick();
+    });
+    host.remove();
   }
 });
 
