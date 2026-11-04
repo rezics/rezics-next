@@ -2,13 +2,14 @@ import { useMemo } from 'react';
 import type { Release } from '@rezics/definitions';
 import type { Related, Subject } from '../../../subject/types';
 import { contextHref } from '../../pages/context-navigation';
+import { workTagReturnHref } from '../../pages/subject-visit-navigation';
 import { projectWorkTags } from './model';
 import { WorkTagReadingView } from './view';
 
 export type WorkTagReturnSelection = Readonly<{
   property: string;
   statement: string;
-  spoiler: number;
+  spoiler: 0 | 1 | 2;
   focus: 'browse' | 'evidence';
 }>;
 
@@ -37,6 +38,8 @@ export function WorkTagReading({
   );
   if (!model) return null;
   const workHref = currentHref ?? (realm ? contextHref(model.workHref, realm) : model.workHref);
+  const returnFor = returnToFor ?? ((selection: WorkTagReturnSelection) =>
+    workTagReturnHref(currentHref, workHref, locale, selection));
   return (
     <WorkTagReadingView
       key={model.sourceKey}
@@ -46,7 +49,7 @@ export function WorkTagReading({
       locale={locale}
       spoilerThreshold={spoilerThreshold}
       workHref={workHref}
-      returnToFor={returnToFor}
+      returnToFor={returnFor}
     />
   );
 }
