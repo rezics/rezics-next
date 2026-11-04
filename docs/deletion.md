@@ -98,8 +98,8 @@ participant acknowledgement.
 
 ### Shared-history participant
 
-Accounts owns the `shared-history` participant for `command-receipt/v1`, `outbox-event/v1` and `durable-work/v1`.
-Every producer declares typed account references for all copied roles and records exact locators in the artifact's
+Accounts owns the minimizers, durable locators/fences and financial-retention policy of the `shared-history` participant for `command-receipt/v1`, `outbox-event/v1` and `durable-work/v1`.
+Kernel retains command/storage/request machinery and History/Work execution. Every producer declares typed account references for all copied roles and records exact locators in the artifact's
 physical partition in the transaction that creates the copy. This includes foreign-partition copies; there is no
 cross-partition write on the command path. The committed `access.erasure` obligation seals participant discovery.
 Discovery visits all 4,096 partitions, one partition per step, and seeks only the deleted account's locator prefix.
@@ -204,33 +204,33 @@ from sealed zero data, unknown custody and actual retained copies. Missing confi
 elapsed TTL never establish `none`; unresolved provider diagnostics keep erasure pending. No external legal
 retention schedule is inferred.
 
-Restoring older Auth data must preserve Access's original immutable obligation and T, the captured native floor,
-applicability and original 310-second consent due time. The database/deployment owner isolates the restored copy;
-Access supplies current source authority and bounded replay through a sealed boundary; Auth redrives native and
-external cleanup before any restored personal data, issuer or workflow writer opens. The same source fence excludes
-stale sessions and late writes. A restored local completion marker never covers newly reintroduced payload.
-Unavailable source or wrong/unproved copy keeps admission closed. There is no account restore, second deletion
-service or credential crossing. Existing `readErasureAccount` supplies only state/fence/epoch, not this replay feed
-or T; adoption is still required.
+Restore is an operational admission procedure: assign a fresh random database incarnation, rotate the Access
+proof-signing key and replay deletions committed since the backup before admitting traffic or writers. Coordinated
+Auth/Kernel restore uses the latest available WAL/PITR. Isolate the restored copy and retire old writers before
+opening the replacement; live and historical deletion obligations must both survive. There is no account restore,
+runtime physical-owner ABI or restore-generation witness protocol.
+
+Replay preserves the original obligation/version/T, captured floor, applicability and original 310-second consent
+due time. A restored local completion marker cannot cover reintroduced bytes. Pending succession retains its
+locators until the actual consumer finishes. Local emptiness proves neither historical coverage, terminal custody
+nor financial closure. Technical negative-identity minima never waive legal or financial retention. Committed
+deletion time is not downstream custody acknowledgement. Hosting/runbook restore proof remains unexercised and
+unverified, distinct from ordinary dev landing; this adoption establishes no operational pass.
+
+Library reuses existing Auth host/deletion interfaces. Consumers own orchestration, never Access-table SQL or
+interpreting a denied read as absence. Existing bounded minimization, immutable source fences, writer retirement
+and retained financial obligations remain required.
 
 A complete `readErasureStatus` does not prove backup expiry or external custody;
 [the coordinator](../services/kernel/src/access/erasure.ts) does not model it. Report active cleanup, named adopted
 retention exceptions and backup expiry separately, while retaining incomplete status for unknown custody. Native
 Auth completion and final trusted acknowledgement remain subject to all other requirements above.
 
-Implement capabilities in this dependency order:
-
-- Access discovery/progress on the existing coordinator/routing, plus Access and Auth cursor cutovers on their native
-  traversal state; deployed cutover coverage precedes any purge of cursor-bearing relations or evidence.
-- Command and workflow copy recorders, after shared history supplies its locator interface and producer-closure
-  protocol; both owners use the agreed artifact contract, including actual durable copy creation.
-- Access and Auth residue phases, using indexed discovery, cursor cutovers and recorders: finish native consumers,
-  drain children before parents, minimize identity last. Auth client drain needs opaque protocol locators; subject
-  drain needs client, operating-evidence and staging cleanup. Registration cleanup needs workflow recording.
-- Auth bounded delayed consent on subject-drain progress/due/completion state, then service plumbing after every
-  native purger, bounded consent and both workflow recorders; fixed-host enqueue accepts an obligation only.
-- Each participant's terminal acknowledgement, last: Access needs all Access phases/recorders and specific Auth
-  native-release evidence; Auth needs every Auth phase, consent completion and fixed trusted service-port wiring.
+Native residue/cursor coverage, actual copy recorders, delayed-consent completion and fixed host plumbing remain
+prerequisites to their respective terminal acknowledgements. A cursor cutover precedes purge of cursor evidence;
+children and committed consumers finish before identity minimization. Shared producer handoff must not wait on a
+shared-history global ACK. Missing producer, routing or physical custody evidence remains incomplete rather than
+being inferred from a successful local page.
 
 ### Auth-local copies and the fixed proof boundary
 

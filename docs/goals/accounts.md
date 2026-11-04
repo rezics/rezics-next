@@ -19,19 +19,23 @@ exercise only the permissions they hold. Operators can open product capabilities
 Completion requires the scoped outcomes on main with recorded checks covering the promoted commit. Specified,
 implemented, exposed, tested and promoted are separate states; a passing local check alone does not complete a Goal.
 
-## Scope
+## Scope and ownership
 
-Includes Auth, Access, operators, grants, memberships, platform gates, public profiles and account preferences.
-Consumer-specific content, library and interface implementation stays with its owner. Follow [public scope](../scope.md);
-a future adapter is not required merely because operation discovery supports it.
+Accounts owns native Auth and Access, `apps/auth/**`, `packages/auth-contract/**` and pure `packages/access/**`,
+including native profile, verification, preferences and identity-publication semantics. Native Access lives under
+`services/kernel/{src,db,test}/access/**`; that placement does not transfer Kernel's command, storage, request or
+execution machinery to Accounts. Web and Performance own their Settings and account-page consumers. Content,
+Commerce, Semantic, Search and generated publication retain their module ownership.
 
-## Ownership
-
-Owns `services/auth/**`, `services/kernel/{src,db,test}/access/**`, and `packages/auth-contract/**`.
-[Auth](../../services/auth/README.md), [Access](../../services/kernel/src/access/README.md) and
-[platform gates](../../services/kernel/src/access/gates/README.md) own the contracts;
-[deletion](../deletion.md) owns lifecycle policy. Kernel owns partition and request machinery. Web owns Auth pages;
-content owns community resources; commerce owns library follow storage.
+[Accounts](../accounts.md) owns identity, delegation, consent and preference policy;
+[deletion](../deletion.md) owns erasure and restore policy;
+[native Auth](../../services/auth/README.md) owns protocol and trusted composition;
+[Auth pages](../../apps/auth/README.md) owns browser behavior;
+[native Access](../../services/kernel/src/access/README.md) owns preparations, disclosure and bounded native work.
+The [adopted Access architecture](../architecture.md) places pure policy behind the public
+`packages/access/src/index.ts` entry. [Platform gates](../../services/kernel/src/access/gates/README.md) retain their
+native exposure contract. Follow [public scope](../scope.md); future adapters are not required merely because
+operation discovery supports them.
 
 ## Dependencies
 
@@ -52,10 +56,6 @@ dependencies through real boundaries. Carry adopted suspended-credential expecta
 the exact response mapping belongs to those contracts. Run the applicable workspace commands from their manifests;
 a shared kernel runtime contract change requires `bun run --cwd services/kernel check`.
 Use [verification](../development/verification.md) for root typecheck, growth and promotion evidence.
-
-Decision: A mounted Security target outcome that is unknown stays unknown through later attempts until dismissed; a later acknowledgement or refusal cannot settle the earlier send.
-
-Decision: mounted passkey history keeps one generic acknowledged or unknown outcome separate from current registration review; unresolved unknown takes precedence until locally dismissed, and inventory reads settle neither outcome.
 
 ## External conditions
 

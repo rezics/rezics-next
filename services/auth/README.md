@@ -1,14 +1,9 @@
 # Auth account effects
 
-For the complete loopback stack, generated keys, persona and reset command, see
-[Local development stack](../../docs/development/local-stack.md). Run `task dev:infra` then `task dev` from the repository root.
-`task dev:persona` repeats the local developer, importer credential and showcase exposure setup; `task seed:dev`
-runs that same step before seeding. It opens mounted anonymous GET groups plus M1 mixed Search (`search`) and
-facets/filters (`search_advanced`) through authorized native platform commands. Failures stop setup with the group,
-native error and retry task. Production defaults and native action/resource checks are unchanged.
-The local host passes the same complete catalogue of mounted and internal Access actions to native bindings,
-Access and Auth client registration; native-only actions such as `account:manage` retain their ordinary checks. The private loopback transport reconstructs
-the public issuer URL before invoking Auth, preserving request headers and body for its normal origin checks.
+[Accounts](../../docs/accounts.md#8-platform-gates) owns local persona, seed and exposure composition.
+[Local development stack](../../docs/development/local-stack.md) owns startup and reset commands. The loopback
+transport preserves native origin checks and supplies the same complete catalogue to Auth and Access; it grants
+no production opening or resource authority.
 
 `@rezics/auth` is a separate workspace and PostgreSQL store. It owns password
 credentials, Better Auth sessions, registered clients, consent and signing keys.
@@ -60,204 +55,35 @@ Collection Kind journey is complete.
 
 ## Restored database admission
 
-A deployment restoring Auth declares `restoredGeneration: { kind: 'RESTORED',
-generation, databaseOwner }` on `AuthServiceOptions` (also inherited by the host).
-The generation identifies the actual isolated restored image, not a startup UUID.
-`createAuthService` checks admission before native producer installation, signer
-loading or Better Auth construction. Consequently `createAuthHost` cannot return
-an active service/handler before `start()`: refusal also precedes workflow SDK
-registration/recovery, maintenance, client registration and mail writers. Host
-refusal closes its owned pools; library refusal leaves the caller's pool owned
-by the caller. A durable unverified declaration is retained even when the owner is missing;
-its null inventory proves no backup boundary. The marker refuses subsequent
-construction that omits the deployment declaration. Unmarked fresh library/host construction
-retains its ordinary lifecycle. Physical isolation of unmarked old snapshots and
-old executors remains the deployment owner's responsibility.
+[Deletion](../../docs/deletion.md#access-and-auth-participants) owns operational restore admission, coordinated
+WAL/PITR recovery, deletion replay, fresh database incarnation and Access proof-key rotation. Auth reuses its
+native erasure engine and original obligation, floor, applicability and consent cutoff; restored completion does
+not certify reintroduced data. Old writers must be retired before issuer, workflow, maintenance or mail writers
+open. This is an adopted requirement, not exercised hosting/runbook proof.
 
-`AuthRestoreDatabaseOwner` in [restore-admission.ts](src/restore-admission.ts)
-is the explicit trusted dependency for verifying the connected database against
-its nonsecret database identity, inventory entry/version, original cluster/timeline/source lineage, capture
-point and recoverable committed native tail beyond the snapshot. Its exact
-account recovery returns original native identity, checkpoint, captured floor,
-applicability, first user-deletion/consent cutoff and genuine original consumer
-acceptance/discharge. There is no installed deployment/database implementation.
-No callback returning a boolean, generated identifier, wall clock, absent user or
-absent snapshot row verifies this evidence. Missing or conflicting evidence has
-an `AuthRestoreAdmissionError.code`; it never establishes no deletion or custody.
-
-`importRestoredAuthProgress` recovers one exact account obligation outside all
-Auth locks, then binds that evidence under the existing account producer lock.
-It preserves original source acceptance, workflow/receipt, applicability and
-consent cutoff; disagreement refuses the transaction. `auth_erasure` retains the
-source route/account/version/T and original floor. `auth_restore_generation`
-retains verified image identity, and `auth_restore_replay` holds immutable
-original progress and per-generation checkpoints beside the existing obligation.
-`replayRestoredAuthPage` reuses the native store/role/client engine and original
-consumer proofs, at most one native unit per call (48 raw keys, 1 KiB per locator,
-64 KiB whole-step ceiling), followed on later calls by existing shared-copy work.
-Each generation restarts the existing native role classification and revisits
-reintroduced bytes, including an image carrying older completion. Original first consent due evidence is retained, without another
-310-second wait; a proved never-established cutoff uses the existing native
-first deletion transaction. Missing original consumer release stays pending.
-No approval, credential effect or 30-minute source authorization is renewed.
-
-`AuthRestoredGeneration.obligations` accepts the original
-`AuthErasureObligationPorts` from `@rezics/auth-contract`. Trusted service/host
-composition supplies the native `createAuthErasureObligationBindings(pool)` or
-the same four methods on default `createAuthBindings`; Auth receives no kernel
-pool, module or HTTP-provided readiness. `stageRestoredAuthObligations` stages
-one actual native partition/page, at most 48 obligations, under one five-second
-absolute deadline. It persists a stable cut UUID before contacting Access and
-reuses that locator on every retry. The UUID establishes no backup proof.
-
-Each ready page obligation is resolved again through the real Source point port
-and compared with independently recovered Auth progress before import. Route
-(0–65535), account, version, exact PostgreSQL T and canonical native integer floor
-must agree. The original Source receipt and ordinal are retained separately from
-Auth's original consumer receipt/continuation. Unknown original floors or missing
-Auth tail never create replacement native progress. No Auth checkout spans a
-Source or database-owner read. The existing account producer/floor locks still
-serialize imports. Durable page/cut/cursor and version checkpoints accompany
-immutable Source obligations and Auth original progress; a crash repeats the
-same page and each native replay uses the existing engine.
-
-Traversal follows native `state` and `next`, keeping pending/initializing pages
-at their original cursor. Empty pages and `sealedPartitions` alone prove no
-completion. After traversal, bounded calls verify all 4096 partitions through
-the actual current Source verifier and retain its generation/epoch/owner and
-high-water/live-high-water observations. A changed head/owner stays pending on
-the same cut rather than silently replacing it. Verification is an observation, not a live cutover fence.
-
-`AuthRestoredGeneration.live(receiver)` binds the original
-`AuthErasureLivePorts` to the verified generation/database identity/inventory
-entry/version and the original cut. Trusted composition supplies
-`receiver => createAuthErasureLiveBindings(sourcePool, receiver)`; the Source
-pool remains inside Access. Auth uses the producer's original published ABI,
-including its opaque string inventory version. Missing native composition still
-reports `source-live-handoff-pending`; a boolean cannot replace it.
-
-After traversal/verification, each bounded call arms or tails one actual native
-partition. Source enrollment uses the actual tombstone append fence. Auth keeps
-the exact receiver and original Source generation/epoch/owner/cut high-water/arm
-high-water. Its tail begins at the original cut high-water, including obligations
-between that cut and the arm. The dynamic `enrolledThrough` is the native tail
-boundary; the cut's `highWater` does not grow. At most 48 obligations and 64 KiB
-cross one call under the same five-second absolute deadline. Every root is
-point-checked and imported through the existing immutable original-progress
-validator. Missing independently recovered Auth progress remains pending, even
-when Source has a genuine new obligation. Auth never invents original progress
-from an absent snapshot row. Page/import/checkpoint interruptions retry the same
-immutable evidence; a CAS advances only a completely imported page.
-
-`auth_restore_live_generation`, `auth_restore_live_partition` and
-`auth_restore_live_work` own durable partition rotation, Source observations,
-CAS cursors and indexed fair native scheduling. An indexed 48-key attachment
-page also enrolls genuine replay rows imported before the live scheduler existed;
-an empty new queue cannot hide that earlier native work. A newly imported obligation
-gets unfinished per-generation native/receiving work without clearing an older
-obligation's original consent cutoff or acknowledged Source evidence. These
-independent tables bind the original verified restore record at runtime; their
-UTC migration does not depend on the ordering of older future-dated migrations.
-
-`reconcileRestoredAuthPage` alternates Source consumption and actual existing
-native replay using durable turns and indexed keys. `createAuthRestoreHost`
-provides the isolated deployment's `start`/`reconcile`/`stop` lifecycle before
-normal `createAuthHost`: it owns its Auth pool, schedules further bounded work,
-awaits in-flight work before pool shutdown, and exposes no service, handler,
-issuer, workflow SDK or maintenance writer. Restarting it resumes native
-checkpoints. Required original consumer continuations remain pending until their
-real owner can redrive them; the isolated host does not launch an SDK to infer
-that release. Normal service admission also runs one reconciler unit before
-refusing. Unmarked fresh service/host behavior is unchanged.
-
-Once all partitions have genuine live enrollment and consumed native tail
-observations, the reported boundary becomes the actual `native-replay-pending`,
-`receiving-closure-pending` or `external-owner-pending`. This progress never opens
-traffic: the installed database owner API verifies image identity and recovered
-native progress only. No installed owner supplies final independent physical,
-committed-tail and receiving closure. A tail-end observation or current Source
-point is insufficient. History completion publication remains held on a marked
-restore image, including carried completion. This delivers no
-physical backup/replica/mail/log deletion or final coordinator ACK. Outstanding
-external custody and backup expiry remain separate pending owner obligations in
-[the external custody contract](src/external-custody-contract.md). The protected
-external/restore custody tests retain their explicit missing-owner failures;
-this change does not certify before-T restore or overall erasure completion.
+Retained `restore-admission.ts` machinery can stage original obligations and advance bounded native replay.
+Its existing `restoredGeneration`/database-owner declarations and receiving controls are implementation seams,
+not a required runtime physical-owner ABI or restore-generation witness protocol. Missing trusted source,
+consumer or custody facts remain unverified; declaration, local emptiness and elapsed TTL never supply them.
+A fresh UUID alone does not prove replay or physical isolation. Ordinary dev landing proves no restore pass.
 
 ### Current receiving closure provenance
 
-[receiving-closure.ts](src/receiving-closure.ts) implements the private
-`auth.receiving-closure/v1` receipt factory. Default service composition exposes
-that fixed factory to the native Access binding; callers supply an obligation
-key, never a publication blob. The producer wire includes the exact accepted
-source continuation and receipt, reread from the durable Auth obligation. Access
-matches that tuple against native consumption and stores it in the immutable
-receiving receipt; a publication for the same barrier alone cannot substitute.
-Legacy source-unbound receipts remain historical without a backfill.
-Native terminal role/cursor work records its
-commit under the permanent account writer fence. Copy cleanup records the real
-permanent SDK fence after actual deletion and absence checks. Receipt creation
-rereads current role coverage, the original source discharge, consent cutoff,
-actual consent/copy absence and the exact restored replay when applicable. It
-preserves original progress and never waits for a final participant ACK.
+The private `auth.receiving-closure/v1` factory accepts an exact obligation key and rereads its original accepted
+source continuation/receipt. Native consumption and copies-erased remain separate facts. Source acceptance alone
+does not discharge the source; original consumers must finish or transfer their need under the permanent fence.
+Copies-erased requires native/consent closure, complete creation coverage, actual result retirement, supported SDK
+writer cancellation/deletion and raw-key absence. No final participant ACK dependency is introduced.
 
-Access stores independent per-home receiving control, exact account/barrier
-obligations and immutable current-closure receipts. Registration creates pending
-obligations without claiming physical ownership. Native INSERT guards reread
-the original Source and exact account/barrier/floor before conflict handling,
-preventing incorrect immutable registration tuples. Invalidation locks the same
-control that verification locks and advances its revision before replacement
-consumers may arm. Restore import, replay and bounded live-home enrollment
-require that control; inventory and live enrollment remain distinct authorities.
-
-`prepareCurrentAuthReceivingClosure` observes only released native homes.
-`verifyCurrentAuthReceivingClosure` rereads the exact Source/control/root/receipt
-in the caller's live transaction and retains shared locks through commit. It
-performs no Auth or foreign I/O. The opaque locator includes the original barrier,
-Source continuity, receiver binding and durable receipt; a JavaScript brand or
-process-local cache cannot substitute for the native read. Autocommit cannot
-certify destructive work. Foreign or unavailable homes remain unavailable.
-
-The required original physical-owner operation is absent. In particular:
-
-- `AuthRestoreDatabaseOwner.verifyRestoredDatabase` verifies restored inventory;
-  `recoverCommittedNativeProgress` recovers one original obligation. Neither
-  operation establishes the current original database's physical ownership,
-  receiving incarnation or independently controlled restore generation.
-- `host.ts` compares product and system connection URLs. That comparison does not
-  identify a physical database or fence an old database/executor after replacement.
-- Access's `auth_erasure_source` binds a Source partition's generation, epoch and
-  node. Those values identify Source continuity, not an Auth receiving database.
-  Its native registration and live enrollment do not control Auth writers.
-
-The missing host provenance is the conjunction of original ownership/control
-records outside the restorable image, the actual connected receiver's identity,
-surviving deployment inventory/isolation and installation, receiving/restore
-generation, and actual per-obligation physical and writer closure. Inventory and
-live enrollment do not establish that conjunction. The installed host inputs
-cannot serialize old/current Auth writers, restore/replay admission, receiver
-replacement and destructive verification against one independently owned fence.
-Replacement must invalidate earlier receipts before either database can serve or
-write. No replacement owner interface is specified here; deployment owns the
-trusted provenance that the current host inputs lack.
-
-The exact integration gap is at `createAuthHost`/`createAuthService` and
-`createAuthHistoryProofBindings`: no existing owner export supplies an actual
-original database identity, receiving incarnation, restore generation, original
-installation/writer fence or per-obligation physical and receiving closure.
-`auth_receiving_control_guard` therefore rejects activation and identity changes;
-`auth_receiving_obligation_guard` rejects physical-custody installation. These
-refusals must be replaced by the original owner's record validation when that
-operation exists. There is no installer flag, generic owner setter or SQL backfill.
-The register, invalidate, publish and current verify bodies are implemented;
-they cannot manufacture this missing authority. The new native-fixture
-missing-owner regression is authored and unrun. A genuine fresh-receiver and
-owner-replacement regression still requires the missing original operation.
-Ordinary authentication and historical erasure publications retain their roles.
+Released preparation and same-transaction current verification retain exact source/account/barrier bindings and
+native locks. No Auth checkout spans a Kernel call. Historical publications, registration, successful child status
+and page EOF do not establish complete custody. Retained receiving guards currently refuse unavailable original
+custody inputs; they cannot manufacture authority. That gap is not resolved by documenting an additional host ABI.
+Operational restore remains owned by Deletion, with deployment/runbook evidence honestly unverified.
 
 ### Receiving producer and restore costs
 
-The native control prices are in [Access](../kernel/src/access/README.md#bounded-receiving-sql).
+The native local control bounds are in [Access](../kernel/src/access/README.md#bounded-receiving-sql).
 The following additions use exact local keys and the existing original engines;
 they do not scan retained obligations, restart a cursor or renew consent. Key
 visits count repeated keyed reads/writes and FK checks. `restoreDatabaseWithin`
@@ -283,14 +109,12 @@ history. All calls occur with Auth and Access homes released. The existing
 `eraseCopy` operation still performs genuine writer retirement and physical
 absence checks before this extra read/receipt. Its original 139-row/10-MiB,
 eight-locator page and one-execution limits remain unchanged and are additional
-to this table. The new receipt never treats SDK status, callback or that old
-receipt alone as current restored physical closure. Local factory output is
+to this table. SDK status, callback or an earlier receipt alone never proves current physical custody. Local factory output is
 bounded below 64 KiB; Access additionally rejects a current locator above 1 KiB.
 The original 310-second cutoff, page sizes, source high water/floor and lineage
 are unchanged. Factory registration and its native-page receiving hook retain
-the same absolute deadline; they cannot renew its five-second budget. New work requires the native terminal engine to run under the
-registered binding; the private factory invokes one original page when needed.
-Historical completion cannot populate its fresh `native_xid`.
+the same absolute deadline; they cannot renew its five-second budget. The retained factory invokes at most one original native page when needed; historical completion cannot
+populate its fresh `native_xid`. These local implementation bounds do not establish restore admission.
 Focused native fixture cases are authored but UNRUN. Original acceptance/native
 and browser checks remain deferred to integration.
 
@@ -860,9 +684,9 @@ this Auth page projection. Reads never create consent. The consent route accepts
 only its optional single `scope` query; other page routes reject query
 parameters. Page reads use the current native session, human and Access checks,
 and `private, no-store` responses. POSTs retain issuer Origin and closed JSON
-body rules. Review-bound writes compare their account and exact reviewed grant
-set under the existing account/client consent lock before any write or reduction
-barrier; ordinary unguarded native callers and explicit remove-all remain
+body rules. Allow compares the reviewed account, request and exact reviewed union under the native consent lock before
+mutation; it rereads and refuses `stale_review` if same-account grants were added after review. Nonempty Security
+reductions likewise bind their reviewed grant set before any reduction barrier; ordinary unguarded native callers and explicit remove-all remain
 unchanged.
 The Cost table derives consent/session reads and single-session revocation,
 including their complete handler growth citations. `pages-consent-sessions.test.ts`
@@ -1831,6 +1655,16 @@ DBOS. Migrate two separate databases first. Supply persistent reference, routing
 staging and signing keys from host configuration; keep Auth database credentials
 and private keys out of the kernel worker. The host owns its Auth pools and
 `auth_dbos` system schema; the caller retains the kernel pool.
+
+One trusted binding factory composes Auth and native Access, with deferred Auth construction where needed.
+Consumers use public inward imports; canonical identity extraction changes imports, never erasure, verification,
+reversal or durable fences. Lightweight public-read and narrow binding entries preserve store entry, canonical
+error identity and deferred loading; they add neither a resolver nor a widened grant. Source compatibility proves
+no native or cold-load pass. Pure policy placement follows the [adopted architecture](../../docs/architecture.md).
+
+Automated and organization creation must verify the actual Auth session before and after released I/O. A
+fresh-human precheck, unchanged Access proof or token floor alone is no post-callback live-session proof. Native
+acknowledgement and browser private-result disclosure are separately owned by the [page contract](../../apps/auth/README.md#mounted-operation-lifetime).
 
 This minimal assembly uses the production factories directly. Import paths are
 relative to an application at the repository root. `actions` is the application's
@@ -3060,10 +2894,6 @@ native work remain explicit requirements rechecked by the durable command. Retry
 and uncertain submitted operation. Commit means the tombstone was committed; active cleanup, named adopted
 retention exceptions, backups and external copies remain separate. The page preserves cleanup-pending wording.
 
-Presentation references: `legacy-final:apps/accounts/features/account/delete-account.tsx` (consequences,
-preparation, authentication and acknowledgment) and `../rezics/apps/web/features/settings/pages/security-settings-page.tsx`
-(current session context and distinct pending/error outcomes). Retired export and guardian policy are not ported.
-
 ## Organization deletion review
 
 `POST /account-management/organizations/deletion-review` accepts exactly `{ organizationId }`, with the issuer
@@ -3073,11 +2903,11 @@ The host consumes `readOrganizationDeletionPage` from the existing native deleti
 `readOrganizationForDeletion` remains exact-profile on both trusted and workflow bindings. Ordinary page readiness
 is absent from workflow ports. Construction invokes no Auth callback or I/O.
 
-Decision: an ordinary live human sees only their initiating ID, the untrusted selected organization ID and an
-explicit authentication continuation; target existence, labels, membership, permission and requirements stay unobserved.
+An ordinary live human receives authentication-required with before/after actual Auth-session proof and only
+their initiating ID, untrusted selected organization ID and explicit authentication continuation; target existence, labels, membership, permission and requirements stay unobserved.
 Missing bindings and failed preparations stay unavailable. Exact-profile native denial never becomes step-up advice.
-The continuation retains only human, target and operation key through the existing deletion step-up flow. Returning
-renews review, clears typed confirmation and requires explicit submission; no approval or command runs on return.
+The continuation retains only human, target and operation key through the existing deletion step-up flow. Return
+compares the exact human/target/key before explicit review, clears typed confirmation and requires explicit submission; no approval or command runs on return.
 
 The exact-profile private producer reuses the native management account/role source and `readManagedAuthActions`
 deletion ENTRY formula without the generic endpoint's `account:read` scope, public attribution or member inventory.

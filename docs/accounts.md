@@ -2,8 +2,8 @@
 
 REZICS has one account identity and five concepts: account, operator, credential, client and grant.
 [Access][access] owns identity and authorization inside the kernel; [Auth][auth] supplies authentication in a
-separate service and database. This document states their contract. The linked source carries each rule; the
-READMEs describe mechanisms, operational requirements and measured costs. An implementation gap called out here
+separate service and database. This document owns product identity, delegation, consent and preferences; the
+module READMEs own native protocols, mechanisms, operational requirements and cost bounds. An implementation gap called out here
 does not change the contract.
 
 The [five-system design status](research/design-status-accounts.md) links the delivered primary research and
@@ -72,13 +72,13 @@ verification evidence, operator proof or stored avatar URL belongs in this proje
 operation and does not change PATCH validation, public lookup or discovery. Advice is not a durable grant. See the
 [Access read contract][access-public].
 
-**Decision:** Private profile GET returns closed `{profile, editing}` from the current prepared `account:update` authority, account kind and field limits; advice is an observation, not a grant, and GET still requires `account:update`.
-
 ### Public identity
 
 The public account page is `/@handle`, outside Realms and Zones. `GET /v1/accounts` accepts exactly one selector:
 up to 100 deduplicated IDs, one handle, or one verified catalogue agent ID. Unknown and pending accounts are
-omitted; handle and agent lookups also hide deleted accounts. The ID form preserves attribution tombstones.
+omitted; handle and agent lookups also hide deleted accounts. The HTTP ID form preserves attribution tombstones. The native observation entry accepts 1–100 routable IDs,
+preserves input order and repeated results while deduplicating seeks; its before/after Media composition uses
+bounded public references, never raw URLs or duplicate profile reads. Unadmitted sources remain unavailable.
 Accounts are public, enumerable identities; the public projection protects private fields rather than concealing that a live account exists.
 [routes.ts][account-routes], [account-data.ts][account-data] and [Public identity read][access-public] define the
 projection and its bounds.
@@ -279,128 +279,67 @@ and container. See [Website client][auth-website], [session routes][web-session-
 
 ## 4. Clients, consent, requests and permission
 
-The website, importer, launcher and CLI are first-party clients with standing consent within their registered
-scope ceiling, shown as product sessions in Auth's security settings. Third-party clients require explicit
-consent and revocation remains available through [Auth's session and consent routes][auth-service]. The importer is
-platform-owned, authenticates as its automated actor through the ordinary key/token endpoint, and has only its
-four approved import scopes, without website-only completion authority. The base's
-[importer credential configuration][importer-credentials] instead requests six scopes, or seven for VNDB;
-[Auth client registration and issuance][auth-service] enforce registered scope ceilings. Launcher and CLI device
-authorization remain unimplemented, as noted in [Auth's boundary][auth].
+Keep account, operator, credential, client and grant distinct. The website, importer, launcher and CLI are
+first-party clients with standing consent within their registered scope ceilings, visible as product sessions in
+Security. Third-party clients require explicit consent and can be revoked. A client or signed-in identity confers
+no resource grant. Device authorization for Launcher/CLI remains unimplemented.
 
-The four import authorities are `subject:create`, `subject:batch_write`, `source_fence:read` and
-`media:import_from_url` on the Global Context. [importer-credentials][importer-credentials] additionally requests
-`statement:propose` and `media:read_reservation`, plus `source_statistic:write` for VNDB; these are the concrete
-scope differences from the four-scope decision.
+The platform-owned importer authenticates as its automated actor through the ordinary key/token endpoint.
+Its adopted authorities are `subject:create`, `subject:batch_write`, `source_fence:read` and
+`media:import_from_url` on Global. The [current credential configuration][importer-credentials] additionally
+requests `statement:propose` and `media:read_reservation`, plus `source_statistic:write` for VNDB; those scope
+differences remain explicit gaps. Website-only `media:complete` is not importer authority. Ordinary Imports
+requests stay proposal-only; explicit local review acceptance and adoption are separate exact-intent native commands.
 
-Consent in the permission formula means current consent. Auth issues only for a registered, ready client and
-current consent, failing closed when either cannot be read. Every reduction of consent or client rights is
-Access-first: an issuance gate prevents new client issuance during client reduction, each live credential owner
-is fenced and has its floor advanced, and only confirmed receipts permit the reducing Auth write. Deleted owners
-need no new barrier. See [service.ts][auth-service], [account-workflows.ts][account-workflows] and
-[Native Auth barriers][access-barriers].
+Consent means current consent. Issuance requires a registered ready client and readable current consent. Every
+reduction of consent or client rights is Access-first: prevent new issuance, fence each live credential owner and
+advance its floor before the reducing Auth write. Deleted owners need no new barrier. Automated consent can be
+widened only by an approved operator opening for its exact client/scopes; consent endpoints and an operator-opened
+session may reduce it. Barrier completion clears only its own fence, and fresh sign-in while fenced is refused.
+[Auth's HTTP contract][auth-http] owns pending ceilings, revisions, barriers and reviewed writes.
 
-Automated consent is granted only by an approved operator opening, for its bound client and scopes. Consent
-endpoints and an operator-opened session may reduce it, never widen it; a later approved opening may grant its
-bound scopes again, while tokens below the advanced floor remain invalid. Barrier completion clears only its
-own fence, never a fence another operation raised. Fresh sign-in inside that gap is refused. See
-[auth-barriers.ts][auth-barriers], [service.ts][auth-service] and [Native Auth barriers][access-barriers].
+Allow binds the reviewed account, request and union of existing grants with requested registered scopes. It cannot
+remove same-account grants added since review. A stale union requires a new explicit review, without automatic
+retry. A nonempty Security reduction likewise binds reviewed intent or refuses a stale review; explicit remove-all
+retains its meaning. Operated principals and pending reductions keep their existing restrictions. Browser leases
+fence browser work only; native preparation and command admission remain authoritative.
 
-The token selects the actor (`sub`), client (`client_id`) and optional delegating principal (`requested_by`);
-request JSON cannot select a different identity. A principal creates the assignment under its own command,
-binding the assigned actor and validity interval. The canonical reference is
-`urn:rezics:request:<principal-uuid>:<request-uuid>`. Attribution shows the actor, third-party client when present,
-delegator when present, and public operator marking for automation. See [delegation-commands.ts][delegation],
-[authenticate.ts][authenticate] and the [command write basis][command].
-
-There is one permission formula:
+The verified token selects actor, client and optional delegating principal; JSON cannot select another identity.
+A principal creates an assignment binding actor and validity. Its canonical reference is
+`urn:rezics:request:<principal-uuid>:<request-uuid>`. Attribution identifies actor, third-party client, delegator
+when present and the native operator marking for automation. Delegation does not impersonate the principal.
 
 `effective permission = actor grants ∩ current client-consented scopes ∩ principal grants (if delegated)`.
 
-[permission.ts][permission] checks the scope operand in process; [permission-check.sql][permission-sql] evaluates
-both grant operands, current assignment validity and explicit denials. Unknown actions and missing evidence deny.
-Modules use Access's supported authorization ports, including page and explicit-action decisions; they do not
-copy or intercept the formula. See [Explicit action decisions][access-explicit].
+Each operand can deny independently. Unknown actions and missing evidence deny; native resource, time,
+suspension, revocation and fence floors remain. Signed-in identity, a role label, page advice or review link
+establishes no allowed action. Consumers use supported Access preparations rather than reproduce this formula.
+The existing anonymous public floor remains resource/catalogue-bound and subject to applicable denials; a
+narrower token does not remove public visibility. Extraction introduces no baseline allowance or old/new allow-OR.
 
-The anonymous floor adds the permissions the action catalogue and resource visibility permit without a login.
-An authenticated account gets that same floor without a grant or scope, unless an applicable denial names it
-(such as a suspension, resource block or Realm ban). Scopes and grants add to the floor; a token with fewer
-scopes does not lose public visibility. [eligibility.ts][eligibility], [permission.ts][permission] and
-[permission-check.sql][permission-sql] implement this alongside the normal authenticated branch.
+Creation is authorized on the existing parent at command T. Ordinary active-account creation comes through a
+standing parent grant to `active_accounts`. Each declared new insertion initializes its type-defined roles exactly
+once; a manifest admits at most 16 resources in one partition, rolls back missing initialization and initializes
+none on replay. Creator ownership uses role IDs, never copied action lists. Communal templates may be empty.
 
-Creation is authorized on the existing parent at the command's T, never on the new ID: a subject's Context,
-a thread's board, or media's container. A separately anchored parent check releases its connection before the
-new resource transaction. An ordinary active account obtains creation rights through a standing parent grant
-to the `active_accounts` principal, installed once and subsequently administered by normal grant commands.
-See [parent-creation.ts][parent-creation], [resource-authorization.ts][resource-authorization] and
-[standing-parent.ts][standing-parent].
+The sole platform root is Global, route `0`, ID `00000000-0000-8000-8000-000000000000`. Its first governance
+holder is an explicitly named active human installed by deployment bootstrap with a one-time marker and audit.
+Subsequent grants use the formula. Only `moderation:takedown`, `moderation:read_reports`, `post:erase`,
+`media:erase` and `access:grant` may use the same action held on Global instead of the target. Commands audit this
+reach. Grantors need `access:grant` and cannot grant actions they lack. Renouncing one's own direct grant may omit
+`access:grant` only when client scopes cover every revoked action; group or other-account grants have no exception.
 
-The new-resource transaction calls [initializeResourceGrants][resource-initialization]: the data-defined type
-template gives its creator the owner role and active accounts its standing roles. It writes role IDs, not
-copied action lists; communal subjects may have an empty template. A parent-authorized manifest may create at
-most 16 declared resources in one partition; every declared new insertion must initialize exactly once, and
-finalization rolls back incomplete work. Replay initializes none. See [creation-manifest.ts][creation-manifest],
-[resource-roles.ts][resource-roles] and [Direct resource role data][access-roles].
+[Native Access][access] owns released evidence preparation, authoritative time, replay/deadlines, currentness,
+resource denials and bounded permission operands. [Kernel commands][command] own receipts and execution;
+[History/Work](../services/kernel/src/history/README.md) owns durable execution rather than a second Accounts
+mechanism. New person-attributed effects restore the immutable initiating identity's current authority; mechanical
+completion of a committed platform decision remains narrowly bound platform work. Private result disclosure
+requires current authority; a receipt or workflow approval is no durable permission.
 
-The only platform root is the seeded Global Context, route `0`, ID
-`00000000-0000-8000-8000-000000000000`. All platform grants, global catalogue creation, bulk import and gates
-attach there; there is no additional platform resource. The first governance holder is an explicitly named
-active human installed by the deployment-only [bootstrap command][bootstrap], with a one-time marker and audit
-event. Subsequent grants use the formula. See [governance-reach.ts][governance] and
-[platform-governance.json][platform-governance].
-
-Only the closed governance set `moderation:takedown`, `moderation:read_reports`, `post:erase`, `media:erase` and
-`access:grant` may use either authority on the target or the same action held on the Global Context. Global
-reach does not imply another action. A command using it records that fact in its own transaction. Grantors need
-`access:grant` and cannot grant actions they do not hold, including when granting on the Global Context.
-An account may renounce its own direct grant without `access:grant` when the client's scopes cover every
-revoked action; that exception cannot revoke group grants or another account's grants. See
-[grant-commands.ts][grants], [platform-governance.json][platform-governance],
-[Grant rule][access-grant-rule] and [Platform governance reach][access-governance].
-
-The resource grant form lets managers change the handle or recipient kind during lookup; each change clears the previous recipient and lookup error while preserving the role/actions and validity draft, and results belong only to the current form, resource and acting authority.
-
-Resource-access controllers retire browser continuations on disposal and remount for a changed resource or acting authority; reattachment retains any uncertain command's original payload and key for explicit retry, with current disclosure read separately from its result.
-
-Every command attempt authorizes before reading an idempotency receipt, including retries and replays. A revoked
-caller receives neither a stored result nor another effect. Catalogue actions that remove their own authority
-declare `replay: 'self-account-read'`. Receipt identity is `(principal_kind, principal_id, command_kind,
-idempotency_key)`; anonymous commands use the nil UUID as a kind marker and a client-generated UUIDv4 key, with
-matching request digest required for replay. The digest binds client and delegation. See the
-[command executor][command] and [request catalogue][request-access].
-
-Each command attempt re-reads the actor's anchor before resource checkout and denies any changed state, fence,
-floor or operator. Authentication retains its single point read; reads may reuse that snapshot for at most
-180 seconds, within the request deadline and bearer lifetime. Each retry prepares new evidence and never
-extends the original request deadline. Evidence preparation releases separate anchors in order and stays within
-the pool's concurrency. See [command-admission.ts][command-admission], [Access composition][access-index] and
-[Evaluator time][access-time].
-
-Durable work records an immutable initiating actor/client/scope/delegation/epoch tuple and native creation
-receipt, never a bearer token. Each new person-attributed action calls `restoreInitiator` at that step's T,
-rechecking current account, floor, operator, consent, assignment, memberships and grants, with scopes capped to
-the original ceiling. Expiry of the original bearer alone does not stop otherwise authorized durable work.
-Mechanical completion of a committed platform decision (fetching, transcoding, physical cleanup or projections)
-runs as platform work; publication and download still enforce their domain fences. See
-[durable-initiator.ts][durable-initiator], [auth-consent.ts][auth-consent] and [Durable initiators][access-durable].
-
-A workflow approval binds its operation key, exact operation, actor, client, scopes, epochs and optional
-assignment. New protected effects recheck that authority at their own T; private results go only to the same
-currently authorized caller and assignment. Completing one already committed effect uses its committed record;
-after restart, resumption authorizes at its new T. Only self-authority-removing actions skip the ordinary
-post-workflow result check. Cleanup continuations are narrower: exact allowlisted step, target, key and digest,
-at most five minutes, no user-result authority, and only current governance may renew unfinished cleanup.
-See [workflow-approvals.ts][approvals], [account-workflows.ts][account-workflows],
-[committed-continuations.ts][continuations] and [Workflow approvals][access-approvals]. Auth's
-[workflow binding][workflows] carries native refusals through one status-bearing contract, without matching
-exception class names.
-
-Unavailability is not denial. Missing facts deny, while elapsed deadlines, exhausted pool waits, connection or
-capacity failures and exhausted transaction retries raise Access unavailability and map to retryable HTTP 503
-`deadline_exceeded`, `overloaded` or `transaction_retry_exhausted`, without an applied command effect. Other
-resource-evidence failures close the request using its domain denial, never an independent permitting branch.
-See [unavailable.ts][unavailable], [evidence.ts][evidence], [problem.ts][problem] and
-[Resource evidence failures][access-evidence].
+Unavailability stays distinct from denial: exhausted deadlines, pool waits, connections or transaction retries
+retain their retryable 503 domain answers and cannot become a permitting branch. Revoked callers cannot read a
+stored result or repeat an effect. The native contracts retain authorization before receipt lookup, fixed request
+deadlines, exact client/delegation digests, self-authority-removal replay restrictions and bounded cleanup continuations.
 
 ## 5. Organizations and memberships
 
@@ -419,13 +358,12 @@ adapter fails closed. See [membership-inverse.ts][membership-inverse], [membersh
 
 The organization member page observes the current viewer role, disclosed public identities and a bounded current
 roster through its dedicated native source. Roster admission and each role-change, removal or supported self-leave
-advice are separate installed `organization:membership` checks. A read-only owner-count probe explains the last-owner
+advice are separate installed `organization:membership` checks. Read-only last-holder advice uses the existing holders predicate and explains the last-owner
 restriction; it never authorizes a write, and the membership command repeats its current native checks under lock.
 Missing public identity uses a presentation fallback, while an unavailable roster remains distinct from an empty one.
 Page cursors bind the current viewer and organization. The exact selected-member read remains the reservation/version
-source for a command; roster rows and advice never replace it.
-
-Decision: show the viewer's current role, require separate native roster admission and per-action advice, expose no owner editor to members, and keep commands authoritative for every write.
+source for a command; roster rows and advice never replace it. Owner leave retains command locking and
+pool-preflight restrictions. Unsupported leave remains unavailable.
 
 An account may have at most 1,000 role-bearing organization and Realm memberships combined, admitted atomically
 on its actor anchor; exceeding the cap returns `membership_limit`. Following a Realm is not membership and does
@@ -542,6 +480,26 @@ ambiguous save distinct from Saved, retain its original input/key for resolution
 appropriate; failures cannot fabricate effective defaults. Unavailable unread data must be distinct from real
 zero. Current count measures capped stored candidates, not the Access-filtered visible inbox population.
 
+Reading, notification and shelf preferences share one current envelope and version. Reading defaults are
+`spoilerLevel: 0` and `suitability: blur`; supported spoiler levels are 0/1/2 and suitability is blur/show. Summaries
+remain spoiler-safe. Reading Reset is ordinary PATCH of those defaults under the reviewed `expectedVersion`,
+with `account:update`, never another permission. Shelf stores only saved overrides; absent parts inherit consumer
+defaults, URL choices take precedence and `shelf: null` resets stored overrides. Native catalogue values do not
+promise that a consumer executes every choice. Unknown or malformed advice is unavailable, not guessed defaults.
+
+Preferences are self-only, including an operator-opened session acting as its automated account. Another account's
+grant does not bypass equality. GET needs `account:read`; PATCH needs `account:update`, the shared expected version,
+ordinary idempotency and current authorization before replay. Unchanged values preserve version and absent storage;
+returning to defaults after changes retains the advancing version. A stale version requires review. Merge patch
+null removes overrides; unknown/mandatory notification keys or invalid values reject the whole patch. Native bounds,
+closed catalogues, envelope fields and whole-call costs live in [Viewer preferences][access-preferences].
+
+`board_activity` is a distinct optional in-app kind. Thread watch uses `thread_watch`, never an overloaded Follow.
+There is no email delivery or backfill. Web and Performance own Settings/account-page presentation; Content owns
+notice delivery. Consumers do not own native preference policy or infer success from an ambiguous response.
+Portability launches through the published privacy contact; no self-service export, block/mute or expiry policy is
+invented by these account interfaces.
+
 Auth is the configured OIDC issuer at `auth.rezics.com`; signing keys and its database credentials stay out of
 the kernel and clients. Login, consent and security pages belong to Auth, with main-site settings reached
 through the website BFF. Cookie caching is disabled, so session revocation cannot be bypassed by a cached cookie.
@@ -643,6 +601,11 @@ its tool list from that same port. `GET /v1/platform/exposure` returns only sort
 uses `no-store`; absence means closed, without revealing inaccessible group names. See
 [visibility.ts][gate-visibility], [admitted-groups-route.ts][gate-groups] and [Platform gates][gates].
 
+Accounts owns local persona, `seed.env` and exposure composition. Within `task seed:dev`/`task dev:persona`, showcase
+setup opens required closed groups through existing platform commands, including POST Search `search` and
+`search_advanced`. Failure stops setup with the native error and retry task. Production defaults, native checks and
+deferred public scope remain unchanged; local opening does not admit production operations.
+
 ## 9. Time
 
 One trusted [kernel clock][clock] supplies authoritative T for command attempts and non-command Access checks;
@@ -727,7 +690,6 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [membership-work]: ../services/kernel/src/access/membership-work.ts
 [handle-policy]: ../services/kernel/src/access/handle-policy.ts
 [handle-reserve]: ../services/kernel/src/access/lifecycle-handle-reserve.sql
-[agent-page]: ../apps/web/src/features/pages/agent.tsx
 [web-agent-actions]: ../apps/web/src/features/pages/agent-actions.ts
 [web-profile-reader]: ../apps/web/src/features/pages/account-read.ts
 [web-profile-header]: ../apps/web/src/features/pages/account.tsx
@@ -756,31 +718,13 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [web-session-routes]: ../apps/web/src/session/routes.ts
 [web-session-store]: ../apps/web/src/session/store.ts
 [media-routes]: ../services/kernel/src/content/media-routes.ts
-[delegation]: ../services/kernel/src/access/delegation-commands.ts
 [command]: ../services/kernel/src/command/command.ts
 [permission-sql]: ../services/kernel/src/access/permission-check.sql
-[eligibility]: ../services/kernel/src/access/eligibility.ts
-[parent-creation]: ../services/kernel/src/access/parent-creation.ts
-[resource-authorization]: ../services/kernel/src/access/resource-authorization.ts
-[standing-parent]: ../services/kernel/src/access/standing-parent.ts
-[resource-initialization]: ../services/kernel/src/access/resource-initialization.ts
-[creation-manifest]: ../services/kernel/src/access/creation-manifest.ts
-[resource-roles]: ../services/kernel/src/access/resource-roles.ts
-[bootstrap]: ../services/kernel/scripts/bootstrap-governance.ts
-[governance]: ../services/kernel/src/access/governance-reach.ts
-[platform-governance]: ../services/kernel/src/access/platform-governance.json
-[grants]: ../services/kernel/src/access/grant-commands.ts
 [access-index]: ../services/kernel/src/access/index.ts
-[durable-initiator]: ../services/kernel/src/access/durable-initiator.ts
-[auth-consent]: ../services/kernel/src/access/auth-consent.ts
-[continuations]: ../services/kernel/src/access/committed-continuations.ts
 [unavailable]: ../services/kernel/src/access/unavailable.ts
-[evidence]: ../services/kernel/src/access/evidence.ts
-[problem]: ../services/kernel/src/http/problem.ts
 [permission-inverse]: ../services/kernel/src/access/permission-inverse.sql
 [auth-schema]: ../services/auth/db/schema.sql
 [preferences]: ../services/kernel/src/access/preferences.ts
-[notification-kinds]: ../services/kernel/src/access/notification-kinds.ts
 [issuer]: ../services/auth/src/issuer.ts
 [registration-proof]: ../services/kernel/src/access/registration-proof.ts
 [workflows]: ../services/auth/src/workflows.ts
@@ -814,20 +758,12 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [recovery-completion]: ../services/kernel/src/access/recovery-completion.ts
 [consent-erasure]: ../services/auth/src/consent-erasure.ts
 [access-handles]: ../services/kernel/src/access/README.md#handles
-[access-grant-rule]: ../services/kernel/src/access/README.md#grant-rule
 [access-preferences]: ../services/kernel/src/access/README.md#viewer-preferences
 [access-public]: ../services/kernel/src/access/README.md#public-identity-read
 [access-speakers]: ../services/kernel/src/access/README.md#organization-speakers-page
 [access-profile]: ../services/kernel/src/access/README.md#public-profile-by-handle
 [access-reinstatement]: ../services/kernel/src/access/README.md#operator-reinstatement-fanout
-[access-barriers]: ../services/kernel/src/access/README.md#native-auth-barriers
-[access-explicit]: ../services/kernel/src/access/README.md#explicit-action-decisions
-[access-roles]: ../services/kernel/src/access/README.md#direct-resource-role-data
-[access-governance]: ../services/kernel/src/access/README.md#platform-governance-reach
 [access-time]: ../services/kernel/src/access/README.md#evaluator-time
-[access-durable]: ../services/kernel/src/access/README.md#durable-initiators
-[access-approvals]: ../services/kernel/src/access/README.md#workflow-approvals
-[access-evidence]: ../services/kernel/src/access/README.md#resource-evidence-failures
 [access-organization]: ../services/kernel/src/access/README.md#organization-creation
 [access-membership]: ../services/kernel/src/access/README.md#membership-work
 [access-transition]: ../services/kernel/src/access/README.md#realm-transition-coordination-and-deletion-entry
@@ -848,3 +784,5 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-boundary]: ../services/auth/README.md#application-boundary-and-configuration
 [auth-host]: ../services/auth/README.md#ordinary-native-host-assembly
 [auth-workflows]: ../services/auth/README.md#durable-account-workflow-host
+
+[access-preferences]: ../services/kernel/src/access/README.md#viewer-preferences

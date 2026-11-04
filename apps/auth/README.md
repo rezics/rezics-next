@@ -7,7 +7,7 @@ Auth is a TanStack Start app on Cloudflare Workers. Its page frame is served at 
 /consent, /recovery, /security and /step-up. Each page contains the REZICS brand header and a localized heading.
 Paraglide supplies the eight launch locales.
 
-Decision: route recovery retries only current route reads and rendering; missing pages use a localized 404 for classified
+Route-error Retry performs bounded current-route read/render recovery, never command replay; missing pages use a localized 404 for classified
 browser documents and fixed local exits at `/login` and `/security`.
 
 Local development uses the Cloudflare Vite plugin's default `.cloudflare/state`. Test launches receive an independent
@@ -20,6 +20,36 @@ Pages compose the shared shadcn card, field, input, input-group, button and aler
 lists also use shadcn items and badges. Password reveal buttons have localized show/hide names and stay disabled
 until hydration. Native form submissions keep their fields and actions; scripted actions retain their pending
 states with an accessible busy indicator. Error text uses ink blue, with red reserved for the brand mark.
+
+## Mounted operation lifetime
+
+These are adopted browser requirements; documentation establishes no native, browser or shared-suite pass.
+Current private advice and generic operation history are separate. Mounted history keeps the first unresolved
+generic unknown plus the latest review/interruption, at most two records, until explicit dismissal. It contains no
+private account/client/target/key/scopes/payload, and adds no persistence. Fresh documents invent no history.
+Later acknowledgement, refusal, decline, actor/request replacement, inventory and current reads never settle the
+earlier unknown. Dismissal hides text only: it cannot cancel or confirm work, remove a marker/fence, authorize resend
+or remove an unresolved attempt's departure caution.
+
+Distinguish unsent, staged/approved/applied, acknowledged/refused and possibly-sent unknown. Lost, malformed or
+timeout mutation replies are uncertain effects, not editable failures. Supported native idempotent retry retains
+the original exact actor/client/key/payload/scopes in its existing attempt/descriptor. Read Retry fetches current
+advice only. Fresh work requires deliberate review and installed warning acknowledgement; no observation attributes
+an earlier effect. Existing Stay/Leave and unload guards protect meaningful drafts and unresolved sends.
+
+Adopt a validated native acknowledgement while its original callback and descriptor are current, before an
+independent final session read. If that read fails, signs out or replaces identity, keep the generic acknowledgement;
+private created details and navigation still need unchanged before/after proof. Replies arriving after retirement
+remain unknown. Retry, return and dismissal cannot reopen an acknowledged invocation or clear replacement markers
+or drafts. An older completion cannot consume a newer descriptor.
+
+Pagehide and authority replacement synchronously clear private DOM, including detached inputs, and retire callbacks.
+Cached return retains only generic history until current advice and deliberate review. Late callbacks cannot restore
+identity, focus, reset or navigation. Exact continuation operation/target/key/return destination must match before
+and after observation; account equality alone is insufficient. Retained private retry operands use only the existing
+supported descriptor/attempt lifetime; generic history cannot reconstruct them. Language changes use the mounted
+language mechanism below, with no navigation or command replacement. Focus, dismissal and historical display add
+zero I/O. Each page's finite advice, preflight and readback costs remain additional below.
 
 ## Account home
 
@@ -55,6 +85,13 @@ current status and never navigates or starts authentication.
 The local guide has phone/desktop and light/dark stories for current identity, missing email, loading, signed-out,
 denied, unavailable and current-read replacement. The mounted language chooser updates all guide copy without a reload
 or a required preference write. Native/browser and integrated acceptance remain controller-owned.
+distinct; unavailable has an explicit Retry. The technical account ID is behind a disclosure. Security, rename and
+deletion links open their existing review pages; each page checks its own current native guidance, so navigation does
+not promise that an action is available. The home never loads an inventory, changes state or resumes an operation.
+
+Home offers installed zero-selector review links for Security, rename, personal deletion, organization creation
+and automated creation. Identity is display-only; each destination's current native advice owns execution.
+There are no fabricated organization targets, per-card preflights or membership link without a selected ID.
 
 ## Sign-in
 
@@ -76,7 +113,7 @@ provisional client id (`login`) and scope (`[]`). It uses the shared `src/api.ts
 failures become an unavailable result. Browser-unsupported passkeys, a missing native passkey method and an actual
 native credential refusal have separate localized messages.
 
-Decision: during an explicit sign-in, disable account switching and session review; switching before dispatch retires
+during an explicit sign-in, disable account switching and session review; switching before dispatch retires
 conditional mediation and the old Continue control synchronously. Native email is display context, never credential input.
 
 The current account, credential entry for another account, pending authentication, unavailable advice and reviewed session
@@ -92,20 +129,11 @@ current-session return or choose credentials again; neither step claims the unce
 Review clears credentials, invalidates conditional mediation and never automatically starts another ceremony. No private
 choice or credential data survives pagehide; BFCache restoration starts with one fresh native observation.
 
-The stable Login boundary retains at most two generic method/phase records in memory: the first unconfirmed
-operation and the latest interrupted operation. Options, browser input, possible dispatch, acknowledgement, refusal
-and cancellation remain distinct. No credential, identity, query, destination, challenge, operation key or private error
-enters this history. Pagehide retires callbacks and synchronously unmounts private controls before returning to the
-browser. A new document has no history. Storage is optional and is never used for this record.
-
-Decision: retain the first unresolved sign-in alongside the latest interruption; dismissal hides both records without
-settling any native effect. A retained return reads current advice once, marks it as refreshed, and never starts autofill.
-Read Retry, locale changes and dismissal send no command. A later refusal or matching viewer never resolves the old
-unknown. A deliberate new authentication uses fresh current advice. Explicit prompts retain method ownership from
-submit through response retirement; conditional mediation is replaceable only before assertion dispatch. Idle autofill
-alone does not warn on departure, but a possibly sent autofill response does. The existing opaque step-up helpers keep
-their native preflight and readback; their invocation is conservatively recorded as possible dispatch, with exact
-management/account-operation selection unchanged.
+Sign-in history uses the mounted lifetime above, with generic method/phase only. Idle autofill alone does not
+warn on departure; possibly sent autofill does. Switch retires previous autofill, Continue and completions
+synchronously. Button and autofill passkeys remain separate browser choices even when they share cached options.
+A deliberate new authentication needs current advice; retained return never starts autofill. Existing exact
+step-up helpers retain their native preflight/readback and conservative possible-dispatch classification.
 
 The whole-call bound remains one bounded native page read per entry, retained return or deliberate read Retry,
 one password authentication or two passkey Auth calls (options plus response, with the existing four-minute options
@@ -136,7 +164,7 @@ URL, leaving the page or restoring a cached document discards old callbacks and 
 submission can replace conditional mediation only before its assertion dispatch; only a current completion may unlock the form or navigate.
 Replacement cancels the browser ceremony, without undoing a server sign-in or retrying an uncertain request.
 
-Decision: login Stay/Leave protects non-whitespace email, any password or a pending explicit sign-in in memory; Stay retains validation, the current request and focus, Leave clears inputs and retires callbacks, reload/close uses the browser warning, and replacement login requests or successful validated returns bypass the choice. Background conditional passkey autofill alone does not warn.
+login Stay/Leave protects non-whitespace email, any password or a pending explicit sign-in in memory; Stay retains validation, the current request and focus, Leave clears inputs and retires callbacks, reload/close uses the browser warning, and replacement login requests or successful validated returns bypass the choice. Background conditional passkey autofill alone does not warn.
 
 The submit button stays enabled until a request is pending. Submission validates the email and password, marks each
 invalid field with a linked error, and focuses the first invalid field. The password uses the shared in-field show and
@@ -157,7 +185,7 @@ ask the person to try again later.
 
 Leaving or replacing the recovery journey discards its browser results and private inputs; returning from a cached
 document starts a fresh form without retrying a mutation. Departure cannot undo a completed native password change.
-Decision: an unknown completion retains the original account, token and password only in the mounted attempt; explicit retry sends that exact submission, while restart or departure discards it without asserting cancellation. Definitive first validation refusals allow correction; a later refusal cannot resolve an earlier unknown outcome. Start acknowledgement confirms acceptance only.
+an unknown completion retains the original account, token and password only in the mounted attempt; explicit retry sends that exact submission, while restart or departure discards it without asserting cancellation. Definitive first validation refusals allow correction; a later refusal cannot resolve an earlier unknown outcome. Start acknowledgement confirms acceptance only.
 
 ## Sign-up
 
@@ -192,8 +220,8 @@ available actions. An already signed-in viewer gets Continue through the existin
 link that replaces the active account; `return_to` remains navigation only. A failed read or missing Turnstile
 configuration shows an unavailable state before the form. This read is advice only; `POST /signup` repeats native
 validation and verification.
-Decision: an already signed-in visitor continues with the current account and can choose Sign in to replace it.
-Decision: nonblank handle/email, any password or confirmation, or a pending creation prompts Stay/Leave; Stay
+an already signed-in visitor continues with the current account and can choose Sign in to replace it.
+nonblank handle/email, any password or confirmation, or a pending creation prompts Stay/Leave; Stay
 preserves input, validation and the same attempt, while confirmed creation releases the warning before sign-in.
 Reload/close warns only for that unfinished work; Leave clears in-memory details and retires browser continuations
 without undoing a dispatched creation. A persisted browser return clears entered values, challenge tokens, request
@@ -203,13 +231,13 @@ An untouched draft or known terminal refusal restores without a warning, after t
 review acknowledgement can open a new form only while native advice permits registration; the form has a new key and
 explains that the earlier result remains unknown. Browser restoration never replays registration or automatic sign-in.
 
-Decision: an uncertain acknowledgement retains the normalized original business input and request key in the
+an uncertain acknowledgement retains the normalized original business input and request key in the
 mounted journey, shows the retained handle/email without the password, and allows only an explicit exact retry with
 a fresh Turnstile token or sign-in/recovery. A failed verification or refusal of that retry does not resolve the
 earlier unknown result. A retry-after delay gates the explicit retry without claiming to cancel creation. Pagehide
 retires this credential-bearing lifetime; the return summary cannot retry or attribute the old write to a current viewer.
 
-Decision: only a first-response 409 `handle_unavailable` establishes the safe handle-correction transition. It has no
+only a first-response 409 `handle_unavailable` establishes the safe handle-correction transition. It has no
 account effects; after choosing a different valid handle, the page starts a new request with a new key. A 400
 `registration_denied` before any uncertain result permits the same draft to continue with a fresh challenge. Generic
 409 responses remain non-enumerating and offer sign-in/recovery without opening a changed registration request.
@@ -241,17 +269,12 @@ Uncertain writes remain unresolved and are never replayed automatically. Tab sto
 context for the admitted account, client and request. A legacy marker without an account remains visibly unattributed;
 a different account cannot inherit or resolve it from matching consent.
 
-Decision: mounted consent history retains only a generic acknowledged/unknown classification, with unknown taking
-precedence across account replacement, later acknowledgements and local refusal; it is never persisted.
-The historical notice remains visible while current review is loading, signed out, not found or unavailable. Current
-identity, client details and permissions disappear before cached-page suspension and are revealed only by a fresh
-exact review on return. Current permission readback is an observation, never proof of an earlier approval's outcome.
-A read Retry uses the same exact client/scope GET and sends no decision. Pending reduction advice and current read
-errors remain separate from historical uncertainty. Allow still requires fresh native advice and deliberate activation;
-Decline is local and sends nothing. Pending and unknown decisions protect account switching and navigation with
-Stay/Leave, plus the browser reload/close warning. Leaving retires callbacks without cancelling a native effect.
-Focus moves to the public review summary when private controls retire and after read Retry, or to the current error.
-The fixed exits are the exact review's sign-in return and Security; no client-supplied redirect is accepted.
+Consent history follows the mounted lifetime, with current private client/scopes/account shown only from fresh
+exact review. Read Retry uses the same client/scope GET and sends no decision. Pending reduction advice remains
+separate from historical uncertainty. Allow requires current native review and deliberate activation; Decline sends
+nothing. Protected navigation uses Stay/Leave and unload warnings. Focus moves to the generic review summary when
+private controls retire, then to the current read result/error. Fixed exits are exact review sign-in and Security;
+no client-supplied redirect is accepted.
 
 Whole-call costs: initial review, each explicit read Retry, focus return after blur and cached-document restoration
 perform at most one existing five-second bounded exact consent GET each (zero if the client is missing or the request
@@ -265,7 +288,7 @@ development. Auth's response returns unchanged, without page headers.
 
 ## Private review reads
 
-Decision: each private session, consent and inventory read has a five-second deadline through response-body
+each private session, consent and inventory read has a five-second deadline through response-body
 completion and browser BFF transport, preserving caller cancellation. Failures reuse the localized unavailable and
 explicit read-retry controls for the current page/account/selection; they never replay a mutation. Independent
 inventories keep their own availability, and existing page generations retire old completions.
@@ -291,19 +314,16 @@ native last-credential refusal. Readback never repeats a removal. A complete cur
 absence; a truncated missing row cannot prove absence. Only a currently present target permits a newly reviewed
 exact-target command. Recovery descriptions come only from a fresh present row; retained list rows are marked as previously shown until current readback.
 
-If pagehide or lost authority retires an active target attempt, the mounted document keeps only a generic outcome
-classification: unknown, acknowledged or refused. It contains no account or target data and appears in loading,
-failure, sign-in and replacement-viewer states. A current inventory observation remains separate from that history;
-returning, focusing the page, retrying a read or dismissing the notice never sends a command. Dismissal hides only the
-notice. A same-account return can restore the exact in-memory target for deliberate current review after the bounded
-native read; another account receives no former target or retry action. A new document has no historical claim.
+Retired Security attempts use the mounted generic history. A current inventory proves only current presence or
+absence, never which earlier action ran. Same-account exact target retry needs a fresh native review and new
+confirmation; changed authority hides private targets. Generic history remains independent of these controls.
 
 Whole-call costs remain bounded: the page uses one native `GET /security-page` read; dispatch uses the existing current
 `GET /session` check and one exact-key removal command (two Auth requests, zero kernel reads); each deliberate
 current-state check uses one native Security page read and zero commands. Pagehide, return, focus and notice dismissal
 add no Auth or kernel calls, inventory scans or per-row reads.
 
-Decision: the browser action wait is twelve seconds: the existing sequential five-second native account check and
+the browser action wait is twelve seconds: the existing sequential five-second native account check and
 five-second command, plus two seconds for browser/BFF delivery. Expiry, abort, thrown transport or malformed
 acknowledgement after invocation becomes unknown. One invocation sends at most one command; cancellation cannot
 undo native work. Target reads use the five-second private-read deadline even if an injected source or browser
@@ -317,7 +337,7 @@ matching name, visible row, empty list or truncated list never settles the earli
 only the inventory shown and does not claim whether that write committed. A blank name receives a browser-and-system
 suggestion, which may not identify the saved passkey.
 
-Decision: when the direct passkey review has no explicit completeness flag, a full 32-row result is shown as potentially
+when the direct passkey review has no explicit completeness flag, a full 32-row result is shown as potentially
 truncated because the read is bounded at the native contract limit.
 
 Security departure is protected by any nonempty new password, a nonblank passkey name, or an unresolved operation;
@@ -330,15 +350,15 @@ reads offer Reload, ended sessions offer sign-in, and return never replays a cre
 
 Connected-application reviews use one page-local controller and acquire the same write boundary until cancellation or a determinate result. Nonempty reductions carry the exact reviewed grant set to the native writer, which rechecks it under the consent lock before publishing a reduction barrier. If it changed, the page refreshes the current permissions and requires a new explicit decision; it never changes the reduction into Allow or resubmits. Explicit remove-all retains its existing meaning, pending reductions keep their ceiling, and uncertain reductions keep all security writes blocked without replay. Independent owned-client navigation remains available and consent navigation cannot discard a review.
 
-Decision: mounted connected-application history keeps only the latest generic unsent, dispatched, acknowledged, refused or unknown classification. A new deliberate review starts a distinct unsent action; it does not settle an earlier unknown write, and a late callback from an older review cannot replace newer history. Current reads never settle an unknown write. This history is never persisted and contains no viewer, client, permission, cursor or command details.
+Connected-application history uses the mounted first-unknown plus latest-review limit. New deliberate review does
+not settle an earlier unknown, and retired callbacks cannot replace current review or history.
 
 Connected-application whole-call costs: Security entry and cached-document return each make one bounded `/clients` inventory read and one bounded `/consents` inventory read, at most 20 rows apiece. Each explicit inventory retry or page navigation makes one read for that inventory and cursor. A confirmed reduction first reads the same bounded consent page once to recheck the target, pending state and exact current grants. A nonempty retained set then makes one existing exact `GET /consent/<client_id>` review; remove-all makes no consent GET. Each path sends at most one existing `POST /consent`; nonempty reductions include the original `reviewed_scopes`, while remove-all keeps its empty-scope body. Every awaited preflight is followed by the existing operation-currentness check, including the exact consent read, and a final currentness check immediately precedes the POST. The response is classified only from its exact native result; no post-write inventory read settles an unknown. A known `stale_review` refusal permits one bounded current consent-page read and no second command. Return, Retry, pagination, focus, language changes and notice presentation send zero commands. There is no polling, full list scan or per-row authority read.
 
 Password changes use the current native Auth password limits, shown locally with Unicode character counts and kept
 within Auth's storage bounds, and require matching new-password confirmation. Before dispatch, the person reviews the
 current account and the native session consequences. Replacing an existing password retires all sessions, including
-the current one; adding the first password leaves existing sessions active. The Security page does not disclose
-whether a password row exists. Decision: the review explains both native outcomes because Security advice does not disclose whether a password row exists: replacing one retires all sessions, while setting the first password keeps them active.
+the current one; adding the first password leaves existing sessions active. Security advice never discloses password-row existence; the review explains both outcomes.
 
 One random operation key and its exact stage, approval and apply bindings stay in mounted page memory. A transport
 failure, timeout or malformed response is phase-specific uncertainty. No phase is retried automatically. An explicit
@@ -357,7 +377,7 @@ the original attempt is retired. Review current Security performs no command: it
 password-requirements reads (two Auth reads), current account-identity read, and one bounded first page each for
 clients and consents (five reads total). It performs no inventory scan or per-row authority reads.
 
-Decision: mounted return history keeps only the most advanced interrupted phase and whether an apply receipt was observed; read Retry preserves that history, while fresh work requires explicit acknowledgement and current native advice.
+mounted return history keeps only the most advanced interrupted phase and whether an apply receipt was observed; read Retry preserves that history, while fresh work requires explicit acknowledgement and current native advice.
 
 Sessions are a list of outlined items spaced by the list's gap, with no separators between them. A local browser and system map formats recognized user agents as a device;
 unrecognized values show a localized unknown-device label, and user agents are never sent elsewhere. The muted
@@ -376,15 +396,12 @@ asks for confirmation and sends the existing `POST /passkeys/remove` with `{ id 
 credential, so nothing changed and a localized message says so. Registration and removal are credential changes: a 401
 `step_up_required` sends the person to `/step-up?return_to=%2Fsecurity`. A dismissed browser prompt is silent. Where the browser has no WebAuthn, saved passkeys and their native removal advice remain visible; only creation is unavailable. A failed inventory shows an alert in its section, never an empty-list claim.
 
-Decision: registration uses the existing five-second issuer deadline through response-body completion; an uncertain acknowledgement holds the page operation boundary until an account-bound native passkey refresh and explicit review, never infers success from names or WebAuthn IDs, and never replays the ceremony or registration POST.
+registration uses the existing five-second issuer deadline through response-body completion; an uncertain acknowledgement holds the page operation boundary until an account-bound native passkey refresh and explicit review, never infers success from names or WebAuthn IDs, and never replays the ceremony or registration POST.
 
-A separate mounted notice retains only a generic Auth acknowledgement or unknown result. It survives cached return,
-read failure, signout and account replacement; acknowledgement describes the earlier native response and says nothing
-about whether a passkey is active now. Unknown stays unknown across later attempts and inventory reads until dismissed.
-Dismissal changes only the notice. Check current and Finish review remain separate actions, and neither resolves the
-earlier result. Current rows and actions still require current native advice and its bounded inventory. A direct list
-without an explicit completeness flag is potentially truncated at 32 rows; names and WebAuthn credential IDs never
-identify native rows.
+Passkey history follows the mounted lifetime. Check current and Finish review remain separate actions; neither
+settles enrollment. Current rows/actions require native advice and bounded inventory. Without explicit completeness,
+a direct 32-row result is potentially truncated. Names and WebAuthn IDs never identify native rows. An acknowledged
+registration remains acknowledged if later session readback fails, without restoring private details or navigation.
 
 Security entry, cached return and page Retry each make one existing bounded native Security read (64 sessions and 32
 passkeys). Deliberate registration uses the admitted advice, one bounded options call, one browser ceremony, one
@@ -400,7 +417,7 @@ Malformed inventories and explicitly truncated native windows cannot prove a tar
 explicit retry with a new confirmation and normal native checks. A denied or ended session clears private rows;
 sign-in is the remedy and does not establish that the action succeeded. No operation target is persisted.
 
-Decision: the native Security page exposes bounded first windows (64 sessions, 32 passkeys) with explicit truncation, rather than adding cursor navigation; WebAuthn support gates creation only.
+the native Security page exposes bounded first windows (64 sessions, 32 passkeys) with explicit truncation, rather than adding cursor navigation; WebAuthn support gates creation only.
 
 Native `GET /security-page` accepts no account selector or query. The existing human proof and issuance boundary
 revalidate account, exact session, epoch, client and scopes around composition. Each ready section supplies `rows`,
@@ -420,52 +437,48 @@ The page heading has the same space below it as the sections have between them.
 
 ## Delete account
 
-`/account/delete` reads current deletion advice and the signed-in account identity from one
-`POST /account-management/deletion-page`. The page explains that deletion is permanent, signs the person out everywhere
-and cannot be undone. Before submitting, the person must type the localized confirmation
-phrase shown above the input (ignoring letter case, trimming surrounding whitespace and normalizing Unicode to NFC) and
-review the three prerequisites: no operated automated accounts, not the last owner of an organization, and no pending
-transfer. These are requirements to resolve, never static verified results; the application and consent inventories
-do not establish deletion eligibility. The server does not identify which precondition failed. Operated-account and
-pending-transfer requirements link to the existing operator-transfer page. Organization ownership is managed from the
-website's managed-account settings: Auth has neither a trusted website destination nor an owned organization ID in
-its session/security inventories, so it keeps the local Security fallback rather than inventing a list target or
-opening membership management without a valid organization ID.
+`/account/delete` obtains current advice and the session-bound identity through
+`POST /account-management/deletion-page`. An ordinary session receives authentication-required without private
+identity or deletion preparation. Deletion is permanent, signs the person out everywhere and has no account restore.
+The person reviews operated-account responsibilities, last organization ownership and pending transfers; application
+and consent inventories cannot verify eligibility. Native refusal does not identify the failed prerequisite.
+Operated-account and transfer guidance uses the existing operator-transfer route. Organization ownership uses
+supported website management; without a trusted destination and selected organization, retain the local Security
+fallback. No membership target is fabricated.
 
-The mounted return reader uses `loadAccountDeletionPage`: one same-origin `POST /account-management/deletion-page` per
-entry, persisted-page return or explicit Retry, with the existing five-second private-read deadline and no retry. An
-admitted review mounts the existing `SecurityInventory`, which reads one bounded clients page and one bounded consents
-page (at most 20 rows each); it does not fetch a next page until the person explicitly navigates. Retiring the review
-aborts the page lifetime and invalidates both inventory results. Returning and Retry perform no approval or execution.
+`loadAccountDeletionPage` performs one same-origin advice POST for entry, retained-document return or deliberate
+read Retry, with the five-second private-read deadline and no automatic retry. Only admitted advice mounts
+`SecurityInventory`: one clients page and one consents page, each capped at 20 rows. Further pages need explicit
+navigation. Review retirement aborts its lifetime and invalidates both inventory results. There is no separate
+session GET, approval or execution on return or Retry.
 
-Each deletion attempt keeps one exact account, operation key and payload for `POST /account-operations/approve` and
-`POST /account-operations/execute`. Approval is unsent navigation state; the continuation stores `submitted: false`
-until execution is dispatched. A 401 `step_up_required` returns through `/step-up?return_to=%2Faccount%2Fdelete` and
-requires a fresh review and typed confirmation. Once execution may have been sent, the continuation keeps
-`submitted: true`. A lost or malformed execution response remains unknown across later refusal, step-up, unavailable
-advice, signout or account replacement. Only a validated native completion reports deletion accepted; cleanup remains
-pending. After returning with only the submitted hint, the page cannot reconstruct which phase ran. It never dispatches
-on mount or return. Refreshing deletion review only reads current advice. Repeating a command requires current review,
-the same retained account, key and payload, and deliberate typed confirmation. One same-body execution retry remains
-limited to the existing unavailable response; a timeout ends browser waiting without cancelling native work.
-From a current review, a successful deletion command normally makes two POSTs: one approval and one execution. The
-approval phase has one same-body retry only for `503 unavailable` while the current review still owns the attempt; if
-approval is accepted, execution is dispatched once and deletion keeps its existing single same-body retry only for
-`503 unavailable` while that review still owns the attempt. A page read is separate: one deletion-advice POST and, for
-an admitted review, one bounded clients page and one bounded consents page. The deletion route does not make a separate
-`GET /session` request. These costs do not scale with the account's session count, organization count or operated
-account count.
+Each mounted attempt retains its original account, key and exact approval/execution payload. Before dispatch,
+authentication keeps an unsent continuation; execution dispatch sets its submitted marker. Older descriptors
+without a marker are conservatively submitted hints. Step-up returns to fresh native review, clears confirmation
+and compares exact human/target/key before another explicit choice. Confirmation uses the localized phrase,
+case-insensitive after surrounding-whitespace trimming and Unicode NFC normalization.
 
-Unavailable advice reads offer a review refresh without submitting deletion; recovery and cached-page restoration
-require fresh typed confirmation, and departure retires callbacks while preserving the original command for explicit
-reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
+Lost or malformed mutation replies remain unknown across later refusal, authentication change, unavailable advice,
+dismissal and account replacement. A submitted hint cannot reconstruct which phase ran. Keep the original descriptor
+and fence; another deliberate exact retry requires fresh review and typed confirmation. Only a validated native
+completion acknowledges deletion acceptance, with cleanup and downstream custody still pending. Browser timeout
+ends waiting without cancelling work. No mount, observation or recovery action executes deletion automatically.
 
-Decision: the mounted return summary can be dismissed, but dismissal hides only generic presentation; any exact
-unresolved descriptor, native fence and departure warning remain intact.
+From an admitted current review, ordinary successful submission sends one approval POST and one execution POST.
+Each phase permits at most one same-body retry for `503 unavailable` while that review still owns the attempt.
+The advice POST and its two admitted inventory reads are separate: a normally admitted entry plus submission is
+five Auth requests. Ordinary authentication-required advice reads no inventory. Each admitted return or read Retry
+adds one advice POST and two bounded inventory reads, with zero commands. These finite counts are independent of
+session, organization and operated-account populations. Native preparations, proofs and whole-call ceilings remain
+owned by [Auth](../../services/auth/README.md#personal-account-deletion-review).
 
-Decision: protect nonblank typed confirmation and unresolved deletion in memory with Stay/Leave and unload warnings; Stay keeps the exact review and focus, while Leave retires callbacks and preserves the original reconciliation identity. Authority loss and intended reauthentication release the guard immediately.
+Protect meaningful confirmation and unresolved sends with Stay/Leave and unload warnings. Stay preserves review
+and focus; Leave retires callbacks without cancelling native work. Authority loss clears private controls and
+intended reauthentication retains its unsent continuation. An unresolved send keeps its generic history, exact
+reconciliation identity and departure caution independently of current advice. Dismissal hides the generic return
+summary only; it removes no descriptor, native fence or warning. After a failed exact retry, a fresh native review
+is required before another explicit retry; the earlier unknown and original operands remain unchanged.
 
-Decision: after a failed retry of an unresolved deletion, require a fresh native review before another explicit exact retry; the unknown outcome, account, key and payload remain unchanged.
 
 ## Delete organization
 
@@ -481,8 +494,8 @@ is distinct from cleanup completion. Uncertain results retain the original comma
 denied and readable readback never establish success or permit a fresh deletion.
 
 Departure and selection changes retire private reviews, pending browser stages, completions and operation locks;
-already dispatched native work continues. Decision: cached-page recovery is explicit Retry with fresh confirmation,
-retaining the initiating human and any original uncertainty identity. Decision: warn on nonblank confirmation or a
+already dispatched native work continues. cached-page recovery is explicit Retry with fresh confirmation,
+retaining the initiating human and any original uncertainty identity. warn on nonblank confirmation or a
 pending or uncertain deletion; Stay preserves the exact in-memory review, while Leave retires callbacks without
 cancelling or replaying native work. Authority loss releases an unsent draft warning, but every readback result
 (including authentication-required advice) preserves an unresolved attempt’s departure protection independently
@@ -490,15 +503,28 @@ of current private authority. Recovery shows current advice without private labe
 the recovery heading; Leave retires browser work without clearing its exact stored uncertainty fence. Storage loss
 does not settle the in-memory attempt. Readback is deliberate, single-flight and uses the existing bounded native
 page reader; it cannot settle the command or produce an authentication-and-delete continuation.
-Decision: even readable recovery advice omits private labels; it reports current readability only.
+even readable recovery advice omits private labels; it reports current readability only.
 
-Decision: after a cached-page return, retain only generic mounted history and wait for a deliberate current review; that read never repeats or settles the deletion request. The page keeps known-unsent, dispatched/unresolved and acknowledged outcomes separate from current organization advice. History contains no identity or operation descriptor. An accepted request remains distinct from downstream erasure custody and cleanup.
+after a cached-page return, retain only generic mounted history and wait for a deliberate current review; that read never repeats or settles the deletion request. The page keeps known-unsent, dispatched/unresolved and acknowledged outcomes separate from current organization advice. History contains no identity or operation descriptor. An accepted request remains distinct from downstream erasure custody and cleanup.
 
-Whole-call cost for the ordinary browser path: initial review is one `POST /account-management/organizations/deletion-review`; a deliberate return review adds one identical read and zero writes; each confirmed submit adds one preflight review, one `POST /account-operations/approve` and one `POST /account-operations/execute`. A failed review retry adds one review POST only. The existing current-generation bounds allow one unavailable-response retry for approval and one same-key execution retry; after departure neither is repeated. A step-up response stops before execution; after return the person gets a fresh review and must confirm again. Each deletion-review POST binds and rechecks the same Auth human around one Access review with two native snapshots: four account reads (caller and selected organization before and after), four partition-anchor reads (home and target before and after), and two organization-role reads. Thus a normal first-load-and-submit path performs two review POSTs and costs eight account, eight partition-anchor and four organization-role reads, plus one approval and one execution call; one deliberate return review adds four, four and two such reads, with no approval or execution. These are the existing finite reads; the page does not scan lists or poll.
+Whole-call browser cost: entry is one deletion-review POST; deliberate return adds one identical read and zero
+writes; confirmed submit adds one preflight review, one approve and one execute. Failed review Retry adds one read.
+The existing current-generation limits permit one unavailable-response approval retry and one same-key execution
+retry; departure repeats neither. Step-up stops execution and returns to fresh review/confirmation. Every review
+has before/after actual Auth-session proof. For ordinary live-human advice, it returns authentication-required
+without target, role or permission I/O, and exposes no target detail. An untrusted target/key survives only as the
+auth continuation; exact-profile denial remains denial.
+
+The exact admitted profile branch separately composes two native snapshots: four account reads, four partition-anchor
+reads and two organization-role reads, plus bounded ENTRY preparations/checks and Auth proofs. If both entry and
+submit use this branch, total review cost is eight account, eight anchor and four role reads, plus approval and
+execution; a return adds four/four/two and no command. This arithmetic never applies to the ordinary branch.
+Return compares exact human/target/key and clears confirmation before explicit review. Generic history need not
+reveal private organization labels even when current advice is readable. No automatic execution or settlement runs.
 
 ## Create organization
 
-Decision: protect nonblank handles and unresolved creation with Stay/Leave and an unload warning; current refusal or loss of session authority retires controls but preserves the earlier unknown attempt and its departure protection. Only a known first mounted refusal releases its continuation; restored hints are conservatively unresolved, regardless of their submitted marker.
+protect nonblank handles and unresolved creation with Stay/Leave and an unload warning; current refusal or loss of session authority retires controls but preserves the earlier unknown attempt and its departure protection. Only a known first mounted refusal releases its continuation; restored hints are conservatively unresolved, regardless of their submitted marker.
 
 `/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers a read-only Retry without discarding the saved draft. It applies the same claim rule and
 lowercase normalization as sign-up. Creation uses one operation key for the
@@ -550,9 +576,12 @@ another request. An already dispatched change continues independently; its store
 original key remain available for explicit confirmation and native reconciliation. Failed identity confirmation
 keeps the current review usable.
 
-Decision: membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
+membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
 
 ## Operator transfer
+
+Imported transfer tuples are unverified source data. Proposed destination review establishes neither source
+relation nor source approval/execution. Only original native source and exact-intent commands establish those facts.
 
 Operator-transfer read failures offer Retry within the same page view. A failed session read preserves the saved
 attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
@@ -563,7 +592,7 @@ generic unresolved notice and Stay/Leave protection survive authority retirement
 relationship observation never attributes that relationship to the earlier operation; an exact retry remains a
 separate, freshly reviewed and explicitly confirmed action using the retained descriptor.
 
-Decision: browser authority retirement keeps only a generic stage summary in mounted state; the existing exact descriptor remains the sole recovery record, current-state review is query-only, and a matching relation never settles an unknown execution.
+browser authority retirement keeps only a generic stage summary in mounted state; the existing exact descriptor remains the sole recovery record, current-state review is query-only, and a matching relation never settles an unknown execution.
 
 An explicit current-state recovery action is bounded to one existing `/session` binding and one operator-transfer review
 request (2 Auth requests total), with zero approve or execute requests. Source execution uncertainty and acknowledged
@@ -582,7 +611,7 @@ claims success or consumes its descriptor. An explicit exact retry can submit on
 native approval and execution remain authoritative. Acknowledgement with failed or changed readback has its own
 notice and offers current review without another command.
 
-Decision: retain only a generic mounted outcome classification across authority loss and cached-document return;
+retain only a generic mounted outcome classification across authority loss and cached-document return;
 keep the admitted original descriptor in its existing storage until definitive acknowledgement, including after
 conflict, refusal or account replacement. A replacement viewer cannot review or retry the former account's work.
 New input cannot replace unknown work. No history summary is stored in browser storage, URLs, history or cookies.
@@ -610,17 +639,18 @@ Authentication handoff retains its existing sign-in/session costs and adds no re
 
 ## Operated session opening
 
-Decision: router departure protects nonblank input, prepared review and unresolved opening with Stay/Leave and reload/close warnings; Stay preserves the exact in-memory review and focus, Leave retires callbacks while retaining submitted readback, and fresh-human authentication or invalidated caller authority bypasses the guard.
+router departure protects nonblank input, prepared review and unresolved opening with Stay/Leave and reload/close warnings; Stay preserves the exact in-memory review and focus, Leave retires callbacks while retaining submitted readback, and fresh-human authentication or invalidated caller authority bypasses the guard.
 
 Read recovery keeps the selected human, subject, operator and original opening key; cached-document return discards private review state and restores only reads from the existing pending descriptor. Submitted openings retain their command for native session readback, and departure retires browser continuations before their next stage.
 
-Cached-document retirement synchronously removes the keyed review before the browser can save it. A bounded, deduplicated set of generic phase summaries stays in mounted memory outside that review; it contains no identity, operation key, labels, scopes, proof, timestamp or payload. Dismissing the summary clears its presentation only. A later acknowledgement or refusal does not settle an earlier unknown opening.
+Cached-document retirement synchronously removes the keyed review before the browser can save it. The bounded generic history stays in mounted memory outside that review; it contains no identity, operation key, labels, scopes, proof, timestamp or payload. Dismissing the summary clears its presentation only. A later acknowledgement or refusal does not settle an earlier unknown opening.
 
 Submitted return and explicit Retry call only `GET /session`. A matching automated session is displayed in a separate current-state region and is labelled as an observation; it does not prove which request created that session. Unknown issuance is never replayed. A new opening uses a fresh human step-up, current metadata, and a new explicit confirmation.
 
-Decision: while the document remains mounted, opening history is a bounded, deduplicated set of nonsecret phase outcomes; only explicit dismissal clears it, and a later acknowledgement never settles an earlier unknown send.
+Opening history uses the mounted first-unknown plus latest-review limit; current-session observation never
+settles an earlier issuance.
 
-Decision: keep public identity labels explicitly undisclosed under the opening profile; recovery links to `https://rezics.com/{locale}/accounts` and a confirmed operated session can continue to `https://rezics.com/{locale}/`.
+keep public identity labels explicitly undisclosed under the opening profile; recovery links to `https://rezics.com/{locale}/accounts` and a confirmed operated session can continue to `https://rezics.com/{locale}/`.
 
 ## Step-up
 
@@ -629,7 +659,7 @@ A signed-in browser whose session is not fresh enough for `prompt=login` or `max
 needed. The form asks for email (`autocomplete="username"`) and password
 (`autocomplete="current-password"`).
 
-Decision: departure is protected when the email has non-whitespace text, the password is nonempty, or a confirmation is pending; leaving clears local input and retires callbacks while any dispatched sign-in continues.
+departure is protected when the email has non-whitespace text, the password is nonempty, or a confirmation is pending; leaving clears local input and retires callbacks while any dispatched sign-in continues.
 
 `src/step-up.ts` reuses `signIn` and `signInTarget`. Confirmation is one browser `POST /signin` with
 the same `client_id` and `scope` as sign-in. On success, Auth replaces the previous session. The
@@ -656,15 +686,14 @@ cancelling the browser ceremony without undoing a dispatched server sign-in or a
 ## Screenshots
 
 Run `bun run screenshots` to capture all eight page states in the eight launch locales and both themes. Desktop images
-use a 1280×900 viewport; login also has one 390×844 light-theme phone image per locale. By default, images are written
-to `.temp/screenshots/auth/` at the repository root. Pass `--out <directory>` to choose another destination.
+use a 1280×900 viewport; login also has one 390×844 light-theme phone image per locale. Pass `--out <directory>` to choose a temporary output directory inside the worktree.
 
 ## Development
 
 Shared `authPost` submissions have a five-second deadline (`AUTH_POST_TIMEOUT_MS`), matching existing Auth issuer
 transport conventions and covering both connection waiting and JSON consumption. A timeout uses the existing localized
 outage state; native writes remain uncertain where their protocol requires readback or exact-command recovery.
-Decision: a deadline ends browser waiting only; its distinct `timeout` result prevents automatic approval or execution
+a deadline ends browser waiting only; its distinct `timeout` result prevents automatic approval or execution
 retries, retaining the original account, operation key and command for explicit recovery.
 
 From this directory, run:
@@ -679,7 +708,7 @@ choice; Apply changes translated presentation and document `lang`, and Cancel re
 The current language remains active until Apply. A blocked cookie shows that the choice lasts only in this
 document. Hydration starts from the exact server language without depending on cookie access or writing it again.
 
-Decision: apply interface language in the mounted route through a locale subscription, without navigation or
+apply interface language in the mounted route through a locale subscription, without navigation or
 router invalidation; route component types and keys stay stable, preserving each owner's drafts and attempts.
 No account preference, native read, command or authorization URL participates. Paraglide writes only its existing
 interface cookie, with its existing scope and lifetime. Restored documents may read a newer supported cookie
@@ -737,20 +766,19 @@ Sign-up makes no kernel reads. A successful submit is one browser `POST /signup`
 - **Touches:** one bounded `POST /recovery/page` per review or Retry; an exact retained account or management continuation adds one bounded `GET /session`. Deliberate Continue repeats those same reads and uses the existing exact local return-marker transition before navigation.
 - **Bound:** at most 1 recovery-page read and 1 exact session read per review attempt, 0 kernel reads, 0 authentication or account-command requests. A separate password confirmation uses 1 Auth request; a fresh passkey confirmation uses the existing 2.
 - **Recovery:** current advice and exact continuation selectors determine whether Continue is offered. Unavailable, stale or replaced reads never restore former account detail or erase an unknown send.
-- **Decision:** after a failed explicit Continue recheck, fresh authentication stays hidden until deliberate Retry obtains current advice.
+- after a failed explicit Continue recheck, fresh authentication stays hidden until deliberate Retry obtains current advice.
 
 ### Passkey list
 
-- **Touches:** one `GET /passkeys`, which returns only the signed-in person's passkeys, beside the page's `GET /session`
-  and `GET /sessions`
-- **Bound:** 1 read of at most the person's own passkeys; 0 kernel reads; one row rendered per passkey
-- **Growth check:** `tests/passkeys-cost.test.ts`: listing passkeys is one read however many passkeys the person has
+- **Touches:** native `GET /security-page`, with current viewer/advice, at most 64 sessions and 32 passkeys and explicit truncation; direct `GET /passkeys` reviews without completeness stay potentially truncated at 32.
+- **Bound:** one bounded native Security read; 0 browser-to-kernel requests; missing/truncated rows do not establish causal enrollment settlement.
+- **Growth evidence:** existing passkey cost fixtures cover direct request counts, not the complete mounted/native journey.
 
 ### Adding a passkey
 
-- **Touches:** `POST /passkeys/register/options` and `POST /passkeys/register`; the new row comes from the 201 body
-- **Bound:** 2 Auth requests and 0 kernel reads, with no re-read of the list
-- **Growth check:** `tests/passkeys-cost.test.ts`: adding a passkey makes two Auth requests however many passkeys the person has
+- **Touches:** current admitted advice, `POST /passkeys/register/options`, one browser ceremony, `POST /passkeys/register`, then one bounded Security readback after acknowledgement.
+- **Bound:** 2 Auth requests for registration plus 1 readback, with any required current-advice/preflight reads counted separately. No replay of the ceremony or registration POST.
+- **Qualification:** the original direct two-call cost fixture does not prove this whole mounted flow; inventory is current state, not settlement.
 
 ### Removing a passkey
 
@@ -764,11 +792,7 @@ Sign-up makes no kernel reads. A successful submit is one browser `POST /signup`
 - **Bound:** a complete opening uses at most 3 `GET /session` reads, 2 bounded opening-page observations, 1 approval request and 1 issuance request; each unsent Retry repeats at most 1 human-session read and 1 opening-page observation. A submitted return or read Retry uses exactly 1 `GET /session` and 0 metadata, approval or issuance calls. Each ordinary focus validation adds at most 1 human-session read. There is no inventory scan, poll or automatic issuance replay. Required fresh sign-in remains the existing native step-up flow.
 - **Growth check:** `tests/operator-opening-return-cost.test.ts` verifies one readback request and no approval or issuance; `tests/operator-opening-return.test.tsx` verifies cached return, replacement cookies, released late reads and zero replay after Retry.
 
-## Visual check
 
-The /login frame was inspected at 390 px and 1280 px in light and dark themes. The wordmark and heading remain
-legible, the brand mark is the only red element, the centered card fits the narrow viewport without horizontal
-overflow, and the background and card retain clear contrast in both themes.
 
 ## Security headers
 
@@ -789,9 +813,9 @@ The policy costs one 16-byte random nonce and one header set per response, with 
 `bun test apps/auth/tests/security-headers.test.ts` from the repository root to build and preview the production
 bundle and check Chromium hydration, policy violations and the real Turnstile script URL with an offline widget.
 
-Decision: automated creation asks Stay/Leave for meaningful input or unresolved review; Leave discards only unsent review, while a tab-local submitted marker preserves the original command for recovery. Caller replacement or permission loss revokes review without prompting.
+automated creation asks Stay/Leave for meaningful input or unresolved review; Leave discards only unsent review, while a tab-local submitted marker preserves the original command for recovery. Caller replacement or permission loss revokes review without prompting.
 
-Decision: opening advice uses a dedicated native management observation; the exact manage-only client keeps identity labels undisclosed instead of acquiring read scope. The read remains advice, never an opening approval.
+opening advice uses a dedicated native management observation; the exact manage-only client keeps identity labels undisclosed instead of acquiring read scope. The read remains advice, never an opening approval.
 
 The Auth host installs `POST /account-management/operators/opening-page` from the native account bindings. Its closed current response identifies the acting human, installed actor target, installed operator kind, reservation/version and supported `opening` action. Missing authority returns refused; missing infrastructure returns unavailable. A single ten-second deadline covers one authentication, two bounded native transfer-state reads and one full-key operator-kind read. The two relation observations must agree. The endpoint performs no command, approval or credential staging; the page consumes one observation and preserves its exact tuple for explicit opening review. Public labels remain undisclosed under the manage-only profile; submission still needs the existing fresh-human approval and opening command.
 
@@ -832,7 +856,7 @@ current advice or a successful sign-in cannot establish what the earlier reset d
 creates the login completion notice. Only native completion acknowledgement uses the existing notice owner.
 Stay preserves active work; explicit Leave clears it and warns that a sent request may still finish.
 
-Decision: deliberate fresh recovery opens an empty start form after current start advice, while generic earlier
+deliberate fresh recovery opens an empty start form after current start advice, while generic earlier
 uncertainty remains visible and independent of the new request.
 
 Whole-call cost: summary capture and display make zero requests. Entry, retained return, focus/visibility refresh,
@@ -841,9 +865,3 @@ explicit read Retry and deliberate transition from completion history to a fresh
 A start or completion submit makes one existing Auth command request, with no reconciliation read, polling, inventory
 scan or speculative retry. Resend confirmation rereads one start advice response; its eventual explicit send makes
 one command. Language changes and displaying history make no requests. Read advice is never an execution receipt.
-
-Compared for presentation: `legacy-final:apps/accounts/features/auth/recovery-form.tsx`,
-`legacy-final:apps/accounts/features/auth/recovery-claim-form.tsx`,
-`legacy-final:apps/accounts/features/consent/consent-problem.tsx` and the earlier Web
-`apps/web/features/settings/pages/security-settings-page.tsx`: short outcomes attach a next step, failed reads have
-visible Retry, and deliberate departure retains confirmation. No legacy implementation was ported.

@@ -1,5 +1,18 @@
 # Access
 
+## Policy boundary
+
+The [adopted architecture](../../../../docs/architecture.md) places the pure catalogue, closed-operand `decide`,
+bounded explanations/conformance and residual specialization behind `packages/access/src/index.ts`. Imports go
+inward through that public entry only, with no reverse or private edges. Kernel retains native facts, qualified
+completeness, opaque proofs, authoritative time, floors/fences, command admission, audit and execution. Exposure
+is a distinct consumer. First-core and Collection residual specialization remain pending, not admitted behavior.
+Extraction supplies no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
+
+[Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
+[Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
+[Auth](../../../auth/README.md#ordinary-native-host-assembly) owns trusted Auth/Access composition.
+
 Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
 
 ## Fixed Global viewer-action bindings
@@ -38,159 +51,54 @@ the production Global-only default and the missing/private resource outcomes unc
 
 ## Native work admission
 
-`access/work.ts` owns the additive accounting port. It has no dependency on the Source interpreter and no
-numeric allowance. Its exact structural dimensions are `{keys, points, witnesses, rows, bytes, emptySeeks}`.
-The caller supplies its existing ledger through `AccessWorkSink.reserve(operation, bound, kind)`, which either refuses
-with `null` or returns a one-shot `settle(actual)` reservation. `kind` is exactly `'native' | 'owner'`:
-the former dispatches an Access-owned native operation; the latter holds an envelope for the resource owner's
-actual dispatched operations. A thrown admission error also prevents dispatch.
-Instantiate `new AccessWorkAccounting(sink, fixedRequestDeadline)` and supply it as `AccessContext.work`.
-The accumulator never grants authority; existing native identity, opaque eligibility, principal, scope and formula
-checks remain mandatory. The ordinary signatures and behavior without `work` are unchanged.
+Static producer bounds replace runtime pricing: use full-key indexed seeks, bounded temporal intervals,
+LIMIT/page/fanout caps and composed finite whole-call ceilings. Missing runtime-price metadata is not an
+authorization prerequisite. Pre-I/O quotes, prepaid/no-refill ledgers and per-profile runtime-price dispatch are
+not adopted admission requirements. This does not relax permissions, isolation, native identity/proofs,
+replay/deadlines, store entry or bounded progress. [History/Work](../history/README.md) owns execution.
 
-The supported producer is the installed `createAccess` implementation, including its ordinary `prepare`,
-`preparePage`, `authorize`, `authorizePage`, `authorizeExplicit` and `prepareReadDecisions().decide` methods.
-Metered preparation requires the caller's already-live native `AuthoritativeTime`: `context.time` for individual
-and homogeneous page preparation, `input.time` for read-decision windows (and matching `context.time` if supplied).
-Final checks must receive that SAME object. Access does not mint another native clock or exempt epoch checks.
-The caller owns admission of its original clock read and resource checkout; Access admits its own time query,
-independent checkouts/waits, assignment, inverse, candidate, organization role and final formula statements.
-Prepared role/assignment metadata can be shared within this live window and its original evidence TTL/deadline;
-each target/scope/denial decision still executes the same `permission-check.sql` at final T. A homogeneous page
-prepares once for its bounded ids. A read-decision window prepares inventory once and executes a fresh final
-formula for each bounded target batch; it stores no allowed boolean.
+`access/work.ts` retains optional accounting metadata with dimensions
+`{keys, points, witnesses, rows, bytes, emptySeeks}`. Its existing capture/reservation APIs are implementation
+instrumentation, not another permission operand. A missing foreign declaration is an unmeasured cost gap, never
+zero work or permission to bypass native checks. Do not infer bounded physical MVCC work from output cardinality.
 
-`await work.capture(operation)` returns the closed union:
-
-```ts
-type AccessWorkResult<T> =
-  | { state: 'complete'; value: T; usage: AccessWork }
-  | { state: 'unavailable'; dependency: string; usage: AccessWork }
-  | { state: 'failed'; error: unknown; usage: AccessWork };
-```
-
-For example, capture ordinary preparation with its metered context, then capture the ordinary final authorize
-call using its returned evidence and the same live T. `false` is a complete denial, with its actual usage.
-`usage` is cumulative across preparation and final checks, including rejected candidates and failed operations.
-`work.usage()` exposes the same immutable receipt when preserving the ordinary throwing API. Do not add a
-captured cumulative receipt to the ledger again: the sink already receives per-operation settlement.
-
-Reservations precede dispatch, including owner callbacks and explicit pool acquisition. Dispatched native rows
-are the owner-declared plan bound, also on empty output, and cannot be refunded using result cardinality. Completed
-statements settle actual serialized parameter/projection bytes and their outer empty seek; this is not a claim of
-measured PostgreSQL physical tuples. Unknown failed work consumes its entire admitted bound and poisons reuse.
-An enclosing timeout seals every pending bound before returning; a late callback cannot refund unknown work or
-issue another reservation. Foreign owners must account all their nested operations within their declaration;
-Access does not inspect their SQL or substitute result rows for work.
-
-`AccessWorkProducer<C,R>` is exactly `{bound(context: C): AccessWork | undefined;
-actual(context: C, result: R): AccessWork | undefined}`. Both functions are synchronous, pure accounting metadata;
-the owner binds the actual receipt to this exact invocation, including zero-IO results. Access reserves `bound`
-before invoking the ORIGINAL callback, then settles the actual receipt. Missing/invalid receipts retain the
-full bound and fail the attempt. A completed owner envelope can release work for branches that never dispatched;
-its receipt must retain every nested native statement's charged plan rows. This differs from refunding dispatched
-native rows using a result row count. There is no blanket callback estimate. The native owner integration points are:
-
-- `ResourceEligibilityOptions.work.{prepare,verify}` for the SAME Content/resource eligibility callbacks.
-- `ReadDecisionEligibility.work`, with context `{client,ids,at}`, for native batch resource eligibility.
-- `AccessRealmRoleReader.work` / `.batchWork` for the original Realm single / batch callback inputs.
-- `AccessConfig.contentEditionBuyerFactWork` for the original Commerce buyer fact reader input/result.
-
-A missing declaration refuses BEFORE that callback, with `AccessWorkUnavailableError.dependency` naming
-`Content resource eligibility.prepare`, `Content resource eligibility.verify`, `Resource ReadDecisionEligibility`,
-`Content AccessRealmRoleReader`, `Content AccessRealmRoleReader.batch`, or `Commerce ContentEditionBuyerFactReader`.
-No foreign native implementation is claimed by publishing these ports.
-
-`accessCheck` preserves its ordinary `(client, time?) => Promise<boolean>` call. Native checks prepared with
-live `AccessContext.time` and the existing `AccessContext.work` additionally expose optional `.work`:
-`PreparedAccessCheckWork` is an `AccessWorkProducer<PreparedAccessCheckInvocation, boolean>` with
-`run(input): Promise<boolean>`, where `input` is exactly `{client, time, work}`. These types are exported from
-the original `access/index.ts`. Manual and foreign checks can omit the property.
-
-Prepare on the released pool before acquiring the target client. The native producer's pure `bound(input)`
-combines the existing mounted formula declaration with the original eligibility owner's verify declaration,
-using the actual prepared roles, assignment, buyer, resource and deadline evidence. Undefined means unsupported
-before nested IO. Unmetered preparation cannot acquire a declaration afterward. The invocation must retain the
-same accounting and live native time object as preparation; a formatted `at`, copied time or cached permission
-cannot substitute for it. Both eligibility contexts now carry optional `time` and `work`; verify retains its
-ordinary formatted `at`. These fields come from the evaluator, including at preparation.
-
-Call `.work.run(input)` to invoke the same native authorizer on the supplied target client. Its synchronous
-`.actual(input, result)` consumes a one-shot receipt for that exact invocation object and result. Distinct
-invocations sharing T remain independent; a cloned input, repeated invocation or missing receipt supplies no proof.
-A false decision still charges the owner points and formula statements actually dispatched.
-
-Owner reservations establish an asynchronous accounting frame inside the SAME `AccessWorkAccounting`. Nested
-native statements and owner envelopes reserve from that finite admitted parent footprint before dispatch. They
-settle into the parent receipt, without a second reservation or charge in the caller's sink. `invocation` returns
-only that frame's child receipts, never a difference of global usage. Concurrent siblings cannot borrow each
-other's reservations. Nested admission also retains the earlier of the parent and native evidence deadlines.
-An owner receipt must include every admitted child; unfinished children, an overrun,
-failure or missing receipt burn the full reservation and poison the attempt. Closed frames forbid late IO.
-Native statement row declarations and all six dimensions retain their original meaning.
-
-This bridge does not declare Content cover readiness: consumers still need to propagate genuine preparation
-time/accounting and compose their own native owner declarations and receipts.
+Prepare native facts on released connections before acquiring the target client. Use the same live opaque
+`AuthoritativeTime` for preparation and final authorization, within the original evidence TTL and request deadline.
+Each bounded target/batch runs the ordinary installed final formula; no prepared allowed boolean substitutes for
+current grants, client/principal operands, assignment, resource denial, account floor or fence. Rejected candidates,
+failed/repeated operations, pool waits, transaction controls and failure rollback belong in the whole-call ceiling.
+Borrowed-client checks require their genuine prepared window; no foreign preparation runs under its checkout.
 
 ### Retained Kind audience contract
 
 Collection presentation uses mixed defaults or an explicit owner-selected Type. It does not invoke
-`Access.kindAudience` or wait for audience capture, preparation, raw input, Type evidence or currentness.
-The optional ABI in [`kind-audience.ts`](kind-audience.ts) and its existing native adapters remain available to
-shared callers and retained-data controls. They supply no ordinary permission or replacement Actor. Existing bearer
-authentication, account fencing, Collection/member disclosure and explicit Type/catalogue publication keep their
-own authorization contracts. No automatic Kind admission/evidence outcome is required for this presentation journey.
+`Access.kindAudience` or wait for audience capture, raw input, Type evidence or currentness. The optional
+`kind-audience.ts` ABI and native adapters remain available to shared callers and retained-data controls; they
+supply no ordinary permission or replacement actor. Bearer authentication, account fencing, member disclosure
+and explicit Type/catalogue publication keep their own contracts.
 
-Native account variants use the existing `account-viewer-actions.sql` full-key projection through
-`readNativeAccountStates`: UUID, kind/state enums, fence, current operator and positive bigint authentication floor.
-`ReadDecisions.prepareAccountAuthority` supports batches admitting `account:read`, `account:update` and
-`account:manage` for `access.account`. Its metered preparation retains only target/operator bindings. Each final
-call rereads current actor/operator and targets and executes fresh ordinary/explicit formulas on the supplied
-client, at the SAME live T object. It checks self, profile operator, verification kind, scopes, principal,
-assignments, role validity and denials through the existing formula. It neither uses the unmetered prepared answer
-map nor checks out another connection under the caller's checkout. Unrelated action windows cannot prepare native
-Account authority and retain the explicit AccountAuthority dependency refusal before IO.
+Native account variants reuse `account-viewer-actions.sql` and `readNativeAccountStates`: full-key UUID,
+kind/state, fence, current operator and positive authentication floor. `prepareAccountAuthority` supports the
+closed `account:read`, `account:update`, `account:manage` window; final calls reread current actor/operator and
+targets and execute ordinary/explicit formulas at the same live T, including scope/principal and verification-kind
+restrictions. Unsupported action windows remain unavailable before I/O.
 
-`createAccountPublicEligibility(resource)` supplies the native public-account floor for
-`account:read_public_identity`, using the same current full-key projection. Only active, unfenced accounts qualify;
-an independent grant still uses the ordinary formula. Its zero-IO preparation and actual one-statement verification
-have exact producer declarations. Unknown resource callbacks still require their owners' declarations.
+`createAccountPublicEligibility` supplies only the existing active/unfenced public-account floor. An independent
+grant still uses the ordinary formula. `accountStandingCheck` observes a fresh anchor and owns/releases its native
+read time. Native bearer refresh preserves its original pool, deadline, wall-clock expiry, floor and fence; no
+partial identity or second resolver is minted. External ES256/JWKS and full approval-restoration cost declarations
+remain unmeasured dependencies, not free work or new authentication prerequisites.
 
-`accountStandingCheck` observes a fresh native account anchor, mints its OWN admitted read time (ignoring a caller's
-command time), prepares native permission evidence and releases that time in `finally`. It admits its checkout and
-final formula in the same parent ledger. The installed authenticator can refresh only its own already-verified
-bearer/account proof, retaining its original pool, deadline, JWT wall-clock expiry, authentication floor and fence.
-Native command admission compares the closed current account projection against the actual authenticated snapshot;
-its per-attempt observation is reusable only with the same accounting object. No partial Account or bearer is minted.
-
-Standalone fixed Global gate checks support the existing exact `gate:<group>` or `gate:any` formula with the mounted
-operation's scope operand. They prepare before resource checkout and admit each checkout, transaction control and
-final formula. Native read minting passes the original timestamp text directly to PostgreSQL, preserving
-microseconds; a provided read time must match the exact window. Expiry is checked again after final transaction
-control. A borrowed client requires the already-prepared shared read window, so foreign preparation never
-runs under a resource checkout. Shared-window checks also execute afresh. `admitGroup` / `admitExposure` accept optional `work`/`time`;
-the native opening probe has no open cache, and a locally minted read time is always released. Failed transactions
-discard only their own checked-out connection rather than dispatch unadmitted rollback work after ledger failure.
-Native opening reads preserve the Global partition handoff check in the same repeatable-read snapshot. Gate
-declaration, catalogue and exposure combining facts come from the `@rezics/access` public entry; Kernel adapts
-mounted operation metadata and retains the native permission, partition, time and audit effects.
-The metered path first projects only the schema-closed partition state and handoff byte length. A moved partition
-then reserves a separate exact-key locator fetch using that length before dispatch, and preserves the exact moved
-target in the native unavailable error. No unbounded node or locator text is read before admission.
-Exposure admission does not become configuration or Source authority.
-
-The remaining authentication dependency is external ES256 verification/JWKS transport: direct metered
-`authenticate` refuses with `Auth ES256 verification/JWKS native work producer` before cryptography/key fetch;
-`actorOf` retains `Auth bearer authentication native work producer`. Approval restoration's full private account /
-assignment path requires `Auth approval restoration full account/assignment native work producer`. These callbacks
-have no declared native bound here and are never metered as zero. Already-verified native refreshed-account paths
-are supported. Unmetered behavior stays compatible.
+Fixed Global gate checks retain the exact `gate:<group>`/`gate:any` formula and mounted operation scope.
+Native opening reads preserve partition handoff in the same repeatable-read snapshot. Moved-target fetch uses the
+observed bounded length; no unbounded node text is selected as permission evidence. Catalogue/declaration and
+exposure combining facts enter through the public pure package, while Kernel retains partition, time, permission
+and audit effects. Exposure advice never becomes configuration or Source authority.
 
 ### Native declaration proof
 
-`accessNativeWork` is called explicitly at each owning SQL call site; it is not a query proxy or SQL matcher.
-Its statement point also admits the implicit pool wait when using `pool.query`; `accessCheckout` admits each
-explicit borrowed checkout separately. Closed projections contain UUIDs, enums, booleans and finite PostgreSQL
+Static declarations live at the owning SQL call site. Whole-call bounds include implicit pool waits and
+explicit borrowed checkouts, rather than treating a bounded result as the complete cost. Closed projections contain UUIDs, enums, booleans and finite PostgreSQL
 timestamp/range text, never native content bodies. Byte bounds use those shapes plus the actual serialized input;
 completed projection bytes are measured directly. Witness work is zero: Access does not produce Source witnesses.
 
@@ -215,7 +123,7 @@ completed projection bytes are measured directly. Witness work is zero: Access d
 - `permission-inverse.sql`: one canonical coverage point and two account/kind ranges per admitted human.
   Their combined cardinality is `MEMBERSHIP_LIMIT` from the existing serialized native reservation writer
   (`membership-inverse-20261025093747-reserve.sql`); incomplete coverage still denies. This is charged once per
-  shared window, never estimated from returned memberships. A caller whose budget cannot admit this bound refuses.
+  shared window, never estimated from returned memberships. This entire bound belongs to the whole call.
 - `permission-membership.sql`: one organization account and current/next temporal seeks for each of two roles,
   at most five native candidates per organization/member pair. Both positive and negative roles are charged.
 - Candidate and final formula SQL: keys are the supplied roles plus two identity/active-account keys per resolved
@@ -226,8 +134,8 @@ completed projection bytes are measured directly. Witness work is zero: Access d
   also charges the finite generated key/target/probe/decision work. The final assignment recheck is separately
   included. No target grant, current denial or final scope decision is reused from preparation.
 
-Native cost/growth evidence remains separate from this supported admission/receipt port. No Source budget,
-resource classifier, ledger or harness is changed here.
+Native cost/growth evidence remains separate from these declarations. Publishing a bound proves no native
+execution, cold-load or shared-suite pass; missing foreign operands remain explicitly unmeasured.
 
 Access owns account state and lifecycle, bearer identity evidence, resource permission evaluation, grants, principal assignments and creation authority.
 
@@ -2229,7 +2137,7 @@ work and no additional relation or growth check. Existing claim storage bounds r
 ### Public identity read
 
 `GET /v1/accounts/{accountId}/profile` (`account.read_editable_profile`) returns the private editable
-`{ profile }` source by full account key, including handleless accounts. It requires `updateAccount`'s native
+`{ profile, editing }` source by full account key, including handleless accounts. It requires `updateAccount`'s native
 authority: `account:update` on an ordinary account, or `account:manage` on an operated actor's current operator.
 Preparation releases foreign evidence before checkout; the operator check is separately released and the subject
 snapshot confirms the exact binding. Current viewer, scope, principal, state and fences still apply. Unknown,
@@ -2248,8 +2156,8 @@ advice is not a readable-but-noneditable grant, a second authorization engine or
 Command-time checks remain mandatory. Avatar advice admits changing the stored reference; media upload stays with Content.
 
 Fixed owned work, excluding reused Access preparation/formula: one pool checkout, begin/commit and reserved rollback
-controls, one `account-profile` full-key statement, at most one Content avatar-summary owner envelope, and closed
-serialization of `{profile,editing}`. Failure rolls back and burns the reserved envelope. Unrelated account
+controls, one `account-profile` full-key statement, at most one bounded Content avatar-summary composition, and
+closed serialization of `{profile,editing}`. Include failure rollback; no runtime-price dispatch is required. Unrelated account
 populations do not change this bound.
 
 - `account-profile.sql` (`account-edit-profile-read.sql`): one `account_pkey(route, account_id)` candidate, one
@@ -3598,23 +3506,16 @@ registration cannot permanently pin a caller-selected Source or barrier. A held 
 retired on early transfer or historical custody. Other native consumers retain
 their original release requirements.
 
-External installation is parked explicitly: no existing Auth host owner input
-supplies independently verified original database identity, surviving installation
-and inventory/isolation, receiving/restore generation, permanent writer isolation
-and per-obligation physical/receiving closure together. The existing
-`AuthRestoreDatabaseOwner` inventory/progress operations supply only their stated
-operands. Control activation/identity and obligation custody transitions therefore
-refuse natively. There is no installer ABI, default identity, ready callback,
-historical-image claim or SQL permission bypass. Restored host composition can
-forward the existing trusted Access controls; import/replay/live enrollment still
-refuse missing control or a database identity different from verified inventory.
-Ordinary authentication is unchanged. The allowed missing external operand does
-not establish whole-feature or native acceptance.
+Operational restore follows [Deletion](../../../../docs/deletion.md#access-and-auth-participants): fresh random
+incarnation, rotated Access proof key, deletion replay and retired old writers before traffic. There is no required
+runtime physical-owner ABI or restore-generation witness protocol. Retained receiving-control schemas still carry
+implementation identity/custody fields, and current guards refuse unavailable inputs. This is an unverified
+composition gap, not a requirement to invent another owner interface. Local source continuity, successful replay
+and empty prefixes cannot establish historical or terminal custody. Hosting/runbook proof remains unexercised.
 
 #### Bounded receiving SQL
 
-These are derived upper bounds for the implemented local entries, rather than
-physical-owner allowances. A key visit counts each keyed table row read or write,
+These are derived upper bounds for the implemented local entries, for local native work; they do not prove external custody. A key visit counts each keyed table row read or write,
 including repeated reads and FK checks; a missing indexed prefix costs at most
 one examined key. Q is client SQL statements on the successful longest path;
 inner SQL table statements are stated separately. Add one ROLLBACK statement on
@@ -3640,7 +3541,7 @@ selects one exact account and one home; none expands into an owner inventory.
 Read/registration/invalidation/preparation/publication share the caller's absolute
 deadline, SQL statement/lock timeouts and bounded pool wait. Publication releases
 registration before the Auth factory and releases Auth before its final native
-transaction. Its complete price is the native portion above PLUS the actual Auth
+transaction. Its complete bound is the native portion above PLUS the actual Auth
 factory below. The factory also repeats a full native registration (17 keys/9
 client statements) before creating local work; thus publication without a native
 page totals 61 native key visits/28 native client statements, plus 17 Auth key
@@ -3648,9 +3549,8 @@ visits/38 Auth client statements. If a native page is reached, add its original
 engine/Kind fence bounds, that fence's receiving begin (5 Auth keys/18 client
 statements plus native registration 17/9), and its terminal callback (3 Auth
 keys/one body statement). Every invocation pays again. No cost from an identity
-original or another child is reused. Physical installation/custody is unavailable and is never assigned
-an assumed fixed foreign price. A future physical-owner binding must supply its
-actual independently bounded implementation before activation is enabled.
+original or another child is reused. Physical custody remains unverified and is never assigned an assumed fixed foreign cost. Operational restore
+evidence is separately required; these local bounds establish neither custody nor deployment readiness.
 
 ### Auth obligation discovery
 
@@ -4756,112 +4656,41 @@ Goal completion remain deferred; workspace typing establishes none of those outc
 
 ### Selected History original and private transfer
 
-The default History worker calls `history/work.ts:advanceSelectedHistoryOriginal`. Its native producer is
-`identity-original-admission.ts:withSelectedHistoryOriginal(deps, body)`, where `deps` contains the actual
-`Pool`, `WorkClient` and `HistoryRegistry`, and `body(jobId, transfer)` receives the opaque
-`IdentityOriginalTransfer`. The native command locks the selected job and current registry, checks the account's
-immutable erasure barrier, and persists its genuine transaction ID, exact job/account/home/phase/cursors, registry
-and absolute five-second deadline. The command commits its entire dispatch debit and immutable allocation before
-the handle escapes. Operational checkout, a job lease, callback identity and ALS are insufficient independently.
+[History/Work](../history/README.md) owns selected-original execution. Accounts supplies immutable erasure,
+source/target/role custody and native progress facts. Original job/home/phase/cursors, registry, identity and fixed
+deadline remain bound across replay; operational checkout, callback identity and job lease confer no authority.
+Current native validation surrounds released child work, with committed progress and original receipt identity
+required before settlement. Workflow completion does not establish physical custody.
 
-`consumeSelectedHistoryOriginal(deps, transfer, jobId)` commits a one-shot entry before affected work. It locks and
-checks the original, job, registry and barrier. Failed validation poisons the live entry; rollback never refunds
-its already committed reservation. `lockSelectedHistoryOriginalPosition` checks the same original inside the
-real locked operational job transaction. `guardSelectedHistoryOriginalTransaction` checks liveness around each
-awaited query, preserving failure ROLLBACK after expiry. Neither adapter issues native command resources or casts
-an operational checkout into native authority.
-
-The actual execution records its changed position through `recordSelectedHistoryOriginalProgress` before COMMIT.
-Settlement accepts only that recorded position matching the current native job, then marks the original advanced.
-A later changed cursor, registry wake/reset, workflow result or callback return alone cannot settle it. A genuinely
-advanced native unit can be admitted independently; an unfinished original cannot change its identity, position,
-partitions, spent balance or deadline on replay. A pending/complete phase transition is execution progress only.
-It never claims physical custody closure.
-
-The complete parent formula is the disjoint inclusive sum:
+The complete parent formula remains the disjoint inclusive sum:
 
 ```
 AccountsLocalControl + SourceHistoryNativeAllReachedCalls
                      + LibraryAllReachedCalls + AdditionalOriginalTransferControl
 ```
 
-`ORIGINAL_AXES` fixes the SQL encoding order to candidate keys, native rows, identity metadata rows, native points,
-witness keys, statements, bytes and empty seeks. Every vector requires exactly these eight own safe nonnegative
-integer properties; the sum rejects overflow. The SQL representation additionally enforces eight bounded bigint
-entries, immutable partitions and monotone entry/progress states. Discovery reserves the finite declared envelope
-before its first SQL; native admission durably prepays it before any capability or child IO. The existing local
-components remain `HISTORY_ORIGINAL_LOCAL_ALLOWANCE`. Their entire reservation is spent; no remainder of it is a
-Source/Library allowance.
+`ORIGINAL_AXES` is candidate keys, native rows, identity metadata rows, native points, witness keys, statements,
+bytes and empty seeks. All eight dimensions need finite nonnegative overflow-checked bounds. Local control and
+`ADDITIONAL_ORIGINAL_TRANSFER_CONTROL` include discovery, BEGIN/settings/COMMIT/failure ROLLBACK, allocation and
+FK reads/writes, original/job/registry/barrier checks, progress, settlement and before/after callback controls.
+Returned columns, vectors and JSON require independent maxima. Zero candidate/metadata/witness axes apply only
+to bodies that perform none of those operations, never to missing child declarations.
 
-`HISTORY_ORIGINAL_TRANSFER_CONTROL` is the literal additional SQL declaration. It includes released discovery's
-BEGIN/settings/COMMIT/failure ROLLBACK; allocation INSERT, original guard and FK points; the entry barrier check;
-native progress read/write; settlement allocation read; and separate pre-grant/post-callback native commands.
-Each transfer command includes original/allocation locks, selected job, registry, barrier, and its irreversible
-state update. Their returned JSON/vector/column maxima are bounded independently. The exported sum is
-`ADDITIONAL_ORIGINAL_TRANSFER_CONTROL`. Its candidate, identity metadata and witness axes are zero because those
-operations do not occur in these control bodies, rather than by conversion from a legacy declaration.
+Source's whole-call operand includes every reached/repeated History, inventory, receiving, H/G/A, outbox,
+released/current/final validator, settings, failed attempt, rollback and settlement body. Library's includes its
+actual page, verifier, planner, locked-plan, exhaustion, seal and final fence bodies. Source and Library remain
+missing terms here: there is no adopted whole-parent numeric ceiling. Static bounds and existing native execution
+seams are required; prepayment, no-refill ledgers and runtime-price metadata are not authorization prerequisites.
+Publishing an interface or a local numeric subtotal does not supply these missing owner implementations.
 
-Accounts reads child declarations only from the actual installed owner modules, before discovery:
-
-- `semantic/identity-source-consumer-maintenance.ts:IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION`
-- `library/collection-source-work.ts:IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION`
-
-Each has type `IdentityHistoryOriginalBodyDeclaration`, containing `work: WorkDimensions` and `engineRequests: 0`.
-The Source declaration must include every reached/repeated History, inventory, receiving, H/G/A, outbox, released,
-current and final validator, settings, failed attempt, rollback and settlement body. Library must declare its real
-page, verifier, planner, locked-plan, exhaustion, seal and final fence bodies. Five-value declarations do not fill
-unclassified axes with zero. Configuration may reduce child limits; it cannot enlarge the original. No public
-function accepts a structural funding declaration or caller price. An absent declaration is SQL NULL, not zero.
-`identityOriginalRemainder(deps, transfer, jobId)` reports only these actual immutable partitions and the original
-ID/deadline/position. Source and Library currently remain null; there is no adopted whole-parent numeric ceiling.
-
-The Accounts private callable is:
-
-```
-withIdentityOriginalSourceTransfer(deps, transfer, jobId, body): Promise<T>
-body(parent: IdentityOriginalSourceContext): Promise<T>
-```
-
-The parent supplies the actual original ID, job ID, exact position, unchanged deadline, prepaid native partition,
-opaque `IdentityOriginalSourceGrant` and one cumulative `NativeCollectionWork`. Before callback escape a separate
-native commit marks that original's child partition consumed. The callback cannot be reentered, even after failed
-checkout, rollback, exception or an unavailable result. Before and after awaits, the producer validates actual
-Pool/WorkClient/registry, native original/position/barrier/deadline and callback lifetime. Its final native command
-revalidates the current/recorded position and permanently ends the callback. Failure leaves it consumed.
-
-Source calls `reserveIdentityOriginalSourceWork(deps, parent.original, parent.jobId, amount)` before each native
-dispatch; only the already prepaid native partition can pay. `identityOriginalLibraryWork` returns the SAME Library
-ledger used by all descendants, receiving/current verification, exhaustion and the final same-command fence.
-Saved ledger methods and reservation handles validate callback lifetime before dispatch and after awaits. Copies,
-wrong dependencies, ended/expired callbacks and attempts to replace private counters fail. No new UUID, second
-Library ledger, post-IO funding or refund is introduced.
-
-`withSelectedHistoryOriginalChild` is the selected caller adapter. It requires the actual History private export
-`withPrepaidAgentIdentityHistoryUnit` with the exported `PrepaidAgentIdentityHistoryUnit` signature:
-`(deps, parent: IdentityOriginalSourceContext, body(funded: IdentitySourceConsumerMaintenanceContext)) => Promise<T>`.
-That export must enter the existing History unit under the authentic Source prepaid frame and the same Library
-ledger. The current independent configured caller is ineligible. Until the complete real declarations and that
-private caller exist, the selected identity dispatch retains
-`identity-history-original-source-transfer-unavailable`. Other undeclared artifact children retain
-`identity-history-original-artifact-declaration-unavailable`; neither path spends local control work as child money.
-Independent admission/allocation/entry/progress machinery remains available.
-
-Only `agent_verification_reversal` with `com.rezics.access.agent-verification.reversing.v1` uses identity fx originals.
-Work composition privately binds its existing effect object to the actual Pool/WorkClient without changing the
-Semantic-owned verification workflow. The effects wrapper associates both relay and direct-enqueue paths with
-one durable original keyed by native event epoch/partition/position/event sequence/effect and exact workflow ID.
-The source command checks the real intent, sealed native inventory, SDK obligation, physical receipt/outbox,
-undo job, source home/domain and full role union. Its LIMIT 65 sentinel refuses more than 64 account keys before
-building the separate full-key barrier read. Source COMMIT/release precedes home-zero receiving, which binds the
-actual receiver epoch and domain generation. Replays prepay their repeated local controls against the existing
-original, never a renewed deadline or a child receipt.
-
-The fx ten-attempt local ceiling covers only these source/receiving/replay controls, including the encoded scalar
-columns outside bounded JSON. Complete SDK/framework dispatch/receiving/replay/rollback work remains a separate
-missing child operand. `requireIdentityFxOriginalDispatch` refuses with
-`identity-fx-original-child-declaration-unavailable` before wrapper enqueue or effect execution. Receiving retains
-`pending-physical-owner`; consumer/workflow completion, SDK observations, registration and EOF never close it.
-Source/Library/Search physical custody and private SDK closure remain their independent owner boundaries.
+Only `agent_verification_reversal` with `com.rezics.access.agent-verification.reversing.v1` uses identity fx
+originals. The existing source command binds real intent, sealed native inventory, SDK obligation, physical
+receipt/outbox, undo job, source home/domain and full role union. Its LIMIT 65 sentinel refuses more than 64 account
+keys before a separate full-key barrier read. Source commit/release precedes receiving. The fx ten-attempt local
+ceiling covers only source/receiving/replay controls, including scalar columns outside bounded JSON. Complete
+SDK/framework dispatch, receiving, replay and rollback remain a separate missing child operand. Unadmitted child
+work stays unavailable; registration, SDK status, EOF and successful callbacks never prove physical custody.
+Source, Library and Search retain their independent custody and SDK closure boundaries. No native pass is claimed.
 
 ## Native live business copies
 
