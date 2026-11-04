@@ -774,6 +774,14 @@ export function createVndbImport(config: Config) {
       if (before && ['applying', 'applied', 'failed'].includes(before.status)) throw new ProblemError('conflict');
       if (pendingAdoption(before)) throw new ProblemError('conflict');
       const reviewId = randomUUID();
+      const matchDigest = entryImportMetadataDigest(matching);
+      const scoreCompatible =
+        before?.score !== undefined &&
+        before.targetId === (target?.targetId ?? null) &&
+        before.matchDigest === matchDigest &&
+        before.guard?.source === target?.source &&
+        before.score.targetId === target?.targetId &&
+        before.score.targetFingerprint === target?.source;
       const decision: Decision = {
         reviewId,
         status: choice.action === 'skip' ? 'skipped' : choice.action === 'retain' ? 'unsupported' : 'reviewed',
@@ -784,7 +792,8 @@ export function createVndbImport(config: Config) {
         replace: choice.replace === true,
         commandKey: `vndb:${id}:${reviewId}`,
         guard: target ? { uploadId: id, ordinal: choice.ordinal, reviewId, source: target.source } : null,
-        matchDigest: entryImportMetadataDigest(matching),
+        matchDigest,
+        ...(scoreCompatible ? { score: before!.score } : {}),
         // A refreshed source review has its own consent, even on the same target.
         // Old metadata tokens must not be transplanted into a corrected match.
         metadata: [],
@@ -1446,6 +1455,28 @@ export function createVndbImport(config: Config) {
       ...(signal === undefined ? {} : { signal }),
     });
   }
+
+  /** A reviewed import vote stays unavailable until Content's guarded writer can admit it atomically. */
+  function applyScore(
+    id: string,
+    choice: { ordinal: number; scoreReviewId: string },
+    decision: Decision | undefined,
+  ): { outcome: { ordinal: number; scoreReviewId: string; status: string }; stopped: null } {
+    const score = decision?.score;
+    if (
+      !score ||
+      score.reviewId !== choice.scoreReviewId ||
+      score.guard.uploadId !== id ||
+      score.guard.ordinal !== choice.ordinal ||
+      score.guard.reviewId !== choice.scoreReviewId
+    )
+      return { outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: 'stale' }, stopped: null };
+    if (score.status === 'applied' || score.status === 'skipped' || score.status === 'stale' || score.status === 'failed')
+      return { outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: score.status }, stopped: null };
+    // In particular, do not call the unguarded vote writer when review admission is unavailable.
+    return { outcome: { ordinal: choice.ordinal, scoreReviewId: choice.scoreReviewId, status: 'unavailable' }, stopped: null };
+  }
+
   async function apply(
     actor: Actor,
     id: string,
@@ -1494,13 +1525,7 @@ export function createVndbImport(config: Config) {
         stopped = signal?.aborted ? 'cancelled' : 'deadline';
         break;
       }
-      const scoreResult = await applyScore(
-        actor,
-        id,
-        { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId },
-        decision,
-        record,
-      );
+      const scoreResult = applyScore(id, { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId }, decision);
       if (scoreResult.outcome) outcomes.push(scoreResult.outcome);
       if (scoreResult.stopped) {
         stopped = scoreResult.stopped;

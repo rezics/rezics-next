@@ -12,6 +12,7 @@ import {
 } from '../src/library/personal-list-import/contract';
 import { nativeVndbImport } from '../src/library/personal-list-import/native';
 import { VndbEvidence } from '../src/library/personal-list-import/fields';
+import { VndbScoreReview } from '../src/library/personal-list-import/score-review';
 import type { VndbVisit } from '../src/library/personal-list-import/visit';
 
 const uploadId = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
@@ -61,6 +62,29 @@ function row(ordinal: number): VndbRow {
     },
     fieldsTreatment: { state: 'review', score: 'private source', other: 'retain' },
   };
+}
+
+function scoredRow(): VndbRow {
+  const scored = row(0);
+  scored.fields.score = { kind: 'value', raw: '07.0', value: 7, scale: { min: 1, max: 10, step: 0.1 } };
+  scored.match = { status: 'matched', candidates: [subject] };
+  scored.target = { targetId: subject, states: [], baseline: null };
+  scored.nativeScore = {
+    question: {
+      id: subject,
+      revision: 1,
+      meaning: 'enjoyment',
+      label: 'Enjoyment',
+      grain: 'work',
+      scale: { min: 0, max: 20, step: 1 },
+      aggregateEffect: 'public-standard-aggregate',
+    },
+    currentVote: { state: 'set', units: 8, revision: 4, at: '2026-11-04T00:00:00Z' },
+    sourceReason: 'exact VNDB score candidate',
+    exactUnits: 14,
+    admission: { status: 'unavailable', reason: 'conditional-admission-unavailable' },
+  };
+  return scored;
 }
 
 function makePort(overrides: Partial<VndbPort> = {}): VndbPort {
@@ -114,25 +138,182 @@ test('binds generated libraryImports.vndb and keeps the visit discoverable', () 
   ).toBe(true);
 });
 
-test('keeps VNDB score precision visible without implying native vote consent or effects', () => {
-  const scored = row(0);
-  scored.fields.score = { kind: 'value', raw: '07.3', value: 7.3, scale: { min: 1, max: 10, step: 0.1 } };
-  const html = renderToStaticMarkup(<VndbEvidence row={scored} />);
-  expect(html).toContain('07.3');
-  expect(html).toContain('Source score');
-  expect(html).toContain('step 0.1');
-  expect(html).toContain('no exact match on a native half-step scale');
-  expect(html).toContain('separate explicit consent');
-  expect(html).toContain('data-vndb-score-review="unavailable"');
-  expect(html).not.toContain('<input');
+test('reviews source score beside the current native vote and requires explicit independent choices', () => {
+  const scored = scoredRow();
+  const evidence = renderToStaticMarkup(<VndbEvidence row={scored} />);
+  const html = renderToStaticMarkup(
+    <VndbScoreReview row={scored} targetId={subject} busy={false} onReview={() => {}} />,
+  );
+  expect(evidence).not.toContain('07.0');
+  expect(html).toContain('07.0');
+  expect(html).toContain('Enjoyment');
+  expect(html).toContain('Current vote: 8 units, revision 4.');
+  expect(html).toContain('exact candidate units: 14');
+  expect(html).toContain('data-vndb-score-review="pending"');
+  expect(html).toContain('I confirm this replaces the displayed current vote.');
+  expect(html).not.toContain('selected=""');
 
-  const zero = row(1);
+  const retained = { ...scored, kind: 'retained' as const };
+  expect(renderToStaticMarkup(<VndbEvidence row={retained} />)).toContain('07.0');
+  expect(renderToStaticMarkup(<VndbScoreReview row={retained} targetId={subject} busy={false} onReview={() => {}} />)).toContain(
+    'not a VN enjoyment vote',
+  );
+
+  const zero = scoredRow();
   zero.fields.score = { kind: 'invalid', raw: '0' };
-  const zeroHtml = renderToStaticMarkup(<VndbEvidence row={zero} />);
+  zero.nativeScore = { ...zero.nativeScore, exactUnits: null };
+  const zeroHtml = renderToStaticMarkup(
+    <VndbScoreReview row={zero} targetId={subject} busy={false} onReview={() => {}} />,
+  );
   expect(zeroHtml).toContain('source score of 0 is invalid');
-  expect(zeroHtml).toContain('native vote of 0 is valid');
-  zero.fields = { vote: zero.fields.score! };
-  expect(renderToStaticMarkup(<VndbEvidence row={zero} />)).toContain('data-vndb-score-review="unavailable"');
+  expect(zeroHtml).not.toContain('exact candidate units');
+});
+
+test('keeps score and state reviews independent and retries exact score outcomes after a partial apply', async () => {
+  const scored = scoredRow();
+  const applyCommands: Extract<VndbCommand, { kind: 'apply' }>[] = [];
+  const journey = createVndbJourney({
+    visit: visit(),
+    port: makePort({
+      preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+      page: async () => ({ kind: 'page', value: pageValue([scored]) }),
+      review: async (command) =>
+        command.body.action === 'score'
+          ? {
+              kind: 'reviewed',
+              value: {
+                reviewId: reviewIds[1]!,
+                status: 'reviewed',
+                targetId: subject,
+                action: 'vote',
+                units: 14,
+                question: scored.nativeScore.question!,
+                currentVote: scored.nativeScore.currentVote,
+                consent: 'adopt-native-vote',
+                sourceReason: 'exact source candidate',
+                nativeAdmission: 'unavailable',
+              },
+            }
+          : {
+              kind: 'reviewed',
+              value: {
+                reviewId: reviewIds[0]!,
+                status: 'reviewed',
+                targetId: subject,
+                state: 'reading',
+                baseline: null,
+                replace: false,
+                action: 'state',
+              },
+            },
+      apply: async (command) => {
+        applyCommands.push(command);
+        if (applyCommands.length === 2) return { kind: 'unknown', command };
+        const item = command.body.rows[0]!;
+        return {
+          kind: 'applied',
+          value: {
+            uploadId,
+            outcomes: [
+              item.scoreReviewId
+                ? { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId, status: 'unavailable' as const }
+                : { ordinal: item.ordinal, reviewId: item.reviewId!, status: 'applied' as const },
+            ],
+            stopped: null,
+          },
+        };
+      },
+    }),
+  });
+  await journey.preview('<vndb-export version="1.0"/>');
+  expect(journey.snapshot().selection).toEqual([]);
+  await journey.review({
+    ordinal: 0,
+    action: 'score',
+    targetId: subject,
+    questionId: subject,
+    questionRevision: 1,
+    selection: { kind: 'vote', units: 14 },
+    consent: 'adopt-native-vote',
+  });
+  expect(journey.snapshot().selectedEffects).toBe(1);
+  await journey.review({ ordinal: 0, action: 'state', targetId: subject, state: 'reading', replace: false });
+  expect(journey.snapshot().selectedEffects).toBe(2);
+  expect(journey.snapshot().rows[0]?.scoreDecision?.reviewId).toBe(reviewIds[1]);
+  journey.openConfirm();
+  const partial = await journey.confirm();
+  expect(applyCommands.map((command) => command.body.rows)).toEqual([
+    [{ ordinal: 0, reviewId: reviewIds[0] }],
+    [{ ordinal: 0, scoreReviewId: reviewIds[1] }],
+  ]);
+  expect(partial.outcomes).toEqual([{ ordinal: 0, reviewId: reviewIds[0], status: 'applied' }]);
+  expect(partial.unattemptedEffects.map((effect) => [effect.kind, effect.reviewId])).toEqual([
+    ['score', reviewIds[1]],
+  ]);
+  expect(partial.pendingEffects.map((effect) => effect.reviewId)).toEqual([reviewIds[1]]);
+  const settled = await journey.retryUnknown();
+  expect(applyCommands[2]).toBe(applyCommands[1]);
+  expect(settled.outcomes.map((outcome) => ('scoreReviewId' in outcome ? outcome.scoreReviewId : outcome.reviewId))).toEqual([
+    reviewIds[0],
+    reviewIds[1],
+  ]);
+  expect(settled.outcomes.map((outcome) => outcome.status)).toEqual(['applied', 'unavailable']);
+  expect(settled.applied).toBe(1);
+  expect(settled.settledEffects.map((effect) => effect.targetId)).toEqual([subject, subject]);
+});
+
+test('rejects a score review whose returned current-vote basis changed and keeps its original reference', async () => {
+  const scored = scoredRow();
+  scored.decision = {
+    reviewId: reviewIds[0]!,
+    status: 'reviewed',
+    targetId: subject,
+    state: 'reading',
+    baseline: null,
+    replace: false,
+    action: 'state',
+  };
+  const changedVote = { state: 'set' as const, units: 9, revision: 5, at: '2026-11-05T00:00:00Z' };
+  const journey = createVndbJourney({
+    visit: visit(),
+    port: makePort({
+      preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+      page: async () => ({ kind: 'page', value: pageValue([scored]) }),
+      review: async () => ({
+        kind: 'reviewed',
+        value: {
+          reviewId: reviewIds[1]!,
+          status: 'reviewed',
+          targetId: subject,
+          action: 'vote',
+          units: 14,
+          question: scored.nativeScore.question!,
+          currentVote: changedVote,
+          consent: 'adopt-native-vote',
+          sourceReason: 'exact source candidate',
+          nativeAdmission: 'unavailable',
+        },
+      }),
+    }),
+  });
+  await journey.preview('<vndb-export version="1.0"/>');
+  await journey.review({
+    ordinal: 0,
+    action: 'score',
+    targetId: subject,
+    questionId: subject,
+    questionRevision: 1,
+    selection: { kind: 'vote', units: 14 },
+    consent: 'adopt-native-vote',
+  });
+  const snap = journey.snapshot();
+  expect(snap.rows[0]?.decision?.reviewId).toBe(reviewIds[0]);
+  expect(snap.rows[0]?.scoreDecision).toBeNull();
+  expect(snap.rows[0]?.nativeScore.currentVote).toEqual(changedVote);
+  expect(snap.scoreNotices).toEqual([
+    { ordinal: 0, reason: 'native-current-vote-changed', reviewId: reviewIds[1], targetId: subject },
+  ]);
+  expect(snap.unattemptedEffects.map((effect) => effect.kind)).toEqual(['entry-state']);
 });
 
 test('sends XML to native admission without a browser size guard or local preview effects', async () => {
@@ -220,7 +401,7 @@ test('confirms only reviewed rows and retries an unknown apply with the identica
   expect(journey.snapshot().selection).toEqual([]);
 });
 
-test('keeps acknowledged outcomes and the remaining selection after native cancellation', async () => {
+test('keeps acknowledged outcomes and retires private review after native cancellation', async () => {
   const rows = [row(0), row(1)];
   const journey = createVndbJourney({
     visit: visit(),
@@ -257,8 +438,9 @@ test('keeps acknowledged outcomes and the remaining selection after native cance
   const snap = await journey.confirm();
   expect(snap.cancelled).toBe(true);
   expect(snap.outcomes.map((outcome) => outcome.ordinal)).toEqual([0]);
-  expect(snap.selection.map((item) => item.ordinal)).toEqual([1]);
+  expect(snap.selection).toEqual([]);
   expect(snap.unattempted).toEqual([1]);
+  expect(snap.unattemptedEffects.map((effect) => [effect.ordinal, effect.reviewId])).toEqual([[1, reviewIds[1]]]);
 });
 
 test.each(['retire', 'subject', 'csrfToken'] as const)(

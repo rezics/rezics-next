@@ -134,6 +134,7 @@ function Example({ completed = false }: { completed?: boolean }) {
             onReview={noop}
             onNext={noop}
             onPrevious={noop}
+            onRefresh={noop}
             onConfirm={noop}
             onSource={noop}
             onHideSource={noop}

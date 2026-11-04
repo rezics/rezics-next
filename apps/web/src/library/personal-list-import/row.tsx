@@ -4,9 +4,11 @@ import { useEffect, useId, useState } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { readVndbTargetStates } from './server';
+import type { VndbScoreNotice } from './controller';
 import type { VndbReviewInput, VndbRow, VndbState } from './contract';
 import { VndbAction, VndbCheck } from './controls';
 import { VndbEvidence } from './fields';
+import { VndbScoreReview } from './score-review';
 import { VndbTargetSearch } from './target';
 
 type StateChoice = { id: string; label: string };
@@ -25,10 +27,12 @@ function labelFor(state: VndbState): string {
 export function VndbRowReview({
   row,
   busy,
+  scoreNotice,
   onReview,
 }: {
   row: VndbRow;
   busy: boolean;
+  scoreNotice?: VndbScoreNotice;
   onReview: (body: VndbReviewInput) => void;
 }) {
   const id = useId();
@@ -135,6 +139,15 @@ export function VndbRowReview({
         {row.decision ? <p role="status">{m.library_vndb_review_status({ status: row.decision.status })}</p> : null}
       </header>
       <VndbEvidence row={row} />
+      {row.kind === 'vn' ? (
+        <VndbScoreReview
+          row={row}
+          busy={busy}
+          {...(scoreNotice ? { scoreNotice } : {})}
+          targetId={targetId ?? row.target?.targetId ?? null}
+          onReview={onReview}
+        />
+      ) : null}
       {row.kind === 'retained' ? <p>{m.library_vndb_metadata_row()}</p> : null}
       <fieldset className="space-y-3">
         <legend className="font-medium">{m.library_vndb_review_action()}</legend>

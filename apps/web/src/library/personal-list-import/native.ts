@@ -13,7 +13,9 @@ import {
   type VndbPage,
   type VndbPort,
   type VndbPreview,
+  type VndbReviewResult,
   type VndbRow,
+  type VndbScoreDecision,
   type VndbSourceValue,
   type VndbState,
   type VndbUnknown,
@@ -108,7 +110,86 @@ function sourceValue(value: unknown): value is VndbSourceValue {
   if (value.raw !== null && typeof value.raw !== 'string') return false;
   if ('value' in value && typeof value.value !== 'string' && typeof value.value !== 'number') return false;
   if ('precision' in value && !['year', 'month', 'day'].includes(String(value.precision))) return false;
+  if (
+    'scale' in value &&
+    (!record(value.scale) ||
+      typeof value.scale.min !== 'number' ||
+      typeof value.scale.max !== 'number' ||
+      typeof value.scale.step !== 'number' ||
+      !Number.isFinite(value.scale.min) ||
+      !Number.isFinite(value.scale.max) ||
+      !Number.isFinite(value.scale.step))
+  )
+    return false;
   return true;
+}
+
+function nativeQuestion(value: unknown): boolean {
+  return (
+    record(value) &&
+    typeof value.id === 'string' &&
+    VNDB_ID.test(value.id) &&
+    Number.isSafeInteger(value.revision) &&
+    (value.meaning === null || typeof value.meaning === 'string') &&
+    typeof value.label === 'string' &&
+    ['work', 'release', 'episode', 'character'].includes(String(value.grain)) &&
+    record(value.scale) &&
+    Number.isFinite(value.scale.min) &&
+    Number.isFinite(value.scale.max) &&
+    Number.isFinite(value.scale.step) &&
+    value.aggregateEffect === 'public-standard-aggregate'
+  );
+}
+
+function nativeVote(value: unknown): boolean {
+  if (!record(value)) return false;
+  if (value.state === 'unavailable' || value.state === 'absent') return true;
+  if (value.state === 'cleared')
+    return Number.isSafeInteger(value.revision) && (value.revision as number) >= 1 && typeof value.at === 'string';
+  return (
+    value.state === 'set' &&
+    Number.isSafeInteger(value.units) &&
+    (value.units as number) >= 0 &&
+    Number.isSafeInteger(value.revision) &&
+    (value.revision as number) >= 1 &&
+    typeof value.at === 'string'
+  );
+}
+
+function nativeScore(value: unknown): boolean {
+  if (!record(value)) return false;
+  if (value.question !== null && !nativeQuestion(value.question)) return false;
+  if (!nativeVote(value.currentVote) || typeof value.sourceReason !== 'string') return false;
+  if (value.exactUnits !== null && (!Number.isSafeInteger(value.exactUnits) || Number(value.exactUnits) < 0))
+    return false;
+  return (
+    record(value.admission) &&
+    value.admission.status === 'unavailable' &&
+    [
+      'conditional-admission-unavailable',
+      'native-question-unavailable',
+      'native-current-vote-unavailable',
+      'source-not-vn-score',
+    ].includes(String(value.admission.reason))
+  );
+}
+
+function scoreDecision(value: unknown): value is VndbScoreDecision {
+  return (
+    record(value) &&
+    typeof value.reviewId === 'string' &&
+    VNDB_ID.test(value.reviewId) &&
+    ['applied', 'failed', 'reviewed', 'skipped', 'stale', 'unavailable'].includes(String(value.status)) &&
+    typeof value.targetId === 'string' &&
+    VNDB_ID.test(value.targetId) &&
+    (value.action === 'vote' || value.action === 'clear') &&
+    (value.units === null || (Number.isSafeInteger(value.units) && Number(value.units) >= 0)) &&
+    nativeQuestion(value.question) &&
+    nativeVote(value.currentVote) &&
+    (value.consent === 'adopt-native-vote' || value.consent === 'clear-native-vote') &&
+    typeof value.sourceReason === 'string' &&
+    value.nativeAdmission === 'unavailable'
+  );
 }
 
 function state(value: unknown): value is VndbState {
@@ -163,6 +244,8 @@ function row(value: unknown): value is VndbRow {
       typeof value.decision.status !== 'string')
   )
     return false;
+  if (value.scoreDecision !== null && !scoreDecision(value.scoreDecision)) return false;
+  if (!nativeScore(value.nativeScore)) return false;
   return record(value.fieldsTreatment);
 }
 
@@ -191,6 +274,15 @@ function decision(value: unknown): value is VndbDecision {
   );
 }
 
+function reviewResult(value: unknown): value is VndbReviewResult {
+  if (scoreDecision(value) || decision(value)) return true;
+  return (
+    record(value) &&
+    value.status === 'unavailable' &&
+    (value.reason === 'native-question-unavailable' || value.reason === 'native-current-vote-unavailable')
+  );
+}
+
 function applied(value: unknown): value is VndbApplyResult {
   return (
     record(value) &&
@@ -201,7 +293,8 @@ function applied(value: unknown): value is VndbApplyResult {
       (outcome) =>
         record(outcome) &&
         Number.isInteger(outcome.ordinal) &&
-        typeof outcome.reviewId === 'string' &&
+        ((typeof outcome.reviewId === 'string' && outcome.scoreReviewId === undefined) ||
+          (typeof outcome.scoreReviewId === 'string' && outcome.reviewId === undefined)) &&
         typeof outcome.status === 'string',
     ) &&
     (value.stopped === null || value.stopped === 'cancelled' || value.stopped === 'deadline')
@@ -305,7 +398,7 @@ export function kernelVndbPort(
           route!({ uploadId: command.uploadId }).$review.post(command.body, {
             headers: headers(authorization, command.key),
           }),
-        (data) => (decision(data) ? data : undefined),
+        (data) => (reviewResult(data) ? data : undefined),
         (value) => ({ kind: 'reviewed', value }),
       );
     },

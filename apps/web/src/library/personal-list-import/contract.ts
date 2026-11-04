@@ -50,16 +50,15 @@ export type VndbPreview = {
 
 export type VndbPage = Omit<GeneratedVndbPage, 'rows'> & { rows: VndbRow[] };
 export type VndbDecision = Extract<GeneratedVndbDecision, { state: string | null }>;
-/** This visit composes only state receipts, even when the producer also publishes score review. */
-export type VndbApplyRow = GeneratedVndbApply['rows'][number] & { reviewId: string; scoreReviewId?: never };
-export type VndbOutcome = GeneratedVndbApplyResult['outcomes'][number] & { reviewId: string; scoreReviewId?: never };
-export type VndbApplyResult = Omit<GeneratedVndbApplyResult, 'outcomes'> & { outcomes: VndbOutcome[] };
+export type VndbScoreDecision = Extract<NonNullable<VndbRow['scoreDecision']>, { action: 'vote' | 'clear' }>;
+export type VndbReviewResult = GeneratedVndbDecision;
+/** Keep both independent review identities exactly as published by the native importer. */
+export type VndbApplyRow = GeneratedVndbApply['rows'][number];
+export type VndbOutcome = GeneratedVndbApplyResult['outcomes'][number];
+export type VndbApplyResult = GeneratedVndbApplyResult;
 
-export type VndbReviewInput = GeneratedVndbReview &
-  (
-    | { ordinal: number; action: 'state'; targetId: string; state: string; replace: boolean }
-    | { ordinal: number; action: 'skip' | 'retain' }
-  );
+/** The native route publishes state, score, skip and retain choices; never add local wire fields here. */
+export type VndbReviewInput = GeneratedVndbReview;
 
 export type VndbCommand =
   | { kind: 'preview'; key: string; xml: string }
@@ -95,7 +94,7 @@ export type VndbPort = {
   ): Promise<{ kind: 'source'; xml: string } | VndbFailure | VndbUnknown>;
   review(
     command: Extract<VndbCommand, { kind: 'review' }>,
-  ): Promise<{ kind: 'reviewed'; value: VndbDecision } | VndbFailure | VndbUnknown>;
+  ): Promise<{ kind: 'reviewed'; value: VndbReviewResult } | VndbFailure | VndbUnknown>;
   apply(
     command: Extract<VndbCommand, { kind: 'apply' }>,
   ): Promise<{ kind: 'applied'; value: VndbApplyResult } | VndbFailure | VndbUnknown>;

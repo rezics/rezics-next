@@ -10,6 +10,7 @@ export function VndbReviewPage({
   onReview,
   onNext,
   onPrevious,
+  onRefresh,
   onConfirm,
   onSource,
   onHideSource,
@@ -19,12 +20,16 @@ export function VndbReviewPage({
   onReview: (body: VndbReviewInput) => void;
   onNext: () => void;
   onPrevious: () => void;
+  onRefresh: () => void;
   onConfirm: () => void;
   onSource: () => void;
   onHideSource: () => void;
 }) {
   const current = snap.page?.rows ?? [];
-  const reviewed = snap.rows.filter((row) => row.decision).length;
+  const reviewed = snap.rows.reduce(
+    (count, row) => count + Number(!!row.decision) + Number(!!row.scoreDecision),
+    0,
+  );
   return (
     <section className="min-w-0 space-y-6" data-vndb-stage="review" tabIndex={-1}>
       <p role="status">
@@ -49,11 +54,19 @@ export function VndbReviewPage({
         </details>
       ) : null}
       <ul className="space-y-6">
-        {current.map((row) => (
-          <li key={`${snap.uploadId}:${row.ordinal}`}>
-            <VndbRowReview row={row} busy={busy || snap.cancelled} onReview={onReview} />
-          </li>
-        ))}
+        {current.map((row) => {
+          const scoreNotice = snap.scoreNotices.find((item) => item.ordinal === row.ordinal);
+          return (
+            <li key={`${snap.uploadId}:${row.ordinal}`}>
+              <VndbRowReview
+                row={row}
+                busy={busy || snap.cancelled}
+                {...(scoreNotice ? { scoreNotice } : {})}
+                onReview={onReview}
+              />
+            </li>
+          );
+        })}
       </ul>
       <div className="flex flex-wrap gap-3">
         {snap.offset > 0 ? (
@@ -61,13 +74,16 @@ export function VndbReviewPage({
             {m.library_vndb_previous_page()}
           </VndbAction>
         ) : null}
+      <VndbAction type="button" variant="outline" disabled={busy} onClick={onRefresh}>
+        {m.library_vndb_refresh_page()}
+      </VndbAction>
         {snap.page?.next !== null && snap.page ? (
           <VndbAction type="button" variant="outline" disabled={busy} onClick={onNext}>
             {m.library_vndb_next_page()}
           </VndbAction>
         ) : null}
-        <VndbAction type="button" disabled={busy || snap.cancelled || snap.selection.length === 0} onClick={onConfirm}>
-          {m.library_vndb_confirm_selection({ count: snap.selection.length })}
+        <VndbAction type="button" disabled={busy || snap.cancelled || snap.selectedEffects === 0} onClick={onConfirm}>
+          {m.library_vndb_confirm_selection({ count: snap.selectedEffects })}
         </VndbAction>
       </div>
     </section>
