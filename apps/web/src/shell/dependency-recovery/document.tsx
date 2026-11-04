@@ -91,7 +91,15 @@ function recoveryPath(request: Request, intent: DocumentFailureIntent): string |
     return values.length === 1 ? safeRecoveryReturn(values[0], url.origin) : undefined;
   }
   if (intent === 'callback') return safeRecoveryReturn(cookie(request, LOGIN_RETURN_COOKIE), url.origin);
-  return safeRecoveryReturn(request.headers.get('referer'), url.origin);
+  const referer = request.headers.get('referer');
+  if (!referer) return undefined;
+  try {
+    const source = new URL(referer);
+    if (source.origin !== url.origin || source.username || source.password) return undefined;
+    return safeRecoveryReturn(source.pathname, url.origin);
+  } catch {
+    return undefined;
+  }
 }
 
 function localizedPath(path: string | undefined, locale: Locale, origin: string): string {
