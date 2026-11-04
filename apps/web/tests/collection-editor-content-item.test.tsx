@@ -279,3 +279,173 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     await window.happyDOM.close();
   }
 });
+
+test('owner preview retains loaded occurrences and authentic cover choices, independent automatic meaning and native reading', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const { collectionStoryMembers } = await import('../src/kernel/fake/collection-stories');
+  const { loadedCoverOptions, loadedCoverAvailability, draftCoverPreview } =
+    await import('../src/library/collection-presentation-review/model');
+  const { CollectionPresentationFields } = await import('../src/library/collection-editor');
+  const { useState } = await import('react');
+  const window = new Window({ url: 'https://rezics.example/en/collections/example', width: 390 });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const loaded: CollectionMember[] = collectionStoryMembers.map((member) => ({
+    ...member,
+    subject: subjectOf(member.subject),
+  }));
+  // Cover art retains its actual recorded association. Duplicate occurrences retain their original Subject.
+  const coverMember = loaded[2]!;
+  const media = coverMember.subject!.cover!.media;
+  const members: CollectionMember[] = [
+    { ...loaded[0]!, subject: { ...loaded[0]!.subject!, type: 'rezics:VisualNovel', typeLabel: 'Visual novel' } },
+    { ...loaded[1]!, subject: { ...loaded[1]!.subject!, type: 'rezics:Anime', typeLabel: 'Anime' } },
+    coverMember,
+    { ...coverMember, id: 'second-book-occurrence' },
+    { ...loaded[3]!, subject: null, note: 'private withheld note' },
+  ];
+  const configs: CollectionListPresentations = {
+    'rezics:VisualNovel': { imageAspect: 'portrait', keyFacts: [] },
+    'rezics:Anime': { imageAspect: 'landscape', keyFacts: [] },
+    'schema:Book': { imageAspect: 'square', keyFacts: [] },
+  };
+  const options = loadedCoverOptions(members);
+  expect(options).toHaveLength(1);
+  expect(loadedCoverAvailability(members)).toEqual({
+    eligible: 2,
+    missing: 2,
+    unavailable: 1,
+    withheld: 0,
+    unsupported: 0,
+  });
+  expect(options[0]!.occurrences.map(({ id }) => id)).toEqual([coverMember.id, 'second-book-occurrence']);
+  expect(
+    loadedCoverOptions([
+      {
+        ...coverMember,
+        subject: { ...coverMember.subject!, cover: { ...coverMember.subject!.cover!, withheld: 'suitability' } },
+      },
+    ]),
+  ).toEqual([]);
+  expect(
+    draftCoverPreview({
+      saved: media,
+      selected: null,
+      nativeCover: coverMember.subject!.cover,
+      nativeSource: 'owner',
+      options,
+    }),
+  ).toEqual({ kind: 'automatic', nativeCover: null, nativeSource: undefined });
+  const outsideCover = loaded[3]!.subject!.cover!;
+  let chosen: string | null = null;
+  let source = members;
+  let locked = false;
+  function Screen() {
+    const [kind, setKind] = useState<string | null>(null);
+    const [cover, setCover] = useState<string | null>(outsideCover.media);
+    return (
+      <form
+        id="collection-edit-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          throw new Error('Preview submitted');
+        }}
+      >
+        <CollectionPresentationFields
+          types={[{ id: 'schema:Book', label: 'Long released book Type label' }]}
+          kind={kind}
+          onKindChange={setKind}
+          coverMediaId={cover}
+          onCoverChange={(id) => {
+            chosen = id;
+            setCover(id);
+          }}
+          savedKind={null}
+          savedCoverMediaId={outsideCover.media}
+          savedCover={outsideCover}
+          members={source}
+          listPresentations={configs}
+          disabled={locked}
+          firstPage={false}
+        />
+      </form>
+    );
+  }
+  const show = () => act(async () => root.render(<Screen />));
+  const button = (label: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
+  try {
+    await show();
+    expect(host.textContent).toContain(m.collection_choice_saved_cover_outside_page());
+    const trigger = host.querySelector<HTMLButtonElement>('[data-presentation-review-trigger]')!;
+    await act(async () => trigger.click());
+    expect(window.document.activeElement?.id).toContain('-review-heading');
+    expect(
+      [...host.querySelectorAll('[data-preview-occurrence]')].map((node) =>
+        node.getAttribute('data-preview-occurrence'),
+      ),
+    ).toEqual(members.map(({ id }) => id));
+    expect(host.querySelectorAll('[data-preview-occurrences] [data-ratio]').length).toBe(4);
+    expect(
+      [...host.querySelectorAll('[data-preview-occurrences] [data-ratio]')].map((node) =>
+        node.getAttribute('data-ratio'),
+      ),
+    ).toEqual(['5:7', '16:9', '1:1', '1:1']);
+    expect(host.textContent).not.toContain('private withheld note');
+    expect(host.querySelector('[data-preview-availability="unavailable"] a')).toBeNull();
+    const native = host.querySelector('[data-cover-reading="saved"]')!.innerHTML;
+    const radio = host.querySelector<HTMLInputElement>(`[data-cover-options] input[value="${media}"]`)!;
+    await act(async () => radio.click());
+    expect(chosen).toBe(media);
+    expect(host.querySelector('[data-cover-reading="saved"]')!.innerHTML).toBe(native);
+    expect(host.querySelector('[data-cover-preview-state]')?.getAttribute('data-cover-preview-state')).toBe('loaded');
+    expect(host.querySelectorAll('[data-preview-occurrence]')).toHaveLength(members.length);
+    source = [];
+    await show();
+    expect(host.querySelector<HTMLSelectElement>('select[id$="-cover"]')!.value).toBe(media);
+    expect(host.textContent).toContain(m.collection_choice_draft_cover_outside_page());
+    expect(host.querySelector('[data-cover-preview-state]')?.getAttribute('data-cover-preview-state')).toBe(
+      'unavailable',
+    );
+    await act(async () => button(m.collection_choice_reset_cover()).click());
+    expect(chosen).toBeNull();
+    expect(host.querySelector('[data-cover-reading="draft"] img')).toBeNull();
+    expect(host.textContent).toContain(m.collection_choice_automatic_cover_help());
+    locked = true;
+    await show();
+    expect([...host.querySelectorAll<HTMLFieldSetElement>('fieldset')].every((field) => field.disabled)).toBe(true);
+    await act(async () => button(m.collection_choice_return_editor()).click());
+    expect(window.document.activeElement).toBe(trigger);
+    expect(host.querySelector('[data-presentation-review]')).toBeNull();
+    await act(async () => trigger.click());
+    await act(async () => {
+      host
+        .querySelector('[data-presentation-review]')!
+        .dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    expect(window.document.activeElement).toBe(trigger);
+    expect(host.querySelector('[data-presentation-review]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.close();
+  }
+});
