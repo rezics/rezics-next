@@ -131,7 +131,7 @@ export class NotificationEditor {
           ]),
         )
       : { ...known.notifications };
-    const intent = admittedNotificationPatch(this.state.intent, page);
+    const intent = preserveDraft ? admittedNotificationPatch(this.state.intent, page) : undefined;
     const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
     this.confirm(known);
     this.update({

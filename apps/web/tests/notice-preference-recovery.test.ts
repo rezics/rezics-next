@@ -20,7 +20,7 @@ const { UnreadBadgeView } = await import('../src/inbox/unread-badge');
 const { m } = await import('../src/paraglide/messages.js');
 
 const token = 'A'.repeat(22);
-const notifications = { reply: true, mention: true };
+const notifications = { reply: true, mention: true, thread_watch: true, board_activity: true };
 const initial = settingsPreferencePage(notifications, 7);
 const currentDisclosure = { kind: 'current-disclosure' as const, at: '2026-11-04T00:00:00.000Z' };
 function session(fail = false) {
@@ -100,7 +100,7 @@ function preferenceJourney() {
       version: current.version + 1,
       notifications:
         change.notifications === null
-          ? { reply: true, mention: true }
+          ? { ...notifications }
           : { ...current.notifications, ...change.notifications },
     };
     receipt = current;
@@ -183,9 +183,9 @@ test('A generic503/deadline/dependency failure renders unavailable with retry ra
     });
     expect(calls).toHaveLength(3);
     expect(owner.reads()).toBe(3);
-    expect(calls[1]!.headers.get('idempotency-key')).toBe(reading.idempotencyKey);
+    expect(calls[1]!.headers.get('idempotency-key')).toBe(JSON.stringify(reading.idempotencyKey));
     expect(await calls[1]!.json()).toEqual({ expectedVersion: 7, spoilerLevel: 2 });
-    expect(calls[2]!.headers.get('idempotency-key')).toBe(notifications.idempotencyKey);
+    expect(calls[2]!.headers.get('idempotency-key')).toBe(JSON.stringify(notifications.idempotencyKey));
     expect(calls[2]!.headers.get('content-type')).toContain('application/merge-patch+json');
     expect(await calls[2]!.json()).toEqual({ expectedVersion: 7, notifications: { reply: false } });
   }
@@ -250,8 +250,8 @@ test('malformed bodies and transport loss never confirm a save or supply prefere
   for (const response of [
     () => new Response('temporarily unavailable', { status: 503 }),
     () => Response.json({ code: 'unknown_failure' }),
-    () => Response.json({ spoilerLevel: 3, suitability: 'blur', version: 8, notifications: initial.notifications }),
-    () => Response.json({ spoilerLevel: 1, suitability: 'show', version: -1, notifications: initial.notifications }),
+    () => Response.json({ spoilerLevel: 3, suitability: 'blur', version: 8, notifications }),
+    () => Response.json({ spoilerLevel: 1, suitability: 'show', version: -1, notifications }),
     () => {
       throw new TypeError('network connection lost');
     },

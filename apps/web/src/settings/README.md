@@ -9,9 +9,11 @@ Applicant verification requests use the same ten-second account budget, includin
 The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory
 notices as explained policy, honest defaults, and admitted `edit`/`reset` actions with the current version. The
 catalogue is the authority; the page does not invent kinds, title-case unknown keys, or promise email or push. Watch
-subscriptions stay at `/settings#watches`. Conflict reloads the current page and version; a still-valid draft needs
-review and never replays a removed or compulsory kind. A missing page renders unavailable rather than default-enabled
-values. Session change clears private policy and draft. Uncertain saves keep the original patch and key.
+subscriptions stay at `/settings#watches`. Native notification controls are in the first Settings HTML so a no-JavaScript
+save still works; after hydration the selected section is the only shown panel. Conflict reloads the current page and
+version; a still-valid draft needs review and never replays a removed or compulsory kind. A missing page renders
+unavailable rather than default-enabled values. Session change clears private policy and draft. Uncertain saves keep the
+original patch and key. A confirmed matching recovery drops the spent intent.
 
 **Decision:** A successful self-read advertises edit and reset; PATCH still checks `account:update` at command time.
 

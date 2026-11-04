@@ -112,8 +112,8 @@ export function NotificationsCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="min-w-0 space-y-4">
-        <WatchNotificationGuide />
         <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">
+          <WatchNotificationGuide />
           <FieldGroup>
             <div className="flex flex-col gap-3">
               {Object.entries(state.draft).map(([kind, checked]) => {

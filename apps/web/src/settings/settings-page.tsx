@@ -161,11 +161,14 @@ function RetainedSettingsPanel({
   selected: boolean;
   children: ReactNode;
 }) {
-  const [visited, setVisited] = useState(selected);
+  // Notification forms must exist in the first HTML for no-JavaScript save; other jobs stay lazy.
+  const [visited, setVisited] = useState(selected || id === 'notifications');
+  const [hydrated, setHydrated] = useState(false);
   const previous = useRef(selected);
   const panel = useRef<HTMLDivElement>(null);
   if (selected && !visited) setVisited(true);
   useLayoutEffect(() => {
+    setHydrated(true);
     if (selected && !previous.current) {
       const heading = panel.current?.querySelector<HTMLElement>('h2') ?? panel.current;
       if (heading) {
@@ -176,8 +179,9 @@ function RetainedSettingsPanel({
     previous.current = selected;
   }, [selected]);
   if (!selected && !visited) return null;
+  const inactive = hydrated && !selected;
   return (
-    <div ref={panel} data-settings-panel={id} hidden={!selected} inert={!selected}>
+    <div ref={panel} data-settings-panel={id} hidden={inactive} inert={inactive}>
       {children}
     </div>
   );
