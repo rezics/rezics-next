@@ -260,9 +260,12 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     ManagementMembershipAccess &
     AutomatedOperatorAccess &
     AccountProfileAccess &
-    OrganizationDeletionAccess & OperatorOpeningPageAccess = {
-    ...createOperatorOpeningPageAccess({ pool, access,
-      accessTokenForProof: proof => config.auth().internal.accessTokenForProof(proof),
+    OrganizationDeletionAccess &
+    OperatorOpeningPageAccess = {
+    ...createOperatorOpeningPageAccess({
+      pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
     }),
     ...createAccountProfileAccess({
       pool,

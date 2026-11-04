@@ -305,11 +305,14 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
                 service,
                 accountProfileReadTransport(
                   service,
-                  operatorOpeningPageTransport(service, credentialEffectTransport(service, workflows.handler, options),
+                  operatorOpeningPageTransport(
+                    service,
+                    credentialEffectTransport(service, workflows.handler, options),
                     (options.trustedAccess as typeof options.trustedAccess & Partial<OperatorOpeningPageAccess>)
                       .readOperatorOpeningPage
                       ? (options.trustedAccess as typeof options.trustedAccess & OperatorOpeningPageAccess)
-                      : undefined),
+                      : undefined,
+                  ),
                   (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
                     .readRenameAccountProfile
                     ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
