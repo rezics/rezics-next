@@ -50,7 +50,7 @@ export type VndbSourceTagWeightResult =
   | { state: 'unsupported' }
   | { state: 'unavailable' };
 
-function isRecord(value: JsonValue | undefined): value is { [key: string]: JsonValue } {
+function isRecord(value: JsonValue | undefined): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && !('sourceNumber' in value);
 }
 
