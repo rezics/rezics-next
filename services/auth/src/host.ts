@@ -10,6 +10,10 @@ import {
   accountManagementMembershipTransport,
   type ManagementMembershipAccess,
 } from './account-management-membership-transport.ts';
+import {
+  organizationMembershipPageTransport,
+  type OrganizationMembershipPageAccess,
+} from './organization-membership-page.ts';
 import { randomUUID } from 'node:crypto';
 import { createNativeLifecycleResults } from './native-lifecycle-results.ts';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
@@ -298,48 +302,55 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
         workflows,
         accountManagementReadTransport(
           service,
-          accountManagementMembershipTransport(
+          organizationMembershipPageTransport(
             service,
-            automatedOperatorTransport(
+            accountManagementMembershipTransport(
               service,
-              organizationDeletionReadTransport(
+              automatedOperatorTransport(
                 service,
-                accountProfileReadTransport(
+                organizationDeletionReadTransport(
                   service,
-                  operatorOpeningPageTransport(
+                  accountProfileReadTransport(
                     service,
-                    accountDeletionPageTransport(
+                    operatorOpeningPageTransport(
                       service,
-                      credentialEffectTransport(service, workflows.handler, options),
-                      options.database,
-                      (options.trustedAccess as typeof options.trustedAccess & Partial<AccountDeletionPageAccess>)
-                        .readAccountDeletionAdvice
-                        ? (options.trustedAccess as typeof options.trustedAccess & AccountDeletionPageAccess)
+                      accountDeletionPageTransport(
+                        service,
+                        credentialEffectTransport(service, workflows.handler, options),
+                        options.database,
+                        (options.trustedAccess as typeof options.trustedAccess & Partial<AccountDeletionPageAccess>)
+                          .readAccountDeletionAdvice
+                          ? (options.trustedAccess as typeof options.trustedAccess & AccountDeletionPageAccess)
+                          : undefined,
+                      ),
+                      (options.trustedAccess as typeof options.trustedAccess & Partial<OperatorOpeningPageAccess>)
+                        .readOperatorOpeningPage
+                        ? (options.trustedAccess as typeof options.trustedAccess & OperatorOpeningPageAccess)
                         : undefined,
                     ),
-                    (options.trustedAccess as typeof options.trustedAccess & Partial<OperatorOpeningPageAccess>)
-                      .readOperatorOpeningPage
-                      ? (options.trustedAccess as typeof options.trustedAccess & OperatorOpeningPageAccess)
+                    (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
+                      .readRenameAccountProfile
+                      ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
                       : undefined,
                   ),
-                  (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
-                    .readRenameAccountProfile
-                    ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
+                  (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionPageAccess>)
+                    .readOrganizationDeletionPage
+                    ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionPageAccess)
                     : undefined,
                 ),
-                (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionPageAccess>)
-                  .readOrganizationDeletionPage
-                  ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionPageAccess)
+                (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
+                  .readAutomatedCreationPage
+                  ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
                   : undefined,
               ),
-              (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
-                .readAutomatedCreationPage
-                ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
+              (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
+                .readOrganizationMembershipCommandState
+                ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
                 : undefined,
             ),
-            (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
-              .readOrganizationMembershipCommandState
-              ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
+            (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationMembershipPageAccess>)
+              .readOrganizationMembershipPage
+              ? (options.trustedAccess as typeof options.trustedAccess & OrganizationMembershipPageAccess)
               : undefined,
           ),
           options.accountManagementReads ?? options.accountOperations,
