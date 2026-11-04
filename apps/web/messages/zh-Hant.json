@@ -6676,6 +6676,8 @@
   "music_context_coordinates_unsupported": "座標仍是未支援的證據。",
   "music_context_unreadable_artist": "關聯藝人目前無法讀取。",
   "music_context_unavailable": "此地點、活動或樂器資料不可用。",
+  "music_location_unsupported": "目前的定義未將此實體列為音樂脈絡。一般主體資訊和現有更正途徑仍可使用。",
+  "music_location_hidden": "部分目標未公開，因此不會顯示為連結。",
   "music_context_denied": "目前工作階段無法使用此資料。",
   "music_context_more": "更多相關作品",
   "music_context_correct": "提出更正",

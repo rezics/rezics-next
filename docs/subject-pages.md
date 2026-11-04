@@ -70,6 +70,21 @@ The reader repeats at most four reads for one deliberate window: Subject, active
 defines subject/page byte bounds, bounded retention and retirement on replacement authority or observation. Existing
 release/file companion costs and release type meanings remain unchanged.
 
+## Read a music place, area, event or instrument
+
+The ordinary Subject overview recognizes released `schema:Place`, `schema:AdministrativeArea`, `schema:Event` and
+`schema:MusicInstrument` identities (including their admitted descendants). It names the exact released Type and reads
+the finite forward and inverse relationship streams admitted for that Type. Related event, area, participant and
+instrument destinations retain their native direction, qualifiers, references, partial dates and exact readable
+identity. Hidden summaries do not link; coordinate strings do not become locations. Unsupported Types have a named
+unsupported state while generic Subject facts and correction access remain available.
+
+Decision: related Subjects open in a same-locale new tab; closing it returns keyboard focus to the source relation link.
+
+The [reader Cost](../apps/web/src/features/catalogue/music-location-reader/README.md#cost) bounds each current Subject and
+one selected relation window, with no target hydration or writes. The existing dedicated MusicContext profile and
+correction route remain unchanged.
+
 ## Create a catalogue subject
 
 `/{locale}/catalogue/new` is the generic initial-terms form, discoverable in the ordinary subject header's

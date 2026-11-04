@@ -6676,6 +6676,8 @@
   "music_context_coordinates_unsupported": "Las coordenadas siguen siendo evidencia no admitida.",
   "music_context_unreadable_artist": "Un artista asociado no se puede leer ahora.",
   "music_context_unavailable": "Este perfil de lugar, evento o instrumento no está disponible.",
+  "music_location_unsupported": "Esta entidad no está admitida como contexto musical en las definiciones actuales. La información general del sujeto y la vía de corrección existente siguen disponibles.",
+  "music_location_hidden": "Algunos destinos se han ocultado y no se muestran como enlaces.",
   "music_context_denied": "Este perfil no está disponible para la sesión actual.",
   "music_context_more": "Más obras relacionadas",
   "music_context_correct": "Proponer una corrección",

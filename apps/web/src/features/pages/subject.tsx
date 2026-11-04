@@ -16,6 +16,8 @@ import { composedSubjectRead } from '../catalogue/music-reader';
 import { MusicAlbumOverview } from '../catalogue/music-reader-view';
 import { MusicReleaseOverview } from '../catalogue/music-release-reader/entry';
 import { musicReleaseEntry } from '../catalogue/music-release-reader/model';
+import { MusicLocationOverview } from '../catalogue/music-location-reader/entry';
+import { musicLocationEntry } from '../catalogue/music-location-reader/model';
 import { AlbumTrackOverview } from '../catalogue/album-track-reader/entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
@@ -765,6 +767,16 @@ export function SubjectPage({
                 source={page}
                 reader={page.requestedReader ?? null}
                 id={read.subject.id}
+                context={page.context?.id ?? read.subject.context}
+                locale={locale}
+                realm={realm}
+              />
+            ) : null}
+            {overview && read && !page.account && musicLocationEntry(read.subject.type, read.summary?.types) ? (
+              <MusicLocationOverview
+                source={page}
+                reader={page.requestedReader ?? null}
+                subject={composedSubjectRead(read)}
                 context={page.context?.id ?? read.subject.context}
                 locale={locale}
                 realm={realm}
