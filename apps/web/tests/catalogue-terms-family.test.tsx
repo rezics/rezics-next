@@ -5,8 +5,8 @@ import { act, useEffect, useState } from 'react';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-// Authored UNRUN: mounted production interactions and native-shaped call witnesses,
-// not native execution, geometry, SSR privacy or whole-feature acceptance proof.
+// Mounted production interactions and native-shaped call witnesses, not native
+// execution, geometry, SSR privacy or whole-feature acceptance proof.
 test('independent Terms forms retain stable associations, multilingual drafts and exact recovery commands', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -27,6 +27,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     matchMedia: window.matchMedia.bind(window),
+    scrollTo: () => {},
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));

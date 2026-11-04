@@ -363,6 +363,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
       await click(discardEnglish);
       await clickElement(dialogButton(discardEnglish));
       await act(async () => beforeDiscard());
+      await mode('labels', 'set');
       expect(control('terms-labels').value).toBe('Original film');
       expect(window.document.activeElement).toBe(control('terms-language'));
       expect(commands).toHaveLength(0);
