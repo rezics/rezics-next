@@ -1133,7 +1133,9 @@ test('work region return focuses its actual inspection control once and retires 
   const root = createRoot(host as unknown as HTMLElement);
   const outside = browser.document.createElement('button');
   browser.document.body.append(outside);
-  const draw = (source = subject, supplied = windows, reader = defaultReader) =>
+  let currentSubject = subject;
+  let currentWindows = windows;
+  const draw = (source = currentSubject, supplied = currentWindows, reader = defaultReader) =>
     act(async () =>
       root.render(
         h(
@@ -1164,6 +1166,9 @@ test('work region return focuses its actual inspection control once and retires 
     expect(browser.document.activeElement).toBe(outside);
     await draw(); // A/B/A keeps the old locator consumed.
     expect(browser.document.activeElement).toBe(outside);
+    expect(host.querySelector('[data-work-action]')).toBeNull();
+    currentSubject = structuredClone(subject);
+    currentWindows = structuredClone(windows);
     href = workFranchiseReturnHref(base, base, 'en', { ...selection, statement: id(979) });
     await draw();
     expect(browser.document.activeElement?.tagName).toBe('H2');
@@ -1173,7 +1178,7 @@ test('work region return focuses its actual inspection control once and retires 
     await draw();
     expect(browser.document.activeElement?.tagName).toBe('H2');
     outside.focus();
-    await draw(subject, windows, { ...defaultReader, spoilerLevel: 1 });
+    await draw(currentSubject, currentWindows, { ...defaultReader, spoilerLevel: 1 });
     expect(host.textContent).not.toContain('Related book');
     expect(host.querySelector('[data-work-action]')).toBeNull();
     await draw();
