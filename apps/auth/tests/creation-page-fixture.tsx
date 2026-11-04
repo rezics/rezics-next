@@ -1,3 +1,4 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { afterAll, afterEach, beforeAll } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
@@ -60,6 +61,8 @@ export function creationFixture() {
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((path, init) => {
+    if (path === '/recovery/page') return Promise.resolve(Response.json(recoveryPage(JSON.parse(String(init?.body)).stage,
+      { minPasswordLength: 8, maxPasswordLength: 128 })));
     if (['/session', '/account-management/deletion-page'].includes(String(path)))
       return Promise.resolve(Response.json(sessionBody));
     const request = Promise.withResolvers<Response>();

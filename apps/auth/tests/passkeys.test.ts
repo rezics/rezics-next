@@ -1,3 +1,4 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { securityEnvelope, currentSecuritySession, signInPage } from './security-page-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -70,6 +71,8 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
+    if (url.pathname === '/recovery/page' && request.method === 'POST')
+      return Response.json(recoveryPage(JSON.parse(call.body).stage, { minPasswordLength: 8, maxPasswordLength: 128 }), { headers });
     const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
     const stepUp = () => json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
     const issueSession = (profile: { client_id?: unknown; scope?: unknown }) => {

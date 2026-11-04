@@ -216,7 +216,7 @@
   "auth_recovery_password": "New password",
   "auth_recovery_password_invalid": "Password must be between 8 and 128 characters.",
   "auth_recovery_start_submit": "Send recovery link",
-  "auth_recovery_start_success": "If an account uses this address, we sent a link.",
+  "auth_recovery_start_success": "Your recovery request was accepted. This does not confirm mail delivery or a password change.",
   "auth_rename_confirm": "I confirm changing this account’s handle to @{handle}.",
   "auth_rename_departure_heading": "Leave account rename?",
   "auth_rename_departure_unsent": "Your proposed handle and confirmation will be cleared if you leave.",
@@ -460,5 +460,10 @@
   "auth_account_delete_advice_available": "Current permission allows a deletion request. Prerequisites and permission are checked again when you submit.",
   "auth_account_delete_review_changed": "Your account or session changed. Reload the review and confirm again.",
   "auth_account_delete_submit_requirements": "Submission also checks temporary holds and pending native work. This review does not verify that they are clear.",
-  "auth_account_delete_retention_limits": "Required retained records follow their adopted retention exceptions. Backup expiry and external copies are separate; this page cannot confirm their erasure."
+  "auth_account_delete_retention_limits": "Required retained records follow their adopted retention exceptions. Backup expiry and external copies are separate; this page cannot confirm their erasure.",
+  "auth_recovery_unknown": "The result is unknown. Your password may already have changed. Try again with the original submission, or restart recovery. A later invalid link does not prove the change failed.",
+  "auth_recovery_retry_exact": "Retry original submission",
+  "auth_step_up_continuation_changed": "Authentication succeeded, but the saved request changed or was removed. Return to the action and review it again. No action was sent.",
+  "auth_recovery_consequences": "A completed reset ends your existing sessions. Sign in again with your new password.",
+  "auth_step_up_review_required": "After authentication, review the pending action and confirm it again. Authentication does not send the action."
 }

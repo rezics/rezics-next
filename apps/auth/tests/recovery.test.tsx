@@ -1,3 +1,4 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
@@ -52,19 +53,21 @@ async function open(fragment = '') {
   const away = createRoute({ getParentRoute: () => rootRoute, path: '/away', component: () => 'Away' });
   const history = createBrowserHistory({ window: dom });
   const router = createRouter({ history, routeTree: rootRoute.addChildren([recovery, away]) });
-  const host = document.body.appendChild(document.createElement('div'));
-  const root = createRoot(host);
-  await router.load();
-  await flush(() => root.render(createElement(StrictMode, null, createElement(RouterProvider, { router }))));
   const calls: unknown[] = [];
   let closed = false;
   let release!: (response: Response) => void;
   globalThis.fetch = (async (_path, init) => {
+    if (_path === '/recovery/page') return Response.json(recoveryPage(JSON.parse(String(init?.body)).stage,
+      { minPasswordLength: 8, maxPasswordLength: 128 }));
     calls.push(JSON.parse(String(init?.body)));
     return new Promise<Response>((resolve) => {
       release = resolve;
     });
   }) as typeof fetch;
+  const host = document.body.appendChild(document.createElement('div'));
+  const root = createRoot(host);
+  await router.load();
+  await flush(() => root.render(createElement(StrictMode, null, createElement(RouterProvider, { router }))));
   return {
     host,
     calls,
@@ -103,7 +106,7 @@ test('current recovery keeps non-disclosing email results and invalid-link recov
     for (const email of ['reader@example.test', 'unknown@example.test']) {
       await page.submit(email);
       await page.respond();
-      expect(page.host.querySelector('[role="status"]')!.textContent).toContain('If an account uses this address');
+      expect(page.host.querySelector('[role="status"]')!.textContent).toContain('Your recovery request was accepted');
     }
     await act(async () => {
       await page.router.navigate({ to: '/recovery', hash: link.slice(1) });
@@ -176,3 +179,32 @@ for (const fragment of ['', link])
         }
       });
     }
+
+test('unknown completion retains an immutable submission for explicit retry and warns until retirement', async () => {
+  const page = await open(link);
+  const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
+  try {
+    await page.submit('original private password');
+    await page.respond(503);
+    expect(page.calls).toHaveLength(1);
+    expect(page.host.textContent).toContain('The result is unknown');
+    expect(page.host.querySelector<HTMLInputElement>('[name=new_password]')!.readOnly).toBe(true);
+    const warning = new dom.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(warning as unknown as Event);
+    expect(warning.defaultPrevented).toBe(true);
+    await page.submit('edited private password');
+    expect(page.calls[1]).toEqual(page.calls[0]);
+    await page.respond(401);
+    expect(page.host.textContent).toContain('The result is unknown');
+    expect(assign).not.toHaveBeenCalled();
+    await page.submit('another edited password');
+    expect(page.calls[2]).toEqual(page.calls[0]);
+    await page.respond();
+    expect(assign).toHaveBeenCalledWith('/login');
+    expect(window.sessionStorage.getItem('auth.recovery.complete')).toBe('1');
+    expect(window.sessionStorage.length).toBe(1);
+  } finally {
+    assign.mockRestore();
+    await page.close();
+  }
+});

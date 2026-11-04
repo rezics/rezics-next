@@ -216,7 +216,7 @@
   "auth_recovery_password": "新しいパスワード",
   "auth_recovery_password_invalid": "パスワードは 8 文字以上 128 文字以下で入力してください。",
   "auth_recovery_start_submit": "復旧リンクを送信",
-  "auth_recovery_start_success": "このアドレスのアカウントがある場合、リンクを送信しました。",
+  "auth_recovery_start_success": "復旧リクエストを受け付けました。メールの配信やパスワードの変更が完了したことを示すものではありません。",
   "auth_rename_confirm": "このアカウントのハンドルを @{handle} に変更することを確認します。",
   "auth_rename_departure_heading": "アカウント名の変更を終了しますか？",
   "auth_rename_departure_unsent": "ページを離れると、入力したハンドルと確認内容は消去されます。",
@@ -460,5 +460,10 @@
   "auth_account_delete_advice_available": "現在の権限で削除を申請できます。送信時に前提条件と権限を再確認します。",
   "auth_account_delete_review_changed": "アカウントまたはセッションが変更されました。確認画面を再読み込みし、もう一度明示的に確認してください。",
   "auth_account_delete_submit_requirements": "送信時には一時的な保留や未完了の内部処理も確認します。この画面は、それらが解消済みであることを保証しません。",
-  "auth_account_delete_retention_limits": "保持が必要な記録には採用済みの保持例外が適用されます。バックアップの期限と外部コピーは別に扱われ、この画面ではその消去を確認できません。"
+  "auth_account_delete_retention_limits": "保持が必要な記録には採用済みの保持例外が適用されます。バックアップの期限と外部コピーは別に扱われ、この画面ではその消去を確認できません。",
+  "auth_recovery_unknown": "結果を確認できません。パスワードはすでに変更された可能性があります。最初に送信した内容で再試行するか、復旧を最初からやり直してください。後でリンクが無効と表示されても、変更の失敗を意味しません。",
+  "auth_recovery_retry_exact": "最初の送信内容で再試行",
+  "auth_step_up_continuation_changed": "認証は成功しましたが、保存されたリクエストが変更または削除されました。元の操作に戻り、もう一度確認してください。操作は送信されていません。",
+  "auth_recovery_consequences": "リセットが完了すると、既存のセッションは終了します。新しいパスワードでログインし直してください。",
+  "auth_step_up_review_required": "認証後、保留中の操作を確認し、改めて確定してください。認証だけでは操作は送信されません。"
 }

@@ -76,8 +76,7 @@ and other responses or network failures report an unavailable Auth service.
 
 ## Recovery
 
-Recovery has an email-start form and a new-password form. Each submit makes one browser Auth request and no kernel
-reads. Every 200 start response shows the same confirmation while leaving the email editable. A recovery fragment is
+Recovery has an email-start form and a new-password form. Each submit makes one browser Auth request; native commands retain their existing Access checks. Every 200 start response shows the same acceptance acknowledgement while leaving the email editable. A recovery fragment is
 removed from browser history before the completion form can send a request. Completion sends the account id, token and
 new password as JSON; the token is not rendered in the page or placed in a request URL. The page sets
 `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
@@ -88,7 +87,7 @@ ask the person to try again later.
 
 Leaving or replacing the recovery journey discards its browser results and private inputs; returning from a cached
 document starts a fresh form without retrying a mutation. Departure cannot undo a completed native password change.
-Decision: an Auth response resolves departure protection while retaining displayed fields and results; a later edit starts a new protected draft.
+Decision: an unknown completion retains the original account, token and password only in the mounted attempt; explicit retry sends that exact submission, while restart or departure discards it without asserting cancellation. Definitive first validation refusals allow correction; a later refusal cannot resolve an earlier unknown outcome. Start acknowledgement confirms acceptance only.
 
 ## Sign-up
 
@@ -489,3 +488,17 @@ Decision: automated creation asks Stay/Leave for meaningful input or unresolved 
 Decision: opening advice uses a dedicated native management observation; the exact manage-only client keeps identity labels undisclosed instead of acquiring read scope. The read remains advice, never an opening approval.
 
 The Auth host installs `POST /account-management/operators/opening-page` from the native account bindings. Its closed current response identifies the acting human, installed actor target, installed operator kind, reservation/version and supported `opening` action. Missing authority returns refused; missing infrastructure returns unavailable. A single ten-second deadline covers one authentication, two bounded native transfer-state reads and one full-key operator-kind read. The two relation observations must agree. The endpoint performs no command, approval or credential staging; submission still needs the existing fresh-human approval and opening command. Page consumption and public-label enrichment remain separate implementation work.
+
+Step-up rereads the exact retained account or organization operation after authentication and again after native session observation. A replaced, missing or malformed continuation refuses the old return, preserves replacement storage and asks the person to review the action again; authentication does not execute it.
+
+Recovery and step-up read `POST /recovery/page` with only `stage` (`start`, `complete` or `step-up`).
+The native producer returns installed handler methods, stage actions, native password limits, and whether to return
+through sign-in or review after authentication. This is advice, never credential eligibility, proof validity or a
+prepared operation. Anonymous reads perform zero account, email, credential or token lookups, even with a signed-in
+cookie. The step-up viewer uses the existing authorized exact-self identity read: three fixed human-proof
+observations, two full-key client admission seeks and one full-key user seek, with the existing issuance guard.
+The complete viewer observation has a three-second deadline and no inventory scan or fan-out. Responses are at
+most 4 KiB; the request is the existing bounded JSON body containing one fixed stage. Browser reads have the existing
+five-second whole-read bound, including streamed body consumption. Failure is explicitly unavailable with Retry,
+never inferred sign-out. Focus or visibility refresh removes old viewer advice; route replacement/departure rejects
+late results. Browser WebAuthn support gates the passkey ceremony alongside the installed native method flag.

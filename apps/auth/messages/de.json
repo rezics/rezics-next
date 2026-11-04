@@ -216,7 +216,7 @@
   "auth_recovery_password": "Neues Passwort",
   "auth_recovery_password_invalid": "Das Passwort muss zwischen 8 und 128 Zeichen lang sein.",
   "auth_recovery_start_submit": "Wiederherstellungslink senden",
-  "auth_recovery_start_success": "Wenn ein Konto diese Adresse verwendet, haben wir einen Link gesendet.",
+  "auth_recovery_start_success": "Deine Wiederherstellungsanfrage wurde angenommen. Das bestätigt weder die Zustellung einer E-Mail noch eine Passwortänderung.",
   "auth_rename_confirm": "Ich bestätige die Änderung des Benutzernamens dieses Kontos zu @{handle}.",
   "auth_rename_departure_heading": "Konto umbenennen und verlassen?",
   "auth_rename_departure_unsent": "Dein vorgeschlagener Benutzername und deine Bestätigung werden beim Verlassen gelöscht.",
@@ -460,5 +460,10 @@
   "auth_account_delete_advice_available": "Die aktuelle Berechtigung erlaubt eine Löschanfrage. Voraussetzungen und Berechtigung werden beim Absenden erneut geprüft.",
   "auth_account_delete_review_changed": "Ihr Konto oder Ihre Sitzung hat sich geändert. Laden Sie die Prüfung neu und bestätigen Sie erneut.",
   "auth_account_delete_submit_requirements": "Beim Absenden werden auch vorübergehende Sperren und ausstehende interne Arbeiten geprüft. Diese Prüfung bestätigt nicht, dass sie erledigt sind.",
-  "auth_account_delete_retention_limits": "Erforderliche aufbewahrte Daten unterliegen den festgelegten Ausnahmen. Backups und externe Kopien sind gesondert zu behandeln; diese Seite bestätigt deren Löschung nicht."
+  "auth_account_delete_retention_limits": "Erforderliche aufbewahrte Daten unterliegen den festgelegten Ausnahmen. Backups und externe Kopien sind gesondert zu behandeln; diese Seite bestätigt deren Löschung nicht.",
+  "auth_recovery_unknown": "Das Ergebnis ist unbekannt. Dein Passwort wurde möglicherweise bereits geändert. Wiederhole die ursprüngliche Übermittlung oder starte die Wiederherstellung neu. Ein später ungültiger Link beweist nicht, dass die Änderung fehlgeschlagen ist.",
+  "auth_recovery_retry_exact": "Ursprüngliche Übermittlung wiederholen",
+  "auth_step_up_continuation_changed": "Die Anmeldung war erfolgreich, aber die gespeicherte Anfrage wurde geändert oder entfernt. Kehre zur Aktion zurück und prüfe sie erneut. Es wurde keine Aktion gesendet.",
+  "auth_recovery_consequences": "Ein abgeschlossener Reset beendet deine bestehenden Sitzungen. Melde dich mit deinem neuen Passwort erneut an.",
+  "auth_step_up_review_required": "Prüfe nach der Anmeldung die ausstehende Aktion und bestätige sie erneut. Die Anmeldung sendet die Aktion nicht."
 }

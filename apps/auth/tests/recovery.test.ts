@@ -1,3 +1,4 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
@@ -47,6 +48,8 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
+    if (url.pathname === '/recovery/page' && request.method === 'POST')
+      return Response.json(recoveryPage(JSON.parse(call.body).stage, { minPasswordLength: 8, maxPasswordLength: 128 }), { headers });
 
     if (url.pathname === '/authorize' && request.method === 'GET') {
       if ((call.headers.cookie ?? '').split(';').some((cookie) => cookie.trim() === `auth_session=${session}`))
@@ -371,7 +374,7 @@ test(
         expect(recoveryCalls('start').at(-1)?.headers.origin).toBe(origin);
         expect(JSON.parse(recoveryCalls('start').at(-1)!.body)).toEqual({ email: address });
       }
-      expect(confirmations[0]).toMatch(/if an account uses this address, we sent a link/i);
+      expect(confirmations[0]).toMatch(/recovery request was accepted/i);
       expect(confirmations[1]).toBe(confirmations[0]);
       expect(recoveryCalls('start')).toHaveLength(2);
     } finally {

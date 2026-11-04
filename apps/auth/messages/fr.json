@@ -216,7 +216,7 @@
   "auth_recovery_password": "Nouveau mot de passe",
   "auth_recovery_password_invalid": "Le mot de passe doit compter entre 8 et 128 caractères.",
   "auth_recovery_start_submit": "Envoyer le lien de récupération",
-  "auth_recovery_start_success": "Si un compte utilise cette adresse, nous avons envoyé un lien.",
+  "auth_recovery_start_success": "Votre demande de récupération a été acceptée. Cela ne confirme ni la livraison du courriel ni un changement de mot de passe.",
   "auth_rename_confirm": "Je confirme le changement du nom de ce compte en @{handle}.",
   "auth_rename_departure_heading": "Quitter le changement de nom du compte ?",
   "auth_rename_departure_unsent": "Votre nom proposé et votre confirmation seront effacés si vous quittez cette page.",
@@ -460,5 +460,10 @@
   "auth_account_delete_advice_available": "L’autorisation actuelle permet une demande de suppression. Les prérequis et l’autorisation seront revérifiés lors de l’envoi.",
   "auth_account_delete_review_changed": "Votre compte ou votre session a changé. Rechargez la vérification et confirmez à nouveau.",
   "auth_account_delete_submit_requirements": "L’envoi vérifie aussi les blocages temporaires et les tâches internes en attente. Cette page ne confirme pas leur résolution.",
-  "auth_account_delete_retention_limits": "Les données conservées suivent les exceptions de conservation adoptées. Les sauvegardes et copies externes sont distinctes ; cette page ne confirme pas leur effacement."
+  "auth_account_delete_retention_limits": "Les données conservées suivent les exceptions de conservation adoptées. Les sauvegardes et copies externes sont distinctes ; cette page ne confirme pas leur effacement.",
+  "auth_recovery_unknown": "Le résultat est inconnu. Votre mot de passe a peut-être déjà changé. Réessayez avec les données initiales ou recommencez la récupération. Un lien ensuite invalide ne prouve pas que le changement a échoué.",
+  "auth_recovery_retry_exact": "Réessayer les données initiales",
+  "auth_step_up_continuation_changed": "L’authentification a réussi, mais la demande enregistrée a changé ou a été supprimée. Revenez à l’action pour la vérifier à nouveau. Aucune action n’a été envoyée.",
+  "auth_recovery_consequences": "Une réinitialisation terminée ferme vos sessions existantes. Reconnectez-vous avec votre nouveau mot de passe.",
+  "auth_step_up_review_required": "Après l’authentification, vérifiez l’action en attente et confirmez-la à nouveau. L’authentification n’envoie pas l’action."
 }

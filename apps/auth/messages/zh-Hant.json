@@ -216,7 +216,7 @@
   "auth_recovery_password": "新密碼",
   "auth_recovery_password_invalid": "密碼長度須介於 8 至 128 個字元。",
   "auth_recovery_start_submit": "寄送復原連結",
-  "auth_recovery_start_success": "如果有帳戶使用這個地址，我們已寄出連結。",
+  "auth_recovery_start_success": "已接受復原要求。這不代表郵件已送達或密碼已變更。",
   "auth_rename_confirm": "我確認將此帳戶的使用者名稱變更為 @{handle}。",
   "auth_rename_departure_heading": "離開帳戶重新命名頁面？",
   "auth_rename_departure_unsent": "離開後，建議的使用者名稱和確認狀態將會清除。",
@@ -460,5 +460,10 @@
   "auth_account_delete_advice_available": "目前的權限允許提出刪除要求。送出時會再次檢查必要條件和權限。",
   "auth_account_delete_review_changed": "帳戶或工作階段已變更。請重新載入檢視，並再次明確確認。",
   "auth_account_delete_submit_requirements": "送出時也會檢查暫時保留及待處理的內部工作。本頁不代表這些條件已滿足。",
-  "auth_account_delete_retention_limits": "必須保留的紀錄依已採納的保留例外處理。備份到期及外部副本另行處理；本頁無法確認它們已清除。"
+  "auth_account_delete_retention_limits": "必須保留的紀錄依已採納的保留例外處理。備份到期及外部副本另行處理；本頁無法確認它們已清除。",
+  "auth_recovery_unknown": "結果不明，密碼可能已變更。請重試原本的提交內容，或重新開始復原。之後顯示連結無效，也不代表先前的變更失敗。",
+  "auth_recovery_retry_exact": "重試原本的提交內容",
+  "auth_step_up_continuation_changed": "身分驗證成功，但儲存的要求已變更或移除。請回到原本的操作並重新確認。尚未送出任何操作。",
+  "auth_recovery_consequences": "重設完成後，現有的工作階段將結束。請使用新密碼重新登入。",
+  "auth_step_up_review_required": "驗證身分後，請重新檢視並確認待處理的操作。身分驗證不會送出操作。"
 }
