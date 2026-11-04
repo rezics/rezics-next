@@ -127,7 +127,7 @@ function CollectionContent({ initialPage }: { initialPage?: CollectionPageResult
     collectionRequestVariant({ id, cursor: search.cursor, search: search.filters }),
     state,
     viewerId,
-    Boolean(csrfToken),
+    csrfToken ?? null,
     getAdmitted,
     membersAdmitted,
   ]);
