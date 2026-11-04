@@ -30,9 +30,9 @@ acceptance:
   tests:
     - An admitted mixed semantic result displays current private state and offers native save/state/change/remove and supported question-bound score set/clear controls without opening its Subject page. Every write uses an existing native command port and reauthorizes.
     - "Pending, rejected, uncertain, successful and retired commands have distinct behavior; a stale viewer, credential, row identity, question, request, locale or page cannot dispatch, publish or roll back into another reader's state."
-    - "Preserve complete-page retirement on false viewerFactsCurrent, including empty/final pages, and ordinary producer-unavailable public-page retention; mutation refresh uses that same final admission lifecycle."
-    - "Controls preserve query/filter/order/scroll and keyboard focus, duplicate identities reconcile from one authoritative refreshed page, zero differs from absence, and all named outcomes work in eight locales."
-    - "Page refresh and mutation reconciliation have finite aggregate native work and byte bounds without per-row reads, unbounded retry, private public-cache fields or a second entry/vote writer; focused tests and changed-workspace typing follow launch policy."
+    - 'Preserve complete-page retirement on false viewerFactsCurrent, including empty/final pages, and ordinary producer-unavailable public-page retention; mutation refresh uses that same final admission lifecycle.'
+    - 'Controls preserve query/filter/order/scroll and keyboard focus, duplicate identities reconcile from one authoritative refreshed page, zero differs from absence, and all named outcomes work in eight locales.'
+    - 'Page refresh and mutation reconciliation have finite aggregate native work and byte bounds without per-row reads, unbounded retry, private public-cache fields or a second entry/vote writer; focused tests and changed-workspace typing follow launch policy.'
 estimate:
   lines: 1700
   files: 18
