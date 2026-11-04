@@ -18,13 +18,18 @@ import {
 import { CreatorPriceField, creatorNotice, parsedPrice } from './creator-offer-editor';
 import { recordedMoneyUnit, recordedTaxBehavior } from './money-schema';
 import { formatMinorAmount } from './money';
+import { useCreatorOfferReading } from './creator-offer-reading';
+import { CreatorOfferInspection, CreatorOfferInspectionTrigger } from './creator-offer-inspection';
+import { RetainedOfferObservation } from './creator-offer-review/changed-offer';
+import { CreatorOfferRowOverview } from './creator-offer-review/row-overview';
 
 // Only this page's edited rows are retained; untouched rows follow the current read.
 const OfferJourney = createContext<{
   retain(offer: CreatorOffer): void;
   release(id: string): void;
   confirmOffer: ((id: string) => Promise<CreatorOffer | null>) | undefined;
-}>({ retain() {}, release() {}, confirmOffer: undefined });
+  registerManagement(id: string, focus: () => void): () => void;
+}>({ retain() {}, release() {}, confirmOffer: undefined, registerManagement: () => () => {} });
 
 function OwnedOfferControls({
   offer,
@@ -102,7 +107,7 @@ function OfferCommands({
     `${offer.id}-sender`,
   );
   const [resume] = useState(memory.value);
-  const { retain, release, confirmOffer } = useContext(OfferJourney);
+  const { retain, release, confirmOffer, registerManagement } = useContext(OfferJourney);
   // Keep the observed row and original command stable while a write's outcome is uncertain.
   const [draft, setDraft] = useState(resume);
   const observed = draft?.observed ?? offer;
@@ -114,6 +119,7 @@ function OfferCommands({
   const reading = useRef(false);
   const [open, setOpen] = useState(false);
   const controlsId = useId();
+  const managementTrigger = useRef<HTMLButtonElement>(null);
   const pending = useRef<CreatorOfferMutation | null>(resume?.pending ?? null);
   const submittedCsrf = useRef(resume?.csrfToken);
   const locked = useRef(resume?.result?.kind === 'saved');
@@ -140,6 +146,15 @@ function OfferCommands({
   // withdrawal still belongs to the current-origin boundary that mounts these controls.
   const keepOpen = !!draft || busy || !!pending.current || !!result;
   const expanded = open || keepOpen;
+  useLayoutEffect(
+    () =>
+      registerManagement(observed.id, () => {
+        if (!isCurrent() || !managementTrigger.current?.isConnected) return;
+        setOpen(true);
+        managementTrigger.current.focus();
+      }),
+    [registerManagement, observed.id, guard],
+  );
   function keepDraft(next: ChangeIntent) {
     memory.value = next;
     setDraft(next);
@@ -260,6 +275,7 @@ function OfferCommands({
   return (
     <div className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
       <Button
+        ref={managementTrigger}
         type="button"
         variant="outline"
         aria-expanded={expanded}
@@ -420,6 +436,7 @@ export function CreatorOffersPage({
     setRetained(next);
   }
   const page = data?.page ?? suppliedPage ?? { kind: 'unavailable' as const };
+  const reading = useCreatorOfferReading({ page, locale, cursor, guard });
   const offers =
     page.kind === 'ready'
       ? [
@@ -489,7 +506,9 @@ export function CreatorOffersPage({
                 <p className="text-sm text-muted-foreground">{m.creator_offers_empty_hint()}</p>
               </div>
             ) : (
-              <OfferJourney.Provider value={{ retain, release, confirmOffer: onConfirm }}>
+              <OfferJourney.Provider
+                value={{ retain, release, confirmOffer: onConfirm, registerManagement: reading.registerManagement }}
+              >
                 <ul className="space-y-3 rounded-xl border bg-card p-3 text-card-foreground sm:p-5">
                   {offers.map((offer) => (
                     <ContentItem
@@ -497,7 +516,9 @@ export function CreatorOffersPage({
                       data-offer-state={offer.state}
                       title={offer.title}
                       headingLevel={2}
-                      {...(offer.state === 'active' && offerPageAvailable
+                      {...(offer.state === 'active' &&
+                      offerPageAvailable &&
+                      page.offers.some((current) => current.id === offer.id && current.state === 'active')
                         ? { href: `/${locale}/offers/${offer.id}` }
                         : {})}
                       className="p-3 sm:[&>div]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&_h2]:break-words [&_h2]:[overflow-wrap:anywhere]"
@@ -527,6 +548,7 @@ export function CreatorOffersPage({
                           {offer.state === 'active' ? m.creator_offers_active() : m.creator_offers_delisted()}
                         </p>
                       }
+                      preview={<CreatorOfferRowOverview offer={offer} />}
                       actions={
                         <div className="min-w-0 max-w-sm space-y-2">
                           <details>
@@ -562,6 +584,14 @@ export function CreatorOffersPage({
                               )}
                             </dl>
                           </details>
+                          <CreatorOfferInspectionTrigger offer={offer} reading={reading} />
+                          {retained[offer.id] && (
+                            <RetainedOfferObservation
+                              observed={offer}
+                              received={page.offers.find((current) => current.id === offer.id)}
+                              locale={locale}
+                            />
+                          )}
                         </div>
                       }
                       trailing={
@@ -576,6 +606,14 @@ export function CreatorOffersPage({
                 </ul>
               </OfferJourney.Provider>
             )}
+            <CreatorOfferInspection
+              reading={reading}
+              locale={locale}
+              restartHref={creatorOffersHref(locale)}
+              retained={reading.observed ? retained[reading.observed.id] : undefined}
+              managementAvailable={!!data}
+              offerPageAvailable={offerPageAvailable}
+            />
             <nav aria-label={m.creator_offers_pagination()} className="flex flex-wrap gap-3">
               {cursor && (
                 <a

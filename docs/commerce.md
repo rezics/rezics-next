@@ -79,3 +79,16 @@ inside its native writer; no Library vote writer or provider aggregate is introd
 Decision: AniList score effects remain unavailable until Content provides a conditional native vote guard for the
 reviewed question revision, counted vote or absence, canonical/counting identity and local correction; score review
 stores owner-selected units and separate effects consent.
+
+## Owned offer terms inspection
+
+The creator’s received offer page supplies read-only inspection, including delisted captures and explicit unknown
+historical mapping. Offer ID and observed revision identify the selection; equal titles and shared Editions do not.
+Captured revision, declared licence, delivery, acquisition and quantity remain separate from current reader access
+and sale eligibility. Revision/hash/reference disclosure performs no content read or independent verification.
+Existing public money adapters retain recorded units and before-tax meaning.
+
+Decision: replacement keeps the opened observation until deliberate review of the received row; inspection review
+never changes an existing command’s original observation, draft, key or recovery, and selection retires with the
+existing current origin or visit. Missing rows offer restart without scanning pages. Management keeps its retained
+row, while public destinations require an active row on the received page.
