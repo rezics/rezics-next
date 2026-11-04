@@ -636,6 +636,7 @@ export function LabelsPageView({
       <header className="space-y-2">
         <PageHeading>{m.library_labels_heading()}</PageHeading>
         <p className="text-muted-foreground">{m.library_labels_private()}</p>
+        <p className="text-sm text-muted-foreground">{m.library_consolidation_labels_hint()}</p>
       </header>
       {feedback &&
       !feedback.ok &&

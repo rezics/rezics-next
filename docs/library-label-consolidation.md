@@ -103,9 +103,21 @@ for each operation, with synchronous retirement notification. Retirement clears 
 evidence. Confirmation evidence and caller keys are retained before dispatch; unknown acknowledgements replay the
 original addressed command. Native results are preserved verbatim and definite assignment effects refresh both
 assignment readers through the supplied callback. The coordinator never writes assignments directly or stores
-private evidence in a global cache. This foundation is not yet mounted on the Labels or shelf surfaces; the concrete
-owner envelope, selection/catalogue UI, locale strings and complete native growth coverage remain implementation
-work in `.temp/continuation/label-consolidation-workspace.md`.
+private evidence in a global cache. The existing Labels catalogue links to the named-label shelf, which mounts this single journey through its actual
+private reader lifetime. Exact visible assignment selection, bounded target pages, review, native results and
+original-command recovery remain visit-local. The source and target native readers reopen after definite effects;
+source presentation refreshes without replacing the retained command evidence. Native growth coverage remains
+controller-owned.
+
+Decision: selection is limited to 16 visible assignments on the current shelf page; target search replaces one
+20-label prefix page at a time and retains an explicitly chosen target ID across prefix paging. No selection is
+inferred from a filter or accumulated by an automatic page walk. Closing review retains its draft and operands;
+discarding requires explicit reselection. Undo uses the original native source revision and finite deadline.
+
+The interaction comparison used `legacy-final:apps/web/features/library/library-list.tsx` for named row selection
+and `legacy-main-final:apps/web/features/library/library-page.tsx` for phone shelf organization. The shared shelf
+controls preserve row titles and touch selection, while the selection bar wraps its phone actions and the review
+scrolls within the viewport. These are interaction references only; native assignment identities remain exact.
 
 ## Cost and verification boundary
 

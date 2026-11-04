@@ -54,6 +54,7 @@ export function usePrivateReportOrigin(
       admitted: groups.map(() => false),
       versions: groups.map(() => 0),
     };
+    const watchers = new Set<() => void>();
     const server = value;
     const read = () => {
       const session = client.getQueryState<Session>(sessionQuery.queryKey);
@@ -145,11 +146,18 @@ export function usePrivateReportOrigin(
           this.version(...required) === version &&
           required.every((group) => read().admitted[groups.indexOf(group)]);
       },
+      watch(notify: () => void) {
+        watchers.add(notify);
+        return () => { watchers.delete(notify); };
+      },
       subscribe(notify: () => void) {
         const changed = () => {
           const previous = value;
           read();
-          if (previous !== value) notify();
+          if (previous !== value) {
+            watchers.forEach((watch) => watch());
+            notify();
+          }
         };
         // The shared lifetime observes every session replacement synchronously, even a batched A-B-A.
         const session = lifetime.subscribe(changed);
