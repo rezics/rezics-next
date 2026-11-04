@@ -168,6 +168,21 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     expect(reviewed.textContent).toContain('Volume');
     expect(reviewed.textContent).toContain('https://example.org/book-source');
     expect(reviewed.textContent).toContain(m.candidate_rank_normal());
+    const urlReview = within(reviewed).getByRole('heading', { name: name('schema:url') }).parentElement!;
+    const originalControl = within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[0]!;
+    await act(async () => user.click(within(urlReview).getByRole('button', { name: m.literary_review_open() })));
+    expect(urlRow.contains(window.document.activeElement)).toBe(true);
+    await act(async () => {
+      await user.clear(originalControl);
+      await user.type(originalControl, 'https://example.org/revised-book');
+    });
+    expect(fixture.calls.some((call) => call.method === 'POST')).toBe(false);
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
+    const revised = host.querySelector('[data-literary-create-review]')!;
+    expect(revised.textContent).toContain('https://example.org/revised-book');
+    expect(revised.textContent).toContain('https://example.org/book-source');
+    expect(revised.textContent).toContain(name('schema:url'));
+    expect(fixture.calls.some((call) => call.method === 'POST')).toBe(false);
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
     await waitFor(() => expect(canvas().getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());
     expect(host.textContent).toContain(literaryWorkId);
@@ -178,6 +193,10 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     expect(book.type).toBe('schema:Book');
     expect(book.statements['schema:inLanguage']![0]!.references).toHaveLength(1);
     expect(book.statements['schema:url']![0]!.rank).toBe('normal');
+    expect(book.statements['schema:url']![0]!.value).toEqual({
+      type: 'value',
+      content: 'https://example.org/revised-book',
+    });
     expect(book.statements['schema:inLanguage']![0]!.references[0]).toEqual(
       book.statements['schema:url']![0]!.references[0],
     );
@@ -346,3 +365,66 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     }
   }
 }, 45_000);
+
+test('Literary review uses the current release and locale while retaining withdrawn evidence and unsupported time advice', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { LiteraryCreateReview } = await import('../src/features/catalogue/literary-create-review-view');
+  const { m } = await import('../src/paraglide/messages.js');
+  const release = structuredClone(recorded.release) as Release;
+  release.properties['schema:url']!.labels = { en: 'Original source label', ja: '現在の出典' };
+  const item = {
+    type: 'schema:Book',
+    labels: { en: 'Retained work' },
+    statements: {
+      'schema:url': [
+        {
+          property: { id: 'schema:url' },
+          value: { type: 'value' as const, content: 'https://example.org/retained' },
+          references: [
+            {
+              parts: [
+                {
+                  property: { id: 'schema:datePublished' },
+                  value: {
+                    type: 'value' as const,
+                    content: {
+                      time: '-000000000044-03-15T00:00:00Z',
+                      precision: 11,
+                      calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
+                      before: 1,
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+          rank: 'normal' as const,
+        },
+      ],
+    },
+  };
+  const snapshot = JSON.stringify(item);
+  const render = (locale: string, stale: boolean) =>
+    renderToStaticMarkup(
+      <LiteraryCreateReview
+        item={item}
+        release={release}
+        locale={locale}
+        stale={stale}
+        factId={() => 'original-holder'}
+        onJump={() => {}}
+      />,
+    );
+  expect(render('en', false)).toContain('Original source label');
+  release.types['schema:Book']!.properties = release.types['schema:Book']!.properties.filter(
+    (id) => id !== 'schema:url',
+  );
+  const withdrawn = render('ja', true);
+  expect(withdrawn).toContain('現在の出典');
+  expect(withdrawn).toContain('lang="ja"');
+  expect(withdrawn).toContain(m.correction_stale({}, { locale: 'ja' }));
+  expect(withdrawn).toContain(m.literary_review_stale({}, { locale: 'ja' }));
+  expect(withdrawn).toContain(m.time_unsupported_uncertainty({}, { locale: 'ja' }));
+  expect(withdrawn).toContain('https://example.org/retained');
+  expect(JSON.stringify(item)).toBe(snapshot);
+});

@@ -11,3 +11,13 @@ The existing `useCatalogueLifetime` boundary fences reader/address replacement w
 Concept owns classification return and leave confirmation; file hash/codec explanations remain profile notices.
 The shared statement summary projects values through `PartValue`, preserves evidence order, and renders
 translated normal, preferred or deprecated rank meanings without reconstructing command operands.
+
+Album, Character, People, Literary, Screen, Addon, publication and changed-fact reviews adopt
+`statement-summary.tsx` directly within the catalogue UI boundary. Released property labels and identifiers
+remain visible for the main assertion, ordered qualifiers and each original reference group, including empty
+groups; `PartValue` owns value states, time precision, calendars and uncertainty. Missing labels retain their
+property identifiers. Consumers retain their profile headings, admission notices, related labels and exact
+field-return controls. Album and Character still apply `creationStatement` before rendering; changed-fact
+review projects the current native rank separately so deprecated assertions remain deprecated without changing
+editable operands. Current and proposed assertions remain independent, with an explicit absent baseline.
+Review is a projection of the caller's captured draft: it neither prepares commands nor renews caller authority.
