@@ -2,9 +2,9 @@
 CREATE TABLE library.copy_loan_generation (
     route integer NOT NULL,
     account_id uuid NOT NULL,
-    generation bigint NOT NULL DEFAULT 1,
+    generation integer NOT NULL DEFAULT 1,
     CONSTRAINT copy_loan_generation_account_route CHECK (route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11))),
-    CONSTRAINT copy_loan_generation_positive CHECK (generation >= 1),
+    CONSTRAINT copy_loan_generation_positive CHECK (generation BETWEEN 1 AND 2147483647),
     CONSTRAINT copy_loan_generation_pkey PRIMARY KEY (route, account_id)
 );
 
