@@ -1890,7 +1890,7 @@ The three independently named cases are:
 - `Wikidata account-key CLI imports refreshes reopens and safely stops the synthetic native scalar feed`
 
 They pin `bangumi@3` (unversioned) and `open-library@3` (edition revision 11 → 12). Wikidata uses the actual
-exported converter revision, currently `wikidata-4`, with synthetic Q571 revision 24681012 → 24681013.
+exported converter revision, currently `wikidata-6`, with synthetic Q571 revision 24681012 → 24681013.
 Bangumi retains types 1/2/4 and complete skipped membership for 3/6. Open Library
 uses five-column TSV, an independent work and the pinned edition with unresolved native author/work keys. Each
 case checks actual tuple claims, retrieved cited candidates, immutable bootstrap bytes/keys/receipts, unchanged
@@ -1912,17 +1912,32 @@ Bangumi / Open Library / Wikidata, with 3 / 2 / 2 subjects and 17 / 22 / 21 immu
 refresh. Each source's malformed, truncated and mass-disappearance inputs produced zero public writes and
 preserved its completed baseline. Exact consumed-byte and seal counters are emitted in the native check log.
 
-The current producer dependency `17183ec750d8f577bd7e86c570b9638c34b986da` ships `wikidata-4`. The caller
-imports its actual `converter_revision` instead of asserting the historical `wikidata-3`; source `lastrevid`,
-fixture bytes and business assertions are unchanged. At tested revision `eceb114710`, current-producer native
-acceptance passed all three cases with 3,392 assertions (check `3d253830-6c17-40fd-9f11-25934deb5667`).
-The log records actual `wikidata-4` proposals, unchanged first-input bytes and receipt counts above, and zero
-public writes for all nine unsafe-input stops. The original receipt remains evidence only for its original base.
+### Wikidata released time and quantity
 
-Local reconciliation preflight passed formatting, direct conversion/importer package compilers, caller TypeScript
-parsing and production module/registration resolution to `wikidata-4`. The direct kernel compiler requires a
-native database for Reylo SQL analysis (`No database URL` locally); the passing native check supplied that
-prerequisite and wrote 683 analyses. No root or sibling regression check was repeated for this reconciliation.
+The ordinary JSONL registration uses the exported `wikidata-6` converter. It
+admits actual cited complete statements through public Definitions validation,
+then native writes recheck the bound holder and its current release. Signed partial
+Gregorian/Julian times retain timezone/uncertainty; quantities retain exact lexical
+amount, bounds and unit. Unsupported neighbors and incomplete exact measurements
+are withheld whole. No importer credentials gain acceptance or adoption authority.
+
+Unchanged reopen retains proposal identity. Converter revision refresh discovers
+supported facts on unchanged source input; changed components change the digest.
+Unknown delivery reuses sealed bytes and keys. Prior receipts and editorial
+selection survive omission and refresh; current authorization and tuple fences
+still govern replay and disclosure.
+
+- Touches: one selected JSONL record, its bounded claims, qualifiers and selected
+  references, local staging/journal point reads and ordinary native batch calls.
+- Bound: 128 KiB record, 64 statements, 100 commands, 15 source references per
+  claim and 16 snaks per group; local conversion is O(selected bytes). Native
+  calls retain existing batch, binding, receipt and fence bounds separately.
+- Growth check: existing converter/importer/native growth suites remain authoritative;
+  unrelated source and native population grows independently. Focused scenarios
+  `tests/wikidata-lossless-source-completion.test.ts` and
+  `../kernel/test/imports/wikidata-lossless-source-completion.test.ts` exercise
+  serialization, independent accept/adopt/read, refresh, lost responses and fences.
+  Authored native coverage is not an executed acceptance or upstream observation.
 
 Caller corrections retain exact values and public contracts: the edition type expectation changed from
 `schema:BookEdition` to the existing native observation `bf:Instance`; native URL/sameAs property expectations

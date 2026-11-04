@@ -3,6 +3,8 @@ import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { tmpdir } from 'node:os';
+import { converter_revision } from '@rezics/conversion/wikidata';
 import entity from '../../../specs/fixtures/imports/wikidata/entity.json';
 import { runImportCli } from '../src/cli.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -15,7 +17,7 @@ test('ordinary Wikidata registration preserves rich cited statements across seri
   const first = registration.convert(input(structuredClone(entity)), context);
   const staged = JSON.parse(JSON.stringify(first.normalized));
   const second = registration.convert(input(staged), context);
-  expect(registration.converter_revision).toBe('wikidata-4');
+  expect(registration.converter_revision).toBe(converter_revision);
   expect(second.proposals).toEqual(first.proposals);
   expect(second.digest).toBe(first.digest);
   expect(second.proposals).toHaveLength(6);
@@ -37,7 +39,7 @@ test('ordinary Wikidata registration preserves rich cited statements across seri
   });
   for (const proposal of second.proposals) {
     if (proposal.op === 'propose') expect(proposal.statement.references.length).toBeGreaterThan(0);
-    expect(proposal.source.converter_revision).toBe('wikidata-4');
+    expect(proposal.source.converter_revision).toBe(converter_revision);
   }
 });
 
@@ -86,7 +88,7 @@ test('registered exact measurements cannot lose qualification during serialize n
 });
 
 test('rich JSONL CLI rejects a malformed tail before Auth or public effects', async () => {
-  const directory = await mkdtemp('/dev/shm/wikidata-rich-cli-local-');
+  const directory = await mkdtemp(join(tmpdir(), 'wikidata-rich-cli-local-'));
   try {
     const key = join(directory, 'account.jwk');
     const pair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
@@ -131,7 +133,7 @@ test('rich JSONL CLI rejects a malformed tail before Auth or public effects', as
         }) as unknown as typeof fetch,
       },
     );
-    expect(revisions).toEqual(['wikidata-4']);
+    expect(revisions).toEqual([converter_revision]);
     expect(result.code).toBe(2);
     expect(result.openHandles).toBe(0);
     expect(requests).toEqual([]);

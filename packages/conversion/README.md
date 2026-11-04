@@ -231,7 +231,7 @@ come only from their source relation records. The caller records raw and
 normalized link digests under its own `vndb-work-links@1` proposal revision; the
 upstream VNDB revision stays sourced from `entry_meta.revision`.
 
-Wikidata revision `wikidata-5` adds conversion-local source type bindings. These
+Wikidata revision `wikidata-6` retains conversion-local source type bindings. These
 classifications do not assert vocabulary equivalence and do not change Definitions:
 
 | Wikidata P31 class (English label verified on its page)                | Proposal type     |
@@ -697,18 +697,22 @@ upperBound. The serialized property has no exact flag. Use the
 exact-quantity validation, independent of property names or holder types.
 Ordinary quantity and default conversion semantics remain unchanged.
 
-Wikidata applies this rule in converter revision `wikidata-4`. It detects
-unmapped qualifier keys on exact quantities without reading their bodies. It
-also treats a mapped qualifier that cannot be normalized as qualification loss.
-If any qualifier was omitted or cannot be carried losslessly, the whole
-measurement is withheld with a diagnostic. Detection uses the admitted fixed
-value schema, not the source property name. Rejection remains stable when the
-importer serializes `normalizedRecord` and converts it again after binding.
-Focused pure controls live in
-`tests/wikidata-exact-quantity.test.ts`. The three frozen native cases passed
-through the ordinary importer and public batch write path (check
-`5936c648-22a7-4930-9fcf-c671639056c1`). Their names, final test hash and
-bootstrap receipt assertions are recorded in the linked audit report.
+Wikidata `wikidata-6` composes the complete cited candidate using the actual
+bundled property and calls public `checkStatementInput` before emission, retaining
+final batch validation. The same native time value keeps signed 4–16 digit nonzero
+years, Gregorian/Julian calendar, precision 9/10/11 and optional safe timezone and
+nonnegative uncertainty. Quantity amount, bounds and unit remain exact lexical
+strings; validation performs no Number coercion or calendar normalization.
+Unsupported or incomplete values withhold the entire statement with bounded
+source diagnostics. Somevalue/novalue remain distinct. Source projection keeps
+its existing field/byte limits; it does not evaluate unknown qualifier bodies.
+
+Exact quantities also withhold the entire measurement when any qualifier is
+unmapped, unsupported, unresolved or narrowed, including loss during projection.
+That rejection survives normalized-record serialization and rebinding. Item
+qualifiers, new mappings and whole-holder word evidence remain unsupported.
+Pure controls remain in `tests/wikidata-exact-quantity.test.ts`; connected source
+and native scenarios are linked from the [Importer owner](../../services/importer/README.md#wikidata-released-time-and-quantity).
 
 The current bundle admits schema:wordCount with exact P6570 mapping, integer
 amount, unit 1, minimum 0 and qualifiers[]. Its mapping alone is unsafe provider
@@ -719,10 +723,6 @@ P459 method is unmapped; current P518 has no executable exact mapping and target
 StoryArc only, so it cannot stand for an arbitrary counted text part. Do not narrow that scope, widen P518, invent
 method/part/digest properties or supply fabricated native identities.
 
-The [handoff evidence and frozen native scenarios](../../docs/research/imports-audit/exact-quantity-qualifiers.md)
-target rejection on the actual bundled runtime through the ordinary importer
-and public batch write path after converter repair; the audit records the latest
-runtime result without treating an earlier assertion failure as qualifier proof.
 The reviewed Q55867126 revision 1717031358 count (+1450/unit 1, P459 Q718390,
 P518 Q63246861, no statement references) belongs to a letter/text. Its explicit
 transplant into a controlled synthetic Book shell proves no observed Book count.
