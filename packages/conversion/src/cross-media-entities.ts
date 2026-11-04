@@ -36,7 +36,7 @@ import {
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
 
-export const converter_revision = 'cross-media-entities@11';
+export const converter_revision = 'cross-media-entities@12';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +
@@ -1460,6 +1460,19 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     normalized.type = own(raw, 'type', '/type');
     const summary = own(raw, 'summary', '/summary');
     if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
+    const career = own(raw, 'career', '/career');
+    if (career !== undefined) {
+      if (Array.isArray(career) && career.length <= 7) {
+        normalized.career = career.map((entry, index) => {
+          if (typeof entry === 'string' && entry.isWellFormed() && Buffer.byteLength(entry, 'utf8') <= 64) return entry;
+          diagnostics.push({ pointer: `/career/${index}`, code: 'malformed_person_career' });
+          return null;
+        });
+      } else {
+        normalized.career = null;
+        diagnostics.push({ pointer: '/career', code: 'malformed_person_career' });
+      }
+    }
   }
   if (kind === 'vndb-producer') {
     type = producerType(raw);

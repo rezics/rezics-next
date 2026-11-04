@@ -86,14 +86,18 @@ import {
   type ImportRunResult,
 } from './importer.ts';
 import { createMediaResolver } from './media-resolver.ts';
-import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
+import type { BangumiCoverSource, BangumiPersonCareerSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
+import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from './showcase-bangumi-careers.ts';
 import {
   createSelectedFamilySourceRegistration,
   createSourceRegistration,
   crossMediaBangumiRevision,
 } from './source-registry.ts';
-import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
+import {
+  currentBangumiCharacterVocabularyBindings,
+  runBangumiCharacterFidelity,
+} from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 import {
   planVndbReleasePlatforms,
@@ -326,6 +330,8 @@ export type CrossMediaPlan = {
   /** Exact selected VNDB release platform and medium rows for source-vocabulary admission. */
   releasePlatforms?: ReadonlyMap<string, VndbReleasePlatformFacts>;
   coverSources?: readonly BangumiCoverSource[];
+  /** Exact API receipts for careers read from selected Bangumi Person records. */
+  personCareerSources?: readonly BangumiPersonCareerSource[];
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
   chars:
@@ -3073,6 +3079,9 @@ export async function runCrossMediaSeedCli(
   await mkdir(dirname(statePath), { recursive: true });
   const importPort = createImportTransport({ origin: api, tokenProvider });
   let characterProfileBindings = await readVndbCharacterProfileBindings(importPort, vndbCharacterProfileReferences);
+  let bangumiCareerBindings = characterBindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] };
+  if (characterBindingsPath)
+    bangumiCareerBindings = await currentBangumiCharacterVocabularyBindings(bangumiCareerBindings, importPort);
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;
@@ -3112,10 +3121,19 @@ export async function runCrossMediaSeedCli(
     const selectedVids = plan.members
       .filter((member) => member.source === 'vndb' && member.kind === 'work')
       .map((member) => member.key);
+    const careerAdmission: NonNullable<ImporterOptions['vocabularyAdmission']> = {
+      request(input) {
+        return bangumiPersonCareerAdmission(
+          crossMediaAliases.bangumi,
+          bangumiCareerBindings,
+          plan.personCareerSources,
+        ).request(input);
+      },
+    };
     let preparedPublicTags: Awaited<ReturnType<typeof prepareShowcaseTags>> | undefined;
     let tagVocabularyRequirements: Awaited<ReturnType<typeof prepareShowcaseVndbPublicTagVocabulary>>['requirements'] =
       [];
-    let vocabularyAdmissions: NonNullable<ImporterOptions['vocabularyAdmission']>[] = [];
+    let vocabularyAdmissions: NonNullable<ImporterOptions['vocabularyAdmission']>[] = [careerAdmission];
     let vndbBindings: SourceVocabularyBindings | undefined;
     if (options.selection && reviewedSubjects) {
       const plannedKeys = new Set([...plan.records.vndb, ...plan.entities.vndb].map((row) => row.key));
@@ -3180,11 +3198,14 @@ export async function runCrossMediaSeedCli(
         schemes: [...reviewedTraits.bindings.schemes, ...roleBindings.schemes],
         concepts: [...reviewedTraits.bindings.concepts, ...roleBindings.concepts],
       };
-      vocabularyAdmissions = [preparedPublicTags.vocabularyAdmission, ...characterAdmissions];
+      vocabularyAdmissions = [preparedPublicTags.vocabularyAdmission, ...characterAdmissions, careerAdmission];
     }
     const episodeCatalogueSubjects = options.reviewedCatalogueSubjects ?? options.episodeCatalogueSubjects;
 
-    if (journal) plan = await acquireBangumiCoverSources(plan, { journal });
+    if (journal) {
+      plan = await acquireBangumiPersonCareerSources(plan, { journal });
+      plan = await acquireBangumiCoverSources(plan, { journal });
+    }
     let publicationPlan = structuredClone(plan);
     let result = await seedShowcaseVndbReleases({
       tables: input,
@@ -3503,6 +3524,7 @@ export async function runCrossMediaSeedCli(
       | Awaited<ReturnType<typeof prepareShowcaseBangumiSelectedCharacterVocabulary>>['requirements']
       | undefined;
     const reseedWithCurrentVocabulary = async (nextCharacterBindings: SourceVocabularyBindings) => {
+      bangumiCareerBindings = await currentBangumiCharacterVocabularyBindings(nextCharacterBindings, importPort);
       publicationPlan = structuredClone(plan);
       result = await seedShowcaseVndbReleases({
         tables: input,

@@ -15,7 +15,7 @@ import { showcaseDigest, showcaseVocabularyExternalId } from './showcase-manifes
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import type { ShowcaseVocabularyRequirement } from './showcase-manifest.ts';
 
-const adapterRevision = 'bangumi-character-vocabulary@2';
+const adapterRevision = 'bangumi-character-vocabulary@3';
 const taxonomy = {
   'bangumi.character.role': {
     group: 'character.role',
@@ -26,6 +26,11 @@ const taxonomy = {
     group: 'subject-characters.type',
     scheme: 'https://rezics.com/schemes/bangumi/appearance-roles',
     label: 'Bangumi appearance roles',
+  },
+  'bangumi.person.career': {
+    group: 'person.career',
+    scheme: 'https://rezics.com/schemes/bangumi/careers',
+    label: 'Bangumi careers',
   },
 } as const;
 type Taxonomy = keyof typeof taxonomy;
@@ -121,6 +126,20 @@ function selectedNeed(plan: CrossMediaPlan, workTypes: readonly SupportedWorkTyp
         property: 'subject-characters.type',
       });
   }
+  const selectedPeople = new Set(
+    plan.members
+      .filter((member) => member.source === 'bangumi' && member.kind === 'person')
+      .map((member) => member.key),
+  );
+  for (const person of plan.entities.bangumi) {
+    if (!selectedPeople.has(person.key) || !person.payload || typeof person.payload !== 'object') continue;
+    const payload = person.payload as Record<string, unknown>;
+    if (payload.type !== 1 || !Array.isArray(payload.career)) continue;
+    for (const code of payload.career) {
+      const evidence = mappingEvidence('bangumi.person.career', code, person.key);
+      if (evidence) concepts.set(`${evidence.taxonomy}\0${evidence.code}`, evidence);
+    }
+  }
   const selectedConcepts = [...concepts.values()].sort(
     (left, right) => left.taxonomy.localeCompare(right.taxonomy) || left.code.localeCompare(right.code),
   );
@@ -202,7 +221,11 @@ function vocabularyCommands(input: {
   const sourceUri = entry.uri;
   const sourceKey = vocabularyKey(entry.taxonomy, isScheme ? undefined : (entry as MappingEvidence).code);
   const source = sourceFor(sourceKey, sourceUri, [sourceUri, entry.citation]);
-  const labels = isScheme ? { en: definition.label } : { en: (entry as MappingEvidence).label };
+  const labels = isScheme
+    ? { en: definition.label }
+    : entry.taxonomy === 'bangumi.person.career'
+      ? { und: (entry as MappingEvidence).code }
+      : { en: (entry as MappingEvidence).label };
   const create: BatchCommand = {
     op: 'create',
     key: `bangumi-character-vocabulary:${commandKey([JSON.stringify(source), 'create', nativeType, JSON.stringify(labels)])}`,

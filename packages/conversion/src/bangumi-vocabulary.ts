@@ -14,10 +14,11 @@ import {
   type BangumiStaffRoleDefinition,
 } from './cross-media-entities.ts';
 
-export const bangumiVocabularyRevision = 'bangumi-vocabulary@2';
+export const bangumiVocabularyRevision = 'bangumi-vocabulary@3';
 const episodeScheme = 'https://rezics.com/schemes/bangumi/episode-types';
 const characterScheme = 'https://rezics.com/schemes/bangumi/character-kinds';
 const appearanceScheme = 'https://rezics.com/schemes/bangumi/appearance-roles';
+const personCareerScheme = 'https://rezics.com/schemes/bangumi/careers';
 export const bangumiStaffSchemeUri = 'https://rezics.com/schemes/bangumi/staff';
 const episodeCodes = new Set(['0', '1', '2', '3', '4', '5', '6']);
 const characterCodes = new Set(['1', '2', '3', '4']);
@@ -164,6 +165,33 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
           row,
           subject: row.character,
           property: 'schema:keywords',
+          content: resolved.id,
+          target: conceptIdentity(resolved),
+          mappingRevision: bangumiVocabularyRevision,
+        });
+      return;
+    }
+    case 'person-career': {
+      const code = environment.sourceCode(row.code);
+      const mapping = code ? mapSourceEnumeration('bangumi', 'person.career', code) : undefined;
+      if (!code || mapping?.status !== 'existing' || !mapping.concept || mapping.concept.scheme !== personCareerScheme || mapping.concept.id !== `${personCareerScheme}/${code}`) {
+        environment.pushGap({ path, ...(code ? { code } : {}), reason: 'unknown_code', property: 'person.career' });
+        return;
+      }
+      if (!row.person) {
+        environment.pushGap({ path, code, reason: 'missing_identity', property: 'wdt:P106' });
+        return;
+      }
+      if (row.person.type !== 'schema:Person') {
+        environment.pushGap({ path, code, reason: 'unsupported_source_case', property: 'person.career' });
+        return;
+      }
+      const resolved = exactConcept(environment, 'bangumi.person.career', code, path, personCareerScheme);
+      if (resolved)
+        environment.propose({
+          row,
+          subject: row.person,
+          property: 'wdt:P106',
           content: resolved.id,
           target: conceptIdentity(resolved),
           mappingRevision: bangumiVocabularyRevision,
@@ -470,6 +498,7 @@ export function mapBangumiVocabulary(input: SourceVocabularyInput): SourceVocabu
     'episode-sort',
     'episode-kind',
     'character-kind',
+    'person-career',
     'staff',
     'character-appearance',
     'voice-credit',

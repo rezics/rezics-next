@@ -1308,6 +1308,40 @@ and Organization, refresh by digest, and respect the summary fence` in
 journey is authored, but its native execution is deferred to integration; no
 native pass is claimed.
 
+## Bangumi Person careers
+
+The selected projection retains authentic career strings for actual type-1
+Persons. Archive career wins whenever the field is present; only selected
+Persons whose archive row omits it use bounded `GET /v0/persons/{id}`. The
+response must identify the exact Person and contain no
+more than seven bounded strings. Its endpoint, response SHA-256, optional ETag
+and categories are sealed in the existing showcase journal. Empty, malformed,
+unknown or unavailable careers never create occupations; Organizations and
+work-credit inference are excluded. Independent identity, biography and credit
+proposals remain available when career acquisition or current vocabulary is
+withheld.
+
+Default explicit seeding prepares only categories present in selected records
+through the common source vocabulary publisher, separate acceptance/adoption
+and current Scheme/Concept reads. The bindings feed the ordinary source
+operator, which emits cited `wdt:P106` proposals for source-owned Concepts under
+`https://rezics.com/schemes/bangumi/careers/<literal>`. No canonical equivalence
+or `schema:hasOccupation` is inferred. The optional Bangumi binding file remains
+a validated override.
+
+- Touches: at most 64 selected people/organizations, 64 bounded Person API
+  reads, one Scheme, seven Concepts and their independent current reads.
+- Bound: each response is at most 64 KiB; acquisition is sequential with a
+  250 ms request gap and the shared import deadline. No population crawl or
+  label lookup occurs.
+- Growth check: `packages/conversion/tests/bangumi-person-careers.test.ts`
+  covers released occupation mapping and malformed/unknown/Organization
+  omissions; `services/importer/tests/showcase-bangumi-person-careers.test.ts`
+  covers bounded acquisition and sealed replay; and
+  `services/kernel/test/imports/bangumi-person-careers.test.ts` covers default
+  source Concept publication, current reads, same-UUID refresh, dependency
+  withholding, tuple fencing and unknown-send replay.
+
 ## Bangumi television original run and episode count
 
 Decision: original-run start is infobox `放送开始`. Type-2 top-level `date`
@@ -1373,7 +1407,7 @@ without a native alternate-name statement.
 
 The production cross-media planner now streams the acquired `chars_names` and
 `chars_alias` COPY tables and joins only exact selected character IDs from
-`chars_vns`. `cross-media-entities@11` preserves localized `schema:name` facts,
+`chars_vns`. `cross-media-entities@12` preserves localized `schema:name` facts,
 unqualified Romanized alternate names and alias alternate names with their
 exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
 whole alias. Qualified text does not enter bootstrap labels or aliases, and
@@ -1465,7 +1499,7 @@ unsupported values do not retract them.
 ## Bangumi character source names
 
 Selected default Bangumi character records retain their exact `infobox` payload
-through `planCrossMediaSeed` and the shared `cross-media-entities@11` converter.
+through `planCrossMediaSeed` and the shared `cross-media-entities@12` converter.
 The reviewed `Crt` grammar supplies cited `schema:name` facts from `name`,
 `name_cn` and `简体中文名`, plus cited `schema:alternateName` facts from its
 labelled `别名` rows. A malformed alias group is withheld as a whole; usable
@@ -1496,6 +1530,8 @@ Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.m
 
 Ordinary conversion uses `bangumi@14`. The selected-family Bangumi caller uses
 `cross-media-entities@11+bangumi@14` so source refresh replays the new mapping
+Ordinary conversion uses `bangumi@13`. The selected-family Bangumi caller uses
+`cross-media-entities@12+bangumi@13` so source refresh replays the new mapping
 under an honest revision without revising the VNDB adapter. Only the exact
 TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
 retain their URL spelling and cite the Bangumi subject record; copyright
@@ -1571,7 +1607,7 @@ additional selected source key as an explicit omission.
 
 Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
 
-The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@11` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
+The selected default Bangumi seed already elects character IDs through the selected works' `subject-characters` rows and carries each exact `character` row into the common source registration. `cross-media-entities@12` reads the pinned Crt infobox for `身高`, `体重` and `血型`; the source scalar and indexed path enter deterministic source evidence. Only explicit released centimetres/metres and kilograms/grams become quantities. Blank and explicit unknown values remain unknown; unitless, ranged, approximate, fictional-unit, mixed-prose, duplicate and over-bound values remain unavailable field evidence. Blood type stays withheld because the repository has no Bangumi blood-type source vocabulary binding to current native Concepts. Character identity remains the selected `character:<id>` binding.
 
 - Touches: one selected Character record, at most one released height and one weight fact, bounded source evidence, and sanitized field-path diagnostics. Existing names, kind, appearance and licensed summary handling remain on their current paths.
 - Bound: 65,536 UTF-8 source bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 quantity facts and 16 diagnostics. Unsupported or oversized values do not create partial quantities; the existing converter command ceiling and common publication manifest remain authoritative.
@@ -1581,6 +1617,7 @@ The selected default Bangumi seed already elects character IDs through the selec
 
 Decision: scalar Game `中文名` supplies `zh`; scalar or single-level bullet `别名` stays `und`.
 Ordinary conversion uses `bangumi@14`; selected-family registration uses `cross-media-entities@11+bangumi@14`.
+Ordinary conversion uses `bangumi@13`; selected-family registration uses `cross-media-entities@12+bangumi@13`.
 
 The pinned `{{Infobox Game` grammar is distinct from TVAnime. Type 4 remains
 `schema:VideoGame`; admitted values become cited `schema:name` or
@@ -1606,6 +1643,7 @@ and cover rights keep their existing owners.
 
 Decision: Game-template `平台` and `游戏引擎` bind through current reviewed Concept reads keyed by the released property plus the exact source item; no infobox-field scheme URI is minted. Engine items with version, platform or edition text are withheld whole because `wdt:P408` admits no qualifiers. Platform language is preserved only as `schema:inLanguage` when the labelled source tag is an admitted BCP 47 tag.
 Decision: current `bangumi@14` includes Game environment, names, player count and source genres, TVAnime work evidence and book grain; selected envelopes use `cross-media-entities@11+bangumi@14`.
+Decision: current `bangumi@13` includes Game environment, names and player count, TVAnime work evidence and book grain; selected envelopes use `cross-media-entities@12+bangumi@13`.
 
 A selected type-4 Game keeps top-level `subject.platform` as the profile selector. Infobox platform and engine items become `schema:gamePlatform` and `wdt:P408` on that VideoGame after an independent current read of each configured Concept. Missing, concealed and wrong-source bindings remain distinct and withhold only the affected occurrence. Identity and sealed retry custody stay on the existing source fence. Names, dates, player count, staff, genre and websites retain their owners.
 
