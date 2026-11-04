@@ -1,43 +1,55 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/content/feed-contract.ts",
-    "services/kernel/src/content/feed-reactions.ts",
-    "services/kernel/src/content/feed-subject-reactions.ts",
-    "services/kernel/src/content/feed-subject-reactions.sql",
-    "services/kernel/src/content/feed.ts",
-    "services/kernel/src/content/reads.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/feed-subject-reactions.test.ts",
-    "services/kernel/test/content/feed-subject-reactions-growth.test.ts",
-    "services/kernel/test/content/feed-contract.test.ts",
-    "docs/feeds.md",
-    "apps/web/src/features/feed/home-feed-reaction.ts",
-    "apps/web/src/features/feed/home-feed-item.tsx",
-    "apps/web/src/features/feed/action-bar.tsx",
-    "apps/web/src/features/feed/README.md",
-    "apps/web/tests/home-native-reactions.test.tsx",
-    "apps/web/tests/home-subject-reactions.test.tsx",
-    "apps/web/src/stories/home-subject-reactions.stories.tsx"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "command": ["bun", "run", "--cwd", "services/kernel", "check", "test/content/feed-subject-reactions.test.ts", "test/content/feed-subject-reactions-growth.test.ts"],
-    "placement": "default",
-    "tests": [
-      "Home Subject cards disclose current native enjoyment counts, viewer selection and action advice in the bounded feed response and react through the existing Subject command engine.",
-      "Anonymous, zero, unavailable, concealed, redirected, account-switch and uncertain-write states preserve native meaning, source retirement and exact retry without per-card hydration.",
-      "Fixed selected targets and homes retain derived physical-work and byte bounds at independent 256/1024/4096 growth."
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/content/feed-contract.ts',
+      'services/kernel/src/content/feed-reactions.ts',
+      'services/kernel/src/content/feed-subject-reactions.ts',
+      'services/kernel/src/content/feed-subject-reactions.sql',
+      'services/kernel/src/content/feed.ts',
+      'services/kernel/src/content/reads.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/feed-subject-reactions.test.ts',
+      'services/kernel/test/content/feed-subject-reactions-growth.test.ts',
+      'services/kernel/test/content/feed-contract.test.ts',
+      'docs/feeds.md',
+      'apps/web/src/features/feed/home-feed-reaction.ts',
+      'apps/web/src/features/feed/home-feed-item.tsx',
+      'apps/web/src/features/feed/action-bar.tsx',
+      'apps/web/src/features/feed/README.md',
+      'apps/web/tests/home-native-reactions.test.tsx',
+      'apps/web/tests/home-subject-reactions.test.tsx',
+      'apps/web/src/stories/home-subject-reactions.stories.tsx',
     ],
-    "failing": true
-  },
-  "estimate": {"lines": 2400, "files": 18}
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'run',
+          '--cwd',
+          'services/kernel',
+          'check',
+          'test/content/feed-subject-reactions.test.ts',
+          'test/content/feed-subject-reactions-growth.test.ts',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'Home Subject cards disclose current native enjoyment counts, viewer selection and action advice in the bounded feed response and react through the existing Subject command engine.',
+          'Anonymous, zero, unavailable, concealed, redirected, account-switch and uncertain-write states preserve native meaning, source retirement and exact retry without per-card hydration.',
+          'Fixed selected targets and homes retain derived physical-work and byte bounds at independent 256/1024/4096 growth.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 2400, 'files': 18 },
 }
 ---
 

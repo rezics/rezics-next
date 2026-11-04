@@ -1,46 +1,59 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/content/feed-contract.ts",
-    "services/kernel/src/content/feed.ts",
-    "services/kernel/src/content/feed-conversation-activity.ts",
-    "services/kernel/src/content/subject-threads.ts",
-    "services/kernel/src/content/subject-threads-conversation-activity.ts",
-    "services/kernel/src/content/model.ts",
-    "services/kernel/src/content/schemas.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/feed-conversation-activity.test.ts",
-    "services/kernel/test/content/subject-threads-conversation-activity.test.ts",
-    "services/kernel/test/content/conversation-card-growth.test.ts",
-    "services/kernel/test/content/feed-contract.test.ts",
-    "docs/feeds.md",
-    "apps/web/src/features/feed/home-feed-item.tsx",
-    "apps/web/src/features/feed/README.md",
-    "apps/web/src/features/pages/subject-community.ts",
-    "apps/web/src/features/pages/subject-community-view.tsx",
-    "apps/web/src/threads/activity.ts",
-    "apps/web/tests/home-conversation-activity.test.tsx",
-    "apps/web/tests/subject-community-activity.test.tsx",
-    "apps/web/src/stories/conversation-activity.stories.tsx"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "command": ["bun", "run", "--cwd", "services/kernel", "check", "test/content/feed-conversation-activity.test.ts", "test/content/subject-threads-conversation-activity.test.ts", "test/content/conversation-card-growth.test.ts"],
-    "placement": "default",
-    "tests": [
-      "Home and Subject discussion/review cards receive current admitted reply-count and real last-contribution meaning in their existing bounded page response and open the exact conversation.",
-      "Exact zero, lower-bound and withheld activity remain distinct through source, membership, account and cursor replacement, with same-input retry after dependency failure.",
-      "Consumer select/hydrate/confirm/final-disclosure composition retains derived physical-work and byte bounds at independent 256/1024/4096 growth."
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/content/feed-contract.ts',
+      'services/kernel/src/content/feed.ts',
+      'services/kernel/src/content/feed-conversation-activity.ts',
+      'services/kernel/src/content/subject-threads.ts',
+      'services/kernel/src/content/subject-threads-conversation-activity.ts',
+      'services/kernel/src/content/model.ts',
+      'services/kernel/src/content/schemas.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/feed-conversation-activity.test.ts',
+      'services/kernel/test/content/subject-threads-conversation-activity.test.ts',
+      'services/kernel/test/content/conversation-card-growth.test.ts',
+      'services/kernel/test/content/feed-contract.test.ts',
+      'docs/feeds.md',
+      'apps/web/src/features/feed/home-feed-item.tsx',
+      'apps/web/src/features/feed/README.md',
+      'apps/web/src/features/pages/subject-community.ts',
+      'apps/web/src/features/pages/subject-community-view.tsx',
+      'apps/web/src/threads/activity.ts',
+      'apps/web/tests/home-conversation-activity.test.tsx',
+      'apps/web/tests/subject-community-activity.test.tsx',
+      'apps/web/src/stories/conversation-activity.stories.tsx',
     ],
-    "failing": true
-  },
-  "estimate": {"lines": 2500, "files": 21}
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'run',
+          '--cwd',
+          'services/kernel',
+          'check',
+          'test/content/feed-conversation-activity.test.ts',
+          'test/content/subject-threads-conversation-activity.test.ts',
+          'test/content/conversation-card-growth.test.ts',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'Home and Subject discussion/review cards receive current admitted reply-count and real last-contribution meaning in their existing bounded page response and open the exact conversation.',
+          'Exact zero, lower-bound and withheld activity remain distinct through source, membership, account and cursor replacement, with same-input retry after dependency failure.',
+          'Consumer select/hydrate/confirm/final-disclosure composition retains derived physical-work and byte bounds at independent 256/1024/4096 growth.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 2500, 'files': 21 },
 }
 ---
 
