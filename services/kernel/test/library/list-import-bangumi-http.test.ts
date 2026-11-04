@@ -35,7 +35,12 @@ async function preview(records: unknown[]) {
 async function review(id: string, ordinal: number, target?: string) {
   return (await ok(await send('POST', `/${id}:review`, { ordinal, ...(target ? { target } : {}) }))).review;
 }
-const choice = (ordinal: number, r: { token: string }, state = 'preserve', skip = false) => ({
+const choice = (
+  ordinal: number,
+  r: { token: string },
+  state: 'omit' | 'preserve' | 'replace' = 'preserve',
+  skip = false,
+) => ({
   ordinal,
   reviewToken: r.token,
   state,
