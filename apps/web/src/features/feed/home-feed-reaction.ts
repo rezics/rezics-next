@@ -52,6 +52,7 @@ function subjectReaction(item: FeedItem, projection: unknown, input: { signedIn:
     sourceWatermark: countState.asOf as FeedReaction['sourceWatermark'],
     settleWithRead: true,
     subjectCollapse: null,
+    inlineKinds: true,
     optimistic: false,
   };
 }

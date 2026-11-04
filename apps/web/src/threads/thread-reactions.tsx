@@ -96,6 +96,8 @@ export type ThreadReactionsProps = {
   presentation?: 'chips' | 'vote' | 'vote-plain';
   /** Override the Subject phone picker collapse; null keeps every admitted kind in the row. */
   subjectCollapse?: number | null;
+  /** Home exposes every admitted Subject kind inline, including kinds with known zero counts. */
+  inlineKinds?: boolean;
   /** Feed callers reconcile one successful explicit write with the existing bounded point reader. */
   settleWithRead?: boolean;
   /** Keep the aggregate projection unchanged until its authoritative point read settles. */
@@ -231,6 +233,7 @@ function ReactionCaller({
   isDesired,
   presentation,
   subjectCollapse,
+  inlineKinds,
   settleWithRead,
   optimistic = true,
   locale,
@@ -510,6 +513,7 @@ function ReactionCaller({
           ? {
               kinds: subjectReactionKinds,
               ...(subjectCollapse === null ? {} : { collapse: subjectCollapse ?? 2 }),
+              ...(inlineKinds ? { inlineKinds: true } : {}),
             }
           : {})}
         labels={reactionLabels(failed)}

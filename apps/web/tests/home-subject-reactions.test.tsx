@@ -175,7 +175,7 @@ test('Home renders five admitted Subject kinds, clears deliberately, and waits f
   const row = item(mountedProjection('love'));
   await paint(row);
 
-  expect(host.querySelectorAll('[data-slot="reactions"] button')).toHaveLength(5);
+  expect(host.querySelectorAll('[data-slot="reaction-chip"]')).toHaveLength(5);
   expect(reactionButton('love')?.getAttribute('aria-pressed')).toBe('true');
   expect(reactionButton('laugh')?.textContent).toContain('0');
   await click(reactionButton('love')!);
@@ -216,9 +216,11 @@ test('anonymous Home Subject reactions return to the card, and unknown coverage 
     false,
   );
   const expected = `/${'en'}/auth/sign-in?return_to=${encodeURIComponent(homeFeedDestination(original, 'en'))}`;
-  expect(host.querySelectorAll('[data-slot="reactions"] a')).toHaveLength(5);
+  expect(host.querySelectorAll('[data-slot="reaction-chip"][href]')).toHaveLength(5);
   expect(
-    [...host.querySelectorAll<HTMLAnchorElement>('[data-slot="reactions"] a')].every((link) => link.href === expected),
+    [...host.querySelectorAll<HTMLAnchorElement>('[data-slot="reaction-chip"][href]')].every(
+      (link) => link.href === expected,
+    ),
   ).toBe(true);
 
   let retries = 0;
@@ -266,8 +268,10 @@ test('an uncertain Home write retries the immutable original intent and retires 
   expect(writes[1]?.headers['Idempotency-Key']).toBe(originalWrite.headers['Idempotency-Key']);
   expect(reactionButton('love')?.textContent).toContain('2');
 
-  client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-two', csrfToken: 'csrf-two' });
-  await act(tick);
+  await act(async () => {
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-two', csrfToken: 'csrf-two' });
+    await tick();
+  });
   pointRead.resolve({
     ok: true,
     counts: { like: 3, love: 3 },
