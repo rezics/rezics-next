@@ -350,7 +350,7 @@ test('one exact inspection keeps value provenance and grouped evidence while con
     item.readability = 'unreadable';
   });
   const unreadableMarkup = renderToStaticMarkup(createElement(CatalogueFileReader, { visit: historical }));
-  expect(unreadableMarkup).toContain('unreadable');
+  expect(unreadableMarkup).toContain('The linked work cannot currently be read.');
   const emptyRead = structuredClone(result.public);
   emptyRead.subject.statements = {};
   emptyRead.subject.sourceRecords = [];
