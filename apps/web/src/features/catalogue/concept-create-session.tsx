@@ -83,13 +83,31 @@ function ConceptCreateSessionLive({
   const titleId = useId();
   const o = { locale: locale as never };
   const host = useCreationHost<ConceptCreateFact, ReturnType<typeof conceptCreateHolders>>({
-    initial, locale, scope: 'concept-create', types: conceptCreateTypes,
-    load: () => loadConceptCreate({ data: true }), failure: <p>{m.concept_create_unavailable({}, { locale: locale as never })}</p>,
+    initial,
+    locale,
+    scope: 'concept-create',
+    types: conceptCreateTypes,
+    load: () => loadConceptCreate({ data: true }),
+    failure: <p>{m.concept_create_unavailable({}, { locale: locale as never })}</p>,
     admit: (entry) => !handoff || classificationTargetAdmitted(entry.id, entry.bases ?? [], handoff.targets),
   });
-  const { work, reading, currentRead, release, pending, factsByType, setFactsByType,
-    prepared, retainedTypes, activeTypes, types, metadata, metadataRevision, activeTypeIds,
-    refreshMetadata } = host;
+  const {
+    work,
+    reading,
+    currentRead,
+    release,
+    pending,
+    factsByType,
+    setFactsByType,
+    prepared,
+    retainedTypes,
+    activeTypes,
+    types,
+    metadata,
+    metadataRevision,
+    activeTypeIds,
+    refreshMetadata,
+  } = host;
 
   useEffect(() => {
     if (!token) {
@@ -214,7 +232,7 @@ function ConceptCreateSessionLive({
             refreshMetadata,
             retainTypeDrafts: true,
             identitySearch: true,
-            releaseDigest: reading.ok ? reading.digest : currentRead?.digest,
+            releaseDigest: metadataRevision,
             initialLanguage: '',
             reviewRevision: host.reviewRevision,
             onTypeDraftChange: host.onTypeDraftChange,

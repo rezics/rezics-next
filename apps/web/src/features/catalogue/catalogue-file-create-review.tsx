@@ -20,10 +20,23 @@ const actionClass =
 
 export function CatalogueFileStatementSummary(props: Parameters<typeof StatementSummary>[0]) {
   const o = { locale: props.locale as never };
-  const notice = catalogueFileCreateHashNotice(props.read.release, props.read.public.subject.type, props.statement.property.id);
-  return <StatementSummary {...props} notice={notice === 'hash'
-    ? <p className="text-sm text-muted-foreground">{m.catalogue_file_hash_statement({}, o)}</p>
-    : notice === 'codec' ? <p className="text-sm text-muted-foreground">{m.catalogue_file_unknown_codec({}, o)}</p> : null} />;
+  const notice = catalogueFileCreateHashNotice(
+    props.read.release,
+    props.read.public.subject.type,
+    props.statement.property.id,
+  );
+  return (
+    <StatementSummary
+      {...props}
+      notice={
+        notice === 'hash' ? (
+          <p className="text-sm text-muted-foreground">{m.catalogue_file_hash_statement({}, o)}</p>
+        ) : notice === 'codec' ? (
+          <p className="text-sm text-muted-foreground">{m.catalogue_file_unknown_codec({}, o)}</p>
+        ) : null
+      }
+    />
+  );
 }
 
 export function CatalogueFileCreateReview({
