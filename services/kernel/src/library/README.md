@@ -1749,12 +1749,24 @@ no subject details or browser per-row requests supply facts. Commerce rechecks i
 reads, then checks current original-to-terminal identity/epoch equality against both the returned native facts and
 summary. Changed identity or source fails closed. Denied/missing entries expose neither a subject nor sibling facts;
 only a complete visible no-facts result becomes `{}`. Neither permission nor source authority is cached.
-After the optional viewer-facts overlay, the Collection route performs a source-only reread of the exact admitted
+FULL authenticated member pages compose `ViewerPersonalActionsReader` (the mounted
+`readViewerPersonalActionsPage`) into `viewerFacts`. Each row retains its original `subjectId` and occurrence `id`
+as `rowKey` (the bounded page index for native rows without IDs). Resource type comes from a current native
+Subject summary for that exact original ID; missing evidence makes the page identity-unavailable. Duplicate raw
+occurrences remain separate and ordered. BASIC and anonymous pages omit the overlay.
+The closed wire schema `viewerPersonalActionsResponseSchema` retains Entry/vote/question facts and adds each row's
+`actions`: current `allowed: [{action, operations}]`, including `[]`, or unavailable with admission/currentness/dependency.
+Page unavailable reasons remain identity/currentness/response_limit with retryable. The retained callable enforces
+100 raw rows, 16,384 encoded input bytes before deduplication and 65,536 response bytes without truncation.
+Action advice grants no future command authority and is independent of curator controls.
+After all personal-action and Subject observation finalizations, the Collection route performs a source-only reread of the exact admitted
 branch and compares the ordered source page, including occurrence ID, subject, note, added time, ordering fields and
 original `next` cursor. FULL finalization calls `readMembers`, not `fullMembers`, so it does not repeat the shared
 Semantic fact producer. A hidden, removed or changed source returns its existing refusal (`not_found`, `forbidden`,
 or `stale_cursor`); a source branch that becomes unavailable returns the typed Semantic-unavailable problem. The
-optional viewer-facts unavailable value is preserved only when this final source read remains current.
+optional viewer-facts unavailable value is preserved only when this final source read remains current. A finite
+native source observation also compares visibility, curator, revision/generation and reader account lifetime after
+the final page read; logical built-ins retain their native source version. No home is held across foreign work.
 
 The existing `CollectionSource` work-context branch admits the native Members or Kind episode on the same live
 Core work-step client before Source I/O and rereads native admission and current Source/canonical keys before
