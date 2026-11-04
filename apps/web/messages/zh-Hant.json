@@ -9921,5 +9921,12 @@
   "music_release_current_release": "目前定義版本",
   "music_release_context": "選取的 Context",
   "music_release_rank": "原生等級",
-  "music_release_revision": "陳述修訂版本"
+  "music_release_revision": "陳述修訂版本",
+  "music_release_assertion_target": "陳述的值",
+  "music_release_destination": "已公開的前往目標",
+  "music_release_pending_request": "要求的視窗",
+  "music_release_retry_previous": "重試會重新讀取相同的先前視窗。",
+  "music_release_retry_next": "重試會要求相同的下一個視窗。",
+  "music_release_retry_start": "重試會要求所選關聯的第一個視窗。",
+  "music_release_retry_scope": "在其他要求成功之前，畫面會保留原本視窗的關聯與收錄項目。"
 }

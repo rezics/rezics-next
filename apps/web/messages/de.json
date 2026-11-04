@@ -9911,5 +9911,12 @@
   "music_release_current_release": "Aktuelle Definitionsversion",
   "music_release_context": "Ausgewählter Context",
   "music_release_rank": "Nativer Rang",
-  "music_release_revision": "Aussagenrevision"
+  "music_release_revision": "Aussagenrevision",
+  "music_release_assertion_target": "Ausgesagter Wert",
+  "music_release_destination": "Offengelegtes Ziel",
+  "music_release_pending_request": "Angefordertes Fenster",
+  "music_release_retry_previous": "Ein neuer Versuch liest genau das vorige Fenster erneut.",
+  "music_release_retry_next": "Ein neuer Versuch fordert genau das folgende Fenster an.",
+  "music_release_retry_start": "Ein neuer Versuch fordert das erste Fenster der gewählten Beziehung an.",
+  "music_release_retry_scope": "Das sichtbare Fenster behält seine Beziehung und Vorkommen, bis eine andere Anfrage erfolgreich ist."
 }

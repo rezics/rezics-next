@@ -9911,5 +9911,12 @@
   "music_release_current_release": "현재 정의 릴리스",
   "music_release_context": "선택한 Context",
   "music_release_rank": "원래 순위",
-  "music_release_revision": "진술 개정 번호"
+  "music_release_revision": "진술 개정 번호",
+  "music_release_assertion_target": "진술 값",
+  "music_release_destination": "공개된 이동 대상",
+  "music_release_pending_request": "요청한 창",
+  "music_release_retry_previous": "재시도하면 같은 이전 창을 다시 읽습니다.",
+  "music_release_retry_next": "재시도하면 같은 다음 창을 요청합니다.",
+  "music_release_retry_start": "재시도하면 선택한 관계의 첫 창을 요청합니다.",
+  "music_release_retry_scope": "다른 요청이 성공할 때까지 원래 창의 관계와 수록 항목을 유지합니다."
 }
