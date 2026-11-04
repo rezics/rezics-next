@@ -628,7 +628,7 @@ export class ShelfPreferenceDraftRecovery {
         Object.keys(shelf.layouts).length > maxLayouts ||
         Object.values(merged).filter((value) => value !== null).length > maxLayouts
       ) {
-        this.update({ phase: 'failed', reason: 'write:invalid' });
+        this.update({ phase: 'failed', writeResponse: shelfResponse('write:invalid') });
         return;
       }
     }
