@@ -93,3 +93,28 @@ Selected workbench retry stays inside its admitted private reader and preserves 
 selected appeal and captured cursor. Keyboard recovery returns to the retry control or workbench boundary unless
 focus moved or the owner retired. Selected resolution reports pending and uncertain intent synchronously to the
 workbench, which blocks refresh until settlement; explicit unknown retry keeps the original command.
+
+## Own reporter inventory consumer seam
+
+`reporter-history/model.ts`, `read.ts` and `server.ts` implement the named minimal local consumer seam
+`report.own_history` against mounted `GET /v1/reports/me`. This is a public wire validator, not installed generated
+client typing. The server prepares the current session once and accepts only cursor and exact report selection;
+there is no browser account selector. A response must carry an opaque native session header, hashed independently
+of the prepared reader origin. Closed viewer/action advice, exact safe native destinations, selection and original
+retry frontier are checked before rows are retained. Concealed targets remain independent from readable reports.
+Preparing, denial, cursor expiry and dependency failure remain distinct from an empty ready page.
+
+Decision: while shared declarations are pending, use an explicit public-wire own-history seam and keep a missing
+configured native origin unavailable, including development; never present fixture data as a delivered inventory.
+
+### Cost: own-history consumer read
+
+- Touches: one session preparation and one mounted own-history GET; one response validation and source hash.
+- Bound: one page with at most twenty ordinary rows and one exact selected row; no target or identity hydration,
+  page search, total calculation or row accumulation. The wire validator does not establish a native materialization
+  or serialization byte bound.
+- Growth check: focused consumer cases pin exact endpoint/operands, sparse and preparing results, selection,
+  private projection and safe advice. Native independent-population growth remains controller/producer work.
+
+The localized route, private visit owner, account navigation and story states remain in the continuation brief;
+this seam alone is not a served history page. Installed declaration head and native execution remain unverified.
