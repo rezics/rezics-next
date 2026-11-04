@@ -52,8 +52,9 @@ function tables(infobox: string): CrossMediaTables {
 }
 
 function playerStatement(read: unknown) {
-  const subject = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown }; qualifiers?: unknown }[]> } })
-    .subject;
+  const subject = (
+    read as { subject?: { statements?: Record<string, { value?: { content?: unknown }; qualifiers?: unknown }[]> } }
+  ).subject;
   return subject?.statements?.['schema:numberOfPlayers']?.[0];
 }
 
@@ -144,14 +145,18 @@ test('selected Game player-count range is independently adopted and current, and
       }),
     );
     expect(playerStatement(await publicClient.readSubject(first.id))).toBeUndefined();
-    expect((await publishShowcase({
-      plan: corrected.plan,
-      result: corrected.result,
-      aliases: crossMediaAliases,
-      journal,
-      review: runtime.importTransport,
-      publicClient,
-    })).status).toBe('incomplete');
+    expect(
+      (
+        await publishShowcase({
+          plan: corrected.plan,
+          result: corrected.result,
+          aliases: crossMediaAliases,
+          journal,
+          review: runtime.importTransport,
+          publicClient,
+        })
+      ).status,
+    ).toBe('incomplete');
     const acknowledged = selectedPlayerCommands(journal);
     expect(acknowledged).toHaveLength(1);
     journal.close();

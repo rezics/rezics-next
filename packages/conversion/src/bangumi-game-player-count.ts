@@ -6,8 +6,7 @@ const fieldLimit = 64;
 const diagnosticLimit = 16;
 const occurrenceLimit = 8;
 const horizontalSpace = /^[\t ]+|[\t ]+$/gu;
-const countGrammar =
-  /^([1-9][0-9]{0,15})(?:[\t ]*人)?(?:[\t ]*[-~～〜–—－][\t ]*([1-9][0-9]{0,15})(?:[\t ]*人)?)?$/u;
+const countGrammar = /^([1-9][0-9]{0,15})(?:[\t ]*人)?(?:[\t ]*[-~～〜–—－][\t ]*([1-9][0-9]{0,15})(?:[\t ]*人)?)?$/u;
 
 export type GamePlayerCountQualifier = {
   readonly property: { readonly id: 'schema:minValue' };
@@ -125,8 +124,7 @@ export function bangumiGamePlayerCount(record: {
   readonly type: number;
   readonly infobox?: string;
 }): GamePlayerCountMapping {
-  if (record.type !== 4 || record.infobox === undefined)
-    return { handledInfobox: false, facts: [], diagnostics: [] };
+  if (record.type !== 4 || record.infobox === undefined) return { handledInfobox: false, facts: [], diagnostics: [] };
   let header: string | undefined;
   for (const raw of record.infobox.split('\n')) {
     const line = (raw.endsWith('\r') ? raw.slice(0, -1) : raw).replace(horizontalSpace, '');

@@ -14,7 +14,8 @@ import type { SourceRegistration } from '../src/import-contract.ts';
 
 const gameId = 91041;
 const rangeInfobox = '{{Infobox Game\n|中文名=发条观测\n|游玩人数=1-4人\n|website=https://example.invalid/game\n}}';
-const modeInfobox = '{{Infobox Game\n|中文名=发条观测\n|游玩人数=1人（在线2-4人）\n|website=https://example.invalid/game\n}}';
+const modeInfobox =
+  '{{Infobox Game\n|中文名=发条观测\n|游玩人数=1人（在线2-4人）\n|website=https://example.invalid/game\n}}';
 
 function record(infobox: string) {
   return { id: gameId, type: 4, name: 'Clockwork Watch', name_cn: '发条观测', infobox };
@@ -121,9 +122,9 @@ test('ordinary and selected-family Game callers propose a stated range, withhold
       ]),
     );
     expect(JSON.stringify(mode.diagnostics)).not.toContain('在线');
-    expect(mode.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:name')).toBe(
-      true,
-    );
+    expect(
+      mode.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:name'),
+    ).toBe(true);
 
     expect((await importer.runDump(current, bytes(dump(rangeInfobox)))).status).toBe('committed');
     expect(api.subjects.get(String(gameId))).toBe(id);
@@ -142,11 +143,18 @@ test('ordinary and selected-family Game callers propose a stated range, withhold
         ],
         references: [
           {
-            parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/91041' } }],
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/91041' } },
+            ],
           },
         ],
       },
-      source: { source: 'bangumi', external_id: '91041', record_revision: 'unversioned', converter_revision: 'bangumi@9' },
+      source: {
+        source: 'bangumi',
+        external_id: '91041',
+        record_revision: 'unversioned',
+        converter_revision: 'bangumi@9',
+      },
     });
     expect(JSON.stringify(proposed[0]!.statement.value)).not.toContain('lowerBound');
     expect(commands.filter((command) => command.op === 'create')).toHaveLength(created);
@@ -170,9 +178,7 @@ test('ordinary and selected-family Game callers propose a stated range, withhold
     expect(familyCount).toMatchObject({
       statement: {
         value: { content: { amount: '+4', unit: '1' } },
-        qualifiers: [
-          { property: { id: 'schema:minValue' }, value: { content: { amount: '+1', unit: '1' } } },
-        ],
+        qualifiers: [{ property: { id: 'schema:minValue' }, value: { content: { amount: '+1', unit: '1' } } }],
       },
       source: { source: crossMediaAliases.bangumi, converter_revision: entityRevision },
     });
