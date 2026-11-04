@@ -194,14 +194,10 @@ test('explicit Subject Board entry requires the exact current Subject, place and
     expect(concealed.body.entry).not.toHaveProperty('board');
     expect(concealed.body.threads).toEqual(plain.body.threads);
   }
-  const wrongPurpose = await get(
-    path(subjectId, { place: GLOBAL_CONTEXT, kind: 'review', board: boardId }),
-  );
+  const wrongPurpose = await get(path(subjectId, { place: GLOBAL_CONTEXT, kind: 'review', board: boardId }));
   expect(wrongPurpose.body.entry).toMatchObject({ state: 'concealed' });
   await invalid(path(subjectId, { ...query, board: 'not-a-content-id' }));
-  await invalid(
-    path(subjectId, { ...query, cursor: plain.body.next, board: boardId }),
-  );
+  await invalid(path(subjectId, { ...query, cursor: plain.body.next, board: boardId }));
 });
 
 test('subject thread pages sort by activity, bind signed cursors, and skip hidden or out-of-place candidates', async () => {

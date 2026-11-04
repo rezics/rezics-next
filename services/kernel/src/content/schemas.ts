@@ -30,6 +30,7 @@ import { RealmPresentationImageSchema } from './realm-media.ts';
 import { FeedAuthorSchema } from './feed-contract.ts';
 import { FeedParentContextSchema } from './feed-context-schema.ts';
 import type { SubjectThreadCard, SubjectThreadCardEntry } from './subject-threads-cards.ts';
+import type { SubjectThreadEntry } from './subject-entry.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
@@ -1282,26 +1283,43 @@ const SubjectThreadEntrySchema = t.Unsafe<SubjectThreadCardEntry>(
 );
 export const SubjectThreadsResponseSchema = t.Object(
   {
-    entry: t.Union([
-      t.Object(
-        {
-          state: t.Literal('not_selected'),
-          request: t.Object(
+    entry: t.Unsafe<SubjectThreadEntry>(
+      t.Union([
+        t.Object(
+          {
+            state: t.Literal('not_selected'),
+            request: t.Object(
+              {
+                subjectId: ContentIdSchema,
+                placeId: ContentIdSchema,
+                kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                selectedBoardId: t.Optional(ContentIdSchema),
+              },
+              closed,
+            ),
+          },
+          closed,
+        ),
+        ...(['concealed', 'unavailable'] as const).map((state) =>
+          t.Object(
             {
-              subjectId: ContentIdSchema,
-              placeId: ContentIdSchema,
-              kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-              selectedBoardId: t.Optional(ContentIdSchema),
+              state: t.Literal(state),
+              request: t.Object(
+                {
+                  subjectId: ContentIdSchema,
+                  placeId: ContentIdSchema,
+                  kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                  selectedBoardId: ContentIdSchema,
+                },
+                closed,
+              ),
             },
             closed,
           ),
-        },
-        closed,
-      ),
-      ...(['concealed', 'unavailable'] as const).map((state) =>
+        ),
         t.Object(
           {
-            state: t.Literal(state),
+            state: t.Literal('current'),
             request: t.Object(
               {
                 subjectId: ContentIdSchema,
@@ -1311,72 +1329,34 @@ export const SubjectThreadsResponseSchema = t.Object(
               },
               closed,
             ),
-          },
-          closed,
-        ),
-      ),
-      t.Object(
-        {
-          state: t.Literal('current'),
-          request: t.Object(
-            {
-              subjectId: ContentIdSchema,
-              placeId: ContentIdSchema,
-              kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-              selectedBoardId: ContentIdSchema,
-            },
-            closed,
-          ),
-          board: BoardViewSchema,
-          actions: t.Object({ createThread: boardAdvice }, closed),
-          observations: t.Object(
-            {
-              subject: t.Object(
-                {
-                  partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                  epoch: t.Integer({ minimum: 1 }),
-                  position: t.String({ pattern: '^[0-9]+$' }),
-                },
-                closed,
-              ),
-              place: t.Union([
-                t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
-                t.Object(
+            board: BoardViewSchema,
+            actions: t.Object({ createThread: boardAdvice }, closed),
+            observations: t.Object(
+              {
+                subject: t.Object(
                   {
-                    kind: t.Literal('realm'),
-                    id: ContentIdSchema,
-                    title: t.String(),
-                    spaceId: ContentIdSchema,
-                    headRevisionId: ContentIdSchema,
+                    partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                    epoch: t.Integer({ minimum: 1 }),
+                    position: t.String({ pattern: '^[0-9]+$' }),
                   },
                   closed,
                 ),
-              ]),
-              board: t.Object(
-                {
-                  initial: t.Object(
+                place: t.Union([
+                  t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
+                  t.Object(
                     {
-                      partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                      epoch: t.Integer({ minimum: 1 }),
-                      position: t.String({ pattern: '^[0-9]+$' }),
+                      kind: t.Literal('realm'),
+                      id: ContentIdSchema,
+                      title: t.String(),
+                      spaceId: ContentIdSchema,
+                      headRevisionId: ContentIdSchema,
                     },
                     closed,
                   ),
-                  final: t.Object(
-                    {
-                      partition: t.Integer({ minimum: 0, maximum: 4095 }),
-                      epoch: t.Integer({ minimum: 1 }),
-                      position: t.String({ pattern: '^[0-9]+$' }),
-                    },
-                    closed,
-                  ),
-                },
-                closed,
-              ),
-              access: t.Object(
-                {
-                  initial: t.Array(
-                    t.Object(
+                ]),
+                board: t.Object(
+                  {
+                    initial: t.Object(
                       {
                         partition: t.Integer({ minimum: 0, maximum: 4095 }),
                         epoch: t.Integer({ minimum: 1 }),
@@ -1384,10 +1364,7 @@ export const SubjectThreadsResponseSchema = t.Object(
                       },
                       closed,
                     ),
-                    { maxItems: 1 },
-                  ),
-                  final: t.Array(
-                    t.Object(
+                    final: t.Object(
                       {
                         partition: t.Integer({ minimum: 0, maximum: 4095 }),
                         epoch: t.Integer({ minimum: 1 }),
@@ -1395,18 +1372,44 @@ export const SubjectThreadsResponseSchema = t.Object(
                       },
                       closed,
                     ),
-                    { maxItems: 1 },
-                  ),
-                },
-                closed,
-              ),
-            },
-            closed,
-          ),
-        },
-        closed,
-      ),
-    ]),
+                  },
+                  closed,
+                ),
+                access: t.Object(
+                  {
+                    initial: t.Array(
+                      t.Object(
+                        {
+                          partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                          epoch: t.Integer({ minimum: 1 }),
+                          position: t.String({ pattern: '^[0-9]+$' }),
+                        },
+                        closed,
+                      ),
+                      { maxItems: 1 },
+                    ),
+                    final: t.Array(
+                      t.Object(
+                        {
+                          partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                          epoch: t.Integer({ minimum: 1 }),
+                          position: t.String({ pattern: '^[0-9]+$' }),
+                        },
+                        closed,
+                      ),
+                      { maxItems: 1 },
+                    ),
+                  },
+                  closed,
+                ),
+              },
+              closed,
+            ),
+          },
+          closed,
+        ),
+      ]),
+    ),
     threads: t.Array(SubjectThreadEntrySchema, { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
     reactionsAsOf: reactionFreshness,
