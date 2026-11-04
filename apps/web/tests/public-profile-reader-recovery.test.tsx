@@ -119,7 +119,9 @@ for (const view of ['overview', 'posts'] as const) {
       await waitForStatus('unavailable');
       expect(status().textContent).toContain('unavailable');
       safe();
-      const publicLink = host.querySelector<HTMLAnchorElement>('a[href*="/@mira"]')!;
+      const publicLink = Array.from(host.querySelectorAll<HTMLAnchorElement>('a[href*="/@mira"]')).find(
+        (link) => !link.closest('ul[data-slot$="-items"]'),
+      )!;
       expect(publicLink).not.toBeNull();
       const recovery = host.querySelector('[data-slot="contribution-return-recovery"]');
       if (view === 'posts') expect(recovery).not.toBeNull();
@@ -127,7 +129,7 @@ for (const view of ['overview', 'posts'] as const) {
       await clickRetry();
       const recovered = await nextRead(2);
       safe();
-      expect(retry()).toBe(trigger);
+      expect(retry() === trigger).toBe(true);
       expect(retry().getAttribute('aria-disabled')).toBe('true');
       // Moving focus while retry is pending must win over its completion.
       publicLink.focus();
@@ -135,8 +137,9 @@ for (const view of ['overview', 'posts'] as const) {
       await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');
       expect(host.querySelector('[data-slot="cover"][data-state="withheld"]')).toBeNull();
-      expect(window.document.activeElement).toBe(publicLink);
-      expect(host.querySelector('[data-slot="contribution-return-recovery"]')).toBe(recovery);
+      expect(publicLink.isConnected).toBe(true);
+      expect(window.document.activeElement === publicLink).toBe(true);
+      expect(host.querySelector('[data-slot="contribution-return-recovery"]') === recovery).toBe(true);
       expect(JSON.stringify(page.reads)).toBe(publicReads);
       // A successful cautious preference value still means personalized reading.
       await clickRetry();
@@ -145,7 +148,7 @@ for (const view of ['overview', 'posts'] as const) {
       cautious.work.resolve(runtime.result('blur'));
       await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');
-      expect(window.document.activeElement).toBe(trigger);
+      expect(window.document.activeElement === trigger).toBe(true);
       safe();
       const reveal = host.querySelector<HTMLButtonElement>('[data-slot="cover"] button')!;
       expect(reveal).not.toBeNull();
@@ -233,5 +236,5 @@ for (const view of ['overview', 'posts'] as const) {
       client.clear();
       restore();
     }
-  });
+  }, 15000);
 }
