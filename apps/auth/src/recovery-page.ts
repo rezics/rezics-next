@@ -12,7 +12,6 @@ export type RecoveryPage = {
   actions: { start: boolean; complete: boolean; authenticate: boolean };
 };
 export type RecoveryPageResult = { kind: 'ready'; page: RecoveryPage } | { kind: 'unavailable' };
-const encoder = new TextEncoder();
 const maxResponseBytes = 4096;
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);

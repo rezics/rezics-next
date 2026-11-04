@@ -328,6 +328,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
             id={emailId}
             name="email"
             type="email"
+            maxLength={page?.requirements.email_max_length}
             autoComplete="email"
             value={email}
             onChange={(event) => {

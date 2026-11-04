@@ -289,7 +289,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
         ) : null}
         <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
           <p>{m.auth_step_up_explanation()}</p>
-          <p>{m.auth_step_up_review_required()}</p>
+          {page?.continuation === 'authenticate-before-review' ? <p>{m.auth_step_up_review_required()}</p> : null}
           <Field data-invalid={Boolean(emailError)}>
             <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
             <Input
@@ -297,6 +297,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
               id={emailId}
               name="email"
               type="email"
+              maxLength={page?.requirements.email_max_length}
               autoComplete="username"
               value={email}
               onChange={(event) => {
