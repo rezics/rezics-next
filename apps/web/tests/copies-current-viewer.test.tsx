@@ -472,10 +472,13 @@ test('The actual Copies route retires retained private rows and editor state on 
     });
   const retainedSubmit = () => {
     const node = form();
-    const key = Object.getOwnPropertyNames(node).find((key) => key.startsWith('__reactProps$'))!;
+    const key = Object.getOwnPropertyNames(button(m.library_copy_save(), node)).find((key) =>
+      key.startsWith('__reactProps$'),
+    )!;
     const props = Reflect.get(node, key) as {
       onSubmit: (event: { preventDefault(): void }) => Promise<void>;
     };
+    expect(props.onSubmit).toBeFunction();
     return () => props.onSubmit({ preventDefault() {} });
   };
   const absent = (subject: string) => {
