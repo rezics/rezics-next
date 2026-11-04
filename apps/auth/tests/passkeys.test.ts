@@ -570,7 +570,7 @@ test(
           .getByRole('listitem');
         await row.waitFor({ state: 'visible' });
         await row.getByRole('button').click();
-        const alert = page.getByRole('alert');
+        const alert = page.getByRole('alert').filter({ hasText: message });
         await alert.waitFor({ state: 'visible' });
         expect(await alert.innerText()).toContain(message);
         expect(await row.count()).toBe(1);
@@ -665,7 +665,9 @@ test(
         if (path === '/security') await page.getByRole('heading', { name: 'Passkeys', exact: true }).waitFor();
         expect(await page.getByRole('button', { name: /passkey/i }).count(), path).toBe(0);
         expect(await page.getByRole('heading', { name: /passkeys/i }).count(), path).toBe(path === '/security' ? 1 : 0);
-        if (path !== '/security') expect(await page.getByText(/passkey/i).count(), path).toBe(0);
+        if (path === '/login')
+          await page.getByRole('status').filter({ hasText: /passkey/i }).waitFor();
+        if (path !== '/security') expect(await page.getByText(/passkey/i).count(), path).toBe(path === '/login' ? 1 : 0);
         if (path !== '/security') {
           expect(await page.locator('input[type=email]').getAttribute('autocomplete')).toBe('username');
           // The password form is the whole page.
