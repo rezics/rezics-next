@@ -72,7 +72,10 @@ export type ConceptRead =
       session?: string | undefined;
     };
 
-type Definitions = Pick<Release, 'types' | 'properties'> & { digest?: string; filters?: FilterRelease['filters'] };
+type Definitions = Pick<Release, 'types' | 'properties'> & {
+  digest?: string;
+  filters?: NonNullable<FilterRelease['filters']>;
+};
 
 export function conceptWorksAdmission(release: Definitions, current: boolean): ConceptWorksAdmission {
   if (!current) return { state: 'unsupported', types: [], properties: [], metadata: null };

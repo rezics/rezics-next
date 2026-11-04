@@ -725,7 +725,7 @@ export function SubjectPage({
   const afterHeader = overview ? (
     <>
       {bar}
-      {read && page.catalogue?.state === 'released' && (
+      {read && page.catalogue?.state === 'released' && page.catalogue.definitions && (
         <SubjectConceptTags
           subject={read.subject}
           related={read.related}

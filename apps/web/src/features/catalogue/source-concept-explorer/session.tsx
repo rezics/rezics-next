@@ -20,8 +20,8 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   role?: string | undefined;
   returnTo?: string | undefined;
   pinUnsupported?: boolean | undefined;
-  worksRoute?: ConceptWorksRouteState;
-  onWorksChange?: (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void;
+  worksRoute?: ConceptWorksRouteState | undefined;
+  onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
 }) {
   const work = useCatalogueLifetime(JSON.stringify(['concept-explore', id, locale, role]));
   const { state } = useSession();

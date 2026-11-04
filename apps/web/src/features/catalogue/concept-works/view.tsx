@@ -26,28 +26,30 @@ import { readPublicConceptWorks } from './actions';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
 
 export type ConceptWorksRouteState = {
-  role?: string;
-  returnTo?: string;
-  property?: string;
-  scheme?: string;
-  type?: string;
-  includeChildren?: boolean;
-  spoilerThreshold?: 0 | 1 | 2;
-  conditionText?: string;
-  tagQualifiersText?: string;
-  cursor?: string;
-  invalid?: boolean;
+  role?: string | undefined;
+  returnTo?: string | undefined;
+  property?: string | undefined;
+  scheme?: string | undefined;
+  type?: string | undefined;
+  includeChildren?: boolean | undefined;
+  spoilerThreshold?: 0 | 1 | 2 | undefined;
+  conditionText?: string | undefined;
+  tagQualifiersText?: string | undefined;
+  cursor?: string | undefined;
+  invalid?: boolean | undefined;
 };
 
-export type ConceptWorksRoutePatch = Partial<
-  Pick<ConceptWorksRouteState, 'property' | 'scheme' | 'type' | 'includeChildren' | 'spoilerThreshold' | 'cursor' | 'tagQualifiersText'>
-> & { condition?: FilterDocument | undefined };
+export type ConceptWorksRoutePatch = {
+  [Key in 'property' | 'scheme' | 'type' | 'includeChildren' | 'spoilerThreshold' | 'cursor' | 'tagQualifiersText']?:
+    | ConceptWorksRouteState[Key]
+    | undefined;
+} & { condition?: FilterDocument | undefined };
 
 type Props = {
   read: Extract<ConceptRead, { ok: true }>;
   locale: string;
   route: ConceptWorksRouteState;
-  onChange?: (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void;
+  onChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
 };
 
 const loading: DiscoveryState = { status: 'loading' };
@@ -176,7 +178,7 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
   const partialEmpty =
     source.status === 'ready' && source.page.hits.length === 0 && !exactEmpty;
   const display: DiscoveryState = partialEmpty
-    ? { status: source.page.freshness.state === 'unavailable' ? 'unavailable' : 'preparing' }
+    ? { status: source.page.freshness?.state === 'unavailable' ? 'unavailable' : 'preparing' }
     : stalePublic;
   const page = source.status === 'ready' ? source.page : undefined;
   const noSelection = !request && !route.invalid;
@@ -301,7 +303,7 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
       ) : noSelection ? (
         <DiscoveryResults state={{ status: 'unsupported' }} locale={locale} />
       ) : (
-        <div ref={personal.regionRef} className="space-y-3" data-slot="concept-tagged-works-results">
+        <div ref={(element) => (personal.regionRef.current = element)} className="space-y-3" data-slot="concept-tagged-works-results">
           {continuationFailure && (
             <div role="alert" tabIndex={-1} className="space-y-2">
               <p>{m.concept_tagged_works_continuation_failed({}, options)}</p>
@@ -313,7 +315,7 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
           {partialEmpty && (
             <p role="status">{m.concept_tagged_works_lagging({}, options)}</p>
           )}
-          {source.status === 'ready' && source.page.hits.length > 0 && source.page.freshness.state !== 'current' && (
+          {source.status === 'ready' && source.page.hits.length > 0 && source.page.freshness?.state !== 'current' && (
             <p role="status">{m.concept_tagged_works_lagging({}, options)}</p>
           )}
           <DiscoveryResults
@@ -364,7 +366,7 @@ export function ConceptTaggedWorks(props: Props) {
   const search = useMemo<ConceptWorksSelection>(
     () => ({
       conceptId: props.read.public.subject.id,
-      ...(roleAvailable ? { property: role } : {}),
+      ...(roleAvailable && role ? { property: role } : {}),
       ...(scheme ? { scheme } : {}),
       ...(props.route.type ? { type: props.route.type } : {}),
       ...(props.route.includeChildren ? { includeChildren: true } : {}),
