@@ -287,8 +287,7 @@ membership command; that command still performs its own authorization and receip
 
 A signed-in response carries the native `viewer` fields: readability, exact current membership episode (or none),
 and participation. Its `actions` is the producer's current `enter`, `manage` and `leave` advice. `enter` names the
-mounted Realm GET. An owner member retains the specific `owner_invariant_observation_unavailable` leave advice
-until Accounts supplies its read-only last-holder seam. Anonymous readers retain `{state: 'anonymous'}` and
+mounted Realm GET. An owner member receives `unavailable: 'last_explicit_holder'` when no other explicit open-ended owner remains, or permitted `DELETE` advice otherwise. The read observation binds to the exact owner grant transaction, so replacing that grant retries even when the advice booleans stay equal. Anonymous readers retain `{state: 'anonymous'}` and
 `{state: 'sign-in'}`. Concealed home remains 404; failed dependencies retain their native problems. The original
 viewer observation is finished after presentation, shelves and ordinary context hydrate. Realm/Space binding,
 membership episode, participation or advice changes retry the exact original request; no refreshed boolean or
