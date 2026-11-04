@@ -142,6 +142,7 @@ test('a selected Context and exact dated Organization assertion survive target, 
     window.history.replaceState(window.history.state, '', via);
     await render('returned', structuredClone(organization), {});
     await act(async () => window.dispatchEvent(new window.PopStateEvent('popstate')));
+    console.log('organization-history-return-debug', window.location.href, organizationHistoryVisitReturn(window.location.hash), host.textContent);
     const returned = host.querySelector('[role="region"]')!;
     expect(returned.textContent).toContain(second.id);
     expect(window.document.activeElement).toBe(returned);
