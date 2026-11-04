@@ -37,7 +37,9 @@ function document() {
     },
   };
 }
-function fixture(options: { offered?: string[]; changed?: boolean; lose?: boolean; managementUnavailable?: boolean } = {}) {
+function fixture(
+  options: { offered?: string[]; changed?: boolean; lose?: boolean; managementUnavailable?: boolean } = {},
+) {
   const calls: { path: string; method: string; headers: Headers; body: unknown }[] = [];
   let offered = options.offered ?? ['open', 'close'];
   const current = {
@@ -56,7 +58,10 @@ function fixture(options: { offered?: string[]; changed?: boolean; lose?: boolea
       if (path === '/v1/platform/exposure/management')
         return options.managementUnavailable
           ? Response.json({ code: 'dependency_unavailable' }, { status: 503 })
-          : Response.json({ ...current, actions: { open: offered.includes('open'), close: offered.includes('close') } });
+          : Response.json({
+              ...current,
+              actions: { open: offered.includes('open'), close: offered.includes('close') },
+            });
       if (/^\/v1\/platform\/exposure\/collections:(open|close)$/.test(path)) {
         if (options.lose) throw new Error('lost response');
         return Response.json({
@@ -109,7 +114,9 @@ test('viewer-filtered operation declarations and visible groups cannot confer na
     current: { status: 'available', actions: { open: false, close: false } },
   });
   expect((await commandExposure(native.client, 'Bearer viewer', intent())).status).toBe('not-sent');
-  expect(native.calls.every((call) => ['/v1/openapi.json', '/v1/platform/exposure/management'].includes(call.path))).toBe(true);
+  expect(
+    native.calls.every((call) => ['/v1/openapi.json', '/v1/platform/exposure/management'].includes(call.path)),
+  ).toBe(true);
   const gateHolder = fixture({ offered: ['gate:any', 'gate:collections'] });
   expect((await commandExposure(gateHolder.client, 'Bearer viewer', intent())).status).toBe('not-sent');
   expect(gateHolder.calls.some((call) => call.path.endsWith(':open'))).toBe(false);

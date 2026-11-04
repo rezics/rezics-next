@@ -98,8 +98,16 @@ export const ManagementOnly: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(view.getByText(m.exposure_state_closed())).toBeVisible();
-    await expect(view.queryByRole('button', { name: m.exposure_action_group({ action: m.exposure_open(), group: 'collections' }) })).toBeNull();
-    await expect(view.queryByRole('button', { name: m.exposure_action_group({ action: m.exposure_close(), group: 'collections' }) })).toBeNull();
+    await expect(
+      view.queryByRole('button', {
+        name: m.exposure_action_group({ action: m.exposure_open(), group: 'collections' }),
+      }),
+    ).toBeNull();
+    await expect(
+      view.queryByRole('button', {
+        name: m.exposure_action_group({ action: m.exposure_close(), group: 'collections' }),
+      }),
+    ).toBeNull();
   },
 };
 

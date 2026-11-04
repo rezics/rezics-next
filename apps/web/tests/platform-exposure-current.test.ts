@@ -58,7 +58,10 @@ function fixture() {
       if (url.pathname === '/v1/platform/exposure/management')
         return managementStatus === 200
           ? Response.json(current)
-          : Response.json({ code: managementStatus === 400 ? 'invalid_cursor' : 'forbidden' }, { status: managementStatus });
+          : Response.json(
+              { code: managementStatus === 400 ? 'invalid_cursor' : 'forbidden' },
+              { status: managementStatus },
+            );
       if (url.pathname.endsWith(':open')) throw new Error('lost response');
       throw new Error(`Unexpected request: ${url.pathname}`);
     }) as typeof fetch,
@@ -206,26 +209,29 @@ test('production reader envelope binds the actual same prepared request and keep
       next: null,
     },
   };
-  const result = await readExposureBound({ limit: 1 }, {
-    prepare: async () => {
-      observed.prepared = request;
-      return request;
+  const result = await readExposureBound(
+    { limit: 1 },
+    {
+      prepare: async () => {
+        observed.prepared = request;
+        return request;
+      },
+      credential: (prepared) => {
+        observed.credential = prepared;
+        return (observed.authorization = 'Bearer actual-reader');
+      },
+      subject: (prepared) => {
+        observed.subject = prepared;
+        return 'actual-reader-subject';
+      },
+      configured: true,
+      read: async (authorization, query) => {
+        expect(authorization).toBe('Bearer actual-reader');
+        expect(query).toEqual({ limit: 1 });
+        return page;
+      },
     },
-    credential: (prepared) => {
-      observed.credential = prepared;
-      return (observed.authorization = 'Bearer actual-reader');
-    },
-    subject: (prepared) => {
-      observed.subject = prepared;
-      return 'actual-reader-subject';
-    },
-    configured: true,
-    read: async (authorization, query) => {
-      expect(authorization).toBe('Bearer actual-reader');
-      expect(query).toEqual({ limit: 1 });
-      return page;
-    },
-  });
+  );
   expect(result).toEqual({ page, sessionSubject: 'actual-reader-subject' });
   expect(observed.prepared).toBe(request);
   expect(observed.credential).toBe(request);

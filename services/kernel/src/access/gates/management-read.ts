@@ -75,7 +75,9 @@ function catalogueOf(routes: readonly MountedRoute[]): Catalogue {
   catalogue = Object.freeze({
     groups,
     actions,
-    digest: createHash('sha256').update(JSON.stringify([declarations, actions])).digest('hex'),
+    digest: createHash('sha256')
+      .update(JSON.stringify([declarations, actions]))
+      .digest('hex'),
   });
   catalogues.set(routes, catalogue);
   return catalogue;
