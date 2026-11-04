@@ -210,7 +210,6 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
     await act(async () => {
       root.render(draw());
     });
-    releaseExposure();
     expect(container.textContent).toContain('First private report');
 
     const continueButton = [...container.querySelectorAll('button')].find((button) =>
@@ -265,6 +264,7 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
     expect(container.textContent).not.toContain('spam');
   } finally {
     await act(async () => root.unmount());
+    releaseExposure();
     cache.clear();
     setLocale(previousLocale, { reload: false });
     for (const [key, descriptor] of saved) {
