@@ -21,6 +21,6 @@ test('the generated reading page route sends its cursor through the kernel clien
   expect(requests).toHaveLength(1);
   expect(requests[0]!.method).toBe('GET');
   const url = new URL(requests[0]!.url);
-  expect(url.pathname).toBe(`/v1/threads/${THREAD_ID}/reading-page`);
+  expect(url.pathname).toBe(`/v1/threads/${THREAD_ID}/reading_page`);
   expect(url.searchParams.get('cursor')).toBe(cursor);
 });
