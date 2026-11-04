@@ -159,6 +159,10 @@ async function open(path: string): Promise<{ page: Page }> {
     { name: 'auth_session', value: session, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax' },
   ]);
   const page = await context.newPage();
+  // Count the explicit button ceremony; autofill has its own journey in passkeys.test.ts.
+  if (path.startsWith('/login')) await page.addInitScript(() => {
+    Object.defineProperty(PublicKeyCredential, 'isConditionalMediationAvailable', { value: async () => false });
+  });
   page.setDefaultTimeout(15_000);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');

@@ -279,9 +279,9 @@ async function addVirtualAuthenticator(cdp: CDPSession): Promise<Authenticator> 
 // An IP address cannot be a relying party ID, so the pages are opened at localhost.
 async function open(
   path: string,
-  options: BrowserContextOptions & { webauthn?: boolean; signedIn?: boolean; pendingOperation?: unknown } = {},
+  options: BrowserContextOptions & { webauthn?: boolean; signedIn?: boolean; pendingOperation?: unknown; autofill?: boolean } = {},
 ): Promise<{ page: Page; origin: string; authenticator: Authenticator | null }> {
-  const { webauthn = true, signedIn = true, pendingOperation, ...contextOptions } = options;
+  const { webauthn = true, signedIn = true, pendingOperation, autofill = true, ...contextOptions } = options;
   const port = await site();
   const origin = `http://localhost:${port}`;
   browser ??= await chromium.launch();
@@ -303,6 +303,9 @@ async function open(
     const cdp = await context.newCDPSession(page);
     await cdp.send('WebAuthn.enable');
     authenticator = await addVirtualAuthenticator(cdp);
+    if (!autofill) await page.addInitScript(() => {
+      Object.defineProperty(PublicKeyCredential, 'isConditionalMediationAvailable', { value: async () => false });
+    });
   } else {
     await page.addInitScript(() => {
       Reflect.deleteProperty(window, 'PublicKeyCredential');
@@ -386,6 +389,7 @@ test(
     reset();
     const { page, authenticator } = await open(`/login?${authorizationQuery}&exp=${exp}&sig=${sig}`, {
       signedIn: false,
+      autofill: false,
     });
     try {
       await addResidentCredential(authenticator!);
@@ -397,7 +401,7 @@ test(
       expect(signedIn).toEqual({ response: expect.any(Object), client_id: 'login', scope: [] });
       expectWebAuthnResponse(signedIn.response, 'assertion');
       expect(sessionCookieSet).toBe(true);
-      // A passkey sign-in is two Auth calls, even though autofill already asked for options.
+      // The explicit button uses two native commands; conditional mediation has a separate journey below.
       expect(authCalls('/signin/passkey/options')).toHaveLength(1);
       expect(authCalls('/signin/passkey')).toHaveLength(1);
     } finally {
