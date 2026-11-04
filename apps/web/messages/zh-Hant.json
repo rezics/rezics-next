@@ -8751,6 +8751,7 @@
   "library_copy_filter_history": "選項來自已儲存的館藏，包括歷史值。",
   "library_copy_filter_none": "此篩選沒有已儲存的選項。",
   "library_copy_filter_options_unavailable": "暫時無法取得篩選選項。已選取的 ID 會保留。",
+  "library_copy_inventory_unavailable": "所選複本篩選暫時無法使用。已保留您的選擇；請重設篩選以瀏覽複本。",
   "quotation_retry": "重試本次讀取",
   "quotation_restart": "從頭瀏覽引文",
   "quotation_previous": "上一頁",

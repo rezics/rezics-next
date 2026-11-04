@@ -241,12 +241,12 @@ test('Actual server exports certify only the exact native preparation, preserve 
     refuseAfterPreparation = true;
     const before = prepareCalls;
     const value = await actions.readCopiesCurrent({
-      data: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'bad/keyset+cursor' },
+      data: { subjectId: id(10), cursor: 'bad/keyset+cursor' },
     });
     expect(value).toMatchObject({
       sessionSubject: 'A',
-      requested: { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'bad/keyset+cursor', locale: 'en' },
-      page: { kind: 'print', status: 'shelf', csrfToken: 'csrf-A', next: 'next-A', filterOptions },
+      requested: { subjectId: id(10), kind: null, status: null, cursor: 'bad/keyset+cursor', locale: 'en' },
+      page: { kind: null, status: null, csrfToken: 'csrf-A', next: 'next-A' },
     });
     expect(value.page.copies[0]?.subject?.label).toBe('Prepared A edition');
     expect(prepareCalls - before).toBe(1);
@@ -258,8 +258,8 @@ test('Actual server exports certify only the exact native preparation, preserve 
     ]);
     const listAddresses = calls.slice(0, 2).map((call) => new URL(call.url).searchParams);
     expect(listAddresses.map((query) => [query.get('subjectId'), query.get('kind'), query.get('status')])).toEqual([
-      [id(10), 'print', 'shelf'],
-      [id(10), 'print', 'shelf'],
+      [id(10), null, null],
+      [id(10), null, null],
     ]);
     expect(listAddresses[0]?.get('cursor')).toBe('bad/keyset+cursor');
     expect(listAddresses[1]?.has('cursor')).toBe(false);
@@ -273,6 +273,24 @@ test('Actual server exports certify only the exact native preparation, preserve 
     ).toBe(true);
     expect(JSON.stringify(value)).not.toContain('credential-A');
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+    expect(value.page.filterOptions).toBeUndefined(); // Undeclared extra wire fields grant no capability.
+    refuseAfterPreparation = false;
+    for (const filters of [{ kind: 'old.print' }, { status: 'retired' }, { kind: 'print', status: 'shelf' }]) {
+      preparation = 'active';
+      currentRequest = request();
+      const before = prepareCalls;
+      const unavailable = await actions.readCopiesCurrent({
+        data: { subjectId: id(10), ...filters, cursor: 'exact/selected+cursor' },
+      });
+      expect(unavailable).toMatchObject({
+        sessionSubject: 'A',
+        requested: { subjectId: id(10), ...filters, cursor: 'exact/selected+cursor', locale: 'en' },
+        page: { ...filters, inventoryState: 'unavailable', copies: [], next: null, csrfToken: 'csrf-A' },
+      });
+      expect(unavailable.page.filterOptions).toBeUndefined();
+      expect(prepareCalls - before).toBe(1);
+      expect(calls.filter((call) => new URL(call.url).pathname === '/v1/copies')).toHaveLength(2);
+    }
 
     // Real retained WeakMap credential, followed by real refusal on the original Request.
     refuseAfterPreparation = false;
@@ -843,6 +861,18 @@ test('The actual Copies route retires retained private rows and editor state on 
     absent('B');
     await act(async () => signoutWrite.resolve({ ok: true, copy: copy('B') }));
     absent('B');
+    search = { subjectId: id(10), kind: 'old.print', status: 'retired', cursor: 'held-cursor' };
+    initial = response('B', search);
+    initial.page = { ...initial.page, copies: [], next: null, inventoryState: 'unavailable' };
+    await show(viewer('B'));
+    await act(async () => lists.at(-1)!.resolve(initial));
+    expect(host.textContent).toContain(m.library_copy_inventory_unavailable());
+    expect(host.textContent).not.toContain(m.library_copy_matching_empty());
+    expect(host.querySelector<HTMLSelectElement>('[name="kind"]')!.value).toBe('old.print');
+    expect(host.querySelector<HTMLSelectElement>('[name="status"]')!.value).toBe('retired');
+    expect(
+      [...host.querySelectorAll('a')].find((link) => link.textContent === m.library_copy_filter_reset())?.href,
+    ).toContain(`subjectId=${id(10)}`);
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());

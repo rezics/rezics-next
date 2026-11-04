@@ -8751,6 +8751,7 @@
   "library_copy_filter_history": "保存された所蔵コピーの値です。過去の値も含まれます。",
   "library_copy_filter_none": "この絞り込みには保存された選択肢がありません。",
   "library_copy_filter_options_unavailable": "絞り込みの選択肢は一時的に利用できません。選択中の ID は保持されます。",
+  "library_copy_inventory_unavailable": "選択したコピーの絞り込みは一時的に利用できません。選択内容は保持されます。コピーを表示するには絞り込みをリセットしてください。",
   "quotation_retry": "この読み込みを再試行",
   "quotation_restart": "引用を最初から読む",
   "quotation_previous": "前のページ",

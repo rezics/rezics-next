@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { CopiesPage } from '../library/copies-page';
-import type { NativeCopyList } from '../library/copies-server';
+import type { CopyInventoryOptions } from '../library/copy-inventory-filters';
 import { m } from '../paraglide/messages.js';
 import { PatternStory, pagePaths } from './page';
 
@@ -12,7 +12,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const nativeOptions: NativeCopyList['filterOptions'] = {
+const presentationOptions: CopyInventoryOptions = {
   kinds: {
     state: 'available',
     choices: [
@@ -52,11 +52,12 @@ function FilteredInventory({
             copies: [],
             next: null,
             addKey: 'story-only',
+            ...(unavailable ? { inventoryState: 'unavailable' } : {}),
             filterOptions: unavailable
               ? { kinds: { state: 'unavailable', choices: [] }, statuses: { state: 'unavailable', choices: [] } }
               : empty
                 ? { kinds: { state: 'available', choices: [] }, statuses: { state: 'available', choices: [] } }
-                : nativeOptions,
+                : presentationOptions,
           }}
         />
       </div>
@@ -89,7 +90,8 @@ export const FilterOptionsUnavailable: Story = {
     const canvas = within(canvasElement);
     expect(canvas.getAllByText(m.library_copy_filter_options_unavailable())).toHaveLength(2);
     expect(canvas.getByRole('combobox', { name: m.library_copy_status() })).toHaveValue('shelf');
-    expect(canvas.getByText(m.library_copy_matching_empty())).toBeVisible();
+    expect(canvas.getByText(m.library_copy_inventory_unavailable())).toBeVisible();
+    expect(canvas.queryByText(m.library_copy_matching_empty())).toBeNull();
   },
 };
 export const EmptyInventory: Story = {

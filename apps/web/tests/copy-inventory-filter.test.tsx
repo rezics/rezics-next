@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CopyInventoryFilters } from '../src/library/copy-inventory-filters';
-import type { NativeCopyList, NativeCopyListQuery } from '../src/library/copies-server';
+import type { CopyInventoryOptions } from '../src/library/copy-inventory-filters';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 const originalGetLocale = getLocale;
@@ -31,13 +31,13 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, key);
   }
 });
-const query: NativeCopyListQuery = {
+const query = {
   subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000011',
   kind: 'old.print',
   status: 'loan',
   cursor: 'old',
 };
-const filterOptions: NativeCopyList['filterOptions'] = {
+const filterOptions: CopyInventoryOptions = {
   kinds: {
     state: 'available',
     choices: [

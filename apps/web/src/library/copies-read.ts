@@ -4,6 +4,7 @@ import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CopyProfile } from './copies-profiles';
+import type { CopyInventoryOptions } from './copy-inventory-filters';
 import type { CopyReadingContext, NativeCopyListContext, NativeCopyListRow } from './copy-reading-context/types';
 import { copyListContextFromNativeRow } from './copy-reading-context/read';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
@@ -12,7 +13,6 @@ import {
   nativeCopyPresentation,
   nativeCopyPresentationQuery,
   type NativeCopy,
-  type NativeCopyList,
   type NativeCopyListQuery,
 } from './copies-server';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
@@ -67,7 +67,9 @@ export type CopiesPageData = {
   subjectId: string | null;
   kind?: string | null;
   status?: string | null;
-  filterOptions?: NativeCopyList['filterOptions'];
+  filterOptions?: CopyInventoryOptions;
+  /** The installed callable cannot execute the selected kind/status predicates. */
+  inventoryState?: 'unavailable';
   /** Original requested cursor, including when the existing invalid-cursor fallback reads page one. */
   requestedCursor?: string | null;
   cursorRestarted?: boolean;
@@ -321,15 +323,13 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
 async function readCopyPage(
   client: KernelClient,
   authorization: string,
-  input: { subjectId?: string; kind?: string; status?: string; cursor?: string },
+  input: { subjectId?: string; cursor?: string },
   recovered?: () => void,
 ) {
   const read = async (pageCursor?: string) => {
     const query: NativeCopyListQuery = {
       ...libraryListQuery(pageCursor),
       ...(input.subjectId ? { subjectId: input.subjectId } : {}),
-      ...(input.kind ? { kind: input.kind } : {}),
-      ...(input.status ? { status: input.status } : {}),
     };
     const result = await client.copies.get({
       query,
@@ -355,6 +355,7 @@ export async function loadCopiesPage(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { subjectId?: string; kind?: string; status?: string; cursor?: string },
+  onPrepared?: (authorization: string) => void,
 ): Promise<LoadedCopiesPageData> {
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
@@ -373,14 +374,28 @@ export async function loadCopiesPage(
       next: null,
       addKey: crypto.randomUUID(),
     };
+  onPrepared?.(authorization);
+  // The installed generated query has no kind/status inputs or filterOptions output.
+  // Keep the exact address without observing a broader inventory as its result.
+  if (kind || status)
+    return {
+      signedIn: true,
+      subjectId,
+      kind,
+      status,
+      ...provenance,
+      inventoryState: 'unavailable',
+      copies: [],
+      next: null,
+      addKey: crypto.randomUUID(),
+      sendKind: true,
+    };
   let cursorRestarted = false;
   const page = await readCopyPage(
     client,
     authorization,
     {
       ...(subjectId ? { subjectId } : {}),
-      ...(kind ? { kind } : {}),
-      ...(status ? { status } : {}),
       ...(input.cursor ? { cursor: input.cursor } : {}),
     },
     () => {
@@ -399,7 +414,6 @@ export async function loadCopiesPage(
     ...provenance,
     ...(cursorRestarted ? { cursorRestarted: true } : {}),
     copies,
-    filterOptions: page.filterOptions,
     next: page.next,
     addKey: crypto.randomUUID(),
     sendKind,
