@@ -109,7 +109,7 @@ export async function createThreadReadingPageFixture() {
   };
   const page = (threadId: string, bearer?: string, cursor?: string) =>
     f.call('GET', `/v1/threads/${threadId}/reading-page${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
-      bearer,
+      ...(bearer === undefined ? {} : { bearer }),
     });
   return { ...f, checked, dependencies, setTime, thread, post, revise, grant, page };
 }
