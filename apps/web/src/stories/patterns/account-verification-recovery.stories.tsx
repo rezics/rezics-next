@@ -98,7 +98,18 @@ function Example({
             requestId: 'native-read-retry',
             retryAfter: '3600',
           });
-        return { accountId, verificationRequest: current, subjectTitle: 'Avery' };
+        return {
+          accountId,
+          verificationRequest: current,
+          viewerActions: current
+            ? current.state === 'pending'
+              ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
+              : ['withdrawn', 'failed', 'rejected'].includes(current.state)
+                ? [{ action: 'account:update', operations: ['account.request_verification'] }]
+                : []
+            : [{ action: 'account:update', operations: ['account.request_verification'] }],
+          subjectTitle: 'Avery',
+        };
       },
       request: (_, input) => {
         onRequest?.(input);

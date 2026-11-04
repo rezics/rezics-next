@@ -2132,6 +2132,7 @@
   "settings_verification_read_unavailable": "请尝试重新加载当前认证状态。重新加载不会提交或撤回认证申请。",
   "settings_verification_loading": "正在加载认证状态…",
   "settings_verification_organization": "组织",
+  "settings_verification_approving": "正在批准 {subject} 的申请。",
   "settings_verification_pending": "正在审核 {subject} 的申请。",
   "settings_verification_person": "个人",
   "settings_verification_rejected": "申请被拒绝：{reason}",

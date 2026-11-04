@@ -30,6 +30,38 @@ const request = {
   updatedAt: '2026-01-01T00:00:00Z',
 } as const;
 
+const requestAdvice = [{ action: 'account:update', operations: ['account.request_verification'] }];
+const withdrawAdvice = [{ action: 'account:update', operations: ['account.withdraw_verification'] }];
+
+function adviceFor(verificationRequest: { state: string } | null) {
+  if (!verificationRequest || ['withdrawn', 'failed', 'rejected'].includes(verificationRequest.state))
+    return requestAdvice;
+  if (verificationRequest.state === 'pending') return withdrawAdvice;
+  return [];
+}
+
+function statusOf(
+  verificationRequest: typeof request | (typeof request & { state: string }) | null,
+  viewerActions = adviceFor(verificationRequest),
+) {
+  return { verificationRequest, viewerActions };
+}
+
+function snapshotOf(
+  verificationRequest: typeof request | (typeof request & { state: string }) | null,
+  extra: {
+    accountId?: string;
+    subjectTitle?: string | null;
+    viewerActions?: { action: string; operations: string[] }[];
+  } = {},
+) {
+  return {
+    accountId: extra.accountId ?? 'alice',
+    ...statusOf(verificationRequest, extra.viewerActions ?? adviceFor(verificationRequest)),
+    subjectTitle: extra.subjectTitle ?? null,
+  };
+}
+
 function fakeClient(responses: { status: number; data?: unknown; error?: unknown }[]) {
   const calls: { operation: string; args: unknown[] }[] = [];
   const next = async (operation: string, ...args: unknown[]) => {
@@ -175,14 +207,22 @@ test('the settings server read does not fetch verification state', async () => {
 });
 
 test('settings reads the current verification request once and uses the generated account response shape', async () => {
-  const { client, calls } = fakeClient([{ status: 200, data: { verificationRequest: request } }]);
-  await expect(readVerification(client as never, 'alice', 'Bearer token')).resolves.toEqual(request);
+  const { client, calls } = fakeClient([{ status: 200, data: statusOf(request) }]);
+  await expect(readVerification(client as never, 'alice', 'Bearer token')).resolves.toEqual(statusOf(request));
   expect(calls).toEqual([{ operation: 'read', args: [{ headers: { authorization: 'Bearer token' } }] }]);
 });
 
-test('an empty verification response is represented as no request', async () => {
+test('an empty verification status with no admitted command is no request', async () => {
+  const { client } = fakeClient([{ status: 200, data: { verificationRequest: null, viewerActions: [] } }]);
+  await expect(readVerification(client as never, 'alice', 'Bearer token')).resolves.toEqual({
+    verificationRequest: null,
+    viewerActions: [],
+  });
+});
+
+test('a missing viewerActions field is a malformed status, not no request', async () => {
   const { client } = fakeClient([{ status: 200, data: { verificationRequest: null } }]);
-  await expect(readVerification(client as never, 'alice', 'Bearer token')).resolves.toBeNull();
+  await expect(readVerification(client as never, 'alice', 'Bearer token')).rejects.toThrow();
 });
 
 test('current verification reads accept explicit nullable requesters on retained terminal requests and reject malformed or foreign responses', async () => {
@@ -203,9 +243,9 @@ test('current verification reads accept explicit nullable requesters on retained
   ] as const;
 
   for (const verificationRequest of retainedTerminalRequests) {
-    const { client } = fakeClient([{ status: 200, data: { verificationRequest } }]);
+    const { client } = fakeClient([{ status: 200, data: statusOf(verificationRequest) }]);
     await expect(readVerification(client as never, 'org-1', 'Bearer manager-token')).resolves.toEqual(
-      verificationRequest,
+      statusOf(verificationRequest),
     );
   }
 
@@ -333,7 +373,13 @@ test('invalid subject, statement, or link counts are rejected before the command
 });
 
 // Recovery cases are additive: the native status and payload oracles above remain unchanged.
-import { VerificationRecovery, verificationQueryKey } from '../src/settings/verification-recovery';
+import {
+  VerificationRecovery,
+  canRequestVerification,
+  canWithdrawVerification,
+  verificationQueryKey,
+  verificationWithdrawalObservation,
+} from '../src/settings/verification-recovery';
 import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/verification-core';
 
 test('a receipt waits for current readback and older requests or revisions cannot replace it', async () => {
@@ -346,7 +392,7 @@ test('a receipt waits for current readback and older requests or revisions canno
   const approved = { ...pending, state: 'approved' as const, updatedAt: '2026-02-02T00:00:00Z' };
   let current: AgentVerificationRequest | null = null;
   const controller = new VerificationRecovery('alice', {
-    read: async () => ({ accountId: 'alice', verificationRequest: current, subjectTitle: 'Agent' }),
+    read: async () => snapshotOf(current, { subjectTitle: 'Agent' }),
     request: async () => ({ ok: true, verificationRequest: pending }),
     withdraw: async () => {
       throw new Error('Unexpected withdrawal');
@@ -380,16 +426,16 @@ test('An uncertain verification request or withdrawal retries the exact original
   const pending: AgentVerificationRequest = { ...request, links: request.links.map((link) => ({ ...link })) };
   const approving = { ...pending, state: 'approving' as const };
   const { client, calls } = fakeClient([
-    { status: 200, data: { verificationRequest: null } },
-    { status: 200, data: { verificationRequest: pending } },
+    { status: 200, data: statusOf(null) },
+    { status: 200, data: statusOf(pending) },
     { status: 201, data: { verificationRequest: pending } },
-    { status: 200, data: { verificationRequest: approving } },
+    { status: 200, data: statusOf(approving) },
   ]);
   const sent: VerificationInput[] = [];
   const controller = new VerificationRecovery('alice', {
     read: async (accountId) => ({
       accountId,
-      verificationRequest: await readVerification(client as never, accountId, 'Bearer token'),
+      ...(await readVerification(client as never, accountId, 'Bearer token')),
       subjectTitle: null,
     }),
     request: async (accountId, original) => {
@@ -439,18 +485,18 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
   const pending: AgentVerificationRequest = { ...request, links: request.links.map((link) => ({ ...link })) };
   const withdrawn = { ...pending, state: 'withdrawn' as const };
   const { client, calls } = fakeClient([
-    { status: 200, data: { verificationRequest: pending } },
-    { status: 200, data: { verificationRequest: null } },
+    { status: 200, data: statusOf(pending) },
+    { status: 200, data: statusOf(null) },
     { status: 409, error: { value: { detail: 'The verification request is no longer pending' } } },
-    { status: 200, data: { verificationRequest: withdrawn } },
-    { status: 200, data: { verificationRequest: null } },
-    { status: 200, data: { verificationRequest: withdrawn } },
+    { status: 200, data: statusOf(withdrawn) },
+    { status: 200, data: statusOf(null) },
+    { status: 200, data: statusOf(withdrawn) },
   ]);
   const sent: { idempotencyKey: string }[] = [];
   const controller = new VerificationRecovery('alice', {
     read: async (accountId) => ({
       accountId,
-      verificationRequest: await readVerification(client as never, accountId, 'Bearer token'),
+      ...(await readVerification(client as never, accountId, 'Bearer token')),
       subjectTitle: null,
     }),
     request: async () => {
@@ -491,7 +537,14 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
 });
 
 test('verification reads reject missing data and other accounts, and late commands cannot cross viewers', async () => {
-  for (const value of [{}, { verificationRequest: { ...request, accountId: 'bob' } }]) {
+  for (const value of [
+    {},
+    { verificationRequest: null },
+    { verificationRequest: { ...request, accountId: 'bob' }, viewerActions: withdrawAdvice },
+    { verificationRequest: request, viewerActions: [{ action: 'account:update', operations: [] }] },
+    { verificationRequest: request, viewerActions: [{ action: 'account:update' }] },
+    { verificationRequest: request, viewerActions: withdrawAdvice, extra: true },
+  ]) {
     const { client } = fakeClient([{ status: 200, data: value }]);
     await expect(readVerification(client as never, 'alice', 'Bearer token')).rejects.toThrow();
   }
@@ -500,7 +553,7 @@ test('verification reads reject missing data and other accounts, and late comman
   const io = {
     read: async (accountId: string) => {
       reads.push(accountId);
-      return { accountId, verificationRequest: null, subjectTitle: null };
+      return snapshotOf(null, { accountId });
     },
     request: () =>
       new Promise<VerificationCommandResult>((resolve) => {
@@ -603,20 +656,20 @@ test('Keep native verification recovery delays actionable without weakening nati
   const clock = spyOn(Date, 'now').mockImplementation(() => now);
   try {
     const { client, calls } = nativeVerificationClient([
-      Response.json({ verificationRequest: null }),
+      Response.json(statusOf(null)),
       Response.json(
         { detail: 'Wait before replaying', code: 'rate_limited', request_id: 'refusal-id' },
         { status: 429, headers: { 'Retry-After': '2' } },
       ),
-      Response.json({ verificationRequest: request }),
+      Response.json(statusOf(request)),
       Response.json({ verificationRequest: request }, { status: 201 }),
-      Response.json({ verificationRequest: { ...request, state: 'approving' } }),
+      Response.json(statusOf({ ...request, state: 'approving' })),
     ]);
     const sent: VerificationInput[] = [];
     const controller = new VerificationRecovery('alice', {
       read: async (accountId) => ({
         accountId,
-        verificationRequest: await readVerification(client, accountId, 'Bearer token'),
+        ...(await readVerification(client, accountId, 'Bearer token')),
         subjectTitle: 'Avery',
       }),
       request: async (accountId, original) => {
@@ -694,13 +747,13 @@ test('a failed final native status read retains the withdrawal receipt and exact
     const retryAfter = new Date(now + 3000).toUTCString();
     const withdrawn = { ...request, state: 'withdrawn' };
     const { client, calls } = nativeVerificationClient([
-      Response.json({ verificationRequest: request }),
+      Response.json(statusOf(request)),
       Response.json({ verificationRequest: withdrawn }),
       Response.json(
         { detail: 'Current status unavailable', code: 'overloaded', retryable: true, request_id: 'read-id' },
         { status: 503, headers: { 'Retry-After': retryAfter } },
       ),
-      Response.json({ verificationRequest: withdrawn }),
+      Response.json(statusOf(withdrawn)),
     ]);
     let pauseRead = false;
     let finishRead!: () => void;
@@ -713,7 +766,7 @@ test('a failed final native status read retains the withdrawal receipt and exact
           });
         return {
           accountId,
-          verificationRequest: await readVerification(client, accountId, 'Bearer token'),
+          ...(await readVerification(client, accountId, 'Bearer token')),
           subjectTitle: 'Avery',
         };
       },
@@ -774,7 +827,7 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
       { detail: 'Read denied', code: 'forbidden', retryable: false },
       { status: 403, headers: { 'Retry-After': 'invalid' } },
     ),
-    Response.json({ verificationRequest: null }),
+    Response.json(statusOf(null)),
   ]);
   let reads = 0;
   const controller = new VerificationRecovery('alice', {
@@ -783,7 +836,7 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
       if (reads === 4) throw new Error('rezics-platform-closed');
       return {
         accountId,
-        verificationRequest: await readVerification(client, accountId, 'Bearer token'),
+        ...(await readVerification(client, accountId, 'Bearer token')),
         subjectTitle: null,
       };
     },
@@ -807,7 +860,7 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
     retryAfter: 'invalid',
   });
   await controller.reload();
-  expect(controller.snapshot().current).toEqual({ accountId: 'alice', verificationRequest: null, subjectTitle: null });
+  expect(controller.snapshot().current).toEqual(snapshotOf(null));
   expect(unwrapVerificationRead({ ok: true, value: controller.snapshot().current })).toBe(
     controller.snapshot().current,
   );
@@ -816,4 +869,39 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
   expect(controller.snapshot().failure).toEqual({ status: 403, message: 'rezics-platform-closed' });
   expect(controller.snapshot().retryAt).toBe(0);
   expect(calls).toHaveLength(2);
+});
+
+test('native viewer advice admits request and withdraw independently of state-only inference', () => {
+  expect(canRequestVerification(snapshotOf(null))).toBe(true);
+  expect(canWithdrawVerification(snapshotOf(null))).toBe(false);
+  expect(canRequestVerification(snapshotOf(null, { viewerActions: [] }))).toBe(false);
+  expect(canRequestVerification(snapshotOf(request))).toBe(false);
+  expect(canWithdrawVerification(snapshotOf(request))).toBe(true);
+  expect(canWithdrawVerification(snapshotOf({ ...request, state: 'approving' }))).toBe(false);
+  expect(canRequestVerification(snapshotOf({ ...request, state: 'approving' }))).toBe(false);
+  expect(canRequestVerification(snapshotOf({ ...request, state: 'withdrawn' }))).toBe(true);
+  expect(canWithdrawVerification(snapshotOf(request, { viewerActions: [] }))).toBe(false);
+});
+
+test('optional title failure keeps the admitted request and its advice', async () => {
+  const { client } = fakeClient([{ status: 200, data: statusOf(request) }]);
+  const status = await readVerification(client as never, 'alice', 'Bearer token');
+  const current = { accountId: 'alice' as const, ...status, subjectTitle: null };
+  expect(current.verificationRequest).toEqual(request);
+  expect(canWithdrawVerification(current)).toBe(true);
+  expect(canRequestVerification(current)).toBe(false);
+});
+
+test('a newer request, changed advice, or pending-to-approving transition invalidates withdrawal confirmation', () => {
+  const pending = snapshotOf(request);
+  const confirmation = verificationWithdrawalObservation(pending);
+  expect(confirmation).toBe(verificationWithdrawalObservation(snapshotOf(request)));
+  expect(confirmation).not.toBe(
+    verificationWithdrawalObservation(snapshotOf({ ...request, id: 'request-2' })),
+  );
+  expect(confirmation).not.toBe(
+    verificationWithdrawalObservation(snapshotOf({ ...request, state: 'approving' })),
+  );
+  expect(confirmation).not.toBe(verificationWithdrawalObservation(snapshotOf(request, { viewerActions: [] })));
+  expect(verificationWithdrawalObservation(snapshotOf(null))).toBeNull();
 });

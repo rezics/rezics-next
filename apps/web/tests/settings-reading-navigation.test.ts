@@ -245,7 +245,16 @@ test('verification latest matching status cannot resolve UNKNOWN; acknowledged e
   const calls: VerificationInput[] = [];
   let current: AgentVerificationRequest | null = null;
   const controller = new VerificationRecovery('alice', {
-    read: async () => ({ accountId: 'alice', verificationRequest: current, subjectTitle: null }),
+    read: async () => ({
+      accountId: 'alice',
+      verificationRequest: current,
+      viewerActions: current
+        ? current.state === 'pending'
+          ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
+          : [{ action: 'account:update', operations: ['account.request_verification'] }]
+        : [{ action: 'account:update', operations: ['account.request_verification'] }],
+      subjectTitle: null,
+    }),
     request: async (_, input) => {
       calls.push(input);
       current = receipt;
@@ -365,7 +374,12 @@ test('standalone notice cards keep their native form without requiring a navigat
 
 test('the validated verification payload treats an empty chooser as no selection without hiding later text', () => {
   const state = {
-    current: { accountId: 'alice', verificationRequest: null, subjectTitle: null },
+    current: {
+      accountId: 'alice',
+      verificationRequest: null,
+      viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
+      subjectTitle: null,
+    },
     attempt: null,
     phase: 'idle' as const,
   };

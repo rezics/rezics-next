@@ -2132,6 +2132,7 @@
   "settings_verification_read_unavailable": "請嘗試重新載入目前的驗證狀態。重新載入不會送出或撤回驗證申請。",
   "settings_verification_loading": "正在載入驗證狀態…",
   "settings_verification_organization": "組織",
+  "settings_verification_approving": "正在核准 {subject} 的申請。",
   "settings_verification_pending": "正在審核 {subject} 的申請。",
   "settings_verification_person": "個人",
   "settings_verification_rejected": "申請遭拒：{reason}",

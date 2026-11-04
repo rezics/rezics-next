@@ -2132,6 +2132,7 @@
   "settings_verification_read_unavailable": "現在の認証状態を再読み込みしてください。再読み込みで認証申請が送信されたり、取り下げられたりすることはありません。",
   "settings_verification_loading": "認証状態を読み込み中…",
   "settings_verification_organization": "組織",
+  "settings_verification_approving": "{subject} の申請を承認しています。",
   "settings_verification_pending": "{subject} の申請を確認中です。",
   "settings_verification_person": "人物",
   "settings_verification_rejected": "申請は却下されました：{reason}",

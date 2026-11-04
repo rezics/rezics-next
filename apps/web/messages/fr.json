@@ -2132,6 +2132,7 @@
   "settings_verification_read_unavailable": "Essayez de recharger l’état de vérification actuel. Cette action n’envoie ni ne retire aucune demande de vérification.",
   "settings_verification_loading": "Chargement de l’état de vérification…",
   "settings_verification_organization": "Organisation",
+  "settings_verification_approving": "La demande pour {subject} est en cours d'approbation.",
   "settings_verification_pending": "La demande pour {subject} est en attente.",
   "settings_verification_person": "Personne",
   "settings_verification_rejected": "Demande refusée : {reason}",

@@ -15,6 +15,11 @@ type VerificationResponse = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['accounts']>['verification']['get']>>['data']
 >;
 export type AgentVerificationRequest = NonNullable<VerificationResponse['verificationRequest']>;
+export type AgentVerificationViewerAction = { action: string; operations: string[] };
+export type VerificationStatus = {
+  verificationRequest: AgentVerificationRequest | null;
+  viewerActions: AgentVerificationViewerAction[];
+};
 
 export type VerificationFailure = {
   status: number;
@@ -52,6 +57,11 @@ function nullableString(value: unknown): boolean {
   return value === null || typeof value === 'string';
 }
 
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+
 /** Native account response validation; an absent or malformed read is never a completed command. */
 function validRequest(value: unknown, accountId: string): value is AgentVerificationRequest {
   if (!record(value)) return false;
@@ -78,6 +88,21 @@ function validRequest(value: unknown, accountId: string): value is AgentVerifica
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
   );
+}
+
+function validViewerAction(value: unknown): value is AgentVerificationViewerAction {
+  if (!record(value) || !exactKeys(value, ['action', 'operations'])) return false;
+  if (typeof value.action !== 'string' || !value.action) return false;
+  if (!Array.isArray(value.operations) || value.operations.length < 1) return false;
+  const operations = value.operations;
+  if (operations.some((operation) => typeof operation !== 'string' || !operation)) return false;
+  return new Set(operations).size === operations.length;
+}
+
+function validStatus(value: unknown, accountId: string): value is VerificationStatus {
+  if (!record(value) || !exactKeys(value, ['verificationRequest', 'viewerActions'])) return false;
+  if (value.verificationRequest !== null && !validRequest(value.verificationRequest, accountId)) return false;
+  return Array.isArray(value.viewerActions) && value.viewerActions.every(validViewerAction);
 }
 
 function apiMessage(error: unknown): string {
@@ -118,9 +143,9 @@ export async function readVerification(
   );
   if (result.error) throw new VerificationReadError(nativeFailure(result));
   if (!result.data) throw new Error(m.settings_verification_request_failed());
-  const request = result.data.verificationRequest;
-  if (request !== null && !validRequest(request, accountId)) throw new Error(m.settings_verification_load_failed());
-  return request;
+  const data: unknown = result.data;
+  if (!validStatus(data, accountId)) throw new Error(m.settings_verification_load_failed());
+  return data;
 }
 
 export async function requestVerification(

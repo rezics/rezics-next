@@ -32,6 +32,7 @@ import {
   canRequestVerification,
   canWithdrawVerification,
   verificationQueryKey,
+  verificationWithdrawalObservation,
   type VerificationSnapshot,
   type VerificationRecoveryIO,
 } from './verification-recovery';
@@ -126,9 +127,15 @@ function VerificationState({
   }, [accountId, subjectId, locale, suppliedTitle, titleKey]);
   const subjectTitle = suppliedTitle ?? (hydrated?.key === titleKey ? hydrated.title : null);
   if (!verification) return null;
-  if (verification.state === 'pending' || verification.state === 'approving')
+  if (verification.state === 'pending')
     return (
       <p>{m.settings_verification_pending({ subject: subjectLabel(subjectTitle, verification.catalogueSubjectId) })}</p>
+    );
+  if (verification.state === 'approving')
+    return (
+      <p>
+        {m.settings_verification_approving({ subject: subjectLabel(subjectTitle, verification.catalogueSubjectId) })}
+      </p>
     );
   if (verification.state === 'approved')
     return (
@@ -297,8 +304,8 @@ export function VerificationCard({
   );
   const form = useRef<HTMLFormElement>(null);
   const [showValidation, setShowValidation] = useState(false);
-  // Confirmation belongs to the observed request; a new read or subject choice requires a fresh decision.
-  const [confirmation, setConfirmation] = useState<VerificationSnapshot | null>(null);
+  // Confirmation belongs to this request identity, state, and advice; a newer observation needs a fresh decision.
+  const [confirmation, setConfirmation] = useState<string | null>(null);
   // Capture the genuine label in the action handler, before a send clears current status or the draft changes.
   const [action, setAction] = useState<{ kind: 'request' | 'withdraw'; subject: string } | null>(null);
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
@@ -307,8 +314,9 @@ export function VerificationCard({
   const waiting = usePreferenceRetry(state.failure, state.retryAt);
   const verification = state.current?.verificationRequest ?? null;
   const subjectTitle = state.current?.subjectTitle ?? null;
-  const canRequest = canRequestVerification(state.current) && !state.attempt && !pending;
-  const canWithdraw = canWithdrawVerification(state.current) && !state.attempt && !pending;
+  const observation = verificationWithdrawalObservation(state.current);
+  const canRequest = canRequestVerification(state.current) && !state.attempt && !pending && !!csrfToken;
+  const canWithdraw = canWithdrawVerification(state.current) && !state.attempt && !pending && !!csrfToken;
   const hasDraft = !!selected || !!statement || links.some((link) => link.label || link.url);
 
   // Wholly empty optional rows remain editable placeholders, as before. Every populated byte stays in order.
@@ -358,7 +366,7 @@ export function VerificationCard({
   }
 
   async function withdraw() {
-    if (!isCurrent() || !csrfToken || confirmation !== state.current || !canWithdraw) return;
+    if (!isCurrent() || !csrfToken || confirmation === null || confirmation !== observation || !canWithdraw) return;
     setAction({ kind: 'withdraw', subject: subjectLabel(subjectTitle, verification?.catalogueSubjectId) });
     await controller.withdraw(true);
     if (isCurrent()) setConfirmation(null);
@@ -382,6 +390,20 @@ export function VerificationCard({
             <VerificationState verification={verification} subjectTitle={subjectTitle} />
           )}
         </div>
+        {verification && state.readStatus === 'success' ? (
+          <div className="space-y-2 break-words">
+            <p className="whitespace-pre-wrap">{verification.statement}</p>
+            {verification.links.length ? (
+              <ul>
+                {verification.links.map((link, index) => (
+                  <li key={index}>
+                    {link.label}: {link.url}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         {state.phase === 'sending' ? <p role="status">{m.settings_saving()}</p> : null}
         {state.readStatus === 'error' ? (
           <div
@@ -484,7 +506,7 @@ export function VerificationCard({
           </form>
         ) : null}
         {canWithdraw ? (
-          confirmation === state.current ? (
+          confirmation !== null && confirmation === observation ? (
             <Alert>
               <AlertTitle>{m.settings_verification_confirm_title()}</AlertTitle>
               <AlertDescription className="flex min-w-0 max-w-full flex-wrap gap-2">
@@ -512,7 +534,7 @@ export function VerificationCard({
               type="button"
               variant="outline"
               className={verificationActionClassName}
-              onClick={() => setConfirmation(state.current)}
+              onClick={() => setConfirmation(observation)}
             >
               {m.settings_verification_withdraw()}
             </Button>

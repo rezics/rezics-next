@@ -2166,6 +2166,7 @@
   "settings_verification_read_unavailable": "Try reloading the current verification status. Reloading does not send or withdraw a verification request.",
   "settings_verification_loading": "Loading verification status…",
   "settings_verification_organization": "Organization",
+  "settings_verification_approving": "Request for {subject} is being approved.",
   "settings_verification_pending": "Request for {subject} is pending.",
   "settings_verification_person": "Person",
   "settings_verification_rejected": "Request rejected: {reason}",

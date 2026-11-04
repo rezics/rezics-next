@@ -15,16 +15,25 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import { runCommand, noEffect } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import type { Access, AccessContext, Actor, Resource } from '../request/access.ts';
+import {
+  prepareReadDecisions,
+  type Access,
+  type AccessContext,
+  type Actor,
+  type Resource,
+} from '../request/access.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
+import { viewerActionReadTime } from './index.ts';
+import { deadlineClient, within } from './authenticate.ts';
+import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import accountRead from './agent-verification-account-read.sql';
 import insertRequest from './agent-verification-request-insert.sql';
@@ -69,6 +78,16 @@ export type AgentVerificationRequest = {
   updatedAt: string;
 };
 export type PendingVerificationPage = { verificationRequests: AgentVerificationRequest[]; next: string | null };
+export type AgentVerificationViewerAction = { action: string; operations: string[] };
+export type AgentVerificationStatus = {
+  verificationRequest: AgentVerificationRequest | null;
+  viewerActions: AgentVerificationViewerAction[];
+};
+
+const REQUEST_OPERATION = 'account.request_verification';
+const WITHDRAW_OPERATION = 'account.withdraw_verification';
+const TERMINAL_REQUEST_STATES = new Set<AgentVerificationState>(['withdrawn', 'failed', 'rejected']);
+const ACCOUNT_AUTHORITY_ACTIONS = new Set(['account:read', 'account:update', 'account:manage']);
 
 type VerificationAccount = {
   route: number;
@@ -350,6 +369,124 @@ export async function readLatestAgentVerificationRequest(
   if (!result.allowed) throw new AgentVerificationDeniedError();
   const row = rows<VerificationRow>(result.value as VerificationRow[] | VerificationRow | null)[0];
   return row ? asRequest(row) : null;
+}
+
+function serializeVerificationActions(action: string, operations: string[]): AgentVerificationViewerAction[] {
+  const unique = [...new Set(operations)].sort();
+  return unique.length ? [{ action, operations: unique }] : [];
+}
+
+function requestCommandEligible(
+  account: VerificationAccount | null,
+  request: AgentVerificationRequest | null,
+): boolean {
+  if (
+    !account ||
+    account.agentVerified ||
+    account.agentSubjectId ||
+    account.pendingAgentSubjectId ||
+    account.pendingAgentReceiptId
+  )
+    return false;
+  return request === null || TERMINAL_REQUEST_STATES.has(request.state);
+}
+
+function withdrawCommandEligible(request: AgentVerificationRequest | null): boolean {
+  return request?.state === 'pending';
+}
+
+async function unreadVerificationAdvice(
+  pool: Pool,
+  access: Access,
+  context: VerificationContext,
+  accountId: string,
+): Promise<AgentVerificationStatus> {
+  return {
+    verificationRequest: await readLatestAgentVerificationRequest(pool, access, context, accountId),
+    viewerActions: [],
+  };
+}
+
+/** Private latest request plus closed request/withdraw advice. Advice never grants command authority. */
+export async function readAgentVerificationStatus(
+  pool: Pool,
+  access: Access,
+  context: VerificationContext,
+  accountId: string,
+): Promise<AgentVerificationStatus> {
+  const route = routeOf(accountId);
+  const { actor } = context;
+  if (route === null || actor.kind !== 'account') throw new AgentVerificationDeniedError();
+  try {
+    const decisions = await prepareReadDecisions(access, {
+      actor,
+      actions: ACCOUNT_AUTHORITY_ACTIONS,
+      typeActions: new Map([['access.account', ACCOUNT_AUTHORITY_ACTIONS]]),
+      context,
+    });
+    if (!decisions.prepareAccountAuthority) return unreadVerificationAdvice(pool, access, context, accountId);
+    const authority = await decisions.prepareAccountAuthority([accountId]);
+    const time = viewerActionReadTime(access, context);
+    return await within(context.deadline, () =>
+      withConnection(pool, async (connection) => {
+        const client = deadlineClient(connection, context.deadline);
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          const readable = await authority.decide(
+            client,
+            { kind: 'verification', action: 'account:read', ids: [accountId] },
+            time,
+          );
+          if (!readable[accountId]?.allowed) throw new AgentVerificationDeniedError();
+          const row = rows<VerificationRow>(
+            await latestRequest.run(client as PoolClient, { account_id: accountId }),
+          )[0];
+          const verificationRequest = row ? asRequest(row) : null;
+          const target = (await accountRead.run(client as PoolClient, {
+            route,
+            account_id: accountId,
+          })) as VerificationAccount | null;
+          let viewerActions: AgentVerificationViewerAction[] = [];
+          try {
+            const writable = await authority.decide(
+              client,
+              { kind: 'verification', action: 'account:update', ids: [accountId] },
+              time,
+            );
+            const write = writable[accountId];
+            if (write?.allowed) {
+              const operations: string[] = [];
+              if (requestCommandEligible(target, verificationRequest)) operations.push(REQUEST_OPERATION);
+              if (withdrawCommandEligible(verificationRequest)) operations.push(WITHDRAW_OPERATION);
+              viewerActions = serializeVerificationActions(write.action, operations);
+            }
+          } catch (error) {
+            if (error instanceof AgentVerificationDeniedError) throw error;
+            viewerActions = [];
+          }
+          requireAccessDeadline(context.deadline);
+          await client.query('COMMIT');
+          return { verificationRequest, viewerActions };
+        } catch (error) {
+          try {
+            await connection.query('ROLLBACK');
+          } catch (rollbackError) {
+            discardConnection(connection, rollbackError as Error);
+          }
+          throw error;
+        }
+      }),
+    );
+  } catch (error) {
+    if (error instanceof AgentVerificationDeniedError) throw error;
+    if (
+      error instanceof AccessUnavailableError ||
+      error instanceof RangeError ||
+      classifyUnavailability(error) !== undefined
+    )
+      return unreadVerificationAdvice(pool, access, context, accountId);
+    throw error;
+  }
 }
 
 /** Pending governance page; the partial index excludes every decided request. */
