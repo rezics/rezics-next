@@ -355,6 +355,60 @@ replay, changed-input conflict, persisted author/provenance, point/selection ref
 protected/ban denial, current vote admission and manage loss before replay. Physical growth is unmeasured;
 the dev verifier owns clause measurements and broader acceptance after integration.
 
+### Realm question management page source
+
+`GET /v1/realms/{realmId}/rating-questions/management` composes the existing Realm directory and optional
+`selectedQuestionId` for an authenticated current reader. It returns closed `viewer`, `realmId`, `directory`,
+`actions` and `selected` fields, with `Cache-Control: private, no-store`. Unknown and concealed Realms or exact
+selections share `404`. It does not initialize a question or change any existing writer. The mounted schema is
+the complete-input publisher's source; the new method has no claimed installed public Client declaration yet.
+
+Decision: management reuses the native active-question directory; a retired definition remains inspectable by
+exact selection, with Restore advice only when current native `realm:manage` permits it.
+
+The directory consumes 20 raw keys plus one unconsumed lookahead. Empty sparse pages preserve continuation;
+there are no totals or automatic refills. Its distinct cursor binds Realm, selected id, sorted credential authority,
+page size and the existing lifecycle generation/epoch-2 frontier. Invalidated lifecycle continuation requires an
+explicit restart. Captions do not invalidate that generation. The ordinary selector's cursor and behavior remain
+unchanged. Global questions and questions belonging to another Realm return `404` on exact management selection.
+
+Selected `question` keeps definition `revision`, `labelRevision` and `lifecycle.revision` distinct. `readback` and
+`history` point to the existing exact question and caption methods; history is never a substitute definition.
+`actions.create` is either the existing POST method/href or null. Selected `actions.caption` carries only the
+existing PUT href and `expectedLabelRevision`; `actions.lifecycle` carries the existing retire/restore POST href
+and `expectedLifecycleRevision`. Exhausted revision heads offer no corresponding action. Advice comes from
+current native Access for `realm:manage`; ordinary membership, readability and creator identity grant none of
+these commands. Unavailable advice fails the entire page rather than looking like denial or an empty directory.
+
+After advice preparation the source requalifies Realm disclosure and checks the generation and exact selected
+metadata again. Changed selected metadata requires fresh inspection (`409`); lifecycle generation changes use
+the native invalid-cursor response. Commands retain authorize-before-receipt and original same-key replay rules.
+Readback is a separate current observation and cannot acknowledge an uncertain command. A future browser consumer
+must retire forms and original intents on private-visit replacement, and retain the original cursor on failed
+continuation. This source alone does not establish that browser behavior or recorded presentation.
+
+The exhaustive mounted-route assertion in `test/kernel.test.ts` must include this additive GET; updating that
+entry changes no shared writer or authorization contract.
+
+#### Management page Cost
+
+- **Touches:** the existing directory operation's two released native Realm observations, its bounded Realm-home
+  snapshot and final lifecycle generation probe; optionally one exact question observation and its Realm disclosure;
+  one native Access preparation/evaluation for manage advice; one final native Realm observation; and one final
+  Realm-home snapshot probing lifecycle generation and optionally the selected question, caption and lifecycle heads.
+  All authentication, Accounts, grants/roles, host and Realm eligibility work inside these calls remains chargeable;
+  no connection is held while preparing foreign authority. No Subject/vote or caption-history operation is invoked.
+- **Bound:** fixed 20 consumed directory keys plus one unconsumed lookahead and at most one independently selected
+  question, read again by key after advice. Joins seek only those keys' caption/lifecycle heads. Meaning is at most
+  2,000 code points, each caption 200, native scale integer 0..20, cursor 4,096 characters and response 1 MiB.
+  Before byte validation, those native row/field bounds limit retained bodies, view copies and serialization;
+  byte validation does not establish physical index or nested Access bounds. Native nested authorities and examined
+  blocks/prefixes remain part of the operation, rather than one constant-cost request.
+- **Growth check:** `test/rating/question-management-journey.test.ts` pins empty, 20-row continuation and exact retired
+  selection, independent caption/lifecycle revisions and current authority loss. Independent unrelated questions,
+  revisions, votes and authority at 256/1024/4096 with full nested physical accounting remain continuation work;
+  existing Global directory measurements do not establish this composition's native growth gate.
+
 ### Question caption maintenance
 
 Decision: label revision 1 resolves immutable creation wording; separate caption heads start at 1, corrections

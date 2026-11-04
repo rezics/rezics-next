@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto';
 import type { Account, Method } from '../../../../specs/community-driver.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { closeCommunityDrivers, createCommunityDriver } from '../community/community-driver.ts';
+import { readQuestionManagementPage } from '../../src/rating/question-management.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver } from '../community/community-driver.ts';
 
 const definition = {
   meaning: 'Judge translation accuracy independently of enjoyment of the original work.',
@@ -84,6 +86,30 @@ test('Realm management advice composes native immutable creation, caption CAS an
     });
     await json(await call('POST', after.selected.actions.lifecycle.href, fixture.member, { expectedLifecycleRevision: 2 }));
     expect((await call('POST', retire.href, fixture.member, lifecycleBody, lifecycleKey)).status).toBe(409);
+    const { system } = communityFixtureRuntime();
+    const actor = await system.access.authenticate(fixture.member.bearer, { pool: system.database.pool, deadline: Date.now() + 30_000 });
+    const input = Object.freeze({ realmId, selectedQuestionId: created.id });
+    const native = { pool: system.database.pool, access: system.access, tokens: system.tokenKeys };
+    await expect(readQuestionManagementPage({ ...native, access: {
+      ...system.access,
+      async prepare(caller, action, resource, context) {
+        if (action === 'realm:manage') throw new AccessUnavailableError('overloaded');
+        return system.access.prepare?.(caller, action, resource, context);
+      },
+    } }, actor, input, Date.now() + 30_000)).rejects.toMatchObject({ reason: 'overloaded' });
+    // A caption change during foreign advice preparation requires fresh selected inspection.
+    let changed = false;
+    await expect(readQuestionManagementPage({ ...native, access: {
+      ...system.access,
+      async prepare(caller, action, resource, context) {
+        const evidence = await system.access.prepare?.(caller, action, resource, context);
+        if (action === 'realm:manage' && !changed) {
+          changed = true;
+          await json(await call('PUT', caption.href, fixture.member, { expectedLabelRevision: 2, label: 'Latest caption' }));
+        }
+        return evidence;
+      },
+    } }, actor, input, Date.now() + 30_000)).rejects.toMatchObject({ code: 'conflict' });
     await json(await call('POST', '/v1/grants:revoke', fixture.owner, grant));
     const readonly = (await json(await call('GET', selectedPath, fixture.member))).selected;
     expect(readonly.actions).toEqual({ caption: null, lifecycle: null });

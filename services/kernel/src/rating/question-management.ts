@@ -17,6 +17,7 @@ import {
   readVisibleRatingQuestion,
   requireRealmQuestionRead,
   type QuestionMetadata,
+  type RatingQuestionView,
 } from './question-directory.ts';
 import generationRead from './question-lifecycle-generation-read.sql';
 import questionRead from './question-read.sql';
@@ -27,6 +28,21 @@ const PAGE_SIZE = 20;
 const MAX_CURSOR = 4096;
 const MAX_BYTES = 1_048_576;
 const MAX_REVISION = 2_147_483_647;
+
+function managementQuestion(view: RatingQuestionView) {
+  if (
+    view.realmId === undefined || view.meaning === undefined || view.canonicalLabel === undefined ||
+    view.labelRevision === undefined || view.lifecycle === undefined
+  ) throw new CommandUnavailableError('overloaded');
+  return {
+    ...view,
+    realmId: view.realmId,
+    meaning: view.meaning,
+    canonicalLabel: view.canonicalLabel,
+    labelRevision: view.labelRevision,
+    lifecycle: view.lifecycle,
+  };
+}
 
 /** Advice is the native Realm manage formula, never a membership/creator shortcut.
  * Preparation releases its connections before the decision's checkout. Every
@@ -111,7 +127,7 @@ export async function readQuestionManagementPage(
       if (JSON.stringify(current) !== JSON.stringify(selected)) throw new ProblemError('conflict');
     }
   });
-  const question = selected === null ? null : ratingQuestionView(selected);
+  const question = selected === null ? null : managementQuestion(ratingQuestionView(selected));
   const selectedBase = question === null ? null : `/v1/rating-questions/${question.id}`;
   const next = directory.hasMore && directory.after !== null
     ? encodeCursor(deps.tokens, binding, { epoch: 2, after: [directory.after, directory.lifecycleGeneration] }, now())
@@ -119,7 +135,7 @@ export async function readQuestionManagementPage(
   const page = {
     viewer: { accountId: actor.accountId },
     realmId,
-    directory: { ratingQuestions: directory.ratingQuestions, next },
+    directory: { ratingQuestions: directory.ratingQuestions.map(managementQuestion), next },
     actions: {
       create: canManage ? { method: 'POST' as const, href: `/v1/realms/${realmId}/rating-questions` } : null,
     },
