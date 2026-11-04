@@ -96,7 +96,10 @@ export function literaryGrainExample(type: 'schema:Book' | 'schema:BookSeries' |
                   ...author,
                   id: 'stated-count',
                   property: { id: 'wdt:P2635', data_type: 'quantity' },
-                  value: { type: 'value', content: { amount: '999', unit: 'wd:Q1238720' } },
+                  value: {
+                    type: 'value',
+                    content: { amount: '+999', unit: 'http://www.wikidata.org/entity/Q1238720' },
+                  },
                 },
               ],
             },
