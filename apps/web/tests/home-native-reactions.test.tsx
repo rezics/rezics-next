@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { reactionKinds } from '@rezics/ui/reactions';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
 
 const { Window } = await import(
@@ -124,8 +125,14 @@ test.each([1, 10, 20])(
   },
 );
 
-test('signed-in Home keeps Content reaction facts visible but disables writes without native action advice', async () => {
-  const item: FeedItem = {
+test.each([
+  ['missing', undefined, m.reaction_unavailable(), false, true],
+  ['allowed', reactionKinds, undefined, true, true],
+  ['empty current', [] as const, m.reaction_forbidden(), false, true],
+  ['unknown viewer', reactionKinds, m.reaction_unavailable(), false, false],
+] as const)('signed-in Home preserves reaction facts with %s native action advice', async (_name, allowed, status, enabled, viewerKnown) => {
+  const target = { targetKind: 'thread' as const, targetId: id };
+  const item = {
     id: 'occurrence:action-advice',
     source: 'following',
     occurredAt: null,
@@ -137,10 +144,11 @@ test('signed-in Home keeps Content reaction facts visible but disables writes wi
       createdAt: '2026-11-04T00:00:00Z',
       reactionTarget: { targetKind: 'thread', targetId: id },
       reactions: { upvote: 2, like: 1 },
-      viewerReaction: null,
+      ...(viewerKnown ? { viewerReaction: null } : {}),
+      ...(allowed === undefined ? {} : { reactionAdvice: { target, state: 'current' as const, allowed } }),
     },
     destination: { kind: 'thread', id, title: 'Card' },
-  };
+  } satisfies FeedItem;
   await paint(
     <HomeFeed
       result={{
@@ -148,13 +156,50 @@ test('signed-in Home keeps Content reaction facts visible but disables writes wi
         page: { ...result.page, feedItems: [item], reactionsAsOf: { epoch: 1, position: '2' } },
       }}
       locale="en"
+      stream="following"
+      input={{ stream: 'following' }}
       signedIn
     />,
   );
-  expect(host.querySelector('[data-slot="feed-reaction-admission"]')?.textContent).toContain(m.reaction_unavailable());
+  const admission = host.querySelector('[data-slot="feed-reaction-admission"]');
+  if (status) expect(admission?.textContent).toContain(status);
+  else expect(admission).toBeNull();
   const controls = host.querySelector('[data-slot="reactions"]');
   expect(controls).not.toBeNull();
-  expect(controls?.querySelectorAll('button:not([disabled])')).toHaveLength(0);
+  expect(controls?.textContent).toContain('2');
+  expect(controls?.querySelectorAll('button:not([disabled])').length > 0).toBe(enabled);
+  const postTarget = { targetKind: 'post' as const, targetId: id };
+  const post: FeedItem = {
+    ...item,
+    id: 'occurrence:post-action-advice',
+    key: { owner: 'content', kind: 'post', route: 0, id },
+    summary: {
+      id,
+      threadId: id,
+      title: 'Card',
+      createdAt: '2026-11-04T00:00:00Z',
+      reactionTarget: postTarget,
+      reactions: { upvote: 2, like: 1 },
+      ...(viewerKnown ? { viewerReaction: null } : {}),
+      ...(allowed === undefined ? {} : { reactionAdvice: { target: postTarget, state: 'current' as const, allowed } }),
+    },
+    destination: { kind: 'post', id, postId: id, threadId: id, title: 'Card' },
+  };
+  await paint(
+    <HomeFeed
+      result={{ state: 'ready', page: { ...result.page, feedItems: [post], reactionsAsOf: { epoch: 1, position: '2' } } }}
+      locale="en"
+      stream="following"
+      input={{ stream: 'following' }}
+      signedIn
+    />,
+  );
+  expect(host.querySelector('[data-slot="reactions"]')?.querySelectorAll('button:not([disabled])').length > 0).toBe(
+    enabled,
+  );
+  const postAdmission = host.querySelector('[data-slot="feed-reaction-admission"]');
+  if (status) expect(postAdmission?.textContent).toContain(status);
+  else expect(postAdmission).toBeNull();
   expect(nativeFetch).not.toHaveBeenCalled();
 });
 

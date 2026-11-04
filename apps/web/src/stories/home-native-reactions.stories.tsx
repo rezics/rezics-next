@@ -60,8 +60,8 @@ function PreparedHome({ anonymous = false }: { anonymous?: boolean }) {
     <QueryClientProvider client={client}>
       <div className="space-y-4 p-4">
         <p role="note">
-          Prepared Home responses. The installed generated client omits reaction fields, so counts remain unavailable.
-          These fixtures do not prove native delivery, including anonymous Content discovery.
+          Prepared Home responses intentionally omit native reaction advice. These fixtures do not prove native
+          delivery, including anonymous Content discovery.
         </p>
         <div className="flex flex-wrap gap-4">
           <button className="min-h-11 underline" onClick={() => setRevision(revision + 1)}>

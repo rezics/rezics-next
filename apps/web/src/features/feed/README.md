@@ -263,7 +263,7 @@ Decision: signed-in Home Thread/Post reactions require native per-row action adv
 - Search's current Review summary supplies author name/handle, excerpt and optional reviewed Subject. It supplies no
   avatar or rating; Home does not infer either fact or fetch the Subject separately.
 
-Decision: Home keeps an unavailable native personal-actions seam until Content publishes the admitted page and generated transport; its local receiver joins original occurrence keys and Subjects, displays facts without granting actions, and removes arbitrary control callbacks.
+Decision: Home consumes Content's installed `reactionAdvice` from the one admitted page, binding it to the exact native reaction target and current occurrence. A current empty `allowed` set is a denial; missing, mismatched or unavailable advice remains unavailable. Disclosed counts and selection stay readable independently, and Home adds no per-card reads or inferred permission.
 
 The [Home work Library receiver](home-work-library/README.md) defines the single-page boundary, exact association,
 reader retirement and remaining native composition and command integration. Do not mount per-card Subject reads.

@@ -1,5 +1,5 @@
 import type { FeedItem, FeedPage } from '../pages/home-feed-read';
-import type { ReactionKind } from '@rezics/ui/reactions';
+import { reactionKinds, type ReactionKind } from '@rezics/ui/reactions';
 import type { FeedReaction } from './vote-control';
 
 type FeedOrigin = { key: string; reader: string | null; isCurrent(): boolean };
@@ -12,6 +12,34 @@ export function homeFeedSubjectReactionProjection(item: FeedItem): unknown {
   if (item.destination.kind !== 'subject' || item.key.owner !== 'semantic' || !('subjectReactions' in item.summary))
     return undefined;
   return item.summary.subjectReactions;
+}
+
+function homeFeedContentReactionAdvice(item: FeedItem, origin?: FeedOrigin) {
+  if (origin && !origin.isCurrent()) return;
+  const destination = item.destination;
+  if (destination.kind !== 'thread' && destination.kind !== 'post') return;
+  const summary = item.summary;
+  if (!('reactionTarget' in summary) || !summary.reactionTarget || !('reactionAdvice' in summary)) return;
+  const advice = summary.reactionAdvice;
+  if (!advice || item.key.owner !== 'content') return;
+  const targetKind = destination.kind === 'thread' ? 'thread' : 'post';
+  const targetId = destination.kind === 'thread' ? destination.id : destination.postId;
+  const sourceMatches =
+    destination.kind === 'thread'
+      ? (item.source === 'discovery' && item.key.kind === 'review') ||
+        (item.source === 'following' && item.key.kind === 'thread')
+      : item.source === 'following' && item.key.kind === 'post';
+  if (
+    !sourceMatches ||
+    item.key.id !== targetId ||
+    summary.id !== targetId ||
+    summary.reactionTarget.targetKind !== targetKind ||
+    summary.reactionTarget.targetId !== targetId ||
+    advice.target.targetKind !== targetKind ||
+    advice.target.targetId !== targetId
+  )
+    return;
+  return advice;
 }
 
 function subjectReaction(item: FeedItem, projection: unknown, input: { signedIn: boolean; origin?: FeedOrigin }) {
@@ -72,20 +100,28 @@ export function homeFeedReaction(
   if (!input.hasReactionFreshness || input.reactionsAsOf === undefined) return;
   if (!('reactionTarget' in summary) || !summary.reactionTarget || !('reactions' in summary) || !summary.reactions)
     return;
+  if (item.destination.kind !== 'thread' && item.destination.kind !== 'post') return;
   const target = summary.reactionTarget;
   const destinationMatches =
     (item.destination.kind === 'thread' && target.targetKind === 'thread' && target.targetId === item.destination.id) ||
     (item.destination.kind === 'post' && target.targetKind === 'post' && target.targetId === item.destination.postId);
-  if (!destinationMatches || (input.signedIn && !Object.hasOwn(summary, 'viewerReaction'))) return;
+  if (!destinationMatches) return;
+  const advice = homeFeedContentReactionAdvice(item, input.origin);
+  const viewerReaction = 'viewerReaction' in summary ? summary.viewerReaction : undefined;
+  const viewerKnown = viewerReaction !== undefined;
+  const allActionsAllowed =
+    advice?.state === 'current' &&
+    reactionKinds.every((kind) => advice.allowed.includes(kind));
+  const signInAllowed = advice?.state === 'sign_in';
   return {
     target: { kind: target.targetKind, id: target.targetId },
     counts: summary.reactions,
-    value: input.signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
+    value: input.signedIn && viewerKnown ? (viewerReaction ?? null) : null,
     ...(input.origin ? { reactionOrigin: input.origin } : {}),
     sourceWatermark: input.reactionsAsOf,
-    // The installed Content feed projection carries no native action advice. Keep its
-    // disclosed counts and selection visible, but do not treat them as permission.
-    personalReady: !input.signedIn,
+    // The shared picker exposes the full set; native advice must admit each current choice.
+    personalReady: input.signedIn ? viewerKnown && allActionsAllowed : signInAllowed,
+    signInAllowed: !input.signedIn && signInAllowed,
   };
 }
 
@@ -94,10 +130,18 @@ export type HomeFeedReactionStatus = 'denied' | 'unavailable';
 /** Describe missing or refused native advice without inferring permission from counts. */
 export function homeFeedReactionStatus(
   item: FeedItem,
-  input: { signedIn: boolean; reaction: FeedReaction | undefined },
+  input: { signedIn: boolean; reaction: FeedReaction | undefined; origin?: FeedOrigin },
 ): HomeFeedReactionStatus | undefined {
-  if (item.destination.kind === 'thread' || item.destination.kind === 'post')
-    return input.signedIn ? 'unavailable' : undefined;
+  if (input.origin && !input.origin.isCurrent()) return 'unavailable';
+  if (item.destination.kind === 'thread' || item.destination.kind === 'post') {
+    const advice = homeFeedContentReactionAdvice(item, input.origin);
+    if (input.signedIn) {
+      if (advice?.state !== 'current') return 'unavailable';
+      if (advice.allowed.length === 0) return 'denied';
+      return input.reaction?.personalReady ? undefined : 'unavailable';
+    }
+    return advice?.state === 'sign_in' && input.reaction?.signInAllowed ? undefined : 'unavailable';
+  }
   if (item.destination.kind !== 'subject') return;
 
   const projection = record(homeFeedSubjectReactionProjection(item));

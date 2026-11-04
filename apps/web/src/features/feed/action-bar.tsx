@@ -224,13 +224,18 @@ export function HomeFeedActions({
   if (kind !== 'thread' && kind !== 'post' && kind !== 'subject') return children;
   const workId = admittedFeedWorkId(item);
   const destination = item.destination;
+  const reactionOrigin = origin === undefined ? undefined : { ...origin, reader: origin.reader ?? null };
   const reaction = homeFeedReaction(item, {
     signedIn,
-    ...(origin === undefined ? {} : { origin: { ...origin, reader: origin.reader ?? null } }),
+    ...(reactionOrigin === undefined ? {} : { origin: reactionOrigin }),
     reactionsAsOf,
     hasReactionFreshness,
   });
-  const reactionStatus = homeFeedReactionStatus(item, { signedIn, reaction });
+  const reactionStatus = homeFeedReactionStatus(item, {
+    signedIn,
+    reaction,
+    ...(reactionOrigin === undefined ? {} : { origin: reactionOrigin }),
+  });
   const target =
     destination.kind === 'thread' || destination.kind === 'subject'
       ? { kind: destination.kind, id: destination.id }
