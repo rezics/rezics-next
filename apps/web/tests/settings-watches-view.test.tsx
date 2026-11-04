@@ -1,10 +1,10 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
 
+mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 const { Window } = await import(
@@ -42,6 +42,7 @@ afterAll(() => {
   void window.happyDOM.close();
 });
 const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
 const { SettingsSessionOwner, SettingsSessionContext } = await import('../src/settings/settings-session-owner');
 const { WatchesSection } = await import('../src/settings/watches');
@@ -51,9 +52,9 @@ test('the mounted private view separates inaccessible targets, uncertain removal
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
   const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
   const envelope = {
     viewer: { state: 'current' as const, accountId: 'alice' },
     actions: { remove: 'available' as const },
@@ -112,13 +113,11 @@ test('the mounted private view separates inaccessible targets, uncertain removal
   try {
     await act(async () =>
       root.render(
-        <StrictMode>
-          <QueryClientProvider client={client}>
-            <SettingsSessionContext.Provider value={owner}>
-              <WatchesSection io={io} />
-            </SettingsSessionContext.Provider>
-          </QueryClientProvider>
-        </StrictMode>,
+        <QueryClientProvider client={client}>
+          <SettingsSessionContext.Provider value={owner}>
+            <WatchesSection io={io} />
+          </SettingsSessionContext.Provider>
+        </QueryClientProvider>,
       ),
     );
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
