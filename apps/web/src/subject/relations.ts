@@ -29,12 +29,6 @@ function isGroup(value: unknown): value is RelationGroup {
   return typeof value === 'string' && (RELATION_GROUPS as readonly string[]).includes(value);
 }
 
-/**
- * The reader-side label and group of each property, from the definition release. A page reads the subjects that point
- * at it, so a directed property reads under its inverse label and a symmetric one under its own label on both sides.
- * A property with no relation definition yet falls back to its label and the `other` group; one the release does not
- * know is absent.
- */
 /** Forward copy/release-to-work controls: complete-empty stays visible; a counted but hidden member is withheld. */
 export function copyWorkDisclosureControl(input: {
   items: readonly unknown[];
@@ -45,6 +39,12 @@ export function copyWorkDisclosureControl(input: {
   return 'empty';
 }
 
+/**
+ * The reader-side label and group of each property, from the definition release. A page reads the subjects that point
+ * at it, so a directed property reads under its inverse label and a symmetric one under its own label on both sides.
+ * A property with no relation definition yet falls back to its label and the `other` group; one the release does not
+ * know is absent.
+ */
 export function relationDefinitions(
   release: { properties: Record<string, unknown> },
   properties: Iterable<string>,
