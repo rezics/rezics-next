@@ -524,6 +524,7 @@ export function BoardPinThreadControls({
     {
       className: 'flex min-w-0 max-w-full flex-wrap items-center gap-2',
       role: 'group',
+      'data-dialog-open': dialogOpen,
       'aria-label': m.board_pin_controls({ title: discussionTitle }),
       'aria-busy': status?.state === 'submitting',
     },
