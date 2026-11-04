@@ -1,4 +1,4 @@
-import { dependencyUnavailable, problem } from '../media/kernel.ts';
+import { problem } from '../media/kernel.ts';
 import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { configured, type SessionEnv } from './client.ts';
 import { cookie, SESSION_COOKIE, validId } from './cookies.ts';
@@ -9,6 +9,7 @@ import {
   isAllowedSiteOrigin,
   isUnsafeRequest,
 } from './csrf.ts';
+import { SESSION_UNAVAILABLE_CODE } from './unavailable';
 
 const credentials = new WeakMap<Request, string>();
 const subjects = new WeakMap<Request, string>();
@@ -54,7 +55,11 @@ export async function prepareSession(
     if (result.status === 'absent' || !csrfTokenMatches(csrfToken, await csrfTokenFromRequest(request)))
       throw problem(403, 'forbidden', 'Forbidden');
   }
-  if (result.status === 'unavailable') throw dependencyUnavailable();
+  if (result.status === 'unavailable') {
+    const error = problem(502, SESSION_UNAVAILABLE_CODE, 'Session Unavailable');
+    error.name = 'SessionUnavailableError';
+    throw error;
+  }
   if (result.status === 'absent') return true;
   credentials.set(request, `Bearer ${result.accessToken}`);
   subjects.set(request, result.subject);

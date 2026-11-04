@@ -3,17 +3,21 @@ import { CreatorSalesAddress } from '../../../checkout/creator-sales-address';
 import { CreatorSalesPage } from '../../../checkout/creator-sales-page';
 import { CreatorSalesCurrent } from '../../../checkout/creator-sales-current';
 import { creatorSalesAddressLoad, creatorSalesSearch, readCreatorSalesCurrent } from '../../../checkout/creator-sales';
-import { requireSignedIn } from '../../../session/guard';
+import { requirePrivatePageAccess } from '../../../session/guard';
+import { isSessionUnavailablePage, loadPrivatePage, SessionUnavailablePrompt } from '../../../session/private-page';
 import { pageHead } from '../../../shell/head';
 import { pageHeadContext } from '../../../shell/head-context';
 import { m } from '../../../paraglide/messages.js';
 import { getLocale } from '../../../paraglide/runtime.js';
 
 export const Route = createFileRoute('/creator/sales/')({
-  beforeLoad: requireSignedIn,
+  beforeLoad: async (context) => ({ sessionAccess: await requirePrivatePageAccess(context) }),
   validateSearch: creatorSalesSearch,
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => creatorSalesAddressLoad(deps, (data) => readCreatorSalesCurrent({ data })),
+  loader: ({ context, deps }) =>
+    loadPrivatePage(context.sessionAccess, () =>
+      creatorSalesAddressLoad(deps, (data) => readCreatorSalesCurrent({ data })),
+    ),
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
@@ -23,6 +27,7 @@ export const Route = createFileRoute('/creator/sales/')({
     const search = Route.useSearch();
     const initial = Route.useLoaderData();
     const locale = getLocale();
+    if (isSessionUnavailablePage(initial)) return <SessionUnavailablePrompt signInHref={initial.signInHref} />;
     if ('kind' in search)
       return (
         <CreatorSalesAddress locale={locale} {...(search.cursor === undefined ? {} : { cursor: search.cursor })} />

@@ -1,4 +1,4 @@
-import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
+import { useIsMobile } from '@rezics/ui/hooks/use-mobile';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { Button } from '@rezics/ui/shadcn/button';
 import {

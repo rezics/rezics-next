@@ -47,6 +47,27 @@ export function NotificationsLink({ pathname, badge }: { pathname: string; badge
   );
 }
 
+export function UnavailableAccountAction({ signIn }: { signIn: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <span role="status" className="sr-only md:not-sr-only md:max-w-36 md:break-words md:text-xs md:text-muted-foreground">
+        {m.shell_account_unavailable()}
+      </span>
+      <a
+        href={signIn}
+        aria-label={m.account_sign_in()}
+        title={m.account_sign_in()}
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'icon-lg' }),
+          'size-11 min-h-11 min-w-11 shrink-0 rounded-full p-0 text-primary',
+        )}
+      >
+        <LogIn aria-hidden="true" className="size-4" />
+      </a>
+    </div>
+  );
+}
+
 export function ShellTopActions({
   session,
   pathname,
@@ -120,9 +141,7 @@ export function ShellTopActions({
           <Skeleton aria-hidden className="hidden size-11 rounded-full motion-reduce:animate-none md:block" />
         </div>
       ) : (
-        <span className="max-w-28 text-xs text-muted-foreground [overflow-wrap:anywhere]" role="status">
-          {m.shell_account_unavailable()}
-        </span>
+        <UnavailableAccountAction signIn={signIn} />
       )}
     </>
   );

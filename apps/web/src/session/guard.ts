@@ -8,6 +8,11 @@ type GuardContext = {
   location: { publicHref: string };
 };
 
+export type SessionAccess = {
+  state: 'signed-in' | 'unavailable';
+  signInHref: string;
+};
+
 const signedInPaths = [
   /^\/collections\/[^/]+\/publish(?:\/|$)/,
   /^\/operations(?:\/|$)/,
@@ -35,8 +40,10 @@ export function isSignedInPath(pathname: string): boolean {
   return signedInPaths.some((pattern) => pattern.test(path));
 }
 
-/** Run before a personal page's loader, sharing the shell's session cache. */
-export async function requireSignedIn({ context, location }: GuardContext): Promise<void> {
+/** Read the current page session without turning an indeterminate result into anonymous access. */
+export async function requirePrivatePageAccess({ context, location }: GuardContext): Promise<SessionAccess> {
+  const url = new URL(location.publicHref, 'https://site.invalid');
+  const signInHref = `/auth/sign-in?return_to=${encodeURIComponent(url.pathname + url.search)}`;
   try {
     await context.queryClient.ensureQueryData(sessionQuery);
   } catch {
@@ -49,12 +56,17 @@ export async function requireSignedIn({ context, location }: GuardContext): Prom
   if (!queryState || queryState.status !== 'success') throw new Error('Session unavailable');
   const session = normalizeSessionObservation(queryState.data);
   if (session.state === 'signed-out') {
-    const url = new URL(location.publicHref, 'https://site.invalid');
     throw redirect({
-      href: `/auth/sign-in?return_to=${encodeURIComponent(url.pathname + url.search)}`,
+      href: signInHref,
       statusCode: 302,
       reloadDocument: true,
     });
   }
-  if (session.state !== 'signed-in') throw new Error('Session unavailable');
+  return { state: session.state === 'signed-in' ? 'signed-in' : 'unavailable', signInHref };
+}
+
+/** Existing guards keep throwing on an indeterminate session for routes without a prompt contract. */
+export async function requireSignedIn(context: GuardContext): Promise<void> {
+  const access = await requirePrivatePageAccess(context);
+  if (access.state !== 'signed-in') throw new Error('Session unavailable');
 }

@@ -65,7 +65,7 @@ const aliceActive = {
 };
 const bobActive = { status: 'active' as const, subject: 'bob', accessToken: 'bob-token', csrfToken: bobCsrf };
 const forbidden = { problem: { status: 403, code: 'forbidden' } };
-const unavailable = { problem: { status: 502, code: 'dependency_unavailable' } };
+const unavailable = { problem: { status: 502, code: 'session_unavailable' } };
 
 test('signed-out and invalid cookies admit no caller credential', async () => {
   const sessions = env({ [aliceId]: aliceActive });

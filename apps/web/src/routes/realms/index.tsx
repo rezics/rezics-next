@@ -1,4 +1,5 @@
-import { requireSignedIn } from '../../session/guard';
+import { requirePrivatePageAccess } from '../../session/guard';
+import { isSessionUnavailablePage, loadPrivatePage, SessionUnavailablePrompt } from '../../session/private-page';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, Link } from '@tanstack/react-router';
@@ -10,30 +11,31 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/realms/')({
-  beforeLoad: requireSignedIn,
+  beforeLoad: async (context) => ({ sessionAccess: await requirePrivatePageAccess(context) }),
   validateSearch: (search: Record<string, unknown>) =>
     typeof search.cursor === 'string' && search.cursor ? { cursor: search.cursor } : {},
   loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: async ({ context, deps, abortController }) => {
-    const caller = await captureMyRealmsCaller(context.queryClient, {
-      cursor: deps.cursor,
-      locale: getLocale(),
-      credentialMode: 'session',
-    });
-    const stopOnAbort = () => caller.retire();
-    abortController.signal.addEventListener('abort', stopOnAbort, { once: true });
-    try {
-      abortController.signal.throwIfAborted();
-      const page = await context.queryClient.fetchQuery(myRealmsQuery(deps.cursor, caller));
-      abortController.signal.throwIfAborted();
-      return { page, visit: caller.acceptLoaderResult(page) };
-    } catch (error) {
-      caller.retire();
-      throw error;
-    } finally {
-      abortController.signal.removeEventListener('abort', stopOnAbort);
-    }
-  },
+  loader: async ({ context, deps, abortController }) =>
+    loadPrivatePage(context.sessionAccess, async () => {
+      const caller = await captureMyRealmsCaller(context.queryClient, {
+        cursor: deps.cursor,
+        locale: getLocale(),
+        credentialMode: 'session',
+      });
+      const stopOnAbort = () => caller.retire();
+      abortController.signal.addEventListener('abort', stopOnAbort, { once: true });
+      try {
+        abortController.signal.throwIfAborted();
+        const page = await context.queryClient.fetchQuery(myRealmsQuery(deps.cursor, caller));
+        abortController.signal.throwIfAborted();
+        return { page, visit: caller.acceptLoaderResult(page) };
+      } catch (error) {
+        caller.retire();
+        throw error;
+      } finally {
+        abortController.signal.removeEventListener('abort', stopOnAbort);
+      }
+    }),
   head: ({ match }) =>
     pageHead({ title: m.realms_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   errorComponent: MyRealmsErrorPage,
@@ -77,5 +79,6 @@ function MyRealmsErrorPage({ error, reset }: { error: unknown; reset?: () => voi
 function MyRealms() {
   const initial = Route.useLoaderData();
   const { cursor } = Route.useSearch();
+  if (isSessionUnavailablePage(initial)) return <SessionUnavailablePrompt signInHref={initial.signInHref} />;
   return <MyRealmsCallerHost key={initial.visit.id} initial={initial} cursor={cursor} />;
 }

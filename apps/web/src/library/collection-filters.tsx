@@ -16,7 +16,7 @@ import { Exposure } from '../kernel/exposure';
 import { SaveQueryLink } from './save-query';
 import { admitSavedQuerySelection, hasSavedQueryInput } from './saved-query-editor/selection';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
+import { useIsMobile } from '@rezics/ui/hooks/use-mobile';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { SlidersHorizontalIcon } from 'lucide-react';

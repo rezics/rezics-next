@@ -117,7 +117,8 @@ export type SubjectPublicCollectionsResult = {
 type EntryResult = { libraryEntry: SubjectSlotEntry & { subject?: { type?: string } | null } };
 export type SubjectSlotSession =
   | { state: 'signed-in'; subject: string; csrfToken: string | null; authorization: string }
-  | { state: 'signed-out' | 'unavailable'; csrfToken: null };
+  | { state: 'signed-out'; csrfToken: null }
+  | { state: 'unavailable'; csrfToken: null; sessionUnavailable?: true };
 
 export async function readSubjectSlotSession(
   request: Request,
@@ -129,7 +130,7 @@ export async function readSubjectSlotSession(
   try {
     const credential = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).credential();
     if (credential.status === 'absent') return { state: 'signed-out', csrfToken: null };
-    if (credential.status !== 'active') return { state: 'unavailable', csrfToken: null };
+    if (credential.status !== 'active') return { state: 'unavailable', csrfToken: null, sessionUnavailable: true };
     return {
       state: 'signed-in',
       subject: credential.subject,
@@ -137,7 +138,7 @@ export async function readSubjectSlotSession(
       authorization: `Bearer ${credential.accessToken}`,
     };
   } catch {
-    return { state: 'unavailable', csrfToken: null };
+    return { state: 'unavailable', csrfToken: null, sessionUnavailable: true };
   }
 }
 

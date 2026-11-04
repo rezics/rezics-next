@@ -10,7 +10,7 @@ mock.module('../src/session/state', () => ({
 
 const { QueryClient } = await import('@tanstack/react-query');
 const { sessionQuery } = await import('../src/session/query');
-const { requireSignedIn } = await import('../src/session/guard');
+const { isSignedInPath, requirePrivatePageAccess, requireSignedIn } = await import('../src/session/guard');
 
 const location = (publicHref = '/fr/settings?from=account#security') => ({ publicHref });
 const signedIn = { state: 'signed-in', subject: 'reader-one', csrfToken: 'csrf-one' } as const;
@@ -86,6 +86,11 @@ test('a current signed-out observation preserves the localized document redirect
   }
 });
 
+test('the four reported private destinations are protected routes', () => {
+  for (const path of ['/en/library', '/en/realms', '/en/settings', '/en/creator/sales'])
+    expect(isSignedInPath(path)).toBe(true);
+});
+
 test('unavailable and malformed observations fail closed with the existing unavailable error', async () => {
   const queryClient = client();
   try {
@@ -109,6 +114,19 @@ test('unavailable and malformed observations fail closed with the existing unava
         'Session unavailable',
       );
     }
+  } finally {
+    queryClient.clear();
+  }
+});
+
+test('private destination guards retain an explicit unresolved session state', async () => {
+  const queryClient = client();
+  try {
+    queryClient.setQueryData(sessionQuery.queryKey, { state: 'unavailable', subject: null, csrfToken: null });
+    await expect(requirePrivatePageAccess({ context: { queryClient }, location: location() })).resolves.toEqual({
+      state: 'unavailable',
+      signInHref: `/auth/sign-in?return_to=${encodeURIComponent('/fr/settings?from=account')}`,
+    });
   } finally {
     queryClient.clear();
   }
