@@ -24,7 +24,10 @@ export type MusicReleaseExample =
 
 /** Explicit example vocabulary, separate from producer publication and generated declarations. */
 export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', locale = 'en') {
-  const release: GuideRelease = { ...structuredClone(recordedRelease.release), digest: recordedRelease.digest };
+  const release = {
+    ...structuredClone(recordedRelease.release),
+    digest: recordedRelease.digest,
+  } as unknown as GuideRelease;
   const summary = (id: string, type: string, label: string) => ({
     id,
     type,
@@ -141,10 +144,11 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
               summary:
                 scenario === 'concealed' ? null : summary(recordingId, 'schema:MusicRecording', 'Harbour'),
               related: {
-                '00000000-0000-4000-8000-00000000b309': {
-                  type: 'skos:Concept',
-                  label: { value: 'lead vocals', language: 'en' },
-                },
+                '00000000-0000-4000-8000-00000000b309': summary(
+                  '00000000-0000-4000-8000-00000000b309',
+                  'skos:Concept',
+                  'lead vocals',
+                ),
               },
             },
             {
