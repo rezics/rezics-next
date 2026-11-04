@@ -6,10 +6,12 @@ import { fromPlainText } from '@rezics/document';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { anchorRoute, routeOf } from '../../src/route/route.ts';
+import { anchorRoute, routeOf, newId } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { createRealAccess } from './real-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { createImportTransport } from '../../../importer/src/import-client.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -27,15 +29,16 @@ const ACTIONS = [
   'moderation:takedown',
 ];
 const accounts = {
-  importer: '019a1b2c-3d4e-7f00-8a00-1a0000000051',
-  editor: '019a1b2c-3d4e-7f00-8a00-ed170e000052',
-  moderator: '019a1b2c-3d4e-7f00-8a00-0d0000000053',
+  importer: newId(0x1a00),
+  editor: newId(0xed17),
+  moderator: newId(0x0d00),
 };
 const realAccess = await createRealAccess(admin, accounts, ACTIONS);
 const kernel = createKernel({
   pool,
   access: realAccess.access,
   tokens,
+  receiptKeys: testReceiptKeys(),
   routeKey,
   writeRate: realAccess.writeRate,
 });
@@ -97,7 +100,21 @@ const results = (body: Record<string, any>) =>
     problem ? { key, status, code: problem.code } : { key, status, value: result },
   );
 
-test('a batch creates one subject per external record and proposes cited statements, one result per command', async () => {
+async function stableBatch(commands: BatchCommand[]) {
+  let response: Response | undefined;
+  const port = createImportTransport({
+    origin: 'http://kernel.test',
+    tokenProvider: async () => realAccess.bearer('importer'),
+    fetch: async (input, init) => {
+      response = await kernel.handle(input instanceof Request ? input : new Request(input, init));
+      return response;
+    },
+  });
+  const body = await port.batch({ commands });
+  return { response: response!, body };
+}
+
+test('native sourced batch create, proposal and replay retain command history and one result per command', async () => {
   const externalId = `OL${randomUUID()}W`;
   const author = (
     await call('POST', '/v1/subjects', {
@@ -120,7 +137,7 @@ test('a batch creates one subject per external record and proposes cited stateme
       }),
     },
   ] as BatchCommand[];
-  const first = await batch(commands);
+  const first = await stableBatch(commands);
   expect(first.response.status).toBe(200);
   expect(first.response.headers.get('rezics-session-token')).toBeString();
   const id = first.body.results[0].value.id as string;
@@ -131,7 +148,7 @@ test('a batch creates one subject per external record and proposes cited stateme
     { key: 'author', status: 201, value: { candidate: expect.any(String), revision: 2 } },
   ]);
 
-  const replay = await batch(commands);
+  const replay = await stableBatch(commands);
   expect(replay.body).toEqual(first.body);
   const rerun = await batch([
     { op: 'create', key: 'rerun', source: record(externalId, { record_revision: '2' }), subject: work('Kokoro') },

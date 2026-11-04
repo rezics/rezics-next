@@ -1323,6 +1323,10 @@ account erasure acknowledgement, legal-hold service or destructive takedown dead
 The bounded lifecycle derivation and evidence qualifications are recorded in the Context discovery,
 lifecycle and current disclosure row of the [Cost table](#cost).
 
+Sourced bulk creation, proposals and retractions all declare their actual response/event history scopes, including
+no-effect resolution. Their permanent command codecs preserve native record-source-set custody; batch dispatch
+does not substitute for the individual command's history declaration.
+
 ### Ordinary record retention
 
 `semanticRetention(pool,{clock}).step({partition,limit,key})` is the native ordinary-record adapter.

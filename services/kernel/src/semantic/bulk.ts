@@ -8,6 +8,8 @@ import { createHash } from 'node:crypto';
 import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 
 registerCommandHistoryKind('subject.batch_create', 3021);
+registerCommandHistoryKind('subject.batch_propose', 3025);
+registerCommandHistoryKind('subject.batch_retract', 3026);
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
@@ -173,11 +175,10 @@ export async function batchCommand(
     async (tx, { transactionId }) => {
       try {
         const resolve = async (value: BulkValue) => {
-          if (command.op === 'create')
-            await declareCommandHistory(tx, kind, {
-              response: { artifactType: 'command-receipt/v1', accounts: [] },
-              events: [],
-            });
+          await declareCommandHistory(tx, kind, {
+            response: { artifactType: 'command-receipt/v1', accounts: [] },
+            events: [],
+          });
           return noEffect<Value>({ status: 200, value });
         };
         const source = command.source;
@@ -308,6 +309,10 @@ export async function batchCommand(
             throw error;
           }
           await insertSourceCandidate.run(tx, { ...key, candidate_id: written.value.candidate });
+          await declareCommandHistory(tx, kind, {
+            response: { artifactType: 'command-receipt/v1', accounts: [] },
+            events: written.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+          });
           return { value: { status: 201, value: written.value }, events: written.events };
         }
         const proposed = await readProposedSource.run(tx, {
@@ -399,22 +404,24 @@ export async function batchCommand(
           publicationEvents,
         );
         await sealSemanticRecordSourceSet(tx, sourceSet);
-        return {
-          value: { status: 200, value: { revision } },
-          events: [
-            ...publicationEvents,
-            {
-              type: SUBJECT_REVISED,
-              subject: command.subject,
-              data: { id: command.subject, revision, kind: 'retract' },
-            },
-            {
-              type: 'com.rezics.statement.retracted.v1',
-              subject: command.subject,
-              data: { candidate: command.candidate, revision },
-            },
-          ],
-        };
+        const events = [
+          ...publicationEvents,
+          {
+            type: SUBJECT_REVISED,
+            subject: command.subject,
+            data: { id: command.subject, revision, kind: 'retract' },
+          },
+          {
+            type: 'com.rezics.statement.retracted.v1',
+            subject: command.subject,
+            data: { candidate: command.candidate, revision },
+          },
+        ];
+        await declareCommandHistory(tx, kind, {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+        });
+        return { value: { status: 200, value: { revision } }, events };
       } catch (error) {
         if (
           typeof error === 'object' &&
