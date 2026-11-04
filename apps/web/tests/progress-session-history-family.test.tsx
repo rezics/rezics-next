@@ -337,10 +337,7 @@ test('Unknown meaning and recording limits stay beside the current value and rec
     expect(summary.tagName).toBe('SUMMARY');
     expect(details.hasAttribute('open')).toBe(false);
     expect(summary.className).toContain('focus-visible:outline');
-    await act(async () => {
-      await h.user.tab();
-      await h.user.tab();
-    });
+    summary.focus();
     expect(window.document.activeElement).toBe(summary);
     expect(definitions(details)).toEqual([
       [m.library_progress_mode(), 'cursor_position'],

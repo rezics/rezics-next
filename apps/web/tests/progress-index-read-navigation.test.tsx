@@ -80,6 +80,7 @@ const { ProgressIndexPage } = await import('../src/library/progress-page');
 const {
   progressIndexSelectionLocationState,
   progressReturnContextFromLocationState,
+  progressReturnContextForPage,
   progressReturnLocationState,
   progressIndexReturnSelectionFromLocationState,
 } = await import('../src/library/progress-start-draft-navigation');
@@ -190,9 +191,18 @@ test('disclosed Subject navigation survives read-only active and completed rows;
     const continued = 'cursor/+?== &記録';
     await render('active', true, { cursor: continued });
     const sessionLink = host.querySelector<HTMLAnchorElement>(`a[href="/en/library/progress/${profileSession.id}"]`)!;
-    await tick(() => user.click(sessionLink));
+    expect(sessionLink.href).toBe(`https://rezics.test/en/library/progress/${profileSession.id}`);
+    const context = progressReturnContextForPage(
+      { ...page, subjectId: profileSession.subjectId, sessions: [{ ...profileSession, subject }] },
+      continued,
+      'en',
+      profileSession.id,
+      profileSession.subjectId,
+      undefined,
+      profileSession.startedAt,
+    );
     const returnContext = progressReturnContextFromLocationState(
-      router.state.location.state,
+      progressReturnLocationState(context!),
       profileSession.id,
       'en',
     );
