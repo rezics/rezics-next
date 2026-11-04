@@ -15,8 +15,6 @@ import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => start.getRequest() }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const spaceActions = await import('../src/community/space-actions');
-const realmMembershipActions = await import('../src/community/realm-membership-actions');
 
 type MembershipCommand = {
   data: { realmId: string; action: 'join' | 'leave'; idempotencyKey: string };
@@ -34,7 +32,6 @@ let sendMembership: (input: MembershipCommand) => Promise<MembershipResult> = as
 });
 
 mock.module('../src/community/realm-membership-actions', () => ({
-  ...realmMembershipActions,
   readRealmMembership: ({ data }: { data: { realmId: string } }) => {
     standingReads.push(data.realmId);
     return realmMembershipTestReaders.readMembership(data.realmId);
@@ -44,8 +41,32 @@ mock.module('../src/community/realm-membership-actions', () => ({
     return realmMembershipTestReaders.readJoinAdvice(data.realmId);
   },
 }));
+const unusedAction = async () => null;
 mock.module('../src/community/space-actions', () => ({
-  ...spaceActions,
+  changeRealmPublication: unusedAction,
+  readRealmBoards: unusedAction,
+  readRealmPublications: unusedAction,
+  readRealmPublicationPreparation: unusedAction,
+  changeRealmBan: unusedAction,
+  readRealmBans: unusedAction,
+  resolveRealmBanTarget: unusedAction,
+  changeSpaceSetup: unusedAction,
+  readSpaceSetup: unusedAction,
+  resolveSpaceSetupChoice: unusedAction,
+  searchSpaceSetupContexts: unusedAction,
+  readSpaceSetupBoardChoices: unusedAction,
+  readRealmAppearanceSettings: unusedAction,
+  changeRealmAppearanceSettings: unusedAction,
+  resolveRealmAppearanceChoice: unusedAction,
+  readRealmRulesAuthoring: unusedAction,
+  readRealmClaimState: unusedAction,
+  readOwnRealmClaimStatus: unusedAction,
+  submitRealmClaim: unusedAction,
+  readContainerLifecycle: unusedAction,
+  changeContainerLifecycle: unusedAction,
+  readContainerLifecycleDestination: unusedAction,
+  locateRealmPage: unusedAction,
+  readSpacePage: unusedAction,
   changeRealmMembership: (input: MembershipCommand) => {
     membershipCommands.push(input);
     return sendMembership(input);
