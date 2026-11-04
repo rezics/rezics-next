@@ -380,6 +380,15 @@ exceptions. No permissive unsupported-rule flag is used.
 
 ## Wall-time measurements
 
+### Retained host-a transfer comparison
+
+The supplied evidence does not establish the deployed `remote-check` hash, `cp-sync` point or periodic check-reclaim
+state, and does not provide a comparable required-check cohort. Record those facts, the measured transport phases and
+whether the reported 58-second symptom remains as unmeasured until confirmed receipts are available; integrated source
+is not deployment evidence. Compare only matching command class, host, source and dirty state, snapshot/base reuse and
+concurrency. Include dependency-cache171 and Git-preparation423 only when present in the selected cohort, and keep
+check-reclaim evidence separate from disk stopgap evidence.
+
 Measured on 28 October 2026 on this machine: Linux x64, AMD Ryzen Threadripper 3970X,
 32 cores / 64 logical CPUs, 64 GiB RAM. Baseline runtime: Bun 1.4.3. Candidate runtime:
 the pinned canary above. Times are elapsed wall seconds, one observation per command,
