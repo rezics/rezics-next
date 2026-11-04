@@ -299,12 +299,16 @@ export function createFollowCommands(config: FollowDeps) {
 
   async function listFollows(
     actor: Actor,
-    page: { cursor: FollowPageCursor | null; limit: number },
+    page: { cursor: FollowPageCursor | null; limit: number; targetType?: FollowTargetType },
   ): Promise<Follow[]> {
     const account = requireAccount(actor);
     const route = routeOf(account.accountId)!;
     return withConnection(pool, (client) =>
-      pageFollows(client, route, account.accountId, { after: page.cursor, limit: page.limit }),
+      pageFollows(client, route, account.accountId, {
+        after: page.cursor,
+        limit: page.limit,
+        ...(page.targetType === undefined ? {} : { targetType: page.targetType }),
+      }),
     );
   }
 

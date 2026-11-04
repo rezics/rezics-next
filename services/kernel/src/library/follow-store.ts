@@ -92,6 +92,7 @@ export async function pageFollows(tx: Client, route: number, accountId: string, 
   const rows = await pageFollowsStatement.run(queryClient(tx), {
     route,
     account_id: accountId,
+    target_type: page.targetType ?? null,
     after_updated_at: page.after?.updatedAt ?? '2026-01-01T00:00:00.000Z',
     after_target_id: page.after?.targetId ?? '00000000-0000-0000-0000-000000000000',
     has_cursor: page.after !== null,

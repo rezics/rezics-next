@@ -1511,7 +1511,13 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .get(
       '/v1/follows',
       {
-        query: t.Object(pageQuery, closed),
+        query: t.Object(
+          {
+            ...pageQuery,
+            targetType: t.Optional(t.Enum({ subject: 'subject', collection: 'collection', space: 'space' })),
+          },
+          closed,
+        ),
         response: {
           200: t.Object({ follows: t.Array(embedded(followSchema, fullFollowFields)), next: nullable }, closed),
           ...failures,
@@ -1527,12 +1533,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             const route = routeOf(owner.accountId)!;
             const binding = {
               operation: 'follow.list',
-              parameters: { accountId: owner.accountId, state: 'following' },
+              parameters: { accountId: owner.accountId, targetType: query.targetType ?? 'all', state: 'following' },
             };
-            const partition = await withConnection(dependencies.pool, (client) =>
-              readPartition(client, partitionOf(route)),
-            );
             let after: FollowPageCursor | null = null;
+            let cursorEpoch: string | null = null;
             if (query.cursor !== undefined) {
               const cursor = decodeCursor(dependencies.tokens, binding, query.cursor);
               if (
@@ -1544,16 +1548,33 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                 routeOf(cursor.after[1]) === null
               )
                 throw new ProblemError('invalid_cursor');
-              if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+              cursorEpoch = cursor.epoch;
               after = { updatedAt: cursor.after[0], targetId: cursor.after[1] };
             }
+            const partition = await withConnection(dependencies.pool, (client) =>
+              readPartition(client, partitionOf(route)),
+            );
+            if (query.cursor !== undefined && cursorEpoch !== partition?.epoch)
+              throw new ProblemError('stale_cursor');
             const size = query.limit ?? 20;
-            const rows = await follows().listFollows(actor, { cursor: after, limit: Math.min(100, size + 1) });
+            const targetType = query.targetType;
+            const rows = await follows().listFollows(actor, {
+              cursor: after,
+              limit: Math.min(100, size + 1),
+              ...(targetType === undefined ? {} : { targetType }),
+            });
             const shown = rows.slice(0, size),
               last = shown.at(-1);
             let more = rows.length > size;
             if (!more && size === 100 && last)
-              more = (await follows().listFollows(actor, { cursor: last, limit: 1 })).length > 0;
+              more =
+                (
+                  await follows().listFollows(actor, {
+                    cursor: last,
+                    limit: 1,
+                    ...(targetType === undefined ? {} : { targetType }),
+                  })
+                ).length > 0;
             return fullView(
               config(),
               actor,

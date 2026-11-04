@@ -17,6 +17,7 @@ scoped AS NOT MATERIALIZED (
          follow.transaction_id
   FROM library.follow AS follow
   WHERE follow.route = :route::integer
+    AND (:target_type::text IS NULL OR follow.target_type = :target_type::text)
 ),
 candidates AS (
 (

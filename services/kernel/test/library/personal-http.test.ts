@@ -196,6 +196,14 @@ test('personal routes mount once and declare their gate in OpenAPI', () => {
         app.routes.filter((candidate) => candidate.path === route && candidate.method.toLowerCase() === method),
       ).toHaveLength(1);
     }
+  const followingParameters = document.paths['/v1/follows']?.get?.parameters ?? [];
+  expect(followingParameters).toContainEqual(
+    expect.objectContaining({
+      name: 'targetType',
+      in: 'query',
+      schema: expect.objectContaining({ enum: ['subject', 'collection', 'space'] }),
+    }),
+  );
 });
 
 test('entry states revisions deletion and signed pages use the frozen HTTP views', async () => {
@@ -688,4 +696,92 @@ test('following pages keep their order and bind cursors to the account', async (
   }
   expect(rows).toEqual(all.follows);
   expect(rows.every((row) => row.state === 'following')).toBe(true);
+});
+
+test('following kind pages seek the selected population and bind cursors to kind and reader', async () => {
+  const route = routeOf(accounts.owner)!;
+  const collectionIds: string[] = [];
+  for (const title of ['First followed Collection', 'Second followed Collection']) {
+    const collection = await collections.insertCollection(
+      db.admin,
+      route,
+      {
+        id: newId(route),
+        curatorAccountId: accounts.owner,
+        title,
+        description: null,
+        visibility: 'public',
+      },
+      { time: clock().toISOString(), transactionId: newId(route) },
+    );
+    collectionIds.push(collection.id);
+    await json(await request('PUT', `/v1/follows/${collection.id}`));
+    if (collectionIds.length === 1)
+      for (let index = 0; index < 12; index++) await json(await request('PUT', `/v1/follows/${await subject()}`));
+  }
+
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES (0, $1, $2, 'space:create', '(,)', $3)`,
+    [GLOBAL_CONTEXT, accounts.owner, randomUUID()],
+  );
+  const space = (await json(await request('POST', '/v1/spaces', { title: 'Following kind space' }), 201)).space;
+  await json(await request('PUT', `/v1/follows/${space.spaceId}`));
+  for (let index = 0; index < 25; index++) await json(await request('PUT', `/v1/follows/${await subject()}`));
+
+  await db.admin.query(
+    `UPDATE library.follow SET updated_at = '2000-01-01T00:00:00Z'
+     WHERE route = $1 AND account_id = $2 AND target_type = 'collection' AND target_id = ANY($3::uuid[])`,
+    [route, accounts.owner, collectionIds],
+  );
+  const all = await json(await request('GET', '/v1/follows?limit=20'));
+  expect(all.follows).toHaveLength(20);
+  expect(all.follows.every((follow: { targetType: string }) => follow.targetType === 'subject')).toBe(true);
+  expect(all.follows.some((follow: { targetId: string }) => collectionIds.includes(follow.targetId))).toBe(false);
+  expect(all.follows.some((follow: { targetId: string }) => follow.targetId === space.spaceId)).toBe(false);
+
+  const expectedCollectionIds = [...collectionIds].sort();
+  const first = await json(await request('GET', '/v1/follows?targetType=collection&limit=1'));
+  expect(first.follows[0]).toMatchObject({ targetId: expectedCollectionIds[0], targetType: 'collection' });
+  expect(first.next).toEqual(expect.any(String));
+  await problem(
+    await request(
+      'GET',
+      `/v1/follows?targetType=subject&limit=1&cursor=${encodeURIComponent(first.next)}`,
+    ),
+    400,
+    'invalid_cursor',
+  );
+  await problem(
+    await request('GET', `/v1/follows?limit=1&cursor=${encodeURIComponent(first.next)}`),
+    400,
+    'invalid_cursor',
+  );
+  await problem(
+    await request('GET', `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`, undefined, 'other'),
+    400,
+    'invalid_cursor',
+  );
+  await problem(
+    await request('GET', '/v1/follows?targetType=collection&cursor=malformed'),
+    400,
+    'invalid_cursor',
+  );
+  await problem(await request('GET', '/v1/follows?targetType=realm'), 400, 'invalid_request');
+
+  await json(await request('DELETE', `/v1/follows/${expectedCollectionIds[1]}`));
+  const afterUnfollow = await json(
+    await request('GET', `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`),
+  );
+  expect(afterUnfollow).toEqual({ follows: [], next: null });
+  await json(await request('PUT', `/v1/follows/${expectedCollectionIds[1]}`));
+  const afterRefollow = await json(
+    await request('GET', `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`),
+  );
+  expect(afterRefollow).toEqual({ follows: [], next: null });
+
+  const spacePage = await json(await request('GET', '/v1/follows?targetType=space'));
+  expect(spacePage.follows).toContainEqual(expect.objectContaining({ targetId: space.spaceId, targetType: 'space' }));
+  await json(await request('DELETE', `/v1/follows/${space.spaceId}`));
+  expect(await json(await request('GET', '/v1/follows?targetType=space'))).toEqual({ follows: [], next: null });
 });

@@ -2435,9 +2435,10 @@ identity/custody and cost proof is pending; source typing does not certify these
 
 ### Follow page
 
-- Touches: One keyset on `follow_account_page` `(route, account_id, state, updated_at, target_id)` for `state = following`. The command page is one statement. The HTTP page also reads the partition epoch. Its first fetch is `min(100, s + 1)`. When `s` is 100 and that fetch does not already show a further row, a second limit-1 call runs. The cursor is bound to the account.
-- Bound: The page statement is `R` `O(s+1)`, `B` `O(L(N)+s)`, `S` 1. HTTP at `s` = 100 adds the probe, so `S` is 1 or 2, plus the partition read. No command envelope.
-- Growth check: `test/library/follows.test.ts`: `statements per follow, membership step and page stay equal as unrelated follows grow` lists with limit 20 and keeps statement counts equal as unrelated follows grow. `test/library/follow-store.test.ts`: `apply and page statement counts and examined rows stay constant as unrelated follows grow` pages with limit 1 as unrelated follows grow: one statement, one examined follow row, no sequential scan, constant rows and logarithmic blocks.
+- Decision: the optional `/v1/follows` selector is `targetType` with `subject`, `collection` and `space`; omission selects all native kinds.
+- Touches: All-kind keysets use `follow_account_page` `(route, account_id, state, updated_at DESC, target_id)`. A selected kind uses `follow_account_kind_page` `(route, account_id, target_type, state, updated_at DESC, target_id)`. Both updated-time branches apply the same kind predicate before ordering and limit, so a selected population is sought in the index instead of filtered from an all-kind page. The command page is one statement. The HTTP page also reads the partition epoch. Its first fetch is `min(100, s + 1)`; when `s` is 100 and that fetch does not show another row, a second limit-1 call checks the same kind. A sealed cursor binds `follow.list`, the exact account, selected kind or all mode, `state = following`, and the native partition epoch.
+- Bound: The page statement is `R` `O(s+1)`, `B` `O(L(N)+s)`, `S` 1. HTTP at `s` = 100 adds the probe, so `S` is 1 or 2, plus the partition read. No command envelope. Both modes read current rows; follow or unfollow changes between pages follow the existing keyset consistency rule and add no snapshot authority.
+- Growth evidence: Existing all-kind measurements remain in `test/library/follows.test.ts` and `test/library/follow-store.test.ts`. Whole-HTTP selected-kind measurements at 64, 512 and 4096 matching and nonmatching follows, including authority reads, final rechecks, serialization, retries and cleanup, remain controller-owned and unmeasured on this source.
 
 ### Publish
 
