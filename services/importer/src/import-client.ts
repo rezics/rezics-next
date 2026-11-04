@@ -343,7 +343,9 @@ export function createImportTransport(options: ImportTransportOptions) {
         (item) =>
           item.status === 503 &&
           'problem' in item &&
+          'code' in item.problem &&
           item.problem.code === 'transaction_retry_exhausted' &&
+          'retryable' in item.problem &&
           item.problem.retryable === true,
       );
       if (!contention || attempt >= 2) return result;
