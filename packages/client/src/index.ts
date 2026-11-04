@@ -7,6 +7,7 @@ import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
 import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/history-page.ts';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
+import type { WatchManagementKind, WatchManagementPage } from './kernel/content/watch-management-contract';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export type {
@@ -31,24 +32,11 @@ export type {
   EntryAnnotationCorrectionPage,
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
-export type WatchManagementKind = 'thread' | 'board';
-type WatchManagementIdentity = {
-  id: string;
-  kind: WatchManagementKind;
-  revision: number;
-  createdAt: string;
-};
-export type WatchManagementItem =
-  | (WatchManagementIdentity & {
-      state: 'available';
-      resourceId: string;
-      title: string | null;
-    })
-  | (WatchManagementIdentity & { state: 'unavailable' });
-export type WatchManagementPage = {
-  items: WatchManagementItem[];
-  next: string | null;
-};
+export type {
+  WatchManagementItem,
+  WatchManagementKind,
+  WatchManagementPage,
+} from './kernel/content/watch-management-contract';
 export type {
   RealmClaimReviewApprovalAdvice,
   RealmClaimReviewClaimant,
@@ -148,6 +136,40 @@ type ClientApp = Elysia<
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
+type GeneratedAccountPath = ReturnType<GeneratedKernelClient['accounts']>;
+type GeneratedAccountRead = GeneratedAccountPath['profile']['get'];
+type WatchRequestOptions = Omit<NonNullable<Parameters<GeneratedAccountRead>[0]>, 'query'>;
+type WatchListOptions = WatchRequestOptions & {
+  query: { kind: WatchManagementKind; limit?: number; cursor?: string };
+};
+type WatchManagementRead = PersonalEntryCall<WatchManagementPage>;
+type WatchRemovalPath = {
+  delete(
+    body: { expectedRevision: number },
+    options: WatchRequestOptions & {
+      query: { kind: WatchManagementKind };
+      headers: Record<string, string> & { 'idempotency-key': string };
+    },
+  ): PersonalEntryCall<{ removed: true }>;
+};
+type WatchManagementPath = ((params: { watchId: string }) => WatchRemovalPath) & {
+  get(options: WatchListOptions): WatchManagementRead;
+};
+type AccountsPath = Omit<GeneratedAccountPath, 'watches'> & { watches: WatchManagementPath };
+type AccountsClient = Omit<GeneratedKernelClient['accounts'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['accounts']>) => AccountsPath);
+type GeneratedBoardsPath = ReturnType<GeneratedKernelClient['boards']>;
+type BoardWatchState = { watching: boolean; revision: number };
+type BoardWatchPath = {
+  get(options?: WatchRequestOptions): PersonalEntryCall<BoardWatchState>;
+  put(
+    body: { watching: boolean; expectedRevision: number },
+    options: PersonalWriteOptions,
+  ): PersonalEntryCall<BoardWatchState>;
+};
+type BoardsPath = Omit<GeneratedBoardsPath, 'watch'> & { watch: BoardWatchPath };
+type BoardsClient = Omit<GeneratedKernelClient['boards'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['boards']>) => BoardsPath);
 type GeneratedBanReviewGet = ReturnType<GeneratedKernelClient['realms']>['bans']['get'];
 type GeneratedBanReviewRead = Awaited<ReturnType<GeneratedBanReviewGet>>;
 type BanReviewRead = Omit<GeneratedBanReviewRead, 'data'> & { data: BanReviewPage | null };
@@ -173,28 +195,13 @@ type PostHistoryPath = Omit<GeneratedPostHistoryPath, 'get'> &
 type PostPath = Omit<GeneratedPostPath, 'revisions'> & { revisions: PostHistoryPath };
 type PostsClient = Omit<GeneratedKernelClient['posts'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['posts']>) => PostPath);
-
-type ReadingPageCall = ReturnType<ReturnType<GeneratedKernelClient['threads']>['reading-page']['get']>;
-/** Response declared by the mounted thread reading route. */
-export type ReadingPageResponse = NonNullable<Awaited<ReadingPageCall>['data']>;
-
-type BoardPageCall = ReturnType<ReturnType<GeneratedKernelClient['boards']>['page']['get']>;
-/** Response declared by the mounted GET /v1/boards/:id/page route. */
-export type BoardPageResponse = NonNullable<Awaited<BoardPageCall>['data']>;
 type PersonalEntryPath = ReturnType<GeneratedKernelClient['libraryEntries']>;
 type DecisionPagePath = ReturnType<GeneratedKernelClient['moderation-decisions']>;
 type DecisionPageGet = DecisionPagePath['get'];
 type DecisionPageRead = Awaited<ReturnType<DecisionPageGet>>;
 type DecisionPageReadResult = Omit<DecisionPageRead, 'data'> & { data: ModerationDecisionPage | null };
-type DecisionAppealPost = DecisionPagePath['$appeal']['post'];
-type DecisionAppealOptions = Parameters<DecisionAppealPost>[1] & {
-  headers: { authorization?: string };
-};
-type DecisionPageEndpoints = Omit<DecisionPagePath, 'get' | '$appeal'> & {
+type DecisionPageEndpoints = Omit<DecisionPagePath, 'get'> & {
   get(...args: Parameters<DecisionPageGet>): Promise<DecisionPageReadResult>;
-  $appeal: Omit<DecisionPagePath['$appeal'], 'post'> & {
-    post(body: Parameters<DecisionAppealPost>[0], options: DecisionAppealOptions): ReturnType<DecisionAppealPost>;
-  };
 };
 type DecisionPages = Omit<GeneratedKernelClient['moderation-decisions'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['moderation-decisions']>) => DecisionPageEndpoints);
@@ -233,23 +240,6 @@ type PersonalEntryEndpoints = {
     }>;
   };
 };
-type WatchManagementEndpoints = {
-  get(
-    options: {
-      query: { kind: WatchManagementKind; limit?: number; cursor?: string };
-    } & PersonalReadOptions,
-  ): PersonalEntryCall<WatchManagementPage>;
-  (params: { watchId: string }): {
-    delete(
-      body: { expectedRevision: number },
-      options: { query: { kind: WatchManagementKind } } & PersonalWriteOptions,
-    ): PersonalEntryCall<{ removed: boolean }>;
-  };
-};
-type AccountsClient = Omit<GeneratedKernelClient['accounts'], keyof Function> &
-  ((
-    ...args: Parameters<GeneratedKernelClient['accounts']>
-  ) => ReturnType<GeneratedKernelClient['accounts']> & { watches: WatchManagementEndpoints });
 export type {
   OwnCountedVoteAccountObservation,
   OwnCountedVoteIdentity,
@@ -258,8 +248,6 @@ export type {
   OwnCountedVotePreparedTarget,
   OwnCountedVotePreparation,
   OwnCountedVoteQuestionObservation,
-  OwnCountedVoteReader,
-  OwnCountedVoteReaderDependencies,
   OwnCountedVoteReadResult,
   OwnCountedVoteRequest,
   OwnCountedVoteResult,
@@ -295,39 +283,17 @@ type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
 
 type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
 type SubjectPath = ReturnType<SubjectsClient>;
-type ProvisionalClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
-// Preserve the existing consumer seam while publication is pending. Once installed, the mounted transport
-// supplies its complete mutation unions without intersection with the provisional narrowing.
-type ClassificationCompatibility<Path> = Path extends { 'source-classifications': unknown }
-  ? Path
-  : Path & { 'source-classifications': ProvisionalClassificationsClient };
-
-// These aliases become usable only when the mounted declaration publisher installs the actual methods.
-// No hand-maintained transport supplies a missing mounted route.
-type ClassificationMethod<Verb extends string> = SubjectRoutes extends {
-  ':id': { 'source-classifications': infer Methods };
-}
-  ? Methods extends Record<Verb, { post: infer Method }>
-    ? Method
-    : never
-  : never;
-type MethodBody<Method> = Method extends { body: infer Body } ? Body : never;
-type MethodResult<Method> = Method extends { response: { 200: infer Result } } ? Result : never;
-export type SourceClassificationBatchInput = MethodBody<ClassificationMethod<'$read'>>;
-export type SourceClassificationBatch = MethodResult<ClassificationMethod<'$read'>>;
-export type SourceClassificationPutInput = MethodBody<ClassificationMethod<'$put'>>;
-export type SourceClassificationPutResult = MethodResult<ClassificationMethod<'$put'>>;
-export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$clear'>>;
-export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
+type SourceClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
 
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms' | 'accounts'
+  'accounts' | 'boards' | 'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
 > & {
+  accounts: AccountsClient;
+  boards: BoardsClient;
   posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
-  accounts: AccountsClient;
   subjects: KernelSubjectsClient;
   'moderation-decisions': DecisionPages;
   realms: RealmsClient;
@@ -346,17 +312,10 @@ export type NoticeInboxPage = NonNullable<NoticeInboxRead['data']>;
 export type NoticeInboxItem = NoticeInboxPage['items'][number];
 export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
-  ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
+  ((...args: Parameters<SubjectsClient>) => SubjectPath & {
+    'source-classifications': SourceClassificationsClient;
+  });
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
-
-type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];
-export type SourceStatisticListResponse = SubjectSourceStatisticsRoute['get']['response'][200];
-export type SourceStatistic = SourceStatisticListResponse[number];
-export type SourceStatisticWriteInput = SubjectSourceStatisticsRoute[':source']['put']['body'];
-export type SourceStatisticWriteResult = SubjectSourceStatisticsRoute[':source']['put']['response'][200];
-export type SourceStatisticClearInput = SubjectSourceStatisticsRoute[':source']['$clear']['post']['body'];
-export type SourceStatisticClearResult = SubjectSourceStatisticsRoute[':source']['$clear']['post']['response'][204];
-export type SourceStatisticFigures = NonNullable<SourceStatistic['figures']>;
 
 /** Home and Following share the installed feedItems response declaration. */
 export type FeedPage = Routes['feedItems']['get']['response'][200];
@@ -412,7 +371,3 @@ export function createKernelClient(origin: string, options: KernelClientOptions 
 export type QuestionLabelInput = Routes['rating-questions'][':questionId']['label']['put']['body'];
 export type QuestionLabelResult = Routes['rating-questions'][':questionId']['label']['put']['response'][200];
 export type QuestionLabelHistoryQuery = Routes['rating-questions'][':questionId']['labels']['get']['query'];
-type ClassificationBallotOwnPageRoute = Routes['me']['classification-assessments']['get'];
-export type ClassificationBallotOwnPageQuery = ClassificationBallotOwnPageRoute['query'];
-export type ClassificationBallotOwnPage = ClassificationBallotOwnPageRoute['response'][200];
-export type ClassificationBallotOwnPageItem = ClassificationBallotOwnPage['items'][number];
