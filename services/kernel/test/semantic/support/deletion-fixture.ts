@@ -12,6 +12,7 @@ import * as semantic from '../../../src/semantic/index.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { createRealAccess } from '../real-access.ts';
 
 // Shared native fixtures; each test file creates and closes its own instance.
@@ -75,6 +76,7 @@ export async function createDeletionFixture(database?: Pick<GrowthDatabase, 'poo
     clock,
     routeKey,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) },
+    receiptKeys: testReceiptKeys(),
     writeRate: createWriteRateLimiter({
       secret: 'semantic-deletion-native-test-rate-secret',
       overrides: '{"new-account":{"write":{"maximum":10000,"seconds":60}}}',

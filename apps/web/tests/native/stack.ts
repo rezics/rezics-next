@@ -45,6 +45,8 @@ export type NativeKernelRequest = {
 export type NativeKernelFailureInjection = {
   method: string;
   path: string;
+  search?: string;
+  bodyIncludes?: string;
   status: number;
   body: string;
 };
@@ -880,7 +882,7 @@ async function startStack(): Promise<
           session: request.headers.get('rezics-session-token'),
           fixtureRequest: request.headers.get('x-native-fixture-request') === '1',
           ...(request.method === 'POST' &&
-          (['/v1/copies', '/v1/subjects'].includes(url.pathname) ||
+          (['/v1/copies', '/v1/subjects', '/v1/viewerActions'].includes(url.pathname) ||
             /^\/v1\/subjects\/[^/]+\/candidates$/u.test(url.pathname))
             ? { body: await request.clone().text() }
             : request.method === 'PATCH'
@@ -903,7 +905,9 @@ async function startStack(): Promise<
             failure.method === request.method &&
             (failure.path.endsWith('*')
               ? url.pathname.startsWith(failure.path.slice(0, -1))
-              : failure.path === url.pathname),
+              : failure.path === url.pathname) &&
+            (failure.search === undefined || failure.search === url.search) &&
+            (failure.bodyIncludes === undefined || observed.body?.includes(failure.bodyIncludes) === true),
         );
         if (failureIndex >= 0) {
           const [failure] = injectedKernelFailures.splice(failureIndex, 1);
@@ -1176,6 +1180,8 @@ async function startStack(): Promise<
         if (
           !failure.method ||
           !failure.path.startsWith('/v1/') ||
+          (failure.search !== undefined && !failure.search.startsWith('?')) ||
+          (failure.bodyIncludes !== undefined && failure.bodyIncludes.length === 0) ||
           !Number.isInteger(failure.status) ||
           failure.status < 400 ||
           failure.status > 599

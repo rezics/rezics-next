@@ -1899,17 +1899,34 @@ See [the runtime contract](#current-list-presentation-facts).
   the frozen `list-presentation-facts.test.ts`. Native execution and quantitative fit receipts are
   deferred to post-integration acceptance under the current minimal verification instruction.
 
-### Subject revision history and statement disclosure
+### Subject revision history, disclosure and current correction actions
 
 The public revision-history route reads the first page and a deep cursor page at a fixed page size. Rows and statements
 stay constant for both pages; indexed blocks grow logarithmically with the selected subject's revision history and are
 independent of other subjects' histories. Statement disclosure measures one candidate mutation with fixed fanout;
 rows and statements stay constant and indexed blocks grow logarithmically with unrelated candidate history.
 
-| Operation                   | Bound                                                                                            | Growth check                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Revision-history pages      | Constant rows/statements for two fixed-size pages; logarithmic blocks in subject history.        | `test/semantic/revision-history-growth.test.ts`: first and deep cursor pages at scales `[1, 8, 64]`.     |
-| Statement disclosure change | Constant rows/statements for one affected candidate; logarithmic blocks in unrelated candidates. | `test/semantic/revision-history-growth.test.ts`: one-candidate disclosure change at scales `[1, 8, 64]`. |
+#### Revision-history pages
+
+- Touches: One requested fixed-size page, its keyed Subject revision range and current `subject:read` authorization.
+- Bound: The native page size and signed cursor remain fixed; indexed work grows logarithmically with the selected Subject history and does not scan other Subjects.
+- Growth check: `test/semantic/revision-history-growth.test.ts` reads first and deep pages at scales `[1, 8, 64]`, asserting constant rows/statements and logarithmic blocks.
+
+#### Statement disclosure change
+
+- Touches: One affected candidate and its bounded disclosure dependencies, including refused and failed native reads.
+- Bound: One candidate mutation with fixed fanout; unrelated candidate history is not hydrated.
+- Growth check: `test/semantic/revision-history-growth.test.ts` measures one-candidate disclosure at scales `[1, 8, 64]`, asserting constant rows/statements and logarithmic blocks.
+
+#### Current correction-action projection
+
+`readSubjectCorrectionActions` uses the mounted `subject.propose` and `subject.terms` references with the shared
+`readViewerActions` reader. It checks current public Subject visibility, type and revision against the exact Global
+Context authority read. A stale revision, concealed Subject or failed authority read produces no positive operation.
+
+- Touches: One current Subject state, one current revision point and the deduplicated mounted Global Context action references, including native Access and failed, stale or concealed branches.
+- Bound: One Subject and one Global Context per request, with at most the two correction operation identities. It does not hydrate actions for historical revisions, scan revision history or enumerate an actor's grants.
+- Growth check: `test/semantic/viewer-actions.test.ts` exercises both mounted operation identities against current Global Access, including revocation. `test/semantic/revision-history-growth.test.ts` retains the three-scale history/disclosure captures; controller post-integration acceptance measures strict plans and examined rows for the action point reader as unrelated history and grants grow.
 
 ## Native subject page publication
 

@@ -733,6 +733,8 @@ The final read checks current disclosure again. Responses use `Cache-Control: no
 `reading` uses actual current decision and selected slot rank in the record's Context (Global for proposals).
 An adoption's selection describes that recorded adoption only. Revision order never proves current adoption.
 
+Decision: a selected terms revision opens the current Terms editor; a disclosed Global property opens the current property editor with only the Subject and property, and return reloads the same number of visited history pages through fresh signed cursors; unsupported contexts stay on Current reading.
+
 Changes offers **Review current candidate** for candidate and decision revisions. For an adoption, choose one of
 its recorded selected rows before opening that exact candidate. These actions perform a new exact current read in
 the disclosed Context; they do not recreate historical candidate bodies, actors or selection state. Candidate

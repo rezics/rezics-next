@@ -25,6 +25,12 @@ async function explain(page: Page, revision: number): Promise<void> {
   ).toBeVisible();
 }
 
+async function replaceTermsName(page: Page, name: string): Promise<void> {
+  const group = page.locator('fieldset').filter({ has: page.locator('legend', { hasText: 'Name' }) });
+  await group.locator('select').selectOption('set');
+  await group.getByLabel('Name', { exact: true }).fill(name);
+}
+
 test('the served Changes route explains native terms and recorded adoption independently of the current reading', async () => {
   const { stack, auth, id, label, path, selected } = fixture;
   const signedIn = await auth.signIn('alice');
@@ -38,7 +44,72 @@ test('the served Changes route explains native terms and recorded adoption indep
   await pageExpect(changes.getByRole('heading', { name: m.changes_title(), exact: true })).toBeVisible();
   await pageExpect(
     changes.getByRole('button', { name: new RegExp(`Revision ${fixture.termsRevision}(?!\\d)`) }),
+  ).toHaveCount(0);
+
+  await changes.getByRole('button', { name: m.changes_more() }).click();
+  await pageExpect(
+    changes.getByRole('button', { name: new RegExp(`Revision ${fixture.termsRevision}(?!\\d)`) }),
   ).toBeVisible();
+
+  await fixture.setProposalAuthority(false);
+  await explain(page, fixture.termsRevision);
+  await pageExpect(changes.getByText(m.changes_correction_denied())).toBeVisible();
+  await pageExpect(changes.getByRole('link', { name: m.changes_correct_terms() })).toHaveCount(0);
+  await pageExpect(changes.getByText(m.changes_terms())).toBeVisible();
+
+  await fixture.setProposalAuthority(true);
+  await explain(page, fixture.termsRevision);
+  await pageExpect(changes.getByRole('link', { name: m.changes_correct_terms() })).toBeVisible();
+  await stack.injectKernelFailureOnce({
+    method: 'POST',
+    path: '/v1/viewerActions',
+    bodyIncludes: id,
+    status: 503,
+    body: JSON.stringify({
+      type: 'https://rezics.com/problems/overloaded',
+      title: 'Overloaded',
+      status: 503,
+      code: 'overloaded',
+      detail: 'PRIVATE ACTION FAILURE',
+    }),
+  });
+  await explain(page, fixture.termsRevision);
+  await pageExpect(changes.getByText(m.changes_correction_unavailable())).toBeVisible();
+  await pageExpect(changes.getByRole('link', { name: m.changes_correct_terms() })).toHaveCount(0);
+  await pageExpect(changes.getByText(m.changes_terms())).toBeVisible();
+  expect(await changes.textContent()).not.toContain('PRIVATE ACTION FAILURE');
+
+  await explain(page, fixture.termsRevision);
+  const correctionLink = changes.getByRole('link', { name: m.changes_correct_terms() });
+  await pageExpect(correctionLink).toBeVisible();
+  const beforeCorrectionResponse = await stack.kernel(`/v1/subjects/${id}`);
+  expect(beforeCorrectionResponse.status).toBe(200);
+  const beforeCorrection = (await beforeCorrectionResponse.json()) as { subject: { revision: number } };
+  await correctionLink.click();
+  await pageExpect(page.getByRole('heading', { name: 'Edit names and descriptions', exact: true })).toBeVisible();
+  await pageExpect(page.getByRole('link', { name: m.changes_return_to_changes() })).toBeVisible();
+  const revisedName = `Current correction ${crypto.randomUUID().slice(0, 8)}`;
+  await replaceTermsName(page, revisedName);
+  await page.getByRole('button', { name: 'Save terms', exact: true }).click();
+  await pageExpect(page.getByText('Terms saved.', { exact: true })).toBeVisible();
+  await stack.refreshKernelRequests();
+  const termsPatch = stack
+    .kernelRequests()
+    .filter((request) => !request.fixtureRequest && request.method === 'PATCH' && request.url === `/v1/subjects/${id}/terms`)
+    .at(-1);
+  expect(termsPatch?.ifMatch).toBe(`"${beforeCorrection.subject.revision}"`);
+  const correctedResponse = await stack.kernel(`/v1/subjects/${id}`);
+  expect(correctedResponse.status).toBe(200);
+  const corrected = (await correctedResponse.json()) as { subject: { labels: Record<string, string> } };
+  expect(corrected.subject.labels.en).toBe(revisedName);
+  await page.getByRole('link', { name: m.changes_return_to_changes() }).click();
+  await hydrate(page);
+  await pageExpect(changes.getByRole('button', { name: new RegExp(`Revision ${fixture.termsRevision}(?!\\d)`) })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await pageExpect(changes.getByText(m.changes_terms())).toBeVisible();
+  await pageExpect(changes.getByRole('link', { name: m.changes_current(), exact: true })).toBeVisible();
 
   await explain(page, fixture.termsRevision);
   await pageExpect(changes.getByText(m.changes_terms())).toBeVisible();
