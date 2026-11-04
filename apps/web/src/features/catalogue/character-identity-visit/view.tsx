@@ -104,9 +104,7 @@ export function CharacterIdentityVisit({
   return (
     <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]" data-slot="character-identity-visit">
       {identity && (
-        <p className="max-w-prose text-sm text-muted-foreground">
-          {m.character_identity_visit_identity_note({}, o)}
-        </p>
+        <p className="max-w-prose text-sm text-muted-foreground">{m.character_identity_visit_identity_note({}, o)}</p>
       )}
       {!identityAvailable && <p role="status">{m.character_identity_visit_unavailable({}, o)}</p>}
       <div className="space-y-3" data-direction={current.stream.direction}>

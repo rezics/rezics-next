@@ -4,7 +4,12 @@ import { dirname } from 'node:path';
 import type { CompositionDocument, SelectedContext } from '@rezics/composition';
 import type { GuideRelease } from '../src/features/catalogue/definition-guide';
 import type { OverviewValue } from '../src/features/pages/overview';
-import type { ConnectionAddress, ConnectionStream, ConnectionVisit, ConnectionWork } from '../src/features/pages/subject-connections';
+import type {
+  ConnectionAddress,
+  ConnectionStream,
+  ConnectionVisit,
+  ConnectionWork,
+} from '../src/features/pages/subject-connections';
 import type { ConnectionRead } from '../src/features/pages/subject-connections-window';
 import type { SubjectPageData } from '../src/features/pages/subject';
 
@@ -90,7 +95,12 @@ function parentRow() {
   };
 }
 
-function visit(stream: ConnectionStream, rows: unknown[], next: string | null = 'current-next', subject = source): ConnectionVisit {
+function visit(
+  stream: ConnectionStream,
+  rows: unknown[],
+  next: string | null = 'current-next',
+  subject = source,
+): ConnectionVisit {
   const kind = stream.direction === 'in' ? 'links' : 'relations';
   return {
     ok: true,
@@ -157,16 +167,18 @@ function overview(context?: SelectedContext, locale = 'en', realm?: string, subj
   } as unknown as OverviewValue;
 }
 
-async function withMountedPage(run: (input: {
-  host: HTMLElement;
-  browser: any;
-  mount: (props: {
-    value?: OverviewValue;
-    page?: SubjectPageData;
-    viewer?: { state: string; subject?: string | null; csrfToken: string | null };
-    read: ConnectionRead;
-  }) => Promise<void>;
-}) => Promise<void>) {
+async function withMountedPage(
+  run: (input: {
+    host: HTMLElement;
+    browser: any;
+    mount: (props: {
+      value?: OverviewValue;
+      page?: SubjectPageData;
+      viewer?: { state: string; subject?: string | null; csrfToken: string | null };
+      read: ConnectionRead;
+    }) => Promise<void>;
+  }) => Promise<void>,
+) {
   const { Window } = await makeWindow();
   const browser = new Window({ url: `https://site.test/en/subjects/${source}/mina` });
   const globals = {
@@ -189,7 +201,12 @@ async function withMountedPage(run: (input: {
     await run({
       host,
       browser,
-      mount: async ({ value = overview(), page = pageForCharacter(value.context, value.subject ?? source), viewer = { state: 'signed-out', csrfToken: null }, read }) => {
+      mount: async ({
+        value = overview(),
+        page = pageForCharacter(value.context, value.subject ?? source),
+        viewer = { state: 'signed-out', csrfToken: null },
+        read,
+      }) => {
         await act(async () =>
           root.render(
             createElement(
@@ -221,18 +238,25 @@ test('directed identity and incoming parent keep released meaning, exact evidenc
   await withMountedPage(async ({ host, browser, mount }) => {
     await mount({
       value: overview(context, 'ja', realm),
-      read: async () => visit(identity, [
-        identityRow(2, '海を渡る長い名前の旅人'),
-        identityRow(3, '海を渡る長い名前の旅人', false, target),
-      ]),
+      read: async () =>
+        visit(identity, [
+          identityRow(2, '海を渡る長い名前の旅人'),
+          identityRow(3, '海を渡る長い名前の旅人', false, target),
+        ]),
     });
     expect(host.querySelector('[data-slot="character-identity-visit"]')).not.toBeNull();
-    expect(host.querySelectorAll(`[data-connection-statement="${id(102)}"] a[href*="/subjects/${target}/"]`)).toHaveLength(1);
+    expect(
+      host.querySelectorAll(`[data-connection-statement="${id(102)}"] a[href*="/subjects/${target}/"]`),
+    ).toHaveLength(1);
     expect(host.querySelectorAll(`[data-connection-statement="${id(102)}"]`)).toHaveLength(1);
-    expect(host.querySelector(`[data-connection-statement="${id(102)}"]`)?.getAttribute('data-connection-holder')).toBe(source);
+    expect(host.querySelector(`[data-connection-statement="${id(102)}"]`)?.getAttribute('data-connection-holder')).toBe(
+      source,
+    );
     expect(host.querySelectorAll(`[data-connection-statement], [data-connection-holder]`)).toHaveLength(2);
     expect(host.querySelectorAll(`a[href*="/subjects/${target}/"]`)).toHaveLength(2);
-    const targetLink = host.querySelector<HTMLAnchorElement>(`[data-connection-statement="${id(102)}"] a[href*="/subjects/${target}/"]`)!;
+    const targetLink = host.querySelector<HTMLAnchorElement>(
+      `[data-connection-statement="${id(102)}"] a[href*="/subjects/${target}/"]`,
+    )!;
     const targetUrl = new URL(targetLink.href);
     expect(targetUrl.pathname.startsWith('/ja/subjects/')).toBe(true);
     expect(targetUrl.searchParams.get('realm')).toBe(realm);
@@ -259,9 +283,16 @@ test('directed identity and incoming parent keep released meaning, exact evidenc
     await mount({
       value: overview(context, 'ja', realm),
       page: pageForCharacter(context),
-      read: async () => visit(identity, [identityRow(2, '海を渡る長い名前の旅人'), identityRow(3, '海を渡る長い名前の旅人', false, target)], null),
+      read: async () =>
+        visit(
+          identity,
+          [identityRow(2, '海を渡る長い名前の旅人'), identityRow(3, '海を渡る長い名前の旅人', false, target)],
+          null,
+        ),
     });
-    expect(document.activeElement?.closest('[data-connection-statement]')?.getAttribute('data-connection-statement')).toBe(id(102));
+    expect(
+      document.activeElement?.closest('[data-connection-statement]')?.getAttribute('data-connection-statement'),
+    ).toBe(id(102));
 
     browser.location.href = `https://site.test/en/subjects/${source}/mina#connections`;
     await mount({ value: overview(context), read: async () => visit(father, [parentRow()], null) });
@@ -276,9 +307,19 @@ test('directed identity and incoming parent keep released meaning, exact evidenc
 test('spoiler gating hides the complete association and withheld targets disclose no identifier', async () => {
   await withMountedPage(async ({ host, mount }) => {
     const withheld = id(9);
-    const missing = { target: withheld, statement: statement(id(109), identity.property, withheld), summary: null, related: {} };
+    const missing = {
+      target: withheld,
+      statement: statement(id(109), identity.property, withheld),
+      summary: null,
+      related: {},
+    };
     await mount({
-      read: async () => visit(identity, [identityRow(2, 'Visible identity'), identityRow(8, 'Secret identity, must stay hidden', true, id(8)), missing]),
+      read: async () =>
+        visit(identity, [
+          identityRow(2, 'Visible identity'),
+          identityRow(8, 'Secret identity, must stay hidden', true, id(8)),
+          missing,
+        ]),
     });
     expect(host.textContent).toContain('Visible identity');
     expect(host.textContent).toContain('Some relationships are hidden at the current spoiler level.');
@@ -300,8 +341,7 @@ test('caller and selected Context A/B/A retirement rejects late rows from both o
     const contextA = { id: realmA, population: { kind: 'realm' as const, id: realmA, title: 'Context A' } };
     const contextB = { id: realmB, population: { kind: 'realm' as const, id: realmB, title: 'Context B' } };
     const pending: { address: ConnectionAddress; resolve: (visit: ConnectionVisit) => void }[] = [];
-    const read: ConnectionRead = (address) =>
-      new Promise((resolve) => pending.push({ address, resolve }));
+    const read: ConnectionRead = (address) => new Promise((resolve) => pending.push({ address, resolve }));
     const viewerA = { state: 'signed-in', subject: id(80), csrfToken: 'caller-a' };
     const viewerB = { state: 'signed-in', subject: id(81), csrfToken: 'caller-b' };
     await mount({ value: overview(contextA, 'en', realmA), viewer: viewerA, read });
@@ -323,7 +363,10 @@ test('caller and selected Context A/B/A retirement rejects late rows from both o
 test('64/512/4096 unrelated Subjects leave the adapter calls, current rows and UTF-8 response charge fixed', async () => {
   const samples: { initial: ConnectionWork; more: ConnectionWork; initialRows: number; currentRows: number }[] = [];
   for (const population of [64, 512, 4096]) {
-    const unrelated = Array.from({ length: population }, (_, index) => ({ subject: id(1000 + index), obsolete: statement(id(5000 + index), identity.property, target) }));
+    const unrelated = Array.from({ length: population }, (_, index) => ({
+      subject: id(1000 + index),
+      obsolete: statement(id(5000 + index), identity.property, target),
+    }));
     const page = pageForCharacter();
     const requests: URL[] = [];
     const client = createKernelClient('https://native.test', {
@@ -332,7 +375,9 @@ test('64/512/4096 unrelated Subjects leave the adapter calls, current rows and U
         requests.push(url);
         if (url.pathname.endsWith('/pages:read')) return Response.json(page);
         if (url.pathname.includes('/definitions'))
-          return Response.json(url.pathname.endsWith('active') ? { digest: release.digest } : { digest: release.digest, release });
+          return Response.json(
+            url.pathname.endsWith('active') ? { digest: release.digest } : { digest: release.digest, release },
+          );
         const kind = url.pathname.endsWith('/links') ? 'links' : 'relations';
         const stream = streams.find((candidate) => candidate.property === url.searchParams.get('property'))!;
         const rows = Array.from({ length: 12 }, (_, index) => {
@@ -344,8 +389,24 @@ test('64/512/4096 unrelated Subjects leave the adapter calls, current rows and U
             stream.property === identityProperty,
           );
           return stream.direction === 'in'
-            ? { subject: destination, property: stream.property, statement: assertion.id, assertion, type: 'wd:Q95074', label: `Character ${index}`, summary: summary(destination, `Character ${index}`), related: {} }
-            : { target: destination, statement: assertion, label: `Character ${index}`, type: 'wd:Q95074', summary: summary(destination, `Character ${index}`), related: { [destination]: summary(destination, `Character ${index}`) } };
+            ? {
+                subject: destination,
+                property: stream.property,
+                statement: assertion.id,
+                assertion,
+                type: 'wd:Q95074',
+                label: `Character ${index}`,
+                summary: summary(destination, `Character ${index}`),
+                related: {},
+              }
+            : {
+                target: destination,
+                statement: assertion,
+                label: `Character ${index}`,
+                type: 'wd:Q95074',
+                summary: summary(destination, `Character ${index}`),
+                related: { [destination]: summary(destination, `Character ${index}`) },
+              };
         });
         return Response.json({ [kind]: rows, next: url.searchParams.has('cursor') ? null : 'opaque-next' });
       }) as typeof fetch,
@@ -358,7 +419,10 @@ test('64/512/4096 unrelated Subjects leave the adapter calls, current rows and U
     };
     const read: ConnectionRead = (selected, signal) =>
       readConnectionVisit(client, selected, undefined, signal, { observe: (current) => work.push({ ...current }) });
-    const window = (await import('../src/features/pages/subject-connections-window')).createConnectionWindow(address, read);
+    const window = (await import('../src/features/pages/subject-connections-window')).createConnectionWindow(
+      address,
+      read,
+    );
     window.activate();
     await window.load();
     const initialVisit = window.snapshot().visit!;
@@ -381,7 +445,11 @@ test('64/512/4096 unrelated Subjects leave the adapter calls, current rows and U
       return total + (Array.isArray(rows) ? rows.length : 0);
     }, 0);
     expect(Object.keys(currentVisit.sections)).toHaveLength(3);
-    expect(requests.filter((url) => url.pathname.endsWith('/relations') || url.pathname.endsWith('/links')).every((url) => url.pathname.includes(source))).toBe(true);
+    expect(
+      requests
+        .filter((url) => url.pathname.endsWith('/relations') || url.pathname.endsWith('/links'))
+        .every((url) => url.pathname.includes(source)),
+    ).toBe(true);
     expect(requests.some((url) => unrelated.some((entry) => url.pathname.includes(entry.subject)))).toBe(false);
     samples.push({ initial: work[0]!, more: work[1]!, initialRows, currentRows });
     expect(initialVisit.sections.relations?.section.ok).toBe(true);
@@ -389,11 +457,19 @@ test('64/512/4096 unrelated Subjects leave the adapter calls, current rows and U
   }
   expect(samples.map(({ initial }) => initial.calls)).toEqual([7, 7, 7]);
   expect(samples.map(({ initial }) => initial.values)).toEqual([36, 36, 36]);
-  expect(samples.map(({ more }) => [more.calls, more.values])).toEqual([[5, 12], [5, 12], [5, 12]]);
+  expect(samples.map(({ more }) => [more.calls, more.values])).toEqual([
+    [5, 12],
+    [5, 12],
+    [5, 12],
+  ]);
   expect(samples.map(({ initialRows, currentRows }) => [initialRows, currentRows])).toEqual([
     [36, 36],
     [36, 36],
     [36, 36],
   ]);
-  expect(samples.map(({ initial }) => initial.bytes)).toEqual([samples[0]!.initial.bytes, samples[0]!.initial.bytes, samples[0]!.initial.bytes]);
+  expect(samples.map(({ initial }) => initial.bytes)).toEqual([
+    samples[0]!.initial.bytes,
+    samples[0]!.initial.bytes,
+    samples[0]!.initial.bytes,
+  ]);
 });

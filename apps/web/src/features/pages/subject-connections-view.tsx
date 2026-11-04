@@ -184,9 +184,9 @@ function ConnectionsReading({
     restore.current = undefined;
     const section = snapshot.visit.sections[connectionReturnGroup(target)];
     if (section?.section.ok && section.reading === target.reading) {
-      const row = [...(region.current?.querySelectorAll<HTMLElement>(
-        '[data-work-statement], [data-connection-statement]',
-      ) ?? [])].find(
+      const row = [
+        ...(region.current?.querySelectorAll<HTMLElement>('[data-work-statement], [data-connection-statement]') ?? []),
+      ].find(
         (element) =>
           (element.dataset.workStatement ?? element.dataset.connectionStatement) === target.focus &&
           (element.dataset.workHolder ?? element.dataset.connectionHolder) === target.holder,
@@ -335,12 +335,12 @@ function ConnectionsReading({
           if (!choices.length) {
             if (character && group === 'relations')
               return (
-              <section key={group} aria-labelledby={`connections-${group}`} className="min-w-0 space-y-4">
-                <h3 id={`connections-${group}`} className="text-xl font-semibold">
-                  {m.character_identity_visit_heading({}, o)}
-                </h3>
-                <p role="status">{m.character_identity_visit_unavailable({}, o)}</p>
-              </section>
+                <section key={group} aria-labelledby={`connections-${group}`} className="min-w-0 space-y-4">
+                  <h3 id={`connections-${group}`} className="text-xl font-semibold">
+                    {m.character_identity_visit_heading({}, o)}
+                  </h3>
+                  <p role="status">{m.character_identity_visit_unavailable({}, o)}</p>
+                </section>
               );
             return group === 'relations' || (character && group === 'characters') ? (
               <p key={group} role="status">
