@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
+import { workspaceAdmission } from '../session/reader';
 import { personalRead, publicRead } from '../kernel/query';
-import { readSearch, type SearchPageData } from './search.tsx';
+import { readSearch } from './search.tsx';
 import type { SearchLoaderDeps } from './search-params';
 import { searchUnavailablePage } from './search-recovery';
 import { searchRequiresCurrentReader, searchSessionLifetime } from './scoped-search-lifetime';
@@ -16,9 +17,17 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
     refetchOnReconnect: false,
     retry: false,
     queryKey: ['search', 'discovery-v1', searchSessionLifetime(locale, params, reader)],
-    queryFn: async ({ signal, client, queryKey }) => {
+    queryFn: async ({ signal: querySignal, client }) => {
+      // The same public reader seam fences browser-owned reads and loader-prefetched windows.
+      const retired = new AbortController();
+      const admission = typeof window === 'undefined' ? undefined : workspaceAdmission(client, []);
+      const origin = admission?.read();
+      const stop = admission?.subscribe(() => {
+        if (admission.read() !== origin) retired.abort();
+      });
+      const signal = AbortSignal.any([querySignal, retired.signal]);
       try {
-        return await readSearch({
+        const page = await readSearch({
           locale,
           signal,
           data: {
@@ -37,10 +46,15 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
             ...(params.sort ? { sort: params.sort } : {}),
           },
         });
+        signal.throwIfAborted();
+        return page;
       } catch (error) {
-        if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
-        const previous = client.getQueryData<SearchPageData>(queryKey);
-        return searchUnavailablePage(params, previous?.conditionMetadata);
+        if (querySignal.aborted) throw error;
+        if (retired.signal.aborted) return searchUnavailablePage(params);
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        return searchUnavailablePage(params);
+      } finally {
+        stop?.();
       }
     },
   });
