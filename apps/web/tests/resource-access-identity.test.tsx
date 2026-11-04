@@ -10,6 +10,17 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/accounts/resource-access', width: 1280, height: 900 });
+window.document.addEventListener('keydown', (event) => {
+  const target = event.target;
+  if (
+    target instanceof window.HTMLElement &&
+    target.tagName === 'SUMMARY' &&
+    (event.key === 'Enter' || event.key === ' ')
+  ) {
+    event.preventDefault();
+    target.click();
+  }
+});
 const globals = {
   window,
   document: window.document,
@@ -101,7 +112,7 @@ async function details(element: HTMLElement, expected: Array<string | number>) {
   expect(panel.open).toBe(false);
   await act(async () => {
     summary.focus();
-    await user.keyboard(' ');
+    await user.keyboard('{Enter}');
   });
   expect(window.document.activeElement).toBe(summary);
   expect(panel.open).toBe(true);
