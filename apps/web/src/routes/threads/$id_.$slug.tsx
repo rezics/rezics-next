@@ -530,7 +530,9 @@ export function ThreadPage() {
                   : {})}
                 returnTo={returnTo}
                 isCurrent={isCallbackCurrent}
-                refreshAdvice={() => refreshThreadPage()}
+                refreshAdvice={async () => {
+                  await refreshThreadPage();
+                }}
               />
             }
           />

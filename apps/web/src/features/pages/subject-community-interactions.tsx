@@ -129,7 +129,7 @@ export function SubjectCommunityInteractions({
           sessionStamp={source}
           admitted
           returnTo={replyHref}
-          {...(currentWatch ? { initialWatching: currentWatch.watching } : { adviceState: watchAdviceState })}
+          {...(currentWatch ? { initialWatching: currentWatch.watching } : {})}
           readAuthority={readAuthority}
           isCurrent={lifetime.isCurrent}
           {...(refreshAdvice ? { refreshAdvice } : {})}
@@ -144,7 +144,7 @@ export function SubjectCommunityInteractions({
           sessionStamp={source}
           admitted
           returnTo={replyHref}
-          adviceState={watchAdviceState}
+          adviceState={watchAdviceState!}
           readAuthority={readAuthority}
           isCurrent={lifetime.isCurrent}
           {...(refreshAdvice ? { refreshAdvice } : {})}
