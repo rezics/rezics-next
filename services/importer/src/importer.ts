@@ -2103,11 +2103,17 @@ export class Importer {
       return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
     }
     if (owner.external_id === 'v1') console.error('showcase-credit v1 preparing store plan');
-    const preparedKind = store.prepare(run, row.recordKey, {
+    let preparedKind: Kind;
+    try {
+      preparedKind = store.prepare(run, row.recordKey, {
         commands,
         omissions,
         ...(deferredCover ? { deferredCover: true } : {}),
       });
+    } catch (error) {
+      if (owner.external_id === 'v1') console.error('showcase-credit v1 store plan failed:', error);
+      throw error;
+    }
     if (owner.external_id === 'v1') console.error('showcase-credit v1 prepared store plan:', preparedKind);
     return {
       kind: preparedKind,
