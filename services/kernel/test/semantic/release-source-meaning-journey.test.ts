@@ -217,20 +217,21 @@ test('sourced release status, directed release targets and episode kinds keep th
   expect((relations.relations as { target: string }[]).map((row) => row.target)).toEqual([prior.id]);
   expect(relations.next).toBeNull();
 
+  const actionStatus = (page: { actions?: unknown }) => {
+    const status = (page.actions as { status?: unknown } | undefined)?.status;
+    expect(typeof status).toBe('string');
+    return status as string;
+  };
   const editorPage = ok(await fixture.request('alice', 'POST', '/v1/pages:read', { target: { subject: current.id } }));
   expect(editorPage.subject).toBe(current.id);
   expect(editorPage.viewer).toEqual({ kind: 'account', account: fixture.personas.alice.accountId });
-  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(
-    (editorPage.actions as { status?: string } | undefined)?.status,
-  );
+  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(actionStatus(editorPage));
   expect(editorPage.reads).toBeDefined();
   const readerPage = ok(
     await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: current.id } }),
   );
   expect(readerPage.viewer).toEqual({ kind: 'anonymous' });
-  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(
-    (readerPage.actions as { status?: string } | undefined)?.status,
-  );
+  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(actionStatus(readerPage));
   expect(readerPage.actions).not.toEqual(editorPage.actions);
   expect(readerPage.subject).toBe(current.id);
 
