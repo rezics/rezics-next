@@ -86,15 +86,14 @@ async function triggerWrite(id: number): Promise<Capture> {
 test('mergeGrowthCaptures keeps trigger plans and shared buffers across a public HTTP producer and nested native write', async () => {
   await primary.admin.query(`TRUNCATE ${table}, ${triggerInput}`);
   await primary.admin.query(`INSERT INTO ${table} VALUES (1)`);
+  const detail = {
+    operationId: 'probe.growth_aggregate',
+    'x-action': 'probe:read',
+    'x-exposure': 'public',
+  };
   const app = createApp({ pool: primary.pool }).get(
     '/growth-probe',
-    {
-      detail: {
-        operationId: 'probe.growth_aggregate',
-        'x-action': 'probe:read',
-        'x-exposure': 'public',
-      },
-    },
+    { detail },
     async () => ({ id: await lockedRead() }),
   );
   const measured = await capture(
