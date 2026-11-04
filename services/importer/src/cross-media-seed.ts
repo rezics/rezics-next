@@ -2190,6 +2190,7 @@ export async function seedCrossMedia(
       members: plan.members,
       runs,
       readings,
+      mediaOutcomes: [],
       workLinks: [],
       gaps: [
         ...plan.gaps,
@@ -2368,12 +2369,6 @@ export async function seedCrossMedia(
         });
       } else mediaOutcomes.push(outcome);
     }
-    const unresolved = delivered.unresolved.map((edge) => ({
-      holder: edge.holder,
-      target: edge.target,
-      property: edge.property,
-      reason: edge.reason,
-    }));
     return {
       status:
         plan.gaps.length ||
