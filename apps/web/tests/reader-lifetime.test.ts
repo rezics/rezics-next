@@ -7,7 +7,12 @@ test('read, address and operation admission remain independent and retired addre
   let credential: string | null = null;
   const address = addressLease(() => addressCurrent);
   const read = readLease('A', address, () => allowed);
-  const command = operationLease(read, 'copy.update', () => allowed, () => credential);
+  const command = operationLease(
+    read,
+    'copy.update',
+    () => allowed,
+    () => credential,
+  );
   expect(read.current()).toBe(true);
   expect(command.credential()).toBeNull();
   credential = 'replacement';

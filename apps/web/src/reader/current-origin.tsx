@@ -61,7 +61,10 @@ export function useReaderCurrentOrigin(
   const ref = useRef<Boundary | null>(null);
   if (!ref.current || ref.current.key !== key || ref.current.parent !== parent?.lifetime) {
     const first = !ref.current;
-    if (ref.current) { ref.current.active = false; ref.current.lease.retire(); }
+    if (ref.current) {
+      ref.current.active = false;
+      ref.current.lease.retire();
+    }
     ref.current = {
       key,
       id: crypto.randomUUID(),
@@ -103,12 +106,13 @@ export function useReaderCurrentOrigin(
       now.allowed[index] === true
     );
   }
-  const command = (index: number) => operationLease(
-    readLease(subject ?? '', boundary.lease, () => current(index)),
-    operations[index]!,
-    () => store.allowed(operations[index]!),
-    () => client.getQueryData(sessionQuery.queryKey)?.csrfToken ?? null,
-  );
+  const command = (index: number) =>
+    operationLease(
+      readLease(subject ?? '', boundary.lease, () => current(index)),
+      operations[index]!,
+      () => store.allowed(operations[index]!),
+      () => client.getQueryData(sessionQuery.queryKey)?.csrfToken ?? null,
+    );
   return {
     client,
     session,
@@ -118,7 +122,9 @@ export function useReaderCurrentOrigin(
     authoritative: !!suppliedClient,
     allowed: !suppliedClient && previewAllowed ? previewAllowed : snapshot.allowed,
     retained: !suppliedClient && previewAllowed ? previewAllowed : hydrated ? scoped.granted : snapshot.allowed,
-    seed: boundary.seed && snapshot.episodes.every((value) => value === 0) &&
+    seed:
+      boundary.seed &&
+      snapshot.episodes.every((value) => value === 0) &&
       (!hydrated || seedObservation.current === scoped.observation),
     readKey: (index: number) => JSON.stringify([boundary.id, scoped.observation?.id, snapshot.dispatch[index]]),
     lifetime: (index: number) => JSON.stringify([boundary.id, snapshot.episodes[index]]),

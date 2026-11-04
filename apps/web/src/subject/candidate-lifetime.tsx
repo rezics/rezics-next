@@ -30,7 +30,9 @@ function useLifetime(identity: string, reader: string, parent?: CandidateWork | 
   if (!previous.current || previous.current.identity !== identity || previous.current.parent !== parent) {
     const generation = ++nextGeneration;
     previous.current?.value.retire();
-    const lease = addressLease(() => !parent || ('active' in parent && typeof parent.active === 'function' ? parent.active() : parent.live()));
+    const lease = addressLease(
+      () => !parent || ('active' in parent && typeof parent.active === 'function' ? parent.active() : parent.live()),
+    );
     const value: Lifetime = {
       reader,
       generation,
@@ -120,8 +122,11 @@ export function captureCandidateSession(client: QueryClient, reader: string): Ca
   const snapshot = store.getSnapshot();
   return {
     reader,
-    current: () => !!reader && snapshot.state === 'signed-in' &&
-      snapshot.observation.subject === reader && store.getSnapshot() === snapshot,
+    current: () =>
+      !!reader &&
+      snapshot.state === 'signed-in' &&
+      snapshot.observation.subject === reader &&
+      store.getSnapshot() === snapshot,
     subscribe: store.subscribe,
   };
 }

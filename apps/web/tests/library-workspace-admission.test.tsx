@@ -739,7 +739,11 @@ test('Copies and Labels keep authorized tokenless reads, exact addresses and ord
 
 // One real client hosts catalogue work, History reading and Ratings without feature-owned session observers.
 test('catalogue, History and My ratings share retirement while read admission survives missing CSRF', async () => {
-  mock.module('../src/ratings/own-votes/actions', () => ({ readOwnVotesForViewer: async () => { throw new Error('Unexpected Ratings read'); } }));
+  mock.module('../src/ratings/own-votes/actions', () => ({
+    readOwnVotesForViewer: async () => {
+      throw new Error('Unexpected Ratings read');
+    },
+  }));
   const { candidateSession, useCandidateWork } = await import('../src/subject/candidate-lifetime');
   const { catalogueEditor, useEditorLifetime } = await import('../src/features/catalogue/editor-lifetime');
   const { MyLogsCurrentViewer } = await import('../src/library/my-logs-page');
@@ -776,22 +780,43 @@ test('catalogue, History and My ratings share retirement while read admission su
     return null;
   }
   function Ratings() {
-    const origin = useOwnVotesCurrentOrigin({
-      state: 'ready', subject: 'A', cursor: null, locale: 'en', source: OWN_VOTES_SOURCE,
-      page: { viewer: { accountId: 'A' }, votes: [], next: null },
-    }, null);
+    const origin = useOwnVotesCurrentOrigin(
+      {
+        state: 'ready',
+        subject: 'A',
+        cursor: null,
+        locale: 'en',
+        source: OWN_VOTES_SOURCE,
+        page: { viewer: { accountId: 'A' }, votes: [], next: null },
+      },
+      null,
+    );
     ratings.push(origin.isCurrent);
     return null;
   }
-  const ratingsRouter = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/library/ratings'] }) });
+  const ratingsRouter = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/library/ratings'] }),
+  });
   const page = mounted(client, '/library/logs');
   try {
-    await page.show(<>
-      <Catalogue />
-      <HistoryLease />
-      <MyLogsCurrentViewer initial={{ sessionSubject: 'A', cursor: null, locale: 'en', page: { state: 'loaded', logs: [], next: null, restarted: false } }} />
-      <RouterContextProvider router={ratingsRouter}><Ratings /></RouterContextProvider>
-    </>);
+    await page.show(
+      <>
+        <Catalogue />
+        <HistoryLease />
+        <MyLogsCurrentViewer
+          initial={{
+            sessionSubject: 'A',
+            cursor: null,
+            locale: 'en',
+            page: { state: 'loaded', logs: [], next: null, restarted: false },
+          }}
+        />
+        <RouterContextProvider router={ratingsRouter}>
+          <Ratings />
+        </RouterContextProvider>
+      </>,
+    );
     expect(cacheSubscription.mock.calls.length).toBe(1);
     expect(reads.at(-1)!()).toBe(true);
     expect(credentials.at(-1)).toBeNull();
@@ -809,11 +834,15 @@ test('catalogue, History and My ratings share retirement while read admission su
     expect(oldWork()).toBe(false);
     expect(oldRead()).toBe(false);
     expect(oldRating()).toBe(false);
-    await act(async () => { settle(client, 'A'); });
+    await act(async () => {
+      settle(client, 'A');
+    });
     const same = client.getQueryData(['session']);
     const time = client.getQueryState(['session'])!.dataUpdatedAt;
     const enrolled = viewerExposureLifetime(client).getSnapshot();
-    await act(async () => { client.setQueryData(['session'], same, { updatedAt: time }); });
+    await act(async () => {
+      client.setQueryData(['session'], same, { updatedAt: time });
+    });
     expect(viewerExposureLifetime(client).getSnapshot()).not.toBe(enrolled);
     const beforeRemoval = viewerExposureLifetime(client).getSnapshot();
     await act(async () => {

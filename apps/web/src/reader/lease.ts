@@ -9,7 +9,9 @@ export type OperationLease<Operation extends string> = ReadLease & {
 export function addressLease(parent: () => boolean = () => true): AddressLease {
   let retired = false;
   return {
-    retire: () => { retired = true; },
+    retire: () => {
+      retired = true;
+    },
     current: () => {
       // Once observed false, even a parent returning to the same value cannot revive this visit.
       if (!parent()) retired = true;
@@ -31,5 +33,5 @@ export function operationLease<Operation extends string>(
   credential: () => string | null,
 ): OperationLease<Operation> {
   const current = () => read.current() && admitted();
-  return { reader: read.reader, operation, current, credential: () => current() ? credential() : null };
+  return { reader: read.reader, operation, current, credential: () => (current() ? credential() : null) };
 }

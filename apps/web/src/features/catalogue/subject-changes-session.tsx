@@ -17,11 +17,7 @@ import { takeSubjectChangesReturn, type SubjectChangesReturn } from './subject-c
 // installed query's transport state so those errors offer the same explicit recovery.
 function useHistorySessionRead() {
   const client = useQueryClient();
-  const subscribe = useCallback(
-    (changed: () => void) =>
-      browserObservation(client).subscribeCache(changed),
-    [client],
-  );
+  const subscribe = useCallback((changed: () => void) => browserObservation(client).subscribeCache(changed), [client]);
   const snapshot = useCallback(() => client.getQueryState(sessionQuery.queryKey), [client]);
   const read = useSyncExternalStore(subscribe, snapshot, () => undefined);
   return { client, read };
