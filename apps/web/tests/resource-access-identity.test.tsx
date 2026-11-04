@@ -101,7 +101,7 @@ async function details(element: HTMLElement, expected: Array<string | number>) {
   expect(panel.open).toBe(false);
   await act(async () => {
     summary.focus();
-    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
   });
   expect(window.document.activeElement).toBe(summary);
   expect(panel.open).toBe(true);
