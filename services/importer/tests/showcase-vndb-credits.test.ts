@@ -95,9 +95,7 @@ function port(commands: BatchCommand[], known: Map<string, unknown>): CrossMedia
     async fence() {
       return { fenced: false, securityRevision: null };
     },
-    async writeSourceStatistic() {
-      throw new Error('No statistic in this selected-VN fixture');
-    },
+    async writeSourceStatistic() {},
     async clearSourceStatistic() {},
     async readReviewedSubject(id) {
       const subject = known.get(id);
