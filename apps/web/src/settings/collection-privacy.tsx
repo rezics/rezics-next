@@ -350,7 +350,7 @@ function CollectionRowView({
                       className={preferenceActionClassName}
                       type="button"
                       variant="outline"
-                      disabled={!mayWrite() || !canSave || busy || commandWaiting}
+                      disabled={!mayWrite() || !canSave || !editor.hasCurrentUpdateAdvice() || busy || commandWaiting}
                       onClick={() => {
                         if (!pageState?.loading) void editor.retry();
                       }}
