@@ -10,6 +10,7 @@ import {
   importVndbPublicTags,
   planVndbPublicTags,
   readVndbPublicTagBindings,
+  vndbPublicTagVocabularyAdmission,
   type AdmittedPublicTag,
   type VndbPublicTagKnownBindings,
   type VndbPublicTagPlan,
@@ -170,6 +171,7 @@ function selectedWorkIds(values: readonly string[]): Set<string> {
 export async function projectShowcaseTagTables(
   input: CrossMediaTables,
   selectedVids: readonly string[],
+  admittedCodes?: ReadonlySet<string>,
 ): Promise<{
   tables: CrossMediaTables;
   gaps: CrossMediaGap[];
@@ -185,15 +187,26 @@ export async function projectShowcaseTagTables(
   const associations: Row[] = [];
   const needed = new Set<string>();
   let associationCount = 0;
+  const admittedAssociations = new Set<string>();
   for await (const row of input.rows('vndb', 'tags_vn')) {
     const vid = typeof row.vid === 'string' ? row.vid : undefined;
     if (!vid || !selected.has(vid)) continue;
+    let admittedKey: string | undefined;
+    if (admittedCodes) {
+      if (!admittedCodes.has(String(row.tag))) continue;
+      const projected = tryProjectAssociation(row);
+      if (!projected || projected.ignore || projected.lie || projected.vote < 1 || projected.vote > 3) continue;
+      const key = `${vid}:${projected.tag}`;
+      if (admittedAssociations.has(key)) continue;
+      admittedKey = key;
+    }
     if (associationCount >= vndbPublicTagLimits.associations) {
       if (!truncated.value) gap('tags_vn', row, 'Selected tag associations exceed the bounded import cap');
       truncated.value = true;
       continue;
     }
     associationCount += 1;
+    if (admittedKey) admittedAssociations.add(admittedKey);
     associations.push(row);
     const projected = tryProjectAssociation(row);
     if (projected) needed.add(projected.tag);
@@ -409,6 +422,24 @@ export type ShowcaseTagsResult = VndbPublicTagsResult & {
   bindings: SourceVocabularyBindings;
 };
 
+/** Prepare vocabulary in the elected run instead of reconciling the same source with a second, smaller run. */
+export async function prepareShowcaseTags(input: {
+  tables: CrossMediaTables;
+  selectedVids: readonly string[];
+  port: CrossMediaPort;
+  known?: VndbPublicTagKnownBindings;
+}) {
+  const known = input.known ?? { schemes: [], concepts: [] };
+  const projected = await projectShowcaseTagTables(
+    input.tables,
+    input.selectedVids,
+    known.concepts.length ? new Set(known.concepts.map((row) => row.code)) : undefined,
+  );
+  const bindings = await readVndbPublicTagBindings(input.port, known);
+  const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
+  return { ...planned, bindings, vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, planned.admitted) };
+}
+
 /** Default adapter: bounded projection, current binding read, then the integrated public-tag importer. */
 export async function importShowcaseTags(input: {
   tables: CrossMediaTables;
@@ -420,7 +451,11 @@ export async function importShowcaseTags(input: {
   manifest?: { recordVocabulary?(records: readonly ShowcaseTagVocabularyRecord[]): void };
 }): Promise<ShowcaseTagsResult> {
   const known = input.known ?? { schemes: [], concepts: [] };
-  const projected = await projectShowcaseTagTables(input.tables, input.selectedVids);
+  const projected = await projectShowcaseTagTables(
+    input.tables,
+    input.selectedVids,
+    known.concepts.length ? new Set(known.concepts.map((row) => row.code)) : undefined,
+  );
   const bindings = await readVndbPublicTagBindings(input.port, known);
   const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
   input.manifest?.recordVocabulary?.(planned.vocabulary);
@@ -431,9 +466,11 @@ export async function importShowcaseTags(input: {
     bindings,
     ...(input.destination ? { destination: input.destination } : {}),
   });
+  const gaps = mergeGaps([...planned.gaps, ...imported.gaps]);
   return {
     ...imported,
-    gaps: mergeGaps([...planned.gaps, ...imported.gaps]),
+    status: gaps.length ? 'imported-with-gaps' : imported.status,
+    gaps,
     vocabulary: planned.vocabulary,
     weightGap: planned.weightGap,
     truncated: planned.truncated,

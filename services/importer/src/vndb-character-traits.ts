@@ -127,7 +127,7 @@ export async function readVndbCharacterVocabularyBindings(
   port: Pick<CrossMediaPort, 'readReviewedSubject'>,
   known: {
     traits: { schemeId: string; concepts: readonly { code: string; id: string }[] };
-    roles: { schemeId: string; concepts: readonly { code: string; id: string }[] };
+    roles?: { schemeId: string; concepts: readonly { code: string; id: string }[] };
   },
 ): Promise<SourceVocabularyBindings> {
   const traits = await readSchemeConcepts(port, {
@@ -137,13 +137,15 @@ export async function readVndbCharacterVocabularyBindings(
     conceptUri: characterTraitConceptUri,
     concepts: known.traits.concepts,
   });
-  const roles = await readSchemeConcepts(port, {
-    taxonomy: appearanceRoleTaxonomy,
-    schemeUri: appearanceRoleSchemeUri,
-    schemeId: known.roles.schemeId,
-    conceptUri: appearanceRoleConceptUri,
-    concepts: known.roles.concepts,
-  });
+  const roles = known.roles
+    ? await readSchemeConcepts(port, {
+        taxonomy: appearanceRoleTaxonomy,
+        schemeUri: appearanceRoleSchemeUri,
+        schemeId: known.roles.schemeId,
+        conceptUri: appearanceRoleConceptUri,
+        concepts: known.roles.concepts,
+      })
+    : { schemes: [], concepts: [] };
   return {
     releaseDigest: bundledDigest,
     schemes: [...traits.schemes, ...roles.schemes],

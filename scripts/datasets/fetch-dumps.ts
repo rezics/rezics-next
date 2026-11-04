@@ -30,6 +30,8 @@ const BANGUMI_TABLES = [
 export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
   chars_alias: ['id', 'spoil', 'name', 'latin'],
   chars_names: ['id', 'lang', 'name', 'latin'],
+  chars_traits: ['id', 'tid', 'spoil', 'lie'],
+  traits: ['id', 'gid', 'gorder', 'defaultspoil', 'sexual', 'searchable', 'applicable', 'name', 'alias', 'description'],
   extlinks: ['id', 'site', 'value'],
   producers_extlinks: ['id', 'link'],
   producers_relations: ['id', 'pid', 'relation'],
@@ -47,6 +49,8 @@ export const VNDB_DUMP_TABLES = [
   'chars',
   'chars_alias',
   'chars_names',
+  'chars_traits',
+  'traits',
   'chars_vns',
   'entry_meta',
   'extlinks',

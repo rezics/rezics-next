@@ -59,6 +59,8 @@ test('VNDB dump cache requires admitted character-name, external-link, and relea
   expect(VNDB_DUMP_TABLES).toEqual(
     expect.arrayContaining(['chars_names', 'chars_alias', 'releases_media', 'releases_platforms']),
   );
+  expect(VNDB_DUMP_TABLES).toEqual(expect.arrayContaining(['chars_traits', 'traits']));
+  expect(VNDB_DUMP_HEADERS.chars_traits).toEqual(['id', 'tid', 'spoil', 'lie']);
   expect(VNDB_DUMP_HEADERS.chars_names).toEqual(['id', 'lang', 'name', 'latin']);
   expect(VNDB_DUMP_HEADERS.chars_alias).toEqual(['id', 'spoil', 'name', 'latin']);
   expect(VNDB_DUMP_TABLES).toEqual(

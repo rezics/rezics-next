@@ -1529,7 +1529,8 @@ the importer does not publish a scheme URI for `releases_vn.rtype`, so this
 platform scheme URI is the reversible binding used by native seed/adoption), and
 the Bangumi episode-type scheme (`https://rezics.com/schemes/bangumi/episode-types`,
 codes 0–6). Seeds carry `schema:url` for importer bindings and `schema:sameAs` for
-the existing correspondence pattern. Unreviewed provider codes are not published.
+the existing correspondence pattern. The local showcase also reviews VNDB character traits i23/i30 and content tags g105/g249 as separate source
+Concepts, with source citations and explicit metadata rights. Unreviewed provider codes are not published.
 
 `schema:creativeWorkStatus` is admitted only on `schema:VideoGame` (and thus
 `wd:Q689445`), `wd:Q20631656`, `rezics:AnimeRelease` and `bf:Instance`. It is a

@@ -1479,6 +1479,13 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: one in-memory omission lookup within at most three groups, no additional SQL or fence request, and zero statistic HTTP writes for the fenced tuple.
 - Growth check: the production importer/registration caller test above proves suppression; existing source-statistic native/cost suites retain their independent scope. This guard adds no native growth measurement.
 
+The development showcase binds the reviewed VNDB character traits i23/i30 and content tags g105/g249 through
+current adopted ConceptScheme/Concept reads. It adds their exact source rows to the elected import run's existing
+vocabulary admission, so tag import does not start a smaller reconciliation generation over the same source.
+Selected tag projection keeps one admitted positive row per work/tag before its 256-association bound; it never
+aggregates vote weights, copies voter identities or notes, or follows unreviewed taxonomy codes. A null lie flag
+remains absent; a true lie, ignored or nonpositive vote still withholds the association. Weight gaps remain explicit.
+
 ### Import VNDB character traits and qualified appearances
 
 - Touches: bounded authored COPY rows for `chars`, `chars_traits`, `chars_vns` and the parent work tables; exact owner/run/journal; ordinary public create/propose/accept/adopt/read.

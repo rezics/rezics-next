@@ -2011,6 +2011,7 @@ export async function seedCrossMedia(
 
 export type CrossMediaSeedCliOptions = {
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
+  reviewedCatalogueSubjects?: Readonly<Record<string, string>>;
   selection?: CrossMediaSelection;
 };
 
@@ -2124,20 +2125,22 @@ export async function runCrossMediaSeedCli(
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   try {
-    const result = await seedShowcaseVndbReleases({
-      tables: input,
-      plan,
-      path: statePath,
-      port,
-      destination: { origin: api },
-      extras: {
-        ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
-        ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
-      },
-      ...(characterBindings === undefined ? {} : { characterBindings }),
-    });
-    const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
+    const reviewed = options.reviewedCatalogueSubjects ?? options.episodeCatalogueSubjects;
+    const traitAdmission = options.reviewedCatalogueSubjects
+      ? await (await import('./showcase-vndb-traits.ts')).prepareShowcaseVndbTraits(input, plan, port, reviewed)
+      : undefined;
+    const { prepareShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
     let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
+    if (reviewed?.['vndb-public-tags-cont-scheme']) {
+      knownTagBindings = parseShowcaseTagKnownBindings({
+        schemes: [{ category: 'cont', id: reviewed['vndb-public-tags-cont-scheme'] }],
+        concepts: ['g105', 'g249'].map((code) => ({
+          category: 'cont',
+          code,
+          id: reviewed[`vndb-public-tags-cont-${code}`],
+        })),
+      });
+    }
     if (tagBindingsPath) {
       const bytes = await readFile(tagBindingsPath);
       ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
@@ -2146,13 +2149,24 @@ export async function runCrossMediaSeedCli(
     const selectedVids = plan.members
       .filter((member) => member.source === 'vndb' && member.kind === 'work')
       .map((member) => member.key);
-    const publicTags = await importShowcaseTags({
+    const publicTags = await prepareShowcaseTags({
       tables: input,
       selectedVids,
-      path: statePath,
       port,
       known: knownTagBindings,
+    });
+    const result = await seedShowcaseVndbReleases({
+      tables: input,
+      plan,
+      path: statePath,
+      port,
       destination: { origin: api },
+      extras: {
+        ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
+        ...(reviewed ? { episodeCatalogueSubjects: reviewed } : {}),
+        vocabularyAdmissions: [...(traitAdmission ? [traitAdmission] : []), publicTags.vocabularyAdmission],
+      },
+      ...(characterBindings === undefined ? {} : { characterBindings }),
     });
     const showcase = journal
       ? await publishShowcase({

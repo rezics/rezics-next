@@ -1275,7 +1275,7 @@ export type VndbPublicTagAssociationRow = Readonly<{
   spoiler: number | null;
   vote: number;
   ignore: boolean;
-  lie: boolean;
+  lie: boolean | null;
 }>;
 export type VndbPublicTagParentRow = Readonly<{
   id: string;
@@ -1330,7 +1330,7 @@ export function projectVndbPublicTagAssociation(cells: Record<string, string | n
     spoiler,
     vote: copyNumber(cells.vote),
     ignore: copyFlag(cells.ignore),
-    lie: copyFlag(cells.lie),
+    lie: cells.lie === null ? null : copyFlag(cells.lie),
   };
 }
 
