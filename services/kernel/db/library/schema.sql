@@ -3178,9 +3178,9 @@ COMMENT ON COLUMN library.copy_loan.counterparty_name IS 'Exact private name tex
 CREATE TABLE library.copy_loan_generation (
     route integer NOT NULL,
     account_id uuid NOT NULL,
-    generation bigint DEFAULT 1 NOT NULL,
+    generation integer DEFAULT 1 NOT NULL,
     CONSTRAINT copy_loan_generation_account_route CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT copy_loan_generation_positive CHECK ((generation >= 1))
+    CONSTRAINT copy_loan_generation_positive CHECK (((generation >= 1) AND (generation <= 2147483647)))
 );
 
 
