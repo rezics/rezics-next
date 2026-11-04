@@ -45,7 +45,29 @@ test('Rename an account through native approved handle workflow preserves exact 
   const read = () =>
     loadRenameTarget(async (id) => {
       expect(id).toBe(target.accountId);
-      return { profile: { id, kind: 'actor', handle } };
+      return {
+        state: 'ready',
+        viewer: {
+          accountId: id,
+          kind: 'actor',
+          clientId: target.clientId,
+          scopes: target.scopes,
+          authnEpoch: 1,
+          authTime: 1,
+          amr: ['pwd'],
+        },
+        profile: { id, kind: 'actor', handle },
+        authActions: {
+          state: 'ready',
+          operations: [
+            {
+              operationId: 'auth.account.rename',
+              action: 'account:update',
+              resource: { route: 1, id },
+            },
+          ],
+        },
+      };
     });
   const loaded = await read();
   expect(loaded.kind).toBe('ready');

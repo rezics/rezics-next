@@ -2920,6 +2920,21 @@ key, credential or URL, and does not assert that an Auth route is deployed. Cons
 explicit deployed Auth path. Auth retains exact-profile consent, fresh same-human step-up, second submission and
 all original payload, execution and replay validation.
 
+The Auth rename page composes its closed private `account:update` profile read with this action-general observation.
+`createAccountProfileAccess.readRenameAccountPage` obtains the current self account with one full-key seek, then calls
+`readManagedAuthActions` for that exact actor and account. The response contains only the actor account ID, the closed
+`{id, kind, handle}` profile, and its native action readiness/entry observation. Auth admits the exact rename profile
+before calling this seam. A positive `auth.account.rename` entry comes only from the existing selected-self,
+active-unfenced-human formula and installed Access check; the profile permission, account ID, signed-in state, client
+scope or browser selection cannot create it. Known denial remains an empty ready action set, and dependency loss remains
+unavailable. The command still performs fresh native approval and execution checks.
+
+The complete page read has a documented finite sum: one existing bounded profile read, one full-key actor seek, and
+one existing bounded action observation. For this self-only selection the before and final snapshots each use one
+deduplicated partition seek and two full-key actor seeks; they admit at most one rename candidate and one installed
+Access check. The action observation retains its existing `O((1 + K) log N)` Access preparation/formula cost and the
+request deadline. No account listing, handle lookup, workflow inventory, approval or new policy table is introduced.
+
 Cost: a fixed set of at most four native entry action checks on known exact targets (this surface currently selects
 one self, two organization or one transfer entry), plus bounded before/final account, assignment, operator slot,
 membership and home point reads. Each action retains the existing O((1 + K) log N) permission preparation/formula

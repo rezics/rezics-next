@@ -1250,6 +1250,42 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (issued.expiresAt <= Date.now()) throw new Denied();
         return issued.token;
       },
+      async hasCurrentAuthSession(headers) {
+        const current = await getAuth().api.getSession({
+          headers,
+          query: { disableCookieCache: true, disableRefresh: true },
+        });
+        return current !== null;
+      },
+      async isProofSessionCurrent(proof) {
+        const scope = proofScope.getStore();
+        const source = proofSources.get(proof);
+        if (!source || !scope?.live || scope.proof !== proof || source.expiresAt <= Date.now()) return false;
+        const current = (
+          await database.query<{
+            userId: string;
+            clientId: string;
+            grantedScope: string;
+            authnEpoch: number;
+            authTime: number;
+            authMethods: string;
+            expiresAt: Date;
+          }>(
+            'SELECT "userId","clientId","grantedScope","authnEpoch","authTime","authMethods","expiresAt" FROM session WHERE id=$1',
+            [source.id],
+          )
+        ).rows[0];
+        return Boolean(
+          current &&
+            current.userId === proof.account_id &&
+            current.clientId === proof.client_id &&
+            current.grantedScope === proof.scope.join(' ') &&
+            current.authnEpoch === proof.authn_epoch &&
+            current.authTime === proof.auth_time &&
+            current.authMethods === proof.amr.join(' ') &&
+            current.expiresAt.getTime() > Date.now(),
+        );
+      },
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
       pruneExpiredSessions: (batch) => pruneExpiredSessions(database, batch),
       async eraseDueConsents(batch) {

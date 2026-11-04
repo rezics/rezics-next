@@ -6,7 +6,11 @@ import {
 } from './organization-deletion-source.ts';
 import { createOperatorTransferPageAccess, type OperatorTransferPageAccess } from './operator-transfer-page-source.ts';
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
-import { createAccountProfileAccess, type AccountProfileAccess } from './account-profile-source.ts';
+import {
+  createAccountProfileAccess,
+  type AccountProfileAccess,
+  type RenameAccountPageAccess,
+} from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
 import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
 import {
@@ -275,6 +279,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     OrganizationMembershipPageAccess &
     AutomatedOperatorAccess &
     AccountProfileAccess &
+    RenameAccountPageAccess &
     OrganizationDeletionPageAccess &
     AccountDeletionPageAccess &
     OperatorOpeningPageAccess &

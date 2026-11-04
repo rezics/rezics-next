@@ -14,8 +14,20 @@ export interface AccountProfileAccess {
 const id = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.exec(value)?.[0] === value;
 
+/** Keep the closed profile read bound to the same exact management proof. */
+export function isExactRenameProfile(human: SessionProof, accountId: string): boolean {
+  const profile = managementOperationProfile('rename');
+  return (
+    human.account_id === accountId &&
+    human.client_id === profile.client_id &&
+    JSON.stringify(human.scope) === JSON.stringify(profile.scope) &&
+    human.amr.length === 1 &&
+    (human.amr[0] === 'pwd' || human.amr[0] === 'pop')
+  );
+}
+
 /** Disclosure is limited even if a composed source returns a broader profile. */
-function closedProfile(value: unknown, accountId: string): RenameAccountProfile {
+export function closedProfile(value: unknown, accountId: string): RenameAccountProfile {
   const profile = (value as RenameAccountProfile | null)?.profile;
   if (
     !profile ||
@@ -61,15 +73,7 @@ export function accountProfileReadTransport(
       const result = await service.internal.withFreshHuman(
         { headers: request.headers, fresh: false },
         async (human) => {
-          const profile = managementOperationProfile('rename');
-          if (
-            human.account_id !== accountId ||
-            human.client_id !== profile.client_id ||
-            JSON.stringify(human.scope) !== JSON.stringify(profile.scope) ||
-            human.amr.length !== 1 ||
-            (human.amr[0] !== 'pwd' && human.amr[0] !== 'pop')
-          )
-            throw new TransportDenied(403);
+          if (!isExactRenameProfile(human, accountId)) throw new TransportDenied(403);
           const result = closedProfile(
             await access.readRenameAccountProfile({ human, accountId, deadline }),
             accountId,
