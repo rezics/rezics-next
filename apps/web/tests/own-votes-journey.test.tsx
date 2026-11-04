@@ -41,6 +41,11 @@ const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
 const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
 const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
 const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => (resolve = yes));
+  return { promise, resolve };
+}
 function row(retired = false, sourceTarget = target): OwnVoteEntry {
   const path = `/v1/subjects/${sourceTarget}/ratings/${question}/vote`;
   return {
@@ -198,6 +203,7 @@ async function setup(
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: () => undefined,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
