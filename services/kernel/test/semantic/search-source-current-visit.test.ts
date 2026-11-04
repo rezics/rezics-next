@@ -89,10 +89,16 @@ test('the mounted source reads current selected nonrelation heads without obsole
   const partition = subjectPartition(book.id);
 
   const preferred = await ok(`/v1/subjects/${book.id}/candidates`, {
-    statement: { ...statement('schema:inLanguage', 'en'), references: [{ parts: [statement('schema:url', 'https://example.org/en')] }] },
+    statement: {
+      ...statement('schema:inLanguage', 'en'),
+      references: [{ parts: [statement('schema:url', 'https://example.org/en')] }],
+    },
   });
   const competing = await ok(`/v1/subjects/${book.id}/candidates`, {
-    statement: { ...statement('schema:inLanguage', 'fr'), references: [{ parts: [statement('schema:url', 'https://example.org/fr')] }] },
+    statement: {
+      ...statement('schema:inLanguage', 'fr'),
+      references: [{ parts: [statement('schema:url', 'https://example.org/fr')] }],
+    },
   });
   await ok(`/v1/subjects/${book.id}/candidates/${preferred.candidate}:accept`, {
     context: GLOBAL_CONTEXT,
@@ -296,7 +302,9 @@ test('lifecycle, disclosure, qualifier change and unreadied coverage stay distin
     [route, book.id, changedFact.slot_id, contextId, revision],
   );
   expect(
-    (await source.read(partition, [book.id])).subjects[0]!.statements.some((row) => row.property === 'schema:inLanguage'),
+    (await source.read(partition, [book.id])).subjects[0]!.statements.some(
+      (row) => row.property === 'schema:inLanguage',
+    ),
   ).toBe(true);
 
   await admin.query(

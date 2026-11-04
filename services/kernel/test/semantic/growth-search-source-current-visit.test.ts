@@ -89,7 +89,7 @@ function expectCurrentHeadPlan(plans: readonly unknown[]): void {
     (node) =>
       node['Node Type'] === 'Sort' &&
       String(node['Sort Key'] ?? '').includes('log_seq') &&
-      String((node as { 'Query Text'?: string })['Query Text'] ?? '').includes('kind = \'statement\''),
+      String((node as { 'Query Text'?: string })['Query Text'] ?? '').includes("kind = 'statement'"),
   );
   expect(sorts).toEqual([]);
 }
