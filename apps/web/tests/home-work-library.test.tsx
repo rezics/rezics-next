@@ -12,6 +12,7 @@ import {
   type HomeWorkLibraryScope,
 } from '../src/features/feed/home-work-library/contract';
 import { HomeWorkLibraryAction, HomeWorkLibraryProvider } from '../src/features/feed/home-work-library/view';
+import { createHomeWorkLibraryAdmission } from '../src/features/feed/home-work-library/admission';
 import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
 import { setLocale } from '../src/paraglide/runtime.js';
 
@@ -159,6 +160,33 @@ test('unavailable or malformed occurrences do not invalidate an unrelated admitt
   ).toBeUndefined();
 });
 
+test('retained completions cannot reconcile after source withdrawal or a reader incarnation changes', () => {
+  let incarnation = 1;
+  const initial = projection();
+  const admission = createHomeWorkLibraryAdmission(initial, {
+    getSnapshot: () => ({ state: 'signed-in', observation: { subject: scope.reader, id: incarnation } }),
+  });
+  const retained = { ...initial, lease: admission.lease };
+  expect(homeWorkLibraryRow(retained, 'occurrence-1', 'work-1')).toBeDefined();
+  const completion = () =>
+    reconcileHomeWorkLibraryAcknowledgement(retained, {
+      scope,
+      state: 'acknowledged',
+      commandId: 'original-command',
+      rowKey: 'occurrence-1',
+      subjectId: 'work-1',
+      entry: { state: 'absent' },
+    });
+  incarnation++;
+  expect(completion()).toBe(retained);
+  incarnation = 1;
+  expect(completion()).toBe(retained);
+  const source = createHomeWorkLibraryAdmission(initial);
+  const withdrawn = { ...initial, lease: source.lease };
+  source.retire();
+  expect(homeWorkLibraryRow(withdrawn, 'occurrence-1', 'work-1')).toBeUndefined();
+});
+
 test('the mounted action keeps its destination while stale or missing private rows become unavailable', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -208,16 +236,23 @@ test('the mounted action keeps its destination while stale or missing private ro
     await act(async () => root.render(render()));
     expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
     await act(async () => root.render(render(scope, { ...current })));
+    expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
+    const freshScope = { ...scope, observation: 'fresh-page' };
+    const fresh = { ...current, scope: freshScope };
+    await act(async () => root.render(render(freshScope, fresh)));
     expect(host.textContent).toContain('8 / 10');
     await act(async () => {
       client.setQueryData(['session'], { ...reader, subject: 'replacement' });
     });
+    expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
+    await act(async () => root.render(render(freshScope, { ...fresh })));
     expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
     await act(async () => {
       client.setQueryData(['session'], reader);
     });
     expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
     await act(async () => root.render(render({ ...scope, observation: 'replacement' })));
+    await act(async () => root.render(render()));
     expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
     expect(host.textContent).not.toContain('8 / 10');
     expect(host.querySelectorAll('[data-slot="home-work-library-entry-unavailable"]')).toHaveLength(2);
