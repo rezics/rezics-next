@@ -141,6 +141,7 @@ test('mounted release visit labels an invalid date with evidence and keeps chron
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
   const { ReleaseFidelityPage } = await import('../src/features/catalogue/release-fidelity/view');
   const fixture = releaseFidelityFixture('ready');
   const result = await fixture.read();
@@ -165,23 +166,32 @@ test('mounted release visit labels an invalid date with evidence and keeps chron
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const route = createRootRoute({
+    component: () => (
+      <ReleaseFidelityPage
+        id={read.public.subject.id}
+        context={candidateContext}
+        locale="en"
+        search={async () => []}
+        transport={{
+          read: async () => read,
+          facts: { read: async () => ({ ok: false, reason: 'denied' }), propose: async () => ({ ok: false }) } as never,
+          relation: () => ({}) as never,
+          review: () => ({}) as never,
+        }}
+      />
+    ),
+  });
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: ['/en/subjects/release/release'] }),
+  });
   const { m } = await import('../src/paraglide/messages.js');
   try {
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
-          <ReleaseFidelityPage
-            id={read.public.subject.id}
-            context={candidateContext}
-            locale="en"
-            search={async () => []}
-            transport={{
-              read: async () => read,
-              facts: { read: async () => ({ ok: false, reason: 'denied' }), propose: async () => ({ ok: false }) } as never,
-              relation: () => ({}) as never,
-              review: () => ({}) as never,
-            }}
-          />
+          <RouterProvider router={router} />
         </QueryClientProvider>,
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
