@@ -39,7 +39,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.3 is current, while release 1.0.0, 1.0.1 and 1.0.2 bytes and their digests remain loadable for existing pins. Book
+is immutable: 1.0.4 is current, while release 1.0.0, 1.0.1, 1.0.2 and 1.0.3 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -152,8 +152,8 @@ and pattern checks.
 A property may name at most 1,024 targets. Compilation allows at most 256 schema files.
 
 The launch grain is three types and twelve properties in one schema file. The bundled
-catalogue has 29 types, 120 properties and 12 schema files. One hundred such verticals
-add 300 types, 1,200 properties and 100 schema files: 329 types, 1,320 properties and
+catalogue has 29 types, 125 properties and 12 schema files. One hundred such verticals
+add 300 types, 1,200 properties and 100 schema files: 329 types, 1,325 properties and
 112 schema files, still under the 4 MiB release cap. `foaf:focus` ranges over `Thing`, so its
 target is `schema:Thing`; a later type matches through its `bases`.
 `schema:exampleOfWork` ranges over `CreativeWork`, so its target stays
@@ -831,6 +831,11 @@ locally without a translation service.
 | `wdt:P178`                  | [developer](https://www.wikidata.org/wiki/Property:P178)                                                                                                   |
 | `wdt:P725`                  | [voice actor](https://www.wikidata.org/wiki/Property:P725)                                                                                                 |
 | `schema:contributor`        | [contributor](https://schema.org/contributor), mapped to [contributor to the creative work or subject (P767)](https://www.wikidata.org/wiki/Property:P767) |
+| `wdt:P106`                  | [occupation](https://www.wikidata.org/wiki/Property:P106), a Concept classifying a person                                                                  |
+| `schema:knowsLanguage`      | [knowsLanguage](https://schema.org/knowsLanguage), languages a person knows as Concepts, not proficiency or a work's language                               |
+| `wdt:P749`                  | [parent organization](https://www.wikidata.org/wiki/Property:P749), stored on the child with optional start and end dates                                   |
+| `wdt:P1365`                 | [replaces](https://www.wikidata.org/wiki/Property:P1365), the predecessor organization, independent of successor                                            |
+| `wdt:P1366`                 | [replaced by](https://www.wikidata.org/wiki/Property:P1366), the successor organization, independent of predecessor                                        |
 | `wdt:P1932`                 | [object of statement named as](https://www.wikidata.org/wiki/Property:P1932), the name as credited                                                         |
 | `schema:position`           | [position](https://schema.org/position), mapped to [series ordinal (P1545)](https://www.wikidata.org/wiki/Property:P1545)                                  |
 | `wdt:P3831`                 | [object of statement has role](https://www.wikidata.org/wiki/Property:P3831), a detailed role concept                                                      |

@@ -1,5 +1,5 @@
 import { createKernelClient, type SubjectRead } from '@rezics/client';
-import type { PropertyDefinition, Release } from '@rezics/definitions';
+import type { Release } from '@rezics/definitions';
 import { candidateContext } from '../../subject/candidates';
 import {
   producerHistoryLabels,
@@ -16,38 +16,7 @@ export const producerParentId = '00000000-0000-4000-8000-00000000e102';
 export const producerSimilarId = '00000000-0000-4000-8000-00000000e103';
 export type ProducerHistoryScenario = 'current' | 'partial' | 'empty' | 'denied' | 'unavailable' | 'concealed';
 
-function relationProperty(id: string, label: string, inverse: string, inverseLabel: string): PropertyDefinition {
-  const labels = { en: label, ja: label };
-  return {
-    iri: `http://www.wikidata.org/prop/direct/${id.slice(4)}`,
-    value: { type: 'string', pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
-    labels,
-    descriptions: { en: label },
-    datatype: 'wikibase-item',
-    targets: ['schema:Organization'],
-    mappings: [],
-    qualifiers: [],
-    multivalued: true,
-    relation: {
-      group: 'derivation',
-      order: 'name',
-      inverse,
-      inverseLabels: { en: inverseLabel, ja: inverseLabel },
-    },
-  };
-}
-
 export function admitProducerHistory(release: Release) {
-  const properties: Record<string, PropertyDefinition> = {
-    'wdt:P749': relationProperty('wdt:P749', 'parent organization', 'rezics:hasSubsidiary', 'has subsidiary'),
-    'wdt:P1365': relationProperty('wdt:P1365', 'replaces', 'rezics:replacedBy', 'replaced by'),
-    'wdt:P1366': relationProperty('wdt:P1366', 'replaced by', 'rezics:replaces', 'replaces'),
-  };
-  Object.assign(release.properties, properties);
-  const type = release.types['schema:Organization'];
-  if (type) {
-    for (const id of Object.keys(properties)) if (!type.properties.includes(id)) type.properties.push(id);
-  }
   return release;
 }
 

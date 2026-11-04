@@ -898,12 +898,12 @@ eligibility, personal disclosure and `sourceOrConsent` stay with their existing 
 never send ingestion Source metadata or infer private relationships.
 
 Person biography, occupations and working languages appear as labelled groups on the existing People profile.
-Requested `schema:abstract`, occupation concepts and `schema:knowsLanguage` stay named unsupported until the active
-release admits those exact descriptors. An admitted biography field uses the existing authored document composer with
+This release admits `schema:abstract`, occupation `wdt:P106` and `schema:knowsLanguage`; other requested occupation
+predicates stay named unsupported. An admitted biography field uses the existing authored document composer with
 language, document identity, references and return; short descriptions are not rewritten as long biography. Occupations
 and languages are independently selected admitted items. Organization producer history is a companion
-`/{locale}/subjects/{id}/{slug}/producer` route that reuses the existing relation editor; requested parent and
-predecessor/successor descriptors bind only when admitted. Released media fields still require their dedicated editor;
+`/{locale}/subjects/{id}/{slug}/producer` route that reuses the existing relation editor; parent `wdt:P749` and
+predecessor/successor `wdt:P1365`/`wdt:P1366` bind as independent directed organization relations. Released media fields still require their dedicated editor;
 this flow supplies no cover import or inferred rights. Metadata text retains its actual fallback language, independently
 of the entered facts' languages.
 

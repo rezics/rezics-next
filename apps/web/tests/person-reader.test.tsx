@@ -15,6 +15,8 @@ test('ordinary Person overview places the reader; admitted authored text and lab
   const fixture = personReaderExample();
   const { SubjectPage } = await import('../src/features/pages/subject');
   const { subjectPageMessages } = await import('../src/features/pages/route-support');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const document: CompositionDocument = {
     root: { props: {} },
     content: [{ type: 'SubjectHeader', props: { id: 'header' } }],
@@ -27,17 +29,19 @@ test('ordinary Person overview places the reader; admitted authored text and lab
     document,
     reads: Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: fixture.read }])),
   };
-  const overview = renderToStaticMarkup(
-    h(SubjectPage, { page, locale: 'en', messages: subjectPageMessages('en'), renderJsonLd: false }),
-  );
+  const draw = (body: typeof page) =>
+    renderToStaticMarkup(
+      h(
+        QueryClientProvider,
+        { client },
+        h(SubjectPage, { page: body, locale: 'en', messages: subjectPageMessages('en'), renderJsonLd: false }),
+      ),
+    );
+  const overview = draw(page);
   expect(overview).toContain('data-slot="person-reader"');
   const organization = structuredClone(page);
   for (const read of Object.values(organization.reads)) read.body.subject.type = 'schema:Organization';
-  expect(
-    renderToStaticMarkup(
-      h(SubjectPage, { page: organization, locale: 'en', messages: subjectPageMessages('en'), renderJsonLd: false }),
-    ),
-  ).not.toContain('data-slot="person-reader"');
+  expect(draw(organization)).not.toContain('data-slot="person-reader"');
   for (const locale of locales) {
     const html = renderToStaticMarkup(
       h(PersonReader, { public: fixture.read, release: fixture.release, documents: fixture.documents, locale }),

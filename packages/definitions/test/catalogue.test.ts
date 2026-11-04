@@ -25,7 +25,7 @@ test('the committed bundled release is the compilation of the bundled catalogue'
 
 test('book work, edition and recipe are profiles of the catalogue', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.3' });
+  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.4' });
   expect(Object.keys(types)).toEqual(expect.arrayContaining(['bf:Instance', 'schema:Book', 'schema:Recipe']));
   expect(types['schema:Book']).toMatchObject({
     mappings: ['wd:Q47461344'],
@@ -217,6 +217,35 @@ ${prefixes}imports:
   );
   expect(release.properties['schema:composer']).toMatchObject({ targets: ['schema:Person'], multivalued: true });
   expect(release.properties['schema:isbn']).toEqual(bundledRelease.properties['schema:isbn']!);
+});
+
+test('Person biography and Organization history admit sourced descriptors', () => {
+  const { types, properties } = bundledRelease;
+  expect(types['schema:Person']?.properties).toEqual(
+    expect.arrayContaining(['schema:abstract', 'wdt:P106', 'schema:knowsLanguage']),
+  );
+  expect(properties['wdt:P106']).toMatchObject({
+    targets: ['skos:Concept'],
+    relation: { group: 'classification', inverse: 'none' },
+  });
+  expect(properties['schema:knowsLanguage']).toMatchObject({ targets: ['skos:Concept'] });
+  expect(properties['schema:hasOccupation']).toBeUndefined();
+  expect(properties['schema:occupation']).toBeUndefined();
+  expect(types['schema:Organization']?.properties).toEqual(
+    expect.arrayContaining(['schema:abstract', 'wdt:P749', 'wdt:P1365', 'wdt:P1366']),
+  );
+  expect(properties['wdt:P749']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'association', inverse: 'rezics:hasSubsidiary' },
+  });
+  expect(properties['wdt:P1365']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'order', inverse: 'rezics:replacedBy' },
+  });
+  expect(properties['wdt:P1366']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'order', inverse: 'rezics:replaces' },
+  });
 });
 
 test('every bundled term carries labels in all eight UI locales', () => {

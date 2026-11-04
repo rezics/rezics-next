@@ -1,9 +1,14 @@
 import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import {
+  classifyUnavailability,
+  CommandUnavailableError,
+  requireAccessDeadline,
+} from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import type { Pool } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
@@ -88,6 +93,7 @@ export type CataloguePageMetadata = {
 const catalogueFileTypes = ['schema:MediaObject', 'rezics:CatalogueFile', 'wd:Q82753'];
 const catalogueGroupTypes = ['rezics:ReleaseGroup', 'wd:Q55327'];
 const catalogueMusicTypes = ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'];
+const cataloguePeopleTypes = ['schema:Person', 'schema:Organization'];
 
 function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
   if (type === base) return true;
@@ -96,19 +102,30 @@ function typeIsA(release: CataloguePageDefinitions, type: string, base: string, 
   return (release.types[type]?.bases ?? []).some((candidate) => typeIsA(release, candidate, base, seen));
 }
 
-/** The ordinary page carries the current file, group or music descriptor and its directed relation vocabulary. */
+/** Person and Organization, including descendants, admit biography and producer history on the ordinary page. */
+export function peopleProducerTypeAdmitted(release: CataloguePageDefinitions | undefined, type: string) {
+  return cataloguePeopleTypes.some((base) => release !== undefined && typeIsA(release, type, base));
+}
+
+/** The ordinary page carries the current file, group, music, person or organization descriptor and its directed relation vocabulary. */
 export function cataloguePageMetadata(
   release: CataloguePageDefinitions | undefined,
   digest: string | undefined,
   type: string,
 ): CataloguePageMetadata | undefined {
-  const candidate = [...catalogueFileTypes, ...catalogueGroupTypes, ...catalogueMusicTypes].includes(type);
+  const candidate = [
+    ...catalogueFileTypes,
+    ...catalogueGroupTypes,
+    ...catalogueMusicTypes,
+    ...cataloguePeopleTypes,
+  ].includes(type);
   const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
   const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
   const music = catalogueMusicTypes.some((base) => release && typeIsA(release, type, base));
-  if (!candidate && !file && !group && !music) return;
+  const people = peopleProducerTypeAdmitted(release, type);
+  if (!candidate && !file && !group && !music && !people) return;
   if (!release || !digest) return { state: 'unavailable', type };
-  if (!release.types[type] || (!file && !group && !music)) return { state: 'unsupported', type, digest };
+  if (!release.types[type] || (!file && !group && !music && !people)) return { state: 'unsupported', type, digest };
 
   const propertyIds = new Set(release.types[type]?.properties ?? []);
   const inversePropertyIds = new Set<string>();
@@ -280,4 +297,72 @@ export async function preparePublicSemanticPageMetadata(deps: SummaryReaderDepen
       return result;
     },
   };
+}
+
+const peopleProducerCorrectionActions = [
+  { action: 'statement:propose', operationId: 'subject.propose' },
+  { action: 'context:accept', operationId: 'subject.accept_candidate' },
+  { action: 'context:adopt', operationId: 'subject.adopt' },
+] as const;
+
+export type PeopleProducerActionState =
+  | 'allowed'
+  | 'denied'
+  | 'unavailable'
+  | 'unsupported'
+  | 'absent'
+  | 'withheld';
+
+export async function readPeopleProducerPageAuthority(
+  deps: { access: Access; pool: Pool },
+  actor: Actor,
+  deadline: number,
+): Promise<{
+  viewer: { kind: 'anonymous' | 'account' };
+  actions: { action: string; operationId: string; state: PeopleProducerActionState }[];
+}> {
+  const viewer = { kind: actor.kind === 'account' ? ('account' as const) : ('anonymous' as const) };
+  const unavailable = peopleProducerCorrectionActions.map((entry) => ({
+    action: entry.action,
+    operationId: entry.operationId,
+    state: 'unavailable' as const,
+  }));
+  try {
+    requireAccessDeadline(deadline);
+    const prepared = await Promise.all(
+      peopleProducerCorrectionActions.map(async (entry) => ({
+        ...entry,
+        check: await accessCheck(
+          deps.access,
+          actor,
+          entry.action,
+          { route: 0, id: GLOBAL_CONTEXT },
+          { pool: deps.pool, deadline },
+        ),
+      })),
+    );
+    requireAccessDeadline(deadline);
+    const actions = await withReadTransaction(
+      deps.pool,
+      async (client) => {
+        const states: { action: string; operationId: string; state: PeopleProducerActionState }[] = [];
+        for (const entry of prepared) {
+          let state: PeopleProducerActionState = 'denied';
+          try {
+            state = (await entry.check(client)) ? 'allowed' : 'denied';
+          } catch (error) {
+            if (classifyUnavailability(error)) state = 'unavailable';
+            else throw error;
+          }
+          states.push({ action: entry.action, operationId: entry.operationId, state });
+        }
+        return states;
+      },
+      deadline,
+    );
+    return { viewer, actions };
+  } catch (error) {
+    if (classifyUnavailability(error)) return { viewer, actions: unavailable };
+    throw error;
+  }
 }

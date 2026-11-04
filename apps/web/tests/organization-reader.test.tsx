@@ -17,14 +17,6 @@ const target = '00000000-0000-4000-8000-00000000d301';
 function fixture() {
   const fixture = peopleProfileFixture('ready', 'en', 'organization');
   const { release, organization: publicRead } = fixture;
-  release.properties['wdt:P1365'] = {
-    ...release.properties['rezics:penNameOf']!,
-    labels: { en: 'Predecessor', ja: '前身' },
-    targets: ['schema:Organization'],
-    qualifiers: ['schema:startDate', 'schema:endDate'],
-    relation: { group: 'credit', order: 'name', inverse: 'none' },
-  };
-  release.types['schema:Organization']!.properties.push('wdt:P1365');
   publicRead.subject.descriptions = { en: 'A historical studio', ja: '歴史ある制作会社' };
   publicRead.related[target] = {
     type: 'schema:Organization',
@@ -82,15 +74,15 @@ test('ordinary Organization reading keeps directed history, partial dates, ranks
   const { read, fact } = fixture();
   const model = organizationHistory(read, 'en')!;
   expect(model.fields.find((field) => field.id === 'wdt:P1365')!.facts).toEqual([fact]);
-  expect(model.unreleased.map((field) => field.meaning)).toEqual(['parent', 'successor']);
-  expect(model.authoredUnsupported).toBe(true);
+  expect(model.unreleased).toEqual([]);
+  expect(model.authoredUnsupported).toBe(false);
   fact.qualifiers = Array.from({ length: 33 }, () => fact.qualifiers[0]!);
   const bounded = organizationHistory(read, 'en')!;
   expect(bounded.limited).toBe(true);
   expect(bounded.fields.find((field) => field.id === 'wdt:P1365')).toMatchObject({ facts: [], unavailable: true });
   delete read.release.properties['wdt:P1365'];
   expect(organizationHistory(read, 'en')!.fields.some((field) => field.id === 'wdt:P1365')).toBe(false);
-  expect(organizationHistory(read, 'en')!.unreleased).toHaveLength(3);
+  expect(organizationHistory(read, 'en')!.unreleased.map((field) => field.meaning)).toEqual(['predecessor']);
   expect(organizationCurrent(read, target, read.public.subject.context)).toBeUndefined();
   read.public.subject.type = 'schema:Person';
   expect(organizationHistory(read, 'en')).toBeUndefined();
@@ -164,13 +156,13 @@ test('history inspection follows the exact disclosed identity, returns focus, an
     source = {};
     await show();
     expect(host.textContent).toContain('Earlier Studio');
-    await settle(() => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
-    expect(host.querySelectorAll('a,button')).toHaveLength(0);
-    source = {};
     delete read.public.related[target];
+    source = {};
     await show();
     expect(host.textContent).toContain(m.people_biography_unreadable());
     expect([...host.querySelectorAll('a')].some((link) => link.href.includes(target))).toBe(false);
+    await settle(() => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
+    expect(host.querySelectorAll('a,button')).toHaveLength(0);
   } finally {
     await act(async () => root.unmount());
     client.clear();
