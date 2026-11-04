@@ -820,7 +820,7 @@ export function PageData({
   locale: string;
   subject?: string | null;
   subjectLabel?: string;
-  currentHref?: string;
+  currentHref?: string | undefined;
   pageTarget?: MemberPageTarget | undefined;
   context?: SelectedContext | undefined;
   continuation?: PageContinuation | undefined;
