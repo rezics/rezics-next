@@ -15,10 +15,12 @@ import { classifyTask } from './routing.ts';
 import { harness, markdown } from './test-support.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
-test('a brief over the size limit is refused with the reason, since the prompt is one launch argument', () => {
+test('a brief over the diagnostic size budget is accepted with a lint warning', () => {
   expect(() => parseBrief(markdown, { version: 1, areas: {} })).not.toThrow();
   const big = `${markdown}\n${'x'.repeat(MAX_BRIEF_BYTES)}\n`;
-  expect(() => parseBrief(big, { version: 1, areas: {} })).toThrow('link evidence files instead of pasting them');
+  expect(parseBrief(big, { version: 1, areas: {} }).lintWarnings?.join('\n')).toContain(
+    `diagnostic budget is ${MAX_BRIEF_BYTES} bytes`,
+  );
 });
 
 test('acceptance placement is optional, typed, and restricts local checks to the audited command boundary', () => {
@@ -175,7 +177,7 @@ test('Parsing and comparing supported long path patterns completes without stack
   expect(() => validatePath('/abs')).toThrow('invalid declared path');
   expect(() => validatePath('../x')).toThrow('invalid declared path');
   expect(() => validatePath('a/**b')).toThrow('invalid declared path');
-  expect(() => validatePath('a'.repeat(MAX_BRIEF_BYTES + 1))).toThrow('keep each pattern under');
+  expect(() => validatePath('a'.repeat(65_537))).toThrow('keep each pattern under 65536 characters');
   expect(() => pathsOverlap(`${'*a'.repeat(1_500)}x`, `${'*a'.repeat(1_500)}y`)).toThrow('supported bound');
   expect(parseBrief(markdown.replace('[result.txt]', `[${long}]`), { version: 1, areas: {} }).paths).toEqual([long]);
   expect(() =>

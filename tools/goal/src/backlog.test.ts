@@ -120,7 +120,7 @@ function brief(state: string, goal: string, name: string, ageMs: number, text = 
   const directory = join(state, 'backlog', goal);
   mkdirSync(directory, { recursive: true });
   const file = join(directory, name);
-  writeFileSync(file, `${text}\n`);
+  writeFileSync(file, `${text.startsWith('---') ? text : `${markdown}\n\n${text}`}\n`);
   const at = (NOW - ageMs) / 1000;
   utimesSync(file, at, at);
   return file;
