@@ -23,9 +23,11 @@ import type { LinkProps } from './shared';
 import { CatalogueSecondary, CatalogueTargetLink } from './catalogue-list-context/secondary';
 import { catalogueText, type CatalogueRowContext } from './catalogue-list-context/model';
 
-const CreditInspectionSession = lazy(() => import('../catalogue/credit-inspection/session').then((module) => ({
-  default: module.CreditInspectionSession,
-})));
+const CreditInspectionSession = lazy(() =>
+  import('../catalogue/credit-inspection/session').then((module) => ({
+    default: module.CreditInspectionSession,
+  })),
+);
 
 export function ExactEditionLink({ href, lang, className, children }: LinkProps) {
   return (
@@ -107,9 +109,13 @@ function ItemCard({
       qualified={item.qualified ?? []}
       value={value}
       openInNewTab={exactEdition}
-      inspection={inspect ? <Button variant="outline" className="mt-2" onClick={(event) => inspect(event.currentTarget)}>
-        {m.credit_inspect({}, { locale: value.locale as never })}
-      </Button> : undefined}
+      inspection={
+        inspect ? (
+          <Button variant="outline" className="mt-2" onClick={(event) => inspect(event.currentTarget)}>
+            {m.credit_inspect({}, { locale: value.locale as never })}
+          </Button>
+        ) : undefined
+      }
     />
   ) : (
     <CoverCard
@@ -200,21 +206,42 @@ export function CoverList({
   const visitOwner = useRef({ identity: visitIdentity });
   if (visitOwner.current.identity !== visitIdentity) visitOwner.current = { identity: visitIdentity };
   const owner = visitOwner.current;
-  const [inspection, setInspection] = useState<{ owner: object; identity: string; credit: CreditAssertion;
-    visit: CreditVisit; title: string; trigger: HTMLButtonElement }>();
-  const liveInspection = inspection?.owner === owner && items.some((item) => contentIdentity(item) === inspection.identity)
-    ? inspection : undefined;
+  const [inspection, setInspection] = useState<{
+    owner: object;
+    identity: string;
+    credit: CreditAssertion;
+    visit: CreditVisit;
+    title: string;
+    trigger: HTMLButtonElement;
+  }>();
+  const liveInspection =
+    inspection?.owner === owner && items.some((item) => contentIdentity(item) === inspection.identity)
+      ? inspection
+      : undefined;
   function closeInspection() {
     if (visitOwner.current !== owner || !liveInspection) return;
     const trigger = liveInspection.trigger;
     setInspection(undefined);
     if (trigger.isConnected) trigger.focus();
   }
-  const inspector = liveInspection ? <Suspense fallback={<p role="status">{m.candidate_loading({}, { locale: value.locale as never })}</p>}><CreditInspectionSession key={liveInspection.identity} id={liveInspection.visit.person}
-    address={visitIdentity} credit={liveInspection.credit} visit={liveInspection.visit}
-    title={liveInspection.title} propertyLabel={liveInspection.visit.propertyLabel}
-    locale={value.locale} onClose={closeInspection}
-    returnFocus={() => visitOwner.current === owner && liveInspection.trigger.isConnected ? liveInspection.trigger : null} /></Suspense> : null;
+  const inspector = liveInspection ? (
+    <Suspense fallback={<p role="status">{m.candidate_loading({}, { locale: value.locale as never })}</p>}>
+      <CreditInspectionSession
+        key={liveInspection.identity}
+        id={liveInspection.visit.person}
+        address={visitIdentity}
+        credit={liveInspection.credit}
+        visit={liveInspection.visit}
+        title={liveInspection.title}
+        propertyLabel={liveInspection.visit.propertyLabel}
+        locale={value.locale}
+        onClose={closeInspection}
+        returnFocus={() =>
+          visitOwner.current === owner && liveInspection.trigger.isConnected ? liveInspection.trigger : null
+        }
+      />
+    </Suspense>
+  ) : null;
   const credits = !!creditVisit || items.some((item) => (item.qualified?.length ?? 0) > 0);
   const occurrences = new Map<string, number>();
   const cards = items.map((item) => {
@@ -232,11 +259,21 @@ export function CoverList({
         item={item}
         value={value}
         credit={credits}
-        {...(item.credit && creditVisit ? { inspect: (trigger: HTMLButtonElement) => {
-          if (visitOwner.current !== owner) return;
-          setInspection({ owner, identity: contentIdentity(item), credit: item.credit!, visit: creditVisit,
-            title: item.label.text || value.unlabelled, trigger });
-        } } : {})}
+        {...(item.credit && creditVisit
+          ? {
+              inspect: (trigger: HTMLButtonElement) => {
+                if (visitOwner.current !== owner) return;
+                setInspection({
+                  owner,
+                  identity: contentIdentity(item),
+                  credit: item.credit!,
+                  visit: creditVisit,
+                  title: item.label.text || value.unlabelled,
+                  trigger,
+                });
+              },
+            }
+          : {})}
         openExactEdition={openExactEditions}
         {...(memberCatalogue && Object.hasOwn(memberCatalogue, item.id) ? { catalogue: memberCatalogue[item.id] } : {})}
         {...(listPresentationFor ? { listPresentationFor } : {})}

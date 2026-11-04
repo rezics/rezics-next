@@ -2491,9 +2491,16 @@ function subjectRoutes(
                       property: t.String(),
                       statement: t.String(),
                       assertion: t.Optional(StatementSchema),
-                      creditSlot: t.Optional(t.Object({
-                        property: t.String(), target: t.String(), key: t.Optional(t.String()),
-                      }, { additionalProperties: false })),
+                      creditSlot: t.Optional(
+                        t.Object(
+                          {
+                            property: t.String(),
+                            target: t.String(),
+                            key: t.Optional(t.String()),
+                          },
+                          { additionalProperties: false },
+                        ),
+                      ),
                       related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
                       type: t.String(),
                       label: t.String(),
