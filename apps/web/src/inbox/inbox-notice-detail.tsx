@@ -40,7 +40,6 @@ export function InboxNoticeDetailView({
   const actorPresentation = inboxNoticeActorPresentation({
     actor,
     actorId: actor.state === 'available' ? actor.accountId : null,
-    actorName: actor.state === 'available' ? actor.displayName : undefined,
     kind: notice.kind,
     reportId: notice.reportId,
   });
