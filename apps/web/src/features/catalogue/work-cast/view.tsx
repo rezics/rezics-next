@@ -71,7 +71,12 @@ export function WorkCastWindow({
       </CurrentLink>
     );
   };
-  const targetValue = { ...value, link: CastTargetLink };
+  const { subject: subjectId, ...rowValue } = value;
+  const targetValue: RowValue & { subject?: string | null } = {
+    ...rowValue,
+    ...(subjectId !== undefined ? { subject: subjectId } : {}),
+    link: CastTargetLink,
+  };
   const window = castWindow(items);
   const options = { locale: value.locale as never };
 
