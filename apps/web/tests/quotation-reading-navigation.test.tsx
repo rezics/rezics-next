@@ -97,7 +97,7 @@ test('mounted reader owns later-page selection, explicit recovery, return and re
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const calls: Parameters<QuotationTransport['read']>[0][] = [];
   let answer: QuotationTransport['read'] = async (input) =>
-    input.cursor ? page([later, first], later) : page([first], first, 'native-page-two');
+    input.cursor ? page([later, first], input.quote ?? later) : page([first], input.quote ?? first, 'native-page-two');
   const transport: QuotationTransport = {
     read: async (input) => {
       calls.push(input);
