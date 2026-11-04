@@ -850,7 +850,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       async ({ params, actor, admission, job }) => {
         requireAccount(actor);
         return admission.run('normal', job, () =>
-          mapped(() => read().readCollectionMetadataHistoryChange(actor, params.collectionId, params.revision, job.deadline)),
+          mapped(() =>
+            read().readCollectionMetadataHistoryChange(actor, params.collectionId, params.revision, job.deadline),
+          ),
         );
       },
     )
