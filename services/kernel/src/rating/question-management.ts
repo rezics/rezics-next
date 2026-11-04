@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
@@ -33,7 +33,7 @@ function managementQuestion(view: RatingQuestionView) {
   if (
     view.realmId === undefined || view.meaning === undefined || view.canonicalLabel === undefined ||
     view.labelRevision === undefined || view.lifecycle === undefined
-  ) throw new CommandUnavailableError('overloaded');
+  ) throw new AccessUnavailableError('overloaded');
   return {
     ...view,
     realmId: view.realmId,
@@ -105,7 +105,10 @@ export async function readQuestionManagementPage(
     lifecycleGeneration = decoded.after[1];
   }
   const directory = await readSelectedQuestionDirectory(
-    deps, actor, { realmId, after, limit: PAGE_SIZE, lifecycleGeneration }, deadline,
+    deps, actor, {
+      realmId, after, limit: PAGE_SIZE,
+      ...(lifecycleGeneration === undefined ? {} : { lifecycleGeneration }),
+    }, deadline,
   );
   let selected: QuestionMetadata | null = null;
   if (selectedQuestionId !== undefined) {
@@ -160,6 +163,6 @@ export async function readQuestionManagementPage(
   // The closed source bounds every field before this copy: one indexed raw page
   // and one exact row, with no votes or revision-history materialized here.
   if ((next !== null && next.length > MAX_CURSOR) || Buffer.byteLength(JSON.stringify(page)) > MAX_BYTES)
-    throw new CommandUnavailableError('overloaded');
+    throw new AccessUnavailableError('overloaded');
   return page;
 }
