@@ -222,7 +222,7 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
         subject: 'reporter-account',
         admitted: ['personal_library'],
       });
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(container.textContent).not.toContain('Selected private report');
     expect(container.textContent).not.toContain('spam');
