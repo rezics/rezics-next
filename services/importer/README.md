@@ -1426,11 +1426,11 @@ bounds belong to the linked owners; conversion itself has no purge work.
 ### Import authored Bangumi television original-run and episode count
 
 - Touches: one admitted type-2 TVAnime infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@8` converter, and ordinary public
+  registration, the shared `bangumi@9` converter, and ordinary public
   batch/fence/candidate paths on that TVSeries. Selected-family seed reuses the
   same registration; this adds no publisher.
 - Bound: at most 64 infobox keys and three run facts inside the existing 64 KiB
-  projection, nine-command and journal budgets. Unknown `*`, weekday schedule
+  projection, 33-command and journal budgets. Unknown `*`, weekday schedule
   text and custom keys withhold only those fields. No extra reads, episode-row
   counts or broadcaster resolution.
 - Growth check: the focused importer case checks exact start/end/count
@@ -2192,7 +2192,7 @@ for these source Concepts.
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2228,6 +2228,32 @@ date is not completion or access authority.
   JSON-lines proposals, unknown totals, schedule/custom omissions, converter
   refresh and changed totals with stable identity. The connected ordinary caller
   is `services/kernel/test/imports/bangumi-television-run.test.ts`; native
+  execution remains controller-owned.
+
+### Bangumi Game platforms and software engine
+
+Ordinary Bangumi JSON-lines registration converts pinned Game infobox `平台`
+and `游戏引擎` on type 4 through `bangumi@9`. Selected-family type 4 rows use
+that same converter. Current reviewed Concept reads supply the only native
+targets; a configuration UUID or identical label is a lookup hint. Concealed
+or wrong-source bindings withhold that occurrence and keep the VideoGame
+identity and sealed retry candidates. Top-level `platform` remains the profile
+selector. Engine version, platform or edition text is withheld because
+`wdt:P408` admits no qualifiers. No second vocabulary publisher or taxonomy
+release is introduced.
+Decision: Game environment admission advances `bangumi@8` to `bangumi@9`; no
+infobox-field scheme URI is minted from `平台` or `游戏引擎`.
+
+- Touches: one ordinary or selected type-4 Game record, at most 16 platform
+  and 8 engine Concept relations, exact infobox field citations, and
+  independent accept/adopt/read of those properties.
+- Bound: 65,536 infobox bytes, 64 fields, depth 2, 16 diagnostics, 24 cached
+  current Concept reads, the 64 KiB command envelope and existing journal
+  limits. No catalogue label scan.
+- Growth check: `services/importer/tests/bangumi-game-environment.test.ts`
+  covers selected-family planning, ordinary registration, citations and
+  concealed/wrong-source withholding. The connected ordinary caller is
+  `services/kernel/test/imports/bangumi-game-environment.test.ts`; native
   execution remains controller-owned.
 
 ### Bangumi creator and voice credits

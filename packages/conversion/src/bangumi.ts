@@ -11,6 +11,7 @@ import { ConversionError, type ConversionInput, type ConvertedRecord } from './i
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
+import { bangumiGameEnvironment } from './bangumi-game-environment.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -23,12 +24,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@8';
+export const converter_revision = 'bangumi@9';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Twelve projected top-level fields; at most nine commands, one cover intent,
+// Twelve projected top-level fields; at most 51 commands, one cover intent,
 // and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
@@ -307,6 +308,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
   }
   const television = bangumiTelevisionRun(record);
+  const environment = bangumiGameEnvironment(record, context);
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -348,6 +350,35 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
     for (const item of television.facts)
       proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
+    for (const item of environment.facts) {
+      let cited = recordUrl;
+      try {
+        const parsed = new URL(recordUrl);
+        parsed.hash = item.citationPath;
+        cited = parsed.href;
+      } catch {
+        cited = recordUrl;
+      }
+      proposals.push(
+        propose(
+          {
+            property: { id: item.property },
+            value: { type: 'value', content: item.content },
+            ...(item.qualifiers
+              ? {
+                  qualifiers: item.qualifiers.map((qualifier) => ({
+                    property: { id: qualifier.property },
+                    value: { type: 'value' as const, content: qualifier.content },
+                  })),
+                }
+              : {}),
+            references: references([cited]),
+          },
+          'facts',
+          item.field,
+        ),
+      );
+    }
     if (document) {
       proposals.push({
         ...propose(fact('schema:abstract', { language: 'und', document }), 'summary', 'summary'),
@@ -405,8 +436,13 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
     diagnostics: [
-      ...retainedFieldDiagnostics(record, extractedNames.diagnostics, television.handledInfobox),
+      ...retainedFieldDiagnostics(
+        record,
+        extractedNames.diagnostics,
+        television.handledInfobox || environment.handledInfobox,
+      ),
       ...television.diagnostics,
+      ...environment.diagnostics,
     ],
     coverAssets,
     mediaImportIntents,
