@@ -1,39 +1,33 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "apps/web/src/features/feed/home-feed-reaction.ts",
-    "apps/web/src/features/feed/action-bar.tsx",
-    "apps/web/src/features/feed/home-card-journey/**",
-    "apps/web/tests/home-native-reactions.test.tsx",
-    "apps/web/tests/home-subject-reactions.test.tsx",
-    "apps/web/src/stories/home-card-journey.stories.tsx",
-    "apps/web/messages/*.json"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "waiting": [],
-  "after": [],
-  "estimate": {
-    "lines": 900,
-    "files": 7
-  },
-  "criticalPath": false,
-  "acceptance": {
-    "tests": [
-      "home-native-reactions.test.tsx: installed Content action advice gates signed-in Thread/Post controls and set/change/clear use the shared engine with frozen uncertain retry.",
-      "home-subject-reactions.test.tsx: retain Subject action denial/unavailability, sign-in return, set/change/clear and current-session retirement.",
-      "Keep the shared successful-session-incarnation controller baseline unchanged."
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'apps/web/src/features/feed/home-feed-reaction.ts',
+      'apps/web/src/features/feed/action-bar.tsx',
+      'apps/web/src/features/feed/home-card-journey/**',
+      'apps/web/tests/home-native-reactions.test.tsx',
+      'apps/web/tests/home-subject-reactions.test.tsx',
+      'apps/web/src/stories/home-card-journey.stories.tsx',
+      'apps/web/messages/*.json',
     ],
-    "failing": true
-  }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 900, 'files': 7 },
+  'criticalPath': false,
+  'acceptance':
+    {
+      'tests':
+        [
+          'home-native-reactions.test.tsx: installed Content action advice gates signed-in Thread/Post controls and set/change/clear use the shared engine with frozen uncertain retry.',
+          'home-subject-reactions.test.tsx: retain Subject action denial/unavailability, sign-in return, set/change/clear and current-session retirement.',
+          'Keep the shared successful-session-incarnation controller baseline unchanged.',
+        ],
+      'failing': true,
+    },
 }
 ---
 

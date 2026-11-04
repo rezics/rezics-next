@@ -143,7 +143,10 @@ test('signed-in Home keeps Content reaction facts visible but disables writes wi
   };
   await paint(
     <HomeFeed
-      result={{ state: 'ready', page: { ...result.page, feedItems: [item], reactionsAsOf: { epoch: 1, position: '2' } } }}
+      result={{
+        state: 'ready',
+        page: { ...result.page, feedItems: [item], reactionsAsOf: { epoch: 1, position: '2' } },
+      }}
       locale="en"
       signedIn
     />,
