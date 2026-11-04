@@ -22,6 +22,7 @@ const globals = {
   matchMedia: window.matchMedia.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -171,7 +172,6 @@ test('unsent references warn on departure, Stay preserves text and focus, and di
     expect(submissions).toBe(0);
   } finally {
     await act(async () => root.unmount());
-    router.dispose();
     window.happyDOM.abort();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
