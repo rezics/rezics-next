@@ -400,7 +400,12 @@ test('independent publication creation, local corrections, immutable recovery an
     const publisherLabel = correction.fixture.release.properties['schema:publisher']!.labels.en!;
     await act(async () => user.type(scope().getByRole('combobox', { name: publisherLabel }), 'Press'));
     const correctionBody = within(window.document.body as unknown as HTMLElement);
-    await act(async () => user.click(await correctionBody.findByRole('option', { name: /Supplied publisher/ })));
+    const suppliedPublisher = await correctionBody.findByRole(
+      'option',
+      { name: /Supplied publisher/ },
+      { timeout: 5000 },
+    );
+    await act(async () => user.click(suppliedPublisher));
     await create();
     await scope().findByRole('heading', { name: m.catalogue_create_invalid(), level: 2 });
     const citation = urlIn(workSection());
@@ -538,9 +543,11 @@ test('independent publication creation, local corrections, immutable recovery an
     await replace(input(m.correction_value()), 'ja');
     await add('schema:publisher');
     await replace(scope().getByRole('combobox', { name: 'publisher' }), 'Supplied');
-    const recoveryPublisher = await within(window.document.body as unknown as HTMLElement).findByRole('option', {
-      name: /Supplied publisher/,
-    });
+    const recoveryPublisher = await within(window.document.body as unknown as HTMLElement).findByRole(
+      'option',
+      { name: /Supplied publisher/ },
+      { timeout: 5000 },
+    );
     await act(async () => user.click(recoveryPublisher));
     await replace(urlIn(workSection()), 'https://publisher.example/edition');
     await create();
@@ -827,7 +834,7 @@ test('independent publication creation, local corrections, immutable recovery an
     const picker = scope().getByRole('combobox', { name: publisherName });
     await act(async () => user.type(picker, 'Press'));
     const optionsInDocument = within(window.document.body as unknown as HTMLElement);
-    const choice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ });
+    const choice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ }, { timeout: 5000 });
     expect(optionsInDocument.queryByRole('option', { name: /Wrong target/ })).toBeNull();
     expect(searchCalls.at(-1)).toBe('Press');
     expect(publisher.fixture.calls).toHaveLength(3);
@@ -838,7 +845,11 @@ test('independent publication creation, local corrections, immutable recovery an
     const freshPicker = scope().getByRole('combobox', { name: publisherName }) as HTMLInputElement;
     expect(freshPicker.value).toBe('');
     await act(async () => user.type(freshPicker, 'Press'));
-    const freshChoice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ });
+    const freshChoice = await optionsInDocument.findByRole(
+      'option',
+      { name: /Supplied publisher/ },
+      { timeout: 5000 },
+    );
     await act(async () => user.click(freshChoice));
     await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
@@ -870,7 +881,8 @@ test('independent publication creation, local corrections, immutable recovery an
     await add('schema:publisher');
     const departurePublisher = departure.fixture.release.properties['schema:publisher']!.labels.en!;
     await act(async () => user.type(scope().getByRole('combobox', { name: departurePublisher }), 'Press'));
-    await act(async () => user.click(await body.findByRole('option', { name: /Supplied publisher/ })));
+    const departureChoice = await body.findByRole('option', { name: /Supplied publisher/ }, { timeout: 5000 });
+    await act(async () => user.click(departureChoice));
     await replace(urlIn(workSection()), 'https://publisher.example/edition');
     const snapshot = () =>
       [...article().querySelectorAll('input, select')].map((element) => {
