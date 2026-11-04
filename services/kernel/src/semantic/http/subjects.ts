@@ -510,9 +510,9 @@ const statementConsentActionsResponse = t.Union([
     },
     { additionalProperties: false },
   ),
-  ...(['refused', 'terminal', 'unavailable'] as const).map(
-    (state) => t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
-  ),
+  t.Object({ state: t.Literal('refused') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('terminal') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
 ]);
 const reactionKind = t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
 const reactionCountResponse = t.Object(
