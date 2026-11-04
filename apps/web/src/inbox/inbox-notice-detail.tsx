@@ -94,10 +94,10 @@ export function InboxNoticeDetailPage({
       viewer={viewer}
       csrfToken={csrfToken}
       noticeId={noticeId}
-      cursor={cursor}
       view={view}
-      loadNotice={loadNotice}
-      acknowledgeNotice={acknowledgeNotice}
+      {...(cursor === undefined ? {} : { cursor })}
+      {...(loadNotice === undefined ? {} : { loadNotice })}
+      {...(acknowledgeNotice === undefined ? {} : { acknowledgeNotice })}
     />
   );
 }
@@ -171,7 +171,7 @@ function ViewerInboxNoticeDetail({
       if (unavailable(failure)) {
         setWithdrawn(true);
         attempt.current = null;
-        queryClient.removeQueries({ queryKey: inboxNoticeQuery(viewer, noticeId, loadNotice).queryKey, exact: true });
+        client.removeQueries({ queryKey: inboxNoticeQuery(viewer, noticeId, loadNotice).queryKey, exact: true });
       }
     } finally {
       sending.current = false;
@@ -261,7 +261,7 @@ function ViewerInboxNoticeDetail({
           <article className="grid gap-6 rounded-xl border border-border p-5 sm:p-7">
             <div className="flex min-w-0 items-start gap-3">
               {actor?.state === 'available' ? (
-                <Avatar aria-hidden="true" size="md" className="shrink-0">
+                <Avatar aria-hidden="true" size="default" className="shrink-0">
                   {actor.avatarUrl ? <AvatarImage src={actor.avatarUrl} alt="" /> : null}
                   <AvatarFallback>{initials(actor.displayName)}</AvatarFallback>
                 </Avatar>
@@ -291,7 +291,7 @@ function ViewerInboxNoticeDetail({
               <h2 className="text-xl font-medium">{notice.summary}</h2>
               <div className="grid gap-2 rounded-lg bg-muted/40 p-4">
                 <h3 className="text-sm font-medium text-muted-foreground">{m.inbox_notice_context()}</h3>
-                {notice.target.state === 'available' && targetContext ? (
+                {notice.target?.state === 'available' && targetContext ? (
                   <p>{targetContext}</p>
                 ) : (
                   <p className="text-sm text-muted-foreground">{m.inbox_notice_target_unavailable()}</p>

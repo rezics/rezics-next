@@ -14,5 +14,5 @@ export const Route = createFileRoute('/inbox/notice')({
 
 function InboxNoticeRoute() {
   const { noticeId, cursor, view } = Route.useSearch();
-  return <InboxNoticeDetailPage noticeId={noticeId} cursor={cursor} view={view} />;
+  return <InboxNoticeDetailPage noticeId={noticeId} view={view} {...(cursor === undefined ? {} : { cursor })} />;
 }

@@ -20,15 +20,14 @@ function InboxRoute() {
   if (isNotice) return <Outlet />;
   return (
     <InboxPageView
-      initialCursor={cursor}
+      {...(cursor === undefined ? {} : { initialCursor: cursor })}
       initialUnreadOnly={view === 'unread'}
       onSelectionChange={({ cursor: nextCursor, view: nextView }) => {
         void navigate({
-          search: (current) => ({
-            ...current,
-            cursor: nextCursor,
-            view: nextView,
-          }),
+          search: (current) => {
+            const { cursor: _currentCursor, ...rest } = current;
+            return { ...rest, ...(nextCursor === undefined ? {} : { cursor: nextCursor }), view: nextView };
+          },
           replace: true,
         });
       }}

@@ -334,7 +334,7 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
 }
 
 /** The exact response has the same strict closed item as the list and binds it to the current viewer. */
-export function decodeInboxNoticeDetail(value: unknown, accountId: string, expectedId: string): NativeNotice {
+export function decodeInboxNoticeDetail(value: unknown, accountId: string, expectedId: string): InboxNotice {
   if (
     !isRecord(value) ||
     !exactKeys(value, ['viewer', 'notice']) ||
