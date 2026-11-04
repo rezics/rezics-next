@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import { QueryClient } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OwnedCollection } from '../src/settings/preferences';
@@ -12,6 +13,7 @@ mock.module('../src/session/query', () => ({
   useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
 }));
 const { CollectionRow } = await import('../src/settings/collection-privacy');
+const { SettingsSessionOwner } = await import('../src/settings/settings-session-owner');
 
 const privateCurated: OwnedCollection = {
   id: 'private-curated',
@@ -53,4 +55,19 @@ test('visibility options follow native advice and logical built-ins remain read-
   expect(logical).toMatch(/<option[^>]*value="private" selected="">/);
   expect(logical).not.toMatch(/<option[^>]*value="unlisted">/);
   expect(logical).not.toMatch(/<option[^>]*value="public">/);
+});
+
+test('a retired viewer cannot restore its old credential after A to B to A', () => {
+  const client = new QueryClient();
+  const queryKey = ['session'];
+  const accountA = { state: 'signed-in', subject: 'account-a', csrfToken: 'test-token' };
+  client.setQueryData(queryKey, accountA);
+  const owner = new SettingsSessionOwner(client, 'test-token', 'account-a');
+  expect(owner.credential()).toBe('test-token');
+
+  client.setQueryData(queryKey, { state: 'signed-in', subject: 'account-b', csrfToken: 'other-token' });
+  expect(owner.credential()).toBeNull();
+  client.setQueryData(queryKey, accountA);
+  expect(owner.credential()).toBeNull();
+  client.clear();
 });

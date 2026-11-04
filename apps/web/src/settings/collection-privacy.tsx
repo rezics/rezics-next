@@ -1,6 +1,16 @@
 import { QueryClientContext } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -32,6 +42,8 @@ import {
 } from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
+const noPagerSubscribe = () => () => {};
+const noPagerSnapshot = () => null;
 
 function visibilityOptions(collection: OwnedCollection): CollectionVisibility[] {
   return [...new Set([collection.visibility, ...collection.allowedVisibilityActions])];
@@ -122,7 +134,11 @@ function CollectionRowView({
   );
   useSettingsDisposal(editor.dispose);
   const pager = useContext(ListRestartContext);
-  const restarting = !!pager?.snapshot().restarting;
+  const pageState = useSyncExternalStore(
+    pager?.subscribe ?? noPagerSubscribe,
+    pager?.snapshot ?? noPagerSnapshot,
+    pager?.snapshot ?? noPagerSnapshot,
+  );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   useSettingsNavigationDraft(
     'collection-privacy',
@@ -134,41 +150,93 @@ function CollectionRowView({
   useLayoutEffect(() => editor.receive(collection), [collection, editor]);
   const waiting = usePreferenceRetry(state.nativeFailure);
   const id = useId();
-  const busy = state.phase === 'saving' || state.phase === 'reloading';
+  const [confirmAbandon, setConfirmAbandon] = useState(false);
+  const busy = state.phase === 'saving' || state.phase === 'reloading' || !!pageState?.loading;
   const { current, desired, phase } = state;
-  if (!current) return null;
-  const options = [...new Set([...visibilityOptions(current), ...(desired !== current.visibility ? [desired] : [])])];
-  const canChangeVisibility = current.revision !== null && current.allowedVisibilityActions.length > 0;
+  const abandonAction = state.attempt && ['uncertain', 'readback'].includes(phase) ? (
+    <Button
+      className={preferenceActionClassName}
+      type="button"
+      variant="outline"
+      disabled={busy || waiting}
+      onClick={() => setConfirmAbandon(true)}
+    >
+      {m.settings_privacy_stop_tracking()}
+    </Button>
+  ) : null;
+  const abandonmentDialog = state.attempt ? (
+    <AlertDialog open={confirmAbandon} onOpenChange={setConfirmAbandon}>
+      <AlertDialogContent className="min-w-0 w-[calc(100vw-2rem)] max-w-sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{m.settings_privacy_abandon_title()}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {state.receipt ? m.settings_privacy_abandon_receipt_text() : m.settings_privacy_abandon_unknown_text()}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="min-w-0 flex-col-reverse sm:flex-row sm:flex-wrap">
+          <AlertDialogCancel className={preferenceActionClassName} onClick={() => setConfirmAbandon(false)}>
+            {m.settings_privacy_keep_tracking()}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className={preferenceActionClassName}
+            onClick={() => {
+              editor.abandon();
+              setConfirmAbandon(false);
+            }}
+          >
+            {m.settings_privacy_confirm_stop_tracking()}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  ) : null;
+  if (!isCurrent()) return null;
   if (state.readRefusal) {
     return (
       <ListRow className="py-3">
         <ListRowControl className="min-w-0 max-w-full">
           <Alert variant="destructive" aria-live="polite">
             <AlertTitle>
-              {state.attempt ? m.settings_privacy_uncertain_title() : m.settings_privacy_read_failed_title()}
+              {state.attempt
+                ? phase === 'readback'
+                  ? m.settings_privacy_readback_title()
+                  : m.settings_privacy_uncertain_title()
+                : m.settings_privacy_read_failed_title()}
             </AlertTitle>
             <AlertDescription className="space-y-3">
               <p>{failureText(state.failure ?? state.readRefusal)}</p>
-              <p>{m.settings_privacy_reload_after_refusal()}</p>
+              {state.attempt ? (
+                <p>{phase === 'readback' ? m.settings_privacy_readback_text() : m.settings_privacy_uncertain_text()}</p>
+              ) : (
+                <p>{m.settings_privacy_reload_after_refusal()}</p>
+              )}
               {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
               {busy ? <p role="status">{m.settings_privacy_reading()}</p> : null}
+              {abandonAction}
               <Button
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
-                disabled={!isCurrent() || !canRead || busy || waiting || restarting}
+                disabled={!canRead || busy || waiting || !!pageState?.restarting}
                 onClick={() => {
-                  if (!pager?.snapshot().restarting) void editor.reload();
+                  if (!pageState?.restarting) {
+                    if (state.attempt) void editor.reload();
+                    else void pager?.restart();
+                  }
                 }}
               >
-                {m.settings_privacy_reload_row()}
+                {state.attempt ? m.settings_privacy_reload_row() : m.settings_privacy_refresh_list()}
               </Button>
             </AlertDescription>
           </Alert>
         </ListRowControl>
+        {abandonmentDialog}
       </ListRow>
     );
   }
+  if (!current) return null;
+  const options = [...new Set([...visibilityOptions(current), ...(desired !== current.visibility ? [desired] : [])])];
+  const canChangeVisibility = current.revision !== null && current.allowedVisibilityActions.length > 0;
   const href = `/${getLocale()}/collections/${encodeURIComponent(current.id)}`;
   return (
     <ListRow className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)] sm:items-center">
@@ -197,14 +265,15 @@ function CollectionRowView({
             aria-describedby={`${id}-current`}
             disabled={
               !isCurrent() ||
-              restarting ||
+              pageState?.loading ||
               !mayWrite() ||
               !canSave ||
               !canChangeVisibility ||
+              phase === 'abandoned' ||
               (waiting && (phase === 'idle' || phase === 'saved'))
             }
             onChange={(event) => {
-              if (pager?.snapshot().restarting) return;
+              if (pageState?.loading) return;
               const value = options.find((option) => option === event.target.value);
               if (value) void editor.edit(value);
             }}
@@ -229,26 +298,37 @@ function CollectionRowView({
               {m.settings_saved()}
             </p>
           ) : null}
-          {['uncertain', 'conflict', 'refused', 'review'].includes(phase) ? (
+          {phase === 'abandoned' ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {state.outcomeUnknown
+                ? m.settings_privacy_abandoned_unknown_text()
+                : m.settings_privacy_abandoned_receipt_text()}
+            </p>
+          ) : null}
+          {['uncertain', 'readback', 'conflict', 'refused', 'review'].includes(phase) ? (
             <Alert variant={phase === 'uncertain' || phase === 'refused' ? 'destructive' : 'default'}>
               <AlertTitle>
                 {phase === 'uncertain'
                   ? m.settings_privacy_uncertain_title()
-                  : phase === 'conflict'
-                    ? m.settings_privacy_conflict_title()
-                    : phase === 'review'
-                      ? m.settings_privacy_review_title()
-                      : m.settings_failed_title()}
+                  : phase === 'readback'
+                    ? m.settings_privacy_readback_title()
+                    : phase === 'conflict'
+                      ? m.settings_privacy_conflict_title()
+                      : phase === 'review'
+                        ? m.settings_privacy_review_title()
+                        : m.settings_failed_title()}
               </AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>
                   {phase === 'uncertain'
                     ? m.settings_privacy_uncertain_text()
-                    : phase === 'conflict'
-                      ? m.settings_privacy_conflict_text()
-                      : phase === 'review'
-                        ? m.settings_privacy_review_text()
-                        : failureText(state.failure)}
+                    : phase === 'readback'
+                      ? m.settings_privacy_readback_text()
+                      : phase === 'conflict'
+                        ? m.settings_privacy_conflict_text()
+                        : phase === 'review'
+                          ? m.settings_privacy_review_text()
+                          : failureText(state.failure)}
                 </p>
                 {state.failure && phase !== 'refused' ? <p>{failureText(state.failure)}</p> : null}
                 {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
@@ -258,9 +338,9 @@ function CollectionRowView({
                       className={preferenceActionClassName}
                       type="button"
                       variant="outline"
-                      disabled={!mayWrite() || !canSave || busy || waiting || restarting}
+                      disabled={!mayWrite() || !canSave || busy || waiting}
                       onClick={() => {
-                        if (!pager?.snapshot().restarting) void editor.retry();
+                        if (!pageState?.loading) void editor.retry();
                       }}
                     >
                       {m.settings_privacy_retry_original()}
@@ -275,34 +355,35 @@ function CollectionRowView({
                         !canSave ||
                         !current.allowedVisibilityActions.includes(desired) ||
                         busy ||
-                        waiting ||
-                        restarting
+                        waiting
                       }
                       onClick={() => {
-                        if (!pager?.snapshot().restarting) void editor.submit();
+                        if (!pageState?.loading) void editor.submit();
                       }}
                     >
                       {m.settings_privacy_save_choice()}
                     </Button>
                   ) : null}
+                  {abandonAction}
                   <Button
                     className={preferenceActionClassName}
                     type="button"
                     variant="outline"
-                    disabled={!isCurrent() || !canRead || busy || waiting || restarting}
+                    disabled={!canRead || busy || waiting}
                     onClick={() => {
-                      if (!pager?.snapshot().restarting) void editor.reload();
+                      if (!pageState?.loading) void editor.reload();
                     }}
                   >
                     {m.settings_privacy_reload_row()}
                   </Button>
                 </div>
-                <p>{m.settings_privacy_reload_discards()}</p>
+                <p>{state.attempt ? m.settings_privacy_reload_keeps_original() : m.settings_privacy_reload_discards()}</p>
               </AlertDescription>
             </Alert>
           ) : null}
         </div>
       </ListRowControl>
+      {abandonmentDialog}
     </ListRow>
   );
 }
@@ -332,9 +413,22 @@ export function CollectionPrivacyView({
   useSettingsDisposal(pager.dispose);
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);
   const waiting = usePreferenceRetry(state.nativeFailure);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const refreshButton = useRef<HTMLButtonElement>(null);
+  const loadMoreButton = useRef<HTMLButtonElement>(null);
+  const focusAfterPage = useRef(false);
   useEffect(() => {
     void pager.load();
   }, [pager]);
+  useEffect(() => {
+    if (!focusAfterPage.current || state.loading) return;
+    focusAfterPage.current = false;
+    if (state.failure) {
+      if (state.nativeFailure?.code === 'invalid_cursor') refreshButton.current?.focus();
+      else retryButton.current?.focus();
+    } else if (state.next !== null) loadMoreButton.current?.focus();
+    else refreshButton.current?.focus();
+  }, [state.failure, state.loading, state.nativeFailure, state.next]);
   return (
     <section id="privacy" aria-labelledby="settings-privacy-heading" className="scroll-mt-6">
       <Card className="min-w-0 max-w-full">
@@ -352,7 +446,7 @@ export function CollectionPrivacyView({
           {state.failure ? (
             <Alert variant="destructive">
               <AlertTitle>
-                {state.loaded && state.next !== null && !pager.retryReplacesRows()
+                {state.loaded && state.next !== null && !pager.retryStartsAtFirstPage()
                   ? m.settings_privacy_page_load_failed()
                   : m.settings_privacy_list_load_failed()}
               </AlertTitle>
@@ -365,11 +459,15 @@ export function CollectionPrivacyView({
                 {state.nativeFailure?.code === 'invalid_cursor' ? <p>{m.settings_privacy_list_restart()}</p> : null}
                 {waiting ? <p role="status">{m.settings_privacy_page_retry_wait()}</p> : null}
                 <Button
+                  ref={retryButton}
                   className={preferenceActionClassName}
                   type="button"
                   variant="outline"
                   disabled={state.loading || waiting || (state.restartBlocked && pager.retryReplacesRows())}
-                  onClick={() => void pager.load()}
+                  onClick={() => {
+                    focusAfterPage.current = true;
+                    void pager.load();
+                  }}
                 >
                   {m.settings_retry()}
                 </Button>
@@ -382,19 +480,23 @@ export function CollectionPrivacyView({
           <ListRestartContext.Provider value={pager}>
             <ul className="space-y-3">
               {state.collections.map((collection) => (
-                <CollectionRow key={collection.id} collection={collection} {...(io ? { io } : {})} />
+                <CollectionRow key={`${state.window}:${collection.id}`} collection={collection} {...(io ? { io } : {})} />
               ))}
             </ul>
           </ListRestartContext.Provider>
           {state.loaded || state.failure ? (
             <div className="space-y-2">
               <Button
+                ref={refreshButton}
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
                 disabled={state.loading || waiting || state.restartBlocked}
                 aria-describedby={state.restartBlocked ? 'settings-privacy-refresh-blocked' : undefined}
-                onClick={() => void pager.restart()}
+                onClick={() => {
+                  focusAfterPage.current = true;
+                  void pager.restart();
+                }}
               >
                 {m.settings_privacy_refresh_list()}
               </Button>
@@ -407,11 +509,16 @@ export function CollectionPrivacyView({
           ) : null}
           {state.next !== null && !state.failure ? (
             <Button
+              ref={loadMoreButton}
               className={preferenceActionClassName}
               type="button"
               variant="outline"
-              disabled={state.loading || waiting}
-              onClick={() => void pager.load()}
+              disabled={state.loading || waiting || state.restartBlocked}
+              aria-describedby={state.restartBlocked ? 'settings-privacy-refresh-blocked' : undefined}
+              onClick={() => {
+                focusAfterPage.current = true;
+                void pager.load();
+              }}
             >
               {state.loading ? m.settings_privacy_loading() : m.settings_privacy_load_more()}
             </Button>

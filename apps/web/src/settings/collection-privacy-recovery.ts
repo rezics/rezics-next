@@ -22,12 +22,15 @@ export type CollectionPrivacyIO = {
   save: (input: VisibilityAttempt) => Promise<CollectionVisibilityWrite>;
   read: (id: string) => Promise<CollectionPrivacyRead<OwnedCollection>>;
 };
+type VisibilityReceipt = { id: string; revision: number; visibility: CollectionVisibility };
 type EditorState = {
   current: OwnedCollection | null;
   desired: CollectionVisibility;
   attempt: VisibilityAttempt | null;
+  receipt: VisibilityReceipt | null;
+  outcomeUnknown: boolean;
   readRefusal: 'closed' | 'forbidden' | null;
-  phase: 'idle' | 'saving' | 'uncertain' | 'conflict' | 'refused' | 'review' | 'reloading' | 'saved';
+  phase: 'idle' | 'saving' | 'uncertain' | 'readback' | 'conflict' | 'refused' | 'review' | 'reloading' | 'saved' | 'abandoned';
   failure?: CollectionPrivacyFailure | 'invalid' | undefined;
   nativeFailure?: NativePreferenceFailure | undefined;
 };
@@ -68,13 +71,26 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     isCurrent: () => boolean = () => true,
     private canWrite: () => boolean = isCurrent,
   ) {
-    super({ current, desired: current.visibility, attempt: null, readRefusal: null, phase: 'idle' }, isCurrent);
+    super(
+      {
+        current,
+        desired: current.visibility,
+        attempt: null,
+        receipt: null,
+        outcomeUnknown: false,
+        readRefusal: null,
+        phase: 'idle',
+      },
+      isCurrent,
+    );
   }
   override dispose = () => {
     this.state = {
       current: null,
       desired: 'private',
       attempt: null,
+      receipt: null,
+      outcomeUnknown: false,
       readRefusal: null,
       phase: 'idle',
     };
@@ -87,7 +103,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const current = this.state.current;
     return (
       this.state.attempt !== null ||
-      (current !== null && this.state.desired !== current.visibility) ||
+      (this.state.phase !== 'abandoned' && current !== null && this.state.desired !== current.visibility) ||
       this.state.phase === 'saving' ||
       this.state.phase === 'reloading'
     );
@@ -106,10 +122,10 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       (current.revision === existing.revision && current.visibility !== existing.visibility)
     )
       return;
-    this.update({ current, desired: current.visibility, phase: 'idle' });
+    this.update({ current, desired: current.visibility, phase: this.state.phase === 'abandoned' ? 'abandoned' : 'idle' });
   }
   async edit(desired: CollectionVisibility) {
-    if (!this.live() || !this.canWrite()) return;
+    if (!this.live() || !this.canWrite() || this.state.phase === 'abandoned') return;
     const current = this.state.current;
     if (
       !current ||
@@ -125,7 +141,13 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   async submit() {
     if (!this.live() || !this.canWrite()) return;
     const current = this.state.current;
-    if (this.state.readRefusal || this.state.attempt || !['idle', 'saved', 'review'].includes(this.state.phase)) return;
+    if (
+      this.state.readRefusal ||
+      this.state.attempt ||
+      this.state.phase === 'abandoned' ||
+      !['idle', 'saved', 'review'].includes(this.state.phase)
+    )
+      return;
     if (
       !current ||
       current.revision === null ||
@@ -146,6 +168,17 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     if (!this.live() || !this.canWrite()) return;
     if (!this.state.readRefusal && this.state.attempt && this.state.phase === 'uncertain') await this.send(true);
   }
+  abandon() {
+    if (!this.live() || !this.state.attempt || !['uncertain', 'readback'].includes(this.state.phase)) return;
+    this.update({
+      attempt: null,
+      receipt: null,
+      desired: this.state.current?.visibility ?? this.state.desired,
+      phase: 'abandoned',
+      failure: undefined,
+      nativeFailure: undefined,
+    });
+  }
   private async send(recovering: boolean) {
     if (!this.live() || !this.canWrite()) return;
     const attempt = this.state.attempt;
@@ -156,12 +189,18 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       const answer = await this.io.save(attempt);
       if (!this.live() || !this.canWrite() || generation !== this.generation) return;
       if (!answer.ok) {
+        if (this.state.receipt) {
+          this.update({ phase: 'readback', failure: answer.reason, nativeFailure: answer.failure });
+          return;
+        }
         this.update(
           answer.reason === 'unavailable' || (recovering && answer.reason !== 'conflict')
             ? // A refused replay cannot establish whether the earlier transport-ambiguous command committed.
-              { phase: 'uncertain', failure: answer.reason, nativeFailure: answer.failure }
+              { phase: 'uncertain', failure: answer.reason, nativeFailure: answer.failure, outcomeUnknown: true }
             : {
                 attempt: null,
+                receipt: null,
+                outcomeUnknown: false,
                 phase: answer.reason === 'conflict' ? 'conflict' : 'refused',
                 failure: answer.reason === 'conflict' ? undefined : answer.reason,
                 nativeFailure: answer.failure,
@@ -176,82 +215,125 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         receipt.revision !== attempt.revision + 1 ||
         receipt.visibility !== attempt.visibility
       ) {
-        this.update({ phase: 'uncertain', failure: 'unavailable' });
+        this.update({ phase: this.state.receipt ? 'readback' : 'uncertain', failure: 'unavailable' });
         return;
       }
       if (!recovering) {
         this.update({
           current: receipt,
           attempt: null,
+          receipt: null,
+          outcomeUnknown: false,
           phase: this.state.desired === receipt.visibility ? 'saved' : 'review',
         });
         return;
       }
       // A replay receipt is historical. Read current native state without replacing a later draft.
-      this.update({ phase: 'reloading', nativeFailure: undefined });
+      const originalReceipt = { id: receipt.id, revision: receipt.revision, visibility: receipt.visibility };
+      this.update({ phase: 'reloading', receipt: originalReceipt, outcomeUnknown: false, nativeFailure: undefined });
       const read = await this.io.read(attempt.collectionId);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
+        const refused = isCollectionPrivacyReadRefusal(read.reason);
         this.update({
-          phase: 'uncertain',
+          ...(refused ? { current: null } : {}),
+          phase: 'readback',
           failure: read.reason,
           nativeFailure: read.failure,
-          readRefusal: isCollectionPrivacyReadRefusal(read.reason) ? read.reason : this.state.readRefusal,
+          readRefusal: refused ? read.reason : this.state.readRefusal,
         });
         return;
       }
       const current = read.value;
       if (
-        current.id !== receipt.id ||
+        current.id !== originalReceipt.id ||
         current.revision === null ||
-        current.revision < receipt.revision ||
-        (current.revision === receipt.revision && current.visibility !== receipt.visibility)
+        current.revision < originalReceipt.revision ||
+        (current.revision === originalReceipt.revision && current.visibility !== originalReceipt.visibility)
       ) {
-        this.update({ phase: 'uncertain', failure: 'unavailable' });
+        this.update({ phase: 'readback', failure: 'unavailable' });
         return;
       }
-      this.update({ current, attempt: null, phase: 'review', readRefusal: null });
+      this.update({
+        current,
+        attempt: null,
+        receipt: null,
+        outcomeUnknown: false,
+        phase: this.state.desired === current.visibility ? 'saved' : 'review',
+        readRefusal: null,
+      });
     } catch (error) {
       if (this.live() && generation === this.generation)
         this.update({
-          phase: 'uncertain',
+          phase: this.state.receipt ? 'readback' : 'uncertain',
           failure: 'unavailable',
           nativeFailure: collectionPrivacyFailureMetadata(error),
+          outcomeUnknown: this.state.receipt ? false : true,
         });
     }
   }
   async reload() {
     if (!this.live()) return;
     const current = this.state.current;
-    if (!current) return;
-    if (this.state.phase === 'saving' || this.state.phase === 'reloading') return;
+    const attempt = this.state.attempt;
+    const collectionId = current?.id ?? attempt?.collectionId;
+    if (!collectionId || this.state.phase === 'saving' || this.state.phase === 'reloading' || this.state.phase === 'abandoned')
+      return;
     const generation = this.generation;
     const edits = this.edits;
     const previous = this.state.phase;
+    const receipt = this.state.receipt;
     this.update({ phase: 'reloading', nativeFailure: undefined });
     try {
-      const read = await this.io.read(current.id);
+      const read = await this.io.read(collectionId);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
+        const refused = isCollectionPrivacyReadRefusal(read.reason);
         this.update({
-          phase: previous,
+          ...(refused ? { current: null, ...(attempt ? {} : { desired: 'private' as const }) } : {}),
+          phase: refused
+            ? attempt
+              ? receipt
+                ? 'readback'
+                : 'uncertain'
+              : 'refused'
+            : previous,
           failure: read.reason,
           nativeFailure: read.failure,
-          readRefusal: isCollectionPrivacyReadRefusal(read.reason) ? read.reason : this.state.readRefusal,
+          readRefusal: refused ? read.reason : this.state.readRefusal,
         });
         return;
       }
       if (
-        read.value.id !== current.id ||
-        (current.revision !== null && read.value.revision !== null && read.value.revision < current.revision) ||
-        (read.value.revision === current.revision && read.value.visibility !== current.visibility)
+        read.value.id !== collectionId ||
+        (current?.revision !== null && current?.revision !== undefined && read.value.revision !== null && read.value.revision < current.revision) ||
+        (current && read.value.revision === current.revision && read.value.visibility !== current.visibility) ||
+        (attempt && read.value.revision !== null && read.value.revision < (receipt?.revision ?? attempt.revision)) ||
+        (receipt &&
+          (read.value.revision === null ||
+            read.value.revision < receipt.revision ||
+            (read.value.revision === receipt.revision && read.value.visibility !== receipt.visibility)))
       )
         throw new Error('Stale Collection read');
-      const desired = edits === this.edits ? read.value.visibility : this.state.desired;
+      if (attempt && !receipt) {
+        // Current state is useful advice, but cannot prove the original command applied or did not apply.
+        this.update({
+          current: read.value,
+          readRefusal: null,
+          phase: 'uncertain',
+          outcomeUnknown: true,
+          failure: undefined,
+          nativeFailure: undefined,
+        });
+        return;
+      }
+      const desired = attempt ? this.state.desired : edits === this.edits ? read.value.visibility : this.state.desired;
       this.update({
         current: read.value,
         desired,
         attempt: null,
+        receipt: null,
+        outcomeUnknown: false,
         readRefusal: null,
         phase: desired === read.value.visibility ? 'idle' : 'review',
         failure: undefined,
@@ -271,6 +353,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
 type PageState = {
   collections: OwnedCollection[];
   next: string | null;
+  window: number;
   loaded: boolean;
   loading: boolean;
   failure: CollectionPrivacyFailure | null;
@@ -287,12 +370,13 @@ export class CollectionPrivacyPager extends Observable<PageState> {
     private read: CollectionPrivacyPageRead,
     isCurrent: () => boolean = () => true,
   ) {
-    super({ collections: [], next: null, loaded: false, loading: false, failure: null }, isCurrent);
+    super({ collections: [], next: null, window: 0, loaded: false, loading: false, failure: null }, isCurrent);
   }
   override dispose = () => {
     this.state = {
       collections: [],
       next: null,
+      window: 0,
       loaded: false,
       loading: false,
       failure: null,
@@ -322,7 +406,8 @@ export class CollectionPrivacyPager extends Observable<PageState> {
     };
   };
   private hasUnresolvedRows = () => [...this.rows].some((needsDecision) => needsDecision());
-  retryReplacesRows = () => this.failedRequest?.replace === true;
+  retryReplacesRows = () => this.failedRequest !== null && this.state.collections.length > 0;
+  retryStartsAtFirstPage = () => this.failedRequest?.cursor === null;
   async load() {
     if (!this.live()) return;
     if (this.state.loaded && this.state.next === null && !this.failedRequest) return;
@@ -334,7 +419,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
   }
   private async requestPage(request: { cursor: string | null; replace: boolean }) {
     if (!this.live()) return;
-    if (this.state.loading || (request.replace && this.hasUnresolvedRows())) return;
+    if (this.state.loading || this.hasUnresolvedRows()) return;
     const generation = this.generation;
     this.update({
       loading: true,
@@ -350,15 +435,33 @@ export class CollectionPrivacyPager extends Observable<PageState> {
         this.update(
           isCollectionPrivacyReadRefusal(read.reason)
             ? // An explicit refresh starts at the first native page; denied pages cannot revive cached rows.
-              { failure: read.reason, nativeFailure: read.failure, collections: [], next: null, loaded: false }
+              {
+                failure: read.reason,
+                nativeFailure: read.failure,
+                collections: [],
+                next: null,
+                window: this.state.window + 1,
+                loaded: false,
+              }
             : { failure: read.reason, nativeFailure: read.failure },
         );
         return;
       }
+      // A row can become dirty while the native page read is in flight. Keep its window and retry this cursor.
+      if (this.hasUnresolvedRows()) {
+        this.failedRequest = request;
+        return;
+      }
       this.failedRequest = null;
-      const rows = new Map((request.replace ? [] : this.state.collections).map((row) => [row.id, row]));
-      for (const row of read.value.collections) if (!rows.has(row.id)) rows.set(row.id, row);
-      this.update({ collections: [...rows.values()], next: read.value.next, loaded: true });
+      // The first occurrence from one native page wins; later duplicate identities are ignored.
+      const rows = new Map<string, OwnedCollection>();
+      for (const row of read.value.collections.slice(0, 20)) if (!rows.has(row.id)) rows.set(row.id, row);
+      this.update({
+        collections: [...rows.values()],
+        next: read.value.next,
+        window: this.state.window + 1,
+        loaded: true,
+      });
     } catch (error) {
       if (this.live() && generation === this.generation) {
         this.failedRequest = request;
