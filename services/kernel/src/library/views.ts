@@ -406,7 +406,7 @@ export async function fullMembers(
       return { id: row.id, subjectId: row.subjectId, note: row.note, addedAt: new Date(row.addedAt).toISOString() };
     }),
     {
-      languages: options.languages,
+      ...(options.languages === undefined ? {} : { languages: options.languages }),
       async revalidate() {
         // Reauthorize after the released Semantic homes; never publish a page from a changed source.
         const current = await readPage();
