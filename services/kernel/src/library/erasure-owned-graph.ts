@@ -75,6 +75,7 @@ export const OWNED_PHASES = [
   'library_archive_merge',
   'shelf_score_head',
   'progress_discovery_generation',
+  'yearly_completion_goals',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -111,7 +112,8 @@ type Kind =
   | 'vndb_import'
   | 'collection_archive_recovery'
   | 'library_archive_merge'
-  | 'progress_discovery_generation';
+  | 'progress_discovery_generation'
+  | 'yearly_completion_goals';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -421,7 +423,19 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
       }
       let removed: number;
       let hasMore = false;
-      if (kind === 'vndb_import') {
+      if (kind === 'yearly_completion_goals') {
+        const page = await tx.query(
+          `WITH keys AS MATERIALIZED (
+             SELECT year FROM library.yearly_completion_goal
+             WHERE route=$1 AND account_id=$2 ORDER BY year LIMIT 100
+           )
+           DELETE FROM library.yearly_completion_goal goal USING keys
+           WHERE goal.route=$1 AND goal.account_id=$2 AND goal.year=keys.year
+           RETURNING goal.year`,
+          [route, accountId],
+        );
+        removed = page.rowCount ?? 0;
+      } else if (kind === 'vndb_import') {
         removed =
           (await tx.query(`DELETE FROM library.vndb_import WHERE route=$1 AND account_id=$2`, [route, accountId]))
             .rowCount ?? 0;
