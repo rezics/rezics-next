@@ -78,10 +78,13 @@ test('selected Bangumi Game destinations survive independent review, correction 
 
     const publicClient = createPublicBulkClient({
       origin: runtime.origin,
-      fetch: async (input) => {
-        const url = new URL(String(input));
-        return runtime.request(`${url.pathname}${url.search}`);
-      },
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0]) => {
+          const url = new URL(String(input));
+          return runtime.request(`${url.pathname}${url.search}`);
+        },
+        { preconnect: fetch.preconnect },
+      ),
     });
     const state = join(directory, 'import.sqlite');
     async function run(infobox: string) {
