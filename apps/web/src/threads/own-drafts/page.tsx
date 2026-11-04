@@ -592,6 +592,7 @@ function BoundOwnDraftsPage({
         if ([`${controlId}-erase-confirm`, `${controlId}-erase-retry`].includes(document.activeElement?.id ?? ''))
           recoveryFocus.current = `${controlId}-command-result`;
         if (result.ok) {
+          recoveryFocus.current = `${controlId}-command-result`;
           listController.current?.abort();
           selectionController.current?.abort();
           localWritingController.current?.abort();

@@ -69,6 +69,7 @@ test('erase review retries the same uncertain intent and readback does not claim
     await fixture.click('Retry the same erase');
     expect(erasures).toHaveLength(2);
     expect(erasures[1]).toEqual(exactIntent);
+    expect(fixture.window.document.activeElement?.textContent).toContain('The erase request was acknowledged');
     await fixture.click('Retry this page');
     expect(fixture.host.textContent).toContain('The erase request was acknowledged');
     await fixture.click('Read current post');
