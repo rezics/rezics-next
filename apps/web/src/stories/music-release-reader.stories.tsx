@@ -50,8 +50,12 @@ type Story = StoryObj<typeof meta>;
 export const AdmittedEdition: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const occurrences = await canvas.findAllByRole('button', { name: new RegExp(m.music_release_inspect()) });
-    await userEvent.click(occurrences[1]!);
+    const gates = await canvas.findAllByText(m.album_tracks_inspect());
+    const details = gates[1]?.closest('details');
+    if (!details) throw new Error('Missing disclosed occurrence gate');
+    await userEvent.click(gates[1]!);
+    const occurrence = await within(details).findByRole('button', { name: new RegExp(m.music_release_inspect()) });
+    await userEvent.click(occurrence);
     const inspector = canvas.getByRole('region', { name: new RegExp(m.music_release_occurrence()) });
     await expect(within(inspector).getByRole('link', { name: m.album_tracks_open() })).toHaveAttribute(
       'target',
@@ -62,7 +66,7 @@ export const AdmittedEdition: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.work_parts_more() }));
     await canvas.findByText(m.album_tracks_complete());
     await userEvent.click(canvas.getByRole('button', { name: m.album_tracks_previous() }));
-    await canvas.findAllByRole('button', { name: new RegExp(m.music_release_inspect()) });
+    await canvas.findAllByText(m.album_tracks_inspect());
   },
 };
 export const MissingConfiguration: Story = { args: { scenario: 'unconfigured' } };
@@ -73,7 +77,7 @@ export const UnavailableContinuation: Story = {
     const next = await canvas.findByRole('button', { name: m.work_parts_more() });
     await userEvent.click(next);
     await canvas.findByText(m.music_release_window_unavailable());
-    await expect(canvas.getAllByRole('button', { name: new RegExp(m.music_release_inspect()) }).length).toBe(3);
+    await expect(canvas.getAllByText(m.album_tracks_inspect()).length).toBe(2);
   },
 };
 export const ExplicitTba: Story = { args: { scenario: 'tba' } };

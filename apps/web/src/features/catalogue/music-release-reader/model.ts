@@ -15,17 +15,27 @@ export function musicReleaseEntry(type: string, types?: readonly string[]) {
 }
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type NativePage = NonNullable<Awaited<ReturnType<Endpoint['relations']['get']>>['data']>;
-export type MusicReleaseAddress = { id: string; context: string; stream?: string; cursor?: string };
+export type MusicReleaseAddress = {
+  id: string;
+  context: string;
+  stream?: string;
+  cursor?: string;
+  /** A return guard, never a replacement for the current native read. */
+  expectedRevision?: number;
+  expectedDigest?: string;
+};
 export type MusicReleaseRead =
-  | { ok: false; reason: 'unavailable' | 'withheld' | 'invalid' }
+  | { ok: false; reason: 'unavailable' | 'withheld' | 'invalid' | 'changed' }
   | {
       ok: true;
+      address: MusicReleaseAddress;
       identity: { id: string; label: ReturnType<typeof pickText> };
       public: SubjectRead;
       digest: string;
       admitted: boolean;
       facts: MusicReleaseFact[];
       unsupported: string[];
+      unreleasedGrains: string[];
       streams: PartStream[];
       stream?: PartStream;
       rows: PartRow[];
@@ -37,6 +47,7 @@ export type MusicReleaseRead =
     };
 export type MusicReleaseTransport = (address: MusicReleaseAddress) => Promise<MusicReleaseRead>;
 export const musicReleaseLimit = 20;
+export const musicReleaseHistoryLimit = 20;
 const cursorLimit = 4096;
 const rowBytes = 128 * 1024;
 const pageBytes = musicReleaseLimit * rowBytes + 64 * 1024;
@@ -52,7 +63,13 @@ export function validMusicReleaseAddress(input: MusicReleaseAddress): boolean {
       (typeof input.cursor === 'string' &&
         input.cursor.length > 0 &&
         input.cursor.length <= cursorLimit &&
-        !!input.stream))
+        !!input.stream)) &&
+    ((input.expectedRevision === undefined && input.expectedDigest === undefined) ||
+      (Number.isSafeInteger(input.expectedRevision) &&
+        input.expectedRevision! >= 0 &&
+        typeof input.expectedDigest === 'string' &&
+        input.expectedDigest.length > 0 &&
+        input.expectedDigest.length <= 128))
   );
 }
 
@@ -292,6 +309,11 @@ export async function readMusicRelease(
     if (current.data.subject.id !== address.id || current.data.subject.context !== address.context)
       return { ok: false, reason: 'withheld' };
     if (bytes(current.data) > 2 * 1024 * 1024) return { ok: false, reason: 'unavailable' };
+    if (
+      (address.expectedRevision !== undefined && address.expectedRevision !== current.data.subject.revision) ||
+      (address.expectedDigest !== undefined && address.expectedDigest !== release.digest)
+    )
+      return { ok: false, reason: 'changed' };
     const admitted = isMusicRelease(release, current.data.subject.type);
     const facts = admitted ? factsFor(current.data, release, locale) : [];
     const unsupported = admitted
@@ -305,8 +327,25 @@ export async function readMusicRelease(
     const streams = musicReleaseStreams(release, current.data.subject.type, locale);
     if (streams.length > 64) return { ok: false, reason: 'unavailable' };
     const preferred = streams.find((item) => item.key === 'forward:schema:track');
-    const stream = address.stream ? streams.find((item) => item.key === address.stream) : (preferred ?? streams[0]);
+    const stream = address.stream
+      ? streams.find((item) => item.key === address.stream)
+      : (preferred ?? streams.find((item) => item.direction === 'forward'));
     if (address.stream && !stream) return { ok: false, reason: 'invalid' };
+    const mediumRelation = Object.entries(release.properties).some(
+      ([property, descriptor]) =>
+        admittedProperty(release, current.data.subject.type, property) &&
+        descriptor.relation &&
+        descriptor.targets?.some(
+          (target) => !!release.types[target] && isA(release, target, 'rezics:MusicMedium'),
+        ),
+    );
+    const unreleasedGrains = admitted
+      ? !release.types['rezics:MusicMedium']
+        ? ['rezics:MusicMedium']
+        : mediumRelation
+          ? []
+          : ['MusicRelease → rezics:MusicMedium membership relation']
+      : [];
     const identity = { id: address.id, label: pickText(current.data.subject.labels, locale) };
     const labels = partLabels(
       release,
@@ -321,7 +360,24 @@ export async function readMusicRelease(
       ),
       locale,
     );
-    const common = { identity, public: current.data, digest: release.digest, admitted, facts, unsupported };
+    const currentAddress: MusicReleaseAddress = {
+      id: address.id,
+      context: address.context,
+      ...(stream ? { stream: stream.key } : {}),
+      ...(address.cursor ? { cursor: address.cursor } : {}),
+      expectedRevision: current.data.subject.revision,
+      expectedDigest: release.digest,
+    };
+    const common = {
+      address: currentAddress,
+      identity,
+      public: current.data,
+      digest: release.digest,
+      admitted,
+      facts,
+      unsupported,
+      unreleasedGrains,
+    };
     if (!stream) return { ok: true, ...common, streams, rows: [], labels, types: {}, next: null, caughtUp: true };
     const query = {
       property: stream.property,
@@ -402,10 +458,7 @@ export async function readMusicRelease(
           ? [
               [
                 row.summary.type,
-                {
-                  ...pickText(release.types[row.summary.type]?.labels ?? {}, locale),
-                  text: pickText(release.types[row.summary.type]?.labels ?? {}, locale).text || row.summary.type,
-                },
+                pickText(release.types[row.summary.type]?.labels ?? {}, locale),
               ],
             ]
           : [],

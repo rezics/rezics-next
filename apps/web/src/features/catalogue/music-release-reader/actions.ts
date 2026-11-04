@@ -12,6 +12,8 @@ export const loadMusicRelease = createServerFn({ method: 'GET', strict: false })
       context: input.context,
       ...(input.stream ? { stream: input.stream } : {}),
       ...(input.cursor ? { cursor: input.cursor } : {}),
+      ...(input.expectedRevision === undefined ? {} : { expectedRevision: input.expectedRevision }),
+      ...(input.expectedDigest === undefined ? {} : { expectedDigest: input.expectedDigest }),
     };
   })
   .handler(async ({ data }) => {

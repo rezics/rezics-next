@@ -1,6 +1,7 @@
 import { createKernelClient, type KernelClient, type SubjectRead } from '@rezics/client';
-import { bundledRelease } from '@rezics/definitions/bundled';
 import { candidateContext } from '../../../subject/candidates';
+import recordedRelease from '../../../kernel/recorded/definitions-release.json';
+import type { GuideRelease } from '../definition-guide';
 import { readMusicRelease, type MusicReleaseAddress } from './model';
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
@@ -9,47 +10,33 @@ type Links = NonNullable<Awaited<ReturnType<Endpoint['links']['get']>>['data']>;
 type Statement = SubjectRead['subject']['statements'][string][number];
 export const releaseId = '00000000-0000-4000-8000-00000000b301';
 export const albumId = '00000000-0000-4000-8000-00000000b302';
-export const mediumId = '00000000-0000-4000-8000-00000000b303';
 export const recordingId = '00000000-0000-4000-8000-00000000b304';
 export const musicAddress: MusicReleaseAddress = { id: releaseId, context: candidateContext };
-export type MusicReleaseExample = 'admitted' | 'unconfigured' | 'tba' | 'empty' | 'continuation-unavailable';
+export type MusicReleaseExample =
+  | 'admitted'
+  | 'unconfigured'
+  | 'tba'
+  | 'empty'
+  | 'continuation-unavailable'
+  | 'concealed'
+  | 'source-unavailable'
+  | 'stream-unavailable';
 
 /** Explicit example vocabulary, separate from producer publication and generated declarations. */
 export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', locale = 'en') {
-  const release = { ...structuredClone(bundledRelease), digest: `sha256:${'0'.repeat(64)}` };
-  for (const [id, name, properties] of [
-    [
-      'schema:MusicRelease',
-      'Music release',
-      ['schema:exampleOfWork', 'schema:datePublished', 'wdt:P437', 'schema:contentLocation', 'bf:hasPart'],
-    ],
-    ['rezics:MusicMedium', 'Music medium', ['wdt:P361']],
-    ['schema:MusicRecording', 'Recording', ['wdt:P361']],
-    ['schema:Place', 'Place', []],
-  ] as const)
-    release.types[id] = {
-      iri: `https://example.test/${id}`,
-      labels: { en: name },
-      mappings: [],
-      bases: ['schema:CreativeWork'],
-      properties: [...properties],
-      facets: [],
-    };
-  release.properties['schema:exampleOfWork']!.targets = ['schema:MusicAlbum'];
-  release.properties['bf:hasPart']!.targets = ['rezics:MusicMedium', 'schema:MusicRecording'];
-  release.properties['wdt:P361']!.targets = ['schema:MusicRelease'];
-  release.properties['wdt:P361']!.relation = {
-    group: 'membership',
-    inverse: 'list',
-    order: 'position',
-    slotKey: 'wdt:P518',
-    inverseLabels: { en: 'Recordings on this edition' },
-  };
-  release.properties['schema:contentLocation'] = {
-    ...release.properties['schema:exampleOfWork']!,
-    labels: { en: 'Region' },
-    targets: ['schema:Place'],
-  };
+  const release = {
+    ...structuredClone(recordedRelease.release),
+    digest: recordedRelease.digest,
+  } as unknown as GuideRelease;
+  const summary = (id: string, type: string, label: string) => ({
+    id,
+    type,
+    label: { value: label, language: 'en' },
+    labels: { en: label },
+    types: [type],
+    creativeWork: true,
+    cover: null,
+  });
   const statement = (n: number, property: string, value: Statement['value']): Statement => ({
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
     property: {
@@ -73,7 +60,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
       descriptions: {},
       aliases: {},
       statements: {
-        'schema:exampleOfWork': [statement(1, 'schema:exampleOfWork', { type: 'value', content: albumId })],
+        'schema:releaseOf': [statement(1, 'schema:releaseOf', { type: 'value', content: albumId })],
         'schema:datePublished': [
           statement(
             2,
@@ -88,26 +75,30 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
           statement(4, 'schema:contentLocation', { type: 'value', content: '00000000-0000-4000-8000-00000000b305' }),
         ],
       },
-      sourceRecords: [{ name: 'Edition catalogue', url: 'https://example.test/catalogue', licence: { id: 'CC0-1.0' } }],
+      sourceRecords:
+        scenario === 'source-unavailable'
+          ? []
+          : [{ name: 'Edition catalogue', url: 'https://example.test/catalogue', licence: { id: 'CC0-1.0' } }],
       relationCounts: {},
       resolution: {},
     },
     account: null,
     summary: null,
     related: {
-      '00000000-0000-4000-8000-00000000b306': { type: 'skos:Concept', labels: { en: 'CD' } },
-      [albumId]: { type: 'schema:MusicAlbum', labels: { en: 'Harbour sessions' } },
-      '00000000-0000-4000-8000-00000000b305': { type: 'schema:Place', labels: { en: 'Japan' } },
+      '00000000-0000-4000-8000-00000000b306': summary('00000000-0000-4000-8000-00000000b306', 'skos:Concept', 'CD'),
+      '00000000-0000-4000-8000-00000000b309': summary(
+        '00000000-0000-4000-8000-00000000b309',
+        'skos:Concept',
+        'lead vocals',
+      ),
+      [albumId]: summary(albumId, 'schema:MusicAlbum', 'Harbour sessions'),
+      '00000000-0000-4000-8000-00000000b305': summary(
+        '00000000-0000-4000-8000-00000000b305',
+        'schema:Place',
+        'Japan',
+      ),
     },
   };
-  const summary = (id: string, type: string, label: string) => ({
-    id,
-    type,
-    label: { value: label, language: 'en' },
-    types: [type],
-    creativeWork: true,
-    cover: null,
-  });
   const assertion = (n: number, property: string, target: string, position: string): Statement => ({
     ...statement(n, property, { type: 'value', content: target }),
     qualifiers: [
@@ -116,8 +107,12 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
         value: { type: 'value' as const, content: position },
       },
       {
-        property: { id: 'wdt:P518', data_type: 'wikibase-item' },
-        value: { type: 'value' as const, content: mediumId },
+        property: { id: 'wdt:P1932', data_type: 'string' },
+        value: { type: 'value' as const, content: 'Mina Kato' },
+      },
+      {
+        property: { id: 'wdt:P3831', data_type: 'wikibase-item' },
+        value: { type: 'value' as const, content: '00000000-0000-4000-8000-00000000b309' },
       },
       {
         property: { id: 'source:unknown', data_type: 'string' },
@@ -143,21 +138,21 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
         ? []
         : [
             {
-              statement: assertion(5, 'bf:hasPart', mediumId, '2'),
-              target: mediumId,
-              external: null,
-              summary: summary(mediumId, 'rezics:MusicMedium', 'Disc two'),
-              related: {},
-            },
-            {
-              statement: assertion(6, 'bf:hasPart', recordingId, '1'),
+              statement: assertion(6, 'schema:track', recordingId, '1'),
               target: recordingId,
               external: null,
-              summary: summary(recordingId, 'schema:MusicRecording', 'Harbour'),
-              related: {},
+              summary:
+                scenario === 'concealed' ? null : summary(recordingId, 'schema:MusicRecording', 'Harbour'),
+              related: {
+                '00000000-0000-4000-8000-00000000b309': summary(
+                  '00000000-0000-4000-8000-00000000b309',
+                  'skos:Concept',
+                  'lead vocals',
+                ),
+              },
             },
             {
-              statement: assertion(7, 'bf:hasPart', recordingId, '3'),
+              statement: assertion(7, 'schema:track', recordingId, '3'),
               target: recordingId,
               external: null,
               summary: summary(recordingId, 'schema:MusicRecording', 'Harbour'),
@@ -188,6 +183,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
   let response: Forward | Links | undefined;
   let status: number | undefined;
   let available = scenario !== 'continuation-unavailable';
+  let unavailableStream = scenario === 'stream-unavailable' ? 'wdt:P361' : undefined;
   const calls: URL[] = [];
   const exampleFetch: typeof fetch = Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -197,6 +193,12 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
         new Response(JSON.stringify(body), { status: code, headers: { 'content-type': 'application/json' } });
       if (url.pathname === `/v1/subjects/${releaseId}`) return json(publicRead);
       if (status) return json({}, status);
+      if (
+        url.pathname.endsWith('/links') &&
+        unavailableStream &&
+        url.searchParams.get('property') === unavailableStream
+      )
+        return json({}, 503);
       if (response) return json(response);
       if (url.pathname.endsWith('/links')) return json(inverse);
       if (url.searchParams.has('cursor')) return available ? json(last) : json({}, 503);
@@ -215,12 +217,16 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
     read: (address = musicAddress) => readMusicRelease(client, release, address, locale),
     recover: () => {
       available = true;
+      unavailableStream = undefined;
     },
     respond: (page: Forward | Links) => {
       response = page;
     },
     fail: (code: number) => {
       status = code;
+    },
+    failStream: (property: string) => {
+      unavailableStream = property;
     },
   };
 }

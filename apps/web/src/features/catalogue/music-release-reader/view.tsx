@@ -4,9 +4,16 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { contextHref } from '../../pages/context-navigation';
+import { correctionProposalAvailability } from '../statement-editor';
+import type { CandidateViewerActions, NativeOperationAvailability, ViewerActionComponent } from '../../../subject/candidates';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { linkClass, linkColor } from '../../pages/shared';
 import { MusicReleaseFacts, MusicReleaseOccurrenceFacts, MusicReleaseSlot } from './facts';
+import {
+  musicReleaseRoute,
+  type MusicReleaseFocus,
+  type MusicReleaseReturn,
+} from './navigation';
 import {
   acceptMusicReleaseAddress,
   musicReleaseFirstAddress,
@@ -36,6 +43,8 @@ type Props = {
   source: object | string;
   reader: string | null;
   initial?: MusicReleaseRead | undefined;
+  /** An explicit local address for mounted examples; production parses the existing Subject return query. */
+  address?: MusicReleaseAddress;
   /** Re-enter the ordinary Subject loader. Success must supply a replacement source observation. */
   recoverCurrentPage?: (() => Promise<void>) | undefined;
 };
@@ -47,12 +56,54 @@ type Recovery = {
   status: 'pending' | 'complete' | 'failed';
 };
 
+function correctionAdvice(source: object | string, contextId: string): NativeOperationAvailability {
+  if (!source || typeof source !== 'object') return 'unavailable';
+  const page = source as {
+    actions?: { status?: string; viewerActions?: { action: string; operations: string[] }[] };
+    viewer?: { context?: string; actions?: { statementPropose?: string } };
+  };
+  if (page.actions?.status === 'denied') return 'denied';
+  if (
+    page.actions?.status !== 'ready' ||
+    !Array.isArray(page.actions.viewerActions) ||
+    page.viewer?.context !== contextId
+  )
+    return 'unavailable';
+  const advice = page.viewer?.actions?.statementPropose;
+  const context: ViewerActionComponent =
+    advice === 'allowed'
+      ? { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] }
+      : advice === 'denied'
+        ? { state: 'available', actions: [] }
+        : advice === 'unavailable'
+          ? { state: 'unavailable', reason: 'unavailable' }
+          : { state: 'not-requested' };
+  const subject: ViewerActionComponent = { state: 'available', actions: page.actions.viewerActions };
+  const actions: CandidateViewerActions = { subject, context };
+  return correctionProposalAvailability(actions);
+}
+
 /** Keep the shared session/provider retirement interface; recovery requires a new Subject observation. */
 export function MusicReleaseReader(props: Props) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef<EventTarget | null>(null);
-  const descriptor = JSON.stringify([props.id, props.context, props.locale, props.realm, props.reader]);
+  const base: MusicReleaseAddress = { id: props.id, context: props.context };
+  const route =
+    props.address !== undefined
+      ? { address: props.address }
+      : typeof window === 'undefined'
+        ? { address: base }
+        : musicReleaseRoute(window.location.search, base);
+  const descriptor = JSON.stringify([
+    props.id,
+    props.context,
+    props.locale,
+    props.realm,
+    props.reader,
+    route.address,
+    route.focus,
+  ]);
   const reading = useSubjectCommunityReading({ source: props.source, reader: props.reader, descriptor });
   const [admission, setAdmission] = useState<Admission>({
     source: props.source,
@@ -167,7 +218,12 @@ export function MusicReleaseReader(props: Props) {
           key={reading.key}
           {...props}
           // An example initial body belongs only to the original observation, never a recovered source.
-          initial={allowInitial.current ? props.initial : undefined}
+          initial={
+            allowInitial.current && route.address.expectedRevision === undefined ? props.initial : undefined
+          }
+          startingAddress={route.address}
+          returnFocus={route.focus}
+          correction={correctionAdvice(props.source, props.context)}
           current={current}
           focusHeading={focusHeading}
           retire={(reason) => {
@@ -220,10 +276,16 @@ export function MusicReleaseWindow({
   realm,
   transport,
   initial,
+  startingAddress,
+  returnFocus: returnLocator,
+  correction,
   current,
   focusHeading,
   retire,
 }: Omit<Props, 'source' | 'reader'> & {
+  startingAddress: MusicReleaseAddress;
+  returnFocus?: MusicReleaseFocus | undefined;
+  correction: NativeOperationAvailability;
   current: () => boolean;
   focusHeading: () => void;
   retire: (reason: Failure['reason']) => void;
@@ -232,7 +294,20 @@ export function MusicReleaseWindow({
   const [page, setPage] = useState<Ready | undefined>(initial?.ok ? initial : undefined);
   const [failure, setFailure] = useState<Failure | undefined>(initial && !initial.ok ? initial : undefined);
   const [busy, setBusy] = useState(!initial);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const initialReturn = initial?.ok
+    ? initial.rows.find(
+        (row) =>
+          row.summary &&
+          row.holder === returnLocator?.holder &&
+          row.statementId === returnLocator?.statementId,
+      )
+    : undefined;
+  const [selectedKey, setSelectedKey] = useState<string | null>(
+    initialReturn ? musicReleaseOccurrenceKey(initialReturn) : null,
+  );
+  const [disclosureKey, setDisclosureKey] = useState<string | null>(
+    initialReturn ? musicReleaseOccurrenceKey(initialReturn) : null,
+  );
   const [previousCount, setPreviousCount] = useState(0);
   const inspectionId = useId();
   const inspectionHeading = useRef<HTMLHeadingElement>(null);
@@ -241,12 +316,22 @@ export function MusicReleaseWindow({
   const mounted = useRef(false);
   const sequence = useRef(0);
   const inFlight = useRef(false);
-  const base = { id, context };
+  const base = startingAddress;
   const navigation = useRef(musicReleaseNavigation(base, initial?.ok ? initial : undefined));
   const origin = useRef<HTMLAnchorElement | null>(null);
   const selected = page?.rows.find((row) => musicReleaseOccurrenceKey(row) === selectedKey);
   const next = page ? musicReleaseNextAddress(navigation.current, page) : undefined;
   const previous = navigation.current.previous.at(-1);
+
+  const currentReturn = (activePage: Ready, focus?: MusicReleaseFocus): MusicReleaseReturn => ({
+    address: activePage.address,
+    locale,
+    ...(realm ? { realm } : {}),
+    label: activePage.identity.label.text,
+    revision: activePage.public.subject.revision,
+    digest: activePage.digest,
+    ...(focus ? { focus } : {}),
+  });
 
   const clearSelection = () => {
     selectionOpener.current = null;
@@ -301,7 +386,22 @@ export function MusicReleaseWindow({
       setPreviousCount(navigation.current.previous.length);
       // Keep an outstanding origin only for the connectedness check on return; never keep a prior row body.
       clearSelection();
+      setDisclosureKey(null);
       setPage(result);
+      if (address.expectedRevision !== undefined && returnLocator) {
+        const returned = result.rows.find(
+          (row) =>
+            row.summary &&
+            row.holder === returnLocator.holder &&
+            row.statementId === returnLocator.statementId,
+        );
+        if (returned) {
+          const key = musicReleaseOccurrenceKey(returned);
+          setSelectedKey(key);
+          setDisclosureKey(key);
+          keyboardSelection.current = true;
+        }
+      }
       if (
         keyboard &&
         trigger &&
@@ -372,7 +472,16 @@ export function MusicReleaseWindow({
           </button>
         </div>
       ) : null}
-      {page ? <MusicReleaseFacts page={page} locale={locale} realm={realm} onNavigate={returnFocus} /> : null}
+      {page ? (
+        <MusicReleaseFacts
+          page={page}
+          locale={locale}
+          realm={realm}
+          current={currentReturn(page)}
+          correction={correction}
+          onNavigate={returnFocus}
+        />
+      ) : null}
       {page && page.admitted && !page.stream ? <p role="status">{m.music_release_unconfigured({}, o)}</p> : null}
       {page?.stream ? (
         <>
@@ -403,84 +512,109 @@ export function MusicReleaseWindow({
             <p role="status">{page.next ? m.music_release_empty_continued({}, o) : m.work_parts_empty({}, o)}</p>
           ) : null}
           <ul className="min-w-0 divide-y divide-border" aria-label={m.music_release_occurrences({}, o)}>
-            {page.rows.map((row) => {
+            {page.rows.map((row, rowIndex) => {
               const key = musicReleaseOccurrenceKey(row);
               const summary = row.summary;
               const type = summary ? page.types[summary.type] : undefined;
               const chosen = selectedKey === key;
               return (
-                <li key={key} data-slot="music-release-row" data-selected={chosen || undefined} className="min-w-0">
-                  <ContentItemFrame as="div" className="min-w-0 space-y-3 py-4">
-                    <div className="min-w-0 space-y-1">
-                      <p className="font-medium [overflow-wrap:anywhere]" lang={summary?.label?.language}>
-                        {summary?.label?.value || m.work_parts_unresolved({}, o)}
-                      </p>
-                      {summary ? (
-                        <p className="text-sm text-muted-foreground" lang={type?.lang ?? undefined}>
-                          {type?.text || summary.type}
-                        </p>
-                      ) : null}
-                      <MusicReleaseSlot row={row} page={page} locale={locale} />
-                    </div>
-                    <button
-                      type="button"
-                      className={`${buttonVariants({ variant: chosen ? 'secondary' : 'outline' })} ${action}`}
-                      disabled={busy}
-                      aria-pressed={chosen}
-                      aria-expanded={chosen}
-                      aria-controls={chosen ? inspectionId : undefined}
-                      onClick={(event) => {
-                        if (!current() || busy) return;
-                        selectionOpener.current = event.currentTarget;
-                        keyboardSelection.current = event.detail === 0;
-                        setSelectedKey(key);
-                        if (chosen && event.detail === 0) inspectionHeading.current?.focus();
+                <li
+                  key={summary ? key : `withheld:${rowIndex}`}
+                  data-slot="music-release-row"
+                  data-selected={summary && chosen ? true : undefined}
+                  className="min-w-0"
+                >
+                  {!summary ? (
+                    <p role="status" className="py-4">
+                      {m.music_release_withheld({}, o)}
+                    </p>
+                  ) : (
+                    <details
+                      open={disclosureKey === key}
+                      onToggle={(event) => {
+                        const open = event.currentTarget.open;
+                        setDisclosureKey((currentKey) => (open ? key : currentKey === key ? null : currentKey));
+                        if (!open && selectedKey === key) clearSelection();
                       }}
+                      className="min-w-0 rounded-lg border border-border p-3"
                     >
-                      {m.music_release_inspect({}, o)}
-                      <span className="sr-only">
-                        {' · '}
-                        {summary?.label?.value || m.work_parts_unresolved({}, o)}
-                      </span>
-                    </button>
-                  </ContentItemFrame>
+                      <summary className={`${action} cursor-pointer`}>{m.album_tracks_inspect({}, o)}</summary>
+                      <ContentItemFrame as="div" className="min-w-0 space-y-3 py-4">
+                        <div className="min-w-0 space-y-1">
+                          <p className="font-medium [overflow-wrap:anywhere]" lang={summary.label?.language}>
+                            {summary.label?.value || m.work_parts_unresolved({}, o)}
+                          </p>
+                          <p className="text-sm text-muted-foreground" lang={type?.lang ?? undefined}>
+                            {type?.text || m.work_parts_unresolved({}, o)}
+                          </p>
+                          <MusicReleaseSlot row={row} page={page} locale={locale} />
+                        </div>
+                        <button
+                          type="button"
+                          className={`${buttonVariants({ variant: chosen ? 'secondary' : 'outline' })} ${action}`}
+                          disabled={busy}
+                          aria-pressed={chosen}
+                          aria-expanded={chosen}
+                          aria-controls={chosen ? inspectionId : undefined}
+                          onClick={(event) => {
+                            if (!current() || busy) return;
+                            selectionOpener.current = event.currentTarget;
+                            keyboardSelection.current = event.detail === 0;
+                            setDisclosureKey(key);
+                            setSelectedKey(key);
+                            if (chosen && event.detail === 0) inspectionHeading.current?.focus();
+                          }}
+                        >
+                          {m.music_release_inspect({}, o)}
+                          <span className="sr-only">{' · '}{summary.label?.value || m.work_parts_unresolved({}, o)}</span>
+                        </button>
+                        {chosen && selected ? (
+                          <section
+                            id={inspectionId}
+                            role="region"
+                            aria-labelledby={`${inspectionId}-heading`}
+                            data-slot="music-release-inspection"
+                            className="min-w-0 space-y-4 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
+                          >
+                            <header className="flex min-w-0 items-start justify-between gap-3">
+                              <h3
+                                id={`${inspectionId}-heading`}
+                                ref={inspectionHeading}
+                                tabIndex={-1}
+                                className="font-semibold"
+                              >
+                                {m.music_release_occurrence({}, o)}
+                                {' · '}
+                                <span lang={selected.summary?.label?.language}>
+                                  {selected.summary?.label?.value || m.work_parts_unresolved({}, o)}
+                                </span>
+                              </h3>
+                              <button
+                                type="button"
+                                className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
+                                onClick={closeInspection}
+                              >
+                                {m.candidate_close({}, o)}
+                              </button>
+                            </header>
+                            <MusicReleaseOccurrenceFacts
+                              row={selected}
+                              page={page}
+                              locale={locale}
+                              realm={realm}
+                              current={currentReturn(page, { holder: selected.holder, statementId: selected.statementId })}
+                              correction={correction}
+                              onNavigate={returnFocus}
+                            />
+                          </section>
+                        ) : null}
+                      </ContentItemFrame>
+                    </details>
+                  )}
                 </li>
               );
             })}
           </ul>
-          {selected ? (
-            <section
-              id={inspectionId}
-              role="region"
-              aria-labelledby={`${inspectionId}-heading`}
-              data-slot="music-release-inspection"
-              className="min-w-0 space-y-4 rounded-lg border border-border p-4 [overflow-wrap:anywhere]"
-            >
-              <header className="flex min-w-0 items-start justify-between gap-3">
-                <h3 id={`${inspectionId}-heading`} ref={inspectionHeading} tabIndex={-1} className="font-semibold">
-                  {m.music_release_occurrence({}, o)}
-                  {' · '}
-                  <span lang={selected.summary?.label?.language}>
-                    {selected.summary?.label?.value || m.work_parts_unresolved({}, o)}
-                  </span>
-                </h3>
-                <button
-                  type="button"
-                  className={`${buttonVariants({ variant: 'outline' })} ${action} shrink-0`}
-                  onClick={closeInspection}
-                >
-                  {m.candidate_close({}, o)}
-                </button>
-              </header>
-              <MusicReleaseOccurrenceFacts
-                row={selected}
-                page={page}
-                locale={locale}
-                realm={realm}
-                onNavigate={returnFocus}
-              />
-            </section>
-          ) : null}
           {!page.next ? <p role="status">{m.album_tracks_complete({}, o)}</p> : null}
           <nav className="flex flex-wrap gap-3" aria-label={m.music_release_navigation({}, o)}>
             <button
