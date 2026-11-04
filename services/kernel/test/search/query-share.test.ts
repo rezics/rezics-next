@@ -28,3 +28,38 @@ test('private, unknown and oversized queries never emit partial portable documen
   expect(prepareQueryShare({ filter: { type: { in: ['x'.repeat(17000)] } } }).reason).toBe('oversized');
   expect(prepareQueryShare({ filter: { type: { in: ['book'] } } }).action).toBe('allowed');
 });
+
+// Exercise the mounted contract and its ordinary current-reader authorization, not a second share authority.
+import { afterAll, beforeAll } from 'bun:test';
+import { createPool } from '../../src/database/pool.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import type { Access } from '../../src/request/access.ts';
+import type { SearchService } from '../../src/search/http/routes.ts';
+const pool = createPool(process.env.DATABASE_URL!);
+const opening = Bun.randomUUIDv7();
+beforeAll(async () => {
+  for (const group of ['search', 'search_advanced']) await pool.query(
+    `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ($1, tstzrange('2000-01-01', NULL, '[)'), $2)`, [group, opening]);
+});
+afterAll(async () => { await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]); await pool.end(); });
+let permitted = true;
+let executions = 0;
+const access: Access = { async authenticate() { throw new Error('not used'); }, async authorize() { return permitted; } };
+const search = { async search(_principal, _request, _now, _release, context) {
+  executions++;
+  const page = { subjects: [], next: null, as_of: new Date().toISOString() };
+  await context?.complete(page);
+  return page;
+} } satisfies Pick<SearchService, 'search'>;
+const app = createKernel({ pool, access, routeKey: new Uint8Array(32), search: search as SearchService });
+test('mounted preparation executes native admission and a recipient denial cannot acquire a portable query', async () => {
+  const send = () => app.handle(new Request('http://kernel.test/v1/subjects:search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'reader', languages: ['en'], prepareShare: true }) }));
+  const response = await send();
+  expect(response.status).toBe(200);
+  expect((await response.json()).action).toBe('allowed');
+  expect(executions).toBe(1);
+  permitted = false;
+  const denied = await send();
+  expect(denied.status).toBe(403);
+  expect(executions).toBe(1);
+});
