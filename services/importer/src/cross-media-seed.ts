@@ -236,7 +236,10 @@ function parentReaches(from: string, to: string, edges: Map<string, Set<string>>
  * Ported selection/incident-edge shape: legacy-final:scripts/datasets/{bangumi,vndb}.ts.
  * Title matching locates records only; identities bind only through cited provider URLs.
  */
-export async function planCrossMediaSeed(input: CrossMediaTables): Promise<CrossMediaPlan> {
+export async function planCrossMediaSeed(
+  input: CrossMediaTables,
+  options: { deferVndbCharacterAppearances?: boolean } = {},
+): Promise<CrossMediaPlan> {
   const plan = emptyCrossMediaPlan();
   plan.characterAppearances ??= [];
   const gap = (
@@ -859,22 +862,24 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       gap('vndb', 'chars_vns', row, 'Missing target record for this source relation');
       continue;
     }
-    const role = mapSourceEnumeration('vndb', 'char_role', text(row, 'role'));
-    if (role?.status === 'omitted') gap('vndb', 'chars_vns', row, role.reason ?? 'Unsupported character role');
-    else if (role?.term === 'wdt:P3831')
-      gap('vndb', 'chars_vns', row, 'Appearance role concept has no resolved native Concept binding');
-    edge({
-      source: 'vndb',
-      alias: crossMediaAliases.vndb,
-      table: 'chars_vns',
-      holder: text(row, 'vid'),
-      target: text(row, 'id'),
-      property: 'schema:character',
-      url: vndbRecordUrl(text(row, 'vid')),
-      membership: 'referenced',
-      record: row,
-      fields: fieldsOf('chars_vns', row),
-    });
+    if (!options.deferVndbCharacterAppearances) {
+      const role = mapSourceEnumeration('vndb', 'char_role', text(row, 'role'));
+      if (role?.status === 'omitted') gap('vndb', 'chars_vns', row, role.reason ?? 'Unsupported character role');
+      else if (role?.term === 'wdt:P3831')
+        gap('vndb', 'chars_vns', row, 'Appearance role concept has no resolved native Concept binding');
+      edge({
+        source: 'vndb',
+        alias: crossMediaAliases.vndb,
+        table: 'chars_vns',
+        holder: text(row, 'vid'),
+        target: text(row, 'id'),
+        property: 'schema:character',
+        url: vndbRecordUrl(text(row, 'vid')),
+        membership: 'referenced',
+        record: row,
+        fields: fieldsOf('chars_vns', row),
+      });
+    }
     member({
       source: 'vndb',
       key: text(row, 'id'),
@@ -1655,7 +1660,17 @@ export async function seedCrossMedia(
 }
 
 export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<void> {
-  const optionalFlags = ['--bangumi-character-bindings', '--vndb-public-tag-bindings'];
+  const {
+    composeVndbCharacterVocabularyBindings,
+    parseVndbCharacterVocabularyProfile,
+    planShowcaseCharacterVocabulary,
+  } = await import('./showcase-character-vocabulary.ts');
+  const { importVndbCharacterTraits } = await import('./vndb-character-traits.ts');
+  const optionalFlags = [
+    '--bangumi-character-bindings',
+    '--vndb-public-tag-bindings',
+    '--vndb-character-vocabulary',
+  ];
   const requiredFlags = [
     '--bangumi',
     '--vndb',
@@ -1672,12 +1687,12 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     process.stdout.write(
       `Usage: bun scripts/datasets/cross-media-seed.ts ${requiredFlags
         .map((flag) => `${flag} <value>`)
-        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>]\n`,
+        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--vndb-character-vocabulary <json>]\n`,
     );
     return;
   }
   ensure(
-    argv.length % 2 === 0 && argv.length >= requiredFlags.length * 2,
+    argv.length % 2 === 0 && argv.length >= requiredFlags.length * 2 && argv.length <= flags.length * 2,
     'Expected explicit cross-media seed configuration',
   );
   const values = new Map<string, string>();
@@ -1694,7 +1709,8 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
-  const plan = await planCrossMediaSeed(input);
+  const plan = await planCrossMediaSeed(input, { deferVndbCharacterAppearances: true });
+  const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -1710,10 +1726,15 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const tagBindingsPath = values.has('--vndb-public-tag-bindings')
     ? resolve(values.get('--vndb-public-tag-bindings')!)
     : undefined;
-  for (const extra of [characterBindingsPath, tagBindingsPath]) {
+  const vndbVocabularyPath = values.has('--vndb-character-vocabulary')
+    ? resolve(values.get('--vndb-character-vocabulary')!)
+    : undefined;
+  for (const extra of [characterBindingsPath, tagBindingsPath, vndbVocabularyPath]) {
     ensure(
       extra === undefined ||
-        (extra !== resultPath && extra !== statePath && ![`${statePath}-wal`, `${statePath}-shm`].includes(extra)),
+        (extra !== resultPath &&
+          extra !== statePath &&
+          ![`${statePath}-wal`, `${statePath}-shm`].includes(extra)),
       'Seed binding files must not overlap importer state or result',
     );
   }
@@ -1722,6 +1743,12 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     const bytes = await readFile(characterBindingsPath);
     ensure(bytes.byteLength <= 256 * 1024, 'Bangumi character bindings exceed the configuration limit');
     characterBindings = JSON.parse(bytes.toString('utf8')) as SourceVocabularyBindings;
+  }
+  let vndbVocabularyProfile: ReturnType<typeof parseVndbCharacterVocabularyProfile> | undefined;
+  if (vndbVocabularyPath) {
+    const bytes = await readFile(vndbVocabularyPath);
+    ensure(bytes.byteLength <= 256 * 1024, 'VNDB character vocabulary profile exceeds the configuration limit');
+    vndbVocabularyProfile = parseVndbCharacterVocabularyProfile(JSON.parse(bytes.toString('utf8')) as unknown);
   }
   ensure(
     resultPath !== statePath && ![`${statePath}-wal`, `${statePath}-shm`].includes(resultPath),
@@ -1748,27 +1775,66 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     known: knownTagBindings,
     destination: { origin: api },
   });
+  const vndbBindings = await composeVndbCharacterVocabularyBindings(
+    port,
+    vndbVocabularyProfile,
+    characterVocabulary.requirements,
+  );
+  const characterResult = await importVndbCharacterTraits({
+    tables: input,
+    path: statePath,
+    port,
+    bindings: vndbBindings,
+    selectedWorkIds: characterVocabulary.requirements.selectedWorkIds,
+    destination: { origin: api },
+  });
+  const readings = new Map<string, (typeof result.readings)[number]>();
+  for (const reading of [...result.readings, ...characterResult.readings])
+    readings.set(`${reading.source}\u0000${reading.externalId}`, reading);
+  const members = new Map<string, (typeof result.members)[number]>();
+  for (const member of [...result.members, ...characterResult.members]) {
+    const key = `${member.source}\u0000${member.key}`;
+    const previous = members.get(key);
+    if (!previous || member.membership === 'family') members.set(key, member);
+  }
+  const allGaps = [...result.gaps, ...characterResult.gaps];
+  const combinedResult = {
+    ...result,
+    status:
+      result.status === 'imported-with-gaps' || characterResult.status === 'imported-with-gaps'
+        ? 'imported-with-gaps'
+        : 'imported',
+    readings: [...readings.values()],
+    members: [...members.values()].sort((left, right) => left.source.localeCompare(right.source) || left.key.localeCompare(right.key)),
+    gaps: allGaps,
+    characterDiagnostics: [...result.characterDiagnostics, ...characterResult.characterDiagnostics],
+    runs: {
+      ...result.runs,
+      ...(characterResult.runs.vndb ? { vndbCharacterVocabulary: characterResult.runs.vndb } : {}),
+    },
+    publicTags: {
+      admitted: publicTags.admitted,
+      vocabulary: publicTags.vocabulary,
+      weightGap: publicTags.weightGap,
+      truncated: publicTags.truncated,
+      adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
+      gaps: publicTags.gaps,
+    },
+    characterVocabulary: {
+      requirements: characterVocabulary.requirements,
+      admittedConceptCodes: vndbBindings.concepts.map((concept) => `${concept.taxonomy}:${concept.code}`).sort(),
+      withheldConceptCodes: characterVocabulary.requirements.terms
+        .filter((term) => !vndbBindings.concepts.some((concept) => concept.taxonomy === term.taxonomy && concept.code === term.code))
+        .map((term) => `${term.taxonomy}:${term.code}`)
+        .sort(),
+    },
+  };
   await mkdir(dirname(resultPath), { recursive: true });
   await writeFile(
     resultPath,
-    `${JSON.stringify(
-      {
-        ...result,
-        publicTags: {
-          admitted: publicTags.admitted,
-          vocabulary: publicTags.vocabulary,
-          weightGap: publicTags.weightGap,
-          truncated: publicTags.truncated,
-          adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
-          gaps: publicTags.gaps,
-        },
-        sourceDigests: Object.fromEntries(input.digests),
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify({ ...combinedResult, sourceDigests: Object.fromEntries(input.digests) }, null, 2)}\n`,
   );
   process.stdout.write(
-    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
+    `Imported ${combinedResult.readings.length} records; ${combinedResult.gaps.length + combinedResult.characterDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
   );
 }
