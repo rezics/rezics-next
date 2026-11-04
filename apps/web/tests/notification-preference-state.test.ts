@@ -410,11 +410,11 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     expect(await transport.calls[1]!.clone().text()).toBe(await transport.calls[0]!.clone().text());
     await editor.edit('thread_watch', false, 9);
     await editor.submit(9);
-    expect(await transport.calls[4]!.json()).toEqual({
+    expect(await transport.calls[5]!.json()).toEqual({
       expectedVersion: 10,
       notifications: { mention: false, thread_watch: false },
     });
-    expect(transport.calls[4]!.headers.get('idempotency-key')).not.toBe(
+    expect(transport.calls[5]!.headers.get('idempotency-key')).not.toBe(
       transport.calls[0]!.headers.get('idempotency-key'),
     );
     expect(transport.calls.map((call) => call.method)).toEqual([
