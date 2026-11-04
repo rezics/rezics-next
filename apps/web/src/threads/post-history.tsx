@@ -348,6 +348,14 @@ function HistoryDisclosure({
         !historicalBindingCurrent(source, request.binding, result.provenance.actualReader) ||
         !lifetime.acceptReader(request, result.provenance.actualReader)
       ) {
+        console.error('History reader rejected its response binding', {
+          target,
+          resultBinding,
+          responseGeneration: result.provenance?.responseGeneration,
+          actualReader: result.provenance?.actualReader,
+          bindingCurrent: historicalBindingCurrent(source, request.binding, result.provenance?.actualReader),
+          requestOwned: lifetime.owns(request),
+        });
         if (lifetime.owns(request)) lifetime.resetDisclosure(connection);
         if (returning && pendingReturn) {
           retireHistoryReturnReceipt(pendingReturn.target.token);
@@ -358,6 +366,7 @@ function HistoryDisclosure({
         return;
       }
       if (!result.data.available) {
+        console.error('History reader returned an unavailable page');
         lifetime.failPage(request);
         if (returning) setReturnState('failed');
         return;
@@ -414,7 +423,8 @@ function HistoryDisclosure({
           setReturnState('restored');
         }
       }
-    } catch {
+    } catch (error) {
+      console.error('History page request failed', error);
       lifetime.failPage(request);
       if (returning) setReturnState('failed');
     } finally {
