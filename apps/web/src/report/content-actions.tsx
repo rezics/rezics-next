@@ -23,6 +23,7 @@ import { sessionQuery } from '../session/query';
 import { sendReport } from './actions';
 import type { ReportResult } from './submit.server';
 import { Verification, type VerificationConfig } from './turnstile';
+import type { OperationLease } from '../reader/lease';
 
 type SessionRecord = {
   state?: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable' | string;
@@ -94,6 +95,71 @@ function reportCredential(authority: SessionAuthority): { csrfToken: string } | 
   return null;
 }
 
+function reportLeaseMatchesAuthority(
+  lease: OperationLease<'report'> | undefined,
+  authority: SessionAuthority,
+): boolean {
+  return (
+    !lease ||
+    (lease.current() &&
+      lease.reader === authority.session?.subject &&
+      lease.credential() === authority.session?.csrfToken)
+  );
+}
+
+type RetainedReport = {
+  target: { kind: 'thread' | 'post' | 'subject'; id: string };
+  revisionId?: string;
+  reason: ReportSubmission['reason'];
+  details: string;
+  token: string;
+  key: string;
+  sender: string | null;
+  credential: string;
+  sessionFingerprint: string;
+  sessionRevision: number;
+  commandLease?: OperationLease<'report'>;
+};
+
+function retainedReportData(attempt: RetainedReport) {
+  return {
+    target: attempt.target,
+    ...(attempt.revisionId !== undefined ? { revisionId: attempt.revisionId } : {}),
+    reason: attempt.reason,
+    ...(attempt.details ? { evidence: attempt.details } : {}),
+    botToken: attempt.token,
+    idempotencyKey: attempt.key,
+  };
+}
+
+let nextReportLeaseId = 1;
+const reportLeaseIds = new WeakMap<object, number>();
+
+function reportLeaseId(lease: OperationLease<'report'> | undefined): number | null {
+  if (!lease) return null;
+  let id = reportLeaseIds.get(lease);
+  if (!id) {
+    id = nextReportLeaseId++;
+    reportLeaseIds.set(lease, id);
+  }
+  return id;
+}
+
+function reportReasonText(reason: ReportSubmission['reason']): string {
+  switch (reason) {
+    case 'off_topic':
+      return m.report_off_topic();
+    case 'inappropriate':
+      return m.report_inappropriate();
+    case 'spam':
+      return m.report_spam();
+    case 'illegal':
+      return m.report_illegal();
+    case 'other':
+      return m.report_other();
+  }
+}
+
 function labels(): ReportDialogLabels {
   return {
     title: m.report_title(),
@@ -156,6 +222,7 @@ export function PostActions({
   verification,
   extraEntries,
   canonicalHref,
+  commandLease,
 }: {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
@@ -163,6 +230,8 @@ export function PostActions({
   extraEntries?: MenuEntry[];
   /** An admitted feed-row destination; detail callers keep their existing local target anchor. */
   canonicalHref?: string;
+  /** Optional original native operation lease for a mounted contribution action. */
+  commandLease?: OperationLease<'report'>;
 }) {
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => observeSession(client), [client]);
@@ -176,6 +245,7 @@ export function PostActions({
     target.id,
     revisionId ?? null,
     canonicalHref ?? null,
+    reportLeaseId(commandLease),
   ]);
   const ownerRef = useRef<OwnerToken | null>(null);
   if (!ownerRef.current || ownerRef.current.key !== ownerKey) ownerRef.current = { key: ownerKey, value: {} };
@@ -192,6 +262,7 @@ export function PostActions({
       target={target}
       {...(revisionId !== undefined ? { revisionId } : {})}
       verification={verification}
+      {...(commandLease ? { commandLease } : {})}
       {...(extraEntries ? { extraEntries } : {})}
       {...(canonicalHref ? { canonicalHref } : {})}
     />
@@ -209,6 +280,7 @@ function ReportActionsVisit({
   verification,
   extraEntries,
   canonicalHref,
+  commandLease,
 }: {
   activeOwner: MutableRefObject<OwnerToken | null>;
   owner: object;
@@ -220,6 +292,7 @@ function ReportActionsVisit({
   verification: VerificationConfig;
   extraEntries?: MenuEntry[];
   canonicalHref?: string;
+  commandLease?: OperationLease<'report'>;
 }) {
   const [reportOpen, setReportOpen] = useState(false);
   // A new open also retires retained shared form handlers from the previous ceremony.
@@ -233,6 +306,12 @@ function ReportActionsVisit({
   const tokenRevision = useRef(0);
   const idempotencyKey = useRef('');
   const [reportId, setReportId] = useState<string | null>(null);
+  const reportAttemptRef = useRef<RetainedReport | null>(null);
+  const [uncertainReport, setUncertainReport] = useState<RetainedReport | null>(null);
+  const [retryingReport, setRetryingReport] = useState(false);
+  const retryingReportRef = useRef(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const reset = useRef<(() => void) | null>(null);
   const mounted = useRef(false);
   const copyTrigger = useRef<HTMLButtonElement>(null);
@@ -310,8 +389,9 @@ function ReportActionsVisit({
   const currentOwner = useCallback(() => {
     if (!mounted.current || activeOwner.current?.value !== owner) return false;
     if (observation.snapshot() !== sessionRevision) return false;
-    return observation.read().fingerprint === admittedFingerprint;
-  }, [activeOwner, admittedFingerprint, observation, owner, sessionRevision]);
+    const authority = observation.read();
+    return authority.fingerprint === admittedFingerprint && reportLeaseMatchesAuthority(commandLease, authority);
+  }, [activeOwner, admittedFingerprint, commandLease, observation, owner, sessionRevision]);
 
   const currentOpen = useCallback(
     (incarnation: number) => currentOwner() && reportOpenRef.current && openIncarnation.current === incarnation,
@@ -319,8 +399,79 @@ function ReportActionsVisit({
   );
 
   const currentAuthority = observation.read();
-  const canReport = Boolean(reportCredential(currentAuthority)) && currentAuthority.fingerprint === admittedFingerprint;
+  const canReport =
+    Boolean(reportCredential(currentAuthority)) &&
+    currentAuthority.fingerprint === admittedFingerprint &&
+    reportLeaseMatchesAuthority(commandLease, currentAuthority);
   const renderIncarnation = openIncarnation.current;
+
+  const isRetainedReportCurrent = useCallback(
+    (attempt: RetainedReport) => {
+      if (reportAttemptRef.current !== attempt || !currentOwner()) return false;
+      if (observation.snapshot() !== attempt.sessionRevision) return false;
+      const authority = observation.read();
+      return (
+        authority.fingerprint === attempt.sessionFingerprint &&
+        (authority.session?.subject ?? null) === attempt.sender &&
+        attempt.commandLease === commandLease &&
+        reportLeaseMatchesAuthority(attempt.commandLease, authority) &&
+        (!attempt.commandLease || attempt.commandLease.credential() === attempt.credential)
+      );
+    },
+    [commandLease, currentOwner, observation],
+  );
+
+  const closeReportForRecovery = useCallback(() => {
+    reportOpenRef.current = false;
+    openIncarnation.current += 1;
+    tokenRevision.current += 1;
+    tokenRef.current = '';
+    reset.current = null;
+    setToken({ value: '', revision: tokenRevision.current });
+    setReportOpen(false);
+  }, []);
+
+  const retryRetainedReport = useCallback(async () => {
+    const attempt = reportAttemptRef.current;
+    if (!attempt || retryingReportRef.current || !isRetainedReportCurrent(attempt)) return;
+    retryingReportRef.current = true;
+    setRetryingReport(true);
+    setRetryError(null);
+    let result: ReportResult;
+    try {
+      result = await sendReport({
+        data: retainedReportData(attempt),
+        headers: { 'X-CSRF-Token': attempt.credential },
+      });
+    } catch {
+      retryingReportRef.current = false;
+      setRetryingReport(false);
+      if (!isRetainedReportCurrent(attempt)) return;
+      setRetryError(m.report_unavailable());
+      return;
+    }
+    retryingReportRef.current = false;
+    setRetryingReport(false);
+    if (!isRetainedReportCurrent(attempt)) return;
+    reportAttemptRef.current = null;
+    setUncertainReport(null);
+    idempotencyKey.current = '';
+    if (!result.ok) {
+      setReportError(refusalText(result));
+      return;
+    }
+    setReportError(null);
+    setReportId(result.reportId);
+  }, [isRetainedReportCurrent]);
+
+  const discardRetainedReport = useCallback(() => {
+    if (!reportAttemptRef.current || retryingReportRef.current) return;
+    reportAttemptRef.current = null;
+    setUncertainReport(null);
+    idempotencyKey.current = '';
+    setRetryError(null);
+    setReportError(null);
+  }, []);
 
   useEffect(() => {
     if (copyResult?.kind !== 'manual') return;
@@ -370,6 +521,7 @@ function ReportActionsVisit({
     (next: boolean) => {
       if (!currentOwner() || renderIncarnation !== openIncarnation.current) return;
       if (next) {
+        if (reportAttemptRef.current) return;
         if (reportOpenRef.current) return;
         retireCopyResult();
         reportOpenRef.current = true;
@@ -382,6 +534,8 @@ function ReportActionsVisit({
         setToken({ value: '', revision: tokenRevision.current });
         setCeremony(openIncarnation.current);
         setReportId(null);
+        setReportError(null);
+        setRetryError(null);
         setReportOpen(true);
         return;
       }
@@ -416,26 +570,45 @@ function ReportActionsVisit({
       if (!currentAttempt() || !submittedToken || !submittedKey || !canReport) throw new Error(m.report_unavailable());
 
       const authority = observation.read();
-      const credential = reportCredential(authority);
-      if (!credential || authority.fingerprint !== admittedFingerprint || observation.snapshot() !== sessionRevision)
+      const credential = commandLease ? commandLease.credential() : reportCredential(authority)?.csrfToken;
+      if (
+        credential === null ||
+        credential === undefined ||
+        authority.fingerprint !== admittedFingerprint ||
+        observation.snapshot() !== sessionRevision ||
+        !reportLeaseMatchesAuthority(commandLease, authority)
+      )
         throw new Error(m.report_unavailable());
+
+      const attempt: RetainedReport = {
+        target: admittedTarget,
+        ...(admittedRevision !== undefined ? { revisionId: admittedRevision } : {}),
+        reason,
+        details,
+        token: submittedToken,
+        key: submittedKey,
+        sender: authority.session?.subject ?? null,
+        credential,
+        sessionFingerprint: authority.fingerprint,
+        sessionRevision,
+        ...(commandLease ? { commandLease } : {}),
+      };
 
       let result: ReportResult;
       try {
         result = await sendReport({
-          data: {
-            target: admittedTarget,
-            ...(admittedRevision !== undefined ? { revisionId: admittedRevision } : {}),
-            reason,
-            ...(details ? { evidence: details } : {}),
-            botToken: submittedToken,
-            idempotencyKey: submittedKey,
-          },
-          headers: { 'X-CSRF-Token': credential.csrfToken },
+          data: retainedReportData(attempt),
+          headers: { 'X-CSRF-Token': credential },
         });
       } catch {
         if (!currentVisit()) return;
-        if (currentAttempt()) submittedReset?.();
+        if (!currentAttempt()) return;
+        reportAttemptRef.current = attempt;
+        setUncertainReport(attempt);
+        setReportError(null);
+        setRetryError(null);
+        submittedReset?.();
+        closeReportForRecovery();
         throw new Error(m.report_unavailable());
       }
 
@@ -445,10 +618,13 @@ function ReportActionsVisit({
         throw new Error(refusalText(result));
       }
       setReportId(result.reportId);
+      setReportError(null);
     },
     [
       admittedFingerprint,
       canReport,
+      closeReportForRecovery,
+      commandLease,
       currentOpen,
       observation,
       ownerTarget.id,
@@ -524,6 +700,35 @@ function ReportActionsVisit({
           }
         />
       </div>
+      {uncertainReport ? (
+        <section
+          aria-label={m.report_unavailable()}
+          className="min-w-0 max-w-full space-y-2 text-sm"
+          data-slot="report-recovery"
+          role="alert"
+        >
+          <p>{m.report_unavailable()}</p>
+          <p>{reportReasonText(uncertainReport.reason)}</p>
+          {retryError ? <p role="alert">{retryError}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={retryingReport || !isRetainedReportCurrent(uncertainReport)}
+              onClick={() => void retryRetainedReport()}
+            >
+              {retryingReport ? m.report_submitting() : m.editorial_retry()}
+            </Button>
+            <Button type="button" variant="ghost" disabled={retryingReport} onClick={discardRetainedReport}>
+              {m.report_cancel()}
+            </Button>
+          </div>
+        </section>
+      ) : reportError ? (
+        <p role="alert" data-slot="report-recovery-error" className="text-sm">
+          {reportError}
+        </p>
+      ) : null}
       {/* Keep the selected URL and its deliberate Close action together in the content action flow. */}
       {copyResult ? (
         <div className="min-w-0 max-w-full space-y-2 text-sm">
