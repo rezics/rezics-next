@@ -131,10 +131,10 @@ function subjectFacts(statements: readonly IndexedStatement[], calendarFormat?: 
   return facts;
 }
 
-function documentTextFields(subject: IndexedSubject, partition: number): Pick<
-  SubjectDocument,
-  'document_text_coverage' | 'document_text_observation' | 'document_texts'
-> {
+function documentTextFields(
+  subject: IndexedSubject,
+  partition: number,
+): Pick<SubjectDocument, 'document_text_coverage' | 'document_text_observation' | 'document_texts'> {
   const projection = subject.documentText;
   if (!projection) return {};
   const { selection } = projection;
