@@ -59,6 +59,7 @@ export function HistoryRow({
           <Button
             variant={selected ? 'secondary' : 'outline'}
             className={actionClass}
+            disabled={correctionLocked}
             aria-expanded={selected}
             aria-controls={`${headingId}-detail`}
             onClick={(event) => select(event.currentTarget)}

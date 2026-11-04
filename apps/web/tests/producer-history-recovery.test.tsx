@@ -283,6 +283,7 @@ test('equal labels and repeated statement IDs keep correction admission on the s
     await ui.click(ui.m.relation_open());
     expect(reads).toEqual([[{ property: 'wdt:P749', target: example.fixture.id }, undefined, 'producer-session']]);
     expect(holders).not.toContain(example.fixture.parent.subject.id);
+    expect(ui.button(ui.m.producer_history_inspect(), occurrences[0]!).disabled).toBe(true);
     expect(ui.host.querySelectorAll('section[id$="-detail"]').length).toBe(1);
     await ui.click(ui.m.producer_history_inspect(), occurrences[0]!);
     expect(ui.host.querySelectorAll('section[id$="-detail"]').length).toBe(1);
