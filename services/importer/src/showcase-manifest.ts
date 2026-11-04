@@ -236,7 +236,7 @@ function selectedEnvelopes(
   for (const provider of ['bangumi', 'vndb'] as const) {
     const registration = createSourceRegistration(provider, {
       source: aliases[provider],
-      converterRevision: entityRevision,
+      converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
     });
     for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
       const context =
