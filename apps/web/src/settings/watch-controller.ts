@@ -216,8 +216,7 @@ export class WatchController {
       // Bound waiting without claiming cancellation reversed a dispatched command.
       const result = await withManagedReadDeadline(() => this.io.stop(command, command.credential));
       if (!this.current() || this.state.command !== command) return;
-      const writeRetryAt =
-        result.kind === 'uncertain' ? preferenceRetryDeadline(result.problem.retryAfter) : 0;
+      const writeRetryAt = result.kind === 'uncertain' ? preferenceRetryDeadline(result.problem.retryAfter) : 0;
       if (result.kind === 'removed') {
         this.update({
           rows: this.state.rows.filter((row) => row.subscriptionId !== command.watchId || row.kind !== command.kind),

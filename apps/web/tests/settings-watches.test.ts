@@ -202,7 +202,11 @@ test('uncertain removal needs current advice and both captured retry deadlines b
 
     current = page([revised(5)], nextCursor);
     await controller.refresh();
-    expect(controller.snapshot()).toMatchObject({ command: original, actions: { remove: 'available' }, writeRetryAt: startedAt + 5000 });
+    expect(controller.snapshot()).toMatchObject({
+      command: original,
+      actions: { remove: 'available' },
+      writeRetryAt: startedAt + 5000,
+    });
     expect(controller.canRetryOriginal()).toBe(false);
     current = page([]);
     await controller.next();
