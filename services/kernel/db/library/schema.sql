@@ -5622,6 +5622,23 @@ CREATE TABLE library.vndb_label_adoption_item (
 
 
 --
+-- Name: yearly_completion_goal; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.yearly_completion_goal (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    year integer NOT NULL,
+    target integer,
+    revision bigint NOT NULL,
+    changed_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT yearly_completion_goal_revision_check CHECK ((revision > 0)),
+    CONSTRAINT yearly_completion_goal_target_check CHECK (((target >= 1) AND (target <= 1000))),
+    CONSTRAINT yearly_completion_goal_year_check CHECK (((year >= 1) AND (year <= 9999)))
+);
+
+
+--
 -- Name: bangumi_upload bangumi_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -7075,6 +7092,14 @@ ALTER TABLE ONLY library.vndb_label_adoption_item
 
 ALTER TABLE ONLY library.vndb_label_adoption
     ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: yearly_completion_goal yearly_completion_goal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.yearly_completion_goal
+    ADD CONSTRAINT yearly_completion_goal_pkey PRIMARY KEY (route, account_id, year);
 
 
 --

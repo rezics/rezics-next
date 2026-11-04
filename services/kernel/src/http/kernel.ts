@@ -48,6 +48,7 @@ import { personalLabelRoutes } from '../library/label-routes.ts';
 import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
 import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
+import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
 import { createSessionCommands } from '../library/sessions.ts';
 import { ratingRoutes } from '../rating/routes.ts';
@@ -506,6 +507,12 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
   });
+  let yearlyGoals: ReturnType<typeof yearlyCompletionGoalRoutes>;
+  yearlyGoals = yearlyCompletionGoalRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(yearlyGoals), realmRoleReader }),
+  });
   let journalCommands: ReturnType<typeof createSessionCommands> | undefined;
   const deferredJournalCommands = new Proxy({} as ReturnType<typeof createSessionCommands>, {
     get(_target, property) {
@@ -960,6 +967,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof commerceRoutes> &
   ReturnType<typeof progressRoutes> &
   ReturnType<typeof readingInsightsRoutes> &
+  ReturnType<typeof yearlyCompletionGoalRoutes> &
   ReturnType<typeof diaryRoutes> &
   ReturnType<typeof contextRoutes> &
   ReturnType<typeof providerReviewQueueRoutes>;
