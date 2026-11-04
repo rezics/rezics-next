@@ -844,6 +844,7 @@
   "library_copy_disposed_hint": "您不再保有這份複本的那天。",
   "library_copy_edit": "編輯複本",
   "library_copy_edition": "版本",
+  "library_copy_reading_context_unavailable": "作品與版本資訊目前無法取得。",
   "library_copy_empty": "這裡還沒有您的複本。",
   "library_copy_page_empty": "此頁沒有顯示複本。",
   "library_copy_failure": "這份複本無法儲存。請再試一次。",

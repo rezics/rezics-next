@@ -1,10 +1,12 @@
 import { subjectHref } from '../../subject/subject-href';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
+import { copiesSubjectId } from '../../library/copies-query';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+(?:/([^/?#]+))?$`);
 const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realms/${uuid}$`);
+const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
 const returnAddressCap = 32768;
 
 /** A public return address may restore one admitted Subject view window without chaining history. */
@@ -17,7 +19,8 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     const url = new URL(value, 'https://rezics.invalid');
     const subject = subjectDestination.exec(url.pathname);
     const realmPath = realmDestination.exec(url.pathname);
-    const match = subject ?? realmPath;
+    const copiesPath = copiesDestination.exec(url.pathname);
+    const match = subject ?? realmPath ?? copiesPath;
     if (
       url.origin !== 'https://rezics.invalid' ||
       !match ||
@@ -25,6 +28,18 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       (subject?.[2] !== undefined && !isView(subject[2]))
     )
       return;
+    if (copiesPath) {
+      const keys = [...url.searchParams.keys()];
+      if (
+        url.hash ||
+        new Set(keys).size !== keys.length ||
+        keys.some((key) => key !== 'subjectId' && key !== 'cursor') ||
+        (url.searchParams.has('subjectId') && !copiesSubjectId(url.searchParams.get('subjectId'))) ||
+        (url.searchParams.get('cursor')?.length ?? 0) > 2048
+      )
+        return;
+      return `${url.pathname}${url.search}`;
+    }
     const allowed = new Set(['realm', 'node', 'cursor', 'property']);
     const keys = [...url.searchParams.keys()];
     if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return;

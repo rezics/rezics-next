@@ -844,6 +844,7 @@
   "library_copy_disposed_hint": "이 복본을 놓아준 날입니다.",
   "library_copy_edit": "소장본 수정",
   "library_copy_edition": "판",
+  "library_copy_reading_context_unavailable": "작품 및 판본 정보를 확인할 수 없습니다.",
   "library_copy_empty": "여기에는 아직 복본이 없습니다.",
   "library_copy_page_empty": "이 페이지에 표시된 소장본이 없습니다.",
   "library_copy_failure": "이 복본을 저장하지 못했습니다. 다시 시도해 주세요.",

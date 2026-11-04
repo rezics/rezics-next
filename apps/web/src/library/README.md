@@ -31,6 +31,12 @@ column IDs), with no extra requests, row hydration or page-local ordering. Score
 unavailable reader and recovery without score preparation or vote reads; chronological paging keeps its existing
 20-row default and 100-row maximum. Settings writes only dirty shelf fields through the existing versioned command.
 
+# Copy reading context
+
+Copy rows compose a bounded Semantic projection for the visible copy window, keyed by the admitted subject identity. Commerce continues to own copy revisions, profile meaning, private source/location/date/note fields and allowed actions. The projection uses only currently admitted directed relations and identifying facts; context failure does not change copy readability or authority. Work and edition destinations return to the same localized inventory address using only its subject filter and opaque cursor.
+
+Decision: Only an admitted `schema:exampleOfWork` fact establishes an exact edition-to-work relationship; missing or withheld facts remain unavailable, and return links include only locale, subject filter and opaque cursor.
+
 # Library selection review
 
 The private shelf selects only the currently supplied rows, in visible selection order, up to the native UI cap of 100. The shared SelectionBar shows the exact count, keeps Review and Clear reachable, and places secondary actions in

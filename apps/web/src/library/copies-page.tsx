@@ -19,7 +19,11 @@ import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { createCopy, deleteCopy, updateCopy, readCopySubject, readCopyDetail } from './copies-actions';
 import { copyStatusChange, type CopiesPageData, type CopyItem } from './copies-read';
+import type { CopyReadingContext } from './copy-reading-context/types';
+import { CopyReadingContextView } from './copy-reading-context/view';
+import { copyInventoryReturnHref } from './copy-reading-context/navigation';
 import { subjectHref } from '../subject/subject-href';
+import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
 
@@ -918,10 +922,23 @@ function CopyTextReader({
   );
 }
 
-function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; ratio: CoverRatio }) {
+export function CopyRow({
+  copy,
+  onEdit,
+  ratio,
+  readingContext,
+  returnTo,
+}: {
+  copy: CopyItem;
+  onEdit: () => void;
+  ratio: CoverRatio;
+  readingContext?: CopyReadingContext | undefined;
+  returnTo?: string | undefined;
+}) {
   const pageLocale = locale();
   const localizedTitle = copy.subject ? displayLibraryTitle(copy.subject.label, pageLocale) : null;
-  const href = copy.subject ? subjectHref({ id: copy.subject.id, label: localizedTitle!.text }, pageLocale) : null;
+  const subjectLink = copy.subject ? subjectHref({ id: copy.subject.id, label: localizedTitle!.text }, pageLocale) : null;
+  const href = subjectLink ? withSubjectVisitReturn(subjectLink.href, returnTo ?? '', pageLocale) : null;
   const title = localizedTitle?.text ?? m.library_subject_unavailable();
   const kind =
     copy.subject?.typeLabel ??
@@ -934,7 +951,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
     <ContentItem
       title={title}
       {...(localizedTitle?.lang === undefined ? {} : { titleLang: localizedTitle.lang })}
-      {...(href ? { href: href.href } : {})}
+      {...(href ? { href } : {})}
       headingLevel={2}
       className="py-4"
       visual={
@@ -953,6 +970,7 @@ function CopyRow({ copy, onEdit, ratio }: { copy: CopyItem; onEdit: () => void; 
               ]}
             />
           </p>
+          <CopyReadingContextView context={readingContext} returnTo={returnTo} locale={pageLocale} />
           {copy.acquiredOn ? (
             <p className="text-sm text-muted-foreground">
               <span>{m.library_copy_acquired()}: </span>
@@ -1069,6 +1087,10 @@ function LoadedCopiesPage({
   originating?: CopiesOrigin | undefined;
 }) {
   const [copies, setCopies] = useState(page.copies);
+  const returnTo = copyInventoryReturnHref(
+    { subjectId: page.subjectId, cursor: page.requestedCursor ?? null },
+    locale(),
+  );
   const [changed, setChanged] = useState(false);
   const previousPage = useRef(page);
   if (originating && previousPage.current !== page) {
@@ -1218,6 +1240,8 @@ function LoadedCopiesPage({
                 key={`${copy.id}:${copy.revision}`}
                 copy={copy}
                 ratio={rowRatio([copy.subject])}
+                readingContext={copy.subject ? page.readingContexts?.[copy.subject.id] : undefined}
+                returnTo={returnTo}
                 onEdit={() => void inspect(copy)}
               />
             ))}

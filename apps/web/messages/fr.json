@@ -844,6 +844,7 @@
   "library_copy_disposed_hint": "Le jour où vous avez laissé partir cet exemplaire.",
   "library_copy_edit": "Modifier l’exemplaire",
   "library_copy_edition": "Édition",
+  "library_copy_reading_context_unavailable": "Les informations sur l’œuvre et l’édition ne sont pas disponibles.",
   "library_copy_empty": "Vous n’avez pas encore d’exemplaire ici.",
   "library_copy_page_empty": "Aucun exemplaire n’est affiché sur cette page.",
   "library_copy_failure": "Cet exemplaire n’a pas pu être enregistré. Veuillez réessayer.",

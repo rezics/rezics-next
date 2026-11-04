@@ -844,6 +844,7 @@
   "library_copy_disposed_hint": "このコピーを手放した日です。",
   "library_copy_edit": "蔵書を編集",
   "library_copy_edition": "版",
+  "library_copy_reading_context_unavailable": "作品と版の情報は利用できません。",
   "library_copy_empty": "ここにはまだコピーがありません。",
   "library_copy_page_empty": "このページには所蔵品が表示されていません。",
   "library_copy_failure": "このコピーを保存できませんでした。もう一度お試しください。",

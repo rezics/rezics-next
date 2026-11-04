@@ -854,6 +854,7 @@
   "library_copy_disposed_hint": "The day you let this copy go.",
   "library_copy_edit": "Edit copy",
   "library_copy_edition": "Edition",
+  "library_copy_reading_context_unavailable": "Work and edition details are unavailable.",
   "library_copy_empty": "You have no copies here yet.",
   "library_copy_page_empty": "No copies are shown on this page.",
   "library_copy_failure": "This copy could not be saved. Please try again.",

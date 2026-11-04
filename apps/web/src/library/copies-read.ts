@@ -4,6 +4,7 @@ import type { Release } from '../subject/definitions';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { CopyProfile } from './copies-profiles';
+import type { CopyReadingContexts } from './copy-reading-context/types';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
 import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy } from './copies-server';
@@ -57,6 +58,8 @@ export type CopiesPageData = {
   requestedCursor?: string | null;
   cursorRestarted?: boolean;
   copies: CopyItem[];
+  /** Bounded Semantic facts for this visible window, keyed by admitted subject id and separate from copy data. */
+  readingContexts?: CopyReadingContexts;
   next: string | null;
   addKey: string;
   profile?: CopyProfile | undefined;

@@ -844,6 +844,7 @@
   "library_copy_disposed_hint": "El día en que dejaste ir este ejemplar.",
   "library_copy_edit": "Editar ejemplar",
   "library_copy_edition": "Edición",
+  "library_copy_reading_context_unavailable": "Los detalles de la obra y la edición no están disponibles.",
   "library_copy_empty": "Aún no tienes ejemplares aquí.",
   "library_copy_page_empty": "No se muestran copias en esta página.",
   "library_copy_failure": "No se pudo guardar este ejemplar. Inténtalo de nuevo.",

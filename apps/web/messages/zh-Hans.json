@@ -844,6 +844,7 @@
   "library_copy_disposed_hint": "您不再保有这份复本的那天。",
   "library_copy_edit": "编辑复本",
   "library_copy_edition": "版本",
+  "library_copy_reading_context_unavailable": "作品和版本信息暂不可用。",
   "library_copy_empty": "这里还没有您的复本。",
   "library_copy_page_empty": "此页没有显示复本。",
   "library_copy_failure": "这份复本无法保存。请重试。",
