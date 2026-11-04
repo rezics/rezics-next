@@ -125,6 +125,29 @@ test('ordinary facts and exact release destinations retain source meaning and ke
   }
 });
 
+test('unqualified selected membership supports public release navigation and return to its opener', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = gameExample('visual-novel');
+    fixture.first.links[0]!.assertion!.qualifiers = [];
+    await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
+    const destination = mounted.host.querySelector<HTMLAnchorElement>(`a[href*="${editionId}"][href$="/release"]`)!;
+    expect(destination).not.toBeNull();
+    expect(destination.target).toBe('_blank');
+    destination.focus();
+    await act(async () => {
+      destination.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+    });
+    destination.blur();
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(document.activeElement).toBe(destination);
+    expect(mounted.host.textContent).toContain(fixture.publicRead.subject.labels.en);
+    expect(fixture.calls).toHaveLength(2);
+  } finally {
+    await mounted.close();
+  }
+});
+
 test('sparse release windows continue, cursor refusal restarts, and withheld readings retire work facts', async () => {
   const mounted = await ui();
   try {

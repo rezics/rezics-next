@@ -140,3 +140,24 @@ test('native links and relations preserve each credit qualifier and stored relea
   expect(JSON.stringify(concealedRole)).not.toContain(role.id);
   expect(disclosedRelationStatement(visible.statement, new Map())).toBeNull();
 });
+
+test('anonymous unqualified release navigation retains the original membership assertion and work direction', async () => {
+  const work = await created({ type: 'wd:Q689445', labels: { en: 'Public visual novel' } });
+  const release = await created({
+    type: 'wd:Q20631656',
+    labels: { en: 'Actual software release' },
+    statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)] },
+  });
+  const incoming = await call('GET', `/v1/subjects/${work.id}/links?property=schema:exampleOfWork&limit=20`);
+  expect(incoming.response.status).toBe(200);
+  const [row] = incoming.body.links;
+  expect(incoming.body.links).toHaveLength(1);
+  expect(row.subject).toBe(release.id);
+  expect(row.summary.id).toBe(release.id);
+  expect(row.statement).toBe(release.statements['schema:exampleOfWork'][0].id);
+  expect(row.assertion).toEqual(release.statements['schema:exampleOfWork'][0]);
+  expect(row.assertion.value).toEqual({ type: 'value', content: work.id });
+  expect(row.assertion.qualifiers).toEqual([]);
+  // A withheld work target cannot be turned into a raw-ID navigation fallback.
+  expect(disclosedRelationStatement(row.assertion, new Map())).toBeNull();
+});
