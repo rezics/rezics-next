@@ -1427,6 +1427,127 @@ $$;
 
 
 --
+-- Name: reading_insights_apply(integer, uuid, integer, text, uuid, integer); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_apply(r integer, a uuid, y integer, k text, s uuid, d integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE previous bigint; following bigint; subject_delta integer; group_delta integer;
+BEGIN
+  SELECT completed INTO previous FROM library.reading_insights_subject
+    WHERE route=r AND account_id=a AND year=y AND profile_key=k AND subject_id=s;
+  previous := COALESCE(previous,0);
+  following := previous+d;
+  subject_delta := (following>0)::integer-(previous>0)::integer;
+  IF following=0 THEN
+    DELETE FROM library.reading_insights_subject
+      WHERE route=r AND account_id=a AND year=y AND profile_key=k AND subject_id=s;
+  ELSE
+    INSERT INTO library.reading_insights_subject VALUES(r,a,y,k,s,following)
+      ON CONFLICT(route,account_id,year,profile_key,subject_id) DO UPDATE SET completed=EXCLUDED.completed;
+  END IF;
+  SELECT completed INTO previous FROM library.reading_insights_profile
+    WHERE route=r AND account_id=a AND year=y AND profile_key=k;
+  previous := COALESCE(previous,0);
+  following := previous+d;
+  group_delta := (following>0)::integer-(previous>0)::integer;
+  IF following=0 THEN
+    DELETE FROM library.reading_insights_profile
+      WHERE route=r AND account_id=a AND year=y AND profile_key=k;
+  ELSE
+    UPDATE library.reading_insights_profile SET completed=following, subjects=subjects+subject_delta
+      WHERE route=r AND account_id=a AND year=y AND profile_key=k;
+    IF NOT FOUND THEN
+      INSERT INTO library.reading_insights_profile VALUES(r,a,y,k,following,subject_delta);
+    END IF;
+  END IF;
+  SELECT completed INTO previous FROM library.reading_insights_year WHERE route=r AND account_id=a AND year=y;
+  IF previous+d=0 THEN
+    DELETE FROM library.reading_insights_year WHERE route=r AND account_id=a AND year=y;
+  ELSE
+    UPDATE library.reading_insights_year SET completed=completed+d,
+      repeats=repeats+d-subject_delta, known_profiles=known_profiles+group_delta*(k<>'')::integer
+      WHERE route=r AND account_id=a AND year=y;
+    IF NOT FOUND THEN
+      INSERT INTO library.reading_insights_year VALUES(r,a,y,d,d-subject_delta,group_delta*(k<>'')::integer);
+    END IF;
+  END IF;
+END $$;
+
+
+--
+-- Name: reading_insights_receive(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_receive() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE item library.progress_session; d integer; k text;
+BEGIN
+  -- An unchanged membership still receives a fresh generation. Receipt replay
+  -- does not write the source and therefore changes neither counters nor revision.
+  IF TG_OP='UPDATE' AND OLD.reading_insights_initialized AND
+    (OLD.route,OLD.account_id,OLD.subject_id,OLD.state,OLD.library_profile_pin,
+      OLD.journal_finish_year,OLD.journal_finish_month,OLD.journal_finish_day)
+    IS NOT DISTINCT FROM
+    (NEW.route,NEW.account_id,NEW.subject_id,NEW.state,NEW.library_profile_pin,
+      NEW.journal_finish_year,NEW.journal_finish_month,NEW.journal_finish_day) THEN
+    UPDATE library.reading_insights_owner SET revision=gen_random_uuid()
+      WHERE route=NEW.route AND account_id=NEW.account_id;
+    NEW.reading_insights_initialized := true;
+    RETURN NEW;
+  END IF;
+  IF TG_OP='UPDATE' THEN
+    PERFORM 1 FROM library.reading_insights_owner
+      WHERE (route,account_id) IN ((OLD.route,OLD.account_id),(NEW.route,NEW.account_id))
+      ORDER BY route,account_id FOR UPDATE;
+  END IF;
+  FOR d IN -1..1 BY 2 LOOP
+    IF d=-1 THEN
+      IF TG_OP='INSERT' THEN CONTINUE; END IF;
+      item := OLD;
+      IF NOT item.reading_insights_initialized THEN CONTINUE; END IF;
+    ELSE
+      IF TG_OP='DELETE' THEN CONTINUE; END IF;
+      item := NEW;
+    END IF;
+    INSERT INTO library.reading_insights_owner VALUES(item.route,item.account_id,0,gen_random_uuid())
+      ON CONFLICT(route,account_id) DO UPDATE SET revision=EXCLUDED.revision;
+    UPDATE library.reading_insights_owner SET initialized_sessions=initialized_sessions+d
+      WHERE route=item.route AND account_id=item.account_id;
+    IF item.state='completed' AND
+      library.reported_finish_valid(item.journal_finish_year,item.journal_finish_month,item.journal_finish_day) THEN
+      k := CASE WHEN item.library_profile_pin IS NOT NULL AND octet_length(item.library_profile_pin::text)<=1024
+        THEN item.library_profile_pin::text ELSE '' END;
+      PERFORM library.reading_insights_apply(item.route,item.account_id,item.journal_finish_year,k,item.subject_id,d);
+    END IF;
+  END LOOP;
+  IF TG_OP<>'INSERT' THEN
+    DELETE FROM library.reading_insights_owner
+      WHERE route=OLD.route AND account_id=OLD.account_id AND initialized_sessions=0;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  NEW.reading_insights_initialized := true;
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: reading_insights_truncate(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  TRUNCATE library.reading_insights_subject,library.reading_insights_profile,
+    library.reading_insights_year,library.reading_insights_owner;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: record_follow_count_source(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -4438,6 +4559,7 @@ CREATE TABLE library.progress_session (
     episode_completed_count integer DEFAULT 0 NOT NULL,
     journal_assessment_units smallint,
     journal_assessment_meaning_revision smallint DEFAULT 1 NOT NULL,
+    reading_insights_initialized boolean DEFAULT false NOT NULL,
     CONSTRAINT progress_session_additional_measures_check CHECK (
 CASE
     WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
@@ -4532,6 +4654,82 @@ CREATE TABLE library.published_log (
     CONSTRAINT published_log_revision_check CHECK (((revision >= 1) AND (revision <= 2147483646))),
     CONSTRAINT published_log_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT published_log_session_state_check CHECK ((session_state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text])))
+);
+
+
+--
+-- Name: reading_insights_installation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_installation (
+    singleton boolean NOT NULL,
+    version integer NOT NULL,
+    CONSTRAINT reading_insights_installation_singleton_check CHECK (singleton),
+    CONSTRAINT reading_insights_installation_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: reading_insights_owner; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_owner (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    initialized_sessions bigint NOT NULL,
+    revision uuid NOT NULL,
+    CONSTRAINT reading_insights_owner_initialized_sessions_check CHECK ((initialized_sessions >= 0))
+);
+
+
+--
+-- Name: reading_insights_profile; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_profile (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    year integer NOT NULL,
+    profile_key text NOT NULL COLLATE pg_catalog."C",
+    completed bigint NOT NULL,
+    subjects bigint NOT NULL,
+    CONSTRAINT reading_insights_profile_check CHECK (((subjects >= 1) AND (subjects <= completed))),
+    CONSTRAINT reading_insights_profile_completed_check CHECK ((completed > 0)),
+    CONSTRAINT reading_insights_profile_profile_key_check CHECK ((octet_length(profile_key) <= 1024))
+);
+
+
+--
+-- Name: reading_insights_subject; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_subject (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    year integer NOT NULL,
+    profile_key text NOT NULL COLLATE pg_catalog."C",
+    subject_id uuid NOT NULL,
+    completed bigint NOT NULL,
+    CONSTRAINT reading_insights_subject_completed_check CHECK ((completed > 0)),
+    CONSTRAINT reading_insights_subject_profile_key_check CHECK ((octet_length(profile_key) <= 1024))
+);
+
+
+--
+-- Name: reading_insights_year; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_year (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    year integer NOT NULL,
+    completed bigint NOT NULL,
+    repeats bigint NOT NULL,
+    known_profiles bigint NOT NULL,
+    CONSTRAINT reading_insights_year_check CHECK (((repeats >= 0) AND (repeats <= completed))),
+    CONSTRAINT reading_insights_year_completed_check CHECK ((completed > 0)),
+    CONSTRAINT reading_insights_year_known_profiles_check CHECK ((known_profiles >= 0)),
+    CONSTRAINT reading_insights_year_year_check CHECK (((year >= 1) AND (year <= 9999)))
 );
 
 
@@ -6354,6 +6552,46 @@ ALTER TABLE ONLY library.published_log
 
 
 --
+-- Name: reading_insights_installation reading_insights_installation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_installation
+    ADD CONSTRAINT reading_insights_installation_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: reading_insights_owner reading_insights_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_owner
+    ADD CONSTRAINT reading_insights_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: reading_insights_profile reading_insights_profile_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_profile
+    ADD CONSTRAINT reading_insights_profile_pkey PRIMARY KEY (route, account_id, year, profile_key);
+
+
+--
+-- Name: reading_insights_subject reading_insights_subject_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_subject
+    ADD CONSTRAINT reading_insights_subject_pkey PRIMARY KEY (route, account_id, year, profile_key, subject_id);
+
+
+--
+-- Name: reading_insights_year reading_insights_year_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_year
+    ADD CONSTRAINT reading_insights_year_pkey PRIMARY KEY (route, account_id, year);
+
+
+--
 -- Name: reported_year_bucket reported_year_bucket_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -7830,6 +8068,13 @@ CREATE INDEX published_log_owner ON library.published_log USING btree (route, ac
 
 
 --
+-- Name: reading_insights_profile_top; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX reading_insights_profile_top ON library.reading_insights_profile USING btree (route, account_id, year, completed DESC, profile_key) INCLUDE (subjects) WHERE (profile_key <> ''::text);
+
+
+--
 -- Name: shelf_count_types; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -8653,6 +8898,20 @@ CREATE TRIGGER published_log_fact_insert AFTER INSERT ON library.published_log F
 --
 
 CREATE TRIGGER published_log_fact_visibility AFTER UPDATE ON library.published_log FOR EACH ROW WHEN ((old.deleted IS DISTINCT FROM new.deleted)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: progress_session reading_insights_receive; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_receive BEFORE INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.reading_insights_receive();
+
+
+--
+-- Name: progress_session reading_insights_truncate; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.reading_insights_truncate();
 
 
 --
