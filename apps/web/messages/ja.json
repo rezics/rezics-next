@@ -8368,5 +8368,8 @@
   "own_media_recovery_heading": "元のメディアの削除",
   "own_media_recovery_browsing": "別の行を確認しても、この削除はキャンセルされません。再試行すると元のリクエストを送信します。",
   "own_media_recovery_withheld": "元のメディアまたは権限が利用できないため、再試行できません。",
-  "own_media_recovery_return": "元のメディアに戻る"
+  "own_media_recovery_return": "元のメディアに戻る",
+  "library_priority_unavailable": "優先度順はまだ利用できません。",
+  "library_priority_ascending": "優先度1から",
+  "library_priority_descending": "優先度100から"
 }

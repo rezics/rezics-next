@@ -8368,5 +8368,8 @@
   "own_media_recovery_heading": "원래 미디어 삭제",
   "own_media_recovery_browsing": "다른 행을 확인해도 이 삭제는 취소되지 않습니다. 재시도하면 원래 요청을 보냅니다.",
   "own_media_recovery_withheld": "원래 미디어 또는 권한을 더 이상 사용할 수 없어 복구를 진행할 수 없습니다.",
-  "own_media_recovery_return": "원래 미디어로 돌아가기"
+  "own_media_recovery_return": "원래 미디어로 돌아가기",
+  "library_priority_unavailable": "우선순위 정렬은 아직 사용할 수 없습니다.",
+  "library_priority_ascending": "1순위부터",
+  "library_priority_descending": "100순위부터"
 }

@@ -8368,5 +8368,8 @@
   "own_media_recovery_heading": "Eliminación original del archivo",
   "own_media_recovery_browsing": "Consultar otra fila no cancela esta eliminación. Reintentar envía la solicitud original.",
   "own_media_recovery_withheld": "La recuperación no está disponible porque el archivo original o la autorización ya no están disponibles.",
-  "own_media_recovery_return": "Volver al archivo original"
+  "own_media_recovery_return": "Volver al archivo original",
+  "library_priority_unavailable": "El orden por prioridad aún no está disponible.",
+  "library_priority_ascending": "Rango 1 primero",
+  "library_priority_descending": "Rango 100 primero"
 }

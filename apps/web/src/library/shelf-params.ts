@@ -52,7 +52,7 @@ export type ShelfDisplay = {
 export const shelfOrders = ['lastActivity', 'createdAt', 'finishedAt'] as const;
 export const shelfDirections = ['desc', 'asc'] as const;
 // Address recognition is independent of native availability. A retained score address must never become a date visit.
-const shelfAddressOrders = [...shelfOrders, 'personalScore'] as const;
+const shelfAddressOrders = [...shelfOrders, 'personalScore', 'priority'] as const;
 export type ShelfSort = { orderBy: (typeof shelfAddressOrders)[number]; direction: (typeof shelfDirections)[number] };
 
 /** Only the historic states with an adopted date default differ; every other exact profile state uses activity. */
@@ -61,7 +61,7 @@ export function shelfSort(search: Pick<ShelfSearch, 'state' | 'orderBy' | 'direc
     orderBy:
       search.orderBy ??
       (search.state === 'planned' ? 'createdAt' : search.state === 'completed' ? 'finishedAt' : 'lastActivity'),
-    direction: search.direction ?? 'desc',
+    direction: search.direction ?? (search.orderBy === 'priority' ? 'asc' : 'desc'),
   };
 }
 

@@ -221,7 +221,7 @@ export function PersonalLibraryPage({
             {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
           </p>
         ) : null}
-        {page.readState === 'score-unavailable' ? (
+        {page.readState === 'score-unavailable' || page.readState === 'priority-unavailable' ? (
           <ShelfScoreUnavailable locale={locale} view={firstPage} />
         ) : page.readState ? (
           <div className="flex flex-col items-start gap-3">
