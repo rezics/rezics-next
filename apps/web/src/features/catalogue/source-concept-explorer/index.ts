@@ -88,8 +88,7 @@ export function conceptWorksAdmission(release: Definitions, current: boolean): C
         values.push(type);
         propertyTypes.set(property, values);
       }
-  if (!types.length || !propertyTypes.size)
-    return { state: 'unsupported', types: [], properties: [], metadata: null };
+  if (!types.length || !propertyTypes.size) return { state: 'unsupported', types: [], properties: [], metadata: null };
 
   const typeDefinitions = Object.fromEntries(types);
   const propertyIds = new Set<string>();

@@ -23,14 +23,17 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
     if (role !== undefined && (typeof role !== 'string' || role.length > 128)) invalid = true;
     if (returnTo !== undefined && !originatingReturn(returnTo)) invalid = true;
     if (pin !== undefined && (typeof pin !== 'string' || pin.length > 128)) throw notFound();
-    if (property !== undefined && (typeof property !== 'string' || property.length < 1 || property.length > 128)) invalid = true;
+    if (property !== undefined && (typeof property !== 'string' || property.length < 1 || property.length > 128))
+      invalid = true;
     if (scheme !== undefined && (typeof scheme !== 'string' || !/^[0-9a-f-]{36}$/i.test(scheme))) invalid = true;
     if (type !== undefined && (typeof type !== 'string' || type.length < 1 || type.length > 128)) invalid = true;
     if (children !== undefined && children !== 'true' && children !== true) invalid = true;
     if (spoiler !== undefined && spoiler !== '0' && spoiler !== '1' && spoiler !== '2') invalid = true;
     if (condition !== undefined && (typeof condition !== 'string' || condition.length > 16_384)) invalid = true;
-    if (tagQualifiers !== undefined && (typeof tagQualifiers !== 'string' || tagQualifiers.length > 2048)) invalid = true;
-    if (cursor !== undefined && (typeof cursor !== 'string' || new TextEncoder().encode(cursor).byteLength > 4096)) invalid = true;
+    if (tagQualifiers !== undefined && (typeof tagQualifiers !== 'string' || tagQualifiers.length > 2048))
+      invalid = true;
+    if (cursor !== undefined && (typeof cursor !== 'string' || new TextEncoder().encode(cursor).byteLength > 4096))
+      invalid = true;
     return {
       role: typeof role === 'string' && role.length <= 128 ? role : undefined,
       returnTo: originatingReturn(returnTo),
@@ -54,7 +57,20 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
 
 function ConceptsRoute() {
   const { id } = Route.useParams();
-  const { role, returnTo, pinUnsupported, property, scheme, type, includeChildren, spoilerThreshold, conditionText, tagQualifiersText, cursor, invalid } = Route.useSearch();
+  const {
+    role,
+    returnTo,
+    pinUnsupported,
+    property,
+    scheme,
+    type,
+    includeChildren,
+    spoilerThreshold,
+    conditionText,
+    tagQualifiersText,
+    cursor,
+    invalid,
+  } = Route.useSearch();
   const navigate = Route.useNavigate();
   const onWorksChange = (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => {
     void navigate({
@@ -65,7 +81,14 @@ function ConceptsRoute() {
         const retainedTagQualifiers = typeof next.tagQualifiersText === 'string' ? next.tagQualifiersText : undefined;
         const retainedChildren = next.includeChildren === true;
         const retainedSpoiler = typeof next.spoilerThreshold === 'number' ? next.spoilerThreshold : 0;
-        for (const key of ['conditionText', 'tagQualifiersText', 'includeChildren', 'spoilerThreshold', 'invalid', 'pinUnsupported'])
+        for (const key of [
+          'conditionText',
+          'tagQualifiersText',
+          'includeChildren',
+          'spoilerThreshold',
+          'invalid',
+          'pinUnsupported',
+        ])
           delete next[key];
         const set = (key: string, value: string | undefined) => {
           if (value === undefined || value === '') delete next[key];
@@ -75,7 +98,8 @@ function ConceptsRoute() {
         if ('scheme' in patch) set('scheme', patch.scheme);
         if ('type' in patch) set('type', patch.type);
         if ('includeChildren' in patch) set('children', patch.includeChildren ? 'true' : undefined);
-        if ('spoilerThreshold' in patch) set('spoiler', patch.spoilerThreshold ? String(patch.spoilerThreshold) : undefined);
+        if ('spoilerThreshold' in patch)
+          set('spoiler', patch.spoilerThreshold ? String(patch.spoilerThreshold) : undefined);
         else if (retainedSpoiler) set('spoiler', String(retainedSpoiler));
         if (!('includeChildren' in patch) && retainedChildren) set('children', 'true');
         if ('condition' in patch) set('condition', patch.condition ? JSON.stringify(patch.condition) : undefined);
@@ -95,7 +119,17 @@ function ConceptsRoute() {
       role={role}
       returnTo={returnTo}
       pinUnsupported={pinUnsupported}
-      worksRoute={{ property, scheme, type, includeChildren, spoilerThreshold, conditionText, tagQualifiersText, cursor, invalid }}
+      worksRoute={{
+        property,
+        scheme,
+        type,
+        includeChildren,
+        spoilerThreshold,
+        conditionText,
+        tagQualifiersText,
+        cursor,
+        invalid,
+      }}
       onWorksChange={onWorksChange}
     />
   );

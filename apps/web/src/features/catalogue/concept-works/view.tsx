@@ -93,15 +93,16 @@ function routeHref(id: string, label: string, locale: string, route: ConceptWork
   return `${base}${search.size ? `?${search}` : ''}`;
 }
 
-function asDiscoveryState(value: DiscoveryState | { status: 'unsupported' | 'unavailable' | 'denied' }): DiscoveryState {
+function asDiscoveryState(
+  value: DiscoveryState | { status: 'unsupported' | 'unavailable' | 'denied' },
+): DiscoveryState {
   return value;
 }
 
 function privatePageWithinLimit(result: Awaited<ReturnType<typeof readDiscoveryPersonalPage>>) {
   const state = boundedConceptWorksState(result.state);
   try {
-    if (state === result.state && new TextEncoder().encode(JSON.stringify(result)).byteLength <= 65_536)
-      return result;
+    if (state === result.state && new TextEncoder().encode(JSON.stringify(result)).byteLength <= 65_536) return result;
   } catch {
     // Strip viewer material below while retaining any independently bounded public cards.
   }
@@ -112,7 +113,15 @@ function privatePageWithinLimit(result: Awaited<ReturnType<typeof readDiscoveryP
   };
 }
 
-function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKey, selection }: Props & {
+function ConceptWorksVisit({
+  read,
+  locale,
+  route,
+  onChange,
+  request,
+  selectionKey,
+  selection,
+}: Props & {
   request: DiscoveryRequest | undefined;
   selectionKey: string;
   selection: ConceptWorksSelection | undefined;
@@ -150,10 +159,7 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
     };
   }, [signedOut, requestKey, retryNumber, locale, selection]);
 
-  const privateSource = useMemo<DiscoveryState>(
-    () => ({ status: 'loading' }),
-    [selectionKey, requestKey, retryNumber],
-  );
+  const privateSource = useMemo<DiscoveryState>(() => ({ status: 'loading' }), [selectionKey, requestKey, retryNumber]);
   const personal = useDiscoveryPersonalResults({
     source: signedOut ? publicState : privateSource,
     request,
@@ -162,21 +168,18 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
     enabled: session.state === 'signed-in',
     read: async (options) => privatePageWithinLimit(await readDiscoveryPersonalPage(options)),
   });
-  const current = signedOut ? publicState : session.state === 'signed-in' ? personal.state ?? loading : loading;
+  const current = signedOut ? publicState : session.state === 'signed-in' ? (personal.state ?? loading) : loading;
 
   useEffect(() => {
     if (!signedOut && current.status === 'ready') setLastReady(publicConceptWorksState(current));
   }, [signedOut, current]);
 
   const continuationFailure =
-    !!cursor &&
-    (current.status === 'unavailable' || current.status === 'closed') &&
-    lastReady?.status === 'ready';
+    !!cursor && (current.status === 'unavailable' || current.status === 'closed') && lastReady?.status === 'ready';
   const source = continuationFailure ? lastReady! : current;
   const stalePublic = continuationFailure ? publicConceptWorksState(source) : source;
   const exactEmpty = conceptWorksExactEmpty(source);
-  const partialEmpty =
-    source.status === 'ready' && source.page.hits.length === 0 && !exactEmpty;
+  const partialEmpty = source.status === 'ready' && source.page.hits.length === 0 && !exactEmpty;
   const display: DiscoveryState = partialEmpty
     ? { status: source.page.freshness?.state === 'unavailable' ? 'unavailable' : 'preparing' }
     : stalePublic;
@@ -188,7 +191,11 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
   const restartHref = routeHref(read.public.subject.id, title, locale, route, false);
 
   return (
-    <section className="space-y-4" aria-labelledby="concept-tagged-works-heading" aria-busy={display.status === 'loading'}>
+    <section
+      className="space-y-4"
+      aria-labelledby="concept-tagged-works-heading"
+      aria-busy={display.status === 'loading'}
+    >
       <h2 id="concept-tagged-works-heading" className="font-sans text-xl font-semibold">
         {m.concept_tagged_works_title({}, options)}
       </h2>
@@ -197,9 +204,19 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
           <FieldLabel htmlFor="concept-work-property">{m.concept_tagged_works_property({}, options)}</FieldLabel>
           <NativeSelect
             id="concept-work-property"
-            value={route.property ?? (read.requestedRole && read.works?.properties.some((entry) => entry.id === read.requestedRole) ? read.requestedRole : '')}
+            value={
+              route.property ??
+              (read.requestedRole && read.works?.properties.some((entry) => entry.id === read.requestedRole)
+                ? read.requestedRole
+                : '')
+            }
             onChange={(event) =>
-              onChange?.({ property: event.currentTarget.value || undefined, type: undefined, cursor: undefined, tagQualifiersText: undefined })
+              onChange?.({
+                property: event.currentTarget.value || undefined,
+                type: undefined,
+                cursor: undefined,
+                tagQualifiersText: undefined,
+              })
             }
           >
             <NativeSelectOption value="">{m.concept_tagged_works_choose({}, options)}</NativeSelectOption>
@@ -241,7 +258,10 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
               read.works.types
                 .filter((type) => {
                   const propertyId = route.property ?? read.requestedRole;
-                  return !propertyId || read.works?.properties.find((entry) => entry.id === propertyId)?.types.includes(type.id);
+                  return (
+                    !propertyId ||
+                    read.works?.properties.find((entry) => entry.id === propertyId)?.types.includes(type.id)
+                  );
                 })
                 .map((type) => (
                   <NativeSelectOption key={type.id} value={type.id}>
@@ -255,7 +275,9 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
           <NativeSelect
             id="concept-work-spoiler"
             value={String(route.spoilerThreshold ?? 0)}
-            onChange={(event) => onChange?.({ spoilerThreshold: Number(event.currentTarget.value) as 0 | 1 | 2, cursor: undefined })}
+            onChange={(event) =>
+              onChange?.({ spoilerThreshold: Number(event.currentTarget.value) as 0 | 1 | 2, cursor: undefined })
+            }
           >
             <NativeSelectOption value="0">{m.character_person_threshold_0({}, options)}</NativeSelectOption>
             <NativeSelectOption value="1">{m.character_person_threshold_1({}, options)}</NativeSelectOption>
@@ -291,7 +313,10 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
       {read.works?.state !== 'available' ? (
         <div className="space-y-2">
           <p role="status">{m.discovery_unsupported({}, options)}</p>
-          <a className={buttonVariants({ variant: 'outline' })} href={`${catalogueEntries.facts({ id: read.public.subject.id, label: title, locale }).href}${route.returnTo ? `?${new URLSearchParams({ returnTo: route.returnTo })}` : ''}`}>
+          <a
+            className={buttonVariants({ variant: 'outline' })}
+            href={`${catalogueEntries.facts({ id: read.public.subject.id, label: title, locale }).href}${route.returnTo ? `?${new URLSearchParams({ returnTo: route.returnTo })}` : ''}`}
+          >
             {m.concept_tagged_works_source({}, options)}
           </a>
         </div>
@@ -318,9 +343,7 @@ function ConceptWorksVisit({ read, locale, route, onChange, request, selectionKe
               </Button>
             </div>
           )}
-          {partialEmpty && (
-            <p role="status">{m.concept_tagged_works_lagging({}, options)}</p>
-          )}
+          {partialEmpty && <p role="status">{m.concept_tagged_works_lagging({}, options)}</p>}
           {source.status === 'ready' && source.page.hits.length > 0 && source.page.freshness?.state !== 'current' && (
             <p role="status">{m.concept_tagged_works_lagging({}, options)}</p>
           )}
@@ -357,11 +380,10 @@ function roleAvailableForRoute(read: Extract<ConceptRead, { ok: true }>, route: 
 export function ConceptTaggedWorks(props: Props) {
   const session = useSession();
   const admission = props.read.works;
-  const role = props.route.property ?? (props.read.requestedRole ?? undefined);
+  const role = props.route.property ?? props.read.requestedRole ?? undefined;
   const roleAvailable = admission?.state === 'available' && admission.properties.some((entry) => entry.id === role);
   const schemeOptions = props.read.schemes.filter((scheme) => scheme.readable && scheme.conceptPage);
-  const uniqueScheme =
-    props.read.schemes.length === 1 && schemeOptions.length === 1 ? schemeOptions[0] : undefined;
+  const uniqueScheme = props.read.schemes.length === 1 && schemeOptions.length === 1 ? schemeOptions[0] : undefined;
   const scheme = props.route.scheme ?? uniqueScheme?.id;
   useEffect(() => {
     if (uniqueScheme && !props.route.scheme)
@@ -381,14 +403,37 @@ export function ConceptTaggedWorks(props: Props) {
       ...(condition ? { condition } : {}),
       ...(props.route.cursor ? { cursor: props.route.cursor } : {}),
     }),
-    [props.read.public.subject.id, roleAvailable, role, scheme, props.route.type, props.route.includeChildren, props.route.spoilerThreshold, qualifiers, condition, props.route.cursor],
+    [
+      props.read.public.subject.id,
+      roleAvailable,
+      role,
+      scheme,
+      props.route.type,
+      props.route.includeChildren,
+      props.route.spoilerThreshold,
+      qualifiers,
+      condition,
+      props.route.cursor,
+    ],
   );
   const request = useMemo(
     () =>
-      props.route.invalid || (!!props.route.conditionText && !condition) || (!!props.route.tagQualifiersText && !qualifiers)
+      props.route.invalid ||
+      (!!props.route.conditionText && !condition) ||
+      (!!props.route.tagQualifiersText && !qualifiers)
         ? undefined
         : conceptWorksRequest(search, admission, props.read.schemes, props.locale),
-    [props.route.invalid, props.route.conditionText, props.route.tagQualifiersText, condition, qualifiers, search, admission, props.read.schemes, props.locale],
+    [
+      props.route.invalid,
+      props.route.conditionText,
+      props.route.tagQualifiersText,
+      condition,
+      qualifiers,
+      search,
+      admission,
+      props.read.schemes,
+      props.locale,
+    ],
   );
   const selectionKey = JSON.stringify([
     props.read.public.subject.id,

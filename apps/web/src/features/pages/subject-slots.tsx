@@ -153,7 +153,9 @@ export function SubjectConceptTags({
         spoilerLevel(statement) > spoilerThreshold
       )
         return [];
-      const hasSpoilerQualifier = statement.qualifiers.some((qualifier) => qualifier.property.id === 'rezics:spoilerLevel');
+      const hasSpoilerQualifier = statement.qualifiers.some(
+        (qualifier) => qualifier.property.id === 'rezics:spoilerLevel',
+      );
       const qualifiers = statement.qualifiers.flatMap((qualifier) => {
         if (qualifier.property.id !== 'rezics:spoilerLevel') return [];
         const level = readNativeSpoilerLevel(qualifier.value.content);

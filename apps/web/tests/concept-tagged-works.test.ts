@@ -21,7 +21,8 @@ const admission = conceptWorksAdmission(recording.release, true);
 const schemes = [{ id: schemeId, label: 'Genre', lang: 'en', readable: true, conceptPage: true }];
 
 function conceptLeaf(filter: FilterDocument): Extract<FilterDocument, { statement: unknown }> | undefined {
-  if ('statement' in filter) return filter.statement.concept ? (filter as Extract<FilterDocument, { statement: unknown }>) : undefined;
+  if ('statement' in filter)
+    return filter.statement.concept ? (filter as Extract<FilterDocument, { statement: unknown }>) : undefined;
   if ('and' in filter || 'or' in filter) {
     for (const child of 'and' in filter ? filter.and : filter.or) {
       const found = conceptLeaf(child);
@@ -102,7 +103,9 @@ test('a disclosed work tag opens the mounted Concept host with its released role
 test('builds one admitted Concept statement with exact role, scheme, descendants, spoiler qualifier, type and Boolean conditions', () => {
   expect(admission.state).toBe('available');
   if (admission.state !== 'available') return;
-  expect(admission.properties.some((property) => property.id === 'schema:genre' && property.types.includes('schema:Book'))).toBe(true);
+  expect(
+    admission.properties.some((property) => property.id === 'schema:genre' && property.types.includes('schema:Book')),
+  ).toBe(true);
 
   const request = conceptWorksRequest(
     {
@@ -148,8 +151,12 @@ test('builds one admitted Concept statement with exact role, scheme, descendants
   );
   const leaf = descendants?.filter ? conceptLeaf(descendants.filter as FilterDocument) : undefined;
   expect(leaf?.statement.concept).toEqual({ scheme: schemeId, includeChildren: true });
-  expect(conceptWorksRequest({ conceptId, property: 'schema:genre', scheme: schemeId }, admission, [], 'en')).toBeUndefined();
-  expect(conceptWorksRequest({ conceptId, property: 'schema:unsupported', scheme: schemeId }, admission, schemes, 'en')).toBeUndefined();
+  expect(
+    conceptWorksRequest({ conceptId, property: 'schema:genre', scheme: schemeId }, admission, [], 'en'),
+  ).toBeUndefined();
+  expect(
+    conceptWorksRequest({ conceptId, property: 'schema:unsupported', scheme: schemeId }, admission, schemes, 'en'),
+  ).toBeUndefined();
 });
 
 test('retains at most 24 rows and issues one bounded Search dispatch without detail reads', async () => {

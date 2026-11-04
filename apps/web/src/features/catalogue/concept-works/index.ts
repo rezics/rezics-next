@@ -71,11 +71,7 @@ export function conceptWorksRequest(
   ];
   if (selection.condition) fixed.push(selection.condition);
   const condition: FilterDocument = fixed.length === 1 ? fixed[0]! : { and: fixed };
-  if (
-    leafCount(condition) + 1 > FILTER_LIMITS.leaves ||
-    !conditionTreeAdmission(admission.metadata)(condition)
-  )
-    return;
+  if (leafCount(condition) + 1 > FILTER_LIMITS.leaves || !conditionTreeAdmission(admission.metadata)(condition)) return;
 
   const state: SearchLoaderDeps = {
     query: '',
@@ -181,10 +177,7 @@ export function publicConceptWorksState(state: DiscoveryState): DiscoveryState {
 }
 
 /** Use the installed Search decoder and its one bounded cursor restart; never reinterpret refusal as empty. */
-export async function readConceptWorksPage(
-  request: DiscoveryRequest,
-  send: DiscoverySender,
-): Promise<DiscoveryState> {
+export async function readConceptWorksPage(request: DiscoveryRequest, send: DiscoverySender): Promise<DiscoveryState> {
   if (
     request.representation !== 'discovery-v1' ||
     request.limit !== conceptWorksLimit ||
