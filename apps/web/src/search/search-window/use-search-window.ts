@@ -77,7 +77,7 @@ export function useSearchWindow({
       ...visit.current,
       cursor,
       attemptedFrom:
-        transition?.request === request && transition.to === cursor ? visit.current.attemptedFrom : undefined,
+        transition?.request === request && transition.to === cursor ? transition.from : undefined,
       history: transition?.request === request && transition.to === cursor ? visit.current.history : persisted(),
     };
     if (transition && transition.to !== cursor) {
