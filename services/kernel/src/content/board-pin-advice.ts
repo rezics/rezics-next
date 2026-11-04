@@ -1,5 +1,6 @@
 import { accessCheck, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import { readPartitions } from '../partition/partition.ts';
 import { ProblemError } from '../http/problem.ts';
 import { MAX_BOARD_PINS, readBoardPinRevision, readBoardPins } from './board-projection.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
@@ -44,6 +45,7 @@ export type BoardPinAdviceObservation = Readonly<{
   pinRevision: string;
   pinIds: readonly string[];
   management: boolean;
+  sourcesCurrent: boolean;
   sources: readonly Source[];
   epochs: ReadonlyMap<number, number>;
 }>;
@@ -92,6 +94,8 @@ export function projectBoardPinAdvice(
   if (before.sources.length !== references.length || after.sources.length !== references.length)
     throw new ContentNotFoundError();
   if (
+    !before.sourcesCurrent ||
+    !after.sourcesCurrent ||
     before.boardId !== after.boardId ||
     before.boardWitness !== after.boardWitness ||
     before.pinRevision !== after.pinRevision ||
@@ -171,7 +175,7 @@ export async function readSelectedBoardPinAdvice(
   const selected = normalizeBoardPinAdviceSelection(boardId, input.selected);
   if (input.pinRevision !== undefined && !revision.test(input.pinRevision)) throw new ProblemError('invalid_request');
   const expectedRevision = input.pinRevision;
-  const snapshot = async (baseline?: { realmId: string | null }) => {
+  const snapshot = async (baseline?: { realmId: string | null }, sourceAnchors: readonly AnchoredPosition[] = []) => {
     const decisions = await prepareBoardPageDecisions(dependencies, context);
     const curator = baseline
       ? await accessCheck(
@@ -182,17 +186,27 @@ export async function readSelectedBoardPinAdvice(
           { pool: dependencies.pool, deadline: context.deadline },
         )
       : null;
-    const observed = await readBoardPageCandidateSnapshot(
-      dependencies,
-      boardId,
-      context,
-      decisions,
-      async (client) => ({
+    const observed = await readBoardPageCandidateSnapshot(dependencies, boardId, context, decisions, async (client) => {
+      // Foreign Access preparation must not bless a source changed since its
+      // final disclosure. Fence the exact native homes in this same snapshot.
+      const homes = [...new Set(sourceAnchors.map((anchor) => anchor.partition.partitionNo))];
+      const current = homes.length ? await readPartitions(client, homes) : [];
+      const byHome = new Map(current.map((partition) => [partition.partitionNo, partition]));
+      const sourcesCurrent = sourceAnchors.every((anchor) => {
+        const partition = byHome.get(anchor.partition.partitionNo);
+        return (
+          partition?.writeState !== 'moved' &&
+          partition?.epoch === anchor.epoch &&
+          partition.position === anchor.position
+        );
+      });
+      return {
         pinRevision: await readBoardPinRevision(client, boardId),
         pinIds: baseline ? await readBoardPins(client, boardId) : [],
         management: curator ? await curator(client) : false,
-      }),
-    );
+        sourcesCurrent,
+      };
+    });
     if (!observed || observed.candidate.pinRevision === null) throw new ContentNotFoundError();
     return { ...observed, decisions };
   };
@@ -231,7 +245,7 @@ export async function readSelectedBoardPinAdvice(
   if (!initial.parentAllowed || !final.parentAllowed) throw new ContentNotFoundError();
   // Prepare fresh authority only after all selected source/disclosure work has released.
   // The grant result and pin generation/state are evaluated in the same final native snapshot.
-  const after = await snapshot(before.board);
+  const after = await snapshot(before.board, final.anchors);
   const anchors = [
     parent.anchor.anchor,
     before.anchor.anchor,
@@ -245,6 +259,7 @@ export async function readSelectedBoardPinAdvice(
     pinRevision: board.candidate.pinRevision!,
     pinIds: board.candidate.pinIds,
     management: board.candidate.management,
+    sourcesCurrent: board.candidate.sourcesCurrent,
     sources: source.sources,
     epochs: epochs([board.anchor.anchor, ...source.anchors]),
   });

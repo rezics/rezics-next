@@ -15,6 +15,7 @@ const observation = (): BoardPinAdviceObservation => ({
   pinRevision: '4',
   pinIds: [],
   management: true,
+  sourcesCurrent: true,
   sources: [{ ...selection[0]!, witness: 'original-thread' }],
   epochs: new Map([[1, 1]]),
 });
@@ -60,6 +61,7 @@ test('only current native curation advice permits a selected pin, even when othe
 test('a changed pin generation, source, parent or home cannot refresh old selected authority', () => {
   const before = observation();
   for (const after of [
+    { ...before, sourcesCurrent: false }, // Source changed during final foreign preparation.
     { ...before, pinRevision: '6' }, // Includes pin/unpin ABA.
     { ...before, boardWitness: 'another-parent' },
     { ...before, sources: [{ ...selection[0]!, witness: 'new-source' }] },
