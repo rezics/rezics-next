@@ -91,6 +91,8 @@ The same-origin page referrer binds server-function summary provenance to its so
 
 Decision: first-use guidance requires an exhausted, ready, unfiltered Entry page and a current complete summary with
 `all.total = 0`; otherwise an empty page describes only that page. Summary refresh does not restart row commands.
+Decision: Group registered provider imports under one localized first-use region, gated by `library_entry.put` admission.
+Only signed-in navigation contributions with that operation supply usable import links and their routes and labels.
 
 `GET /v1/libraryShelfTypes?limit=&cursor=` returns `{types: [{type, count}], next}` in stable private UUID order
 (the UUID is not returned). Counts are the account's entries of the type in any state. Limit 1 to 100, default 20.

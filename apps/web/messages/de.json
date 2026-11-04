@@ -8480,6 +8480,8 @@
   "library_summary_stale": "Deine Bibliothek hat sich geändert. Aktualisiere die Zahlen.",
   "library_summary_unavailable": "Bibliothekszahlen sind nicht verfügbar. Einträge können weiterhin genutzt werden.",
   "library_summary_retry": "Zahlen aktualisieren",
+  "library_summary_first_use_guidance": "Finde Werke zum Hinzufügen, importiere eine vorhandene Liste von einem anderen Dienst oder organisiere Einträge mit Labels und Sammlungen.",
+  "library_summary_first_use_imports": "Aus einem anderen Dienst importieren",
   "concept_explore_original_role": "Ursprüngliche Quellrolle",
   "concept_explore_role_evidence": "Unbekannte Quellrolle: unverändert übernommen; sie erteilt keine Konzept- oder Korrekturberechtigung.",
   "concept_explore_scheme_withheld": "Schema-Ziel nicht offengelegt",

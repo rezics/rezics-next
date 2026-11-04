@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode } from 'react';
+import { act, StrictMode, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from '@tanstack/react-router';
@@ -13,11 +13,18 @@ import { locales, getLocale, setLocale } from '../src/paraglide/runtime.js';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+let admittedOperations = new Set<string>();
+mock.module(Bun.resolveSync('../src/kernel/exposure', import.meta.dir), () => ({
+  Exposure: ({ operation, children }: { operation: string; children: ReactNode }) =>
+    admittedOperations.has(operation) ? children : null,
+}));
 afterAll(() => mock.restore());
 const reads = await import('../src/library/shelf-summary-read');
 const { useShelfSummaryCurrent } = await import('../src/library/shelf-summary-current');
-const { ShelfSummaryNavigation, ShelfSummaryCount, shelfSummaryFirstUse } =
+const { ShelfSummaryNavigation, ShelfSummaryCount, ShelfSummaryFirstUseLinks, shelfSummaryFirstUse } =
   await import('../src/library/shelf-summary-view');
+const { libraryNavigation } = await import('../src/library/navigation');
+const messages = await import('../src/paraglide/messages.js');
 const binding = { subject: 'owner', type: null, locale: 'en', source: 'https://site.test/en/library' };
 function summary(n = 0): ShelfSummary {
   return {
@@ -94,15 +101,21 @@ test('mixed account, exact Type, locale, source and credential observations neve
   for (const page of [
     { ...rows, readState: 'preparing' as const },
     { ...rows, type: 'schema:Book' },
+    { ...rows, state: 'planned' as const },
     { ...rows, next: 'later' },
+    { ...rows, signedIn: false as const },
   ])
     expect(shelfSummaryFirstUse(response().page, page)).toBe(false);
-  expect(shelfSummaryFirstUse({ state: 'unavailable' }, rows)).toBe(false);
+  expect(shelfSummaryFirstUse(response().page, rows, 'later')).toBe(false);
+  for (const state of ['preparing', 'stale', 'unavailable'] as const)
+    expect(shelfSummaryFirstUse({ state }, rows)).toBe(false);
   expect(shelfSummaryFirstUse(response(2).page, rows)).toBe(false);
 });
 
-test('all eight locales render localized counts and native links preserving Type, sort and display, clearing cursors', () => {
+test('eight locales render first-use and count navigation with registered destinations and admission', () => {
   const before = getLocale();
+  const previousAdmission = admittedOperations;
+  admittedOperations = new Set(['library_entry.put', 'library_label.list', 'collection.list']);
   const client = new QueryClient();
   try {
     for (const locale of locales) {
@@ -124,6 +137,7 @@ test('all eight locales render localized counts and native links preserving Type
               size: 'l',
             }}
           />
+          <ShelfSummaryFirstUseLinks locale={locale} />
         </QueryClientProvider>,
       );
       expect(html).toContain(new Intl.NumberFormat(locale).format(4096));
@@ -136,9 +150,23 @@ test('all eight locales render localized counts and native links preserving Type
       expect(html).not.toContain('cursor=');
       expect(html).toContain('aria-current="page"');
       expect(html).toContain('min-h-11 min-w-11');
+      expect(html).toContain(messages.library_summary_first_use_guidance({}, { locale }));
+      const imports = libraryNavigation.filter((destination) => destination.id.startsWith('library.import-'));
+      expect(imports).toHaveLength(4);
+      for (const destination of imports) {
+        expect(html).toContain(`href="/${locale}${destination.href}"`);
+        expect(html).toContain(destination.label({ locale }));
+      }
     }
+    admittedOperations = new Set(['library_label.list', 'collection.list']);
+    const withoutImportAdmission = renderToStaticMarkup(<ShelfSummaryFirstUseLinks locale="en" />);
+    expect(withoutImportAdmission).toContain('/en/search');
+    expect(withoutImportAdmission).toContain('/en/library/labels');
+    expect(withoutImportAdmission).toContain('/en/library/collections');
+    expect(withoutImportAdmission).not.toContain('/library/import-');
   } finally {
     setLocale(before, { reload: false });
+    admittedOperations = previousAdmission;
     client.clear();
   }
 });

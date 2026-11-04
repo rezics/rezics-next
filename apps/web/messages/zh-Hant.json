@@ -8480,6 +8480,8 @@
   "library_summary_stale": "書庫已變更，請重新整理數量。",
   "library_summary_unavailable": "無法取得數量，仍可使用條目。",
   "library_summary_retry": "重新整理數量",
+  "library_summary_first_use_guidance": "瀏覽並新增作品、從其他服務匯入現有清單，或用標籤和合輯整理條目。",
+  "library_summary_first_use_imports": "從其他服務匯入",
   "concept_explore_original_role": "原始來源角色",
   "concept_explore_role_evidence": "未知來源角色：依收到的原值保留，不授予概念認可或訂正權限。",
   "concept_explore_scheme_withheld": "方案端點未公開",
