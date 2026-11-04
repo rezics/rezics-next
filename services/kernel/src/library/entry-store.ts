@@ -6,6 +6,12 @@ import copyDelete from './entry-store-copy-delete.sql';
 import copyInsert from './entry-store-copy-insert.sql';
 import copyPage from './entry-store-copy-page.sql';
 import copySubjectPage from './entry-store-copy-subject-page.sql';
+import copyKindPage from './copies-kind-page.sql';
+import copyStatusPage from './copies-status-page.sql';
+import copyKindStatusPage from './copies-kind-status-page.sql';
+import copySubjectKindPage from './copies-subject-kind-page.sql';
+import copySubjectStatusPage from './copies-subject-status-page.sql';
+import copySubjectKindStatusPage from './copies-subject-kind-status-page.sql';
 import copyRead from './entry-store-copy-read.sql';
 import copyUpdate from './entry-store-copy-update.sql';
 import entryDelete from './entry-store-entry-delete.sql';
@@ -328,6 +334,8 @@ export async function pageCopies(
   accountId: string,
   page: CopyPage,
   subjectId: string | null = null,
+  kind: string | null = null,
+  status: string | null = null,
 ): Promise<Copy[]> {
   assertLimit(page.limit);
   const parameters = {
@@ -337,10 +345,22 @@ export async function pageCopies(
     after_copy_id: page.after?.copyId ?? null,
     limit: Math.min(MAX_LIBRARY_PAGE_SIZE, page.limit),
   };
-  const rows =
-    subjectId === null
-      ? await copyPage.run(queryClient(client), parameters)
-      : await copySubjectPage.run(queryClient(client), { ...parameters, subject_id: subjectId });
+  const query = queryClient(client);
+  const rows = subjectId !== null
+    ? kind !== null && status !== null
+      ? await copySubjectKindStatusPage.run(query, { ...parameters, subject_id: subjectId, kind, status })
+      : kind !== null
+        ? await copySubjectKindPage.run(query, { ...parameters, subject_id: subjectId, kind })
+        : status !== null
+          ? await copySubjectStatusPage.run(query, { ...parameters, subject_id: subjectId, status })
+          : await copySubjectPage.run(query, { ...parameters, subject_id: subjectId })
+    : kind !== null && status !== null
+      ? await copyKindStatusPage.run(query, { ...parameters, kind, status })
+      : kind !== null
+        ? await copyKindPage.run(query, { ...parameters, kind })
+        : status !== null
+          ? await copyStatusPage.run(query, { ...parameters, status })
+          : await copyPage.run(query, parameters);
   if (rows.some((row) => row.libraryProfilePin === null)) {
     await assertPreProfileLibraryRead(client, accountId);
     for (const row of rows) if (row.libraryProfilePin === null) assertStatus(row.status);

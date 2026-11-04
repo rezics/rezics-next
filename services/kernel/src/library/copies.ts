@@ -37,6 +37,7 @@ import { readLibraryProfileSource } from './profile-source.ts';
 import { deadlineClient, within as withinDeadline } from '../access/authenticate.ts';
 import type { CopyPresentation } from './copy-model.ts';
 import { prepareCopyPresentation } from './copy-presentation.ts';
+import { prepareCopyInventory, readCopyInventoryValues } from './copy-inventory.ts';
 import copyDetailRead from './copy-store-read.sql';
 
 const UPDATED_EVENT = 'com.rezics.library.copy.updated.v1';
@@ -70,7 +71,7 @@ type CopyInput = {
   note: string | null;
 };
 type CopyPatch = { revision: number } & Partial<CopyChanges>;
-type PageOptions = { cursor?: string; limit?: number; subjectId?: string };
+type PageOptions = { cursor?: string; limit?: number; subjectId?: string; kind?: string; status?: string };
 
 export class CopyInvalidError extends Error {
   constructor(readonly field: string) {
@@ -244,13 +245,18 @@ export function createCopyCommands(config: Dependencies) {
     return owner;
   }
 
-  async function readOnly<T>(owner: AccountActor, body: (client: PoolClient) => Promise<T>): Promise<T> {
+  async function readOnly<T>(
+    owner: AccountActor,
+    body: (client: CommandTransaction) => Promise<T>,
+    deadline?: number,
+  ): Promise<T> {
     return withConnection(pool, async (client) => {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const bounded = deadline === undefined ? client : deadlineClient(client, deadline);
+      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
-        await admitAccount(client, owner);
-        const result = await body(client);
-        await client.query('COMMIT');
+        await admitAccount(bounded, owner);
+        const result = await body(bounded);
+        await bounded.query('COMMIT');
         return result;
       } catch (error) {
         await client.query('ROLLBACK');
@@ -592,69 +598,103 @@ export function createCopyCommands(config: Dependencies) {
     );
   }
 
-  async function listCopiesWithObservation(actor: Actor, options: PageOptions = {}) {
+  async function listCopiesWithObservation(actor: Actor, options: PageOptions = {}, languages: readonly string[] = []) {
     const owner = requireActor(actor, 'copy:list');
     const filterSubjectId = options.subjectId === undefined ? null : subjectId(options.subjectId);
-    return readOnly(owner, async (client) => {
-      const size = options.limit ?? DEFAULT_LIMIT;
-      if (!Number.isInteger(size) || size < 1 || size > MAX_LIMIT) throw new CopyInvalidError('limit');
-      const accountRoute = requireRoute(owner.accountId);
-      const binding: CursorBinding = {
-        operation: 'copy.list',
-        parameters: { accountId: owner.accountId, subjectId: filterSubjectId },
-      };
-      const partition = await readPartition(client, partitionOf(accountRoute));
-      let after: { createdAt: string; copyId: string } | null = null;
-      if (options.cursor !== undefined) {
-        const cursor = decodeCursor(tokens, binding, options.cursor);
-        const createdAt = cursor.ok ? cursor.after[0] : undefined;
-        const cursorId = cursor.ok ? cursor.after[1] : undefined;
-        if (
-          !cursor.ok ||
-          cursor.after.length !== 2 ||
-          typeof createdAt !== 'string' ||
-          !Number.isFinite(Date.parse(createdAt)) ||
-          typeof cursorId !== 'string' ||
-          routeOf(cursorId) !== accountRoute
-        ) {
-          throw new ProblemError('invalid_cursor');
+    const filterKind = options.kind === undefined ? null : vocabularyValue(options.kind, 'kind');
+    const filterStatus = options.status === undefined ? null : vocabularyValue(options.status, 'status');
+    const size = options.limit ?? DEFAULT_LIMIT;
+    if (!Number.isInteger(size) || size < 1 || size > MAX_LIMIT) throw new CopyInvalidError('limit');
+    const accountRoute = requireRoute(owner.accountId);
+    const binding: CursorBinding = {
+      operation: 'copy.list',
+      parameters: {
+        accountId: owner.accountId,
+        accountLifetime: owner.authnEpoch,
+        clientId: owner.clientId,
+        requestedBy: owner.requestedBy,
+        route: accountRoute,
+        subjectId: filterSubjectId,
+        kind: filterKind,
+        status: filterStatus,
+        order: 'created_at:asc,copy_id:asc',
+        basis: 'library.partition.epoch',
+      },
+    };
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const readPage = () =>
+      readOnly(owner, async (client) => {
+        const partition = await readPartition(client, partitionOf(accountRoute));
+        let after: { createdAt: string; copyId: string } | null = null;
+        if (options.cursor !== undefined) {
+          const cursor = decodeCursor(tokens, binding, options.cursor);
+          const createdAt = cursor.ok ? cursor.after[0] : undefined;
+          const cursorId = cursor.ok ? cursor.after[1] : undefined;
+          if (
+            !cursor.ok ||
+            cursor.after.length !== 2 ||
+            typeof createdAt !== 'string' ||
+            !Number.isFinite(Date.parse(createdAt)) ||
+            typeof cursorId !== 'string' ||
+            routeOf(cursorId) !== accountRoute
+          ) {
+            throw new ProblemError('invalid_cursor');
+          }
+          if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+          after = { createdAt, copyId: cursorId };
         }
-        if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-        after = { createdAt, copyId: cursorId };
-      }
-      const rows = await store.pageCopies(
-        client,
-        accountRoute,
-        owner.accountId,
-        {
-          after,
-          limit: Math.min(MAX_LIMIT, size + 1),
-        },
-        filterSubjectId,
-      );
-      const copies = rows.slice(0, size);
-      const last = copies.at(-1);
-      let more = rows.length > size;
-      if (!more && size === MAX_LIMIT && last) {
-        const probe = await store.pageCopies(
+        const rows = await store.pageCopies(
           client,
           accountRoute,
           owner.accountId,
-          {
-            after: { createdAt: last.createdAt, copyId: last.id },
-            limit: 1,
-          },
+          { after, limit: Math.min(MAX_LIMIT, size + 1) },
           filterSubjectId,
+          filterKind,
+          filterStatus,
         );
-        more = probe.length > 0;
-      }
+        const copies = rows.slice(0, size);
+        const last = copies.at(-1);
+        let more = rows.length > size;
+        if (!more && size === MAX_LIMIT && last) {
+          const probe = await store.pageCopies(
+            client,
+            accountRoute,
+            owner.accountId,
+            { after: { createdAt: last.createdAt, copyId: last.id }, limit: 1 },
+            filterSubjectId,
+            filterKind,
+            filterStatus,
+          );
+          more = probe.length > 0;
+        }
+        const inventoryValues = await readCopyInventoryValues(client, accountRoute, owner.accountId);
+        return {
+          copies,
+          next:
+            more && last && partition
+              ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.createdAt, last.id] })
+              : null,
+          accountEpoch: partition?.epoch ?? null,
+          inventoryValues,
+        };
+      }, deadline);
+
+    return withRequestDeadline(deadline, async () => {
+      const first = await readPage();
+      const filterOptions = await prepareCopyInventory(pool, first.inventoryValues, deadline, languages);
+      const current = await readPage();
+      if (
+        JSON.stringify(first.copies) !== JSON.stringify(current.copies) ||
+        first.next !== current.next ||
+        first.accountEpoch !== current.accountEpoch ||
+        JSON.stringify(first.inventoryValues) !== JSON.stringify(current.inventoryValues)
+      )
+        throw new ProblemError('semantic_not_ready');
       return {
-        copies,
-        next:
-          more && last && partition
-            ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.createdAt, last.id] })
-            : null,
-        accountEpoch: partition?.epoch ?? null,
+        copies: first.copies,
+        next: first.next,
+        accountEpoch: first.accountEpoch,
+        filterOptions,
       };
     });
   }
