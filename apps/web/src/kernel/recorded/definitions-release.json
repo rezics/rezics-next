@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:4942013e3622de4921a2fbb35888bd46e461759c624e7e63cbebd7efbc7ef5f3",
+  "digest": "sha256:60dfcb6002f0d667e770b7f201be9a87ea37d3ec0ede4975ad8958bfa33e3e1d",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -232,6 +232,7 @@
           "schema:author",
           "schema:character",
           "schema:contributor",
+          "schema:creativeWorkStatus",
           "schema:datePublished",
           "schema:director",
           "schema:genre",
@@ -320,6 +321,7 @@
           "rezics:summaryOf",
           "schema:author",
           "schema:contributor",
+          "schema:creativeWorkStatus",
           "schema:datePublished",
           "schema:director",
           "schema:exampleOfWork",
@@ -728,6 +730,7 @@
           "schema:alternateName",
           "schema:author",
           "schema:contributor",
+          "schema:creativeWorkStatus",
           "schema:datePublished",
           "schema:director",
           "schema:exampleOfWork",
@@ -744,6 +747,7 @@
           "schema:sameAs",
           "schema:translator",
           "schema:url",
+          "wdt:P155",
           "wdt:P178",
           "wdt:P2899",
           "wdt:P31",
@@ -1211,6 +1215,7 @@
           "schema:author",
           "schema:character",
           "schema:contributor",
+          "schema:creativeWorkStatus",
           "schema:datePublished",
           "schema:director",
           "schema:gamePlatform",
@@ -1552,6 +1557,7 @@
           "schema:author",
           "schema:contributor",
           "schema:copyrightNotice",
+          "schema:creativeWorkStatus",
           "schema:datePublished",
           "schema:director",
           "schema:exampleOfWork",
@@ -2646,7 +2652,7 @@
           "zh-Hans": "上一项",
           "zh-Hant": "上一項"
         },
-        "targets": ["schema:CreativeWork"],
+        "targets": ["schema:CreativeWork", "wd:Q20631656"],
         "datatype": "wikibase-item",
         "mappings": ["wd:P155"],
         "relation": {
@@ -2665,7 +2671,7 @@
             "zh-Hant": "續作"
           }
         },
-        "qualifiers": [],
+        "qualifiers": ["schema:sameAs"],
         "multivalued": true,
         "descriptions": {
           "de": "Das vorherige Werk oder die vorherige Veröffentlichung, auf die dieses Werk oder diese Veröffentlichung folgt.",
@@ -5841,7 +5847,7 @@
             "zh-Hant": "版本"
           }
         },
-        "qualifiers": ["schema:sameAs", "wdt:P648"],
+        "qualifiers": ["schema:sameAs", "wdt:P31", "wdt:P648"],
         "multivalued": false,
         "descriptions": {
           "de": "Das Werk, das diese Ausgabe oder Veröffentlichung verkörpert; das Werk selbst verknüpfen, kein persönliches Exemplar.",
@@ -7272,6 +7278,50 @@
           "ko": "이 제작 단체가 대체하는 조직입니다. 값은 전신입니다. 단순한 연대 이웃이 아니라 방향이 있는 교체입니다.",
           "zh-Hans": "此制作方所取代的组织。值为前身；这是有方向的更替，不是单纯按时间相邻的邻居。",
           "zh-Hant": "此製作方所取代的組織。值為前身；這是有方向的更替，不是單純按時間相鄰的鄰居。"
+        }
+      },
+      "schema:creativeWorkStatus": {
+        "iri": "http://schema.org/creativeWorkStatus",
+        "labels": {
+          "de": "Status des Werks",
+          "en": "creative work status",
+          "es": "estado de la obra",
+          "fr": "statut de l’œuvre",
+          "ja": "作品の状態",
+          "ko": "작품 상태",
+          "zh-Hans": "作品状态",
+          "zh-Hant": "作品狀態"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "classification",
+          "order": "name",
+          "inverse": "rezics:creativeWorkWithStatus",
+          "inverseLabels": {
+            "de": "Werke mit diesem Status",
+            "en": "Works with this status",
+            "es": "Obras con este estado",
+            "fr": "Œuvres avec ce statut",
+            "ja": "この状態の作品",
+            "ko": "이 상태의 작품",
+            "zh-Hans": "此状态的作品",
+            "zh-Hant": "此狀態的作品"
+          }
+        },
+        "targets": ["skos:Concept"],
+        "descriptions": {
+          "de": "Ein Konzept für Entwicklungs- oder Veröffentlichungsstatus dieses Werks oder dieser Veröffentlichung; Vollständigkeit einer Veröffentlichung für ein Werk steht an der Werkzuordnung.",
+          "en": "A Concept for this work or release development or publication status; completeness of a particular release for a work is a qualifier on the work association.",
+          "es": "Un concepto de estado de desarrollo o publicación de esta obra o edición; la integridad de una edición concreta respecto a la obra es un calificador de esa asociación.",
+          "fr": "Un concept de statut de développement ou de publication de cette œuvre ou de cette parution ; l’intégralité d’une parution pour une œuvre est un qualificatif de cette association.",
+          "ja": "この作品またはリリースの開発・公開状態を表す概念。あるリリースが作品に対して完全かどうかは作品関連の修飾語です。",
+          "ko": "이 작품 또는 릴리스의 개발·공개 상태를 나타내는 개념입니다. 특정 릴리스가 작품에 대해 완전한지는 작품 연관의 한정어입니다.",
+          "zh-Hans": "表示此作品或发行版本开发或出版状态的概念；某一发行版本相对作品是否完整，记录在作品关联的限定上。",
+          "zh-Hant": "表示此作品或發行版本開發或出版狀態的概念；某一發行版本相對作品是否完整，記錄在作品關聯的限定上。"
         }
       }
     },
