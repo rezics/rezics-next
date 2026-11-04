@@ -51,16 +51,21 @@ import {
 import {
   ENTRY_IMPORT_METADATA_LIMITS,
   assertEntryImportMetadataHistorySize,
-  applyEntryImportMetadataCommands,
   entryImportMetadataDigest,
   entryPersonalMetadataDigest,
-  parseEntryImportMetadataSelections,
   type EntryImportMetadataOutcome,
   type EntryImportMetadataProposal,
   type EntryImportMetadataProposals,
   type EntryImportMetadataReview,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
+import {
+  appendListImportMetadataReview,
+  createListImportMetadataCoordinator,
+  mergeListImportMetadataConfirmation,
+  selectListImportMetadataConfirmation,
+} from './list-import-metadata-coordinator.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import {
   describeProgressSources,
   executeProgressAdoption,
@@ -808,59 +813,225 @@ export function createAniListImport(deps: Dependencies) {
       metadata.profileDigest
     );
   }
-  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
-    const account = owner(actor),
-      stored = await load(actor, id, ordinal),
-      review = stored.review;
-    if (
-      !review ||
-      sourceReviewToken.length > 128 ||
-      review.id !== sourceReviewToken ||
-      review.input.skip ||
-      !review.observation?.current?.incarnationId
-    )
-      throw new LibraryConflictError();
-    if (stored.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
-      throw new LibraryConflictError();
-    const profileDigest = await currentMetadataProfileDigest(
-      actor,
-      stored,
-      sourceReviewToken,
-      review.observation.subjectId,
-    );
-    if (!profileDigest) throw new LibraryConflictError();
-    const personal = await personalEntries.readPersonalEntry(actor, review.observation.subjectId),
-      next: EntryImportMetadataReview = {
-        token: randomUUID(),
-        requestDigest: entryImportMetadataDigest({ sourceReviewToken, key }),
-        sourceReviewToken,
-        subjectId: review.observation.subjectId,
-        clientId: account.clientId,
-        requestedBy: account.requestedBy ?? null,
-        annotationRevision: personal.annotationRevision,
-        personalDigest: entryPersonalMetadataDigest(personal),
-        sourceDigest: entryImportMetadataDigest(stored.source.evidence),
-        profileDigest,
-        incarnationId: review.observation.current.incarnationId,
-      };
-    const saved = await save(actor, id, ordinal, 'metadata-review', key, { sourceReviewToken }, (current) => {
+  const metadataCoordinator = createListImportMetadataCoordinator({
+    provider: 'anilist',
+    native: personalEntries,
+    async prepareReview({ actor, id, ordinal, sourceReviewToken, key }) {
+      const account = owner(actor),
+        stored = await load(actor, id, ordinal),
+        review = stored.review;
       if (
-        current.review?.id !== sourceReviewToken ||
-        current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome)
+        !review ||
+        sourceReviewToken.length > 128 ||
+        review.id !== sourceReviewToken ||
+        review.input.skip ||
+        !review.observation?.current?.incarnationId
       )
         throw new LibraryConflictError();
-      const history = [...(current.metadataReviews ?? [])],
-        existing = history.find((item) => item.requestDigest === next.requestDigest);
-      if (existing) return current;
-      if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw new LibraryConflictError();
-      history.push(next);
-      assertEntryImportMetadataHistorySize(history);
-      return { ...current, metadataReviews: history };
-    });
-    const current = await load(actor, id, ordinal),
-      record = current.metadataReviews?.find((item) => item.requestDigest === next.requestDigest);
-    if (!record || saved.value.reviewId !== sourceReviewToken) throw new LibraryConflictError();
-    return { ordinal, reviewToken: record.token };
+      const profileDigest = await currentMetadataProfileDigest(
+        actor,
+        stored,
+        sourceReviewToken,
+        review.observation.subjectId,
+      );
+      if (!profileDigest) throw new LibraryConflictError();
+      const personal = await personalEntries.readPersonalEntry(actor, review.observation.subjectId);
+      return {
+        history: stored.metadataReviews ?? [],
+        requestDigest: entryImportMetadataDigest({ sourceReviewToken, key }),
+        identity: {
+          sourceReviewToken,
+          subjectId: review.observation.subjectId,
+          clientId: account.clientId,
+          requestedBy: account.requestedBy ?? null,
+          annotationRevision: personal.annotationRevision,
+          personalDigest: entryPersonalMetadataDigest(personal),
+          sourceDigest: entryImportMetadataDigest(stored.source.evidence),
+          profileDigest,
+          incarnationId: review.observation.current.incarnationId,
+        },
+      };
+    },
+    async persistReview({ actor, id, ordinal, sourceReviewToken, key }, next) {
+      const saved = await save(actor, id, ordinal, 'metadata-review', key, { sourceReviewToken }, (current) => {
+        if (current.review?.id !== sourceReviewToken) throw new LibraryConflictError();
+        return {
+          ...current,
+          metadataReviews: appendListImportMetadataReview(current.metadataReviews ?? [], next).history,
+        };
+      });
+      const current = await load(actor, id, ordinal),
+        record = current.metadataReviews?.find((item) => item.requestDigest === next.requestDigest);
+      if (!record || saved.value.reviewId !== sourceReviewToken) throw new LibraryConflictError();
+      return { ordinal, reviewToken: record.token };
+    },
+    async loadReview({ actor, id, ordinal }, reviewToken) {
+      const stored = await load(actor, id, ordinal);
+      return stored.metadataReviews?.find((item) => item.token === reviewToken) ?? null;
+    },
+    async readView({ actor, id, ordinal }, reviewToken) {
+      const stored = await load(actor, id, ordinal),
+        metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
+      if (!metadata || !stored.review) throw new LibraryConflictError();
+      const account = owner(actor),
+        personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
+        profileDigest = await currentMetadataProfileDigest(
+          actor,
+          stored,
+          metadata.sourceReviewToken,
+          metadata.subjectId,
+        ),
+        row = stored.source;
+      return {
+        review: metadata,
+        observation: {
+          sourceReviewToken: stored.review.id,
+          subjectId: stored.review.observation?.subjectId ?? null,
+          clientId: account.clientId,
+          requestedBy: account.requestedBy ?? null,
+          sourceDigest: entryImportMetadataDigest(row.evidence),
+          profileDigest,
+          incarnationId: stored.review.observation?.current?.incarnationId ?? null,
+          personal,
+          proposals: anilistMetadataProposals(row),
+          recordId:
+            typeof row.evidence.id === 'number' && Number.isSafeInteger(row.evidence.id) && row.evidence.id > 0
+              ? String(row.evidence.id)
+              : `${id}/${ordinal}`,
+          providerCurrent: profileDigest !== null,
+        },
+      };
+    },
+    async confirm({ actor, id, ordinal }, reviewToken, proposed) {
+      const saved = await save(
+        actor,
+        id,
+        ordinal,
+        'metadata-confirm',
+        `${id}:${ordinal}:${reviewToken}:confirm`,
+        { reviewToken, selectionDigest: proposed.selectionDigest },
+        (current) => {
+          const record = current.metadataReviews?.find((item) => item.token === reviewToken);
+          if (!record || current.review?.id !== record.sourceReviewToken) throw new LibraryConflictError();
+          const confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed),
+            next = {
+              ...current,
+              metadataReviews: current.metadataReviews!.map((item) =>
+                item.token === reviewToken ? { ...item, confirmation } : item,
+              ),
+            };
+          assertEntryImportMetadataHistorySize(next.metadataReviews);
+          return next;
+        },
+      );
+      if (saved.value.reviewId === null) throw new LibraryConflictError();
+    },
+    async persist({ actor, id, ordinal }, token, confirmation) {
+      const stateDigest = entryImportMetadataDigest(confirmation);
+      await save(
+        actor,
+        id,
+        ordinal,
+        'metadata-progress',
+        `${id}:${ordinal}:${token}:progress:${stateDigest}`,
+        { reviewToken: token, stateDigest },
+        (current) => {
+          const record = current.metadataReviews?.find((item) => item.token === token);
+          if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
+            throw new LibraryConflictError();
+          const starting =
+            (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
+            (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
+          if (
+            starting &&
+            (current.review?.id !== record.sourceReviewToken ||
+              entryImportMetadataDigest(current.source.evidence) !== record.sourceDigest)
+          )
+            throw new LibraryConflictError();
+          const merged = mergeListImportMetadataConfirmation(record.confirmation, confirmation),
+            next = {
+              ...current,
+              metadataReviews: current.metadataReviews!.map((item) =>
+                item.token === token ? { ...item, confirmation: merged } : item,
+              ),
+            };
+          assertEntryImportMetadataHistorySize(next.metadataReviews);
+          return next;
+        },
+      );
+    },
+    async isCurrent({ actor, id, ordinal }, metadata) {
+      try {
+        return await metadataCurrent(actor, await load(actor, id, ordinal), metadata);
+      } catch (error) {
+        if (error instanceof LibraryNotFoundError) return false;
+        throw error;
+      }
+    },
+    async isCancelled({ actor, id }) {
+      try {
+        return (await load<Header>(actor, id, -1)).cancelled;
+      } catch (error) {
+        if (error instanceof LibraryNotFoundError) return true;
+        throw error;
+      }
+    },
+    admission: ({ actor, id, ordinal }, metadata): LabelCommandAdmission => ({
+      input: undefined,
+      async prepare() {
+        // Release the local snapshot before observing matching and profile authority.
+        const stored = await load(actor, id, ordinal);
+        if (!(await metadataCurrent(actor, stored, metadata))) throw new LibraryConflictError();
+        return async (tx) => {
+          const account = owner(actor),
+            route = requireRoute(account.accountId),
+            args = [route, account.accountId, id];
+          const header = (
+            await tx.query<{ payload: Header }>(
+              'SELECT payload FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=-1 FOR SHARE',
+              args,
+            )
+          ).rows[0]?.payload;
+          const current = (
+              await tx.query<{ payload: Stored }>(
+                'SELECT payload FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=$4 FOR SHARE',
+                [...args, ordinal],
+              )
+            ).rows[0]?.payload,
+            record = current?.metadataReviews?.find((item) => item.token === metadata.token);
+          if (
+            !header ||
+            header.cancelled ||
+            !current ||
+            current.review?.id !== metadata.sourceReviewToken ||
+            hash(current.review) !== hash(stored.review) ||
+            account.clientId !== metadata.clientId ||
+            (account.requestedBy ?? null) !== metadata.requestedBy ||
+            entryImportMetadataDigest(current.source.evidence) !== metadata.sourceDigest ||
+            !record?.confirmation ||
+            record.subjectId !== metadata.subjectId ||
+            record.profileDigest !== metadata.profileDigest ||
+            record.confirmation.selectionDigest !== metadata.confirmation!.selectionDigest ||
+            (!record.confirmation.annotationStarted && !record.confirmation.provenanceStarted)
+          )
+            throw new LibraryConflictError();
+          const entry = (
+            await tx.query<{ incarnation_id: string; revision: number }>(
+              'SELECT incarnation_id,revision FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE',
+              [route, account.accountId, metadata.subjectId],
+            )
+          ).rows[0];
+          if (
+            entry?.incarnation_id !== metadata.incarnationId ||
+            entry?.revision !== current.review.observation?.current?.revision
+          )
+            throw new LibraryConflictError();
+        };
+      },
+    }),
+  });
+  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
+    return metadataCoordinator.review({ actor, id, ordinal, sourceReviewToken, key });
   }
   async function metadataView(
     actor: Actor,
@@ -868,31 +1039,7 @@ export function createAniListImport(deps: Dependencies) {
     ordinal: number,
     reviewToken: string,
   ): Promise<EntryImportMetadataView> {
-    const stored = await load(actor, id, ordinal),
-      metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
-    if (!metadata || !stored.review) throw new LibraryConflictError();
-    const account = owner(actor),
-      personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
-      current = await metadataCurrent(actor, stored, metadata),
-      unchanged =
-        account.clientId === metadata.clientId &&
-        (account.requestedBy ?? null) === metadata.requestedBy &&
-        entryImportMetadataDigest(stored.source.evidence) === metadata.sourceDigest &&
-        entryPersonalMetadataDigest(personal) === metadata.personalDigest &&
-        personal.annotationRevision === metadata.annotationRevision &&
-        (stored.review.observation?.current?.incarnationId ?? null) === metadata.incarnationId,
-      view: EntryImportMetadataView = {
-        status: current && unchanged ? 'current' : 'stale',
-        reviewToken,
-        sourceReviewToken: metadata.sourceReviewToken,
-        subjectId: metadata.subjectId,
-        personal,
-        proposals: anilistMetadataProposals(stored.source),
-        outcome: metadata.confirmation?.outcome ?? null,
-      };
-    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
-      throw new AniListInputError();
-    return view;
+    return metadataCoordinator.view({ actor, id, ordinal, reviewToken });
   }
   async function applyMetadata(
     actor: Actor,
@@ -902,136 +1049,14 @@ export function createAniListImport(deps: Dependencies) {
     fields: unknown,
     signal?: AbortSignal,
   ): Promise<EntryImportMetadataOutcome> {
-    const selections = parseEntryImportMetadataSelections(fields),
-      selectionDigest = entryImportMetadataDigest(selections);
-    let stored = await load(actor, id, ordinal),
-      metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
-    if (!metadata) return { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
-    if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest)
-      throw new LibraryConflictError();
-    if (metadata.confirmation?.outcome) return metadata.confirmation.outcome;
-    if (!metadata.confirmation) {
-      const confirmation = {
-        fields: selections,
-        selectionDigest,
-        annotationKey: `anilist:${id}:${ordinal}:${reviewToken}:annotations`,
-        provenanceKey: `anilist:${id}:${ordinal}:${reviewToken}:provenance`,
-        annotationStarted: false,
-        provenanceStarted: false,
-      };
-      const saved = await save(
-        actor,
-        id,
-        ordinal,
-        'metadata-confirm',
-        `${id}:${ordinal}:${reviewToken}:confirm`,
-        { reviewToken, selectionDigest },
-        (current) => {
-          const record = current.metadataReviews?.find((item) => item.token === reviewToken);
-          if (!record || current.review?.id !== record.sourceReviewToken) throw new LibraryConflictError();
-          if (record.confirmation) {
-            if (record.confirmation.selectionDigest !== selectionDigest) throw new LibraryConflictError();
-            return current;
-          }
-          const next = {
-            ...current,
-            metadataReviews: current.metadataReviews!.map((item) =>
-              item.token === reviewToken ? { ...item, confirmation } : item,
-            ),
-          };
-          assertEntryImportMetadataHistorySize(next.metadataReviews ?? []);
-          return next;
-        },
-      );
-      if (saved.value.reviewId === null) throw new LibraryConflictError();
-      stored = await load(actor, id, ordinal);
-      metadata = stored.metadataReviews?.find((item) => item.token === reviewToken);
-    }
-    if (!metadata?.confirmation) throw new LibraryConflictError();
-    if (metadata.confirmation.outcome) return metadata.confirmation.outcome;
-    const view = await metadataView(actor, id, ordinal, reviewToken);
-    if (
-      view.status !== 'current' &&
-      !metadata.confirmation.annotationStarted &&
-      !metadata.confirmation.provenanceStarted
-    ) {
-      const outcome: EntryImportMetadataOutcome = {
-        reviewToken,
-        fields: selections.map(({ field }) => ({ field, status: 'stale' })),
-      };
-      metadata.confirmation.outcome = outcome;
-      await persistMetadataConfirmation(actor, id, ordinal, reviewToken, metadata.confirmation);
-      return outcome;
-    }
-    const row = stored.source;
-    const stableRecord =
-      typeof row.evidence.id === 'number' && Number.isSafeInteger(row.evidence.id) && row.evidence.id > 0
-        ? String(row.evidence.id)
-        : `${id}/${ordinal}`;
-    return (
-      await applyEntryImportMetadataCommands({
-        actor,
-        subjectId: metadata.subjectId,
-        provider: 'anilist',
-        recordId: stableRecord,
-        reviewToken,
-        personal: view.personal,
-        proposals: view.proposals,
-        selections,
-        baselineAnnotationRevision: metadata.annotationRevision,
-        confirmation: metadata.confirmation,
-        native: personalEntries,
-        persist: (value) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, value),
-        isCurrent: async () => {
-          try {
-            return await metadataCurrent(actor, await load(actor, id, ordinal), metadata!);
-          } catch (error) {
-            if (error instanceof LibraryNotFoundError) return false;
-            throw error;
-          }
-        },
-        isCancelled: async () => {
-          try {
-            return (await load<Header>(actor, id, -1)).cancelled;
-          } catch (error) {
-            if (error instanceof LibraryNotFoundError) return true;
-            throw error;
-          }
-        },
-        ...(signal ? { signal } : {}),
-      })
-    ).outcome;
-  }
-  async function persistMetadataConfirmation(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    token: string,
-    confirmation: EntryImportMetadataReview['confirmation'],
-  ) {
-    if (!confirmation) return;
-    const stateDigest = entryImportMetadataDigest(confirmation);
-    await save(
+    return metadataCoordinator.apply({
       actor,
       id,
       ordinal,
-      'metadata-progress',
-      `${id}:${ordinal}:${token}:progress:${stateDigest}`,
-      { reviewToken: token, stateDigest },
-      (current) => {
-        const record = current.metadataReviews?.find((item) => item.token === token);
-        if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-          throw new LibraryConflictError();
-        const next = {
-          ...current,
-          metadataReviews: current.metadataReviews!.map((item) =>
-            item.token === token ? { ...item, confirmation } : item,
-          ),
-        };
-        assertEntryImportMetadataHistorySize(next.metadataReviews ?? []);
-        return next;
-      },
-    );
+      reviewToken,
+      fields,
+      ...(signal === undefined ? {} : { signal }),
+    });
   }
   async function apply(
     actor: Actor,

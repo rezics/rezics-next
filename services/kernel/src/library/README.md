@@ -3506,10 +3506,10 @@ Decision: preserve native metadata reservation and immutable-definition recovery
 
 ## VNDB retained-source admission and retry
 
-VNDB and Bangumi share `list-import-metadata-coordinator.ts` for review identity, history limits, field selection,
+VNDB, Bangumi, MAL and AniList share `list-import-metadata-coordinator.ts` for review identity, history limits, field selection,
 confirmation phases and uncertain results. Their adapters retain the native storage boundaries: VNDB locks and saves
 its bounded upload document with the same-home source fence, while Bangumi locks its header and addressed row and
-keeps its own cancellation and expiry behavior. Both still dispatch through the existing annotation and source-
+keeps its own cancellation and expiry behavior. All four dispatch through the existing annotation and source-
 observation command owners.
 
 The [VNDB owner contract](../../../../docs/library-import-vndb.md) binds each explicit state, metadata, label and
@@ -3521,10 +3521,13 @@ expiry. The native source fence rejects fresh effects; private reads independent
 Personal annotation/observation commands reuse the trusted admission preparation/callback protocol after receipt
 lookup, preserving existing callers' digests. Original in-flight VNDB metadata digests remain unchanged.
 
-MAL and AniList remain on their current metadata orchestration and continue to use the shared proposal vocabulary and
-native command executor. MAL still mutates one upload document under its explicit deadline; AniList still loads and
-saves one row and rechecks its profile digest. Those are the concrete constraints for a later adapter migration; no
-four-provider migration is claimed here.
+MAL carries its original deadline in a request-scoped coordinator adapter and keeps whole-document mutation receipts
+and the 48 MiB JSON constraint. AniList retains one addressed row, the 4 MiB row constraint and live matching, candidate,
+Subject, epoch, accepting pin and incarnation checks. Both supply their original `{sourceReviewToken,key}` review
+digest, preserve confirmation/progress mutation operands and merge delayed checkpoints without replacing terminal
+results. Fresh native commands fence their retained source and entry incarnation through deferred admission with no
+new native receipt operand; already admitted receipts remain replayable. Notes, the explicit MAL priority mapping and
+provenance field meaning remain owned by [the metadata contract](../../../../docs/library-import-entry-metadata.md).
 
 Expired label-preview reconciliation is still unavailable. V4 retains its private inert parsed evidence contract;
 native recovery consumers still refuse it. Focused HTTP cases cover actual lost native acknowledgements, expiry,

@@ -59,18 +59,16 @@ export type ListImportMetadataViewState = {
   observation: ListImportMetadataObservation | null;
 };
 
-export type ListImportMetadataCoordinatorAdapter = {
+export type ListImportMetadataCoordinatorAdapter<ReviewResult = { ordinal: number; reviewToken: string }> = {
   provider: string;
   nativeAdmission?: EntryImportMetadataConfirmation['nativeAdmission'];
   native: ReturnType<typeof createEntryPersonalCommands>;
   prepareReview: (input: ListImportMetadataReviewRequest) => Promise<{
     history: readonly EntryImportMetadataReview[];
     identity: ListImportMetadataReviewIdentity;
+    requestDigest?: string;
   }>;
-  persistReview: (
-    input: ListImportMetadataReviewRequest,
-    review: EntryImportMetadataReview,
-  ) => Promise<{ ordinal: number; reviewToken: string }>;
+  persistReview: (input: ListImportMetadataReviewRequest, review: EntryImportMetadataReview) => Promise<ReviewResult>;
   loadReview: (
     input: ListImportMetadataScope,
     reviewToken: string,
@@ -212,7 +210,9 @@ function confirmationFor(
   };
 }
 
-export function createListImportMetadataCoordinator(adapter: ListImportMetadataCoordinatorAdapter) {
+export function createListImportMetadataCoordinator<ReviewResult>(
+  adapter: ListImportMetadataCoordinatorAdapter<ReviewResult>,
+) {
   return {
     async review(input: ListImportMetadataReviewRequest) {
       const prepared = await adapter.prepareReview(input);
@@ -220,7 +220,7 @@ export function createListImportMetadataCoordinator(adapter: ListImportMetadataC
       if (prepared.identity.sourceReviewToken !== input.sourceReviewToken) throw new ProblemError('conflict');
       const review: EntryImportMetadataReview = {
         token: randomUUID(),
-        requestDigest: entryImportMetadataDigest({ key: input.key }),
+        requestDigest: prepared.requestDigest ?? entryImportMetadataDigest({ key: input.key }),
         ...prepared.identity,
       };
       return adapter.persistReview(input, review);

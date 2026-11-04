@@ -39,15 +39,20 @@ import { parseSourceTimestamp } from './entry-personal-model.ts';
 import {
   ENTRY_IMPORT_METADATA_LIMITS,
   assertEntryImportMetadataHistorySize,
-  applyEntryImportMetadataCommands,
   entryImportMetadataDigest,
   entryPersonalMetadataDigest,
-  parseEntryImportMetadataSelections,
   type EntryImportMetadataOutcome,
   type EntryImportMetadataProposals,
   type EntryImportMetadataReview,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
+import {
+  appendListImportMetadataReview,
+  createListImportMetadataCoordinator,
+  mergeListImportMetadataConfirmation,
+  selectListImportMetadataConfirmation,
+} from './list-import-metadata-coordinator.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import {
   describeProgressSources,
   executeProgressAdoption,
@@ -1665,6 +1670,230 @@ export function createMalImport(deps: Dependencies) {
       stopped: outcomes.length < input.rows.length,
     };
   }
+  // Each public request keeps its original deadline in this closure, including native admission.
+  function metadataCoordinator(deadline: number) {
+    return createListImportMetadataCoordinator({
+      provider: 'mal',
+      native: personalEntries,
+      async prepareReview({ actor, id, ordinal, sourceReviewToken, key }) {
+        const account = owner(actor),
+          { doc } = await load(actor, id, deadline),
+          row = doc.rows[ordinal],
+          review = doc.reviews[ordinal];
+        if (
+          !row ||
+          !review ||
+          sourceReviewToken.length > 128 ||
+          review.version !== sourceReviewToken ||
+          review.skip ||
+          !review.target ||
+          !review.source ||
+          review.current?.incarnationId == null
+        )
+          throw stale();
+        const observation = await observe(actor, row, review.binding ? null : review.target, deadline);
+        if (!sameReviewContext(review, observation)) throw stale();
+        const personal = await personalEntries.readPersonalEntry(actor, review.target);
+        return {
+          history: doc.metadataReviews?.[ordinal] ?? [],
+          requestDigest: entryImportMetadataDigest({ sourceReviewToken, key }),
+          identity: {
+            sourceReviewToken,
+            subjectId: review.target,
+            clientId: account.clientId,
+            requestedBy: account.requestedBy ?? null,
+            annotationRevision: personal.annotationRevision,
+            personalDigest: entryPersonalMetadataDigest(personal),
+            sourceDigest: entryImportMetadataDigest(row),
+            profileDigest: entryImportMetadataDigest({
+              source: review.source,
+              binding: review.binding,
+              current: review.current,
+            }),
+            incarnationId: review.current.incarnationId,
+          },
+        };
+      },
+      async persistReview({ actor, id, ordinal, sourceReviewToken, key }, next) {
+        const result = await mutate(actor, id, key, 'metadata-review', { row: ordinal, sourceReviewToken }, (doc) => {
+          const current = doc.reviews[ordinal];
+          if (!current || current.version !== sourceReviewToken || doc.canceled) throw stale();
+          doc.metadataReviews ??= {};
+          doc.metadataReviews[ordinal] = appendListImportMetadataReview(
+            doc.metadataReviews[ordinal] ?? [],
+            next,
+          ).history;
+        });
+        const current = await load(actor, id, deadline),
+          stored = current.doc.metadataReviews?.[ordinal]?.find((item) => item.requestDigest === next.requestDigest);
+        if (!stored) throw stale();
+        return { ...result, value: { ...result.value, reviewToken: stored.token } };
+      },
+      async loadReview({ actor, id, ordinal }, reviewToken) {
+        const { doc } = await load(actor, id, deadline);
+        return doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken) ?? null;
+      },
+      async readView({ actor, id, ordinal }, reviewToken) {
+        const { doc } = await load(actor, id, deadline),
+          row = doc.rows[ordinal],
+          review = doc.reviews[ordinal],
+          metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
+        if (!row || !review || !metadata) throw stale();
+        const account = owner(actor),
+          personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
+          observation = await observe(actor, row, review.binding ? null : review.target, deadline);
+        return {
+          review: metadata,
+          observation: {
+            sourceReviewToken: review.version,
+            subjectId: review.target,
+            clientId: account.clientId,
+            requestedBy: account.requestedBy ?? null,
+            sourceDigest: entryImportMetadataDigest(row),
+            profileDigest: entryImportMetadataDigest({
+              source: review.source,
+              binding: review.binding,
+              current: review.current,
+            }),
+            incarnationId: review.current?.incarnationId ?? null,
+            personal,
+            proposals: malMetadataProposals(row),
+            recordId: `${row.kind}/${row.identifier.value}`,
+            providerCurrent: sameReviewContext(review, observation),
+          },
+        };
+      },
+      async confirm({ actor, id, ordinal }, reviewToken, proposed) {
+        await mutate(
+          actor,
+          id,
+          `${id}:${ordinal}:${reviewToken}:confirm`,
+          'metadata-confirm',
+          { row: ordinal, reviewToken, selectionDigest: proposed.selectionDigest },
+          (doc) => {
+            const review = doc.reviews[ordinal],
+              record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
+            if (doc.canceled || !record || review?.version !== record.sourceReviewToken) throw stale();
+            record.confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed);
+            assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
+          },
+        );
+      },
+      async persist({ actor, id, ordinal }, token, confirmation) {
+        const stateDigest = entryImportMetadataDigest(confirmation);
+        await mutate(
+          actor,
+          id,
+          `${id}:${ordinal}:${token}:progress:${stateDigest}`,
+          'metadata-progress',
+          { row: ordinal, reviewToken: token, stateDigest },
+          (doc) => {
+            const row = doc.rows[ordinal],
+              review = doc.reviews[ordinal],
+              record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === token);
+            if (!row || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
+              throw stale();
+            const starting =
+              (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
+              (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
+            if (
+              starting &&
+              (doc.canceled ||
+                review?.version !== record.sourceReviewToken ||
+                entryImportMetadataDigest(row) !== record.sourceDigest)
+            )
+              throw stale();
+            record.confirmation = mergeListImportMetadataConfirmation(record.confirmation, confirmation);
+            assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
+          },
+        );
+      },
+      async isCurrent({ actor, id, ordinal }, metadata) {
+        const latest = (await load(actor, id, deadline)).doc,
+          source = latest.reviews[ordinal],
+          row = latest.rows[ordinal];
+        if (
+          !source ||
+          !row ||
+          source.version !== metadata.sourceReviewToken ||
+          entryImportMetadataDigest(row) !== metadata.sourceDigest
+        )
+          return false;
+        const current = await observe(actor, row, source.binding ? null : source.target, deadline);
+        return sameReviewContext(source, current);
+      },
+      async isCancelled({ actor, id }) {
+        try {
+          return (await load(actor, id, deadline)).doc.canceled;
+        } catch (error) {
+          if (error instanceof ProblemError && error.code === 'not_found') return true;
+          throw error;
+        }
+      },
+      admission: ({ actor, id, ordinal }, metadata): LabelCommandAdmission => ({
+        // No new operand is added to existing native receipt digests.
+        input: undefined,
+        async prepare() {
+          const { doc } = await load(actor, id, deadline),
+            source = doc.reviews[ordinal],
+            row = doc.rows[ordinal];
+          if (
+            !source ||
+            !row ||
+            source.target !== metadata.subjectId ||
+            source.version !== metadata.sourceReviewToken ||
+            entryImportMetadataDigest(row) !== metadata.sourceDigest
+          )
+            throw stale();
+          const current = await observe(actor, row, source.binding ? null : source.target, deadline);
+          if (
+            !sameReviewContext(source, current) ||
+            entryImportMetadataDigest({ source: source.source, binding: source.binding, current: source.current }) !==
+              metadata.profileDigest
+          )
+            throw stale();
+          return async (tx) => {
+            const account = owner(actor),
+              route = routeOf(account.accountId)!;
+            const locked = await deadlineClient(tx, deadline).query<{ document: Document }>(
+              `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3
+               AND expires_at>clock_timestamp() FOR SHARE`,
+              [route, account.accountId, id],
+            );
+            const retained = locked.rows[0]?.document,
+              review = retained?.reviews[ordinal],
+              record = retained?.metadataReviews?.[ordinal]?.find((item) => item.token === metadata.token);
+            if (
+              !retained ||
+              retained.canceled ||
+              !review ||
+              review.version !== metadata.sourceReviewToken ||
+              review.target !== metadata.subjectId ||
+              account.clientId !== metadata.clientId ||
+              (account.requestedBy ?? null) !== metadata.requestedBy ||
+              entryImportMetadataDigest(retained.rows[ordinal]) !== metadata.sourceDigest ||
+              entryImportMetadataDigest({ source: review.source, binding: review.binding, current: review.current }) !==
+                metadata.profileDigest ||
+              !record?.confirmation ||
+              record.subjectId !== metadata.subjectId ||
+              record.confirmation.selectionDigest !== metadata.confirmation!.selectionDigest ||
+              (!record.confirmation.annotationStarted && !record.confirmation.provenanceStarted)
+            )
+              throw stale();
+            const entry = await deadlineClient(tx, deadline).query<{ incarnation_id: string; revision: number }>(
+              `SELECT incarnation_id,revision FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE`,
+              [route, account.accountId, metadata.subjectId],
+            );
+            if (
+              entry.rows[0]?.incarnation_id !== metadata.incarnationId ||
+              entry.rows[0]?.revision !== review.current?.revision
+            )
+              throw stale();
+          };
+        },
+      }),
+    });
+  }
   async function reviewMetadata(
     actor: Actor,
     id: string,
@@ -1672,57 +1901,13 @@ export function createMalImport(deps: Dependencies) {
     key: string,
     deadline: number,
   ) {
-    const account = owner(actor),
-      { doc } = await load(actor, id, deadline),
-      row = doc.rows[input.row],
-      review = doc.reviews[input.row];
-    if (
-      !row ||
-      !review ||
-      input.sourceReviewToken.length > 128 ||
-      review.version !== input.sourceReviewToken ||
-      review.skip ||
-      !review.target ||
-      !review.source
-    )
-      throw stale();
-    if (review.current?.incarnationId == null) throw stale();
-    const observation = await observe(actor, row, review.binding ? null : review.target, deadline);
-    if (!sameReviewContext(review, observation)) throw stale();
-    const personal = await personalEntries.readPersonalEntry(actor, review.target),
-      requestDigest = entryImportMetadataDigest({ sourceReviewToken: input.sourceReviewToken, key }),
-      next: EntryImportMetadataReview = {
-        token: randomUUID(),
-        requestDigest,
-        sourceReviewToken: input.sourceReviewToken,
-        subjectId: review.target,
-        clientId: account.clientId,
-        requestedBy: account.requestedBy ?? null,
-        annotationRevision: personal.annotationRevision,
-        personalDigest: entryPersonalMetadataDigest(personal),
-        sourceDigest: entryImportMetadataDigest(row),
-        profileDigest: entryImportMetadataDigest({
-          source: review.source,
-          binding: review.binding,
-          current: review.current,
-        }),
-        incarnationId: review.current.incarnationId,
-      };
-    const result = await mutate(actor, id, key, 'metadata-review', input, (doc) => {
-      const current = doc.reviews[input.row],
-        history = doc.metadataReviews![input.row] ?? [];
-      if (!current || current.version !== input.sourceReviewToken || doc.canceled) throw stale();
-      if (history.some((item) => item.confirmation && !item.confirmation.outcome)) throw stale();
-      const existing = history.find((item) => item.requestDigest === requestDigest);
-      if (existing) return;
-      if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw stale();
-      doc.metadataReviews![input.row] = [...history, next];
-      assertEntryImportMetadataHistorySize(doc.metadataReviews![input.row]!);
+    return metadataCoordinator(deadline).review({
+      actor,
+      id,
+      ordinal: input.row,
+      sourceReviewToken: input.sourceReviewToken,
+      key,
     });
-    const current = await load(actor, id, deadline),
-      stored = current.doc.metadataReviews?.[input.row]?.find((item) => item.requestDigest === requestDigest);
-    if (!stored) throw stale();
-    return { ...result.value, reviewToken: stored.token };
   }
   async function metadataView(
     actor: Actor,
@@ -1731,75 +1916,7 @@ export function createMalImport(deps: Dependencies) {
     reviewToken: string,
     deadline: number,
   ): Promise<EntryImportMetadataView> {
-    const { doc } = await load(actor, id, deadline),
-      row = doc.rows[ordinal],
-      review = doc.reviews[ordinal],
-      metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
-    if (!row || !review || !metadata) throw stale();
-    const account = owner(actor),
-      personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
-      observation = await observe(actor, row, review.binding ? null : review.target, deadline),
-      unchanged =
-        account.clientId === metadata.clientId &&
-        (account.requestedBy ?? null) === metadata.requestedBy &&
-        entryImportMetadataDigest(row) === metadata.sourceDigest &&
-        entryPersonalMetadataDigest(personal) === metadata.personalDigest &&
-        personal.annotationRevision === metadata.annotationRevision,
-      matches =
-        review.version === metadata.sourceReviewToken &&
-        review.target === metadata.subjectId &&
-        review.current?.incarnationId === metadata.incarnationId &&
-        sameReviewContext(review, observation) &&
-        entryImportMetadataDigest({ source: review.source, binding: review.binding, current: review.current }) ===
-          metadata.profileDigest,
-      view: EntryImportMetadataView = {
-        status: matches && unchanged ? 'current' : 'stale',
-        reviewToken,
-        sourceReviewToken: metadata.sourceReviewToken,
-        subjectId: metadata.subjectId,
-        personal,
-        proposals: malMetadataProposals(row),
-        outcome: metadata.confirmation?.outcome ?? null,
-      };
-    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
-      throw new ProblemError('invalid_request');
-    return view;
-  }
-  async function persistMetadataConfirmation(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    token: string,
-    confirmation: EntryImportMetadataReview['confirmation'],
-  ) {
-    if (!confirmation) return;
-    const stateDigest = entryImportMetadataDigest(confirmation);
-    await mutate(
-      actor,
-      id,
-      `${id}:${ordinal}:${token}:progress:${stateDigest}`,
-      'metadata-progress',
-      { row: ordinal, reviewToken: token, stateDigest },
-      (doc) => {
-        const row = doc.rows[ordinal],
-          review = doc.reviews[ordinal],
-          record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === token);
-        if (!row || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-          throw stale();
-        const starting =
-          (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
-          (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-        if (
-          starting &&
-          (doc.canceled ||
-            review?.version !== record.sourceReviewToken ||
-            entryImportMetadataDigest(row) !== record.sourceDigest)
-        )
-          throw stale();
-        record.confirmation = confirmation;
-        assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
-      },
-    );
+    return metadataCoordinator(deadline).view({ actor, id, ordinal, reviewToken });
   }
   async function applyMetadata(
     actor: Actor,
@@ -1811,100 +1928,15 @@ export function createMalImport(deps: Dependencies) {
     signal?: AbortSignal,
     recordCommand?: (command: CommandOutcome<unknown>) => void,
   ): Promise<EntryImportMetadataOutcome> {
-    const selections = parseEntryImportMetadataSelections(fields),
-      selectionDigest = entryImportMetadataDigest(selections);
-    let { doc } = await load(actor, id, deadline),
-      metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
-    if (!metadata) return { reviewToken, fields: selections.map(({ field }) => ({ field, status: 'stale' })) };
-    if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest) throw stale();
-    if (metadata.confirmation?.outcome) return metadata.confirmation.outcome;
-    if (!metadata.confirmation) {
-      const confirmation = {
-        fields: selections,
-        selectionDigest,
-        annotationKey: `mal:${id}:${ordinal}:${reviewToken}:annotations`,
-        provenanceKey: `mal:${id}:${ordinal}:${reviewToken}:provenance`,
-        annotationStarted: false,
-        provenanceStarted: false,
-      };
-      await mutate(
-        actor,
-        id,
-        `${id}:${ordinal}:${reviewToken}:confirm`,
-        'metadata-confirm',
-        { row: ordinal, reviewToken, selectionDigest },
-        (current) => {
-          const review = current.reviews[ordinal],
-            record = current.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
-          if (current.canceled || !record || review?.version !== record.sourceReviewToken) throw stale();
-          if (record.confirmation) {
-            if (record.confirmation.selectionDigest !== selectionDigest) throw stale();
-            return;
-          }
-          record.confirmation = confirmation;
-          assertEntryImportMetadataHistorySize(current.metadataReviews?.[ordinal] ?? []);
-        },
-      );
-      doc = (await load(actor, id, deadline)).doc;
-      metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
-    }
-    if (!metadata?.confirmation) throw stale();
-    if (metadata.confirmation.outcome) return metadata.confirmation.outcome;
-    const view = await metadataView(actor, id, ordinal, reviewToken, deadline);
-    if (
-      view.status !== 'current' &&
-      !metadata.confirmation.annotationStarted &&
-      !metadata.confirmation.provenanceStarted
-    ) {
-      const outcome: EntryImportMetadataOutcome = {
-        reviewToken,
-        fields: selections.map(({ field }) => ({ field, status: 'stale' })),
-      };
-      metadata.confirmation.outcome = outcome;
-      await persistMetadataConfirmation(actor, id, ordinal, reviewToken, metadata.confirmation);
-      return outcome;
-    }
-    const row = doc.rows[ordinal]!;
-    return (
-      await applyEntryImportMetadataCommands({
-        actor,
-        subjectId: metadata.subjectId,
-        provider: 'mal',
-        recordId: `${row.kind}/${row.identifier.value}`,
-        reviewToken,
-        personal: view.personal,
-        proposals: view.proposals,
-        selections,
-        baselineAnnotationRevision: metadata.annotationRevision,
-        confirmation: metadata.confirmation,
-        native: personalEntries,
-        persist: (value) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, value),
-        isCurrent: async () => {
-          const latest = (await load(actor, id, deadline)).doc,
-            source = latest.reviews[ordinal],
-            currentRow = latest.rows[ordinal];
-          if (
-            !source ||
-            !currentRow ||
-            source.version !== metadata.sourceReviewToken ||
-            entryImportMetadataDigest(currentRow) !== metadata.sourceDigest
-          )
-            return false;
-          const current = await observe(actor, currentRow, source.binding ? null : source.target, deadline);
-          return sameReviewContext(source, current);
-        },
-        ...(recordCommand ? { record: recordCommand } : {}),
-        isCancelled: async () => {
-          try {
-            return (await load(actor, id, deadline)).doc.canceled;
-          } catch (error) {
-            if (error instanceof ProblemError && error.code === 'not_found') return true;
-            throw error;
-          }
-        },
-        ...(signal ? { signal } : {}),
-      })
-    ).outcome;
+    return metadataCoordinator(deadline).apply({
+      actor,
+      id,
+      ordinal,
+      reviewToken,
+      fields,
+      ...(signal === undefined ? {} : { signal }),
+      ...(recordCommand === undefined ? {} : { record: recordCommand }),
+    });
   }
   async function source(actor: Actor, id: string, deadline: number) {
     const { doc } = await load(actor, id, deadline);

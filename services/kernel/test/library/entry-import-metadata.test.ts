@@ -8,19 +8,25 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bangumiMetadataProposals, createBangumiImport } from '../../src/library/list-import-bangumi.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
+import { createSessionCommands } from '../../src/library/sessions.ts';
 import { createVoteCommands } from '../../src/rating/votes.ts';
-import { malMetadataProposals } from '../../src/library/list-import-mal.ts';
+import { createMalImport, malMetadataProposals } from '../../src/library/list-import-mal.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
-import { anilistMetadataProposals } from '../../src/library/list-import-anilist.ts';
+import { createAniListImport, anilistMetadataProposals } from '../../src/library/list-import-anilist.ts';
 import { parseAniList } from '../../src/library/list-import-anilist-parser.ts';
 import { vndbMetadataProposals } from '../../src/library/list-import-vndb.ts';
 import { parseVndb } from '../../src/library/list-import-vndb-parser.ts';
+import {
+  entryImportMetadataDigest,
+  type EntryImportMetadataReview,
+} from '../../src/library/list-import-entry-metadata.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 
 let f: NativeProfileFixture;
 let subjectId: string;
+let anilistSubjectId: string;
 const providerId = 815432;
 const root = '/v1/libraryImports/bangumi';
 const send = (method: string, path: string, body?: unknown, persona = 'owner') => f.send(persona, method, path, body);
@@ -48,37 +54,40 @@ beforeAll(async () => {
       key: randomUUID(),
     },
   );
-  const sourceRoute = tupleRoute(testRouteKey(), 'bangumi', String(providerId));
-  const imported = await batchCommand(f.pool, {
-    actor: importer.actor,
-    route: sourceRoute,
-    routeKey: testRouteKey(),
-    clock: () => new Date(),
-    deadline: Date.now() + 30_000,
-    authorization: resourceAuthorization({
-      access: f.access,
+  for (const provider of ['bangumi', 'anilist']) {
+    const sourceRoute = tupleRoute(testRouteKey(), provider, String(providerId));
+    const imported = await batchCommand(f.pool, {
       actor: importer.actor,
-      action: 'subject:batch_write',
-      anchor: globalContextAnchor,
-      context: { pool: f.pool, deadline: Date.now() + 30_000, partition: partitionOf(sourceRoute) },
-    }),
-    release: { digest: f.originalDigest, release: f.original },
-    command: {
-      op: 'create',
-      key: randomUUID(),
-      subject: { type: 'ex:Child', labels: { en: 'Retained provider subject' } },
-      source: {
-        source: 'bangumi',
-        external_id: String(providerId),
-        record_revision: 'v0',
-        digest: 'a'.repeat(64),
-        converter_revision: 'fixture',
-        field_group: 'facts',
+      route: sourceRoute,
+      routeKey: testRouteKey(),
+      clock: () => new Date(),
+      deadline: Date.now() + 30_000,
+      authorization: resourceAuthorization({
+        access: f.access,
+        actor: importer.actor,
+        action: 'subject:batch_write',
+        anchor: globalContextAnchor,
+        context: { pool: f.pool, deadline: Date.now() + 30_000, partition: partitionOf(sourceRoute) },
+      }),
+      release: { digest: f.originalDigest, release: f.original },
+      command: {
+        op: 'create',
+        key: randomUUID(),
+        subject: { type: 'ex:Child', labels: { en: 'Retained provider subject' } },
+        source: {
+          source: provider,
+          external_id: String(providerId),
+          record_revision: 'v0',
+          digest: 'a'.repeat(64),
+          converter_revision: 'fixture',
+          field_group: 'facts',
+        },
       },
-    },
-  });
-  if (!('id' in imported.value)) throw new Error('Native provider subject was not created');
-  subjectId = imported.value.id;
+    });
+    if (!('id' in imported.value)) throw new Error('Native provider subject was not created');
+    if (provider === 'bangumi') subjectId = imported.value.id;
+    else anilistSubjectId = imported.value.id;
+  }
 }, 120_000);
 
 afterAll(async () => f?.close());
@@ -370,3 +379,263 @@ test('provider proposals retain supported fields, unknown privacy and unsupporte
   expect(proposals.map(({ priority }) => priority.mapping?.id)).toEqual(Array(3).fill('mal-priority-position-v1'));
   expect(proposals.map(({ privacy }) => privacy.state)).toEqual(Array(3).fill('unknown'));
 });
+
+for (const provider of ['mal', 'anilist'] as const) {
+  test(`${provider} keeps persisted identities, native receipts and separate partial results through the coordinator`, async () => {
+    const target = provider === 'mal' ? await f.createSubject('game') : anilistSubjectId;
+    await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey());
+    await body(
+      await send('POST', `/v1/libraryEntries/${target}/sourceObservations`, {
+        provider,
+        recordId: provider === 'mal' ? 'anime/17' : '17',
+        confirmReviewed: true,
+        privacy: { status: 'known', meaning: 'public' },
+        sourceCreated: { status: 'absent' },
+        sourceUpdated: { status: 'absent' },
+      }),
+      201,
+    );
+    const root = `/v1/libraryImports/${provider}`;
+    const payload =
+      provider === 'mal'
+        ? {
+            xml: '<myanimelist><anime><series_animedb_id>17</series_animedb_id><series_title>Metadata</series_title><my_status>Plan to Watch</my_status><my_comments>Retained note</my_comments><my_priority>2</my_priority><my_privacy>private</my_privacy></anime></myanimelist>',
+          }
+        : {
+            upload: JSON.stringify([
+              {
+                id: 17,
+                mediaId: providerId,
+                notes: 'Retained note',
+                priority: 2,
+                private: true,
+                createdAt: '2020-01',
+                updatedAt: '2021-02-03',
+              },
+            ]),
+          };
+    const createUpload = async () => (await body(await send('POST', `${root}:preview`, payload))).id as string;
+    const id = await createUpload();
+    const sourceKey = entryKey();
+    const source = await body(
+      await f.send(
+        'owner',
+        'POST',
+        provider === 'mal' ? `${root}/${id}/review` : `${root}/${id}:review`,
+        provider === 'mal' ? { row: 0, target, replace: false, skip: false } : { ordinal: 0, fields: ['status'] },
+        sourceKey,
+      ),
+    );
+    const sourceReviewToken = provider === 'mal' ? sourceKey : (source.review.id as string);
+    const reviewKey = entryKey();
+    const reviewPath = provider === 'mal' ? `${root}/${id}/metadata/review` : `${root}/${id}:reviewMetadata`;
+    const reviewInput = provider === 'mal' ? { row: 0, sourceReviewToken } : { ordinal: 0, sourceReviewToken };
+    const first = await body(await f.send('owner', 'POST', reviewPath, reviewInput, reviewKey));
+    const readHistory = async (): Promise<EntryImportMetadataReview[]> => {
+      if (provider === 'mal')
+        return (
+          await f.pool.query<{ history: EntryImportMetadataReview[] }>(
+            `SELECT document->'metadataReviews'->'0' AS history FROM library.list_import_mal WHERE account_id=$1 AND id=$2`,
+            [f.owner.actor.accountId, id],
+          )
+        ).rows[0]!.history;
+      return (
+        await f.pool.query<{ history: EntryImportMetadataReview[] }>(
+          `SELECT payload->'metadataReviews' AS history FROM library.list_import_anilist WHERE account_id=$1 AND import_id=$2 AND ordinal=0`,
+          [f.owner.actor.accountId, id],
+        )
+      ).rows[0]!.history;
+    };
+    const writeHistory = async (history: EntryImportMetadataReview[]) => {
+      if (provider === 'mal')
+        await f.pool.query(
+          `UPDATE library.list_import_mal SET document=jsonb_set(document,'{metadataReviews,0}',$3::jsonb) WHERE account_id=$1 AND id=$2`,
+          [f.owner.actor.accountId, id, JSON.stringify(history)],
+        );
+      else
+        await f.pool.query(
+          `UPDATE library.list_import_anilist SET payload=jsonb_set(payload,'{metadataReviews}',$3::jsonb) WHERE account_id=$1 AND import_id=$2 AND ordinal=0`,
+          [f.owner.actor.accountId, id, JSON.stringify(history)],
+        );
+    };
+    const history = await readHistory();
+    expect(history[0]!.requestDigest).toBe(entryImportMetadataDigest({ sourceReviewToken, key: reviewKey }));
+    // This is the pre-extraction on-disk shape: no nativeAdmission marker and original digest/token.
+    const token = entryKey();
+    history[0]!.token = token;
+    await writeHistory(history);
+    const retried = await body(await f.send('owner', 'POST', reviewPath, reviewInput, reviewKey));
+    expect(retried.reviewToken).toBe(token);
+    expect(retried.reviewToken).not.toBe(first.reviewToken);
+    const fields = [
+      { field: 'note', action: 'adopt' },
+      { field: 'priority', action: 'adopt', mapping: 'mal-priority-position-v1' },
+      { field: 'privacy', action: 'adopt' },
+      { field: 'sourceCreated', action: 'adopt' },
+      { field: 'sourceUpdated', action: 'adopt' },
+    ];
+    const selectionDigest = entryImportMetadataDigest(fields);
+    history[0]!.confirmation = {
+      fields: fields as NonNullable<EntryImportMetadataReview['confirmation']>['fields'],
+      selectionDigest,
+      annotationKey: `retained-${provider}-annotation-${id}`,
+      provenanceKey: `retained-${provider}-provenance-${id}`,
+      annotationStarted: false,
+      provenanceStarted: false,
+    };
+    await writeHistory(history);
+    // Lose the acknowledgement after the real annotation transaction commits, before a checkpoint exists.
+    let loseResponse = true;
+    const faultPool = Object.create(f.pool) as typeof f.pool;
+    faultPool.query = f.pool.query.bind(f.pool);
+    faultPool.connect = (async () => {
+      const client = await f.pool.connect();
+      let annotation = false;
+      return new Proxy(client, {
+        get(current, key) {
+          if (key !== 'query') {
+            const value = Reflect.get(current, key);
+            return typeof value === 'function' ? value.bind(current) : value;
+          }
+          return async (...args: unknown[]) => {
+            const query = args[0] as string | { text: string },
+              text = typeof query === 'string' ? query : query.text;
+            if (text.includes('UPDATE library.entry_personal_fact')) annotation = true;
+            const result = await Reflect.apply(current.query, current, args);
+            if (annotation && text === 'COMMIT' && loseResponse) {
+              loseResponse = false;
+              throw new Error('Lost native annotation response');
+            }
+            return result;
+          };
+        },
+      });
+    }) as typeof faultPool.connect;
+    const deps = { pool: faultPool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() };
+    const engine =
+      provider === 'mal'
+        ? createMalImport({ ...deps, journal: createSessionCommands(deps) })
+        : createAniListImport(deps);
+    const partial =
+      provider === 'mal'
+        ? await (engine as ReturnType<typeof createMalImport>).applyMetadata(
+            f.owner.actor,
+            id,
+            0,
+            token,
+            fields,
+            Date.now() + 30_000,
+          )
+        : await (engine as ReturnType<typeof createAniListImport>).applyMetadata(f.owner.actor, id, 0, token, fields);
+    expect(loseResponse).toBe(false);
+    expect(partial.fields.find((field) => field.field === 'note')?.status).toBe('failed');
+    const nativeFacts = async () =>
+      (await body(await send('GET', `/v1/libraryEntries/${target}/personal`))).personalEntry;
+    const admitted = await nativeFacts();
+    expect(admitted.note).toBe('Retained note');
+    const pending = (await readHistory())[0]!.confirmation!;
+    expect(pending.annotationStarted).toBe(true);
+    expect(pending.annotationKey).toBe(history[0]!.confirmation!.annotationKey);
+    expect(pending.annotationInput?.note).toEqual({ op: 'set', value: 'Retained note' });
+    expect(pending.outcome).toBeUndefined();
+    const applyPath = provider === 'mal' ? `${root}/${id}/metadata/apply` : `${root}/${id}:applyMetadata`;
+    const applyInput = { ...(provider === 'mal' ? { row: 0 } : { ordinal: 0 }), reviewToken: token, fields };
+    expect(
+      (await send('POST', applyPath, { ...applyInput, fields: [{ field: 'note', action: 'clear' }] })).status,
+    ).toBe(409);
+    expect((await send('POST', reviewPath, reviewInput)).status).toBe(409);
+    expect((await send('POST', applyPath, { ...applyInput, reviewToken: first.reviewToken })).status).toBe(200);
+    const complete = await body(await send('POST', applyPath, applyInput));
+    expect(complete.fields.find((field: { field: string }) => field.field === 'note').status).toBe('applied');
+    expect(complete.fields.find((field: { field: string }) => field.field === 'priority').status).toBe(
+      provider === 'mal' ? 'applied' : 'unsupported',
+    );
+    const saved = await nativeFacts();
+    expect(saved.annotationRevision).toBe(admitted.annotationRevision);
+    expect(saved.priority).toBe(provider === 'mal' ? 1 : null);
+    if (provider === 'anilist')
+      expect(saved.sourceObservations).toMatchObject([
+        { provider, recordId: '17', privacy: { status: 'known', meaning: 'private' } },
+      ]);
+    else
+      expect(complete.fields.find((field: { field: string }) => field.field === 'sourceCreated').status).toBe(
+        'unsupported',
+      );
+    const final = (await readHistory())[0]!.confirmation!;
+    expect(final.annotationKey).toBe(pending.annotationKey);
+    expect(final.annotationInput).toEqual(pending.annotationInput);
+    expect(final.outcome).toEqual(complete);
+    expect(await body(await send('POST', applyPath, applyInput))).toEqual(complete);
+    expect(await nativeFacts()).toEqual(saved);
+    const viewPath = `${root}/${id}/metadata/0?reviewToken=${token}`;
+    expect((await send('GET', viewPath, undefined, 'other')).status).toBe(404);
+    const second = await body(await send('POST', reviewPath, reviewInput));
+    expect(second.reviewToken).not.toBe(token);
+    expect((await send('POST', reviewPath, reviewInput)).status).toBe(409);
+    const clearFields = [
+      { field: 'note', action: 'clear' },
+      { field: 'privacy', action: 'clear' },
+    ];
+    let signalReads = 0;
+    const signal = Object.defineProperty({}, 'aborted', { get: () => ++signalReads > 1 }) as AbortSignal;
+    const interrupted =
+      provider === 'mal'
+        ? await (engine as ReturnType<typeof createMalImport>).applyMetadata(
+            f.owner.actor,
+            id,
+            0,
+            second.reviewToken,
+            clearFields,
+            Date.now() + 30_000,
+            signal,
+          )
+        : await (engine as ReturnType<typeof createAniListImport>).applyMetadata(
+            f.owner.actor,
+            id,
+            0,
+            second.reviewToken,
+            clearFields,
+            signal,
+          );
+    expect(interrupted.fields).toEqual([
+      { field: 'note', status: 'applied' },
+      { field: 'privacy', status: 'unattempted' },
+    ]);
+    expect((await readHistory())[1]!.confirmation?.outcome).toBeUndefined();
+    const stoppedFacts = await nativeFacts();
+    expect(stoppedFacts.note).toBeNull();
+    expect(stoppedFacts.sourceObservations[0].privacy).toEqual({ status: 'known', meaning: 'private' });
+    const otherUpload = await createUpload();
+    const otherApply =
+      provider === 'mal' ? `${root}/${otherUpload}/metadata/apply` : `${root}/${otherUpload}:applyMetadata`;
+    expect(
+      (await body(await send('POST', otherApply, applyInput))).fields.every(
+        (item: { status: string }) => item.status === 'stale',
+      ),
+    ).toBe(true);
+    await body(await send('POST', provider === 'mal' ? `${root}/${id}/cancel` : `${root}/${id}:cancel`, {}));
+    expect(
+      await body(
+        await send('POST', applyPath, { ...applyInput, reviewToken: second.reviewToken, fields: clearFields }),
+      ),
+    ).toEqual(interrupted);
+    expect((await readHistory())[1]!.confirmation?.outcome).toEqual(interrupted);
+    expect(await body(await send('POST', applyPath, applyInput))).toEqual(complete);
+    await body(
+      await send(
+        provider === 'mal' ? 'DELETE' : 'POST',
+        provider === 'mal' ? `${root}/${id}` : `${root}/${id}:cancel`,
+        provider === 'mal' ? undefined : { remove: true },
+      ),
+    );
+    expect((await send('GET', viewPath)).status).toBe(404);
+    expect(await nativeFacts()).toEqual(stoppedFacts);
+    await body(
+      await send(
+        provider === 'mal' ? 'DELETE' : 'POST',
+        provider === 'mal' ? `${root}/${otherUpload}` : `${root}/${otherUpload}:cancel`,
+        provider === 'mal' ? undefined : { remove: true },
+      ),
+    );
+  }, 120_000);
+}
