@@ -35,6 +35,7 @@ type ReaderFixture = {
   body: any;
   waitFor: any;
   admissions: string[];
+  committedLocales: Locale[];
   setDraft: (dirty: boolean) => void;
   setCanLeave: (value: boolean) => void;
   confirmCount: () => number;
@@ -111,7 +112,6 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     useRouterState,
   } =
     await import('@tanstack/react-router');
-  const { setLocale } = await import('../src/paraglide/runtime.js');
   const { deriveLocaleDestinations } = await import('../src/shell/locale-navigation/routing');
   const { LocaleNavigationProvider } = await import('../src/shell/locale-navigation/context');
   const { AppearanceControls } = await import('../src/shell/appearance-controls');
@@ -126,6 +126,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   let confirmCount = 0;
   let setDraft: (dirty: boolean) => void = () => {};
   const admissions: string[] = [];
+  const committedLocales: Locale[] = [];
 
   function LocaleHarness({ children }: { children: ReactNode }) {
     const router = useRouter();
@@ -145,7 +146,9 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
       revalidate: async () => {
         await router.invalidate();
       },
-      commitLocale: (locale) => setLocale(locale, { reload: false }),
+      commitLocale: (locale) => {
+        committedLocales.push(locale);
+      },
     };
     return <LocaleNavigationProvider value={value}>{children}</LocaleNavigationProvider>;
   }
@@ -192,7 +195,6 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     routeTree: rootRoute.addChildren(subjectRoutes),
     history: createMemoryHistory({ initialEntries: [entry] }),
   });
-  setLocale('en', { reload: false });
   const root = createRoot(host);
   await act(async () => {
     await router.load();
@@ -216,6 +218,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     body,
     waitFor,
     admissions,
+    committedLocales,
     setDraft,
     setCanLeave(value: boolean) {
       canLeave = value;
@@ -241,7 +244,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
 }
 
 test('keyboard switching keeps the reader query and fragment; staying in a dirty editor keeps its language', async () => {
-  await withReader(async ({ window, router, body, user, act, waitFor, admissions, setDraft, setCanLeave, confirmCount }) => {
+  await withReader(async ({ router, body, user, act, waitFor, admissions, committedLocales, setDraft, setCanLeave, confirmCount }) => {
     const button = () => body.getByRole('button', { name: /言語|Language/ });
     const trigger = button();
     trigger.focus();
@@ -254,7 +257,7 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
     expect(body.getByRole('heading', { name: 'Subject reader route' })).toBeDefined();
     expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
     expect(router.state.location.hash).toBe('chapter-4');
-    expect(window.document.cookie).toContain('rezics_locale=ja');
+    expect(committedLocales).toEqual(['ja']);
     await waitFor(() => expect(admissions).toContain('ja'));
     expect(button().getAttribute('aria-label')).toContain('日本語');
 
@@ -269,14 +272,14 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
     await waitFor(() => expect(confirmCount()).toBeGreaterThan(0));
 
     expect(router.state.location.pathname).toBe('/ja/subjects/reader-01');
-    expect(window.document.cookie).toContain('rezics_locale=ja');
+    expect(committedLocales).toEqual(['ja']);
     expect(button().getAttribute('aria-label')).toContain('日本語');
     expect(body.queryByRole('alert')).toBeNull();
   });
 });
 
 test('navigation failure offers the current safe reader and an obsolete completion cannot replace a newer visit', async () => {
-  await withReader(async ({ window, router, body, user, act, waitFor }) => {
+  await withReader(async ({ router, body, user, act, waitFor, committedLocales }) => {
     const originalNavigate = router.navigate.bind(router);
     Object.defineProperty(router, 'navigate', {
       configurable: true,
@@ -292,7 +295,7 @@ test('navigation failure offers the current safe reader and an obsolete completi
     const failure = await body.findByRole('alert');
     expect(failure.textContent).toContain('日本語');
     expect(failure.querySelector('a')?.getAttribute('href')).toBe(entry);
-    expect(window.document.cookie).toContain('rezics_locale=en');
+    expect(committedLocales).toEqual([]);
 
     Object.defineProperty(router, 'navigate', {
       configurable: true,
@@ -334,7 +337,7 @@ test('navigation failure offers the current safe reader and an obsolete completi
     await act(async () => resolveOld());
     await waitFor(() => expect(trigger().getAttribute('aria-label')).toContain('日本語'));
     expect(router.state.location.pathname).toBe('/ja/subjects/reader-02');
-    expect(window.document.cookie).toContain('rezics_locale=ja');
+    expect(committedLocales).toEqual(['ja']);
     Object.defineProperty(router, 'navigate', {
       configurable: true,
       writable: true,
