@@ -132,6 +132,7 @@ export function OrganizationDeleteContent({
   const review = useRef<
     | (OrganizationDeletionReview & {
         selected?: string | undefined;
+        operationKey?: string | undefined;
         active: boolean;
         source: string | undefined;
         reader: OrganizationDeletionReader;
@@ -213,12 +214,11 @@ export function OrganizationDeleteContent({
           continuation.value,
           result.target.humanAccountId,
           result.target.organizationId,
-          operationKeyFor({ kind: 'delete', accountId: result.target.organizationId }, result.target.humanAccountId),
+          current.operationKey ?? '',
         )
       ) {
-        clearOrganizationDeleteStepUp();
         invalidateReview(current);
-        setLoaded({ kind: 'denied' });
+        setLoaded({ kind: 'changed' });
         return;
       }
       setMessage(m.auth_account_operation_reconfirm());
@@ -237,6 +237,12 @@ export function OrganizationDeleteContent({
     const uncertain = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
     const current = {
       selected,
+      operationKey:
+        uncertain.kind === 'pending'
+          ? uncertain.value.operationKey
+          : saved?.organizationId === selected
+            ? saved.operationKey
+            : undefined,
       active: true,
       source: organizationId,
       reader: read,
@@ -305,6 +311,18 @@ export function OrganizationDeleteContent({
   const target = loaded?.kind === 'ready' ? loaded.target : null;
   const phrase = target ? organizationDeleteConfirmation(target, m.auth_organization_delete_phrase()) : '';
 
+  function clearReviewContinuation(current: NonNullable<typeof review.current>) {
+    const saved = readOrganizationDeleteStepUp();
+    if (
+      saved.kind === 'pending' &&
+      current.humanAccountId &&
+      current.selected &&
+      current.operationKey &&
+      organizationDeletePendingMatches(saved.value, current.humanAccountId, current.selected, current.operationKey)
+    )
+      clearOrganizationDeleteStepUp();
+  }
+
   function authenticate(humanAccountId: string, selected: string) {
     const current = review.current;
     if (
@@ -320,14 +338,14 @@ export function OrganizationDeleteContent({
       setOutcome('unknown');
       return;
     }
-    const key = operationKeyFor({ kind: 'delete', accountId: selected }, humanAccountId);
+    const key = current.operationKey ?? operationKeyFor({ kind: 'delete', accountId: selected }, humanAccountId);
+    current.operationKey = key;
     const continuation = readOrganizationDeleteStepUp();
     if (
       continuation.kind === 'invalid' ||
       (continuation.kind === 'pending' &&
         !organizationDeletePendingMatches(continuation.value, humanAccountId, selected, key))
     ) {
-      clearOrganizationDeleteStepUp();
       invalidateReview(current);
       setLoaded({ kind: 'changed' });
       setConfirmation('');
@@ -359,14 +377,16 @@ export function OrganizationDeleteContent({
     setMessage('');
     try {
       const operation = { kind: 'delete' as const, accountId: target.organizationId };
-      const key = operationKeyFor(operation, target.humanAccountId);
+      const key = current.operationKey ?? operationKeyFor(operation, target.humanAccountId);
+      current.operationKey = key;
       const continuation = readOrganizationDeleteStepUp();
       if (
         continuation.kind === 'invalid' ||
         (continuation.kind === 'pending' &&
           !organizationDeletePendingMatches(continuation.value, target.humanAccountId, target.organizationId, key))
       ) {
-        clearOrganizationDeleteStepUp();
+        invalidateReview(current);
+        setLoaded({ kind: 'changed' });
         setConfirmation('');
         setMessage(m.auth_organization_delete_changed());
         return;
@@ -376,7 +396,7 @@ export function OrganizationDeleteContent({
       if (!current.isCurrent()) return;
       if (result.ok) {
         forgetOperationKey(operation, target.humanAccountId);
-        clearOrganizationDeleteStepUp();
+        clearReviewContinuation(current);
         setOutcome('accepted');
         setConfirmation('');
         return;
@@ -389,12 +409,12 @@ export function OrganizationDeleteContent({
       if (result.reason === 'unknown') {
         // No new approval or execution after ambiguity; only current readback
         // follows while the original command identity remains stored.
-        clearOrganizationDeleteStepUp();
+        clearReviewContinuation(current);
         setOutcome('unknown');
         setMessage(m.auth_organization_delete_unknown());
       } else if (result.reason === 'changed') {
         invalidateReview(current);
-        clearOrganizationDeleteStepUp();
+        clearReviewContinuation(current);
         setLoaded({ kind: 'unavailable' });
         setMessage(m.auth_organization_delete_changed());
       } else if (result.reason === 'denied') {
