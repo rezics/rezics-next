@@ -2466,6 +2466,7 @@
   "settings_profile_checking": "Vérification du profil actuel… Aucune modification n’est envoyée.",
   "settings_profile_confirming": "Réponse à l’enregistrement reçue. Vérification du profil actuel…",
   "settings_profile_read_failed": "Impossible de vérifier le profil actuel. Les valeurs affichées peuvent être obsolètes. Votre brouillon est conservé ; rechargez le profil pour réessayer.",
+  "settings_profile_acknowledged_stale": "L’enregistrement initial du profil a été confirmé. Le profil actuel n’a pas encore été vérifié ; rechargez-le avant d’enregistrer d’autres modifications.",
   "settings_profile_read_closed": "Le profil actuel ne peut pas être chargé pour le moment. Vos modifications sur cette page sont conservées. Rechargez le profil plus tard pour vérifier son état actuel.",
   "settings_profile_save_error_title": "L’enregistrement du profil nécessite votre attention",
   "settings_profile_save_closed": "La modification du profil n’est pas disponible pour le moment. Votre brouillon est conservé. Rechargez le profil actuel avant de réessayer l’enregistrement.",

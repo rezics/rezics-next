@@ -2466,6 +2466,7 @@
   "settings_profile_checking": "正在檢查目前的個人資料… 不會傳送任何變更。",
   "settings_profile_confirming": "已收到儲存回應，正在檢查目前的個人資料…",
   "settings_profile_read_failed": "無法檢查目前的個人資料。顯示的值可能已過時。草稿已保留，請重新載入後再檢查。",
+  "settings_profile_acknowledged_stale": "原始個人資料儲存已確認。目前的個人資料尚未確認；請重新載入後再儲存其他變更。",
   "settings_profile_read_closed": "目前無法載入個人資料。此頁面上的修改會保留。請稍後重新載入，以查看個人資料的最新狀態。",
   "settings_profile_save_error_title": "個人資料儲存需要處理",
   "settings_profile_save_closed": "目前無法編輯個人資料。草稿會保留。再次儲存前，請重新載入目前的個人資料。",

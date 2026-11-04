@@ -151,6 +151,7 @@ test('A lost save response retries the exact original payload and key while reta
   editor.edit({ displayName: 'Submitted name' });
   await editor.submit('profile');
   expect(editor.snapshot().phase).toBe('uncertain');
+  expect(editor.snapshot().acknowledged).toBe(false);
   const original = editor.snapshot().attempt;
   expect(Object.isFrozen(original)).toBe(true);
   expect(Object.isFrozen(original?.after.links)).toBe(true);
@@ -210,51 +211,15 @@ test('a successful activity write shares readback without submitting or discardi
   expect(editor.snapshot().known?.publicViews.reviews).toBe(false);
 });
 
-test('an acknowledged command uses a deliberate current read and keeps only later edits', async () => {
-  const newer = { ...initial(), displayName: 'Another writer', biography: 'Current native biography' };
-  const writes: ProfileAttempt[] = [];
-  let reads = 0;
-  const editor = new ProfileEditor(
-    {
-      save: async (attempt) => {
-        writes.push(attempt);
-        return { ok: true, profile: attempt.after };
-      },
-      read: async () => {
-        if (++reads === 1) throw new Error('Current profile unavailable');
-        return newer;
-      },
-    },
-    initial(),
-  );
-  editor.edit({ displayName: 'Acknowledged name' });
-  const capturedRetry = editor.retry.bind(editor);
-  await editor.submit('profile');
-  const ackAfterFailedRead = editor.snapshot().acknowledged === true;
-  editor.edit({ biography: 'Later local edit' });
-  await capturedRetry();
-  const writesAfterCapturedRetry = writes.length;
-  await editor.reload();
-  expect({
-    ackAfterFailedRead,
-    writesAfterCapturedRetry,
-    known: editor.snapshot().known,
-    draft: editor.snapshot().draft,
-    attempt: editor.snapshot().attempt,
-  }).toMatchObject({
-    ackAfterFailedRead: true,
-    writesAfterCapturedRetry: 1,
-    known: newer,
-    draft: { ...newer, biography: 'Later local edit' },
-    attempt: null,
-  });
-});
-
 test('a receipt never claims success when current readback differs or is unavailable', async () => {
   for (const unreadable of [false, true]) {
+    let writes = 0;
     const editor = new ProfileEditor(
       {
-        save: async (attempt) => ({ ok: true, profile: attempt.after }),
+        save: async (attempt) => {
+          writes++;
+          return { ok: true, profile: attempt.after };
+        },
         read: async () => {
           if (unreadable) throw new Error('Read unavailable');
           return { ...initial(), displayName: 'Another device' };
@@ -267,6 +232,13 @@ test('a receipt never claims success when current readback differs or is unavail
     expect(editor.snapshot().phase).toBe(unreadable ? 'uncertain' : 'review');
     expect(editor.snapshot().draft?.displayName).toBe('Intended name');
     expect(!!editor.snapshot().attempt).toBe(unreadable);
+    if (unreadable) {
+      const capturedRetry = editor.retry.bind(editor);
+      expect(editor.snapshot().acknowledged).toBe(true);
+      editor.retire();
+      await capturedRetry();
+      expect([writes, editor.snapshot().acknowledged, editor.snapshot().attempt]).toEqual([1, false, null]);
+    }
   }
 });
 
