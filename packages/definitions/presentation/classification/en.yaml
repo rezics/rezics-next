@@ -10,6 +10,10 @@ properties:
   schema:creativeWorkStatus: 'creative work status'
   schema:genre: 'genre'
   skos:closeMatch: 'close match'
+  rezics:sourceTagWeight: 'source tag weight'
+  rezics:sourceTagWeightMetric: 'source tag weight metric'
+  rezics:sourceSnapshot: 'source snapshot'
+  rezics:sourceTagId: 'VNDB tag ID'
 inverseProperties:
   wdt:P7937: 'Works in this form'
   skos:inScheme: 'Concepts in this scheme'
@@ -31,3 +35,7 @@ propertyDescriptions:
   schema:creativeWorkStatus: 'A Concept for this work or release development or publication status; completeness of a particular release for a work is a qualifier on the work association.'
   schema:genre: 'A genre Concept classifying this work, such as science fiction.'
   skos:closeMatch: 'A distinct Concept with a closely corresponding meaning; not equivalence and not automatic filter expansion.'
+  rezics:sourceTagWeight: 'An exact provider aggregate on this association. VNDB tags.rating is in rating points on (0,3]; it is not a REZICS vote or confidence.'
+  rezics:sourceTagWeightMetric: 'The typed provider metric that gives a source tag weight its scale and meaning.'
+  rezics:sourceSnapshot: 'The SHA-256 digest of the exact unversioned provider response cited by this association.'
+  rezics:sourceTagId: 'The provider identifier for this exact tag within its cited VNDB record.'

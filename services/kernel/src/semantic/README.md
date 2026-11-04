@@ -15,6 +15,57 @@ The derived read budget, SQL controls, byte inputs, partition checkouts and plan
 [current-relations-cost.md](current-relations-cost.md). This source-level declaration does not claim native plan
 acceptance; the controller runs that acceptance after integration.
 
+## Released source-weighted classification tags
+
+Decision: VNDB source tag weights use only the exact Kana `/vn` `tags.rating` aggregate, metric `vndbTagsRating`, unit `1` and range `(0,3]`; `tags_vn.vote` remains an association admission filter and is never converted into this statistic.
+
+`produceVndbSourceTagWeightCandidate` in `source-tag-weight.ts` accepts the exact `https://api.vndb.org/kana/vn` endpoint, request body and response bytes for one Kana `/vn` lookup. It requires `filters: ["id", "=", <record id>]`, `fields: "id,tags{id,rating,spoiler,lie}"` and `results: 1`; then it validates the returned VN id and requested provider tag id, requires `lie: false`, preserves the rating's decimal token without floating-point rounding, and carries spoiler `0`, `1` or `2` onto the same ordinary `schema:genre` or `schema:keywords` candidate. It rejects the dump's individual votes, guessed values, a request that omitted `tags.rating`, and unsupported fields. The numeric qualifier is source evidence; it never supplies a REZICS vote, confidence, rank, acceptance or adoption.
+
+The candidate carries the caller's exact native Context, Concept and classification property. Its references include the VNDB record citation, exact source tag id, SHA-256 of the complete unversioned response and the official [Kana `/vn` API field contract](https://api.vndb.org/kana#post-vn). The proposal endpoint remains Global; the returned `contextId` is the exact Context Imports must use for native acceptance and adoption, and grants no authority. A later source revision is a new candidate for the same exact source association and must pass those existing native authorities. There is no import-time aggregation or page-time vote scan. The public subject page reads the already selected and disclosed statement plus the page's bounded Concept summary; its private viewer-action component remains an independent read in the same `POST /v1/pages:read` request.
+
+For this producer, `lie: true` is a suppressed source outcome. Imports still owns the existing Source-fence checks and source tuple; this mapper creates neither and cannot override suppression. Imports' live Kana acquisition and source-fence handoff remain unavailable until that owner connects them.
+
+### Imports handoff example
+
+The captured official query uses this exact request body:
+
+```json
+{"filters":["id","=","v17"],"fields":"id,tags{id,rating,spoiler,lie}","results":1}
+```
+
+Its response contains `v17` / `g3` with `rating: 2.59999990463257`, `spoiler: 2` and `lie: false`; the complete response digest is `sha256:5cd11554c247c1c3085297a765d172216b9733331d5aac273788ba9fe6d5eba5`. With the actual native subject, Context and Concept ids substituted, the callable producer returns this statement shape:
+
+```json
+{
+  "property":{"id":"schema:genre"},
+  "value":{"type":"value","content":"<concept-uuid>"},
+  "rank":"normal",
+  "qualifiers":[
+    {"property":{"id":"rezics:sourceTagWeight"},"value":{"type":"value","content":{"amount":"+2.59999990463257","unit":"1"}}},
+    {"property":{"id":"rezics:sourceTagWeightMetric"},"value":{"type":"value","content":"vndbTagsRating"}},
+    {"property":{"id":"rezics:spoilerLevel"},"value":{"type":"value","content":{"amount":"+2","unit":"1"}}}
+  ],
+  "references":[
+    {"parts":[
+      {"property":{"id":"schema:url"},"value":{"type":"value","content":"https://vndb.org/v17"}},
+      {"property":{"id":"rezics:sourceTagId"},"value":{"type":"value","content":"g3"}},
+      {"property":{"id":"rezics:sourceSnapshot"},"value":{"type":"value","content":"unversioned:sha256:5cd11554c247c1c3085297a765d172216b9733331d5aac273788ba9fe6d5eba5"}}
+    ]},
+    {"parts":[{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://api.vndb.org/kana#post-vn"}}]}
+  ]
+}
+```
+
+Imports submits that statement to `POST /v1/subjects/{subject}/candidates` under its real `statement:propose` authority and retains the returned candidate id and revision. The endpoint's response is `{ "candidate": "<native-candidate-uuid>", "revision": <native-revision> }`; acceptance and adoption then use the producer's `contextId`, returned native identities, and the existing `context:accept` / `context:adopt` authorities. This is the declared native exchange shape, not a captured successful response from this attempt. The captured end-to-end response remains deferred to the native acceptance run.
+
+### Page cost
+
+The installed subject reader selects at most 12 relation slots for each property and examines the 13th row as its rejected/continuation lookahead. The tag caller has exactly two relation properties, `schema:genre` and `schema:keywords`, so the raw tag window is `W = 2 × (12 + 1) = 26`. This includes rejected lookahead and the existing source revision/security fence checks; it does not scan fact history to find current tags. A producer-created weighted row has at most `Q = 3` qualifiers and `4` reference parts (three parts in the source citation and one API documentation URL), or seven keyed evidence observations. There is at most one direct Concept target per row, so distinct source-tag target expansion `D ≤ W`; existing one-hop redirect fills remain bounded by that same distinct-target set.
+
+The read uses indexed outbound seeks, then `O(W × Q + D)` keyed fact and disclosure observations plus the existing batched summary reads. Each producer statement is below 2 KiB, and one requested Concept summary is below 10 KiB under the released label and id limits (one language is requested by the mounted page). The weighted-tag evidence contribution is therefore at most `W × (2 KiB + 10 KiB) = 319,488` UTF-8 bytes. `test/semantic/growth-source-tag-weight.test.ts` grows unrelated subjects and retracted association assertions at 64/512/4096 while holding the selected tags and page language fixed; it counts rows, SQL statements, indexed blocks, expanded targets and response bytes. The rest of the page retains the existing subject and `POST /v1/pages:read` limits. No selected tag vote history is read or aggregated.
+
+The checked-in native source example is the captured official response at `test/fixtures/vndb-source-weight-v17.json`: VNDB `v17`, tag `g3`, raw aggregate `2.59999990463257`, spoiler `2`, `lie: false`. This proves the producer input shape only. The live dump does not supply `tags.rating`, and Imports has no Kana API acquisition binding yet, so a production import cannot emit this weight until that owner supplies the cited API response. No importer coordinator or default seed is changed here.
+
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
 Provider queue pages retain `context:read` and `context:accept` admission. Their private BFF includes an independent current
