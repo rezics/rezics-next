@@ -29,6 +29,7 @@ mock.module('../src/report/turnstile', () => ({
     ),
 }));
 
+const importDom = await installDom();
 const { AccountPosts } = await import('../src/features/pages/account');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const {
@@ -53,6 +54,7 @@ const { originalContributionReference, contributionCommandTarget, contributionOp
   await import('../src/accounts/public-profile/contribution-actions/advice');
 type NativeAdvice = import('../src/accounts/public-profile/contribution-actions/advice').NativeContributionAdvice;
 const { PostActions } = await import('../src/report/content-actions');
+await importDom.close();
 
 const id = '00000000-0000-4000-8000-000000000001';
 
@@ -831,13 +833,7 @@ test('PostActions retains the original report body, sender, key and credential f
       (candidate) => candidate.getAttribute('aria-label') === m.report_more(),
     );
     expect(more).toBeDefined();
-    await act(async () => {
-      more!.focus();
-      more!.dispatchEvent(
-        new dom.window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
-      );
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    await clickButton(node, m.report_more());
     await clickButton(node, m.report_action());
     const other = node.querySelector<HTMLButtonElement>('[role="radio"][value="other"]');
     expect(other).toBeDefined();
