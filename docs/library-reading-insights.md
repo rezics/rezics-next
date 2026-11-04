@@ -1,15 +1,17 @@
 # Private reading insights
 
-This owner document covers the retained-profile distribution projection. The native session writer now captures
-accepting unit meaning for new sessions, but the complete private insights journey still needs its maintained current
-unit aggregate, assessment coverage, composed viewer/actions and reachable Web page. Existing all-time/year counts,
-month navigation, journals, assessment writers and diary allocation remain authoritative and unchanged.
+This owner document covers the retained-profile distribution and private assessment coverage projections. New native
+sessions capture accepting unit meaning and assessment presence, while old rows without captured unit meaning remain
+unavailable for dimensional interpretation. The complete private insights journey still needs its maintained
+current-unit aggregate, composed viewer/actions and reachable Web page. Existing all-time/year counts, month
+navigation, journal reads and commands, and diary allocation remain authoritative and unchanged.
 
 Decision: Group historical completions by the entire immutable accepting profile pin, including release and accepting
 Type; show profile identity with historical labels unavailable until accepted descriptors are retained, never infer books
 or episodes from a current Type or a profile ID. Pins exceeding 1,024 encoded bytes join historical-unavailable coverage.
 Decision: Capture current-progress meaning only from the accepting pinned descriptor at native session creation; older
 rows without a captured descriptor remain unavailable, and labels or current profiles never supply historical meaning.
+Decision: Assessment coverage includes retained non-retired sessions, including active sessions; retirement removes a session from the panel and restoration receives it again. Keep exact values and half-point frequencies within each meaning revision, report historical null presence as unknown, and never average incompatible revisions.
 
 ## Mounted panel contract
 
@@ -47,9 +49,33 @@ changes neither. Cache consumers must bind values to exact origin/owner/locale/y
 responses and clear old values on authority change or unavailable coverage. This panel is a pure GET with no command
 identity, diary slot, renewal, export or repair side effect.
 
+## Mounted assessment panel contract
+
+`GET /v1/libraryReadingInsightsAssessments`, operation `library_reading_insights.assessments`, is an independent
+owner-only panel. It requires the current authenticated own account, `progress_session:list`, the existing
+`reading_progress` exposure, partition admission and request deadline. It accepts no query fields and returns private,
+no-store JSON. It does not change the journal read or command response.
+
+The panel covers retained non-retired progress sessions, including active sessions. Each meaning revision remains a
+separate group with exact `absent`, `explicitNull`, `value` and `historicalUnknown` counts. New sessions begin absent;
+an explicit null patch is distinct from an omitted patch; a value of zero is retained in the value histogram. A null
+presence on an older row remains historical unknown, while an older non-null value remains a value. Histograms list
+native half-point units and exact occurrence counts without averaging or combining revisions. Retiring a session
+removes its contribution; restoration adds it once; receipt replay does not receive a second contribution.
+
+The installed marker is version 1. Receiving is synchronous for new sessions and addressed mutations. Older retained
+rows initialize through the existing bounded shelf-maintenance sessions phase. Availability requires the installed
+all-time source and ready/open shelf maintenance, plus equality between this receiver's initialized-session count and
+the retained-session counter. The reader addresses at most sixteen revision rows and twenty-one exact value buckets
+per revision, rechecks authority and generation, and caps JSON at 16,384 UTF-8 bytes. GET remains pure.
+
+The mounted route and schema are exported by `reading-insights-routes.ts`; Content still needs to publish its matching
+generated client output before Web can call this endpoint. This independent panel is not yet composed with the
+all-time/year summary, retained-profile distribution or current-progress aggregate.
+
 ## Coverage, installation and cleanup
 
-The migration installs synchronous native source receiving and empty derived tables with a fast constant-default
+The profile-distribution migration installs synchronous native source receiving and empty derived tables with a fast constant-default
 `reading_insights_initialized=false` column; it performs no history scan. New sessions receive immediately.
 An old session receives only through an addressed mutation or the installed shelf maintenance backfill's existing
 100-row sessions phase. Receiving uses the existing native changed row operands, without a generic event dependency.

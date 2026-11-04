@@ -532,6 +532,12 @@ export function createSessionCommands(config: Dependencies) {
         const startDate = Object.hasOwn(patch, 'startDate') ? (patch.startDate ?? null) : current.startDate;
         const finishDate = Object.hasOwn(patch, 'finishDate') ? (patch.finishDate ?? null) : current.finishDate;
         const reflection = Object.hasOwn(patch, 'reflection') ? (patch.reflection ?? null) : current.reflection;
+        const requestedAssessmentPresence = Object.hasOwn(patch, 'assessment')
+          ? patch.assessment === null
+            ? ('explicit_null' as const)
+            : ('value' as const)
+          : undefined;
+        const assessmentPresence = requestedAssessmentPresence ?? current.assessmentPresence;
         const assessment = Object.hasOwn(patch, 'assessment')
           ? { meaningRevision: current.assessment.meaningRevision, units: patch.assessment?.units ?? null }
           : current.assessment;
@@ -539,7 +545,8 @@ export function createSessionCommands(config: Dependencies) {
           sameJournalDate(startDate, current.startDate) &&
           sameJournalDate(finishDate, current.finishDate) &&
           reflection === current.reflection &&
-          assessment.units === current.assessment.units;
+          assessment.units === current.assessment.units &&
+          assessmentPresence === current.assessmentPresence;
         if (unchanged) return noEffect({ sessionId, revision: current.revision, changed: false });
         if (current.revision >= 2_147_483_646) throw new ProgressConflictError();
 
@@ -550,7 +557,7 @@ export function createSessionCommands(config: Dependencies) {
           finishDate,
           reflection,
           assessment,
-        });
+        }, requestedAssessmentPresence);
         if (!updated) throw new ProgressConflictError();
         return {
           value: { sessionId, revision: updated.revision, changed: true },
