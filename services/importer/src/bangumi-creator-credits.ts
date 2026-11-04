@@ -262,12 +262,14 @@ export async function deliverBangumiCreatorCredits(input: {
           : /^\d+$/u.test(key)
             ? 'wdt:P5732'
             : undefined;
-      const sourceId = key.startsWith('person:') || key.startsWith('character:') ? key.slice(key.indexOf(':') + 1) : key;
+      const sourceId =
+        key.startsWith('person:') || key.startsWith('character:') ? key.slice(key.indexOf(':') + 1) : key;
       const hasIdentity =
         identityProperty !== undefined &&
         (subject?.statements?.[identityProperty]?.some(
           (statement) => statement.value?.type === 'value' && statement.value.content === sourceId,
-        ) ?? false);
+        ) ??
+          false);
       if (!type || subject?.id !== claim.subject || type !== expectedType || !hasIdentity) continue;
       const identity = { id: claim.subject, type, releaseDigest: bundledDigest };
       resolved[key] = identity;
@@ -371,18 +373,19 @@ export async function importBangumiCreatorCredits(input: {
       read: (subjectId) => input.port.readReviewedSubject(subjectId),
       expectedNativeType: (externalId) => {
         if (externalId === input.work.key) {
-          const bootstrap = registration.convert(
-            { external_id: input.work.key, record_revision: input.work.revision, record: input.work.payload },
-            { source: alias },
-          ).proposals.find((command) => command.op === 'create');
+          const bootstrap = registration
+            .convert(
+              { external_id: input.work.key, record_revision: input.work.revision, record: input.work.payload },
+              { source: alias },
+            )
+            .proposals.find((command) => command.op === 'create');
           return bootstrap?.op === 'create' ? bootstrap.subject.type : undefined;
         }
         const row = [...input.people, ...(input.characters ?? [])].find((record) => record.key === externalId);
         if (!row) return undefined;
-        const bootstrap = registration.convert(
-          { external_id: row.key, record_revision: row.revision, record: row.payload },
-          { source: alias },
-        ).proposals.find((command) => command.op === 'create');
+        const bootstrap = registration
+          .convert({ external_id: row.key, record_revision: row.revision, record: row.payload }, { source: alias })
+          .proposals.find((command) => command.op === 'create');
         return bootstrap?.op === 'create' ? bootstrap.subject.type : undefined;
       },
       metadataFor: () => ({

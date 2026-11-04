@@ -38,7 +38,13 @@ test('selected anime staff and cast use the default acknowledged role adapter an
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   const subjects = new Map<
     string,
-    { id: string; type: string; sourceExternalId: string; labels: Record<string, string>; statements: Record<string, unknown[]> }
+    {
+      id: string;
+      type: string;
+      sourceExternalId: string;
+      labels: Record<string, string>;
+      statements: Record<string, unknown[]>;
+    }
   >();
   const sources = new Map<string, string>();
   const receipts = new Map<string, { body: string; result: BatchWriteResult['results'][number] }>();
@@ -76,7 +82,12 @@ test('selected anime staff and cast use the default acknowledged role adapter an
         yield { subject_id: 101, person_id: 99, position: 2 };
       }
       if (provider === 'bangumi' && table === 'person-characters')
-        yield { subject_id: 101, person_id: 12, character_id: 21, summary: 'Association commentary is not a credit name.' };
+        yield {
+          subject_id: 101,
+          person_id: 12,
+          character_id: 21,
+          summary: 'Association commentary is not a credit name.',
+        };
       if (provider === 'bangumi' && table === 'person') {
         yield { id: 11, type: 1, name: 'Director' };
         yield { id: 12, type: 1, name: 'Voice performer' };
@@ -88,15 +99,33 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     const subject = subjects.get(id);
     if (!subject) throw new Error('Missing fixture subject');
     const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
-    const property = identity?.[1] === 'person' ? 'wdt:P6298' : identity?.[1] === 'character' ? 'wdt:P6296' : identity ? 'wdt:P5732' : undefined;
+    const property =
+      identity?.[1] === 'person'
+        ? 'wdt:P6298'
+        : identity?.[1] === 'character'
+          ? 'wdt:P6296'
+          : identity
+            ? 'wdt:P5732'
+            : undefined;
     const statements = property
       ? {
           ...subject.statements,
-          [property]: [{
-            property: { id: property },
-            value: { type: 'value', content: identity![2] },
-            references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: bangumiRecordUrl(subject.sourceExternalId) } }] }],
-          }],
+          [property]: [
+            {
+              property: { id: property },
+              value: { type: 'value', content: identity![2] },
+              references: [
+                {
+                  parts: [
+                    {
+                      property: { id: 'schema:url' },
+                      value: { type: 'value', content: bangumiRecordUrl(subject.sourceExternalId) },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         }
       : subject.statements;
     return { subject: { ...subject, statements } } as unknown as ReviewedSubjectRead;
@@ -151,7 +180,9 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       expect(query.context).toBe(globalContext);
       return {
         candidates: [...candidates.values()].filter(
-          (candidate) => candidate.source.external_id === subjects.get(id)?.sourceExternalId && candidate.statement.property.id === query.property,
+          (candidate) =>
+            candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
+            candidate.statement.property.id === query.property,
         ),
         next: null,
         adoption: adopted.get(`${id}\0${query.property}`) ?? null,
@@ -159,7 +190,10 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     },
     async acceptReviewedCandidate(_id, candidateId) {
       accepted.add(candidateId);
-      return { acceptance: { context: globalContext, candidate: candidateId, decision: 'accept', head: 1 }, revision: 1 } as never;
+      return {
+        acceptance: { context: globalContext, candidate: candidateId, decision: 'accept', head: 1 },
+        revision: 1,
+      } as never;
     },
     async adoptReviewedCandidates(id, body) {
       const action = body as {
@@ -169,8 +203,13 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       const key = `${id}\0${action.property}`;
       const next = { head: (adopted.get(key)?.head ?? 0) + 1, selection: action.selection };
       adopted.set(key, next);
-      subjects.get(id)!.statements[action.property] = action.selection.map(({ candidate }) => candidates.get(candidate)!.statement);
-      return { adoption: { context: globalContext, property: action.property, mode: 'replace', ...next }, revision: 1 } as never;
+      subjects.get(id)!.statements[action.property] = action.selection.map(
+        ({ candidate }) => candidates.get(candidate)!.statement,
+      );
+      return {
+        adoption: { context: globalContext, property: action.property, mode: 'replace', ...next },
+        revision: 1,
+      } as never;
     },
   };
   const publicClient = createPublicBulkClient({
@@ -226,9 +265,19 @@ test('selected anime staff and cast use the default acknowledged role adapter an
       vocabularyRequirements: result.creditVocabularyRequirements,
     });
     const workId = result.readings.find((reading) => reading.externalId === '101')!.subject.subject!.id!;
-    const work = (await publicClient.readSubject(workId)).subject as { statements: Record<string, readonly BatchStatement[]> };
-    const staff = work.statements['schema:director']?.find((statement) => valueContent(statement) === result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id);
-    const voice = work.statements['wdt:P725']?.find((statement) => valueContent(statement) === result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id);
+    const work = (await publicClient.readSubject(workId)).subject as {
+      statements: Record<string, readonly BatchStatement[]>;
+    };
+    const staff = work.statements['schema:director']?.find(
+      (statement) =>
+        valueContent(statement) ===
+        result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id,
+    );
+    const voice = work.statements['wdt:P725']?.find(
+      (statement) =>
+        valueContent(statement) ===
+        result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id,
+    );
     expect(publication.status).toBe('incomplete');
     expect(accepted.size).toBeGreaterThan(0);
     expect(result.creditRoles).toHaveLength(1);
@@ -237,14 +286,42 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     );
     expect(staff).toBeDefined();
     expect(voice).toBeDefined();
-    expect(staff?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === result.creditRoles![0]!.conceptId)).toBe(true);
-    expect(staff?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P1932' && valueContent(qualifier) === 'Chief Director')).toBe(true);
-    expect(staff?.references?.flatMap((reference) => reference.parts).some((part) => valueContent(part) === 'https://bgm.tv/subject/101#/subject-persons/101/11/position')).toBe(true);
-    expect(voice?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P453' && valueContent(qualifier) === result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id)).toBe(true);
+    expect(
+      staff?.qualifiers?.some(
+        (qualifier) =>
+          qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === result.creditRoles![0]!.conceptId,
+      ),
+    ).toBe(true);
+    expect(
+      staff?.qualifiers?.some(
+        (qualifier) => qualifier.property.id === 'wdt:P1932' && valueContent(qualifier) === 'Chief Director',
+      ),
+    ).toBe(true);
+    expect(
+      staff?.references
+        ?.flatMap((reference) => reference.parts)
+        .some((part) => valueContent(part) === 'https://bgm.tv/subject/101#/subject-persons/101/11/position'),
+    ).toBe(true);
+    expect(
+      voice?.qualifiers?.some(
+        (qualifier) =>
+          qualifier.property.id === 'wdt:P453' &&
+          valueContent(qualifier) ===
+            result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id,
+      ),
+    ).toBe(true);
     expect(JSON.stringify(voice)).not.toContain('Association commentary');
-    expect(result.creditGaps).toContainEqual(expect.objectContaining({ reason: 'missing_identity', property: 'schema:director', path: '/subject-persons/101/99/position' }));
+    expect(result.creditGaps).toContainEqual(
+      expect.objectContaining({
+        reason: 'missing_identity',
+        property: 'schema:director',
+        path: '/subject-persons/101/99/position',
+      }),
+    );
     const role = result.creditRoles![0]!;
-    const concept = (await publicClient.readSubject(role.conceptId)).subject as { statements: Record<string, readonly BatchStatement[]> };
+    const concept = (await publicClient.readSubject(role.conceptId)).subject as {
+      statements: Record<string, readonly BatchStatement[]>;
+    };
     expect(valueContent(concept.statements['schema:sameAs']?.[0])).toBe(role.uri);
     expect(valueContent(concept.statements['skos:inScheme']?.[0])).toBe(role.schemeId);
     expect(accepted.size).toBeGreaterThan(0);

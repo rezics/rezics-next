@@ -144,15 +144,26 @@ test('default anime staff and voice publication adopts exact cited endpoints and
 
     const first = await importAndPublish();
     expect(first.result.creditGaps).toContainEqual(
-      expect.objectContaining({ reason: 'missing_identity', property: 'schema:director', path: '/subject-persons/101/99/position' }),
+      expect.objectContaining({
+        reason: 'missing_identity',
+        property: 'schema:director',
+        path: '/subject-persons/101/99/position',
+      }),
     );
     const role = first.result.creditRoles![0]!;
     const workId = first.result.readings.find((reading) => reading.externalId === '101')!.subject.subject!.id!;
-    const directorId = first.result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id!;
-    const performerId = first.result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id!;
-    const characterId = first.result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id!;
+    const directorId = first.result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!
+      .id!;
+    const performerId = first.result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!
+      .id!;
+    const characterId = first.result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!
+      .id!;
     const workRead = await publicClient.readSubject(workId);
-    const workSubject = workRead.subject as { id: string; type: string; statements: Record<string, readonly BatchStatement[]> };
+    const workSubject = workRead.subject as {
+      id: string;
+      type: string;
+      statements: Record<string, readonly BatchStatement[]>;
+    };
     const work = workSubject;
     const staff = work.statements['schema:director']?.find((statement) => valueContent(statement) === directorId);
     const voice = work.statements['wdt:P725']?.find((statement) => valueContent(statement) === performerId);
@@ -160,22 +171,48 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     expect(work.id).toBe(workId);
     expect(work.type).toBe('schema:TVSeries');
     expect(valueContent(work.statements['wdt:P5732']?.[0])).toBe('101');
-    expect(staff?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === role.conceptId)).toBe(true);
-    expect(staff?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P1932' && valueContent(qualifier) === 'Chief Director')).toBe(true);
-    expect(staff?.references?.flatMap((reference) => reference.parts).some((part) => valueContent(part) === 'https://bgm.tv/subject/101#/subject-persons/101/11/position')).toBe(true);
-    expect(voice?.qualifiers?.some((qualifier) => qualifier.property.id === 'wdt:P453' && valueContent(qualifier) === characterId)).toBe(true);
+    expect(
+      staff?.qualifiers?.some(
+        (qualifier) => qualifier.property.id === 'wdt:P3831' && valueContent(qualifier) === role.conceptId,
+      ),
+    ).toBe(true);
+    expect(
+      staff?.qualifiers?.some(
+        (qualifier) => qualifier.property.id === 'wdt:P1932' && valueContent(qualifier) === 'Chief Director',
+      ),
+    ).toBe(true);
+    expect(
+      staff?.references
+        ?.flatMap((reference) => reference.parts)
+        .some((part) => valueContent(part) === 'https://bgm.tv/subject/101#/subject-persons/101/11/position'),
+    ).toBe(true);
+    expect(
+      voice?.qualifiers?.some(
+        (qualifier) => qualifier.property.id === 'wdt:P453' && valueContent(qualifier) === characterId,
+      ),
+    ).toBe(true);
     expect(JSON.stringify(voice)).not.toContain('Association commentary');
     const performerRead = await publicClient.readSubject(performerId);
     const characterRead = await publicClient.readSubject(characterId);
-    const performer = performerRead.subject as { id: string; type: string; statements: Record<string, readonly BatchStatement[]> };
-    const character = characterRead.subject as { id: string; type: string; statements: Record<string, readonly BatchStatement[]> };
+    const performer = performerRead.subject as {
+      id: string;
+      type: string;
+      statements: Record<string, readonly BatchStatement[]>;
+    };
+    const character = characterRead.subject as {
+      id: string;
+      type: string;
+      statements: Record<string, readonly BatchStatement[]>;
+    };
     expect(performer).toMatchObject({ id: performerId, type: 'schema:Person' });
     expect(valueContent(performer.statements['wdt:P6298']?.[0])).toBe('12');
     expect(character).toMatchObject({ id: characterId, type: 'wd:Q95074' });
     expect(valueContent(character.statements['wdt:P6296']?.[0])).toBe('21');
     const roleRead = await publicClient.readSubject(role.conceptId);
     const roleStatements = (roleRead.subject as { statements: Record<string, readonly BatchStatement[]> }).statements;
-    expect(valueContent(roleStatements['schema:url']?.[0])).toBe('https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_staffs.yml');
+    expect(valueContent(roleStatements['schema:url']?.[0])).toBe(
+      'https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_staffs.yml',
+    );
     expect(valueContent(roleStatements['schema:sameAs']?.[0])).toBe(role.uri);
     expect(valueContent(roleStatements['skos:inScheme']?.[0])).toBe(role.schemeId);
 
@@ -183,9 +220,15 @@ test('default anime staff and voice publication adopts exact cited endpoints and
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
     const refreshed = await importAndPublish(first.publication);
     expect(refreshed.result.readings.find((reading) => reading.externalId === '101')!.subject.subject!.id).toBe(workId);
-    expect(refreshed.result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id).toBe(directorId);
-    expect(refreshed.result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id).toBe(performerId);
-    expect(refreshed.result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id).toBe(characterId);
+    expect(refreshed.result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id).toBe(
+      directorId,
+    );
+    expect(refreshed.result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id).toBe(
+      performerId,
+    );
+    expect(
+      refreshed.result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id,
+    ).toBe(characterId);
     expect(refreshed.result.creditRoles?.[0]).toMatchObject({ conceptId: role.conceptId, schemeId: role.schemeId });
 
     const roleRequirement = resolution!.requirements.find((item) => item.sourceKey === `bangumi.staff:${role.code}`)!;
@@ -216,17 +259,25 @@ test('default anime staff and voice publication adopts exact cited endpoints and
           statement: {
             property: { id: 'skos:inScheme' },
             value: { type: 'value', content: wrongSchemeId },
-            references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: roleRequirement.sourceUri } }] }],
+            references: [
+              {
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: roleRequirement.sourceUri } },
+                ],
+              },
+            ],
           },
         },
       ],
     });
     const candidateId = (wrongScheme.results[0] as { value: { candidate: string } }).value.candidate;
-    const candidate = (await runtime.importTransport.reviewedCandidates(role.conceptId, {
-      property: 'skos:inScheme',
-      context: globalContext,
-      limit: 100,
-    })).candidates.find((item) => item.id === candidateId)!;
+    const candidate = (
+      await runtime.importTransport.reviewedCandidates(role.conceptId, {
+        property: 'skos:inScheme',
+        context: globalContext,
+        limit: 100,
+      })
+    ).candidates.find((item) => item.id === candidateId)!;
     const accept = await runtime.importTransport.acceptReviewedCandidate(
       role.conceptId,
       candidateId,

@@ -980,12 +980,12 @@ export async function publishShowcase(input: {
           return exactVocabularySource
             ? false
             : record.provider === 'bangumi'
-            ? host !== 'bgm.tv' &&
-              host !== 'bangumi.tv' &&
-              host !== 'www.bgm.tv' &&
-              host !== 'www.bangumi.tv' &&
-              !(assertion.property === 'schema:image' && host === 'lain.bgm.tv')
-            : host !== 'vndb.org' && !host.endsWith('.vndb.org');
+              ? host !== 'bgm.tv' &&
+                host !== 'bangumi.tv' &&
+                host !== 'www.bgm.tv' &&
+                host !== 'www.bangumi.tv' &&
+                !(assertion.property === 'schema:image' && host === 'lain.bgm.tv')
+              : host !== 'vndb.org' && !host.endsWith('.vndb.org');
         } catch {
           return true;
         }

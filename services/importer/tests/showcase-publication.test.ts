@@ -91,7 +91,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
               references: [
                 {
                   parts: [
-                    { property: { id: 'schema:url' }, value: { type: 'value', content: bangumiRecordUrl(subject.sourceExternalId) } },
+                    {
+                      property: { id: 'schema:url' },
+                      value: { type: 'value', content: bangumiRecordUrl(subject.sourceExternalId) },
+                    },
                   ],
                 },
               ],

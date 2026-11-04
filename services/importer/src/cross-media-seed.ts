@@ -1794,9 +1794,7 @@ export type CrossMediaSeedExtras = {
   }) => Promise<BangumiCreditVocabularyResolution>;
 };
 
-function bangumiSourceIdentity(
-  key: string,
-): { property: string; value: string } | undefined {
+function bangumiSourceIdentity(key: string): { property: string; value: string } | undefined {
   if (key.startsWith('person:')) return { property: 'wdt:P6298', value: key.slice('person:'.length) };
   if (key.startsWith('character:')) return { property: 'wdt:P6296', value: key.slice('character:'.length) };
   if (key.startsWith('episode:')) return { property: 'schema:url', value: bangumiRecordUrl(key) };
@@ -2140,7 +2138,11 @@ export async function seedCrossMedia(
       ensure(subjectRead, 'Current bound source subject is unavailable');
       if (provider === 'bangumi') {
         const subject = subjectRead.subject as
-          | { id?: unknown; type?: unknown; statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[]> }
+          | {
+              id?: unknown;
+              type?: unknown;
+              statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[]>;
+            }
           | undefined;
         const identity = bangumiSourceIdentity(record.key);
         const expectedType = nativeTypes.get(`${sourceAlias}\u0000${record.key}`);
@@ -2148,7 +2150,8 @@ export async function seedCrossMedia(
           identity !== undefined &&
           (subject?.statements?.[identity.property]?.some(
             (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
-          ) ?? false);
+          ) ??
+            false);
         if (subject?.id !== claim.subject || subject.type !== expectedType || !matches) {
           if (identity)
             sourceIdentityGaps.push({
@@ -2406,9 +2409,7 @@ export async function seedCrossMedia(
       creditGaps: credits.gaps,
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
-      ...(vocabulary
-        ? { creditRoles: vocabulary.roles, creditVocabularyRequirements: vocabulary.requirements }
-        : {}),
+      ...(vocabulary ? { creditRoles: vocabulary.roles, creditVocabularyRequirements: vocabulary.requirements } : {}),
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
@@ -2419,9 +2420,9 @@ export async function seedCrossMedia(
   }
 }
 
-async function readPriorShowcasePublication(path: string): Promise<
-  Pick<ShowcasePublicationResult, 'manifest' | 'published'> | undefined
-> {
+async function readPriorShowcasePublication(
+  path: string,
+): Promise<Pick<ShowcasePublicationResult, 'manifest' | 'published'> | undefined> {
   const limit = 32 * 1024 * 1024;
   let bytes: Buffer;
   try {
@@ -2731,19 +2732,20 @@ export async function runCrossMediaSeedCli(
           .sort(),
       },
     };
-    const showcase = journal && publicClient
-      ? await publishShowcase({
-          plan,
-          result: combinedResult,
-          aliases: crossMediaAliases,
-          journal,
-          review: importPort,
-          publicClient,
-          ...(result.creditVocabularyRequirements
-            ? { vocabularyRequirements: result.creditVocabularyRequirements }
-            : {}),
-        })
-      : undefined;
+    const showcase =
+      journal && publicClient
+        ? await publishShowcase({
+            plan,
+            result: combinedResult,
+            aliases: crossMediaAliases,
+            journal,
+            review: importPort,
+            publicClient,
+            ...(result.creditVocabularyRequirements
+              ? { vocabularyRequirements: result.creditVocabularyRequirements }
+              : {}),
+          })
+        : undefined;
     const { bangumiGenrePublication, ...publicCombinedResult } = combinedResult;
     await mkdir(dirname(resultPath), { recursive: true });
     await writeFile(

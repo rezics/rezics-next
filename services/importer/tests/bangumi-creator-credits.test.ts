@@ -102,7 +102,8 @@ function port() {
           if (command.op === 'create' && typeof command.subject === 'object' && 'id' in result.value) {
             const externalId = command.source.external_id;
             const match = /^(person|character):([1-9][0-9]*)$/u.exec(externalId);
-            const property = match?.[1] === 'person' ? 'wdt:P6298' : match?.[1] === 'character' ? 'wdt:P6296' : 'wdt:P5732';
+            const property =
+              match?.[1] === 'person' ? 'wdt:P6298' : match?.[1] === 'character' ? 'wdt:P6296' : 'wdt:P5732';
             const value = match?.[2] ?? externalId;
             subjects.set(result.value.id, {
               id: result.value.id,

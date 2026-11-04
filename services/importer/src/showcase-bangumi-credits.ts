@@ -145,7 +145,9 @@ function needsFor(input: {
       source,
     });
   }
-  return [...required.values()].sort((left, right) => left.code.localeCompare(right.code)).slice(0, showcaseLimits.vocabulary - 1);
+  return [...required.values()]
+    .sort((left, right) => left.code.localeCompare(right.code))
+    .slice(0, showcaseLimits.vocabulary - 1);
 }
 
 function requirementsFor(roles: readonly RequiredRole[], schemeSource: Source): ShowcaseVocabularyRequirement[] {
@@ -255,7 +257,8 @@ async function writeCommands(input: {
       if (!ack || !('value' in ack))
         throw new TypeError(`Bangumi staff vocabulary write failed: ${ack?.status ?? 'missing-ack'}`);
       if (command.op === 'create') {
-        if (!('id' in ack.value) || !uuid.test(ack.value.id)) throw new TypeError('Bangumi staff vocabulary ACK has no UUID');
+        if (!('id' in ack.value) || !uuid.test(ack.value.id))
+          throw new TypeError('Bangumi staff vocabulary ACK has no UUID');
         ids.set(command.key, ack.value.id);
       }
     }
@@ -290,8 +293,7 @@ function statementCites(command: BatchCommand, uri: string): boolean {
     command.op === 'propose' &&
     (command.statement.references ?? []).some((reference) =>
       reference.parts.some(
-        (part) =>
-          part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === uri,
+        (part) => part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === uri,
       ),
     )
   );
@@ -302,10 +304,7 @@ function hasValues(read: ReviewedSubjectRead | null, property: string): boolean 
   return (subject?.statements?.[property]?.length ?? 0) > 0;
 }
 
-function vocabularyRecord(
-  manifest: ShowcaseManifest,
-  sourceKey: string,
-): ShowcaseVocabularyRecord | undefined {
+function vocabularyRecord(manifest: ShowcaseManifest, sourceKey: string): ShowcaseVocabularyRecord | undefined {
   return manifest.vocabulary.find((record) => record.provider === 'bangumi' && record.sourceKey === sourceKey);
 }
 
@@ -386,13 +385,22 @@ async function currentVocabularyRecord(input: {
   )
     return undefined;
   const publicRecord = publishedRecord(input.published, record);
-  const requiredProperties = input.schemeId ? ['schema:url', 'schema:sameAs', 'skos:inScheme'] : ['schema:url', 'schema:sameAs'];
+  const requiredProperties = input.schemeId
+    ? ['schema:url', 'schema:sameAs', 'skos:inScheme']
+    : ['schema:url', 'schema:sameAs'];
   if (
     !publicRecord ||
-    requiredProperties.some((property) => !publicRecord.assertions.some((assertion) => assertion.property === property)) ||
+    requiredProperties.some(
+      (property) => !publicRecord.assertions.some((assertion) => assertion.property === property),
+    ) ||
     !exactAcknowledgements(
       record,
-      { source: input.source, sourceUri: input.sourceUri, sameAs: input.sameAs, ...(input.schemeId ? { schemeId: input.schemeId } : {}) },
+      {
+        source: input.source,
+        sourceUri: input.sourceUri,
+        sameAs: input.sameAs,
+        ...(input.schemeId ? { schemeId: input.schemeId } : {}),
+      },
       input.acknowledgements,
     )
   )
@@ -441,14 +449,17 @@ export async function prepareBangumiCreatorCreditBindings(input: {
   read(subjectId: string): Promise<ReviewedSubjectRead | null>;
 }): Promise<BangumiCreditVocabularyResolution> {
   const roles = needsFor({ drafts: input.drafts, plan: input.plan, subjectTypes: input.subjectTypes ?? [2] });
-  if (!roles.length) return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
+  if (!roles.length)
+    return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
 
   const acknowledgements = input.journal.acknowledgedCommands();
   const schemeSource = schemeEnvelope(roles);
   const schemeRequirement = requirementsFor(roles, schemeSource)[0]!;
   const previousScheme = input.prior ? vocabularyRecord(input.prior.manifest, schemeSourceKey) : undefined;
   const previousSchemeWasPublished =
-    previousScheme !== undefined && input.prior !== undefined && publishedRecord(input.prior.published, previousScheme) !== undefined;
+    previousScheme !== undefined &&
+    input.prior !== undefined &&
+    publishedRecord(input.prior.published, previousScheme) !== undefined;
   const cachedReads = new Map<string, Promise<ReviewedSubjectRead | null>>();
   const read = async (id: string): Promise<ReviewedSubjectRead | null> => {
     let pending = cachedReads.get(id);
@@ -560,7 +571,9 @@ export async function prepareBangumiCreatorCreditBindings(input: {
     const requirement = roleRequirements[index]!;
     const previousRecord = input.prior ? vocabularyRecord(input.prior.manifest, roleSourceKey(role.code)) : undefined;
     const wasPublished =
-      previousRecord !== undefined && input.prior !== undefined && publishedRecord(input.prior.published, previousRecord) !== undefined;
+      previousRecord !== undefined &&
+      input.prior !== undefined &&
+      publishedRecord(input.prior.published, previousRecord) !== undefined;
     const bound = await currentVocabularyRecord({
       record: previousRecord,
       sourceKey: roleSourceKey(role.code),
@@ -582,7 +595,13 @@ export async function prepareBangumiCreatorCreditBindings(input: {
         schemeId: scheme.id,
         releaseDigest: bundledDigest,
       });
-      reachedRoles.push({ code: role.code, property: role.property, uri: role.uri, conceptId: bound.id, schemeId: scheme.id });
+      reachedRoles.push({
+        code: role.code,
+        property: role.property,
+        uri: role.uri,
+        conceptId: bound.id,
+        schemeId: scheme.id,
+      });
       existingRoleRequirements.push(requirement);
     } else if (
       wasPublished ||
@@ -675,7 +694,13 @@ export async function prepareBangumiCreatorCreditBindings(input: {
         schemeId: scheme.id,
         releaseDigest: bundledDigest,
       });
-      reachedRoles.push({ code: role.code, property: role.property, uri: role.uri, conceptId: bound.id, schemeId: scheme.id });
+      reachedRoles.push({
+        code: role.code,
+        property: role.property,
+        uri: role.uri,
+        conceptId: bound.id,
+        schemeId: scheme.id,
+      });
       existingRoleRequirements.push(requirement);
     }
   }
@@ -709,7 +734,8 @@ export async function currentBangumiCreatorCreditBindings(input: {
   const cached = new Map<string, Promise<ReviewedSubjectRead | null>>();
   const manifest = input.manifest ?? input.resolution.publication?.manifest;
   const published = input.published ?? input.resolution.publication?.published ?? [];
-  if (!manifest) return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
+  if (!manifest)
+    return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
   const read = (id: string) => {
     let pending = cached.get(id);
     if (!pending) {
@@ -719,7 +745,8 @@ export async function currentBangumiCreatorCreditBindings(input: {
     return pending;
   };
   const schemeRequirement = requirementBySource(input.resolution.requirements, schemeSourceKey);
-  if (!schemeRequirement) return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
+  if (!schemeRequirement)
+    return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
   const schemeRecord = vocabularyRecord(manifest, schemeSourceKey);
   const scheme = await currentVocabularyRecord({
     record: schemeRecord,
@@ -732,7 +759,8 @@ export async function currentBangumiCreatorCreditBindings(input: {
     acknowledgements: input.acknowledgements,
     read,
   });
-  if (!scheme) return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
+  if (!scheme)
+    return { bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] }, requirements: [], roles: [] };
   const concepts: ResolvedConcept[] = [];
   const roles: BangumiCreditRoleBinding[] = [];
   const requirements = [schemeRequirement];
@@ -766,7 +794,15 @@ export async function currentBangumiCreatorCreditBindings(input: {
   return {
     bindings: {
       releaseDigest: bundledDigest,
-      schemes: [{ taxonomy: 'bangumi.staff', uri: bangumiStaffSchemeUri, id: scheme.id, type: 'skos:ConceptScheme', releaseDigest: bundledDigest }],
+      schemes: [
+        {
+          taxonomy: 'bangumi.staff',
+          uri: bangumiStaffSchemeUri,
+          id: scheme.id,
+          type: 'skos:ConceptScheme',
+          releaseDigest: bundledDigest,
+        },
+      ],
       concepts,
     },
     requirements,
