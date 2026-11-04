@@ -360,7 +360,9 @@ test('the mounted file visit keeps definitions when eligibility is refused, unkn
     expect(commands).toHaveLength(0);
 
     observe = async () => ({ state: 'unknown', reason: 'unavailable' });
-    await page.refresh();
+    await act(async () =>
+      page.user.click(page.canvas.getByRole('button', { name: page.m.identity_intake_authority_retry() })),
+    );
     await page.waitFor(() =>
       expect(page.canvas.getByRole('alert').textContent).toContain(page.m.identity_intake_authority_unknown()),
     );
