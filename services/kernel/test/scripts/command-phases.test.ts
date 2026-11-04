@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { join, resolve } from 'node:path';
 import {
   KERNEL_COMMAND_PHASES,
+  KERNEL_COMPILER_NESTED_PHASES,
   commandObservation,
   formatCommandObservation,
   parseIoPressure,
@@ -48,6 +49,7 @@ test('Kernel command phases pair without a duration assertion', async () => {
   expect(lines[0]).toMatch(/^compiler\tstart\t\d+$/);
   expect(lines[1]).toMatch(/^compiler\tend\t\d+$/);
   expect(KERNEL_COMMAND_PHASES).toEqual(['database-image', 'migrations', 'sql-schema', 'compiler', 'cleanup']);
+  expect(KERNEL_COMPILER_NESTED_PHASES).toEqual(['client-emit', 'tsc', 'construct', 'openapi']);
 });
 
 test('slice memory and IO pressure parse without inventing zeros', () => {
@@ -137,8 +139,61 @@ test('admitted typecheck uses one throwaway database for compiler work and recor
     'migrations',
     'migrations',
     'compiler',
+    'tsc',
+    'tsc',
+    'construct',
+    'construct',
     'compiler',
     'cleanup',
     'cleanup',
   ]);
+});
+
+function phaseNames(file: string): string[] {
+  return readFileSync(file, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => line.split('\t')[0]);
+}
+
+function writeExecutable(directory: string, name: string, script: string): void {
+  const path = join(directory, name);
+  writeFileSync(path, script);
+  chmodSync(path, 0o755);
+}
+
+test('nested compiler markers pair in publication order and skip after a failed tsc', async () => {
+  const directory = temporaryDirectory();
+  const phases = join(directory, 'command-phases.tsv');
+  writeExecutable(directory, 'bun', '#!/bin/sh\nexit 0\n');
+  writeExecutable(directory, 'tsc', '#!/bin/sh\nexit 0\n');
+  const env = {
+    PATH: `${directory}:${process.env.PATH}`,
+    REZICS_CHECK_PHASES: phases,
+    DATABASE_URL: 'postgres://throwaway.test/db',
+  };
+  const dependencies = {
+    recognize: () => physicalAdmission,
+    place: async () => {
+      throw new Error('nested placement');
+    },
+    outputTree: async (_root: string, run: () => Promise<number>) => run(),
+  };
+  expect(await runKernelTypecheck(env, dependencies, ['--emit-client', '--emit-openapi'])).toBe(0);
+  expect(phaseNames(phases)).toEqual([
+    'compiler',
+    'client-emit',
+    'client-emit',
+    'tsc',
+    'tsc',
+    'construct',
+    'construct',
+    'openapi',
+    'openapi',
+    'compiler',
+  ]);
+  writeFileSync(phases, '');
+  writeExecutable(directory, 'tsc', '#!/bin/sh\nexit 2\n');
+  expect(await runKernelTypecheck({ ...env, REZICS_CHECK_PHASES: phases }, dependencies, [])).toBe(2);
+  expect(phaseNames(phases)).toEqual(['compiler', 'tsc', 'tsc', 'compiler']);
 });

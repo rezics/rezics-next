@@ -4,6 +4,9 @@ import { spawnSync } from 'node:child_process';
 /** Command phases owned by Kernel. Slot wait and rsync stay on the transport receipt. */
 export const KERNEL_COMMAND_PHASES = ['database-image', 'migrations', 'sql-schema', 'compiler', 'cleanup'] as const;
 
+/** Nested markers inside `compiler` so one receipt can split client emit, `tsc`, construct and OpenAPI. */
+export const KERNEL_COMPILER_NESTED_PHASES = ['client-emit', 'tsc', 'construct', 'openapi'] as const;
+
 export type KernelCommandPhase = (typeof KERNEL_COMMAND_PHASES)[number];
 
 export type CommandPhaseClock = () => bigint;

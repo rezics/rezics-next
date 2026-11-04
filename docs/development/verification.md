@@ -138,14 +138,20 @@ commands, full Kernel checks, browser work, database/container work and commands
 go to a performance-approved check host. Package-script, `--cwd` and ordinary `env` prefixes use the same classification.
 
 Kernel typecheck and kernel check command phases are `database-image`, `migrations`, `sql-schema`, `compiler` and
-`cleanup`, written to `REZICS_CHECK_PHASES`. Slot wait and rsync remain transport-owned and must not be folded into
-those durations. Compare like command/source classes using command phases plus admission `inactive_file` / IO pressure;
-do not treat wrapper wall time as compiler work. Cache-aware admission counts reclaimable file cache as headroom
-(`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`). The earlier 10–25 minute Kernel typecheck on host b with
-slice file cache full and IO full around 40% is that admission limit, not duplicate Kernel schema or compiler
-preparation. A later receipt is still required after that producer is what the host actually runs; a dev commit is not
-deployed behavior. The one-run Kernel compiler database uses a labelled volume in the run slice, matching kernel check
-storage.
+`cleanup`, written to `REZICS_CHECK_PHASES`. Kernel typecheck nests `client-emit`, `tsc`, `construct` and `openapi`
+inside `compiler` so one receipt can split those commands. Slot wait and rsync remain transport-owned and must not be
+folded into those durations. Compare like command/source classes using command phases plus admission `inactive_file` /
+IO pressure; do not treat wrapper wall time as compiler work. Cache-aware admission counts reclaimable file cache as
+headroom (`3afee00d49` / `b1841e43808feae3d6f1c1f8617bc8ffdde2512f`) on current dev; that commit is not an ancestor of
+`main`, and a dev commit is not deployed behavior. The labelled-volume host-a Kernel typecheck (334s command, 324s
+compiler, 4.6s slot wait, 1.8s rsync, IO full 34% at start, pre-existing compiler errors) shows compiler dominating
+admitted command time on that a-host run. It does not identify the 10–25 minute host-b symptom, and a failed compiler
+cannot establish a successful full typecheck. Ledger Kernel typechecks on 2026-11-04 used revision
+`7a651ea717c21e8c659dc7f447d371e556a973d4`, ledger host `remote`, compiler exit 2, command 269–591s and wrapper
+330–1375s. A passing 2026-11-02 Kernel typecheck had command 223s and wrapper 1591s at slot wait 4.6s. File-cache
+pressure remains a correlation until a like-class b-host receipt records nested compiler phases, live producer hash,
+host, concurrency, slice memory/IO and compiler outcome. The one-run Kernel compiler database uses a labelled volume
+in the run slice, matching kernel check storage.
 
 `worker-check`, `stack-run`, `check-run` and `remote-check` derive the performance pool from hosts explicitly marked
 `"performance": true` in the private hosts file. Missing or false flags exclude a host, including a or b; there is no
