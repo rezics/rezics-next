@@ -6813,6 +6813,7 @@
   "graph_explore_denied": "Este grafo no está disponible para la sesión actual.",
   "graph_explore_stale": "Esta selección ya no es actual. Vuelva a elegir un nodo o una arista.",
   "graph_explore_loading": "Leyendo el grafo…",
+  "graph_explore_retry": "Reintentar esta misma lectura",
   "quotation_title": "Citas",
   "quotation_intro": "Lea una cita admitida con orador, obra y voz como identidades distintas. El texto por sí solo no indica quién habló.",
   "quotation_text": "Texto de la cita",

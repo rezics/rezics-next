@@ -179,6 +179,17 @@ test('graph explorer keeps cycles and both directions, continues a truncated bra
   expect(read.graph.edges.some((edge) => edge.from === cycle && edge.to === anchor)).toBe(true);
   expect(read.graph.edges.some((edge) => edge.from === neighbour && edge.to === anchor)).toBe(true);
   expect(new Set(read.graph.edges.map((edge) => JSON.stringify(edge))).size).toBe(read.graph.edges.length);
+  const staleEdge = await readSubjectGraphPage(current.client, 'Bearer reader', release(), anchor, 'en', {
+    property: 'wdt:P737',
+    selection: {
+      kind: 'edge',
+      statement: '00000000-0000-4000-8000-00000000e001',
+      from: anchor,
+      to: cycle,
+      property: 'wdt:P737',
+    },
+  });
+  expect(staleEdge).toEqual({ ok: false, reason: 'stale' });
   const truncated = graphClient('truncated');
   const first = await readSubjectGraphPage(truncated.client, 'Bearer reader', release(), anchor, 'en', {
     property: 'wdt:P737',

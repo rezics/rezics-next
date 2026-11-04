@@ -6813,6 +6813,7 @@
   "graph_explore_denied": "Dieser Graph ist für die aktuelle Sitzung nicht verfügbar.",
   "graph_explore_stale": "Diese Auswahl ist nicht mehr aktuell. Wählen Sie Knoten oder Kante erneut.",
   "graph_explore_loading": "Graph wird gelesen…",
+  "graph_explore_retry": "Dieselbe Graphabfrage erneut lesen",
   "quotation_title": "Zitate",
   "quotation_intro": "Lesen Sie ein zugelassenes Zitat mit Sprecher, Werk und Stimme als getrennte Identitäten. Der Text allein sagt nicht, wer sprach.",
   "quotation_text": "Zitattext",

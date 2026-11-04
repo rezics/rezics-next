@@ -6813,6 +6813,7 @@
   "graph_explore_denied": "当前会话无法使用此关系图。",
   "graph_explore_stale": "此选择已过时。请重新选择一个节点或边。",
   "graph_explore_loading": "正在读取关系图…",
+  "graph_explore_retry": "按相同条件重试读取",
   "quotation_title": "引文",
   "quotation_intro": "阅读已承认的引文，说话者、作品与配音是彼此独立的对象。单凭正文不能推断是谁说的。",
   "quotation_text": "引文正文",

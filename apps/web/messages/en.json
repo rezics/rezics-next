@@ -6890,6 +6890,7 @@
   "graph_explore_denied": "This graph is not available for the current session.",
   "graph_explore_stale": "This selection is no longer current. Choose a node or edge again.",
   "graph_explore_loading": "Reading the graph…",
+  "graph_explore_retry": "Retry this exact read",
   "quotation_title": "Quotations",
   "quotation_intro": "Read an admitted quotation with its speaker, work and voice as separate identities. Text alone does not imply who spoke.",
   "quotation_text": "Quotation text",
