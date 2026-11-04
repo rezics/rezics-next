@@ -4499,8 +4499,8 @@ observations and final COMMIT. An existing unit reuses its actual context. When 
 the History unit validates and reuses that exact live token and its remaining balance; it never opens a nested
 Source frame. A shorter caller deadline stays shorter. Foreign-Pool, expired/settled or explicit mismatched tokens
 refuse before dispatch. The old Pool-only entry can prepare/refuse but cannot mutate; when invoked inside Source
-it prepays C + B(k) before its sole command and cannot retry or silently escape that allocation. Deadline and
-native reservations are inherited without refund or replacement. The installed selected retirement engine remains
+its sole command has static bound C + B(k); retries must include their repeated work. The original deadline
+and native identity/proof bindings remain unchanged. The installed selected retirement engine remains
 the sole writer of readiness, generation-2 closure, physical deletion and receiving proof; this minimizer consumes
 its actual committed result and creates no parallel engine.
 
@@ -4545,11 +4545,11 @@ minimized source use the already accepted technical receiver; they cannot supply
 
 #### Additional final-frame cost handoff
 
-This is the literal Accounts composition for the existing Semantic final-frame owner. It supplements the complete
-selected-unit table above; it does not fund it. All vectors are rows/points/statements/bytes/engineRequests, with
-engineRequests zero for the additions. Each listed bound is reserved before its actual call, including refusal,
-failed dispatch and rollback prefixes. No subtraction on early return, cached success, replacement frame or local
-ledger is permitted. SQL recognition and smaller configured/remainder caps stay unchanged.
+This is the static Accounts composition for the existing Semantic final-frame owner, additional to the complete
+selected-unit table above. All vectors are rows/points/statements/bytes/engineRequests, with engineRequests zero
+for the additions. Each reached call contributes its full declared bound, including refusal, failed dispatch and
+rollback prefixes; repeated or nested work cannot be omitted from the whole-call ceiling. Runtime prepayment or
+a no-refill ledger is not an authorization prerequisite. SQL recognition and smaller configured caps stay unchanged.
 
 | Literal SQL / export identity                                                                                         | Home and locked footprint                                                                                                                                                     | Reservation per invocation                                                          |
 | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -4611,11 +4611,11 @@ failure ROLLBACK) with the eight C controls; it adds 3/1/4/128/0 to that observa
 No current verifier or physical bound is reduced. Original receipt/outbox observations also invoke
 `readAgentIdentityRecoveryArtifactInTransaction`'s exact copy/recovery association SELECT: its existing
 2/2/1/512/0 reservation is additional on every actual invocation, including an absent recovery association.
-An actual recovery then prepays the existing 135/135/6/32768/0 finite cut and
+An actual recovery additionally includes the existing 135/135/6/32768/0 finite cut and
 100/100/36/24576/0 current readiness body; missing Search current-enrollment authority still refuses, and no
-Source or SDK result substitutes for that owner. `readAgentIdentityRetirementStage` now also reserves its
-73/71/26/82176/0 local command before dispatch whenever an ambient Source frame exists, including calls outside
-the History scheduling callback. That provenance is funding only; only the registered callback dispatches Source.
+Source or SDK result substitutes for that owner. `readAgentIdentityRetirementStage` also includes its
+73/71/26/82176/0 local command whenever an ambient Source frame exists, including calls outside
+the History scheduling callback. That cost association supplies no authority; only the registered callback dispatches Source.
 
 The original effect wrapper is another independent retained execution: `events/effects.ts:registerEffects`
 persists `fx:…` workflow IDs and the `effect.run` input, while the reversal writer maps the distinct original
@@ -4630,27 +4630,26 @@ A refusal before staging still spends its command/root prefix. Staging refusal, 
 reservations already made; another delivery spends again. The per-key Source stage, original SDK observation,
 current point/cut verification, H, Rcurrent, recovery point and M are separate reached calls, not alternative
 budgets. Five existing current-verifier entries alone require 696320 bytes, exceeding the unchanged 630784-byte
-Source allowance before new recovery receiving calls. The Source recovery branch refuses before foreign recovery
+local Source ceiling before new recovery receiving calls. The Source recovery branch refuses before foreign recovery
 probes or writing. The old 11588/9856/2731/6843136/0 consumer body, 577, 585 and 1198 do not fund the complete
 Source/History composition. Preserve directory parent100/200/36/229376 and effective child 50/100/18/114688,
 smaller remainder/configuration caps and the native 100-row ceiling. Semantic must reconcile the repeated H/current
-Account and Library's literal nested/fence costs before final funding; unknown-SQL refusal stays enabled.
+Account and Library's literal nested/fence costs in the whole-call ceiling; unknown-SQL refusal stays enabled.
 
 The focused default positive/refusal regression is authored in `agent-verification-reversal.test.ts` and is UNRUN.
 Additional unrun assertions cover original released receipt receiving and current barrier/role rejection, plus
 actual inherited-frame reuse, cumulative balance and foreign/ended-frame refusal without dispatch.
-The released recovery inventory snapshot separately prepays its BEGIN, timeout setting, COMMIT and failure
+The released recovery inventory snapshot separately includes BEGIN, timeout setting, COMMIT and failure
 ROLLBACK: 1/0/4/128/0 in addition to the in-transaction 135/135/6/32768/0 cut. The exported
 `AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST` and `AGENT_IDENTITY_RECOVERY_INVENTORY_SNAPSHOT_COST` distinguish
-these two actual dispatches; the released total is 136/135/10/32896/0, paid before checkout. This does not change
-the same-command recovery cut reservation. Additional unrun cases cover this prepayment, direct preparation's
+these two actual dispatches; the released total is 136/135/10/32896/0, including checkout controls. This does not change
+the same-command recovery cut reservation. Additional unrun cases cover these control costs, direct preparation's
 inherited debit, explicit ended SDK tokens and foreign-barrier refusal. The original selected-body
 11588/9856/2731/6843136/0 declaration remains unchanged and is not a full aggregate: the new R physical reads,
 initial/repeated inventory/receiving and recovery snapshot controls remain additional reached work for the
 Source owner's final declaration. No child or parent cap is enlarged here.
-The released `readAgentIdentityReceivingArtifact` entry prepays
-`AGENT_IDENTITY_RECEIVING_ARTIFACT_COST` (69/69/4/24576/0) before acquiring its native checkout, then pays C
-before command entry. Both Account copy staging and SDK retirement observation use this entry. The same-command
+The released `readAgentIdentityReceivingArtifact` entry includes
+`AGENT_IDENTITY_RECEIVING_ARTIFACT_COST` (69/69/4/24576/0) for its native checkout, plus C for command entry. Both Account copy staging and SDK retirement observation use this entry. The same-command
 `lockAgentIdentityReceivingArtifact` remains the physical resolver; this wrapper adds neither custody nor funding.
 Its focused insufficient-funding/no-checkout case is authored in the same existing fixture and is UNRUN.
 It requires genuine lifecycle T, accepted verify/reversal, actual same-Pool SDK admission, the installed selected
