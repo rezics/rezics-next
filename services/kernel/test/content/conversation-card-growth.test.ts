@@ -223,7 +223,8 @@ async function readHome() {
     bearer: world.base.other.bearer,
   });
   requireStatus(result, 200);
-  return result;
+  if (result.value === null) throw new Error('Home feed response omitted its page');
+  return { ...result, value: result.value };
 }
 
 async function readSubject(limit: number, cursor?: string) {
@@ -233,7 +234,8 @@ async function readSubject(limit: number, cursor?: string) {
     bearer: world.base.author.bearer,
   });
   requireStatus(result, 200);
-  return result;
+  if (result.value === null) throw new Error('Subject thread response omitted its page');
+  return { ...result, value: result.value };
 }
 
 async function addSparseSubjectRows(): Promise<string[]> {
@@ -445,7 +447,7 @@ function assertIndexedSnapshots(capture: Capture): void {
 }
 
 function assertBoundedGrowth(axis: Axis, samples: readonly Sample[]): void {
-  expect(samples.map(({ scale }) => scale)).toEqual(scales);
+  expect(samples.map(({ scale }) => scale)).toEqual([...scales]);
   const first = samples[0]!;
   for (const sample of samples.slice(1)) {
     expect(sample.cost.statements, `${axis}: SQL statement count`).toBe(first.cost.statements);
@@ -610,7 +612,7 @@ test.serial('complete Home and Subject conversation pages stay bounded across fo
           /content\.conversation_activity_board_frontier/i.test(sql),
         ).length;
         const measurement: PageMeasurement = {
-          ...measured.value.measurement,
+          ...measured.value.value.measurement,
           snapshotReads,
           poolQueries: measured.capture.statements.length,
           poolRequestBytes: cost.requestBytes,
@@ -625,8 +627,8 @@ test.serial('complete Home and Subject conversation pages stay bounded across fo
           jsonParsedUtf8: measured.value.meter.parsedUtf8,
         };
         expect(snapshotReads).toBeGreaterThanOrEqual(4);
-        expect(measured.value.homePage.value.feedItems).toHaveLength(pageSize);
-        expect(measured.value.subjectPage.value.threads).toHaveLength(pageSize);
+        expect(measured.value.value.homePage.value.feedItems).toHaveLength(pageSize);
+        expect(measured.value.value.subjectPage.value.threads).toHaveLength(pageSize);
         samples.push({ scale, capture: measured.capture, cost, measurement });
       }
       assertBoundedGrowth(axis, samples);
