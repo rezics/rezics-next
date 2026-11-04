@@ -6,9 +6,10 @@ import { StdioAppServer, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { temporaryDirectory } from './test-support.ts';
 
-async function setup() {
+async function setup(policy?: ControlPolicy) {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
@@ -27,6 +28,7 @@ async function setup() {
   let passing = false;
   let now = Date.now();
   const services = {
+    ...(policy ? { policy } : {}),
     connect: async () => {
       connections++;
       return client;
@@ -259,6 +261,72 @@ test('turn and wall-clock limits replace the session without waking the superman
     } finally {
       await s.close();
     }
+  }
+});
+
+test('A manager whose wall-clock renewal fails is reported to the supermanager as a blocker carrying the failure's error line, not as an ordinary round-limit pause.', async () => {
+  const s = await setup();
+  try {
+    const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
+    const state = await s.managers.start(spec);
+    await s.managers.flush();
+    s.services.windows.register = () => {
+      throw new Error('Missing termspaces session: rezics-agents\nrest of the stack');
+    };
+    s.advance(spec.limits.wallMs + 1);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
+    });
+    await s.managers.flush();
+    const failed = s.managers.get(state.id);
+    expect(failed.status).toBe('renewal-failed');
+    expect(failed.renewalAttempts).toEqual([
+      { at: expect.any(Number), error: 'Missing termspaces session: rezics-agents' },
+    ]);
+    const pending = s.inbox.pending('supervisor');
+    expect(pending.map((entry) => entry.event.kind)).toEqual(['blocker']);
+    expect(pending[0]?.event.summary).toBe(
+      'Manager manager renewal failed: Missing termspaces session: rezics-agents',
+    );
+  } finally {
+    await s.close();
+  }
+});
+
+test("The host retries a failed renewal on a bounded schedule until it succeeds, and each retry outcome is visible in the manager's state.", async () => {
+  const s = await setup({ ...defaultPolicy, manager: { ...defaultPolicy.manager, renewalRetryMs: 200 } });
+  try {
+    const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
+    const state = await s.managers.start(spec);
+    await s.managers.flush();
+    s.services.windows.register = () => {
+      throw new Error('Missing termspaces session: rezics-agents');
+    };
+    s.advance(spec.limits.wallMs + 1);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: state.threadId, turn: { id: state.activeTurnId, status: 'completed' } },
+    });
+    await s.managers.flush();
+    expect(s.managers.get(state.id).status).toBe('renewal-failed');
+    s.services.windows.register = (manager: string, argv: string[]) => {
+      s.windows.push({ manager, argv });
+      return '@1';
+    };
+    const deadline = Date.now() + 1500;
+    while (s.managers.get(state.id).status !== 'running' && Date.now() < deadline) await Bun.sleep(10);
+    await s.managers.flush();
+    const renewed = s.managers.get(state.id);
+    expect(renewed.status).toBe('running');
+    expect(renewed.threadId).not.toBe(state.threadId);
+    expect(renewed.renewalAttempts).toEqual([
+      { at: expect.any(Number), error: 'Missing termspaces session: rezics-agents' },
+      { at: expect.any(Number) },
+    ]);
+    expect(renewed.nextRenewalRetryAt).toBeUndefined();
+  } finally {
+    await s.close();
   }
 });
 

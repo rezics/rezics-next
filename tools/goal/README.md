@@ -694,6 +694,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.manager.continuationBudgetPercent`            | `90`                        | Budget consumption percentage requesting a manager continuation.                                                                                                                            |
 | `policy.manager.continuationCharacters`               | `8000`                      | Manager continuation length guidance (characters).                                                                                                                                          |
 | `policy.manager.messageWords`                         | `60`                        | Manager decision and handoff message length guidance (words).                                                                                                                               |
+| `policy.manager.renewalRetryMs`                       | `600000`                    | Interval between automatic retries after a failed manager renewal (ms).                                                                                                                     |
 | `policy.guidance.longCommandWaitMs`                   | `300000`                    | Minimum open-session long-command wait in worker prompts (ms).                                                                                                                              |
 | `policy.guidance.summaryWords`                        | `120`                       | Worker final summary length guidance (words).                                                                                                                                               |
 | `policy.guidance.blockerWords`                        | `80`                        | Worker final blocker detail length guidance (words).                                                                                                                                        |
@@ -2218,6 +2219,11 @@ owner documents, and next actions), without appending to the old file, then mess
 automatically pauses and renews the manager with a fresh thread. If the continuation file exists, the new thread's first
 prompt names it; the supermanager receives one environment event with the old token count and new thread. A manual
 `manager renew` also accepts Codex Goals in `budgetLimited` or `blocked` status without a separate stop.
+When an automatic renewal fails, the host delivers a `blocker` to the supermanager with the manager id and the error's
+first line, keeps that manager in `renewal-failed` (distinct from a pause), records each attempt on the manager, and
+retries every `policy.manager.renewalRetryMs` (ten minutes by default) until the renewal succeeds. A manual
+`manager renew` accepts `renewal-failed` as well as `paused`. Window lookups pass `-u` to every tmux invocation and
+accept the underscore field separators tmux prints when the host has no locale.
 
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
 The control plane's manager wakeup path is event-driven: the opening tells a manager to end the turn when no decision
