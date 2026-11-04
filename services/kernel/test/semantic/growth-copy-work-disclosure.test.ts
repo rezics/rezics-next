@@ -21,7 +21,9 @@ test('copy/work disclosure stays bounded at 64/512/4096 unrelated subjects and o
   const f = await createListPresentationFixture({ poolMax: 1 });
   try {
     const work = await f.create('schema:Book', {}, { en: 'Growth work' });
-    const edition = await f.create('bf:Instance', { 'schema:exampleOfWork': work }, { en: 'Growth edition' });
+    const edition = await f.create('bf:Instance', {}, { en: 'Growth edition' });
+    const candidate = await f.propose(edition, 'schema:exampleOfWork', work);
+    await f.adopt(edition, 'schema:exampleOfWork', [candidate]);
     const empty = await f.create('bf:Instance', {}, { en: 'Growth empty' });
     const page = [edition, empty, edition];
     const route = routeOf(edition)!;
