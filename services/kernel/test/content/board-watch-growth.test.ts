@@ -64,11 +64,15 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
       );
       const retryReader = f.accounts.principal;
       let retryTarget: string | undefined;
+      let retryTargetPostId: string | undefined;
+      let unrelatedSourceThreadId: string | undefined;
+      let unrelatedSourcePostId: string | undefined;
       let retryCursor = '';
       if (step === 'cold-thread-retry') {
         const first = await f.thread();
         const later = await f.thread();
         retryTarget = later.id;
+        retryTargetPostId = later.firstPost.id;
         for (const thread of [first, later])
           expect((await f.call(retryReader, 'PUT', `/v1/threads/${thread.id}/watch`)).status).toBe(204);
         await f.db.admin.query(
@@ -77,6 +81,11 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
            WHERE watcher_account_id=$2 AND thread_id=ANY($3::uuid[])`,
           [first.id, retryReader, [first.id, later.id]],
         );
+      }
+      if (step === 'thread-list') {
+        const unrelatedSource = await f.thread();
+        unrelatedSourceThreadId = unrelatedSource.id;
+        unrelatedSourcePostId = unrelatedSource.firstPost.id;
       }
       const access = createContentWorkAccess(() => new Date(), f.db.pool);
       let source: CloudEvent;
@@ -234,70 +243,108 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
         },
         async grow(db, scale, previous) {
           const count = scale - previous;
-          const ownIds = Array.from({ length: count }, () => newId(ownerRoute));
           const resources = Array.from({ length: count }, () => newId(0x7865));
-          const recipients = Array.from({ length: count }, () => newId(0x7654));
-          const recipientWatches = Array.from({ length: count }, () => newId(0x7654));
-          if (step !== 'board-list' && step !== 'board-remove')
+          const oldCreatedAt = "'2000-01-01T00:00:00Z'::timestamptz";
+          const identityKind =
+            step === 'board-list' || step === 'board-remove'
+              ? 'board'
+              : step === 'thread-list' || step === 'thread-remove' || step === 'cold-thread-retry'
+                ? 'thread'
+                : null;
+          if (identityKind !== null) {
+            const selectedAccount = step === 'cold-thread-retry' ? retryReader : owner;
+            const unrelatedAccount = step === 'cold-thread-retry' ? owner : f.accounts.recipient;
+            const selectedRoute = routeOf(selectedAccount)!;
+            const unrelatedRoute = routeOf(unrelatedAccount)!;
+            const selectedWatchIds = Array.from({ length: count }, () => newId(selectedRoute));
+            const unrelatedWatchIds = Array.from({ length: count }, () => newId(unrelatedRoute));
+            if (identityKind === 'board') {
+              const insertBoardHistory = `
+                INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
+                SELECT $1,$2,board,watch,true,1,${oldCreatedAt}
+                FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`;
+              await db.admin.query(insertBoardHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
+              await db.admin.query(insertBoardHistory, [unrelatedRoute, unrelatedAccount, resources, unrelatedWatchIds]);
+            } else {
+              const insertThreadHistory = `
+                INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
+                SELECT $1,$2,thread,watch,${oldCreatedAt}
+                FROM unnest($3::uuid[],$4::uuid[]) n(thread,watch)`;
+              await db.admin.query(insertThreadHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
+              await db.admin.query(insertThreadHistory, [unrelatedRoute, unrelatedAccount, resources, unrelatedWatchIds]);
+            }
+          }
+          if (step === 'opening' || step === 'sparse-opening') {
+            const recipients = Array.from({ length: count }, () => newId(0x7654));
+            const recipientWatches = Array.from({ length: count }, () => newId(0x7654));
             await db.admin.query(
               `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
-          SELECT $1,$2,board,watch,true,1,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`,
-              [ownerRoute, owner, resources, ownIds],
+               SELECT $1,recipient,$2,watch,true,1,clock_timestamp()+interval '100 years'
+               FROM unnest($3::uuid[],$4::uuid[]) n(recipient,watch)`,
+              [0x7654, f.boardId, recipients, recipientWatches],
             );
-          if (step !== 'thread-list' && step !== 'thread-remove')
+          }
+          if (step === 'erase')
             await db.admin.query(
-              `INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
-          SELECT $1,$2,thread,watch,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(thread,watch)`,
-              [ownerRoute, owner, resources, ownIds],
+              `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
+               SELECT $1,$2,board,watch,false,2,${oldCreatedAt}
+               FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`,
+              [
+                routeOf(erasing),
+                erasing,
+                resources,
+                Array.from({ length: count }, () => newId(routeOf(erasing)!)),
+              ],
             );
-          await db.admin.query(
-            `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
-          SELECT $1,$2,board,watch,false,2,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`,
-            [routeOf(erasing), erasing, resources, Array.from({ length: count }, () => newId(routeOf(erasing)!))],
-          );
-          // Missing recipients exercise both native current authority and terminal recipient finalization.
-          await db.admin.query(
-            `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
-          SELECT $1,recipient,$2,watch,true,1,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(recipient,watch)`,
-            [0x7654, f.boardId, recipients, recipientWatches],
-          );
-          const revisionRoute = routeOf(watched.id)!;
-          const historicalRevisions = Array.from({ length: count }, () => newId(revisionRoute));
-          const historicalTransactions = historicalRevisions.map(() => newId(revisionRoute));
-          await db.admin.query(
-            `INSERT INTO content.revision(
-               route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,
-               availability,recorded_transaction_id,recorded_at,media_ids,vote_citation)
-             SELECT source.route,source.thread_id,source.post_id,history.revision_id,source.body,source.body_sha256,
-                    source.search_text,source.licence,source.subject_ids,source.board_id,source.availability,
-                    history.transaction_id,source.recorded_at-history.ordinal*interval '1 second',
-                    source.media_ids,source.vote_citation
-             FROM (SELECT * FROM content.revision WHERE post_id=$1 ORDER BY recorded_at DESC LIMIT 1) source
-             CROSS JOIN unnest($2::uuid[],$3::uuid[]) WITH ORDINALITY history(revision_id,transaction_id,ordinal)`,
-            [watched.firstPost.id, historicalRevisions, historicalTransactions],
-          );
-          const grantRoute = routeOf(f.boardId)!;
-          const authorityTransactions = Array.from({ length: count }, () => newId(grantRoute));
-          const unrelatedAuthorityTransactions = Array.from({ length: count }, () => newId(grantRoute));
-          const rebaseCurrentAuthority = `
-            UPDATE access.resource_grant SET valid=tstzrange(clock_timestamp() - interval '1 day',NULL,'[)')
-            WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='board:read' AND valid @> clock_timestamp()`;
-          await db.admin.query(rebaseCurrentAuthority, [grantRoute, f.boardId, owner]);
-          await db.admin.query(rebaseCurrentAuthority, [grantRoute, f.boardId, f.accounts.recipient]);
-          const insertExpiredAuthority = `
-            INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
-            SELECT $1,$2,$3,'board:read',
-                   tstzrange('2000-01-01T00:00:00Z'::timestamptz - ($5 + ordinal)*interval '2 hours',
-                             '2000-01-01T01:00:00Z'::timestamptz - ($5 + ordinal)*interval '2 hours','[)'),transaction_id
-            FROM unnest($4::uuid[]) WITH ORDINALITY history(transaction_id,ordinal)`;
-          await db.admin.query(insertExpiredAuthority, [grantRoute, f.boardId, owner, authorityTransactions, previous]);
-          await db.admin.query(insertExpiredAuthority, [
-            grantRoute,
-            f.boardId,
-            f.accounts.recipient,
-            unrelatedAuthorityTransactions,
-            previous,
-          ]);
+          const revisionPosts =
+            step === 'thread-list'
+              ? [watched.firstPost.id, unrelatedSourcePostId!]
+              : step === 'cold-thread-retry'
+                ? [retryTargetPostId!]
+                : [];
+          for (const postId of revisionPosts) {
+            const revisionRoute = routeOf(postId)!;
+            const historicalRevisions = Array.from({ length: count }, () => newId(revisionRoute));
+            const historicalTransactions = historicalRevisions.map(() => newId(revisionRoute));
+            await db.admin.query(
+              `INSERT INTO content.revision(
+                 route,thread_id,post_id,revision_id,body,body_sha256,search_text,licence,subject_ids,board_id,
+                 availability,recorded_transaction_id,recorded_at,media_ids,vote_citation)
+               SELECT source.route,source.thread_id,source.post_id,history.revision_id,source.body,source.body_sha256,
+                      source.search_text,source.licence,source.subject_ids,source.board_id,source.availability,
+                      history.transaction_id,source.recorded_at-history.ordinal*interval '1 second',
+                      source.media_ids,source.vote_citation
+               FROM (SELECT * FROM content.revision WHERE post_id=$1 ORDER BY recorded_at DESC LIMIT 1) source
+               CROSS JOIN unnest($2::uuid[],$3::uuid[]) WITH ORDINALITY history(revision_id,transaction_id,ordinal)`,
+              [postId, historicalRevisions, historicalTransactions],
+            );
+          }
+          const authority =
+            step === 'board-list'
+              ? [{ resourceId: f.boardId, route: routeOf(f.boardId)!, action: 'board:read', subject: owner },
+                  { resourceId: f.boardId, route: routeOf(f.boardId)!, action: 'board:read', subject: f.accounts.recipient }]
+              : step === 'thread-list'
+                ? [{ resourceId: watched.id, route: routeOf(watched.id)!, action: 'thread:read', subject: owner },
+                    { resourceId: unrelatedSourceThreadId!, route: routeOf(unrelatedSourceThreadId!)!, action: 'thread:read', subject: f.accounts.recipient }]
+                : step === 'cold-thread-retry'
+                  ? [{ resourceId: retryTarget!, route: routeOf(retryTarget!)!, action: 'thread:read', subject: retryReader }]
+                  : [];
+          for (const { resourceId, route: grantRoute, action, subject } of authority) {
+            const transactions = Array.from({ length: count }, () => newId(grantRoute));
+            await db.admin.query(
+              `UPDATE access.resource_grant SET valid=tstzrange(clock_timestamp() - interval '1 day',NULL,'[)')
+               WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4 AND valid @> clock_timestamp()`,
+              [grantRoute, resourceId, subject, action],
+            );
+            await db.admin.query(
+              `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+               SELECT $1,$2,$3,$4,
+                      tstzrange('2000-01-01T00:00:00Z'::timestamptz - ($6 + ordinal)*interval '2 hours',
+                                '2000-01-01T01:00:00Z'::timestamptz - ($6 + ordinal)*interval '2 hours','[)'),transaction_id
+               FROM unnest($5::uuid[]) WITH ORDINALITY history(transaction_id,ordinal)`,
+              [grantRoute, resourceId, subject, action, transactions, previous],
+            );
+          }
         },
         prepare,
         async warmup() {
