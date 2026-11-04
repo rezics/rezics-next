@@ -250,10 +250,17 @@ established by this implementation part.
 The native vocabulary, parsing, field merge and historical display helpers are implemented in `copy-condition.ts` and
 integrated with the existing revisioned create/update commands, private row storage and detail presentation. Each
 observation is stored in its own nullable JSONB column; SQL NULL means not recorded, while an observation value of
-JSON null means intentionally cleared. The retained Content publisher must add optional `condition: 'physical-v1'`
-to the Definitions Copy kind source/release schema and type, preserve it through compilation, and publish generated
-native create/update/detail shapes and root exports. The installed contract currently has only kind labels/statuses,
-so positive admission and Web controls remain unavailable. No growth, browser or promoted acceptance is claimed.
+JSON null means intentionally cleared. Definitions now publishes optional `condition: 'physical-v1'` on its Copy
+kind source/release schema and type. Web profile preparation carries that explicit capability for the exact kind,
+including its absence on older releases; it never infers support from an ID or label. This current profile advice
+cannot establish historical admission or replace the private detail's per-field accepted pins.
+
+The installed generated client still lacks condition create/update/detail shapes. The retained Content publisher
+must publish those shapes through the official callables before Web can offer condition editing or render condition
+observations. Controls remain unavailable until that publication; profile preparation alone does not enable them.
+The remaining page journey includes the earlier Collection-item management comparison, independent media and
+packaging controls, full-Copy conflict review, exact retries and saved-copy reopening. Native, growth, browser and
+promoted acceptance remain with the controller.
 
 A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org
 `ItemList` surface. Curated membership stores ordered occurrences, each with its own ID and note; duplicates remain
