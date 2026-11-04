@@ -81,6 +81,7 @@ document.body.append(host);
 let root: ReturnType<typeof createRoot> | undefined;
 let client: InstanceType<typeof QueryClient>;
 let router: ReturnType<typeof createRouter>;
+let navigation: Promise<void> | undefined;
 
 function link(action: string) {
   return host.querySelector<HTMLAnchorElement>(`[data-window-action="${action}"]`)!;
@@ -88,6 +89,8 @@ function link(action: string) {
 async function finish(status = 200) {
   await act(async () => {
     reads.at(-1)!.finish(status);
+    await navigation;
+    navigation = undefined;
   });
 }
 async function click(action: string) {
@@ -143,6 +146,11 @@ async function show() {
     defaultPendingMinMs: 0,
     defaultViewTransition: false,
   });
+  const navigate = router.navigate.bind(router);
+  router.navigate = (options) => {
+    navigation = navigate(options);
+    return navigation;
+  };
   const loading = router.load();
   await act(async () => {
     await Promise.resolve();
@@ -221,4 +229,29 @@ test('restart is explicit, duplicate activation is bounded and reader replacemen
   });
   await finish();
   expect(document.activeElement).not.toBe(host.querySelector('[data-search-results]'));
+});
+
+test('a superseded query and a moved focus cannot publish a pending window or regain focus', async () => {
+  await show();
+  await click('next');
+  const abandoned = reads.at(-1)!;
+  await act(async () => {
+    void router.navigate({ href: '/en/search?q=Atlas' });
+  });
+  const replacement = reads.at(-1)!;
+  expect(replacement.params.query).toBe('Atlas');
+  await act(async () => {
+    abandoned.finish();
+  });
+  expect(host.textContent).not.toContain('Mira Reading Room');
+  await finish();
+  expect(host.querySelector('[data-search-window-current]')!.textContent).toContain('Atlas');
+  expect(link('previous')).toBeNull();
+  await click('next');
+  const outside = document.createElement('button');
+  document.body.append(outside);
+  outside.focus();
+  await finish();
+  expect(document.activeElement).toBe(outside);
+  outside.remove();
 });

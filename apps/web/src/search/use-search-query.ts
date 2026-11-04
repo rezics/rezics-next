@@ -26,16 +26,23 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
     admission.value.viewer,
     admission.value.observation?.id,
   ]);
+  const actual = router?.state.location;
+  const matches =
+    !actual ||
+    (actual.pathname.replace(/\/$/, '').endsWith('/search') &&
+      discoverySearchHref(locale, searchLoaderDeps(actual.search)) === discoverySearchHref(locale, params));
+  const key = JSON.stringify(options.queryKey);
   const readCount = () => client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
-  const lifetime = useRef({ owner, minimum: 0, refresh: false });
-  if (lifetime.current.owner !== owner) lifetime.current = { owner, minimum: readCount() + 1, refresh: true };
+  const lifetime = useRef({ owner, key, minimum: 0, refresh: false });
+  if (lifetime.current.key !== key) lifetime.current = { owner, key, minimum: 0, refresh: false };
+  else if (lifetime.current.owner !== owner) lifetime.current = { owner, key, minimum: readCount() + 1, refresh: true };
   const current = lifetime.current;
   useEffect(() => {
-    if (!current.refresh) return;
+    if (!current.refresh || !matches) return;
     current.refresh = false;
     // Reader replacement retires the enrolled request before starting one current read.
     void query.refetch({ cancelRefetch: true });
-  }, [owner]);
+  }, [owner, key, matches]);
   useEffect(() => {
     const restored = (event: PageTransitionEvent) => {
       if (event.persisted) void query.refetch({ cancelRefetch: true });
@@ -43,11 +50,6 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
     window.addEventListener('pageshow', restored);
     return () => window.removeEventListener('pageshow', restored);
   }, [locale, JSON.stringify(params), owner]);
-  const actual = router?.state.location;
-  const matches =
-    !actual ||
-    (actual.pathname.replace(/\/$/, '').endsWith('/search') &&
-      discoverySearchHref(locale, searchLoaderDeps(actual.search)) === discoverySearchHref(locale, params));
   const waiting = !matches || query.isFetching || readCount() < current.minimum || !address.isCurrent();
   const data = waiting
     ? searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' })
