@@ -335,7 +335,10 @@ export function parseVndbReleaseStateBindings(value: unknown): {
         );
         const code = Reflect.get(concept, 'code');
         const id = Reflect.get(concept, 'id');
-        ensure(typeof code === 'string' && typeof id === 'string' && UUID.test(id), 'Invalid VNDB release-state concept');
+        ensure(
+          typeof code === 'string' && typeof id === 'string' && UUID.test(id),
+          'Invalid VNDB release-state concept',
+        );
         return { code, id };
       });
       groups.push({ taxonomy, uri, schemeId, concepts });

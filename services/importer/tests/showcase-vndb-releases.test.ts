@@ -137,7 +137,12 @@ function port(commands: BatchCommand[], statusBound: boolean, created = new Map<
 }
 
 function extras() {
-  return { providers: ['vndb'] as const, mediaDeadlineMs: 0, recordConcurrency: 1, episodeCatalogueSubjects: catalogue };
+  return {
+    providers: ['vndb'] as const,
+    mediaDeadlineMs: 0,
+    recordConcurrency: 1,
+    episodeCatalogueSubjects: catalogue,
+  };
 }
 
 function dateContent(command: BatchCommand) {
