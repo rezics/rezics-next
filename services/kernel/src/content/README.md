@@ -1329,6 +1329,8 @@ This API handoff does not establish rendered acceptance or the all-pool physical
   no registered effect. These are harness assertions; connected results remain unverified until full-tree
   compilation and the mounted suites succeed.
 
+Decision: exact-decision growth selects native thread idempotency keys for the selected home before creation, so unrelated and selected histories exercise the same full route prefix without rewriting target identities.
+
 Only the target's author may appeal, once per decision, with a statement of at most 2,000 characters. The appeal
 deadline is the decision time plus 183 days, inclusive; the next instant is late. A second appeal returns 409,
 including after resolution. A first appeal after the deadline returns 422. An unrelated account cannot read or

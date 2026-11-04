@@ -155,13 +155,21 @@ test('exact decision pages retain bounded native work across independent histori
   const boardId = base.mainBoardId;
   const authorTarget = await fixture.createThread(boardId, 'Fixed decision page author target');
   const authorDecision = await fixture.createDecision(authorTarget);
-  const postTarget = await fixture.createThread(boardId, 'Fixed decision page post target');
+  const postTarget = await fixture.createThread(boardId, 'Fixed decision page post target', authorTarget.threadId);
   const postDecision = await fixture.createDecision(postTarget, 'post');
-  const moderatorTarget = await fixture.createThread(boardId, 'Fixed decision page moderator target');
+  const moderatorTarget = await fixture.createThread(
+    boardId,
+    'Fixed decision page moderator target',
+    authorTarget.threadId,
+  );
   await fixture.grant(boardId, people.reviewer.accountId, ['moderation:read_reports']);
   const submitted = await fixture.submitAppeal(boardId, moderatorTarget);
   await fixture.resolveAppeal(submitted.record, 'reverse');
-  const unrelatedTarget = await fixture.createThread(boardId, 'Unrelated decision page pressure target');
+  const unrelatedTarget = await fixture.createThread(
+    boardId,
+    'Unrelated decision page pressure target',
+    authorTarget.threadId,
+  );
   const authorRoute = fixture.routed(authorDecision.decisionId);
   expect(fixture.routed(authorTarget.threadId)).toBe(authorRoute);
   expect(fixture.routed(unrelatedTarget.threadId)).toBe(authorRoute);

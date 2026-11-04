@@ -1,6 +1,8 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomUUID } from 'node:crypto';
+import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
+import { threadTarget } from '../../../src/content/commands.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { encodeReceiptKey } from '../../../src/command/receipt-key.ts';
@@ -660,8 +662,34 @@ export async function createGrowthAppealBoundariesFixture() {
       async createBoard(label: string) {
         return (await base.createRealmTarget(label, 'public')).boardId;
       },
-      async createThread(boardId: string, label: string) {
-        return base.createThread(boardId, label);
+      async createThread(boardId: string, label: string, homeId?: string): Promise<ThreadTarget> {
+        if (homeId === undefined) return base.createThread(boardId, label);
+        const route = routed(homeId);
+        // Select the command key before creation; never rewrite a native target's home.
+        for (let attempt = 0; attempt < 1_048_576; attempt++) {
+          const key = randomUUID();
+          const target = threadTarget(system.routeKey, people.author.accountId, key);
+          if (target.route !== route) continue;
+          const created = await base.command<{ thread: { id: string; firstPost: { id: string } } }>(
+            'POST',
+            '/v1/threads',
+            {
+              title: label,
+              body: fromPlainText(`${label} first post`),
+              licence: 'CC0-1.0',
+              subjectIds: [],
+              boardId,
+              visibility: 'published',
+            },
+            { key },
+          );
+          const threadId = created.thread.id;
+          const postId = created.thread.firstPost.id;
+          if (threadId !== target.id || routed(threadId) !== route || routed(postId) !== route)
+            throw new Error('Native thread creation did not retain the selected decision-page home');
+          return { threadId, postId, boardId, threadRoute: route, postRoute: route, boardRoute: routed(boardId) };
+        }
+        throw new Error('Could not select a native thread key for the decision-page home');
       },
       routed,
       async close() {
