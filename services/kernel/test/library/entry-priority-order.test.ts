@@ -75,13 +75,13 @@ test('priority pages order the full filtered shelf and read current annotation w
   const firstPage = await asc(null);
   expect(firstPage.entries.map((entry) => entry.subjectId)).toEqual([
     ids.first,
-    [ids.edited, ids.tied].sort((a, b) => a.localeCompare(b))[0],
+    [ids.edited, ids.tied].sort((a, b) => a.localeCompare(b))[0]!,
   ]);
   expect(firstPage.entries.map((entry) => entry.priority)).toEqual([1, 8]);
   const boundary = firstPage.entries.at(-1)!;
   const secondPage = await asc({ key: String(boundary.priority), subjectId: boundary.subjectId });
   expect(secondPage.entries.map((entry) => entry.subjectId)).toEqual([
-    [ids.edited, ids.tied].sort((a, b) => a.localeCompare(b))[1],
+    [ids.edited, ids.tied].sort((a, b) => a.localeCompare(b))[1]!,
     ids.unranked,
   ]);
   expect(secondPage.entries.at(-1)?.priority).toBeNull();
