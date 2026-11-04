@@ -38,7 +38,7 @@ export function QueryTextRecovery({
 }: {
   value: string;
   diagnostic?: TextDiagnostic | undefined;
-  locale?: string;
+  locale?: string | undefined;
   retryAt?: number | undefined;
   onApply: (value: string) => void;
 }) {
