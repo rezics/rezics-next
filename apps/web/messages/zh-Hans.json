@@ -8695,5 +8695,7 @@
   "search_population_retry": "重试此 Realm 搜索",
   "search_population_restart": "重新开始相同搜索",
   "shell_client_unavailable": "交互控件加载失败。下方仍可查看服务器响应；请重新加载此页重试。",
-  "shell_client_reload": "重新加载此页"
+  "shell_client_reload": "重新加载此页",
+  "work_relation_citations_undisclosed": "本次阅读未公开引文。",
+  "work_relations_unsupported": "此已发布类型未配置作品关系流。"
 }

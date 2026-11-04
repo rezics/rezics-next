@@ -8695,5 +8695,7 @@
   "search_population_retry": "이 Realm 검색 재시도",
   "search_population_restart": "같은 검색 다시 시작",
   "shell_client_unavailable": "대화형 컨트롤을 불러오지 못했습니다. 아래 서버 응답은 계속 볼 수 있습니다. 페이지를 새로고침해 다시 시도하세요.",
-  "shell_client_reload": "이 페이지 새로고침"
+  "shell_client_reload": "이 페이지 새로고침",
+  "work_relation_citations_undisclosed": "이 읽기에서 공개된 인용은 없습니다.",
+  "work_relations_unsupported": "이 배포된 유형에는 작품 관계 목록이 설정되어 있지 않습니다."
 }

@@ -13,7 +13,7 @@ export function createConnectionWindow(address: ConnectionAddress, read: Connect
   let retired = false;
   const listeners = new Set<() => void>();
   const requests = new Map<string, AbortController>();
-  const selections: NonNullable<ConnectionAddress['selection']> = {};
+  const selections: NonNullable<ConnectionAddress['selection']> = { ...address.selection };
   const publish = (next: ConnectionSnapshot) => {
     snapshot = next;
     for (const listener of listeners) listener();
@@ -70,6 +70,10 @@ export function createConnectionWindow(address: ConnectionAddress, read: Connect
       publish({ failure: 409, pending: new Set() });
       return;
     }
+    for (const [group, current] of Object.entries(result.sections)) {
+      const key = group as ConnectionGroup;
+      if (!selections[key]) selections[key] = { stream: current.stream.key };
+    }
     publish({
       visit: {
         ...result,
@@ -88,6 +92,9 @@ export function createConnectionWindow(address: ConnectionAddress, read: Connect
       };
     },
     load,
+    retry(group: ConnectionGroup) {
+      return load(group, selections[group]);
+    },
     activate() {
       retired = false;
     },

@@ -95,7 +95,7 @@ function read(
 function pageFor(source: SubjectRead): SubjectPageData {
   const content = [
     workDocument.content[0]!,
-    { type: 'SubjectList', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8 } },
+    { type: 'OutgoingRelations', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8 } },
     ...Object.keys(source.subject.statements)
       .filter((key) => key !== property)
       .map((key) =>
@@ -110,6 +110,19 @@ function pageFor(source: SubjectRead): SubjectPageData {
   for (const [key, planned] of Object.entries(plan.reads)) {
     if (planned.kind === 'subject') {
       reads[key] = { status: 200, body: source };
+      continue;
+    }
+    if (planned.kind === 'relations') {
+      reads[key] = { status: 200, body: {
+        relations: (source.subject.statements[planned.property] ?? []).map((statement) => {
+          const target = statement.value.content as string;
+          const entry = source.related[target];
+          return { target, statement, label: Object.values(entry?.labels ?? {})[0] ?? '',
+            summary: entry ? { id: target, type: entry.type, types: entry.types,
+              label: { value: Object.values(entry.labels)[0] ?? '', language: 'ja' }, cover: null } : null,
+            related: {} };
+        }), next: null,
+      } };
       continue;
     }
     if (planned.kind !== 'links') continue;
@@ -188,9 +201,9 @@ test('Subject composition joins the VN, anime and book with localized, disclosed
   const vnHtml = await render(vn),
     animeUrl = new URL(link(vnHtml, animeId)![1]!.replaceAll('&amp;', '&'), 'https://site.test');
   expect(vnHtml).toContain('data-slot="game-reader"');
-  expect(link(vnHtml, animeId)?.[2]).toContain('映像作品');
+  expect(vnHtml).toContain('映像作品');
   expect(animeUrl.pathname).toMatch(new RegExp(`^/ja/subjects/${animeId}/`));
-  expect(animeUrl.searchParams.get('via')).toMatch(new RegExp(`^/ja/subjects/${vnId}/.*#connections$`));
+  expect(animeUrl.searchParams.get('via')).toMatch(new RegExp(`^/ja/subjects/${vnId}/.*#connections\\?stream=`));
   expect(link(vnHtml, animeId)?.[0]).not.toContain('target="_blank"');
 
   const animeHtml = await render(anime);
@@ -212,6 +225,6 @@ test('Subject composition joins the VN, anime and book with localized, disclosed
   const withheld = read('wd:Q689445', '原作ビジュアルノベル', vnId, 'schema:TVSeries', '非公開のアニメ', animeId);
   withheld.related = {};
   const withheldHtml = await render(withheld);
-  expect(withheldHtml).not.toContain('data-slot="work-franchise"');
+  expect(withheldHtml).toContain('data-slot="work-franchise"');
   expect(withheldHtml).not.toContain(animeId);
 });

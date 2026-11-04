@@ -597,13 +597,15 @@ export function SubjectPage({
     read && !page.account
       ? subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale)
       : undefined;
-  const workReturn = workAddress ? (visitReturn ?? contextHref(workAddress.href, realm)) : undefined;
+  const workReturn = workAddress ? contextHref(workAddress.href, realm) : undefined;
   const workRelationsHref =
     workAddress && page.views?.includes('relations') ? subjectUrlForView(workAddress, 'relations') : undefined;
   const ContextLink = useMemo(() => {
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
-      const href = withSubjectVisitReturn(props.href, mangaReturn ?? visitReturn ?? '', locale);
+      const existingReturn = new URL(props.href, 'https://rezics.invalid').searchParams.get('via');
+      const href = subjectVisitReturn(existingReturn, locale) ? props.href
+        : withSubjectVisitReturn(props.href, mangaReturn ?? visitReturn ?? '', locale);
       return <Link {...props} href={contextHref(href, realm)} />;
     };
   }, [link, locale, mangaReturn, realm, visitReturn]);
@@ -825,6 +827,7 @@ export function SubjectPage({
             {overview && read && !page.account && showcaseWork && workReturn ? (
               <WorkFranchiseOverview
                 subject={read.subject}
+                windows={profileRelationWindows(page)}
                 related={read.related}
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
                 locale={locale}

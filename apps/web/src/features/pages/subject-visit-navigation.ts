@@ -10,6 +10,47 @@ const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/libr
 const returnAddressCap = 32768;
 const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
 
+export type ConnectionReturnWindow = {
+  stream: string;
+  cursor?: string;
+  reading?: string;
+  focus?: string;
+  holder?: string;
+};
+
+/** An opaque public locator, not rows, credentials, a reveal grant or a recursive opener. */
+export function connectionReturnWindow(hash: string): ConnectionReturnWindow | undefined {
+  if (!hash.startsWith('#connections?') || hash.length > 28000) return;
+  const params = new URLSearchParams(hash.slice('#connections?'.length));
+  const keys = [...params.keys()];
+  if (new Set(keys).size !== keys.length || keys.some((key) => !['stream', 'cursor', 'reading', 'focus', 'holder'].includes(key))) return;
+  const stream = params.get('stream');
+  const reading = params.get('reading');
+  const cursor = params.get('cursor');
+  const focus = params.get('focus');
+  const holder = params.get('holder');
+  if (!stream || !/^(in|out):[^\s\u0000-\u001f]{1,256}$/u.test(stream) ||
+      (reading !== null && !/^[a-f0-9]{64}$/.test(reading)) ||
+      (reading === null && (cursor !== null || focus !== null || holder !== null)) ||
+      (cursor !== null && (!cursor || cursor.length > 8192 || /[\u0000-\u001f]/u.test(cursor))) ||
+      (focus !== null && !new RegExp(`^${uuid}$`).test(focus)) ||
+      (holder !== null && (!focus || !new RegExp(`^${uuid}$`).test(holder))) ||
+      (focus !== null && !holder)) return;
+  return { stream, ...(reading ? { reading } : {}), ...(cursor ? { cursor } : {}), ...(focus ? { focus, holder: holder! } : {}) };
+}
+
+export function connectionWindowFragment(window: ConnectionReturnWindow): string {
+  const params = new URLSearchParams({ stream: window.stream });
+  if (window.reading) params.set('reading', window.reading);
+  if (window.cursor) params.set('cursor', window.cursor);
+  if (window.focus && window.holder) {
+    params.set('focus', window.focus);
+    params.set('holder', window.holder);
+  }
+  const hash = `#connections?${params}`;
+  return connectionReturnWindow(hash) ? hash : '#connections';
+}
+
 function collectionReturn(url: URL, locale?: string): string | undefined {
   const match = collectionDestination.exec(url.pathname);
   if (!match || (locale !== undefined && match[1] !== locale)) return undefined;
@@ -85,6 +126,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     const fragment = url.hash === '' ? '#connections' : url.hash;
     if (
       fragment !== '#connections' &&
+      !(subject && connectionReturnWindow(fragment)) &&
       fragment !== '#manga-reader' &&
       !(subject?.[2] === 'sources' && fragment === '#subject-sources-heading')
     )
@@ -108,10 +150,10 @@ export function subjectRouteSearchLimit(search: string, cursor?: string): number
   }
 }
 
-export function connectionReturnHref(id: string, label: string, locale: string, realm?: string): string {
+export function connectionReturnHref(id: string, label: string, locale: string, realm?: string, window?: ConnectionReturnWindow): string {
   const url = new URL(subjectHref({ id, label }, locale).href, 'https://rezics.invalid');
   if (realm) url.searchParams.set('realm', realm);
-  return `${url.pathname}${url.search}#connections`;
+  return `${url.pathname}${url.search}${window ? connectionWindowFragment(window) : '#connections'}`;
 }
 
 export function withSubjectVisitReturn(href: string, value: string, locale: string): string {
