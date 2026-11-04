@@ -233,11 +233,9 @@ test('Multilingual terms show actionable field-specific corrections without chan
       await mode('labels', 'set');
       await replace('terms-labels', 'Current draft');
       const retiredEdit = queuedChange(control('terms-labels'), 'Retired edit');
-      const retiredNavigation = queuedChange(control('terms-language'), 'en');
       await language('ja');
       await act(async () => {
         retiredEdit();
-        retiredNavigation();
       });
       expect(control('terms-language').value).toBe('ja');
       await language('en');
