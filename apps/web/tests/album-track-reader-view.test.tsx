@@ -120,7 +120,8 @@ test('native rows open one exact membership inspection and accepted navigation c
       (details) => details.querySelector('summary')?.textContent === m.sources_citations(),
     );
     expect(sourceGroup).not.toBeNull();
-    expect(sourceGroup?.textContent).toContain('source:unknownPosition');
+    expect(sourceGroup?.textContent).toContain('Unsupported calendar:');
+    expect(sourceGroup?.textContent).not.toContain('source:unknownPosition');
     const target = inspection.querySelector<HTMLAnchorElement>(`a[href*="${exampleRecording}"]`)!;
     expect(target.href).toBe(`https://site.example/en/subjects/${exampleRecording}/harbour`);
     expect(target.target).toBe('_blank');
@@ -139,6 +140,13 @@ test('native rows open one exact membership inspection and accepted navigation c
     selectedTarget.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
     window.dispatchEvent(new Event('focus'));
     expect(document.activeElement).toBe(selectedTarget);
+    await mounted.click(m.candidate_close());
+    const sourceIndex = initial.rows.findIndex((row) => JSON.stringify(row.statement?.references).includes('unknownPosition'));
+    expect(sourceIndex).toBeGreaterThanOrEqual(0);
+    await inspect(sourceIndex);
+    inspection = mounted.host.querySelector<HTMLElement>('[data-slot="album-track-inspection"]')!;
+    expect(inspection.textContent).toContain('source:unknownPosition');
+    expect(inspection.querySelectorAll('details')).toHaveLength(2);
     await mounted.click(m.candidate_close());
     await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.album_tracks_next_unavailable());
