@@ -727,6 +727,9 @@ export function finishMapping(environment: MappingEnvironment): SourceVocabulary
   return {
     proposals: environment.proposals,
     gaps: environment.gaps,
-    request: requestSnapshot({ bindings: environment.input.bindings, rows: environment.input.rows }) as SourceVocabularyRequest,
+    request: requestSnapshot({
+      bindings: environment.input.bindings,
+      rows: environment.input.rows,
+    }) as SourceVocabularyRequest,
   };
 }

@@ -449,9 +449,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
         ? {}
         : {
             order:
-              typeof row.order === 'number' || typeof row.order === 'string' || row.order === null
-                ? row.order
-                : -1,
+              typeof row.order === 'number' || typeof row.order === 'string' || row.order === null ? row.order : -1,
           }),
     });
   }
@@ -1178,16 +1176,17 @@ export async function seedCrossMedia(
       runs[provider] = run;
     }
     const hasBangumiInput = plan.records.bangumi.length > 0 || plan.entities.bangumi.length > 0;
-    const fidelity = providers.includes('bangumi') && hasBangumiInput
-      ? await runBangumiCharacterFidelity({
-          importer,
-          port,
-          sourceAlias: crossMediaAliases.bangumi,
-          records: [...plan.records.bangumi, ...plan.entities.bangumi],
-          appearances: plan.characterAppearances ?? [],
-          ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
-        })
-      : undefined;
+    const fidelity =
+      providers.includes('bangumi') && hasBangumiInput
+        ? await runBangumiCharacterFidelity({
+            importer,
+            port,
+            sourceAlias: crossMediaAliases.bangumi,
+            records: [...plan.records.bangumi, ...plan.entities.bangumi],
+            appearances: plan.characterAppearances ?? [],
+            ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
+          })
+        : undefined;
     if (fidelity) {
       ensure(fidelity.run.status === 'committed', `Bangumi character fidelity import failed: ${fidelity.run.status}`);
       runs.bangumiCharacterFidelity = fidelity.run;

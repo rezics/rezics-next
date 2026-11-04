@@ -511,9 +511,7 @@ export class Importer {
             ...(conversion.sourceClassification === undefined
               ? {}
               : { sourceClassification: conversion.sourceClassification }),
-            ...(conversion.sourceVocabulary === undefined
-              ? {}
-              : { sourceVocabulary: conversion.sourceVocabulary }),
+            ...(conversion.sourceVocabulary === undefined ? {} : { sourceVocabulary: conversion.sourceVocabulary }),
             ...(ignored
               ? {}
               : registration.describeSourceRecord

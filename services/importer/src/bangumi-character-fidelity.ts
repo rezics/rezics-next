@@ -36,7 +36,8 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function configuredBindings(value: unknown): SourceVocabularyBindings {
   const raw = record(value) ? value : {};
-  const releaseDigest = typeof raw.releaseDigest === 'string' && raw.releaseDigest.length <= 64 ? raw.releaseDigest : '';
+  const releaseDigest =
+    typeof raw.releaseDigest === 'string' && raw.releaseDigest.length <= 64 ? raw.releaseDigest : '';
   const schemesInput = Array.isArray(raw.schemes) ? raw.schemes.slice(0, 64) : [];
   const conceptsInput = Array.isArray(raw.concepts) ? raw.concepts.slice(0, 512) : [];
   const safeSchemes = schemesInput.flatMap((entry) => {
@@ -119,11 +120,7 @@ async function nativeIdentity(
   const character = externalId.startsWith('character:');
   const expectedType = character ? 'wd:Q95074' : subject.type;
   const identifier = character ? 'wdt:P6296' : 'wdt:P5732';
-  if (
-    subject.type !== expectedType ||
-    !hasCurrentValue(subject, identifier, sourceId) ||
-    !uuid.test(subject.id)
-  )
+  if (subject.type !== expectedType || !hasCurrentValue(subject, identifier, sourceId) || !uuid.test(subject.id))
     return undefined;
   return { id: subject.id, type: subject.type, releaseDigest: bundledDigest };
 }
@@ -268,11 +265,7 @@ export async function runBangumiCharacterFidelity(input: {
       const roleCode = sourceCode(appearance.roleCode);
       if (roleCode === null) continue;
       rows.push(
-        rowForAppearance(
-          appearance,
-          identities.get(record.key),
-          identities.get(`character:${appearance.characterId}`),
-        ),
+        rowForAppearance(appearance, identities.get(record.key), identities.get(`character:${appearance.characterId}`)),
       );
     }
     if (rows.length) requests.set(record.key, { bindings, rows });
@@ -295,8 +288,11 @@ export async function runBangumiCharacterFidelity(input: {
       return conversion;
     },
   };
-  const run = await input.importer.runRecords(registration, (async function* () {
-    yield* input.records;
-  })());
+  const run = await input.importer.runRecords(
+    registration,
+    (async function* () {
+      yield* input.records;
+    })(),
+  );
   return { run, gaps: uniqueGaps([...gaps, ...inputGaps]) };
 }

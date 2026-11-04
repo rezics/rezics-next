@@ -591,9 +591,7 @@ function convert(
     mediaImportIntents: [],
     sourceMetadata: {
       recordUrl: url,
-      ...(summaryText
-        ? { summary: { language: 'und', takedownEligible: true as const } }
-        : {}),
+      ...(summaryText ? { summary: { language: 'und', takedownEligible: true as const } } : {}),
     },
   };
 }

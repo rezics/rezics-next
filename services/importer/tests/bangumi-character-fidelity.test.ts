@@ -136,9 +136,7 @@ test('Bangumi character facts retain source identities, concepts, citation, and 
     subject: work.id,
     statement: {
       value: { type: 'value', content: character.id },
-      qualifiers: [
-        { property: { id: 'wdt:P3831' }, value: { type: 'value', content: uuid(4) } },
-      ],
+      qualifiers: [{ property: { id: 'wdt:P3831' }, value: { type: 'value', content: uuid(4) } }],
       references: [
         expect.objectContaining({
           parts: expect.arrayContaining([

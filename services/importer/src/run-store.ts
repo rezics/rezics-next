@@ -1163,11 +1163,11 @@ export class RunStore<Projection = BatchStatement[]> {
     let projection: string;
     if (this.projectionMode === 'source-record') {
       const sourceProjection: unknown = record.projection;
-      exact(sourceProjection, ['sourceKind', 'normalizedRecord'], [
-        'sourceRecordMetadata',
-        'sourceClassification',
-        'sourceVocabulary',
-      ]);
+      exact(
+        sourceProjection,
+        ['sourceKind', 'normalizedRecord'],
+        ['sourceRecordMetadata', 'sourceClassification', 'sourceVocabulary'],
+      );
       if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
       // Only the caller's sanitized converter input is retained; row metadata stays separate.
       const normalizedRecord = boundedJson(sourceProjection.normalizedRecord, MAX_DUMP_RECORD_BYTES);
