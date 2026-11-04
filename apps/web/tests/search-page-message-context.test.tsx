@@ -86,13 +86,15 @@ function pageData(editing = false): SearchPageData {
   };
 }
 
-function resourceLanguagePageData(): SearchPageData {
+function resourceLanguagePageData(editing = false): SearchPageData {
   const queryState = searchLoaderDeps({
     q: 'Mira',
     type: 'schema:Book',
     language: ['en'],
     'f.schema:inLanguage': ['pt-BR'],
-    condition: JSON.stringify({ not: { statement: { property: RESOURCE_LANGUAGE_PROPERTY, in: ['ja'] } } }),
+    ...(editing
+      ? {}
+      : { condition: JSON.stringify({ not: { statement: { property: RESOURCE_LANGUAGE_PROPERTY, in: ['ja'] } } }) }),
   });
   const properties = [
     {
@@ -121,7 +123,7 @@ function resourceLanguagePageData(): SearchPageData {
     },
   };
   return {
-    ...pageData(),
+    ...pageData(editing),
     queryState,
     type: queryState.type,
     condition: queryState.condition,
@@ -268,7 +270,7 @@ test('the live Search filter renders a separate resource-language refinement wit
   expect(html).toContain('日本語');
   expect(html).toContain('lang="ja"');
   expect(html).toContain('name="f.schema:inLanguage"');
-  expect(html).toMatch(/name="f\.schema:inLanguage"[^>]*value="pt-BR"[^>]*checked/);
+  expect(html).toMatch(/<input\b(?=[^>]*name="f\.schema:inLanguage")(?=[^>]*value="pt-BR")(?=[^>]*checked="")[^>]*>/);
   expect(html).toContain(`aria-label="${m.refinement_remove({ value: selectedSummary }, en)}"`);
   expect(html).toContain(m.search_resource_language_clear({}, en));
   expect(html).toContain(m.refinement_more_values({}, en));
@@ -291,7 +293,7 @@ test('resource-language refusal, preparation, unavailable and missing-release st
     );
     const html = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data, locale: 'en' }));
     expect(html).toContain(message);
-    expect(html).toMatch(/name="f\.schema:inLanguage"[^>]*value="pt-BR"[^>]*checked/);
+    expect(html).toMatch(/<input\b(?=[^>]*name="f\.schema:inLanguage")(?=[^>]*value="pt-BR")(?=[^>]*checked="")[^>]*>/);
   }
 
   const stale = resourceLanguagePageData();
@@ -325,7 +327,7 @@ test('mobile Filters heading follows the supplied locale while ambient English d
       createElement(
         HeaderSearchFilterProvider,
         null,
-        createElement(SearchPage, { query: 'Mira', data: pageData(true), locale: 'zh-Hans' }),
+        createElement(SearchPage, { query: 'Mira', data: resourceLanguagePageData(true), locale: 'zh-Hans' }),
       ),
   });
   const router = createRouter({
@@ -336,16 +338,14 @@ test('mobile Filters heading follows the supplied locale while ambient English d
   document.body.append(host);
   const ambient = getLocale();
   setLocale('en', { reload: false });
+  width = 390;
   let root: ReturnType<typeof createRoot> | undefined;
   try {
     await router.load();
     root = createRoot(host);
     await act(async () => root!.render(createElement(RouterProvider, { router })));
     await act(async () => document.querySelector<HTMLButtonElement>('button[aria-controls="search-filters"]')!.click());
-    await act(async () => {
-      width = 390;
-      for (const listener of mediaListeners) listener({} as MediaQueryListEvent);
-    });
+    await act(async () => Promise.resolve());
     const zh = options['zh-Hans'];
     const mobile = document.querySelector('form#search-filters');
     const heading =
@@ -356,6 +356,7 @@ test('mobile Filters heading follows the supplied locale while ambient English d
     expect(heading).toContain(m.search_filters({}, zh));
     expect(mobile?.textContent).toContain(m.search_filter_revert_action({}, zh));
     expect(mobile?.textContent).toContain(m.search_apply({}, zh));
+    expect(mobile?.textContent).toContain(m.search_resource_language({}, zh));
     expect(mobile?.textContent).not.toContain(m.search_filters({}, options.en));
     expect(mobile?.querySelector('input[name="q"]')?.getAttribute('value')).toBe('Mira');
   } finally {
