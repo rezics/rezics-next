@@ -36,6 +36,8 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     document: window.document,
     navigator: window.navigator,
     scrollTo: window.scrollTo.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     ...Object.fromEntries(
       [
         'HTMLElement',
