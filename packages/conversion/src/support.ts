@@ -328,6 +328,18 @@ export function safeSourceUrl(url: unknown, hosts: readonly string[]): string {
   return parsed.href;
 }
 
+/** Public website citations only; these URLs are never fetched by conversion. */
+export function sourceWebsiteUrl(value: string): string {
+  try {
+    const host = new URL(value).hostname;
+    if (value.length > 1500 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u.test(host))
+      throw new TypeError('Invalid external website URL');
+    return safeSourceUrl(value, [host]);
+  } catch {
+    throw new TypeError('Invalid external website URL');
+  }
+}
+
 const documents = new Map<string, DocumentSnapshot>();
 const documentCapacity = 64;
 

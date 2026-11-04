@@ -1277,12 +1277,22 @@ table_types:
   schema:sameAs:
     status: existing
     mapping: wdt:P2888
-    meaning: Link to an external identity or URL.
+    meaning: Dictionary heading for external-link tables. It supplies no identity authority, sameAs claim, or cross-provider resolution; selected website values map through extlinks.value as schema:url.
     citations:
       [
         'https://schema.org/sameAs',
         'https://www.wikidata.org/wiki/Property:2888',
         'https://www.wikidata.org/wiki/Property:P2888',
+      ]
+  schema:url:
+    status: existing
+    mapping: wdt:P856
+    meaning: Source-listed website URL inherited from Thing.url on Person, Organization and Release.
+    citations:
+      [
+        'https://schema.org/url',
+        'https://www.wikidata.org/wiki/Property:856',
+        'https://www.wikidata.org/wiki/Property:P856',
       ]
   wd:Q1107:
     status: proposed
@@ -1768,8 +1778,16 @@ tables:
         status: omitted
         reason: Source site code selects URL parsing rules and is not a profile statement.
       - name: value
-        status: omitted
-        reason: VNDB extlinks.value is source-specific technical or organizational metadata with no selected profile statement.
+        status: proposed
+        term: schema:url
+        mapping: wdt:P856
+        meaning: A source-listed website URL on the selected staff Person, producer Organization or Person, or release, joined through staff_extlinks, producers_extlinks or releases_extlinks. schema:url is the inherited Thing.url fact; it is not an official-site claim, sameAs identity, cross-provider resolution, redirect equivalence, or an instruction to fetch. The table-level schema:sameAs label is a dictionary heading and supplies no identity authority. Unsupported site codes stay addressable source losses; site-specific identifiers are never guessed into URLs. VN work websites remain vn_extlinks. Bangumi identity remains the independent cited-provider bridge.
+        citations:
+          [
+            'https://schema.org/url',
+            'https://www.wikidata.org/wiki/Property:856',
+            'https://www.wikidata.org/wiki/Property:P856',
+          ]
   - name: image_votes
     type: wdt:P1352
     columns:
