@@ -429,14 +429,23 @@ Admission retries races against other callers. The default probe interval is fiv
 
 #### Retained host-a transfer comparison
 
-Three comparable required kernel-check receipts on host a share ordinary one-slot priority, overlay after GitHub
-fetch, 0 overlay files (17 bytes sent), snapshot reuse and a dependency-artifact hit. Git-preparation423 phases are
-present: snapshot staging 3.9–4.8 s, shared-store lock/fetch 0.71–0.92 s, checkout 1.04–1.12 s, GitHub fetch 3.1–3.4 s,
-overlay rsync 2.2–2.9 s. Slot wait 4.5–5.6 s; bun install 13.1–16.0 s; command 10.0–10.7 s; return rsync 16.5–26.6 s.
-The reported 58-second upload rsync does not remain; overlay rsync is the measured upload phase. Exact source commit,
-working-tree dirty bytes beyond that 0-file overlay, concurrent occupancy, the deployed `remote-check` hash, cp-sync
-point and reclaim/disk stopgap state remain unmeasured. Do not infer those missing facts from integrated source.
-Keep check-reclaim and disk stopgap evidence separate; only the supermanager retires either stopgap.
+Three comparable required Kernel-check receipts on host a share ordinary one-slot priority, overlay after GitHub fetch,
+0 overlay files (17 bytes sent), snapshot reuse and a dependency-artifact hit. Git preparation phases are present:
+snapshot staging 3.9–4.8 s, shared-store lock/fetch 0.71–0.92 s, checkout 1.04–1.12 s, GitHub fetch 3.1–3.4 s, and
+empty-overlay rsync 2.2–2.9 s. Slot wait is 4.5–5.6 s; dependency install 13.1–16.0 s; command 10.0–10.7 s; and
+return rsync 16.5–26.6 s. The exact receipt references remain in the existing temporary evidence.
+
+The exact source commit, working-tree dirty bytes beyond the empty overlay, deployed `remote-check` hash, cp-sync point,
+concurrent occupancy, periodic reclaim state and independent disk stopgap state remain unmeasured. Do not infer these
+deployment facts from integrated source. This cohort establishes only its observed 2.2–2.9-second empty-overlay phase.
+No comparable non-empty host-a required-check receipts with the source/deployment context needed for comparison are
+available in the retained evidence, so the original 58-second per-run upload question remains unmeasured. These
+receipts do not establish resolution after admission deployment or characterize a non-empty source transfer.
+
+No cause-supported runner repair follows from this cohort. Dependency-cache and Git-preparation work retain their
+existing owners. Keep reclaim and disk stopgap evidence separate; runner deployment and cp-sync, and retirement of
+either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration remain separate
+questions for the existing compiler/health chain; this cohort supplies neither.
 
 1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
    using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and

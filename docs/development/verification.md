@@ -394,12 +394,23 @@ exceptions. No permissive unsupported-rule flag is used.
 
 ### Retained host-a transfer comparison
 
-Three comparable host-a kernel-check receipts (ordinary one-slot, overlay after GitHub fetch, 0 overlay files, snapshot
-reuse, dependency-artifact hit) measure overlay rsync at 2.2–2.9 s. Git-preparation423 lock/fetch and checkout are
-present. The reported 58-second upload rsync does not remain in that overlay phase. The deployed `remote-check` hash,
-cp-sync point, reclaim and disk stopgap state, exact source commit and concurrent occupancy remain unmeasured.
-Integrated source is not that missing evidence. Keep reclaim evidence separate from disk stopgap evidence.
-Decision: no runner repair; overlay rsync is not the remaining 58-second cause.
+Three comparable required Kernel-check receipts on host a share ordinary one-slot priority, overlay after GitHub fetch,
+0 overlay files (17 bytes sent), snapshot reuse and a dependency-artifact hit. Git preparation phases are present:
+snapshot staging 3.9–4.8 s, shared-store lock/fetch 0.71–0.92 s, checkout 1.04–1.12 s, GitHub fetch 3.1–3.4 s, and
+empty-overlay rsync 2.2–2.9 s. Slot wait is 4.5–5.6 s; dependency install 13.1–16.0 s; command 10.0–10.7 s; and
+return rsync 16.5–26.6 s. The exact receipt references remain in the existing temporary evidence.
+
+The exact source commit, working-tree dirty bytes beyond the empty overlay, deployed `remote-check` hash, cp-sync point,
+concurrent occupancy, periodic reclaim state and independent disk stopgap state remain unmeasured. Do not infer these
+deployment facts from integrated source. This cohort establishes only its observed 2.2–2.9-second empty-overlay phase.
+No comparable non-empty host-a required-check receipts with the source/deployment context needed for comparison are
+available in the retained evidence, so the original 58-second per-run upload question remains unmeasured. These
+receipts do not establish resolution after admission deployment or characterize a non-empty source transfer.
+
+No cause-supported runner repair follows from this cohort. Dependency-cache and Git-preparation work retain their
+existing owners. Keep reclaim and disk stopgap evidence separate; runner deployment and cp-sync, and retirement of
+either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration remain separate
+questions for the existing compiler/health chain; this cohort supplies neither.
 
 Measured on 28 October 2026 on this machine: Linux x64, AMD Ryzen Threadripper 3970X,
 32 cores / 64 logical CPUs, 64 GiB RAM. Baseline runtime: Bun 1.4.3. Candidate runtime:
