@@ -659,8 +659,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       phase={returnPhase}
       history={returnState.history}
       pending={pending}
-      handle={createdHandle || undefined}
-      accountId={createdHandle ? createdAccountId : undefined}
+      {...(createdHandle ? { handle: createdHandle, accountId: createdAccountId } : {})}
       canRetryRead={canRetryRead}
       canRetryCreation={canRetryCreation}
       signedOut={loadState === 'signed-out'}

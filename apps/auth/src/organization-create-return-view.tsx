@@ -89,7 +89,7 @@ export function OrganizationCreateReturnView({
         <Alert role="status"><AlertDescription>{m.auth_organization_return_acknowledged()}</AlertDescription></Alert>
       ) : null}
       {view}
-      {showUnknown || phase === 'unavailable' || phase === 'unresumable' || signedOut ? (
+      {showUnknown || phase === 'unavailable' || signedOut ? (
         <div className="flex flex-wrap items-center gap-3">
           {canRetryRead && readRetry ? (
             <Button type="button" variant="outline" onClick={readRetry}>
