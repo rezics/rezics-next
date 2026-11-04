@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { browserObservation } from '../../../session/observation';
+import { sessionQueryKey } from '../../../session/browser-state';
 import { subjectHref } from '../../../subject/subject-href';
 import type { QuotationRead } from '../../catalogue/quotation';
 import type { QuotationTransport } from '../quotation-view';
@@ -104,6 +105,7 @@ export function useQuotationVisit(props: {
 
   async function request(intent: Intent, previous?: Page, focusSelected = false, push = false) {
     if (!work.active() || !mounted.current) return;
+    receipt = undefined;
     const owner = ++sequence.current;
     focus.current = focusSelected ? { owner, element: document.activeElement } : undefined;
     publish({ intent: { ...intent }, previous, phase: 'loading', observation: owner });
@@ -187,6 +189,7 @@ export function useQuotationVisit(props: {
     if (!read?.selected || !link?.getAttribute('href')?.startsWith('/') || !work.active()) return;
     const store = browserObservation(client);
     const observed = store.getSnapshot();
+    const sessionState = client.getQueryState(sessionQueryKey);
     receipt = {
       token,
       id,
@@ -194,7 +197,7 @@ export function useQuotationVisit(props: {
       page: { ...current.current.intent, quote: read.selected.id },
       previous: current.current.previous,
       origin: safeOrigin,
-      current: () => store.getSnapshot() === observed,
+      current: () => store.getSnapshot() === observed && client.getQueryState(sessionQueryKey) === sessionState,
     };
     // Departure retires every pending focus ticket without changing the admitted page.
     focus.current = undefined;
