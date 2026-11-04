@@ -2,6 +2,7 @@ import {
   isShelfEntryState,
   MAX_SHELF_PAGE_SIZE,
   type ShelfDateReader,
+  type ShelfDateRows,
   type ShelfPageReader,
 } from './shelf-contract.ts';
 import { routeOf } from '../route/route.ts';
@@ -91,7 +92,7 @@ export function createShelfPageReader(): ShelfPageReader {
           : query.orderBy === 'priority'
             ? priority[query.direction]
             : readers[query.orderBy][query.direction];
-      const page = await reader.page(client, route, accountId, query, after);
+      const page: ShelfDateRows = await reader.page(client, route, accountId, query, after);
       const sessions = await active.sessions(
         client,
         route,

@@ -764,7 +764,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         shelfOwner(actor);
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () => command(() => createShelfTitlePreparation(config())(
-          actor, idempotencyKeyOf(requestHeaders), languageRanges(request.headers.get('accept-language')),
+          actor, idempotencyKeyOf(requestHeaders['idempotency-key']), languageRanges(request.headers.get('accept-language')),
         )));
       },
     )
