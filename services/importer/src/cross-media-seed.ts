@@ -12,6 +12,7 @@ import {
   liveActionWorkType,
   mapSourceEnumeration,
   type SourceMapping,
+  vndbCharacterNameLimits,
   vndbProducerParentEnds,
   vndbRecordUrl,
   vndbStaffNameLimit,
@@ -53,6 +54,106 @@ export function crossMediaFranchise(...names: unknown[]): Franchise | undefined 
 
 export interface CrossMediaTables {
   rows(provider: Provider, table: string): AsyncIterable<Row>;
+}
+export type SelectedVndbCharacterNameRows = {
+  names: Map<string, Row[]>;
+  aliases: Map<string, Row[]>;
+  overflow: Map<string, { table: 'chars_names' | 'chars_alias'; row: Row; reason: string }>;
+};
+
+/** Join only elected VNDB character IDs and retain stable, bounded COPY-column rows. */
+export async function collectSelectedVndbCharacterNameRows(
+  input: CrossMediaTables,
+  selected: ReadonlySet<string>,
+): Promise<SelectedVndbCharacterNameRows> {
+  const names = new Map<string, Row[]>();
+  const aliases = new Map<string, Row[]>();
+  const overflow = new Map<string, { table: 'chars_names' | 'chars_alias'; row: Row; reason: string }>();
+  const byteCounts = new Map<string, number>();
+  const limits = new Map<string, number>();
+  for (const table of ['chars_names', 'chars_alias'] as const) {
+    const destination = table === 'chars_names' ? names : aliases;
+    const limit = table === 'chars_names' ? vndbCharacterNameLimits.maxNames : vndbCharacterNameLimits.maxAliases;
+    for await (const sourceRow of input.rows('vndb', table)) {
+      if (typeof sourceRow.id !== 'string' || !selected.has(sourceRow.id)) continue;
+      const row =
+        table === 'chars_names'
+          ? { id: sourceRow.id, lang: sourceRow.lang, name: sourceRow.name, latin: sourceRow.latin }
+          : { id: sourceRow.id, spoil: sourceRow.spoil, name: sourceRow.name, latin: sourceRow.latin };
+      const key = JSON.stringify(row);
+      const rows = destination.get(sourceRow.id) ?? [];
+      if (rows.some((existing) => JSON.stringify(existing) === key)) continue;
+      if (overflow.has(sourceRow.id)) continue;
+      const fields = table === 'chars_names' ? ['lang', 'name', 'latin'] : ['spoil', 'name', 'latin'];
+      const oversize = fields.some((field) => {
+        const value = row[field as keyof typeof row];
+        return typeof value === 'string' && Buffer.byteLength(value, 'utf8') > vndbCharacterNameLimits.stringBytes;
+      });
+      const rowBytes = Buffer.byteLength(key, 'utf8');
+      const nextBytes = (byteCounts.get(sourceRow.id) ?? 0) + rowBytes;
+      const nextCount = (limits.get(sourceRow.id) ?? 0) + 1;
+      if (
+        oversize ||
+        rows.length >= limit ||
+        nextCount > limit * 2 ||
+        nextBytes > vndbCharacterNameLimits.recordBytes
+      ) {
+        overflow.set(sourceRow.id, {
+          table,
+          row,
+          reason: oversize ? 'value_limit' : rows.length >= limit || nextCount > limit * 2 ? 'row_limit' : 'byte_limit',
+        });
+        continue;
+      }
+      rows.push(row);
+      destination.set(sourceRow.id, rows);
+      byteCounts.set(sourceRow.id, nextBytes);
+      limits.set(sourceRow.id, nextCount);
+    }
+  }
+  const ids = new Set([...names.keys(), ...aliases.keys()]);
+  for (const id of ids) {
+    for (const row of names.get(id) ?? []) {
+      const language = String(row.lang ?? '');
+      const name = String(row.name ?? '');
+      const previous = names.get(id)!.find((candidate) => candidate !== row && candidate.lang === language);
+      if (previous && (previous.name !== name || previous.latin !== row.latin)) {
+        overflow.set(id, { table: 'chars_names', row, reason: 'conflicting_key' });
+        break;
+      }
+    }
+    for (const row of aliases.get(id) ?? []) {
+      const previous = aliases.get(id)!.find((candidate) => candidate !== row && candidate.name === row.name);
+      if (previous && (previous.spoil !== row.spoil || previous.latin !== row.latin)) {
+        overflow.set(id, { table: 'chars_alias', row, reason: 'conflicting_key' });
+        break;
+      }
+    }
+    const nameRows = names.get(id) ?? [];
+    const aliasRows = aliases.get(id) ?? [];
+    for (const [table, rows] of [
+      ['chars_names', nameRows],
+      ['chars_alias', aliasRows],
+    ] as const) {
+      rows.sort((left, right) => {
+        const a = JSON.stringify(left);
+        const b = JSON.stringify(right);
+        return a < b ? -1 : a > b ? 1 : 0;
+      });
+      if (Buffer.byteLength(JSON.stringify(rows), 'utf8') > vndbCharacterNameLimits.recordBytes)
+        overflow.set(id, { table, row: rows[0] ?? { id }, reason: 'byte_limit' });
+    }
+    if (
+      Buffer.byteLength(JSON.stringify({ chars_names: nameRows, chars_alias: aliasRows }), 'utf8') >
+      vndbCharacterNameLimits.recordBytes
+    )
+      overflow.set(id, {
+        table: 'chars_names',
+        row: nameRows[0] ?? aliasRows[0] ?? { id },
+        reason: 'byte_limit',
+      });
+  }
+  return { names, aliases, overflow };
 }
 export type CrossMediaGap = {
   source: Provider;
@@ -851,7 +952,13 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       qualifiers,
     });
   }
-  for await (const row of input.rows('vndb', 'chars_vns')) if (vnIds.has(text(row, 'vid'))) chars.add(text(row, 'id'));
+  const selectedVndbCharacterIds = new Set<string>();
+  for await (const row of input.rows('vndb', 'chars_vns')) {
+    if (!vnIds.has(text(row, 'vid'))) continue;
+    const id = text(row, 'id');
+    chars.add(id);
+    selectedVndbCharacterIds.add(id);
+  }
   for await (const row of input.rows('vndb', 'chars_vns')) {
     if (!chars.has(text(row, 'id'))) continue;
     if (!vnIds.has(text(row, 'vid'))) {
@@ -1002,8 +1109,18 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     member({ source: 'vndb', key: sid, kind: 'person', membership: 'referenced' });
   }
   if (withheldCredits.size) plan.edges = plan.edges.filter((draft) => !withheldCredits.has(draft));
+  const characterNameRows = await collectSelectedVndbCharacterNameRows(input, selectedVndbCharacterIds);
+  for (const [id, issue] of characterNameRows.overflow)
+    gap(
+      'vndb',
+      issue.table,
+      issue.row,
+      `Selected character name payload rejected: ${issue.reason}`,
+      { code: issue.reason },
+    );
   for await (const row of input.rows('vndb', 'chars')) {
-    if (!chars.has(text(row, 'id'))) continue;
+    const id = text(row, 'id');
+    if (!chars.has(id)) continue;
     if (typeof row.main === 'string' && /^c[1-9][0-9]*$/.test(row.main)) {
       chars.add(row.main);
       member({ source: 'vndb', key: row.main, kind: 'character', membership: 'referenced' });
@@ -1014,7 +1131,15 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
         'chars.main is a referenced character endpoint; the source relation is not a standalone profile field',
       );
     }
-    plan.entities.vndb.push({ source: 'vndb', key: text(row, 'id'), revision: null, payload: row });
+    if (selectedVndbCharacterIds.has(id) && characterNameRows.overflow.has(id)) continue;
+    const payload = selectedVndbCharacterIds.has(id)
+      ? {
+          ...row,
+          chars_names: characterNameRows.names.get(id) ?? [],
+          chars_alias: characterNameRows.aliases.get(id) ?? [],
+        }
+      : row;
+    plan.entities.vndb.push({ source: 'vndb', key: id, revision: null, payload });
   }
   for (const [id, row] of staffRowById) {
     if (staffAliasRejected.has(id)) continue;
@@ -1372,6 +1497,10 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       ensure(columns.length > 0 && new Set(columns).size === columns.length, 'Invalid VNDB header');
       if (table === 'producers_relations')
         ensure(columns.join('\t') === 'id\tpid\trelation', 'Invalid VNDB producers_relations header');
+      if (table === 'chars_alias')
+        ensure(columns.join('\t') === 'id\tspoil\tname\tlatin', 'Invalid VNDB chars_alias header');
+      if (table === 'chars_names')
+        ensure(columns.join('\t') === 'id\tlang\tname\tlatin', 'Invalid VNDB chars_names header');
       const headerKey = `${provider}/${table}.header`,
         hash = createHash('sha256').update(header!).digest('hex');
       ensure(!this.digests.has(headerKey) || this.digests.get(headerKey) === hash, 'Dump changed during selection');

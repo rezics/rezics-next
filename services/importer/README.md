@@ -1604,6 +1604,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 - Touches: the same selected-family COPY set and seed caller, plus `releases.olang` on already selected releases. Language shares `convertCrossMediaEntity` with titles and identity; it does not split or merge releases, copy language onto a work, or invent platform language qualifiers.
 - Bound: one optional cited `schema:inLanguage` fact per release inside the existing 162-command, 64 KiB and 64-release caps. Inventory language codes canonicalise through `inLanguageTag`; COPY `\\N` and unmapped codes are review diagnostics only. No Concept reads or per-field authority queries.
+
+### Import authored VNDB character names and qualified aliases
+
+- Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@5` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
 ### Import authored VNDB public tag associations

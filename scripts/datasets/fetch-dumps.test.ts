@@ -53,7 +53,11 @@ async function tempCache(): Promise<{ cacheRoot: string; dispose: () => Promise<
   return { cacheRoot: join(temp, 'cache'), dispose: () => rm(temp, { recursive: true, force: true }) };
 }
 
-test('VNDB dump cache requires the exact external-link tables and COPY headers', () => {
+test('VNDB dump cache requires admitted character-name and external-link tables with their COPY headers', () => {
+  expect(VNDB_DUMP_TABLES).toContain('releases_titles');
+  expect(VNDB_DUMP_TABLES).toEqual(expect.arrayContaining(['chars_names', 'chars_alias']));
+  expect(VNDB_DUMP_HEADERS.chars_names).toEqual(['id', 'lang', 'name', 'latin']);
+  expect(VNDB_DUMP_HEADERS.chars_alias).toEqual(['id', 'spoil', 'name', 'latin']);
   expect(VNDB_DUMP_TABLES).toEqual(
     expect.arrayContaining(['extlinks', 'staff_extlinks', 'producers_extlinks', 'releases_extlinks', 'vn_extlinks']),
   );
@@ -64,7 +68,6 @@ test('VNDB dump cache requires the exact external-link tables and COPY headers',
     releases_extlinks: ['id', 'link'],
     vn_extlinks: ['id', 'link'],
   });
-  expect(VNDB_DUMP_TABLES).toContain('releases_titles');
 });
 
 test("When the pinned VNDB dump URL is gone, the fetch resolves the current dump from VNDB's published dump index (or the documented durable location), verifies it, and records the resolved file and checksum; it never silently seeds without VNDB.", async () => {
@@ -97,6 +100,12 @@ test("When the pinned VNDB dump URL is gone, the fetch resolves the current dump
     expect(await readFile(result.vndbArchive)).toEqual(bytes);
     expect(await readFile(join(result.vndb, 'README.txt'), 'utf8')).toBe('VNDB dump\n');
     expect(seen).toEqual([VNDB_ARCHIVE_URL, VNDB_DUMP_INDEX_URL, CURRENT_DUMP_URL]);
+    await rm(join(result.vndb, 'db', 'chars_names'));
+    await rm(join(result.vndb, 'db', 'chars_names.header'));
+    const refreshed = await fetchVndbDump({ cacheRoot, fetchImpl });
+    expect(refreshed.manifest).toEqual(result.manifest);
+    expect(await readFile(join(refreshed.vndb, 'db', 'chars_names.header'), 'utf8')).toBe('id\tlang\tname\tlatin\n');
+    expect(await readFile(join(refreshed.vndb, 'db', 'chars_names'), 'utf8')).toBe('v1\n');
   } finally {
     await dispose();
   }

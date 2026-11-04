@@ -34,6 +34,14 @@ export const vndbReleaseNameLimits = Object.freeze({
   recordBytes: vndbLimits.recordBytes,
   maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases + vndbLimits.maxLinks + 1,
 });
+export const vndbCharacterNameLimits = Object.freeze({
+  maxNames: 64,
+  maxAliases: 64,
+  stringBytes: 4096,
+  maxCodepoints: 1500,
+  recordBytes: 65_536,
+  maxCommands: 257,
+});
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
 const centimeter = 'http://www.wikidata.org/entity/Q174728';
@@ -315,6 +323,155 @@ function array(value: unknown, pointer: string): unknown[] {
   return value as unknown[];
 }
 
+function nameText(value: unknown, pointer: string): string {
+  if (typeof value !== 'string' || !value.isWellFormed() || !value.trim()) fail(pointer);
+  const result = value as string;
+  if ([...result].length > vndbCharacterNameLimits.maxCodepoints)
+    fail(pointer, 'invalid_record');
+  if (Buffer.byteLength(result, 'utf8') > vndbCharacterNameLimits.stringBytes) fail(pointer, 'invalid_record');
+  return result;
+}
+
+function latinCell(value: unknown, pointer: string): string | null {
+  if (value === null) return null;
+  if (value === '') return '';
+  return nameText(value, pointer);
+}
+
+function spoilerLevel(value: unknown): number | undefined {
+  if (value === 0 || value === 1 || value === 2) return value;
+  if (value === '0' || value === '1' || value === '2') return Number(value);
+  return undefined;
+}
+
+function dumpRows(value: unknown, pointer: string, cap: number): unknown[] {
+  if (value === undefined) return [];
+  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
+    fail(pointer);
+  const array = value as unknown[];
+  const length = Object.getOwnPropertyDescriptor(array, 'length')!.value as number;
+  if (typeof length !== 'number' || length > cap) fail(pointer, 'invalid_record_row_limit');
+  const result = [];
+  for (let i = 0; i < length; i++) {
+    const child = own(array, String(i), `${pointer}/${i}`);
+    if (child === undefined) fail(`${pointer}/${i}`);
+    result.push(child);
+  }
+  return result;
+}
+
+type CharacterName = { id: string; lang: string; name: string; latin: string | null };
+type CharacterAlias = { id: string; spoil: number | string | null; name: string; latin: string | null };
+type LanguageText = { language: string; text: string };
+type QualifiedCharacterAlias = LanguageText & { spoilerLevel: number };
+
+function projectCharacterNames(raw: object, expected: string): {
+  names: CharacterName[];
+  aliases: CharacterAlias[];
+  nameFacts: LanguageText[];
+  alternateNameFacts: LanguageText[];
+  qualifiedAlternateNameFacts: QualifiedCharacterAlias[];
+  withheld: ConversionDiagnostic[];
+} {
+  const namesByLanguage = new Map<string, CharacterName>();
+  for (const [index, value] of dumpRows(
+    own(raw, 'chars_names', '/chars_names'),
+    '/chars_names',
+    vndbCharacterNameLimits.maxNames,
+  ).entries()) {
+    const pointer = `/chars_names/${index}`;
+    const entry = object(value, pointer);
+    const id = text(own(entry, 'id', `${pointer}/id`), `${pointer}/id`, 32);
+    if (id !== expected) fail(`${pointer}/id`, 'invalid_identifier');
+    const language =
+      canonicalLanguageTag(text(own(entry, 'lang', `${pointer}/lang`), `${pointer}/lang`, 64)) ??
+      fail(`${pointer}/lang`, 'invalid_language');
+    const name = nameText(own(entry, 'name', `${pointer}/name`), `${pointer}/name`);
+    const latin = latinCell(own(entry, 'latin', `${pointer}/latin`), `${pointer}/latin`);
+    const candidate = { id, lang: language, name, latin };
+    const previous = namesByLanguage.get(language);
+    if (previous && JSON.stringify(previous) !== JSON.stringify(candidate))
+      fail(`${pointer}/lang`, 'conflicting_key');
+    namesByLanguage.set(language, candidate);
+  }
+  const names = [...namesByLanguage.values()].sort(
+    (left, right) => compareText(left.lang, right.lang) || compareText(left.name, right.name),
+  );
+  const nameFacts = names.map(({ lang, name }) => ({ language: lang, text: name }));
+  const alternateByTuple = new Map<string, LanguageText>();
+  const diagnostics: ConversionDiagnostic[] = [];
+  for (const [index, row] of names.entries()) {
+    const latin = row.latin;
+    if (latin === null || latin === '') continue;
+    const language = latinLanguageTag(row.lang);
+    if (language === null) {
+      diagnostics.push({ pointer: `/chars_names/${index}/latin`, code: 'unadmitted_latin_language' });
+      continue;
+    }
+    const alternate = { language, text: latin };
+    alternateByTuple.set(JSON.stringify([alternate.language, alternate.text]), alternate);
+  }
+  const aliasesByTuple = new Map<string, CharacterAlias>();
+  const qualifiedByTuple = new Map<string, QualifiedCharacterAlias>();
+  const withheld: ConversionDiagnostic[] = [];
+  for (const [index, value] of dumpRows(
+    own(raw, 'chars_alias', '/chars_alias'),
+    '/chars_alias',
+    vndbCharacterNameLimits.maxAliases,
+  ).entries()) {
+    const pointer = `/chars_alias/${index}`;
+    const entry = object(value, pointer);
+    const id = text(own(entry, 'id', `${pointer}/id`), `${pointer}/id`, 32);
+    if (id !== expected) fail(`${pointer}/id`, 'invalid_identifier');
+    const name = nameText(own(entry, 'name', `${pointer}/name`), `${pointer}/name`);
+    const latin = latinCell(own(entry, 'latin', `${pointer}/latin`), `${pointer}/latin`);
+    const rawSpoil = own(entry, 'spoil', `${pointer}/spoil`);
+    const spoil = spoilerLevel(rawSpoil);
+    const normalizedSpoil: CharacterAlias['spoil'] =
+      spoil !== undefined
+        ? spoil
+        : rawSpoil === null || typeof rawSpoil === 'string' || (typeof rawSpoil === 'number' && Number.isSafeInteger(rawSpoil))
+          ? rawSpoil
+          : 'unrepresentable';
+    const alias = { id, spoil: normalizedSpoil, name, latin };
+    aliasesByTuple.set(JSON.stringify([normalizedSpoil, name, latin]), alias);
+    if (spoil === undefined) {
+      withheld.push({ pointer: `${pointer}/spoil`, code: 'unrepresentable_qualifier' });
+      continue;
+    }
+    for (const [language, text] of [
+      ['und', name],
+      ...(latin && latin !== '' ? [['und-Latn', latin]] : []),
+    ] as [string, string][]) {
+      const tuple = { language, text, spoilerLevel: spoil };
+      qualifiedByTuple.set(JSON.stringify([language, text, spoil]), tuple);
+    }
+  }
+  const aliases = [...aliasesByTuple.values()].sort(
+    (left, right) =>
+      compareText(String(left.spoil), String(right.spoil)) ||
+      compareText(left.name, right.name) ||
+      compareText(left.latin ?? '', right.latin ?? ''),
+  );
+  const alternateNameFacts = [...alternateByTuple.values()].sort(
+    (left, right) => compareText(left.language, right.language) || compareText(left.text, right.text),
+  );
+  const qualifiedAlternateNameFacts = [...qualifiedByTuple.values()].sort(
+    (left, right) =>
+      left.spoilerLevel - right.spoilerLevel ||
+      compareText(left.language, right.language) ||
+      compareText(left.text, right.text),
+  );
+  return {
+    names,
+    aliases,
+    nameFacts,
+    alternateNameFacts,
+    qualifiedAlternateNameFacts,
+    withheld: [...diagnostics, ...withheld].sort((left, right) => compareText(left.pointer, right.pointer)),
+  };
+}
+
 function nativeNumber(value: unknown, pointer: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) fail(pointer, 'invalid_identifier');
   return value as number;
@@ -475,6 +632,7 @@ type Projected = {
   aliases?: Record<string, string[]>;
   names?: { language: string; text: string }[];
   alternateNames?: { language: string; text: string }[];
+  qualifiedAlternateNames?: QualifiedCharacterAlias[];
   identifier: string;
   nameFacts?: { language: string; text: string }[];
   maxCommands?: number;
@@ -811,6 +969,51 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       diagnostics: names.diagnostics,
     };
   }
+
+  if (
+    kind === 'vndb-character' &&
+    (own(raw, 'chars_names', '/chars_names') !== undefined || own(raw, 'chars_alias', '/chars_alias') !== undefined)
+  ) {
+    const characterNames = projectCharacterNames(raw, expected);
+    const rawName = own(raw, 'name', '/name');
+    const scalarName = rawName === undefined ? undefined : text(rawName, '/name', 500);
+    const names = [...characterNames.nameFacts];
+    if (scalarName !== undefined) names.push({ language: 'und', text: scalarName });
+    if (names.length === 0) names.push({ language: 'und', text: expected });
+    names.sort((left, right) => compareText(left.language, right.language) || compareText(left.text, right.text));
+    const uniqueNames = new Map<string, LanguageText>();
+    for (const name of names) uniqueNames.set(JSON.stringify([name.language, name.text]), name);
+    const nameFacts = [...uniqueNames.values()];
+    const bootstrapNames = [...nameFacts, ...characterNames.alternateNameFacts].sort(
+      (left, right) => compareText(left.language, right.language) || compareText(left.text, right.text),
+    );
+    const labels: Record<string, string> = Object.create(null);
+    const aliases: Record<string, string[]> = Object.create(null);
+    for (const name of bootstrapNames) {
+      if (labels[name.language] === undefined) labels[name.language] = name.text;
+      else if (labels[name.language] !== name.text) (aliases[name.language] ??= []).push(name.text);
+    }
+    const normalized: Normalized = {
+      id: nativeId,
+      name: scalarName ?? expected,
+      chars_names: characterNames.names,
+      chars_alias: characterNames.aliases,
+    };
+    if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbCharacterNameLimits.recordBytes)
+      fail('', 'invalid_record_byte_limit');
+    return {
+      normalized,
+      type,
+      labels,
+      ...(Object.keys(aliases).length ? { aliases } : {}),
+      names: nameFacts,
+      alternateNames: characterNames.alternateNameFacts,
+      qualifiedAlternateNames: characterNames.qualifiedAlternateNameFacts,
+      identifier: expected,
+      maxCommands: vndbCharacterNameLimits.maxCommands,
+      diagnostics: characterNames.withheld,
+    };
+  }
   const name = own(raw, 'name', '/name');
   const title = own(raw, 'title', '/title');
   const label =
@@ -970,6 +1173,15 @@ function convert(
     fact(profile.identifier, identifierContent),
     ...names.map((name) => fact('schema:name', name)),
     ...(projected.alternateNames ?? []).map((name) => fact('schema:alternateName', name)),
+    ...(projected.qualifiedAlternateNames ?? []).map((name) => ({
+      ...fact('schema:alternateName', { language: name.language, text: name.text }),
+      qualifiers: [
+        {
+          property: { id: 'rezics:spoilerLevel' },
+          value: { type: 'value' as const, content: name.spoilerLevel },
+        },
+      ],
+    })),
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
   const extlinks = projected.normalized.extlinks;
