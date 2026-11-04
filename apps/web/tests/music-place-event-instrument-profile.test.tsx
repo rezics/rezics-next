@@ -139,6 +139,12 @@ test('music context reads admitted event grains from the recorded release and ke
   expect(recorded.release).toEqual(bundledRelease);
   expect(musicContextKind(bundledRelease, 'schema:MusicAlbum')).toBe('unsupported');
   expect(musicContextKind(bundledRelease, 'schema:MusicInstrument')).toBe('unsupported');
+  const historical = structuredClone(recorded.release);
+  historical.types['schema:MusicInstrument'] = {
+    ...historical.types['wd:Q34379']!,
+    iri: 'http://schema.org/MusicInstrument',
+  };
+  expect(musicContextKind(historical, 'schema:MusicInstrument')).toBe('instrument');
   expect(musicContextKind(recorded.release, 'schema:Place')).toBe('place');
   expect(musicContextKind(recorded.release, 'schema:MusicVenue')).toBe('place');
   expect(musicContextKind(recorded.release, 'schema:AdministrativeArea')).toBe('area');

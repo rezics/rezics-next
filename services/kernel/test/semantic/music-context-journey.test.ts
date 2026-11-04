@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { releaseDigest, type Release } from '@rezics/definitions';
+import { releaseDigest, validateRelease, type Release } from '@rezics/definitions';
 import { createSemanticDriver } from './outcome-driver.ts';
 
 const GREGORIAN = 'http://www.wikidata.org/entity/Q1985727';
@@ -25,10 +25,18 @@ const cited = (property: string, content: unknown, qualifiers: Record<string, un
 
 function closedRelease(): Release {
   const release = structuredClone(bundledRelease);
+  const instrument = release.types['wd:Q34379'];
   for (const id of MUSIC_TYPES) delete release.types[id];
   for (const term of ['schema:location', 'schema:containedInPlace', 'wdt:P1303'] as const) delete release.properties[term];
+  if (instrument) release.types['schema:MusicInstrument'] = { ...instrument, iri: 'http://schema.org/MusicInstrument' };
   release.catalogue = { ...release.catalogue, version: '1.0.1-music-context-closed' };
   return release;
+}
+
+function pageSubject(body: Record<string, any>, id: string) {
+  return Object.values(body.reads as Record<string, { status: number; body: Record<string, any> }>).find(
+    (read) => read.status === 200 && read.body.subject?.id === id,
+  )?.body.subject;
 }
 
 test('a reader follows a sourced music event through native review and a bounded production page', async () => {
@@ -114,12 +122,29 @@ test('a reader follows a sourced music event through native review and a bounded
     expect(page.status, JSON.stringify(page.body)).toBe(200);
     expect(page.headers.get('cache-control')).toBe('private, no-store');
     expect(page.body.subject).toBe(event.id);
-    const subjectRead = Object.values(page.body.reads as Record<string, { status: number; body: Record<string, any> }>).find(
-      (read) => read.status === 200 && read.body.subject?.id === event.id,
+    const facts = pageSubject(page.body, event.id);
+    if (!facts) throw new Error('expected event page facts');
+    expect(facts.statements['schema:location'][0].value.content).toBe(venue.id);
+    expect(facts.statements['schema:startDate'][0].value.content.precision).toBe(10);
+    expect(facts.statements['wdt:P1303'][0].qualifiers[0].value.content).toBe('piano');
+    expect(facts.statements['schema:location'][0].references[0].parts[0].value.content).toBe('https://example.test/src');
+    for (const related of [venue, area, piano]) {
+      const relatedPage = await driver.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: related.id } });
+      expect(relatedPage.status, JSON.stringify(relatedPage.body)).toBe(200);
+      expect(relatedPage.body.subject).toBe(related.id);
+      expect(pageSubject(relatedPage.body, related.id)?.type).toBe(related.type);
+    }
+    const returned = await driver.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: event.id } });
+    expect(returned.status).toBe(200);
+    expect(returned.body.subject).toBe(event.id);
+    const deniedWrite = await driver.request(
+      'anonymous',
+      'POST',
+      `/v1/subjects/${event.id}/candidates`,
+      { statement: cited('schema:startDate', date('+2025-00-00T00:00:00Z', 9)) },
+      key(),
     );
-    expect(subjectRead?.body.subject.statements['schema:location'][0].value.content).toBe(venue.id);
-    expect(subjectRead?.body.subject.statements['schema:startDate'][0].value.content.precision).toBe(10);
-    expect(subjectRead?.body.subject.statements['wdt:P1303'][0].qualifiers[0].value.content).toBe('piano');
+    expect(deniedWrite.status).toBe(401);
 
     const editorPage = await driver.request('editor', 'POST', '/v1/pages:read', { target: { subject: event.id } });
     expect(editorPage.status).toBe(200);
@@ -162,8 +187,17 @@ test('a reader follows a sourced music event through native review and a bounded
     expect(concealedSubject.statements['schema:location'] ?? []).toEqual([]);
     expect(concealedSubject.statements['schema:startDate']).toHaveLength(1);
     expect(concealedSubject.statements['wdt:P1303']).toHaveLength(1);
+    const withheldPage = await driver.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: event.id } });
+    expect(withheldPage.status).toBe(200);
+    const withheld = pageSubject(withheldPage.body, event.id);
+    if (!withheld) throw new Error('expected withheld event page');
+    expect(withheld.statements['schema:location'] ?? []).toEqual([]);
+    expect(withheld.statements['schema:startDate']).toHaveLength(1);
+    expect(withheld.statements['wdt:P1303']).toHaveLength(1);
 
-    const published = await driver.request('steward', 'POST', '/v1/definitions/releases', { release: closedRelease() }, key());
+    const closed = closedRelease();
+    expect(validateRelease(closed)).toEqual([]);
+    const published = await driver.request('steward', 'POST', '/v1/definitions/releases', { release: closed }, key());
     expect(published.status, JSON.stringify(published.body)).toBe(201);
     const publishedDigest = published.body.digest as string;
     const old = await driver.request('anonymous', 'GET', `/v1/definitions/releases/${publishedDigest}`);
@@ -171,6 +205,7 @@ test('a reader follows a sourced music event through native review and a bounded
     const oldRelease = old.body.release as Release;
     expect(old.body.digest as string).not.toBe(bundledDigest);
     expect(oldRelease.types['schema:MusicEvent']).toBeUndefined();
+    expect(oldRelease.types['schema:MusicInstrument']).toBeDefined();
     expect(oldRelease.types['schema:Book']).toBeDefined();
     const current = await driver.request('anonymous', 'GET', '/v1/definitions/active');
     expect(current.body.digest as string).toBe(bundledDigest);

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
-import { RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
+import { PUBLICATION_LIMITS, publicationLimits, RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
@@ -112,9 +112,20 @@ test('a selected music-event window stays fixed at 64/512/4096 unrelated events 
     },
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+  const recorded = report.samples.map(({ scale, cost }) => ({
+    scale,
+    rows: cost.rows,
+    blocks: cost.blocks,
+    statements: cost.statements,
+    ...(cost.responseBytes === undefined ? {} : { bytes: cost.responseBytes }),
+  }));
+  console.info(`Music context native work ${JSON.stringify(recorded)}`);
+  expect(recorded.every((sample) => sample.rows === recorded[0]!.rows && sample.rows > 0)).toBe(true);
+  expect(recorded.every((sample) => sample.blocks === recorded[0]!.blocks)).toBe(true);
 }, 180_000);
 
 test('released definitions expand at 10/100 manifests without new engine branches', async () => {
+  expect(PUBLICATION_LIMITS).toEqual({ bases: 4096, mappings: 256, qualifiers: 4096 });
   for (const count of [10, 100]) {
     const extra = verticalManifests(count);
     const bundled = bundledSources();
@@ -128,6 +139,7 @@ test('released definitions expand at 10/100 manifests without new engine branche
       presentation: { ...bundled.presentation, ...extra.presentation },
     });
     expect(validateRelease(release)).toEqual([]);
+    expect(publicationLimits(release)).toEqual([]);
     expect(Object.keys(release.types)).toHaveLength(Object.keys(bundledRelease.types).length + count * 3);
     expect(release.types['schema:MusicEvent']).toEqual(bundledRelease.types['schema:MusicEvent']);
     expect(release.types['wd:Q34379']).toEqual(bundledRelease.types['wd:Q34379']);

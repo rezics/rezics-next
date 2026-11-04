@@ -172,9 +172,10 @@ dates and exact readable identity. Hidden summaries do not link; coordinate stri
 Unsupported Types, including a historical pin that still names `schema:MusicInstrument`, have a named unsupported
 state while generic Subject facts and correction access remain available.
 
-Decision: Event timing belongs on the event, location on the place, and instrument use on the exact event credit
-targeting `wd:Q34379`; Place, MusicVenue, AdministrativeArea, Event and MusicEvent are Thing grains in `works.yaml`,
-not CreativeWork, and no `schema:MusicInstrument`, coordinates or geographic engine are published.
+Decision: Event timing belongs on the event using the existing `schema:startDate` and `schema:endDate` time properties,
+location on the place, and instrument use on the exact event credit targeting `wd:Q34379`; Place, MusicVenue,
+AdministrativeArea, Event and MusicEvent are Thing grains in `works.yaml`, not CreativeWork, and no
+`schema:MusicInstrument`, coordinates or geographic engine are published.
 
 Decision: related Subjects open in a same-locale new tab; closing it returns keyboard focus to the source relation link.
 
