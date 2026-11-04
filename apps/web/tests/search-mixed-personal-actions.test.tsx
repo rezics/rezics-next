@@ -17,7 +17,7 @@ import {
 import { DiscoveryPersonalControls, DiscoveryScoreControls } from '../src/search/discovery-personal-controls';
 import { changeDiscoveryVote } from '../src/search/discovery-personal-actions';
 import { readBoundDiscoveryPage } from '../src/search/discovery-personal-server';
-import { discoveryExposureKey } from '../src/search/discovery-personal-capabilities';
+import { discoveryExposureKey, discoveryMetadataFetch } from '../src/search/discovery-personal-capabilities';
 import { writeQuestionBoundRatingForCurrentReader } from '../src/features/pages/rating-actions';
 import { changePersonalLibraryEntry } from '../src/library/entries-read';
 import { QUESTION } from '../src/features/pages/subject-ratings';
@@ -120,6 +120,14 @@ test('private page final admission is terminal, bounded and retains ordinary pub
     state: { page: { viewerFacts: { reason: 'response_limit' }, next: null, hits: [] } },
     capabilities: null,
   });
+});
+
+test('capability metadata shares one finite transport byte allowance across native reads', async () => {
+  const fetcher = discoveryMetadataFetch(new AbortController().signal)(
+    (async () => new Response('x'.repeat(600000))) as typeof fetch,
+  );
+  expect((await fetcher('https://kernel.invalid/release')).status).toBe(200);
+  await expect(fetcher('https://kernel.invalid/exposure')).rejects.toThrow('byte bound');
 });
 
 test('guarded native BFF ports refuse credentials changed during session await and bind score question/zero/clear', async () => {
@@ -577,6 +585,11 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en/search?q=title&sort=name&kind=book#context' });
+  let scroll = 0;
+  Object.defineProperty(window, 'scrollY', { get: () => scroll });
+  window.scrollTo = (_x: number, y: number) => {
+    scroll = y;
+  };
   const keys = [
     'window',
     'document',
@@ -650,11 +663,12 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
       vote: true,
     },
   };
-  const refresh = deferred<DiscoveryBoundPage>(),
-    entry = deferred<{ result: 'saved' }>(),
+  let refresh = deferred<DiscoveryBoundPage>();
+  const entry = deferred<{ result: 'saved' }>(),
     vote = deferred<'rejected'>();
   let reads = 0;
   const writes: unknown[] = [];
+  const signals: AbortSignal[] = [];
   function Live({ locale = 'en' }: { locale?: string }) {
     const personal = useDiscoveryPersonalResults({
       enabled: true,
@@ -662,10 +676,11 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
       request: { representation: 'discovery-v1', text: 'title', limit: 100 },
       locale,
       returnTo: window.location.href,
-      read: async ({ data }) => {
+      read: async ({ data, signal }) => {
+        signals.push(signal);
         expect(data.expectedCredential).toBe(credential);
         reads++;
-        return reads === 1 ? bound : refresh.promise;
+        return reads === 1 || reads === 3 ? bound : refresh.promise;
       },
       writeEntry: async (command) => {
         writes.push(command);
@@ -718,7 +733,7 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
     await act(async () => entry.resolve({ result: 'saved' }));
     expect(reads).toBe(1);
     expect(window.document.activeElement).toBe(submit);
-    expect(host.querySelector('[data-slot=rating-control-value]')?.textContent).not.toBe('0');
+    expect(host.querySelector('[data-slot=rating-control-value]')?.textContent).not.toContain('0');
     await act(async () => vote.resolve('rejected'));
     expect(reads).toBe(2);
     await act(async () => refresh.resolve({ state: { status: 'restart' }, capabilities: null }));
@@ -727,11 +742,29 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
     expect(window.location.search).toBe('?q=title&sort=name&kind=book');
     expect(window.location.hash).toBe('#context');
     expect(host.querySelectorAll('select')).toHaveLength(0);
+    refresh = deferred<DiscoveryBoundPage>();
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <Live locale="fr" />
+        </QueryClientProvider>,
+      ),
+    );
+    expect(reads).toBe(3);
+    const cancelling = host.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    cancelling.focus();
+    await act(async () => host.querySelector('form')!.requestSubmit());
+    expect(reads).toBe(4);
     await act(async () =>
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
     );
+    expect(signals[3]!.aborted).toBe(true);
+    await act(async () => refresh.resolve(bound));
+    expect(host.querySelectorAll('select')).toHaveLength(0);
+    expect(window.document.activeElement).not.toBe(cancelling);
+    expect(window.scrollY).toBe(210);
     expect(host.textContent).not.toContain('Planned');
-    expect(reads).toBe(2);
+    expect(reads).toBe(4);
   } finally {
     await act(async () => root.unmount());
     client.clear();
