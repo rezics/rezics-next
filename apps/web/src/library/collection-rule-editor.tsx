@@ -133,13 +133,14 @@ function OwnerFields({
   value,
   onChange,
   choices,
+  locale,
 }: {
   value: OwnerLeaf;
   onChange(value: FilterDocument): void;
   choices: RuleChoices;
+  locale: string;
 }) {
   const owner = value.owner;
-  const locale = getLocale();
   const label = (labels: Record<string, string>) => localizedLabel(labels, locale).text;
   if ('presence' in owner) return <p>{m.library_rule_presence()}</p>;
   if ('label' in owner)
@@ -257,6 +258,7 @@ type EditorProps = {
   navigate?: ((id: string) => void) | undefined;
   resultsHref?: string | undefined;
   seed?: FilterDocument | undefined;
+  locale?: string | undefined;
 };
 
 const pageIdentity = (page: RulePage) =>
@@ -439,6 +441,7 @@ function RuleForm({
   navigate,
   resultsHref,
   viewerId,
+  locale = getLocale(),
   epoch,
   canLabel,
   isCurrent: ownerCurrent = alwaysCurrent,
@@ -510,10 +513,11 @@ function RuleForm({
       { label: m.library_rule_session(), value: { owner: { session: { profileId: '', lifecycle: 'active' } } } },
       { label: m.library_rule_holding(), value: { owner: { holding: { profileId: '' } } } },
     ],
-    render: (value, onChange): ReactNode =>
+    render: (value, onChange, context): ReactNode =>
       'owner' in value ? (
         <OwnerFields
           value={value}
+          locale={context?.locale ?? locale}
           onChange={(next) => {
             if (isCurrent() && !captured.current) onChange(next);
           }}
@@ -870,7 +874,7 @@ function RuleForm({
               onChange={(value) => {
                 if (isCurrent() && !captured.current) setFilter(value);
               }}
-              locale={getLocale()}
+              locale={locale}
               metadata={choices.release.metadata ?? { types: {}, properties: {} }}
               extension={extension}
               embedded
@@ -887,6 +891,7 @@ function RuleForm({
               basisKind={intent ? 'original' : 'loaded'}
               collectionId={base.state === 'ready' ? base.id : savedId ?? undefined}
               returnedId={savedId ?? undefined}
+              locale={locale}
               ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
             />
             {currentRuleRead && base.state === 'ready' ? (
@@ -914,6 +919,7 @@ function RuleForm({
                     basis={base.rule}
                     basisKind="loaded"
                     collectionId={base.id}
+                    locale={locale}
                     ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
                   />
                 ) : null}
