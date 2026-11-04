@@ -63,19 +63,22 @@ export function admittedOptionalKind(page: PreferencePage, kind: string): boolea
   return page.kinds.some((entry) => entry.kind === kind && entry.optional);
 }
 
-/** Keep only kinds the current page still admits; a removed or compulsory kind is never replayed as a new edit. */
+/** Admit a new patch only as a whole; a filtered subset is not completion. */
 export function admittedNotificationPatch(
   intent: NotificationPatch | undefined,
   page: PreferencePage,
 ): NotificationPatch | undefined {
   if (intent === undefined) return undefined;
   if (intent === null) return preferencePageAllows(page, 'reset') ? null : undefined;
-  const next = Object.fromEntries(
-    Object.entries(intent).filter(
+  const entries = Object.entries(intent);
+  if (
+    entries.length === 0 ||
+    !entries.every(
       (entry): entry is [string, boolean] => admittedOptionalKind(page, entry[0]) && typeof entry[1] === 'boolean',
-    ),
-  );
-  return Object.keys(next).length > 0 ? next : undefined;
+    )
+  )
+    return undefined;
+  return Object.fromEntries(entries);
 }
 
 export function notificationIntentAllowed(intent: NotificationPatch | undefined, page: PreferencePage): boolean {
@@ -83,8 +86,30 @@ export function notificationIntentAllowed(intent: NotificationPatch | undefined,
   return admitted !== undefined && preferencePageAllows(page, admitted === null ? 'reset' : 'edit');
 }
 
-function retainedNotificationIntent(intent: NotificationPatch | undefined, page: PreferencePage) {
-  return intent === null ? null : admittedNotificationPatch(intent, page);
+export function unavailableNotificationIntent(
+  intent: NotificationPatch | undefined,
+  page: PreferencePage,
+): NotificationPreferences {
+  if (intent === undefined || intent === null) return {};
+  return Object.fromEntries(
+    Object.entries(intent).filter(
+      (entry): entry is [string, boolean] => typeof entry[1] === 'boolean' && !admittedOptionalKind(page, entry[0]),
+    ),
+  );
+}
+
+function overlayOptionalDraft(
+  known: NotificationPreferences,
+  draft: NotificationPreferences,
+  intent: NotificationPatch | undefined,
+): NotificationPreferences {
+  return Object.fromEntries(
+    Object.entries(known).map(([kind, enabled]) => {
+      if (kind in draft) return [kind, draft[kind]!];
+      if (intent && intent !== null && typeof intent[kind] === 'boolean') return [kind, intent[kind]];
+      return [kind, enabled];
+    }),
+  );
 }
 
 export function notificationOriginalAllowed(
@@ -199,14 +224,9 @@ export class NotificationEditor {
   private adoptPage(page: PreferencePage, preserveDraft: boolean, phase: NotificationEditorState['phase']) {
     const known = snapshotFrom(page);
     const draft = preserveDraft
-      ? Object.fromEntries(
-          Object.entries(known.notifications).map(([kind, enabled]) => [
-            kind,
-            kind in this.state.draft ? this.state.draft[kind]! : enabled,
-          ]),
-        )
+      ? overlayOptionalDraft(known.notifications, this.state.draft, this.state.intent)
       : { ...known.notifications };
-    const intent = preserveDraft ? retainedNotificationIntent(this.state.intent, page) : undefined;
+    const intent = preserveDraft ? this.state.intent : undefined;
     const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
     this.confirm(known);
     this.update({
@@ -226,13 +246,8 @@ export class NotificationEditor {
   }
   private reviewPending(page: PreferencePage) {
     const known = snapshotFrom(page);
-    const draft = Object.fromEntries(
-      Object.entries(known.notifications).map(([kind, enabled]) => [
-        kind,
-        kind in this.state.draft ? this.state.draft[kind]! : enabled,
-      ]),
-    );
-    const intent = retainedNotificationIntent(this.state.intent, page);
+    const draft = overlayOptionalDraft(known.notifications, this.state.draft, this.state.intent);
+    const intent = this.state.intent;
     this.confirm(known);
     this.update({
       currentAdvice: page,
@@ -248,13 +263,8 @@ export class NotificationEditor {
   private reviewConfirmed(page: PreferencePage, confirmation: ConfirmedReceipt) {
     const known = snapshotFrom(page);
     const laterIntent = intentSince(confirmation.attempt.intent, this.state.intent);
-    const intent = admittedNotificationPatch(laterIntent, page);
-    const draft = {
-      ...known.notifications,
-      ...Object.fromEntries(
-        Object.entries(intent ?? {}).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'),
-      ),
-    };
+    const intent = laterIntent;
+    const draft = overlayOptionalDraft(known.notifications, {}, laterIntent);
     const newer = known.version > confirmation.receipt.version;
     this.confirm(known);
     this.update({
@@ -293,6 +303,21 @@ export class NotificationEditor {
     if (this.state.phase === 'failed') return;
     if (local) return;
     await this.start(this.state.intent!, version);
+  }
+  discardKind(kind: string) {
+    if (!this.live()) return;
+    const intent = this.state.intent;
+    if (intent === undefined || intent === null || !(kind in intent)) return;
+    const next = { ...intent };
+    delete next[kind];
+    const intentNext: NotificationPatch | undefined = Object.keys(next).length ? next : undefined;
+    const draft = overlayOptionalDraft(this.state.known.notifications, this.state.draft, intentNext);
+    const edited = intentNext !== undefined || !sameNotifications(draft, this.state.known.notifications);
+    this.update({
+      intent: intentNext,
+      draft,
+      phase: edited ? (this.state.phase === 'idle' || this.state.phase === 'saved' ? 'review' : this.state.phase) : 'idle',
+    });
   }
   async restore(version: number) {
     if (!this.live() || !this.canWrite()) return;
@@ -339,12 +364,10 @@ export class NotificationEditor {
       });
       return;
     }
-    const admitted = admittedNotificationPatch(notifications, page);
-    if (admitted === undefined) return;
-    if (!preferencePageAllows(page, admitted === null ? 'reset' : 'edit')) return;
+    if (!notificationIntentAllowed(notifications, page)) return;
     const input = Object.freeze({
       expectedVersion: this.state.known.version,
-      notifications: admitted === null ? null : Object.freeze({ ...admitted }),
+      notifications: notifications === null ? null : Object.freeze({ ...notifications }),
       idempotencyKey: crypto.randomUUID(),
     });
     const intent =
@@ -430,6 +453,7 @@ export class NotificationEditor {
     if (!recovering) {
       const edited = !sameNotifications(this.state.draft, attempt.draft);
       const stale = receipt.version < this.minimumVersion();
+      const laterIntent = intentSince(attempt.intent, this.state.intent);
       // This command is confirmed, but a later shared version makes its values historical.
       this.confirm(receipt);
       const draft = Object.fromEntries(
@@ -441,7 +465,7 @@ export class NotificationEditor {
       this.update({
         pending: null,
         draft,
-        intent: stale || edited ? admittedNotificationPatch(this.state.intent, receipt.page) : undefined,
+        intent: stale || edited ? (edited ? laterIntent : this.state.intent) : undefined,
         phase: stale ? 'conflict' : edited ? 'review' : 'saved',
         readOrigin: null,
         readReason: undefined,

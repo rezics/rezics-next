@@ -1484,6 +1484,8 @@
   "settings_notifications_heading": "Notifications",
   "settings_notifications_read_only": "You can view the saved settings, but current account access does not allow changes.",
   "settings_notifications_review_unavailable": "Current account access does not allow this retained operation. Reload notification settings to check again after access changes.",
+  "settings_notifications_retained_unavailable": "Your retained choice for {name} ({state}) is not currently optional. Discard it, or reload if current advice admits this choice.",
+  "settings_notifications_discard_choice": "Discard this choice",
   "settings_notifications_mandatory": "Moderation decisions about your content, report outcomes and appeal outcomes are always sent.",
   "settings_notifications_policy_heading": "Always sent",
   "settings_notifications_default_on": "Default: on",
