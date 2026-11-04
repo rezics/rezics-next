@@ -105,6 +105,8 @@ export class ProfileEditor {
   // Value comparisons alone cannot distinguish a later edit back to the original value.
   // Keep these edits across unknown outcomes and retries of the same immutable attempt.
   private laterEdits: ProfilePatch = {};
+  // Denial hides known/draft from this observation; a later authorized GET rebases the same in-memory draft.
+  private withheld: { known: ProfileValues; draft: ProfileValues } | null = null;
   constructor(
     private io: ProfileEditorIO,
     initial: ProfileValues | null = null,
@@ -146,6 +148,7 @@ export class ProfileEditor {
     this.lifetime.abort();
     this.readVersion++;
     this.laterEdits = {};
+    this.withheld = null;
     this.update({
       known: null,
       draft: null,
@@ -181,7 +184,10 @@ export class ProfileEditor {
     if (!this.current()) return;
     const denied = profileReadDenied(error);
     const failure = failureMetadata(error);
-    if (denied) this.readVersion++;
+    if (denied) {
+      this.readVersion++;
+      if (this.state.known && this.state.draft) this.withheld = { known: this.state.known, draft: this.state.draft };
+    }
     this.update({
       phase: this.state.attempt ? 'uncertain' : 'unavailable',
       readStatus: 'failed',
@@ -313,7 +319,11 @@ export class ProfileEditor {
     }
   }
   private finishRead(current: ProfileValues, acknowledged: boolean) {
-    const { attempt, known, draft } = this.state;
+    const withheld = this.state.readAuthority === 'denied' ? this.withheld : null;
+    if (this.state.readAuthority === 'denied') this.withheld = null;
+    const attempt = this.state.attempt;
+    const known = this.state.known ?? withheld?.known ?? null;
+    const draft = this.state.draft ?? withheld?.draft ?? null;
     if (known && known.accountId !== current.accountId) throw new Error('Profile account changed');
     if (!draft) {
       this.update({

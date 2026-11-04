@@ -77,6 +77,10 @@ export function PublicViewsCard({
                     onCheckedChange={(checked) => {
                       editor.edit({ publicViews: { ...profile.publicViews, [view]: checked } });
                     }}
+                    onClick={() => {
+                      if (closed || busy) return;
+                      editor.edit({ publicViews: { ...profile.publicViews, [view]: !profile.publicViews[view] } });
+                    }}
                   />
                 </Field>
               </label>
@@ -93,6 +97,10 @@ export function PublicViewsCard({
                     disabled={closed || busy}
                     onCheckedChange={(checked) => {
                       editor.edit({ speakersListed: checked });
+                    }}
+                    onClick={() => {
+                      if (closed || busy) return;
+                      editor.edit({ speakersListed: profile.speakersListed !== true });
                     }}
                   />
                 </Field>
