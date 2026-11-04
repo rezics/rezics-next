@@ -26,6 +26,7 @@ afterAll(async () => {
   window.happyDOM.abort();
 });
 const share: QueryShare = {
+  viewer: 'anonymous',
   action: 'allowed',
   reason: 'ready',
   document: { text: '"complete text"', filter: null, languages: ['ja', 'en'], sort: null },

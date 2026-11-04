@@ -2,6 +2,7 @@ import { t } from 'elysia';
 const closed = { additionalProperties: false } as const;
 export const QueryShareSchema = t.Object(
   {
+    viewer: t.Union([t.Literal('anonymous'), t.Literal('signed-in')]),
     action: t.Union([t.Literal('allowed'), t.Literal('disabled'), t.Literal('unavailable')]),
     reason: t.Union(
       ['ready', 'private_context', 'unsupported', 'oversized', 'unavailable'].map((value) => t.Literal(value)),

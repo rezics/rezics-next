@@ -3,6 +3,7 @@ import { parseText } from './text.ts';
 
 export const QUERY_SHARE_LIMITS = Object.freeze({ documentBytes: 16384, urlBytes: 8192, labels: 128, labelBytes: 256 });
 export type QueryShare = {
+  viewer: 'anonymous' | 'signed-in';
   action: 'allowed' | 'disabled' | 'unavailable';
   reason: 'ready' | 'private_context' | 'unsupported' | 'oversized' | 'unavailable';
   document: { text: string; filter: string | null; languages: string[]; sort: string | null } | null;
@@ -14,7 +15,7 @@ export function unavailableQueryShare(
   reason: QueryShare['reason'],
   action: QueryShare['action'] = 'disabled',
 ): QueryShare {
-  return { action, reason, document: null, parameters: null, selections: [] };
+  return { viewer: 'anonymous', action, reason, document: null, parameters: null, selections: [] };
 }
 
 /** Called only after ordinary native execution admits this exact request. No principal or continuation is copied. */
@@ -112,6 +113,7 @@ export function prepareQueryShare(
   )
     return unavailableQueryShare('oversized');
   return {
+    viewer: 'anonymous',
     action: 'allowed',
     reason: 'ready',
     document,

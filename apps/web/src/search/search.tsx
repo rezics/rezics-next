@@ -1205,7 +1205,7 @@ export function SearchPage({
         <QuerySharePreview
           key={JSON.stringify([stateKey, locale, session])}
           locale={locale}
-          changed={editing}
+          changed={editing || Object.keys(rangeDraftState.properties).length > 0}
           prepare={() =>
             prepareShareWithLocale({
               data: {

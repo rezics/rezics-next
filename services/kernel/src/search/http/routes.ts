@@ -590,7 +590,9 @@ export function searchRoutes<App>(
             for (const [id, definition] of Object.entries(active.release.types)) labels[id] = definition.labels;
             for (const [id, definition] of Object.entries(active.release.properties)) labels[id] = definition.labels;
           }
-          return prepareQueryShare(body, labels);
+          const projection = prepareQueryShare(body, labels);
+          projection.viewer = actor.kind === 'account' ? 'signed-in' : 'anonymous';
+          return projection;
         }
         if (body.representation === 'discovery-v1') return mixed();
         if (body.representation === 'release-groups-v1') return grouped();

@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 export const queryShareSchema = v.object({
+  viewer: v.optional(v.picklist(['anonymous', 'signed-in']), 'anonymous'),
   action: v.picklist(['allowed', 'disabled', 'unavailable']),
   reason: v.picklist(['ready', 'private_context', 'unsupported', 'oversized', 'unavailable']),
   document: v.nullable(
@@ -15,6 +16,7 @@ export const queryShareSchema = v.object({
 });
 export type QueryShare = v.InferOutput<typeof queryShareSchema>;
 export const shareUnavailable = (): QueryShare => ({
+  viewer: 'anonymous',
   action: 'unavailable',
   reason: 'unavailable',
   document: null,
