@@ -32,7 +32,7 @@ test('a concrete music edition keeps album and recording identities distinct and
   expect(page.rows.map((row) => row.summary?.id)).toEqual([recordingId, recordingId]);
   expect(page.rows.map((row) => row.statement?.qualifiers[0]?.value.content)).toEqual(['1', '3']);
   expect(page.rows.map((row) => row.statement)).toEqual(fixture.first.relations.map((row) => row.statement));
-  expect(new Set(page.rows.map((row) => row.statementId)).size).toBe(3);
+  expect(new Set(page.rows.map((row) => row.statementId)).size).toBe(2);
   expect(page.public.subject.sourceRecords).toEqual(fixture.publicRead.subject.sourceRecords);
   expect(fixture.calls.map((url) => url.pathname)).toEqual([
     `/v1/subjects/${releaseId}`,
@@ -108,7 +108,7 @@ test('TBA, partial month/year, absent, explicit none and unknown precision remai
   const absent = await fixture.read();
   expect(absent.ok && absent.facts.find((fact) => fact.kind === 'date')?.statements).toEqual([]);
   fixture.respond({ ...fixture.first, next: 'same' });
-  expect(await fixture.read({ ...musicAddress, stream: 'forward:bf:hasPart', cursor: 'same' })).toEqual({
+  expect(await fixture.read({ ...musicAddress, stream: 'forward:schema:track', cursor: 'same' })).toEqual({
     ok: false,
     reason: 'unavailable',
   });
