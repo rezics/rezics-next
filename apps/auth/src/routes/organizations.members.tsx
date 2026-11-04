@@ -422,7 +422,8 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     if (await choose()) {
       // A clean page also needs a fresh lifetime for its replacement read.
       renewActivity();
-      await reload(cursor);
+      if (isUnresolvedMembership(command, observed)) await reviewRecovery(cursor);
+      else await reload(cursor);
     }
   }
   function retainUnknown(command: MembershipCommand, kind: string, result?: MembershipPage) {
@@ -522,7 +523,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       }
     }
   }
-  async function reviewRecovery() {
+  async function reviewRecovery(cursor?: string) {
     const isActive = activity.current;
     const expected = command;
     if (!isActive() || lock.current || !expected || !isUnresolvedMembership(expected, observed)) return;
@@ -551,7 +552,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         installPage({ kind });
         return;
       }
-      const currentPage = await loadMembershipPage(organizationId, expected.accountId);
+      const currentPage = await loadMembershipPage(organizationId, expected.accountId, cursor);
       if (!isActive()) return;
       if (currentPage.kind !== 'ready') {
         installPage(currentPage);

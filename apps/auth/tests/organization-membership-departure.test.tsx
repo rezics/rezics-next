@@ -226,3 +226,25 @@ test('authority loss leaves an open unknown-outcome departure choice honest and 
   expect(host.textContent).not.toContain(account);
   expect(membership.readMembershipCommand()).toEqual(saved);
 });
+
+test('paging Leave rereads current advice before restoring an unresolved review', async () => {
+  await mount();
+  execute = async () => Response.json({}, { status: 503 });
+  await click(m.auth_members_change_role());
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  const saved = membership.readMembershipCommand() as membership.MembershipCommand;
+
+  await click(m.auth_inventory_next());
+  await click(m.auth_members_stay());
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  await click(m.auth_inventory_next());
+  await click(m.auth_members_leave());
+
+  expect(list.mock.calls.at(-1)).toEqual([org, account, 'next']);
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).toContain(member);
+  expect(host.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(false);
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(requests.filter((path) => path.endsWith('/execute'))).toHaveLength(1);
+});
