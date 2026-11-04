@@ -71,7 +71,7 @@ test('projection retains distinct assertions and counts only labelled tags admit
   expect(model?.rows).toHaveLength(30);
   expect(model?.rows[0]?.targetId).toBe(model?.rows[1]?.targetId);
   expect(model?.rows[0]?.key).not.toBe(model?.rows[1]?.key);
-  expect(model?.rows[14]?.spoilerQualifiers).toEqual([{ property: 'rezics:spoilerLevel', in: [2] }]);
+  expect(model?.rows[14]?.spoilerQualifiers).toEqual([{ property: 'rezics:spoilerLevel', in: ['2'] }]);
   expect(model?.disclosedCount).toBe(27);
   expect(model?.rows[29]?.targetId).toBe(targets[29]);
   expect(model?.sourceKey).toContain('release-a');

@@ -177,7 +177,7 @@ test('mounted work tags paginate, retain source assertions, gate each spoiler, a
     );
     expect(spoilerWhy).toBeDefined();
     expect(new URL(spoilerWhy!.href).searchParams.get('tagQualifiers')).toBe(
-      JSON.stringify([{ property: 'rezics:spoilerLevel', in: [2] }]),
+      JSON.stringify([{ property: 'rezics:spoilerLevel', in: ['2'] }]),
     );
 
     await act(async () => more()!.click());

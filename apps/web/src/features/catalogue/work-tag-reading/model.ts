@@ -15,7 +15,7 @@ export type WorkTagAssertion = {
   statement: Stmt;
   spoilerLevel: number;
   hasSpoilerQualifier: boolean;
-  spoilerQualifiers: { property: string; in: number[] }[];
+  spoilerQualifiers: { property: string; in: string[] }[];
 };
 
 export type WorkTagProjection = {

@@ -54,7 +54,7 @@ const rows: WorkTagAssertion[] = Array.from({ length: 29 }, (_, index) => ({
   statement: statement(index),
   spoilerLevel: index === 14 ? 2 : 0,
   hasSpoilerQualifier: index === 14,
-  spoilerQualifiers: index === 14 ? [{ property: 'rezics:spoilerLevel', in: [2] }] : [],
+  spoilerQualifiers: index === 14 ? [{ property: 'rezics:spoilerLevel', in: ['2'] }] : [],
 }));
 rows[6] = { ...rows[6]!, targetId: conceptId(5) };
 rows[22] = { ...rows[22]!, targetId: conceptId(22) };
