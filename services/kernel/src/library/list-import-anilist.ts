@@ -926,15 +926,15 @@ export function createAniListImport(deps: Dependencies) {
           const record = current.metadataReviews?.find((item) => item.token === reviewToken);
           if (!record) throw new LibraryConflictError();
           const confirmation = listImportMetadataOrConflict(
-            confirmListImportMetadata(
-              record.confirmation,
-              proposed,
-              anilistMetadataFence(record, current, fence?.cancelled === true),
+              confirmListImportMetadata(
+                record.confirmation,
+                proposed,
+                anilistMetadataFence(record, current, fence?.cancelled === true),
+              ),
+              () => {
+                throw new LibraryConflictError();
+              },
             ),
-            () => {
-              throw new LibraryConflictError();
-            },
-          ),
             next = {
               ...current,
               metadataReviews: current.metadataReviews!.map((item) =>
@@ -960,15 +960,15 @@ export function createAniListImport(deps: Dependencies) {
           const record = current.metadataReviews?.find((item) => item.token === token);
           if (!record) throw new LibraryConflictError();
           const merged = listImportMetadataOrConflict(
-            persistListImportMetadata(
-              record.confirmation,
-              confirmation,
-              anilistMetadataFence(record, current, fence?.cancelled === true),
+              persistListImportMetadata(
+                record.confirmation,
+                confirmation,
+                anilistMetadataFence(record, current, fence?.cancelled === true),
+              ),
+              () => {
+                throw new LibraryConflictError();
+              },
             ),
-            () => {
-              throw new LibraryConflictError();
-            },
-          ),
             next = {
               ...current,
               metadataReviews: current.metadataReviews!.map((item) =>

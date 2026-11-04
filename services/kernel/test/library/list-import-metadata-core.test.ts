@@ -48,9 +48,15 @@ function proposed(provider: string, admission?: EntryImportMetadataConfirmation[
   });
 }
 
-function operands(provider: string): Pick<
+function operands(
+  provider: string,
+): Pick<
   EntryImportMetadataConfirmation,
-  'annotationInput' | 'provenanceInput' | 'annotationReceiptDigest' | 'provenanceReceiptDigest' | 'sourceObservationDigest'
+  | 'annotationInput'
+  | 'provenanceInput'
+  | 'annotationReceiptDigest'
+  | 'provenanceReceiptDigest'
+  | 'sourceObservationDigest'
 > {
   return {
     annotationInput: {
@@ -111,7 +117,12 @@ test('each provider confirmation reaches native annotation and provenance and re
     );
     expect(started.ok).toBe(true);
     if (!started.ok) throw new Error('persist');
-    expect(started.value.outcome?.fields.map((field) => field.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
+    expect(started.value.outcome?.fields.map((field) => field.status)).toEqual([
+      'applied',
+      'applied',
+      'applied',
+      'applied',
+    ]);
 
     const resumed = persistListImportMetadata(
       started.value,
@@ -132,7 +143,12 @@ test('each provider confirmation reaches native annotation and provenance and re
     expect(resumed.value.annotationReceiptDigest).toBe(`${provider}-annotation-receipt`);
     expect(resumed.value.provenanceReceiptDigest).toBe(`${provider}-provenance-receipt`);
     expect(resumed.value.selectionDigest).toBe(selectionDigest);
-    expect(resumed.value.outcome?.fields.map((field) => field.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
+    expect(resumed.value.outcome?.fields.map((field) => field.status)).toEqual([
+      'applied',
+      'applied',
+      'applied',
+      'applied',
+    ]);
   }
 });
 
@@ -169,11 +185,7 @@ test('cancelled, changed, expired and concurrent confirmations refuse new phases
     expect(persistListImportMetadata(proposed('mal'), { ...proposed('mal'), annotationStarted: true }, facts).ok).toBe(
       false,
     );
-    const recovered = persistListImportMetadata(
-      original,
-      { ...original, annotationStatus: 'unattempted' },
-      facts,
-    );
+    const recovered = persistListImportMetadata(original, { ...original, annotationStatus: 'unattempted' }, facts);
     expect(recovered.ok).toBe(true);
     if (recovered.ok) {
       expect(recovered.value.annotationReceiptDigest).toBe('bangumi-annotation-receipt');
@@ -186,9 +198,9 @@ test('cancelled, changed, expired and concurrent confirmations refuse new phases
   expect(unrelated).toHaveLength(6);
   expect(original.selectionDigest).toBe(selectionDigest);
   expect(original.annotationKey).toBe('bangumi:upload:0:review:annotations');
-  expect(confirmListImportMetadata(original, { ...original, selectionDigest: 'other-selection' }, eligibleFacts()).ok).toBe(
-    false,
-  );
+  expect(
+    confirmListImportMetadata(original, { ...original, selectionDigest: 'other-selection' }, eligibleFacts()).ok,
+  ).toBe(false);
   const expired = recoverListImportMetadataExpiredOutcome({
     reviewToken: 'review',
     selections: fields,

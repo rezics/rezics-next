@@ -94,11 +94,7 @@ type StoredRow = Omit<BangumiRow, 'review'> & {
   labels: BangumiLabelState | null;
 };
 
-function bangumiMetadataFence(
-  record: EntryImportMetadataReview,
-  locked: StoredRow,
-  cancelled: boolean,
-) {
+function bangumiMetadataFence(record: EntryImportMetadataReview, locked: StoredRow, cancelled: boolean) {
   const sourceReview = locked.review;
   return listImportMetadataFenceFacts({
     cancelled,
@@ -936,7 +932,11 @@ export function createBangumiImport(deps: Dependencies) {
             record = locked.review?.metadata?.find((item) => item.token === reviewToken);
           if (!record) throw new ProblemError('conflict');
           record.confirmation = listImportMetadataOrConflict(
-            persistListImportMetadata(record.confirmation, confirmation, bangumiMetadataFence(record, locked, h.cancelled)),
+            persistListImportMetadata(
+              record.confirmation,
+              confirmation,
+              bangumiMetadataFence(record, locked, h.cancelled),
+            ),
             () => {
               throw new ProblemError('conflict');
             },

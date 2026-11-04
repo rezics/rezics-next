@@ -6,9 +6,7 @@ import type {
   EntryImportMetadataSelection,
 } from './list-import-entry-metadata.ts';
 
-export type ListImportMetadataDecision<T> =
-  | { ok: true; value: T }
-  | { ok: false; reason: 'conflict' };
+export type ListImportMetadataDecision<T> = { ok: true; value: T } | { ok: false; reason: 'conflict' };
 
 export type ListImportMetadataFenceFacts = Readonly<{
   cancelled: boolean;
@@ -49,8 +47,7 @@ export function listImportMetadataFenceFacts(input: {
     cancelled: input.cancelled === true,
     expired: input.expired === true,
     sourceReviewMatches: input.currentSourceReviewToken === input.boundSourceReviewToken,
-    sourceDigestMatches:
-      input.currentSourceDigest != null && input.currentSourceDigest === input.boundSourceDigest,
+    sourceDigestMatches: input.currentSourceDigest != null && input.currentSourceDigest === input.boundSourceDigest,
     profileMatches: input.currentProfileDigest != null && input.currentProfileDigest === input.boundProfileDigest,
     incarnationMatches: input.currentIncarnationId === input.boundIncarnationId,
   };
@@ -72,8 +69,7 @@ export function listImportMetadataPhaseStart(
   next: EntryImportMetadataConfirmation,
 ): boolean {
   return (
-    (next.annotationStarted && !current.annotationStarted) ||
-    (next.provenanceStarted && !current.provenanceStarted)
+    (next.annotationStarted && !current.annotationStarted) || (next.provenanceStarted && !current.provenanceStarted)
   );
 }
 
@@ -124,10 +120,7 @@ export function persistListImportMetadata(
   return mergeListImportMetadataConfirmation(current, next);
 }
 
-export function listImportMetadataOrConflict<T>(
-  decision: ListImportMetadataDecision<T>,
-  conflict: () => never,
-): T {
+export function listImportMetadataOrConflict<T>(decision: ListImportMetadataDecision<T>, conflict: () => never): T {
   if (!decision.ok) conflict();
   return decision.value;
 }
@@ -153,7 +146,12 @@ export function recoverListImportMetadataExpiredOutcome(
     value: {
       reviewToken: input.reviewToken,
       fields: input.selections.map(({ field }) =>
-        recoverExpiredField(field, confirmation, old.get(field), annotationField(field) ? input.annotationReceipt : input.provenanceReceipt),
+        recoverExpiredField(
+          field,
+          confirmation,
+          old.get(field),
+          annotationField(field) ? input.annotationReceipt : input.provenanceReceipt,
+        ),
       ),
     },
   };
