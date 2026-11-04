@@ -8589,5 +8589,9 @@
   "moderation_directory_return_hint": "Votre page d’annuaire d’origine sera vérifiée à nouveau à votre retour.",
   "moderation_directory_ready": "Choisissez une file que vous avez actuellement le droit d’ouvrir.",
   "moderation_directory_retired": "Cette visite privée de l’annuaire est terminée. Recommencez pour vérifier vos files actuelles.",
-  "moderation_directory_expired": "Cette page d’annuaire a expiré. Recommencez pour vérifier l’accès actuel aux files."
+  "moderation_directory_expired": "Cette page d’annuaire a expiré. Recommencez pour vérifier l’accès actuel aux files.",
+  "profile_contribution_actions_sign_in": "Connectez-vous pour consulter les actions actuelles des contributions",
+  "profile_contribution_actions_preparing": "Vérification des actions actuelles des contributions…",
+  "profile_contribution_actions_unavailable": "Les actions privées sont indisponibles. Vous pouvez toujours ouvrir chaque contribution.",
+  "profile_contribution_actions_retired": "Ces actions ont expiré. Revenez à la page actuelle pour les vérifier à nouveau."
 }

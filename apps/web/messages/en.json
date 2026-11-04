@@ -8701,5 +8701,9 @@
   "moderation_directory_return_hint": "Your original directory page will be checked again when you return.",
   "moderation_directory_ready": "Choose a queue you are currently permitted to open.",
   "moderation_directory_retired": "This private directory visit has ended. Restart to check your current queues.",
-  "moderation_directory_expired": "This directory page has expired. Restart discovery to check current queue access."
+  "moderation_directory_expired": "This directory page has expired. Restart discovery to check current queue access.",
+  "profile_contribution_actions_sign_in": "Sign in to check current contribution actions",
+  "profile_contribution_actions_preparing": "Checking current contribution actions…",
+  "profile_contribution_actions_unavailable": "Private actions are unavailable. You can still open each contribution.",
+  "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again."
 }

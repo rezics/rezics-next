@@ -8589,5 +8589,9 @@
   "moderation_directory_return_hint": "Beim Zurückkehren wird deine ursprüngliche Übersichtsseite erneut geprüft.",
   "moderation_directory_ready": "Wähle eine Warteschlange, die du derzeit öffnen darfst.",
   "moderation_directory_retired": "Dieser private Besuch der Übersicht ist beendet. Starte neu, um deine aktuellen Warteschlangen zu prüfen.",
-  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen."
+  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen.",
+  "profile_contribution_actions_sign_in": "Anmelden, um aktuelle Beitragsaktionen zu prüfen",
+  "profile_contribution_actions_preparing": "Aktuelle Beitragsaktionen werden geprüft…",
+  "profile_contribution_actions_unavailable": "Private Aktionen sind nicht verfügbar. Du kannst jeden Beitrag weiterhin öffnen.",
+  "profile_contribution_actions_retired": "Diese Aktionen sind abgelaufen. Kehre zur aktuellen Seite zurück, um sie erneut zu prüfen."
 }

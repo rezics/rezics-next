@@ -8589,5 +8589,9 @@
   "moderation_directory_return_hint": "返回时将重新检查原来的目录页面。",
   "moderation_directory_ready": "请选择您目前有权打开的队列。",
   "moderation_directory_retired": "本次私人目录访问已结束。请重新开始以检查目前可用的队列。",
-  "moderation_directory_expired": "此目录页面已过期。请重新发现队列以检查目前的访问权限。"
+  "moderation_directory_expired": "此目录页面已过期。请重新发现队列以检查目前的访问权限。",
+  "profile_contribution_actions_sign_in": "登录以查看贡献内容当前可用的操作",
+  "profile_contribution_actions_preparing": "正在检查贡献内容当前可用的操作…",
+  "profile_contribution_actions_unavailable": "私人操作暂不可用。你仍可打开各条贡献内容。",
+  "profile_contribution_actions_retired": "这些操作已失效。请返回当前页面重新检查。"
 }

@@ -8589,5 +8589,9 @@
   "moderation_directory_return_hint": "返回時將重新檢查原來的目錄頁面。",
   "moderation_directory_ready": "請選擇您目前有權開啟的佇列。",
   "moderation_directory_retired": "本次私人目錄存取已結束。請重新開始以檢查目前可用的佇列。",
-  "moderation_directory_expired": "此目錄頁面已過期。請重新探索佇列以檢查目前的存取權限。"
+  "moderation_directory_expired": "此目錄頁面已過期。請重新探索佇列以檢查目前的存取權限。",
+  "profile_contribution_actions_sign_in": "登入以查看貢獻內容目前可用的操作",
+  "profile_contribution_actions_preparing": "正在檢查貢獻內容目前可用的操作…",
+  "profile_contribution_actions_unavailable": "私人操作暫時無法使用。你仍可開啟各筆貢獻內容。",
+  "profile_contribution_actions_retired": "這些操作已失效。請返回目前頁面重新檢查。"
 }

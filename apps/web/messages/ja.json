@@ -8589,5 +8589,9 @@
   "moderation_directory_return_hint": "戻ると、元の一覧ページのアクセス権が再確認されます。",
   "moderation_directory_ready": "現在開く権限のあるキューを選択してください。",
   "moderation_directory_retired": "この非公開の一覧の閲覧は終了しました。現在のキューを確認するにはやり直してください。",
-  "moderation_directory_expired": "一覧のこのページは期限切れです。検索をやり直して、現在のアクセス権を確認してください。"
+  "moderation_directory_expired": "一覧のこのページは期限切れです。検索をやり直して、現在のアクセス権を確認してください。",
+  "profile_contribution_actions_sign_in": "ログインして投稿で現在利用できる操作を確認",
+  "profile_contribution_actions_preparing": "投稿で現在利用できる操作を確認中…",
+  "profile_contribution_actions_unavailable": "非公開の操作は利用できません。各投稿は引き続き開けます。",
+  "profile_contribution_actions_retired": "これらの操作は期限切れです。現在のページに戻って再度確認してください。"
 }

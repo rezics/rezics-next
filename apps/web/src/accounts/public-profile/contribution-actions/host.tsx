@@ -16,7 +16,12 @@ import {
 } from 'react';
 import type { PageRead } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
-import { sessionQuery } from '../../../session/query';
+import { browserObservation } from '../../../session/observation';
+import { normalizeSessionObservation, sessionQueryKey } from '../../../session/browser-state';
+import { ContributionActionsAddress } from './current';
+import type { BrowserObservationSnapshot } from '../../../session/observation';
+import type { OperationLease } from '../../../reader/lease';
+import type { ContributionOperation } from './current';
 import type { SubjectPageData } from '../../../features/pages/subject';
 import { isRecord } from '../../../features/pages/shared';
 import {
@@ -27,63 +32,6 @@ import {
   type ContributionActionsInput,
   type ContributionActionsState,
 } from './receiver';
-
-type BrowserSession = {
-  state?: string;
-  subject?: string | null;
-  csrfToken?: string | null;
-};
-
-type SessionAuthority = {
-  status: string;
-  state: string;
-  subject: string | null;
-  csrfToken: string | null;
-};
-
-type SessionObservation = {
-  subscribe: (notify: () => void) => () => void;
-  snapshot: () => number;
-  read: () => SessionAuthority;
-};
-
-/** Observe only the existing one-segment session entry; a successful replacement is a new episode. */
-export function observeContributionActionsSession(client: QueryClient): SessionObservation {
-  let revision = 0;
-  const key = sessionQuery.queryKey;
-  return {
-    subscribe(notify) {
-      return client.getQueryCache().subscribe((event) => {
-        const query = 'query' in event ? event.query : undefined;
-        if (
-          !query ||
-          query.queryKey.length !== key.length ||
-          query.queryKey.some((part: unknown, index: number) => part !== key[index])
-        )
-          return;
-        const replaced =
-          event.type === 'added' ||
-          event.type === 'removed' ||
-          (event.type === 'updated' &&
-            (event.action.type === 'success' || event.action.type === 'setState' || event.action.type === 'error'));
-        if (!replaced) return;
-        revision++;
-        notify();
-      });
-    },
-    snapshot: () => revision,
-    read() {
-      const query = client.getQueryState(key);
-      const session = client.getQueryData<BrowserSession>(key);
-      return {
-        status: query?.status ?? 'missing',
-        state: session?.state ?? 'unknown',
-        subject: typeof session?.subject === 'string' ? session.subject : null,
-        csrfToken: typeof session?.csrfToken === 'string' ? session.csrfToken : null,
-      };
-    },
-  };
-}
 
 export type ContributionActionsPageScopeValue = {
   page: SubjectPageData;
@@ -157,9 +105,10 @@ export type ContributionActionsEpisode = {
   publication: object | null;
   postsPublished: boolean;
   reviewsPublished: boolean;
-  sessionRevision: number;
-  session: SessionAuthority;
-  navigationRevision: number;
+  reader: BrowserObservationSnapshot;
+  credential: string | null;
+  navigation: object;
+  mount: object | null;
   wire: AuthorContributionActionsWire<unknown>;
   rows: RowObservation[];
 };
@@ -173,8 +122,10 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
     'locale',
     'postsPublished',
     'reviewsPublished',
-    'sessionRevision',
-    'navigationRevision',
+    'reader',
+    'credential',
+    'navigation',
+    'mount',
   ] as const;
   if (scalarKeys.some((key) => left[key] !== right[key])) return false;
   if (
@@ -185,10 +136,6 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
     left.selection !== right.selection ||
     left.publication !== right.publication ||
     left.wire !== right.wire ||
-    left.session.status !== right.session.status ||
-    left.session.state !== right.session.state ||
-    left.session.subject !== right.session.subject ||
-    left.session.csrfToken !== right.session.csrfToken ||
     left.rows.length !== right.rows.length
   )
     return false;
@@ -203,6 +150,7 @@ export type ContributionActionsHostValue = {
   state: ContributionActionsState<unknown>;
   isCurrent: () => boolean;
   retry: () => Promise<void>;
+  operation: (operation: ContributionOperation) => OperationLease<ContributionOperation> | undefined;
 };
 
 const ContributionActionsHostContext = createContext<ContributionActionsHostValue | null>(null);
@@ -217,8 +165,9 @@ const noSnapshot = () => unavailable;
 const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 type Visit = {
-  episode: ContributionActionsEpisode;
+  episode: ContributionActionsEpisode | undefined;
   receiver?: ContributionActionsReceiver<unknown>;
+  address?: ContributionActionsAddress;
 };
 
 export function ContributionActionsHost({
@@ -254,20 +203,34 @@ export function ContributionActionsHost({
 }) {
   const client = useQueryClient();
   const router = useRouter();
-  const observation = useMemo(() => observeContributionActionsSession(client), [client]);
-  const sessionRevision = useSyncExternalStore(observation.subscribe, observation.snapshot, () => 0);
-  const session = observation.read();
-  const [navigation, setNavigation] = useState({ revision: 0, active: true });
+  const observation = useMemo(() => browserObservation(client), [client]);
+  const reader = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
+  const session = normalizeSessionObservation(client.getQueryData(sessionQueryKey));
+  const [navigation, setNavigation] = useState({ active: true });
+  const [mount, setMount] = useState<object | null>(null);
+  const mounted = useRef<object | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const navigationRef = useRef(navigation);
   navigationRef.current = navigation;
   const current = useRef<Visit | null>(null);
-  const effectGeneration = useRef(0);
+  const latest = useRef<ContributionActionsEpisode | null>(null);
   const bumpNavigation = useCallback((active: boolean) => {
-    const next = { revision: navigationRef.current.revision + 1, active };
+    const next = { active };
     navigationRef.current = next;
+    current.current?.address?.retire();
     current.current?.receiver?.retire();
     setNavigation(next);
+  }, []);
+
+  useClientLayoutEffect(() => {
+    const token = {};
+    mounted.current = token;
+    setMount(token);
+    return () => {
+      mounted.current = null;
+      current.current?.address?.retire();
+      current.current?.receiver?.retire();
+    };
   }, []);
 
   useClientLayoutEffect(() => {
@@ -293,12 +256,7 @@ export function ContributionActionsHost({
   }, [bumpNavigation, router]);
 
   const input = contributionActionsInput(accountId, view, cursor, selection);
-  const hasCredential =
-    typeof window !== 'undefined' &&
-    session.status === 'success' &&
-    session.state === 'signed-in' &&
-    !!session.subject &&
-    !!session.csrfToken;
+  const signedIn = reader.state === 'signed-in';
   const episode: ContributionActionsEpisode = {
     client,
     accountId,
@@ -312,28 +270,42 @@ export function ContributionActionsHost({
     publication,
     postsPublished,
     reviewsPublished,
-    sessionRevision,
-    session,
-    navigationRevision: navigation.revision,
+    reader,
+    credential: session.csrfToken,
+    navigation,
+    mount,
     wire,
     rows: observeContributionActionsRows(rows),
   };
 
+  latest.current = episode;
   let visit = current.current;
-  if (!visit || !sameContributionActionsEpisode(visit.episode, episode)) {
+  if (!visit?.episode || !sameContributionActionsEpisode(visit.episode, episode)) {
+    visit?.address?.retireSilently();
     visit?.receiver?.retireSilently();
+    if (visit) visit.episode = undefined;
     const next: Visit = { episode };
-    const readAdmitted = !!input && hasCredential && navigation.active;
+    const published = view === 'reviews' ? reviewsPublished : postsPublished;
+    const readAdmitted = !!input && published && rows.length <= 20 && signedIn && navigation.active && mount !== null;
     if (readAdmitted) {
-      next.receiver = new ContributionActionsReceiver(input!, wire, () => {
-        const active = navigationRef.current;
-        return (
+      const address = new ContributionActionsAddress(
+        client,
+        reader,
+        () =>
           current.current === next &&
-          active.active &&
-          active.revision === episode.navigationRevision &&
-          observation.snapshot() === episode.sessionRevision
-        );
-      });
+          mounted.current === episode.mount &&
+          navigationRef.current === episode.navigation &&
+          navigationRef.current.active &&
+          !!latest.current &&
+          sameContributionActionsEpisode(episode, latest.current) &&
+          sameContributionActionsEpisode(episode, { ...episode, rows: observeContributionActionsRows(rows) }),
+        () => {
+          next.episode = undefined;
+          next.receiver?.retire();
+        },
+      );
+      next.address = address;
+      next.receiver = new ContributionActionsReceiver(input!, wire, address.isCurrent);
     }
     current.current = next;
     visit = next;
@@ -342,39 +314,51 @@ export function ContributionActionsHost({
   const receiver = visit.receiver;
   const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, receiver?.snapshot ?? noSnapshot, noSnapshot);
   useEffect(() => setHydrated(true), []);
+  useClientLayoutEffect(() => visit.address?.attach(), [visit]);
   useEffect(() => {
-    effectGeneration.current++;
-    if (current.current === null) current.current = visit;
-    if (receiver && receiver.isCurrent()) void receiver.refresh();
-    return () => {
-      if (current.current === visit) current.current = null;
-      const retirement = ++effectGeneration.current;
-      queueMicrotask(() => {
-        if (effectGeneration.current === retirement && current.current !== visit) receiver?.retire();
-      });
-    };
-  }, [receiver, visit]);
+    if (receiver?.isCurrent()) void receiver.refresh();
+  }, [receiver]);
 
   const isCurrent = () => !!receiver && current.current === visit && receiver.isCurrent();
   const retry = () => (isCurrent() ? receiver!.refresh() : Promise.resolve());
-  const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry };
-  const showReadStatus = hydrated && !!input && hasCredential;
+  const operation = (name: ContributionOperation) => (isCurrent() ? visit.address?.operation(name) : undefined);
+  const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry, operation };
+  const showReadStatus = hydrated && signedIn;
+  const signInHref =
+    hydrated && reader.state === 'signed-out'
+      ? `/${encodeURIComponent(locale)}/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`
+      : undefined;
   return (
     <ContributionActionsHostContext.Provider value={hostValue}>
       <div data-slot="contribution-actions-host" data-action-state={state.state} className="contents">
-        {showReadStatus && state.state === 'pending' ? (
-          <p role="status" className="sr-only">
-            {m.public_account_preparing()}
+        {signInHref ? (
+          <p className="text-sm">
+            <a
+              href={signInHref}
+              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+            >
+              {m.profile_contribution_actions_sign_in()}
+            </a>
+          </p>
+        ) : null}
+        {hydrated && (reader.state === 'unknown' || (showReadStatus && state.state === 'pending')) ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.profile_contribution_actions_preparing()}
           </p>
         ) : null}
         {showReadStatus && (state.state === 'failed' || state.state === 'unavailable') ? (
           <p role={state.state === 'failed' ? 'alert' : 'status'} className="flex flex-wrap items-center gap-2 text-sm">
-            <span>{m.public_account_unavailable()}</span>
+            <span>{m.profile_contribution_actions_unavailable()}</span>
             {state.state === 'failed' ? (
               <Button type="button" variant="outline" onClick={() => void retry()} disabled={!isCurrent()}>
                 {m.public_account_retry()}
               </Button>
             ) : null}
+          </p>
+        ) : null}
+        {showReadStatus && state.state === 'retired' ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.profile_contribution_actions_retired()}
           </p>
         ) : null}
         {children}

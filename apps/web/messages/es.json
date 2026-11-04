@@ -8589,5 +8589,9 @@
   "moderation_directory_return_hint": "Al volver se comprobará de nuevo tu página original del directorio.",
   "moderation_directory_ready": "Elige una cola que tengas permiso para abrir actualmente.",
   "moderation_directory_retired": "Esta visita privada al directorio ha terminado. Reinicia para consultar tus colas actuales.",
-  "moderation_directory_expired": "Esta página del directorio ha caducado. Reinicia para comprobar el acceso actual a las colas."
+  "moderation_directory_expired": "Esta página del directorio ha caducado. Reinicia para comprobar el acceso actual a las colas.",
+  "profile_contribution_actions_sign_in": "Inicia sesión para consultar las acciones actuales de las contribuciones",
+  "profile_contribution_actions_preparing": "Comprobando las acciones actuales de las contribuciones…",
+  "profile_contribution_actions_unavailable": "Las acciones privadas no están disponibles. Puedes seguir abriendo cada contribución.",
+  "profile_contribution_actions_retired": "Estas acciones han caducado. Vuelve a la página actual para consultarlas de nuevo."
 }

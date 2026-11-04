@@ -53,5 +53,24 @@ unavailable and exposes no inferred controls.
 At declaration head `25f7c27445d37078c22b4066a7fe9f64396b53c4`, installed `@rezics/client` resolves to
 `packages/client` version `0.1.0`; `src/kernel/zones/http.d.ts` has no `author_contributions.actions` declaration.
 The production wire remains unavailable until the complete-input publisher supplies that public method and DTO.
-The closed response adapter, existing native command-owner connections and accessible action presentation remain
-for the continuation. This reader does not add private fields to anonymous documents.
+The closed response adapter and exact native command-owner connections require the admitted native mounted
+contract and official installed callable closure. Recorded adapters do not constitute that delivery. Existing
+native destinations and their reaction/watch/report/reply writers remain the way to review current native advice.
+This reader does not add private fields to anonymous documents.
+
+## Current page custody
+
+The existing host uses Web's `browserObservation` and `subscribeCache`; it has no separate session event policy.
+The shared observation retires advice during invalidation/fetching, equal successful replacement and observed
+A/B/A, even when React batches the intermediate states. Local address/read/operation leases keep the selected
+public account, original cursor, publication, source, locale and bounded rows separate from the signed-in viewer.
+A read does not require a mutation credential. An operation lease fences the original reader and credential; it
+is not action advice or an authorization grant. Native writers must still admit the exact operation themselves.
+Retirement aborts owned reads and releases their listeners, retained response and page references. Unmount cleanup
+retires synchronously; effect replay and remount acquire a new page visit. A replacement reader reacquires the
+current original selection instead of adopting a previous response or uncertain command.
+
+Decision: show sign-in and private recovery once per contribution page, leaving each original public destination
+usable while private advice is unavailable. The sign-in return keeps the actual path, cursor query bytes and hash.
+Preparing, unavailable and retired notices describe private advice rather than claiming that the public page failed.
+Retry refreshes only the same admitted page input; readback never acknowledges a native write.
