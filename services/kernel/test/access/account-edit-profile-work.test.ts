@@ -19,16 +19,16 @@ test('private profile advice is closed per viewer and kind at three unrelated po
   const organization = accountProfileEditing(actorId, { id: organizationId, kind: 'organization' });
   const managed = accountProfileEditing(operatorId, { id: actorId, kind: 'actor' });
   const identity = {
-    displayName: { applicable: true, maxLength: PROFILE_TEXT_MAX_LENGTH },
-    biography: { applicable: true, maxLength: PROFILE_TEXT_MAX_LENGTH },
-    avatar: { applicable: true },
+    displayName: { applicable: true as const, maxLength: PROFILE_TEXT_MAX_LENGTH },
+    biography: { applicable: true as const, maxLength: PROFILE_TEXT_MAX_LENGTH },
+    avatar: { applicable: true as const },
     links: {
-      applicable: true,
+      applicable: true as const,
       maxItems: PROFILE_LINK_MAX_ITEMS,
       labelMaxLength: PROFILE_LINK_LABEL_MAX_LENGTH,
       urlMaxLength: PROFILE_LINK_URL_MAX_LENGTH,
     },
-    publicViews: { applicable: true, flags: PROFILE_PUBLIC_VIEW_FLAGS },
+    publicViews: { applicable: true as const, flags: PROFILE_PUBLIC_VIEW_FLAGS },
   };
   expect(actor).toEqual({
     viewer: { accountId: actorId },
@@ -39,7 +39,7 @@ test('private profile advice is closed per viewer and kind at three unrelated po
   expect(organization).toEqual({
     viewer: { accountId: actorId },
     target: { accountId: organizationId, kind: 'organization' },
-    fields: { ...identity, speakersListed: { applicable: true } },
+    fields: { ...identity, speakersListed: { applicable: true as const } },
   });
   expect(managed).toEqual({
     viewer: { accountId: operatorId },

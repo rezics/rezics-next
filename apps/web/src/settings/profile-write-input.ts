@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { accountProfileEditingSchema } from './editable-profile-source';
 
 const profile = v.object({
   accountId: v.string(),
@@ -9,6 +10,7 @@ const profile = v.object({
   links: v.array(v.object({ label: v.string(), url: v.string() })),
   publicViews: v.object({ posts: v.boolean(), reviews: v.boolean(), collections: v.boolean(), realms: v.boolean() }),
   speakersListed: v.exactOptional(v.boolean()),
+  editing: accountProfileEditingSchema,
 });
 const submission = v.object({ before: profile, after: profile, idempotencyKey: v.pipe(v.string(), v.uuid()) });
 

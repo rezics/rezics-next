@@ -133,10 +133,11 @@ const organizationEditing = v.strictObject({
   target: v.strictObject({ accountId: v.string(), kind: v.literal('organization') }),
   fields: v.strictObject({ ...identityAdvice, speakersListed: v.strictObject({ applicable }) }),
 });
+export const accountProfileEditingSchema = v.union([actorEditing, organizationEditing]);
 // Mirror the integrated route's closed actor/organization bodies, including Content's actual avatar summary.
 const response = v.strictObject({
   profile: v.variant('kind', [actorProfile, organizationProfile]),
-  editing: v.union([actorEditing, organizationEditing]),
+  editing: accountProfileEditingSchema,
 });
 
 function sameAdvice(profile: EditableProfile, editing: AccountProfileEditing, viewerId: string, accountId: string) {

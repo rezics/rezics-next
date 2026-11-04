@@ -218,7 +218,8 @@ export async function readEditableAccountProfile(
                 collections: views?.collections === true,
                 realms: views?.realms === true,
               };
-              const avatar = row.avatar
+              const avatarId = row.avatar;
+              const avatar = avatarId
                 ? await accessOwnerWork(
                     work,
                     'content.avatar-summaries',
@@ -226,8 +227,8 @@ export async function readEditableAccountProfile(
                       bound: () => avatarBound,
                       actual: (_input, summary) => (summary ? avatarBound : { ...avatarBound, emptySeeks: 1 }),
                     },
-                    { media: row.avatar },
-                    async () => (await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ?? null,
+                    { media: avatarId },
+                    async () => (await readAvatarSummaries(client, [avatarId])).get(avatarId) ?? null,
                   )
                 : null;
               const kind = row.kind === 'organization' ? 'organization' : 'actor';
