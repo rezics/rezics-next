@@ -135,6 +135,17 @@ export class SignupAttemptController {
   }
 
   resolve(attempt: SignupAttempt, result: SignupSubmission): SignupResolution {
+    return this.#resolve(attempt, result);
+  }
+
+  /** Resolve by a non-secret id so an async callback need not retain the credential-bearing attempt. */
+  resolveAttempt(attemptId: number, result: SignupSubmission): SignupResolution {
+    const current = this.#phase;
+    if (current.kind !== 'dispatched' || current.attempt.id !== attemptId) return { kind: 'ignored' };
+    return this.#resolve(current.attempt, result);
+  }
+
+  #resolve(attempt: SignupAttempt, result: SignupSubmission): SignupResolution {
     const current = this.#phase;
     if (
       !this.#active ||

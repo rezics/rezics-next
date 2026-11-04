@@ -1,4 +1,5 @@
-import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
+import { createFileRoute, useBlocker, useRouter, useRouterState } from '@tanstack/react-router';
+import { flushSync } from 'react-dom';
 import { AuthButton as Button } from '../button';
 import { Field } from '@rezics/ui/shadcn/field';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
@@ -14,9 +15,11 @@ import {
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
-import { explainSignIn, normalizeSignupHandle, submitSignup } from '../signup';
+import { explainSignIn, normalizeSignupHandle, submitSignup, type SignupBody, type SignupPasswordLimits } from '../signup';
 import { signIn, signInTarget } from '../sign-in';
 import { readRegistrationPage, type RegistrationPage } from '../registration-page';
+import { SignupReturnView } from '../signup-return-view';
+import { SignupReturnController, type SignupReturnState, type SignupReturnSummary } from '../signup-return';
 import { TurnstileWidget, type TurnstileHandle, type TurnstileStatus } from '../turnstile.tsx';
 import { ErrorAlert } from '../alert';
 import {
@@ -35,8 +38,14 @@ type SignupJourney = {
   active: boolean;
   sequence: number;
   query: string;
-  attempt: SignupAttemptController;
+  attempt: SignupAttemptController | null;
+  freshAfterReturn: SignupReturnSummary['kind'] | null;
+  requestBody: SignupBody | null;
+  signInCredentials: { email: string; password: string } | null;
+  clearChallenge: (() => void) | null;
 };
+
+type ActiveSignupJourney = SignupJourney & { attempt: SignupAttemptController };
 
 type ActiveSignupPhase = Extract<
   SignupAttemptPhase,
@@ -49,6 +58,76 @@ function clearSignupInputs() {
   document.querySelectorAll<HTMLInputElement>('#signup-form input').forEach((input) => {
     input.value = '';
   });
+}
+
+function clearSignupPayload(body: SignupBody) {
+  body.key = '';
+  body.handle = '';
+  body.email = '';
+  body.password = '';
+  body.turnstile_token = '';
+}
+
+function clearJourneySecrets(journey: SignupJourney) {
+  if (journey.requestBody) clearSignupPayload(journey.requestBody);
+  journey.requestBody = null;
+  if (journey.signInCredentials) {
+    journey.signInCredentials.email = '';
+    journey.signInCredentials.password = '';
+  }
+  journey.signInCredentials = null;
+  journey.clearChallenge?.();
+}
+
+function retireSignupJourney(journey: SignupJourney) {
+  journey.active = false;
+  journey.attempt?.retire();
+  clearJourneySecrets(journey);
+  clearSignupInputs();
+}
+
+async function finishSignupDispatch(
+  journey: ActiveSignupJourney,
+  attemptId: number,
+  body: SignupBody,
+  limits: SignupPasswordLimits,
+  onResolution: (resolution: ReturnType<SignupAttemptController['resolveAttempt']>) => void,
+  onSignInFailure: () => void,
+) {
+  const result = await submitSignup(body, limits);
+  if (journey.requestBody === body) {
+    clearSignupPayload(body);
+    journey.requestBody = null;
+  }
+  if (!journey.active) return;
+
+  const resolution = journey.attempt.resolveAttempt(attemptId, result);
+  if (resolution.kind !== 'created') {
+    onResolution(resolution);
+    return;
+  }
+
+  journey.signInCredentials = resolution.credentials;
+  if (!journey.attempt.beginSignIn()) {
+    resolution.credentials.email = '';
+    resolution.credentials.password = '';
+    journey.signInCredentials = null;
+    return;
+  }
+  const signInResult = await signIn(resolution.credentials.email, resolution.credentials.password);
+  if (journey.signInCredentials === resolution.credentials) {
+    resolution.credentials.email = '';
+    resolution.credentials.password = '';
+    journey.signInCredentials = null;
+  }
+  if (!journey.active) return;
+  if (signInResult.ok) {
+    journey.attempt.finishSignIn(true);
+    window.location.assign(signInTarget(journey.query, window.location.origin));
+  } else {
+    journey.attempt.finishSignIn(false, explainSignIn(signInResult));
+    onSignInFailure();
+  }
 }
 
 // Keep the router adapter with the journey: Stay retains its original attempt and focus.
@@ -109,6 +188,12 @@ export const Route = createFileRoute('/signup')({
 function SignupPage() {
   const router = useRouter();
   const { history } = router;
+  const adviceReadState = useRouterState({
+    select: (state) => {
+      const match = state.matches.find((current) => current.routeId === '/signup');
+      return `${match?.status ?? ''}:${match?.isFetching ?? ''}:${match?.updatedAt ?? ''}`;
+    },
+  });
   const page = Route.useLoaderData();
   const pageKey =
     page.kind === 'already-signed-in'
@@ -118,73 +203,247 @@ function SignupPage() {
         : null;
   const sequence = useRef(0);
   const currentJourney = useRef<SignupJourney | null>(null);
-  const replaceJourney = useRef<() => void>(() => {});
+  const replaceJourney = useRef<(freshAfterReturn?: SignupReturnSummary['kind'] | null) => void>(() => {});
+  const refreshAdvice = useRef<() => void>(() => {});
   const lastAuthority = useRef<string | null>(null);
   const [journey, setJourney] = useState<SignupJourney | null>(null);
+  const returnControllerRef = useRef<SignupReturnController | null>(null);
+  returnControllerRef.current ??= new SignupReturnController();
+  const returnController = returnControllerRef.current;
+  const [returnState, setReturnState] = useState<SignupReturnState>(returnController.state);
+  const pendingAdviceRead = useRef<{
+    readId: number;
+    initialUpdatedAt: number | undefined;
+    observedFetch: boolean;
+    failed: boolean;
+  } | null>(null);
+
+  const finishRead = useCallback(
+    (readId: number, failed: boolean) => {
+      if (history.location.pathname !== '/signup') return;
+      const changed = failed
+        ? returnController.adviceUnavailable(readId)
+        : returnController.adviceReturned(readId);
+      if (changed) setReturnState(returnController.state);
+    },
+    [history, returnController],
+  );
 
   useLayoutEffect(() => {
-    const leave = () => {
-      const current = currentJourney.current;
-      if (current) {
-        current.active = false;
-        current.attempt.retire();
-      }
-      currentJourney.current = null;
-      clearSignupInputs();
-      setJourney(null);
-    };
-    const replace = () => {
-      leave();
-      if (history.location.pathname !== '/signup') return;
+    const pending = pendingAdviceRead.current;
+    if (!pending) return;
+    const match = router.state.matches.find((current) => current.routeId === '/signup');
+    if (!match) return;
+    if (match.isFetching !== false) {
+      pending.observedFetch = true;
+      return;
+    }
+    if (pending.observedFetch || match.updatedAt !== pending.initialUpdatedAt || match.status === 'error') {
+      pendingAdviceRead.current = null;
+      finishRead(pending.readId, pending.failed || match.status === 'error');
+    }
+  }, [adviceReadState, finishRead, router]);
+
+  useLayoutEffect(() => {
+    const createJourney = (
+      query: string,
+      withAttempt: boolean,
+      freshAfterReturn: SignupReturnSummary['kind'] | null = null,
+    ): SignupJourney => {
       const nextSequence = ++sequence.current;
-      const next: SignupJourney = {
+      return {
         active: true,
         sequence: nextSequence,
-        query: history.location.search,
-        attempt: new SignupAttemptController(nextSequence),
+        query,
+        attempt: withAttempt ? new SignupAttemptController(nextSequence) : null,
+        freshAfterReturn,
+        requestBody: null,
+        signInCredentials: null,
+        clearChallenge: null,
       };
+    };
+    const retireCurrent = (current: SignupJourney | null) => {
+      if (current) retireSignupJourney(current);
+    };
+    const replace = (freshAfterReturn: SignupReturnSummary['kind'] | null = null) => {
+      const previous = currentJourney.current;
+      if (previous?.attempt) returnController.retain(previous.attempt.phase);
+      retireCurrent(previous);
+      currentJourney.current = null;
+      clearSignupInputs();
+      if (history.location.pathname !== '/signup') {
+        pendingAdviceRead.current = null;
+        returnController.clear();
+        setReturnState(returnController.state);
+        setJourney(null);
+        return;
+      }
+      const hasSummary = returnController.state.summary !== null;
+      const next = createJourney(
+        history.location.search,
+        !hasSummary,
+        hasSummary ? null : freshAfterReturn ?? previous?.freshAfterReturn ?? null,
+      );
       currentJourney.current = next;
       setJourney(next);
+      setReturnState(returnController.state);
     };
     replaceJourney.current = replace;
-    const unsubscribe = history.subscribe(replace);
-    const restore = (event: PageTransitionEvent) => {
-      if (event.persisted) {
-        replace();
-        void router.invalidate();
-      }
+    const unsubscribe = history.subscribe(() => replace());
+    const invalidateForAdvice = (readId: number) => {
+      const match = router.state.matches.find((current) => current.routeId === '/signup');
+      const pending = {
+        readId,
+        initialUpdatedAt: match?.updatedAt,
+        observedFetch: false,
+        failed: false,
+      };
+      pendingAdviceRead.current = pending;
+      void router.invalidate().catch(() => {
+        if (pendingAdviceRead.current !== pending) return;
+        pending.failed = true;
+        const current = router.state.matches.find((item) => item.routeId === '/signup');
+        if (!current || current.isFetching === false) {
+          pendingAdviceRead.current = null;
+          finishRead(readId, true);
+        }
+      });
     };
-    const refresh = () => void router.invalidate();
-    window.addEventListener('pagehide', leave);
+    const readCurrentAdvice = () => {
+      const state = returnController.state;
+      if (!state.summary && !state.restorationRequired) {
+        void router.invalidate();
+        return;
+      }
+      const readId = returnController.beginRefresh();
+      if (readId === null) return;
+      setReturnState(returnController.state);
+      invalidateForAdvice(readId);
+    };
+    refreshAdvice.current = readCurrentAdvice;
+    const restore = (event: PageTransitionEvent) => {
+      if (!event.persisted || history.location.pathname !== '/signup') return;
+      const current = currentJourney.current;
+      if (current?.attempt) returnController.retain(current.attempt.phase);
+      const readId = returnController.beginRestoration();
+      if (readId === null) return;
+      retireCurrent(current);
+      const next = createJourney(history.location.search, returnController.state.summary === null);
+      currentJourney.current = next;
+      lastAuthority.current = null;
+      setJourney(next);
+      setReturnState(returnController.state);
+      invalidateForAdvice(readId);
+    };
+    const pagehide = (event: PageTransitionEvent) => {
+      const current = currentJourney.current;
+      flushSync(() => {
+        if (event.persisted && current?.attempt) returnController.retain(current.attempt.phase);
+        returnController.suspend(event.persisted);
+        pendingAdviceRead.current = null;
+        retireCurrent(current);
+        currentJourney.current = null;
+        lastAuthority.current = null;
+        clearSignupInputs();
+        setReturnState(returnController.state);
+        setJourney(null);
+      });
+    };
+    window.addEventListener('pagehide', pagehide);
     window.addEventListener('pageshow', restore);
-    window.addEventListener('focus', refresh);
+    window.addEventListener('focus', readCurrentAdvice);
     replace();
     return () => {
-      leave();
+      retireCurrent(currentJourney.current);
+      currentJourney.current = null;
+      pendingAdviceRead.current = null;
+      returnController.clear();
       replaceJourney.current = () => {};
+      refreshAdvice.current = () => {};
       unsubscribe();
-      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pagehide', pagehide);
       window.removeEventListener('pageshow', restore);
-      window.removeEventListener('focus', refresh);
+      window.removeEventListener('focus', readCurrentAdvice);
     };
-  }, [history, router]);
+  }, [finishRead, history, router, returnController]);
 
   useLayoutEffect(() => {
     if (pageKey === null) return;
     const previous = lastAuthority.current;
     if (previous !== null && previous !== pageKey) replaceJourney.current();
+    returnController.noteAuthorityChange(previous, pageKey);
+    setReturnState(returnController.state);
     lastAuthority.current = pageKey;
-  }, [pageKey]);
+  }, [pageKey, returnController]);
 
-  return journey ? <SignupPageState key={journey.sequence} journey={journey} page={page} router={router} /> : null;
+  const acknowledge = () => {
+    const outcome = returnController.state.summary?.kind ?? null;
+    if (!returnController.acknowledge()) return;
+    setReturnState(returnController.state);
+    replaceJourney.current(page.kind === 'registration' && page.actions.register ? outcome : null);
+  };
+
+  return journey ? (
+    <SignupPageState
+      key={journey.sequence}
+      journey={journey}
+      page={page}
+      router={router}
+      returnState={returnState}
+      retryAdvice={() => refreshAdvice.current()}
+      acknowledge={acknowledge}
+    />
+  ) : null;
 }
 
 function SignupPageState({
   journey,
   page,
   router,
+  returnState,
+  retryAdvice,
+  acknowledge,
 }: {
   journey: SignupJourney;
+  page: RegistrationPage;
+  router: ReturnType<typeof useRouter>;
+  returnState: SignupReturnState;
+  retryAdvice: () => void;
+  acknowledge: () => void;
+}) {
+  const { history } = router;
+  function follow(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    history.push(event.currentTarget.getAttribute('href')!);
+  }
+
+  const returning =
+    returnState.summary !== null ||
+    returnState.status === 'restoring' ||
+    (returnState.restorationRequired && returnState.status === 'unavailable');
+  if (returning) {
+    return (
+      <SignupReturnView
+        state={returnState}
+        page={page}
+        query={journey.query}
+        follow={follow}
+        retry={retryAdvice}
+        acknowledge={acknowledge}
+      />
+    );
+  }
+  if (!journey.attempt) return null;
+  return <SignupActivePageState journey={journey as ActiveSignupJourney} page={page} router={router} />;
+}
+
+function SignupActivePageState({
+  journey,
+  page,
+  router,
+}: {
+  journey: ActiveSignupJourney;
   page: RegistrationPage;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -207,10 +466,8 @@ function SignupPageState({
   }, [controller, journey]);
 
   const leave = useCallback(() => {
-    journey.active = false;
-    controller.retire();
-    clearSignupInputs();
-  }, [controller, journey]);
+    retireSignupJourney(journey);
+  }, [journey]);
 
   useLayoutEffect(() => {
     const unload = (event: BeforeUnloadEvent) => {
@@ -436,7 +693,7 @@ function SignupForm({
   registration,
   phase,
 }: {
-  journey: SignupJourney;
+  journey: ActiveSignupJourney;
   registration: Extract<RegistrationPage, { kind: 'registration' }>;
   phase: ActiveSignupPhase;
 }) {
@@ -454,6 +711,17 @@ function SignupForm({
   const [errors, setErrors] = useState<SignupCredentialErrors>(emptyErrors);
   const [turnstileError, setTurnstileError] = useState('');
   const [retryClock, setRetryClock] = useState(Date.now());
+
+  useLayoutEffect(() => {
+    const clearChallenge = () => {
+      submitting.current = false;
+      turnstile.current?.reset();
+    };
+    journey.clearChallenge = clearChallenge;
+    return () => {
+      if (journey.clearChallenge === clearChallenge) journey.clearChallenge = null;
+    };
+  }, [journey]);
 
   const values: SignupDraft | null =
     phase.kind === 'draft'
@@ -504,7 +772,7 @@ function SignupForm({
     setErrors((current) => ({ ...current, [field]: '' }));
   }
 
-  async function sendAttempt(retrying: boolean, event?: FormEvent<HTMLFormElement>) {
+  function sendAttempt(retrying: boolean, event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (!journey.active || submitting.current) return;
     const current = controller.phase;
@@ -543,41 +811,33 @@ function SignupForm({
       if (invalidHandle || invalidEmail || invalidPassword || invalidConfirmation) return;
     }
 
-    const token = turnstile.current?.getToken();
-    if (!token) {
+    const dispatch = controller.dispatch(turnstile.current?.getToken() ?? '');
+    if (!dispatch) {
       setTurnstileError(m.auth_signup_turnstile_required());
       return;
     }
-    const dispatch = controller.dispatch(token);
-    if (!dispatch) return;
     submitting.current = true;
     setTurnstileError('');
-    const result = await submitSignup(dispatch.body, requirements.password);
-    if (!journey.active) return;
-    const resolution = controller.resolve(dispatch.attempt, result);
-
-    if (resolution.kind === 'created') {
-      controller.beginSignIn();
-      const signInResult = await signIn(resolution.credentials.email, resolution.credentials.password);
-      if (!journey.active) return;
-      submitting.current = false;
-      if (signInResult.ok) {
-        controller.finishSignIn(true);
-        window.location.assign(signInTarget(query, window.location.origin));
-        return;
-      }
-      controller.finishSignIn(false, explainSignIn(signInResult));
-      return;
-    }
-
-    submitting.current = false;
-    if (resolution.kind === 'ignored') return;
-    turnstile.current?.reset();
-    if (resolution.kind === 'request-rejected') {
-      setTurnstileError(m.auth_signup_verification_failed());
-    } else if (resolution.kind === 'handle-unavailable') {
-      setErrors((currentErrors) => ({ ...currentErrors, handle: resolution.failure.message }));
-    }
+    journey.requestBody = dispatch.body;
+    void finishSignupDispatch(
+      journey,
+      dispatch.attempt.id,
+      dispatch.body,
+      requirements.password,
+      (resolution) => {
+        submitting.current = false;
+        if (resolution.kind === 'ignored') return;
+        turnstile.current?.reset();
+        if (resolution.kind === 'request-rejected') {
+          setTurnstileError(m.auth_signup_verification_failed());
+        } else if (resolution.kind === 'handle-unavailable') {
+          setErrors((currentErrors) => ({ ...currentErrors, handle: resolution.failure.message }));
+        }
+      },
+      () => {
+        submitting.current = false;
+      },
+    );
   }
 
   function useCorrectedHandle() {
@@ -590,6 +850,11 @@ function SignupForm({
   const draftForm = phase.kind === 'draft' || phase.kind === 'handle-unavailable' || phase.kind === 'dispatched';
   return (
     <>
+      {journey.freshAfterReturn === 'created' ? (
+        <p role="status">{m.auth_signup_return_new_attempt_created()}</p>
+      ) : journey.freshAfterReturn === 'unresolved' ? (
+        <p role="status">{m.auth_signup_return_new_attempt()}</p>
+      ) : null}
       <form
         id="signup-form"
         className="auth-login-form"
@@ -635,8 +900,11 @@ function SignupForm({
               siteKey={siteKey}
               scriptUrl={scriptUrl}
               language={challengeLanguage}
-              onStatus={setChallengeStatus}
+              onStatus={(status) => {
+                if (journey.active) setChallengeStatus(status);
+              }}
               onToken={(value) => {
+                if (!journey.active) return;
                 if (value) setTurnstileError('');
               }}
             />

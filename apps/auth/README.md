@@ -140,13 +140,18 @@ Decision: an already signed-in visitor continues with the current account and ca
 Decision: nonblank handle/email, any password or confirmation, or a pending creation prompts Stay/Leave; Stay
 preserves input, validation and the same attempt, while confirmed creation releases the warning before sign-in.
 Reload/close warns only for that unfinished work; Leave clears in-memory details and retires browser continuations
-without undoing a dispatched creation. A cached-document return starts an empty fresh journey and never retries a
-write automatically.
+without undoing a dispatched creation. A persisted browser return clears entered values, challenge tokens, request
+payloads and old callbacks, then shows only a generic summary for a possibly completed creation or confirmed creation
+whose automatic sign-in did not establish a session. Before showing registration controls, it reads fresh native advice.
+An untouched draft or known terminal refusal restores without a warning, after the same fresh advice read. A deliberate
+review acknowledgement can open a new form only while native advice permits registration; the form has a new key and
+explains that the earlier result remains unknown. Browser restoration never replays registration or automatic sign-in.
 
 Decision: an uncertain acknowledgement retains the normalized original business input and request key in the
 mounted journey, shows the retained handle/email without the password, and allows only an explicit exact retry with
 a fresh Turnstile token or sign-in/recovery. A failed verification or refusal of that retry does not resolve the
-earlier unknown result. A retry-after delay gates the explicit retry without claiming to cancel creation.
+earlier unknown result. A retry-after delay gates the explicit retry without claiming to cancel creation. Pagehide
+retires this credential-bearing lifetime; the return summary cannot retry or attribute the old write to a current viewer.
 
 Decision: only a first-response 409 `handle_unavailable` establishes the safe handle-correction transition. It has no
 account effects; after choosing a different valid handle, the page starts a new request with a new key. A 400
