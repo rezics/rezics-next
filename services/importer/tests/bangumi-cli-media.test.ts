@@ -177,7 +177,7 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
     ).toBe(true);
     const initialCommands = commands.length;
     await invoke(raw);
-    expect(commands.slice(initialCommands)).toEqual([]);
+    expect(commands).toHaveLength(initialCommands);
     const changed = structuredClone(raw);
     changed.images.large = 'https://lain.bgm.tv/pic/cover/l/ab/cd/424242_wire_refresh.png';
     await invoke(changed);
