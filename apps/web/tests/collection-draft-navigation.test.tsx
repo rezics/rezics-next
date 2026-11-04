@@ -41,6 +41,17 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     ...Object.fromEntries(
       [
         'HTMLElement',
+        'HTMLButtonElement',
+        'HTMLInputElement',
+        'HTMLSelectElement',
+        'HTMLTextAreaElement',
+        'Event',
+        'FocusEvent',
+        'MouseEvent',
+        'KeyboardEvent',
+        'PointerEvent',
+        'ShadowRoot',
+        'NodeFilter',
         'HTMLAnchorElement',
         'HTMLFormElement',
         'Element',
