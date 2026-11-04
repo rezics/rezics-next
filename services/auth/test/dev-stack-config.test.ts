@@ -1,9 +1,9 @@
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { developmentKeys, issuerRequest, localDatabase, openLocalShowcase, publicKey } from '../scripts/dev-stack.ts';
+import { developmentKeys, issuerRequest, localDatabase, openLocalShowcase, publicKey, retireDevelopmentSeedState } from '../scripts/dev-stack.ts';
 
 test('native loopback transport retains the public issuer and original request evidence', async () => {
   const request = new Request('http://127.0.0.1:3100/signin', {
@@ -91,4 +91,19 @@ test('development setup gives finite dataset write capacity and preserves explic
   expect(developmentEnv('KERNEL_WRITE_RATE_OVERRIDES={}\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_WRITE_RATE_OVERRIDES={}\n',
   );
+});
+
+test('database reset retires old native-ID journals and preserves the development keys', async () => {
+  const repository = await mkdtemp(resolve(import.meta.dir, '../../../.temp/reset-seed-'));
+  try {
+    const keys = await developmentKeys(resolve(repository, '.temp/local-stack'));
+    await mkdir(resolve(repository, '.temp/cross-media-seed'));
+    await writeFile(resolve(repository, '.temp/cross-media-seed/state.sqlite'), 'old-native-ids');
+    const archived = await retireDevelopmentSeedState(repository);
+    expect(await readFile(resolve(archived!, 'state.sqlite'), 'utf8')).toBe('old-native-ids');
+    expect(await retireDevelopmentSeedState(repository)).toBeUndefined();
+    expect(await developmentKeys(resolve(repository, '.temp/local-stack'))).toEqual(keys);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
 });
