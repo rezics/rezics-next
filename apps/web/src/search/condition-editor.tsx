@@ -19,6 +19,8 @@ import { useWorkspaceAdmission, useReaderAddress } from '../session/reader';
 import { conditionPresetCatalogue, type ConditionPresetCatalogue } from './condition-preset-model';
 import { ConditionPresetName } from './condition-preset';
 import { ConditionRangeInput } from './condition-range-input';
+import { ConditionCalendarRangeEditor } from './condition-calendar-range';
+import { ConditionRangeMode } from './condition-range-mode';
 import { ConditionLanguages } from './condition-languages';
 import { ConditionSavedFilter, editSavedFilterTree, type SavedFilterEditMode } from './condition-saved-filter';
 import {
@@ -187,7 +189,9 @@ export function ConditionEditor({
   }
   // Only documents emitted by this session inherit its drafts. Revert and external
   // replacements start fresh, even when they reuse an earlier document object.
-  if (session.value !== value) {
+  const draftOwner = useRef(focusOwner);
+  if (session.value !== value || draftOwner.current !== focusOwner) {
+    draftOwner.current = focusOwner;
     recovery.current.cancel();
     session = { value, lifetime: {}, node: value ? createConditionDraftNode(value, nextKey) : undefined };
     setSession(session);
@@ -758,29 +762,47 @@ function NodeEditor({
           <p className="text-sm text-muted-foreground">{definition?.datatype}</p>
           {range ? (
             <>
-              {(['gte', 'lte'] as const).map((bound) => {
-                const label = bound === 'gte' ? m.refinement_lower({}, options) : m.refinement_upper({}, options);
-                return (
-                  <EditorField
-                    key={bound}
-                    context={context}
-                    pointer={`${pointer}/statement/range/${bound}`}
-                    label={label}
-                  >
-                    {(props) =>
-                      range.type === 'time' ? (
-                        <Input
-                          {...props}
-                          type="text"
-                          value={range[bound] ?? ''}
-                          onChange={(event) => {
-                            const next = { ...range };
-                            if (event.target.value === '') delete next[bound];
-                            else next[bound] = event.target.value;
-                            replaceStatement({ range: next });
-                          }}
-                        />
-                      ) : (
+              {definition?.datatype === 'time' && (
+                <ConditionRangeMode
+                  key={property}
+                  range={range}
+                  locale={context.locale}
+                  onChange={(next) => {
+                    context.changeCondition(path, { statement: { ...value.statement, range: next } }, false);
+                    context.announce(m.condition_range_replace_title({}, options), pointer);
+                  }}
+                />
+              )}
+              {range.type === 'time' ? (
+                <ConditionCalendarRangeEditor
+                  key={property}
+                  range={range}
+                  property={property!}
+                  draft={draft}
+                  locale={context.locale}
+                  onChange={(next) => replaceStatement({ range: next })}
+                  field={(bound, input) => (
+                    <EditorField
+                      key={bound}
+                      context={context}
+                      pointer={`${pointer}/statement/range/${bound}`}
+                      label={bound === 'gte' ? m.refinement_lower({}, options) : m.refinement_upper({}, options)}
+                    >
+                      {input}
+                    </EditorField>
+                  )}
+                />
+              ) : (
+                (['gte', 'lte'] as const).map((bound) => {
+                  const label = bound === 'gte' ? m.refinement_lower({}, options) : m.refinement_upper({}, options);
+                  return (
+                    <EditorField
+                      key={bound}
+                      context={context}
+                      pointer={`${pointer}/statement/range/${bound}`}
+                      label={label}
+                    >
+                      {(props) => (
                         <ConditionRangeInput
                           {...props}
                           draft={draft.ranges[bound]}
@@ -795,11 +817,11 @@ function NodeEditor({
                             replaceStatement({ range: next });
                           }}
                         />
-                      )
-                    }
-                  </EditorField>
-                );
-              })}
+                      )}
+                    </EditorField>
+                  );
+                })
+              )}
               {definition?.datatype === 'time' && range.type !== 'time' && (
                 <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>
               )}

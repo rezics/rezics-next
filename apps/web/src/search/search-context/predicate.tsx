@@ -1,9 +1,16 @@
 import type { DiscoveryFilterDocument, FilterRange } from '@rezics/filter';
 import type { ReactNode } from 'react';
+import { calendarPrecision } from '../condition-calendar';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 
-export function rangeDescription(range: FilterRange): string {
+export function rangeDescription(range: FilterRange, locale = 'en'): string {
+  const options = { locale: locales.find((item) => item === locale) ?? 'en' };
+  if (range.type === 'time') {
+    const endpoint = (value: string | undefined) =>
+      value === undefined ? calendarPrecision(undefined, locale) : `${value} (${calendarPrecision(value, locale)})`;
+    return `${m.condition_range_calendar_mode({}, options)}: ≥ ${endpoint(range.gte)}; ≤ ${endpoint(range.lte)}. ${m.condition_calendar_overlap({}, options)}`;
+  }
   const end = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value));
   return [
     range.gte === undefined ? '' : `≥ ${end(range.gte)}`,
@@ -87,7 +94,8 @@ export function PredicateDescription({
     const statement = value.statement;
     return (
       <>
-        {label(statement.property)}: {'in' in statement ? terms(statement.in) : rangeDescription(statement.range)}
+        {label(statement.property)}:{' '}
+        {'in' in statement ? terms(statement.in) : rangeDescription(statement.range, locale)}
         {'inverse' in statement && statement.inverse ? ' ←' : null}
         {'in' in statement && statement.concept
           ? ` (${statement.concept.scheme}${statement.concept.includeChildren ? ' + ↓' : ''})`

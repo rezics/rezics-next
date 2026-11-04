@@ -10035,5 +10035,21 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "condition_range_mode": "Range meaning",
+  "condition_range_year_mode": "Numeric years",
+  "condition_range_calendar_mode": "Gregorian calendar",
+  "condition_range_replace_title": "Change range meaning?",
+  "condition_range_replace_help": "Numeric bounds compare recorded years. Calendar bounds match possible overlap of represented date intervals. These meanings can differ. Replace the current bounds and unfinished edits, then enter new bounds; nothing runs until Apply.",
+  "condition_range_replace_confirm": "Replace bounds",
+  "condition_calendar_open": "Open bound",
+  "condition_calendar_incomplete": "Incomplete or invalid date",
+  "condition_calendar_year": "Year precision",
+  "condition_calendar_month": "Month precision",
+  "condition_calendar_day": "Day precision",
+  "condition_calendar_help": "Enter a year (2024), month (2024-02) or day (2024-02-29). Signed extended years are accepted, for example -0044 or +012345-06. Missing components represent the whole year or month. Leave one bound empty for an open range.",
+  "condition_calendar_overlap": "Gregorian bounds are inclusive. A recorded year or month may match when its possible dates overlap this range; this does not assert an exact recorded date. Missing dates do not match.",
+  "condition_calendar_invalid": "Enter a valid Gregorian year, month or day; keep the text here to repair it.",
+  "condition_calendar_empty": "Enter at least one bound before Apply.",
+  "condition_calendar_reversed": "The lower bound must not follow the upper bound; correct either endpoint before Apply."
 }

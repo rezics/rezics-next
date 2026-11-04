@@ -210,3 +210,13 @@ visible. It never reads matching subjects or opens operand lookups. Coverage des
 independently of the draft. Locale, public reader/address observation, accepted release replacement, external document
 replacement and node replacement/deletion retire inspection and picker state and pending tree-edit focus. Equivalent
 renders preserve deliberate edits. Existing saved-reference sharing refusal remains authoritative.
+
+Advanced time conditions offer numeric year bounds and explicit Gregorian calendar bounds. Decision: switching
+modes always confirms replacement of bounds and unfinished edits, because numeric year projection and calendar
+precision overlap are not assumed equivalent. The selected mode never changes on mount or metadata arrival.
+Calendar text retains exact signed/extended years and year/month/day precision; `@rezics/filter` alone validates
+endpoints and inclusive interval ordering. Empty text opens one endpoint, never both. Invalid or incomplete raw
+edits remain on their occurrence and block form Apply without publishing a replacement predicate. Occurrence edits
+survive Boolean wrapping and equivalent renders; property/mode, external request and reader replacement retire
+obsolete repair state. Coverage describes committed endpoints, precision and possible overlap, excluding missing
+dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.

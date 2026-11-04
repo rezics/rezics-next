@@ -9932,5 +9932,21 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "condition_range_mode": "Sens de la plage",
+  "condition_range_year_mode": "Années numériques",
+  "condition_range_calendar_mode": "Calendrier grégorien",
+  "condition_range_replace_title": "Changer le sens de la plage ?",
+  "condition_range_replace_help": "Les bornes numériques comparent les années enregistrées. Les bornes calendaires recherchent un chevauchement possible des intervalles représentés. Ces sens peuvent différer. Remplacez les bornes et les saisies inachevées, puis entrez de nouvelles bornes. La recherche ne démarre qu’avec Appliquer.",
+  "condition_range_replace_confirm": "Remplacer les bornes",
+  "condition_calendar_open": "Borne ouverte",
+  "condition_calendar_incomplete": "Date incomplète ou invalide",
+  "condition_calendar_year": "Précision à l’année",
+  "condition_calendar_month": "Précision au mois",
+  "condition_calendar_day": "Précision au jour",
+  "condition_calendar_help": "Saisissez une année (2024), un mois (2024-02) ou un jour (2024-02-29). Les années étendues signées sont acceptées, par exemple -0044 ou +012345-06. Les éléments absents représentent l’année ou le mois entier. Laissez une borne vide pour une plage ouverte.",
+  "condition_calendar_overlap": "Les bornes grégoriennes sont inclusives. Une année ou un mois enregistré peut correspondre si ses dates possibles chevauchent la plage ; cela n’affirme pas une date exacte. Les dates absentes ne correspondent pas.",
+  "condition_calendar_invalid": "Saisissez une année, un mois ou un jour grégorien valide ; le texte reste disponible pour correction.",
+  "condition_calendar_empty": "Saisissez au moins une borne avant d’appliquer.",
+  "condition_calendar_reversed": "La borne inférieure ne doit pas suivre la borne supérieure ; corrigez une borne avant d’appliquer."
 }

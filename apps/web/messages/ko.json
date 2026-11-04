@@ -9932,5 +9932,21 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "condition_range_mode": "범위의 의미",
+  "condition_range_year_mode": "숫자 연도",
+  "condition_range_calendar_mode": "그레고리력",
+  "condition_range_replace_title": "범위의 의미를 변경할까요?",
+  "condition_range_replace_help": "숫자 경계는 기록된 연도를 비교합니다. 달력 경계는 표현된 날짜 구간이 겹칠 가능성을 확인합니다. 두 의미는 다를 수 있습니다. 현재 경계와 미완성 편집을 교체한 뒤 새 경계를 입력하세요. 적용하기 전에는 검색이 실행되지 않습니다.",
+  "condition_range_replace_confirm": "경계 교체",
+  "condition_calendar_open": "열린 경계",
+  "condition_calendar_incomplete": "미완성 또는 잘못된 날짜",
+  "condition_calendar_year": "연도 정밀도",
+  "condition_calendar_month": "월 정밀도",
+  "condition_calendar_day": "일 정밀도",
+  "condition_calendar_help": "연도(2024), 월(2024-02), 일(2024-02-29)을 입력하세요. -0044 또는 +012345-06처럼 부호가 있는 확장 연도도 허용됩니다. 생략한 구성 요소는 연도 또는 월 전체를 나타냅니다. 한쪽 경계를 비우면 그쪽은 제한되지 않습니다.",
+  "condition_calendar_overlap": "그레고리력 경계는 양 끝을 포함합니다. 기록된 연도나 월의 가능한 날짜가 범위와 겹치면 일치할 수 있으며, 정확한 기록 날짜를 단정하지 않습니다. 날짜가 없는 기록은 일치하지 않습니다.",
+  "condition_calendar_invalid": "올바른 그레고리력 연도, 월 또는 일을 입력하세요. 수정할 수 있도록 입력 내용이 유지됩니다.",
+  "condition_calendar_empty": "적용하기 전에 하나 이상의 경계를 입력하세요.",
+  "condition_calendar_reversed": "하한은 상한보다 뒤일 수 없습니다. 적용하기 전에 경계를 수정하세요."
 }

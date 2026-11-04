@@ -9942,5 +9942,21 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "condition_range_mode": "範囲の意味",
+  "condition_range_year_mode": "数値の年",
+  "condition_range_calendar_mode": "グレゴリオ暦",
+  "condition_range_replace_title": "範囲の意味を変更しますか？",
+  "condition_range_replace_help": "数値の境界は記録された年を比較します。暦の境界は、表された日付区間が重なる可能性を調べます。両者の意味は異なる場合があります。現在の境界と未完了の編集を置き換え、新しい境界を入力します。「適用」するまで検索は実行されません。",
+  "condition_range_replace_confirm": "境界を置き換える",
+  "condition_calendar_open": "境界なし",
+  "condition_calendar_incomplete": "未完了または無効な日付",
+  "condition_calendar_year": "年の精度",
+  "condition_calendar_month": "月の精度",
+  "condition_calendar_day": "日の精度",
+  "condition_calendar_help": "年（2024）、月（2024-02）、日（2024-02-29）を入力します。-0044 や +012345-06 のような符号付き拡張年も使えます。省略した要素は年全体または月全体を表します。片方の境界を空欄にすると、その側は制限されません。",
+  "condition_calendar_overlap": "グレゴリオ暦の境界は両端を含みます。記録された年や月の取り得る日付が範囲と重なる場合に一致し、正確な記録日を断定するものではありません。日付のない記録は一致しません。",
+  "condition_calendar_invalid": "有効なグレゴリオ暦の年・月・日を入力してください。入力内容は修正できるよう保持されます。",
+  "condition_calendar_empty": "適用する前に少なくとも片方の境界を入力してください。",
+  "condition_calendar_reversed": "下限が上限より後にならないよう、適用する前に境界を修正してください。"
 }
