@@ -60,6 +60,7 @@ export const shelfEntrySchema = embedded(
       lastActivityAt: text,
       finishedAt: nullable,
       personalScore: t.Optional(t.Union([t.Integer({ minimum: 0, maximum: 4096 }), t.Null()])),
+      priority: t.Optional(t.Union([t.Integer({ minimum: 1, maximum: 100 }), t.Null()])),
       activeProgressSession: t.Union([shelfSessionSchema, t.Null()]),
     },
     closed,

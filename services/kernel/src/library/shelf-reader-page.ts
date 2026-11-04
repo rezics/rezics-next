@@ -12,6 +12,7 @@ import { createShelfCreatedAscReader } from './shelf-page-created-asc.ts';
 import { createShelfFinishedAscReader } from './shelf-page-finished-asc.ts';
 import { createShelfFinishedDescReader } from './shelf-page-finished-desc.ts';
 import { createShelfScoreReader } from './shelf-score.ts';
+import { createEntryPriorityReaders } from './entry-priority-page.ts';
 import all from './shelf-reader-created-desc.sql';
 import state from './shelf-reader-created-desc-state.sql';
 import type from './shelf-reader-created-desc-type.sql';
@@ -76,16 +77,17 @@ export function createShelfPageReader(): ShelfPageReader {
     finishedAt: { asc: createShelfFinishedAscReader(), desc: createShelfFinishedDescReader() },
   };
   const score = createShelfScoreReader();
+  const priority = createEntryPriorityReaders();
   const active = createShelfActiveReader();
   return {
     async page(client, route, accountId, query, after) {
-      const page = await (query.orderBy === 'personalScore' ? score : readers[query.orderBy][query.direction]).page(
-        client,
-        route,
-        accountId,
-        query,
-        after,
-      );
+      const reader =
+        query.orderBy === 'personalScore'
+          ? score
+          : query.orderBy === 'priority'
+            ? priority[query.direction]
+            : readers[query.orderBy][query.direction];
+      const page = await reader.page(client, route, accountId, query, after);
       const sessions = await active.sessions(
         client,
         route,

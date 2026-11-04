@@ -271,6 +271,7 @@ entry annotation command, while reopening returns current native values and per-
 correction contract](library-entry-selected-correction.md) for its bounds, expiry, cancellation and client operands.
 
 Decision: Personal priority is an owner-local list position from 1 through 100, where 1 is highest; null is unranked.
+Decision: Priority planning sorts `1` through `100` ascending and `100` through `1` descending; Unranked stays last in both directions, with ties ordered by Subject UUID ascending.
 
 Each source observation is separately addressed by owner, canonical Subject, provider key and provider record ID.
 Admission requires `confirmReviewed:true` and inserts once; a duplicate address conflicts. Correction requires the

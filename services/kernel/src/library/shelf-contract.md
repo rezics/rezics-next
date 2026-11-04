@@ -17,7 +17,7 @@ helper; old readable HMAC tokens are refused. `direction` and `type` without
 
 | Parameter   | Values                                                     |
 | ----------- | ---------------------------------------------------------- |
-| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`, `personalScore` |
+| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`, `personalScore`, `priority` |
 | `direction` | `desc` (default), `asc`                                    |
 | `state`     | exact validated profile state ID, optional                 |
 | `type`      | exact full primary-type CURIE, optional                    |
@@ -26,11 +26,12 @@ helper; old readable HMAC tokens are refused. `direction` and `type` without
 | `cursor`    | opaque, at most 4096 characters                            |
 
 The response is `{libraryEntries, next}`. Each item has the BASIC entry fields (`subjectId`, optional nullable `incarnationId`, `state`, `revision`,
-`createdAt`, `updatedAt`) and three additions. FULL adds only `subject`, as it does today; the embedded session never gains
+`createdAt`, `updatedAt`) and four additions. FULL adds only `subject`, as it does today; the embedded session never gains
 `subject`.
 
 - `lastActivityAt`: RFC 3339.
 - `finishedAt`: RFC 3339 or `null`.
+- `priority`: owner-local rank `1`–`100` or `null` (Unranked), present only for `orderBy=priority`.
 - `activeProgressSession`: `null` or exactly the BASIC per-session shape of `GET /v1/progressSessions` (`id`, `subjectId`,
   `versionSubjectId`, `mode`, `unit`, `total`, `amount`, `locator`, `position`, `completedUnitCount`, `state`, `revision`,
   `startedAt`, `completedAt`). No `accountId`, `transactionId` or unit rows. Strings and nulls are passed through as the
@@ -47,6 +48,14 @@ Only the three native dates have sortable table headers; title/type/status remai
 require both advertised entry-list and progress-list admission; current native Access still decides every read.
 The profile supplies exact state labels and choices; summary tabs retain their existing legacy bucket meanings.
 No new content-family declaration or state coercion is introduced.
+
+Priority order reads the retained entry population before applying the keyset limit and joins the current
+`entry_personal_fact.priority` in the same native statement. Ascending uses ranks `1` through `100`; descending uses
+`100` through `1`; `null` is last in both directions, and tied ranks use Subject UUID ascending. A page explicitly
+returns the accepted rank or `null` for Unranked. It makes no per-row annotation request and adds no public Collection,
+feed or Search field. Cursors bind the existing account, query, order and direction; their after-key is the canonical
+decimal rank or `''` for Unranked, followed by Subject UUID. Traversal stays live: after a priority edit, the next page
+uses current ranks against the existing keyset boundary rather than a retained snapshot.
 
 `GET /v1/libraryShelfSummary?type=` returns `{tabs}`. `tabs` has the keys `all`, `in_progress`, `planned`, `completed`,
 `paused`, `dropped`, `collections`, each `{total, shown}`. `total` ignores the type filter and `shown` applies it; without
@@ -108,7 +117,8 @@ The old-mode entry list uses the same route/viewer but query `{state: state ?? n
 direction: 'desc', limit}`. This distinct order prevents an old-list token from becoming a shelf position. Do not accept
 old HMAC tokens on either mode. Changing owner, state, resolved type, order, direction or page size, using another list's
 token, tampering or expiry gives `400 invalid_cursor`; a partition-epoch mismatch gives `409 stale_cursor`.
-Shelf after-keys are exact stored timestamp text (microseconds kept, `''` for null finished date) and subject UUID;
+Shelf after-keys are exact stored timestamp text (microseconds kept, `''` for null finished date), canonical priority
+rank (`1`–`100`, `''` for Unranked), or score key, followed by subject UUID;
 facet after is only the last emitted private type UUID. No timestamp passes through `Date`.
 
 Walking is a live traversal: every entry appears exactly once while the data does not change. Under concurrent writes a
