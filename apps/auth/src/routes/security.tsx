@@ -49,11 +49,7 @@ import {
   type PasswordChangeAttempt,
   type PasswordChangeLimits,
 } from '../password-change-attempt';
-import {
-  PasswordChangeForm,
-  type PasswordChangeOperation,
-  type PasswordReviewBinding,
-} from '../password-change-form';
+import { PasswordChangeForm, type PasswordChangeOperation, type PasswordReviewBinding } from '../password-change-form';
 
 export const Route = createFileRoute('/security')({
   head: () => ({ meta: [{ title: `${m.auth_security_heading()} · REZICS` }] }),
@@ -558,7 +554,8 @@ function SecurityPageView({
   }
 
   function requestPasswordReview(): PasswordReviewBinding | null {
-    if (renderGeneration !== authorityGeneration.current || renderAdviceGeneration !== adviceGeneration.current) return null;
+    if (renderGeneration !== authorityGeneration.current || renderAdviceGeneration !== adviceGeneration.current)
+      return null;
     const owner = activeAccount.current;
     if (!owner || owner !== accountId || activeOperation.current || !passwordLimits) return null;
     const advice = currentPasswordAdvice.current;
@@ -899,7 +896,9 @@ function SecurityPageView({
               ) : null}
               <PasswordChangeForm
                 accountId={accountId}
-                accountLabel={identity.state.kind === 'ready' && identity.state.email ? identity.state.email : accountId}
+                accountLabel={
+                  identity.state.kind === 'ready' && identity.state.email ? identity.state.email : accountId
+                }
                 passwordLimits={passwordLimits}
                 advice={page?.actions.change_password}
                 review={passwordReview}

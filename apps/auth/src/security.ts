@@ -60,31 +60,38 @@ export type PasskeyRegistrationReview =
   | { kind: 'denied' }
   | { kind: 'unavailable' };
 
-const passwordChangeLimitsRead = createServerFn({ method: 'POST' }).handler(async (): Promise<PasswordChangeLimits | null> => {
-  try {
-    const response = await issuerSecurityRequest('/registration-page');
-    if (response.status !== 200) return null;
-    const body: unknown = await response.json();
-    if (!body || typeof body !== 'object' || Array.isArray(body) || !('requirements' in body)) return null;
-    const requirements = body.requirements;
-    if (!requirements || typeof requirements !== 'object' || Array.isArray(requirements) || !('password' in requirements))
+const passwordChangeLimitsRead = createServerFn({ method: 'POST' }).handler(
+  async (): Promise<PasswordChangeLimits | null> => {
+    try {
+      const response = await issuerSecurityRequest('/registration-page');
+      if (response.status !== 200) return null;
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || Array.isArray(body) || !('requirements' in body)) return null;
+      const requirements = body.requirements;
+      if (
+        !requirements ||
+        typeof requirements !== 'object' ||
+        Array.isArray(requirements) ||
+        !('password' in requirements)
+      )
+        return null;
+      const password = requirements.password;
+      if (!password || typeof password !== 'object' || Array.isArray(password)) return null;
+      if (
+        !('minLength' in password) ||
+        !('maxLength' in password) ||
+        !Number.isSafeInteger(password.minLength) ||
+        !Number.isSafeInteger(password.maxLength) ||
+        Number(password.minLength) < 1 ||
+        Number(password.maxLength) < Number(password.minLength)
+      )
+        return null;
+      return { minLength: Number(password.minLength), maxLength: Number(password.maxLength) };
+    } catch {
       return null;
-    const password = requirements.password;
-    if (!password || typeof password !== 'object' || Array.isArray(password)) return null;
-    if (
-      !('minLength' in password) ||
-      !('maxLength' in password) ||
-      !Number.isSafeInteger(password.minLength) ||
-      !Number.isSafeInteger(password.maxLength) ||
-      Number(password.minLength) < 1 ||
-      Number(password.maxLength) < Number(password.minLength)
-    )
-      return null;
-    return { minLength: Number(password.minLength), maxLength: Number(password.maxLength) };
-  } catch {
-    return null;
-  }
-});
+    }
+  },
+);
 
 export async function loadPasswordChangeLimits(signal?: AbortSignal): Promise<PasswordChangeLimits | null> {
   try {

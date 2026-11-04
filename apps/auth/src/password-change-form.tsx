@@ -87,8 +87,7 @@ export function PasswordChangeForm({
   const recoveryStatus = useRef<HTMLDivElement>(null);
   const draftVersion = useRef(0);
   const editable = !blocked && !operation;
-  const canReview =
-    passwordLimits !== null && (advice === 'allowed' || advice === 'step-up-required');
+  const canReview = passwordLimits !== null && (advice === 'allowed' || advice === 'step-up-required');
   const currentReview = review && review.accountId === accountId && reviewVersion === draftVersion.current;
 
   useLayoutEffect(() => {
@@ -185,9 +184,7 @@ export function PasswordChangeForm({
   }
 
   if (operation) {
-    const expired = operation.attempt.approval
-      ? Date.parse(operation.attempt.approval.expiresAt) <= Date.now()
-      : false;
+    const expired = operation.attempt.approval ? Date.parse(operation.attempt.approval.expiresAt) <= Date.now() : false;
     return (
       <section aria-labelledby="security-password-heading">
         <h2 id="security-password-heading">{m.auth_security_change_password()}</h2>
@@ -207,12 +204,7 @@ export function PasswordChangeForm({
             <p className="auth-security-hint">{m.auth_security_password_retry_unavailable()}</p>
           ) : null}
           {operation.status !== 'sending' ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={blocked || advice !== 'allowed'}
-              onClick={onRetry}
-            >
+            <Button type="button" variant="outline" disabled={blocked || advice !== 'allowed'} onClick={onRetry}>
               {m.auth_signup_retry_original()}
             </Button>
           ) : null}
@@ -258,7 +250,9 @@ export function PasswordChangeForm({
             value={password}
             onChange={(event) => edit('password', event.target.value)}
             aria-invalid={passwordError ? true : undefined}
-            aria-describedby={passwordError ? 'security-password-help security-password-error' : 'security-password-help'}
+            aria-describedby={
+              passwordError ? 'security-password-help security-password-error' : 'security-password-help'
+            }
           />
           {passwordError ? <FieldError id="security-password-error">{passwordError}</FieldError> : null}
         </Field>

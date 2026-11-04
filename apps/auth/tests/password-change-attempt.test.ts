@@ -28,7 +28,11 @@ test('every explicit phase retry retains the original exact key and phase payloa
   const staged = createPasswordChangeAttempt('account', 'a private password', 'original-key');
   expect(passwordChangeRequest(staged)).toEqual({
     path: '/credential-effects/stage',
-    body: { key: 'original-key', subjectId: 'account', credential: { kind: 'password', password: 'a private password' } },
+    body: {
+      key: 'original-key',
+      subjectId: 'account',
+      credential: { kind: 'password', password: 'a private password' },
+    },
   });
   const uncertainStage = classifyPasswordChangeReply(staged, { ok: false, status: 503, code: 'unavailable' });
   expect(uncertainStage.kind).toBe('unknown');
@@ -84,9 +88,9 @@ test('malformed replies stay uncertain and later refusal cannot settle an unknow
       effectStatus: 'not_applied',
     }).kind,
   ).toBe('unknown');
-  expect(
-    classifyPasswordChangeReply(unknownApply, { ok: true, body: { receiptId: '', replayed: true } }).kind,
-  ).toBe('unknown');
+  expect(classifyPasswordChangeReply(unknownApply, { ok: true, body: { receiptId: '', replayed: true } }).kind).toBe(
+    'unknown',
+  );
 });
 
 test('only the explicit native not-applied marker settles a first refusal', () => {

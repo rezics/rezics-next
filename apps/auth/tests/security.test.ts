@@ -333,9 +333,10 @@ test(
       const form = await passwordForm(page);
       expect(await form.input.getAttribute('autocomplete')).toBe('new-password');
       expect(authCalls('/registration-page')).toHaveLength(1);
-      expect(await form.input.getAttribute('maxlength'), await page.locator('#security-password-help').innerText()).toBe(
-        '128',
-      );
+      expect(
+        await form.input.getAttribute('maxlength'),
+        await page.locator('#security-password-help').innerText(),
+      ).toBe('128');
       expect(await form.confirmation.getAttribute('autocomplete')).toBe('new-password');
       expect(await page.getByRole('button', { name: 'Show password', exact: true }).count()).toBe(2);
       await form.input.fill(password);
@@ -447,8 +448,7 @@ test(
       await form.review.click();
       await Promise.all([
         page.waitForResponse(
-          (response) =>
-            new URL(response.url()).pathname === '/credential-effects/stage' && response.status() === 409,
+          (response) => new URL(response.url()).pathname === '/credential-effects/stage' && response.status() === 409,
         ),
         form.confirm.click(),
       ]);
@@ -492,7 +492,9 @@ test.each(['before', 'after'] as const)(
       ).toHaveLength(1);
       expect(authCalls('/credential-effects/apply')).toHaveLength(loss === 'after' ? 1 : 0);
       const original = await page.evaluate(
-        () => (window as Window & { __passwordChangeAttempts?: Array<{ body: unknown }> }).__passwordChangeAttempts?.[0]?.body,
+        () =>
+          (window as Window & { __passwordChangeAttempts?: Array<{ body: unknown }> }).__passwordChangeAttempts?.[0]
+            ?.body,
       );
 
       if (loss === 'before') {
@@ -507,18 +509,22 @@ test.each(['before', 'after'] as const)(
         refuseNextApply = true;
         await Promise.all([
           page.waitForResponse(
-            (response) =>
-              new URL(response.url()).pathname === '/credential-effects/apply' && response.status() === 409,
+            (response) => new URL(response.url()).pathname === '/credential-effects/apply' && response.status() === 409,
           ),
           page.getByRole('button', { name: 'Retry original attempt', exact: true }).click(),
         ]);
-        await page.getByText('A refusal now cannot tell whether an earlier apply changed the password.', { exact: false }).waitFor();
+        await page
+          .getByText('A refusal now cannot tell whether an earlier apply changed the password.', { exact: false })
+          .waitFor();
         await page
           .getByRole('status')
           .filter({ hasText: 'Auth did not confirm whether the password changed.' })
           .waitFor();
         expect(
-          await page.getByRole('status').filter({ hasText: 'Auth did not confirm whether the password changed.' }).count(),
+          await page
+            .getByRole('status')
+            .filter({ hasText: 'Auth did not confirm whether the password changed.' })
+            .count(),
         ).toBe(1);
         expect(authCalls('/credential-effects/apply')).toHaveLength(2);
       }
@@ -529,8 +535,7 @@ test.each(['before', 'after'] as const)(
       expect(attempts).toHaveLength(2);
       expect(attempts?.[0]?.body).toEqual(original);
       expect(attempts?.[1]?.body).toEqual(original);
-      for (const call of authCalls('/credential-effects/apply'))
-        expect(JSON.parse(call.body)).toEqual(original);
+      for (const call of authCalls('/credential-effects/apply')) expect(JSON.parse(call.body)).toEqual(original);
       if (loss === 'after') expect(acceptedApplyKeys.has((original as { key: string }).key)).toBe(true);
     } finally {
       refuseNextApply = false;

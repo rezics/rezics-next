@@ -37,11 +37,7 @@ export function passwordLengthValid(value: string, limits: PasswordChangeLimits)
   const length = Array.from(value).length;
   // Auth enforces its configured maximum in UTF-16 code units. Keep the local
   // user-facing count Unicode-aware while preventing a value Auth must reject.
-  return (
-    length >= limits.minLength &&
-    length <= limits.maxLength &&
-    value.length <= limits.maxLength
-  );
+  return length >= limits.minLength && length <= limits.maxLength && value.length <= limits.maxLength;
 }
 
 export function createPasswordChangeAttempt(
@@ -166,4 +162,3 @@ export function classifyPasswordChangeReply(
     return unknown(attempt);
   return { kind: 'complete', receiptId: reply.body.receiptId, replayed: reply.body.replayed };
 }
-

@@ -59,7 +59,9 @@ test('confirmation mismatch is local; editing or cancelling retires an unsent re
 test('unavailable native advice blocks both rendered and submitted credential effects', async () => {
   const { host, calls } = await mount('unavailable');
   await fillPassword(host, 'a private password');
-  await flush(() => host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  await flush(() =>
+    host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
   expect(button(host, m.auth_security_password_review())?.disabled).toBe(true);
   expect(calls.filter((call) => call.path.startsWith('/credential-effects/'))).toHaveLength(0);
   expect(host.textContent).toContain(m.auth_inventory_unavailable());
@@ -112,7 +114,9 @@ test('lost stage response exposes exact explicit retry and only validated phases
   );
   expect(calls[2]!.path).toBe('/credential-effects/approve');
   await flush(() =>
-    calls[2]!.resolve(Response.json({ reference: 'approval-ref', expiresAt: new Date(Date.now() + 60_000).toISOString() })),
+    calls[2]!.resolve(
+      Response.json({ reference: 'approval-ref', expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+    ),
   );
   expect(calls[3]!.path).toBe('/credential-effects/apply');
   expect(calls[3]!.body).toEqual({

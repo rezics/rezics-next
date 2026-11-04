@@ -86,8 +86,7 @@ async function mount() {
         user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
       });
-    if (String(path).startsWith('/credential-effects/'))
-      requestBodies.push(JSON.parse(String(init?.body)));
+    if (String(path).startsWith('/credential-effects/')) requestBodies.push(JSON.parse(String(init?.body)));
     return response.promise;
   }) as typeof fetch;
   await render();
@@ -111,7 +110,9 @@ test('a reviewed password change blocks competing writes and duplicate confirmat
   expect(calls).toHaveLength(1);
   expect(calls[0]).toBe('/credential-effects/stage');
   await flush(() =>
-    response.resolve(Response.json({ error: 'credential_effect_denied', effect_status: 'not_applied' }, { status: 409 })),
+    response.resolve(
+      Response.json({ error: 'credential_effect_denied', effect_status: 'not_applied' }, { status: 409 }),
+    ),
   );
   expect(writes().every((control) => !control.disabled)).toBe(true);
 });
