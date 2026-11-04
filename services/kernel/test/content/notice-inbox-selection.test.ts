@@ -4,27 +4,31 @@ import {
   inboxCandidateScanLimit,
   INBOX_CANDIDATE_FACTOR,
   INBOX_CANDIDATE_SCAN_CEILING,
+  InvalidInboxCursorError,
+  listNoticeInbox,
+  markNoticesSeen,
+  type InboxDependencies,
 } from '../../src/content/notice-inbox.ts';
-import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { reactionFixture } from './reactions.test.ts';
 import { observeSql } from './support/sql-observer.ts';
 
 let fixture: Awaited<ReturnType<typeof reactionFixture>>;
-let kernel: ReturnType<typeof createKernel>;
+let inbox: InboxDependencies;
 const originalReceiptKeys = process.env.KERNEL_RECEIPT_KEYS;
 beforeAll(async () => {
   process.env.KERNEL_RECEIPT_KEYS = [...testReceiptKeys().keys]
     .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
     .join(',');
   fixture = await reactionFixture();
-  kernel = createKernel({
+  inbox = {
     pool: fixture.db.pool,
     routeKey: new Uint8Array(32).fill(71),
     access: fixture.access,
+    actor: await fixture.verified(),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
-  });
+  };
 }, 120_000);
 afterAll(async () => {
   await fixture?.close();
@@ -32,13 +36,8 @@ afterAll(async () => {
   else process.env.KERNEL_RECEIPT_KEYS = originalReceiptKeys;
 });
 
-async function call(path: string) {
-  const response = await kernel.handle(
-    new Request(`http://kernel.test${path}`, {
-      headers: { authorization: `Bearer ${fixture.bearer()}` },
-    }),
-  );
-  return { response, value: response.status === 204 ? null : ((await response.json()) as any) };
+function list(input: { limit: number; cursor?: string; selection?: 'all' | 'unread' }) {
+  return listNoticeInbox(inbox, fixture.accountId, input);
 }
 
 async function seed(count: number) {
@@ -67,74 +66,59 @@ test('candidate scan limits are static page-size bounds', () => {
 test('All and Unread bind selection into the cursor, admit displayed through, and seek unread without walking read pages', async () => {
   const ids = await seed(5);
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
-  const seenThrough = ids[2]!;
-  const mark = await kernel.handle(
-    new Request(`http://kernel.test${base}:markSeen`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${fixture.bearer()}`,
-        'idempotency-key': JSON.stringify(crypto.randomUUID()),
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ through: seenThrough }),
-    }),
-  );
-  expect(mark.status).toBe(204);
+  await markNoticesSeen(fixture.db.pool, fixture.accountId, ids[2]!);
 
-  const all = await call(`${base}?limit=10&selection=all`);
-  expect(all.response.status).toBe(200);
-  expect(all.value.selection).toBe('all');
-  expect(all.value.viewer).toEqual({ accountId: fixture.accountId });
-  expect(all.value.items.map((item: { id: string }) => item.id)).toEqual([...ids].reverse());
-  expect(all.value.actions.markSeen).toEqual({
+  const all = await list({ limit: 10, selection: 'all' });
+  expect(all.selection).toBe('all');
+  expect(all.viewer).toEqual({ accountId: fixture.accountId });
+  expect(all.items.map((item) => item.id)).toEqual([...ids].reverse());
+  expect(all.actions.markSeen).toEqual({
     method: 'POST',
     path: `${base}:markSeen`,
     through: ids[4],
   });
 
-  const unread = await call(`${base}?limit=10&selection=unread`);
-  expect(unread.value.selection).toBe('unread');
-  expect(unread.value.items.map((item: { id: string; unread: boolean }) => [item.id, item.unread])).toEqual([
+  const unread = await list({ limit: 10, selection: 'unread' });
+  expect(unread.selection).toBe('unread');
+  expect(unread.items.map((item) => [item.id, item.unread])).toEqual([
     [ids[4], true],
     [ids[3], true],
   ]);
-  expect(unread.value.next).toBeNull();
-  expect(unread.value.actions.markSeen.through).toBe(ids[4]);
+  expect(unread.next).toBeNull();
+  expect(unread.actions.markSeen?.through).toBe(ids[4]);
 
-  const continuing = await call(`${base}?limit=1&selection=unread`);
-  expect(continuing.value.items.map((item: { id: string }) => item.id)).toEqual([ids[4]]);
-  expect(continuing.value.next).toEqual(expect.any(String));
-  expect(continuing.value.actions.markSeen).toBeNull();
-  const sameRange = await call(`${base}?limit=1&selection=unread&cursor=${encodeURIComponent(continuing.value.next)}`);
-  expect(sameRange.response.status).toBe(200);
-  expect(sameRange.value.items.map((item: { id: string }) => item.id)).toEqual([ids[3]]);
-  expect(sameRange.value.selection).toBe('unread');
+  const continuing = await list({ limit: 1, selection: 'unread' });
+  expect(continuing.items.map((item) => item.id)).toEqual([ids[4]]);
+  expect(continuing.next).toEqual(expect.any(String));
+  expect(continuing.actions.markSeen).toBeNull();
+  const sameRange = await list({ limit: 1, selection: 'unread', cursor: continuing.next! });
+  expect(sameRange.items.map((item) => item.id)).toEqual([ids[3]]);
+  expect(sameRange.selection).toBe('unread');
 
-  const allFirst = await call(`${base}?limit=1&selection=all`);
-  const crossed = await call(`${base}?limit=1&selection=unread&cursor=${encodeURIComponent(allFirst.value.next)}`);
-  expect(crossed.response.status).toBe(400);
-  expect(crossed.value.code).toBe('invalid_cursor');
-  const invalid = await call(`${base}?limit=1&selection=all&cursor=not-a-cursor`);
-  expect(invalid.response.status).toBe(400);
-  expect(invalid.value.code).toBe('invalid_cursor');
+  const allFirst = await list({ limit: 1, selection: 'all' });
+  await expect(list({ limit: 1, selection: 'unread', cursor: allFirst.next! })).rejects.toBeInstanceOf(
+    InvalidInboxCursorError,
+  );
+  await expect(list({ limit: 1, selection: 'all', cursor: 'not-a-cursor' })).rejects.toBeInstanceOf(
+    InvalidInboxCursorError,
+  );
 });
 
 test('list candidate LIMIT is min(4×page size, 200) at three page sizes for All and Unread', async () => {
   await seed(3);
-  const base = `/v1/accounts/${fixture.accountId}/notifications`;
   const observed: number[] = [];
   for (const selection of ['all', 'unread'] as const) {
     for (const limit of [1, 20, 50]) {
       const trace = observeSql(fixture.db.pool);
       try {
-        const page = await call(`${base}?limit=${limit}&selection=${selection}`);
-        expect(page.response.status).toBe(200);
-        const list = trace.records.find(
+        const page = await list({ limit, selection });
+        expect(page.selection).toBe(selection);
+        const listed = trace.records.find(
           (record) => record.statement.includes('FROM content.notice AS n') && record.statement.includes('DESC LIMIT'),
         )!;
-        expect(list.parameters.at(-1)).toBe(inboxCandidateScanLimit(limit));
-        expect(list.statement.split('s.seen_notice_id IS NULL').length - 1).toBe(selection === 'unread' ? 2 : 1);
-        observed.push(list.parameters.at(-1) as number);
+        expect(listed.parameters.at(-1)).toBe(inboxCandidateScanLimit(limit));
+        expect(listed.statement.split('s.seen_notice_id IS NULL').length - 1).toBe(selection === 'unread' ? 2 : 1);
+        observed.push(listed.parameters.at(-1) as number);
       } finally {
         await trace.close();
       }
