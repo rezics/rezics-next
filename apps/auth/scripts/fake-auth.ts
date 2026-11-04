@@ -170,7 +170,11 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
             client_id: 'screenshot-client',
             display_name: 'REZICS Reading Companion',
             scopes: ['openid', 'offline_access'],
+            requested: [...new Set((url.searchParams.get('scope') ?? '').split(' ').filter(Boolean))],
             granted: ['openid'],
+            pending_reduction: false,
+            acting_account: { account_id: state.sessionAccountId, email: 'person@example.test' },
+            decisions: { allow: true, decline: true, switch_account: true },
           },
           { headers },
         );

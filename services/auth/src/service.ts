@@ -22,6 +22,7 @@ import { issuerOrigin } from './issuer.ts';
 import { securityInventory, type SecurityInventoryInput } from './security-inventory.ts';
 import { composeSecurityPage } from './security-page.ts';
 import { readNativeAccountIdentity } from './account-identity.ts';
+import { normalizeConsentRequestedScopes, parseConsentRequestedScopes, projectConsentPage } from './consent-page.ts';
 import { signInPage, type SignInPageViewer } from './signin-page.ts';
 import {
   securityPageInput,
@@ -121,6 +122,9 @@ function normalizeScopes(value: unknown, limit: number): string[] {
   )
     throw new Denied(400);
   return [...new Set(value as string[])].sort();
+}
+function sameScopeSet(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((scope) => right.includes(scope));
 }
 function text(value: unknown): string {
   if (typeof value !== 'string' || !value || value.length > 1024) throw new Denied(400);
@@ -2126,23 +2130,68 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           }
           const client = await clientFor(clientId, 404);
           if (client.first_party) throw new Denied(404);
-          const consent = (
-            await database.query<{ scopes: string[]; pending_scopes: string[] | null }>(
-              'SELECT scopes,pending_scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2',
-              [human.account_id, client.client_id],
+          if ([...url.searchParams.keys()].some((key) => key !== 'scope')) throw new Denied(400);
+          const requestedValues = url.searchParams.getAll('scope');
+          if (requestedValues.length > 1) throw new Denied(400);
+          const requested = parseConsentRequestedScopes(requestedValues[0] ?? '');
+          if (!requested) throw new Denied(400);
+          const page = await withIssuance(clientId, async () => {
+            const before = await humanProof(request.headers);
+            const beforeSource = proofSources.get(before);
+            const initialSource = proofSources.get(human);
+            if (
+              !beforeSource ||
+              !initialSource ||
+              beforeSource.id !== initialSource.id ||
+              before.account_id !== human.account_id ||
+              before.client_id !== human.client_id ||
+              before.authn_epoch !== human.authn_epoch ||
+              before.auth_time !== human.auth_time ||
+              JSON.stringify(before.scope) !== JSON.stringify(human.scope) ||
+              JSON.stringify(before.amr) !== JSON.stringify(human.amr)
             )
-          ).rows[0];
-          return json({
-            client_id: client.client_id,
-            display_name: client.display_name,
-            scopes: client.scopes,
-            granted:
-              consent?.scopes.filter(
-                (scope) =>
-                  client.scopes.includes(scope) &&
-                  (consent.pending_scopes === null || consent.pending_scopes.includes(scope)),
-              ) ?? [],
+              throw new Denied(409);
+            const currentClient = await clientFor(clientId, 404);
+            if (currentClient.first_party) throw new Denied(404);
+            return withConsent(before.account_id, clientId, async (connection) => {
+              const identity = await readNativeAccountIdentity(database, before.account_id);
+              const consent = (
+                await connection.query<{ scopes: string[]; pending_scopes: string[] | null }>(
+                  'SELECT scopes,pending_scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2',
+                  [before.account_id, currentClient.client_id],
+                )
+              ).rows[0] ?? null;
+              const afterClient = await clientFor(clientId, 404);
+              const after = await humanProof(request.headers);
+              const afterSource = proofSources.get(after);
+              if (
+                !afterSource ||
+                afterSource.id !== beforeSource.id ||
+                after.account_id !== before.account_id ||
+                after.client_id !== before.client_id ||
+                after.authn_epoch !== before.authn_epoch ||
+                after.auth_time !== before.auth_time ||
+                JSON.stringify(after.scope) !== JSON.stringify(before.scope) ||
+                JSON.stringify(after.amr) !== JSON.stringify(before.amr) ||
+                identity.account_id !== before.account_id ||
+                afterClient.display_name !== currentClient.display_name ||
+                afterClient.first_party !== currentClient.first_party ||
+                !sameScopeSet(afterClient.scopes, currentClient.scopes)
+              )
+                throw new Denied(409);
+              const projected = projectConsentPage({
+                client: currentClient,
+                identity,
+                requested,
+                consent,
+              });
+              if (!projected) throw new Denied(503);
+              return projected;
+            });
           });
+          const response = json(page);
+          response.headers.set('cache-control', 'private, no-store');
+          return response;
         }
         if (url.pathname === '/sessions' && request.method === 'GET') {
           const human = await humanProof(request.headers);
@@ -2645,9 +2694,20 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           });
         }
         if (url.pathname === '/consent') {
-          fields(body, ['client_id', 'scope']);
+          fields(body, ['client_id', 'scope', 'reviewed_account_id', 'reviewed_scopes', 'reviewed_requested']);
           const clientId = text(body.client_id);
           const granted = scopes(body.scope);
+          const reviewedAccountId =
+            body.reviewed_account_id === undefined ? undefined : text(body.reviewed_account_id);
+          const reviewedScopes = body.reviewed_scopes === undefined ? undefined : scopes(body.reviewed_scopes);
+          const reviewedRequested =
+            body.reviewed_requested === undefined ? undefined : normalizeConsentRequestedScopes(body.reviewed_requested);
+          if (
+            (body.reviewed_requested !== undefined && !reviewedRequested) ||
+            (reviewedAccountId !== undefined && (reviewedScopes === undefined || reviewedRequested === undefined)) ||
+            (reviewedAccountId === undefined && reviewedRequested !== undefined)
+          )
+            throw new Denied(400);
           const outcome = await withIssuance(clientId, async () => {
             const native = await getAuth().api.getSession({
               headers: request.headers,
@@ -2661,6 +2721,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             const openingReceiptId = operated ? await operatorOpening(session) : undefined;
             const client = await clientFor(clientId);
             if (client.first_party || granted.some((scope) => !client.scopes.includes(scope))) throw new Denied(400);
+            if (reviewedAccountId !== undefined && reviewedAccountId !== account.accountId) throw new Denied(409);
             return withConsent(account.accountId, clientId, async (connection) => {
               const previous = (
                 await connection.query<{
@@ -2672,6 +2733,17 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   [account.accountId, clientId],
                 )
               ).rows[0];
+              if (reviewedScopes !== undefined && !sameScopeSet(previous?.scopes ?? [], reviewedScopes))
+                throw new Denied(409);
+              if (reviewedAccountId !== undefined) {
+                const expected = scopes([
+                  ...new Set([
+                    ...reviewedScopes!,
+                    ...reviewedRequested!.filter((scope) => client.scopes.includes(scope)),
+                  ]),
+                ]);
+                if (!sameScopeSet(granted, expected)) throw new Denied(409);
+              }
               if (operated && (!previous || granted.some((scope) => !previous.scopes.includes(scope))))
                 throw new Denied();
               if (!previous?.scopes.some((scope) => !granted.includes(scope))) {
@@ -2869,7 +2941,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               minimumAuthnEpoch: receipt.minimumAuthnEpoch,
             });
           }
-          return json({ client_id: clientId, scope: granted });
+          return json({
+            client_id: clientId,
+            scope: granted,
+            ...(reviewedAccountId === undefined
+              ? {}
+              : { account_id: reviewedAccountId, requested: reviewedRequested }),
+          });
         }
         fields(body, []);
         // Better Auth owns cookie clearing and deletion of its own persistent session.
@@ -2891,7 +2969,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return respond(
           credentialRoute
             ? { error: 'credential_effect_denied', effect_status: 'not_applied' }
-            : { error: 'authentication_denied' },
+            : { error: 'authentication_denied', ...(status === 409 ? { code: 'stale_review' } : {}) },
           status,
         );
       }

@@ -311,7 +311,7 @@ export async function loadPasskeyInventory(signal?: AbortSignal) {
 }
 
 export type ConsentReductionResult = {
-  kind: 'accepted' | 'pending' | 'signed-out' | 'denied' | 'unknown' | 'unavailable';
+  kind: 'accepted' | 'pending' | 'signed-out' | 'denied' | 'stale-review' | 'unknown' | 'unavailable';
 };
 /** The page lends its existing write boundary to a mounted consent review.
  * Acquisition is synchronous; release only ends the operation that acquired it.
@@ -396,9 +396,11 @@ export async function reduceConsent(
   const response = await authPost<unknown>('/consent', {
     client_id: target.clientId,
     scope: target.retained,
+    ...(target.retained.length > 0 ? { reviewed_scopes: [...target.current] } : {}),
   });
   if (!response.ok) {
     if (response.status === 401) return { kind: 'signed-out' };
+    if (response.status === 409 && response.code === 'stale_review') return { kind: 'stale-review' };
     if (response.status === 403 || response.status === 409) return { kind: 'denied' };
     // Once sent, an outage/ambiguous acknowledgement may have applied the barrier.
     return { kind: 'unknown' };

@@ -94,16 +94,23 @@ test('consent read returns the client display name registered scopes and current
   const path = `/consent/${external}`;
   const response = await request(path);
   expect(response.status).toBe(200);
-  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
   expect(await response.json()).toEqual({
     client_id: external,
     display_name: 'Example Client',
     scopes: ['read', 'write'],
+    requested: [],
     granted: [],
+    pending_reduction: false,
+    acting_account: { account_id: person, email: `${person}@example.test` },
+    decisions: { allow: true, decline: true, switch_account: true },
   });
   expect((await request('/consent', { client_id: external, scope: ['read'] })).status).toBe(200);
   expect((await request('/consent', { client_id: external, scope: ['write'] }, otherCookie)).status).toBe(200);
   expect((await (await request(path)).json()).granted).toEqual(['read']);
+  const review = await request(`${path}?scope=write%20unknown:permission`);
+  expect(review.status).toBe(200);
+  expect((await review.json()).requested).toEqual(['write', 'unknown:permission']);
   await service.internal.registerClient({
     clientId: external,
     firstParty: false,
@@ -135,11 +142,62 @@ test('consent read returns the client display name registered scopes and current
     'UPDATE auth_consent SET pending_scopes=ARRAY[]::text[],pending_reference=$3 WHERE account_id=$1 AND client_id=$2',
     [person, external, 'pending'],
   );
-  expect((await (await request(path)).json()).granted).toEqual([]);
+  const pending = await request(path);
+  expect(await pending.json()).toMatchObject({ granted: [], pending_reduction: true, decisions: { allow: false } });
   await database.query(
     'UPDATE auth_consent SET pending_scopes=NULL,pending_reference=NULL WHERE account_id=$1 AND client_id=$2',
     [person, external],
   );
+});
+
+test('review-bound Allow and a nonempty reduction refuse grants added after the browser review', async () => {
+  await service.internal.registerClient({
+    clientId: external,
+    firstParty: false,
+    scopes: ['read', 'write', 'delete'],
+    displayName: 'Example Client',
+  });
+  await database.query('DELETE FROM auth_consent WHERE account_id=$1 AND client_id=$2', [person, external]);
+  const establish = await request('/consent', { client_id: external, scope: ['read', 'write'] });
+  expect(establish.status).toBe(200);
+
+  const allowReview = await request(`/consent/${external}?scope=delete`);
+  expect((await allowReview.json()).granted).toEqual(['read', 'write']);
+  expect((await request('/consent', { client_id: external, scope: ['read', 'write', 'delete'] })).status).toBe(200);
+  const staleAllow = await request('/consent', {
+    client_id: external,
+    scope: ['read', 'write', 'delete'],
+    reviewed_account_id: person,
+    reviewed_scopes: ['read', 'write'],
+    reviewed_requested: ['delete'],
+  });
+  expect(staleAllow.status).toBe(409);
+  expect(await staleAllow.json()).toMatchObject({ code: 'stale_review' });
+  expect((await (await request(`/consent/${external}`)).json()).granted).toEqual(['read', 'write', 'delete']);
+
+  expect((await request('/consent', { client_id: external, scope: ['read', 'write'] })).status).toBe(200);
+  const lastBrowserRead = await request(`/consent/${external}`);
+  expect((await lastBrowserRead.json()).granted).toEqual(['read', 'write']);
+  expect((await request('/consent', { client_id: external, scope: ['read', 'write', 'delete'] })).status).toBe(200);
+  const staleReduction = await request('/consent', {
+    client_id: external,
+    scope: ['read'],
+    reviewed_scopes: ['read', 'write'],
+  });
+  expect(staleReduction.status).toBe(409);
+  expect(await staleReduction.json()).toMatchObject({ code: 'stale_review' });
+  const stored = await database.query<{ scopes: string[]; pending_scopes: string[] | null; pending_reference: string | null }>(
+    'SELECT scopes,pending_scopes,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2',
+    [person, external],
+  );
+  expect(stored.rows[0]).toEqual({ scopes: ['read', 'write', 'delete'], pending_scopes: null, pending_reference: null });
+  await database.query('DELETE FROM auth_consent WHERE account_id=$1 AND client_id=$2', [person, external]);
+  await service.internal.registerClient({
+    clientId: external,
+    firstParty: false,
+    scopes: ['read', 'write'],
+    displayName: 'Example Client',
+  });
 });
 
 test('consent read refuses signed-out browsers and first-party or unknown clients', async () => {
@@ -307,6 +365,7 @@ test('pages routes enforce origin queries closed bodies and no-store errors with
   for (const [path, body, headers, status] of [
     ['/sessions?extra=1', undefined, {}, 400],
     [`/consent/${external}?extra=1`, undefined, {}, 400],
+    [`/consent/${external}?scope=read&scope=write`, undefined, {}, 400],
     ['/sessions/revoke?extra=1', { session_id: id }, {}, 400],
     ['/sessions/revoke', { session_id: id }, { origin: 'https://evil.test' }, 403],
     ['/sessions/revoke', { session_id: id }, { 'sec-fetch-site': 'cross-site' }, 403],

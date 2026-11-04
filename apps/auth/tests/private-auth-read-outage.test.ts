@@ -26,7 +26,16 @@ const session = {
   auth_time: Math.floor(Date.now() / 1000),
   amr: ['pwd'],
 };
-const consent = { client_id: 'selected-app', display_name: 'Reader', scopes: ['openid'], granted: [] };
+const consent = {
+  client_id: 'selected-app',
+  display_name: 'Reader',
+  scopes: ['openid'],
+  requested: [],
+  granted: [],
+  pending_reduction: false,
+  acting_account: { account_id: 'account-1', email: null },
+  decisions: { allow: true, decline: true, switch_account: true },
+};
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
@@ -70,7 +79,7 @@ for (const [status, phase] of [
 ] as const)
   test(`consent stalled ${status} ${phase} unlocks explicit read retry; disposal hides late private data`, async () => {
     const states: ConsentReview[] = [];
-    const review = createConsentReview(consent.client_id, (value) => states.push(value));
+    const review = createConsentReview(consent.client_id, '', (value) => states.push(value));
     globalThis.fetch = (() =>
       phase === 'headers'
         ? new Promise(() => {})
