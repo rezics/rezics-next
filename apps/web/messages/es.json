@@ -7364,6 +7364,7 @@
   "revision_return_retry": "Reintentar esta página del historial",
   "revision_return_to_history": "Volver al historial de revisiones",
   "revision_return_unavailable": "Esta revisión no tiene una selección de historial en esta pestaña. No se puede restaurar la selección anterior; el enlace al hilo actual solo aparece cuando está disponible de forma segura.",
+  "revision_return_unsupported": "Esta fuente del historial no permite volver aquí en la misma pestaña. Reinicia el historial desde el hilo actual antes de abrir una revisión exacta.",
   "revision_history_navigator": "Recorrer revisiones cargadas",
   "revision_history_choose": "Elegir una revisión cargada",
   "revision_history_choose_placeholder": "Elegir una posición del historial cargado",

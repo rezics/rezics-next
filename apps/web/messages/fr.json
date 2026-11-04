@@ -7364,6 +7364,7 @@
   "revision_return_retry": "Réessayer cette page de l’historique",
   "revision_return_to_history": "Retour à l’historique des révisions",
   "revision_return_unavailable": "Cette révision n’a pas de sélection d’historique dans cet onglet. L’ancienne sélection ne peut pas être restaurée ; le lien vers le fil actuel n’apparaît que s’il peut être affiché en toute sécurité.",
+  "revision_return_unsupported": "Cette source d’historique ne permet pas un retour dans le même onglet ici. Relancez l’historique depuis le fil actuel avant d’ouvrir une révision exacte.",
   "revision_history_navigator": "Parcourir les révisions chargées",
   "revision_history_choose": "Choisir une révision chargée",
   "revision_history_choose_placeholder": "Choisir une position dans l’historique chargé",

@@ -7364,6 +7364,7 @@
   "revision_return_retry": "이 기록 페이지 다시 시도",
   "revision_return_to_history": "수정 기록으로 돌아가기",
   "revision_return_unavailable": "이 탭에는 이 수정본의 기록 선택이 없습니다. 이전 선택은 복원할 수 없습니다. 현재 스레드 링크는 안전하게 표시할 수 있을 때만 나타납니다.",
+  "revision_return_unsupported": "이 기록 소스에서는 여기서 같은 탭으로 돌아갈 수 없습니다. 정확한 수정본을 열기 전에 현재 스레드에서 기록을 다시 시작하세요.",
   "revision_history_navigator": "불러온 수정본 탐색",
   "revision_history_choose": "불러온 수정본 선택",
   "revision_history_choose_placeholder": "불러온 기록 내의 위치 선택",

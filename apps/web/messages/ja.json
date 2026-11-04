@@ -7364,6 +7364,7 @@
   "revision_return_retry": "この履歴ページを再試行",
   "revision_return_to_history": "改訂履歴に戻る",
   "revision_return_unavailable": "このタブにはこの改訂の履歴選択がありません。以前の選択は復元できません。現在のスレッドへのリンクは、安全に表示できる場合のみ表示されます。",
+  "revision_return_unsupported": "この履歴ソースでは、ここから同じタブに戻れません。正確な改訂を開く前に、現在のスレッドから履歴をやり直してください。",
   "revision_history_navigator": "読み込んだ改訂を移動",
   "revision_history_choose": "読み込んだ改訂を選択",
   "revision_history_choose_placeholder": "読み込んだ履歴内の位置を選択",

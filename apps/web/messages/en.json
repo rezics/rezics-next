@@ -7440,6 +7440,7 @@
   "revision_return_retry": "Retry this history page",
   "revision_return_to_history": "Return to revision history",
   "revision_return_unavailable": "This revision has no history selection in this tab. The old selection can’t be restored; the current thread link appears only when it is safely available.",
+  "revision_return_unsupported": "This history source cannot carry a same-tab return here. Restart history from the current thread before opening an exact revision.",
   "revision_history_navigator": "Navigate loaded revisions",
   "revision_history_choose": "Choose a loaded revision",
   "revision_history_choose_placeholder": "Choose a position in loaded history",

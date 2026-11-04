@@ -17,7 +17,7 @@ export function HistoryReturnLink({
       to="/threads/$id_/$slug"
       params={{ id: target.threadId, slug: target.slug }}
       search={{
-        ...(target.threadCursor ? { cursor: target.threadCursor } : {}),
+        ...(target.threadCursor !== undefined ? { cursor: target.threadCursor } : {}),
         post: target.postId,
         historyReturn: target.token,
         historyRevision: revisionId,

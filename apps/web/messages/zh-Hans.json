@@ -7364,6 +7364,7 @@
   "revision_return_retry": "重试此历史页",
   "revision_return_to_history": "返回修订历史",
   "revision_return_unavailable": "此标签页没有此修订对应的历史选择。无法恢复旧选择；只有在安全可用时才会显示当前讨论串链接。",
+  "revision_return_unsupported": "此历史来源暂不支持在此标签页返回。打开精确修订前，请从当前讨论串重新开始历史记录。",
   "revision_history_navigator": "浏览已加载的修订",
   "revision_history_choose": "选择已加载的修订",
   "revision_history_choose_placeholder": "选择已加载历史中的位置",
