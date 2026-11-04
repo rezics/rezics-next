@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { decodeJwt, importJWK, SignJWT } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
-import { readEditableAccountProfile } from '../../src/access/account-edit-profile.ts';
+import { readEditableAccountProfile, type AccountProfileEditing } from '../../src/access/account-edit-profile.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
@@ -24,18 +24,25 @@ function expectedEditing(
   viewerId: string,
   targetId: string,
   kind: 'actor' | 'organization' = 'actor',
-) {
+): AccountProfileEditing {
   const identity = {
     displayName: { applicable: true, maxLength: 4096 },
     biography: { applicable: true, maxLength: 4096 },
     avatar: { applicable: true },
     links: { applicable: true, maxItems: 5, labelMaxLength: 64, urlMaxLength: 2048 },
     publicViews: { applicable: true, flags: ['posts', 'reviews', 'collections', 'realms'] },
-  };
+  } as const;
+  if (kind === 'organization') {
+    return {
+      viewer: { accountId: viewerId },
+      target: { accountId: targetId, kind: 'organization' },
+      fields: { ...identity, speakersListed: { applicable: true } },
+    };
+  }
   return {
     viewer: { accountId: viewerId },
-    target: { accountId: targetId, kind },
-    fields: kind === 'organization' ? { ...identity, speakersListed: { applicable: true } } : identity,
+    target: { accountId: targetId, kind: 'actor' },
+    fields: identity,
   };
 }
 
