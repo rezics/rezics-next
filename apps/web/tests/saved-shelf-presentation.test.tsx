@@ -194,7 +194,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     shelf: initialShelf,
   };
   let conflictNext = true;
-  let unknownNext = true;
+  let unknownNext = false;
   let holdSave = false;
   let resolveSave: (() => void) | undefined;
   const receipts = new Map<string, Record<string, unknown>>();
@@ -474,6 +474,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect(explicit.search.cursor).toBe('explicit-address-cursor');
       expect(patches).toHaveLength(2);
 
+      unknownNext = true;
       await select(1, 'small');
       await click(m.settings_shelf_save());
       expect(host.textContent).toContain(m.settings_shelf_uncertain());

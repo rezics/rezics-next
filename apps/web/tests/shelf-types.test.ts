@@ -276,7 +276,7 @@ test('a reader chooses an indexed Type absent from loaded entries, retains the n
     expect(latest()).toEqual({ state: 'paused', orderBy: 'finishedAt', direction: 'asc', limit: '100', view: 'FULL' });
     expect(
       shelfDisplay(validateShelfSearch(Object.fromEntries(new URL(address, 'https://site.test').searchParams))),
-    ).toEqual({ layout: 'grid', size: 's' });
+    ).toEqual({ layout: 'grid', size: 's', layoutExplicit: true, sizeExplicit: true, columnsExplicit: false });
     expect(reads.every((r) => r.authorization === 'Bearer owner-token')).toBe(true);
     expect(cacheHeaders.length).toBeGreaterThan(0);
     expect(cacheHeaders.every((value) => value === 'private, no-store')).toBe(true);

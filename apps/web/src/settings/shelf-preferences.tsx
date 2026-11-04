@@ -630,7 +630,7 @@ export function ShelfPreferencesCard({
           <Button
             type="button"
             className="min-h-11 max-w-full whitespace-normal"
-            disabled={disabled || !state.dirty.size}
+            disabled={disabled || !!state.pending || !state.dirty.size}
             onClick={() => void controller.submit()}
           >
             {m.settings_shelf_save()}
