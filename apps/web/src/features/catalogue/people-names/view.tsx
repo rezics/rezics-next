@@ -54,15 +54,25 @@ export function PeopleNamesView({
   const [page, setPage] = useState(restored?.page ?? 0);
   const groups = useMemo(() => (names.state === 'ready' ? filterPeopleNames(names.groups, query) : []), [names, query]);
   const count = groups.reduce((sum, group) => sum + group.names.length, 0);
-  const offset = Math.min(page, Math.max(0, Math.ceil(groups.length / PEOPLE_NAME_GROUP_WINDOW) - 1)) * PEOPLE_NAME_GROUP_WINDOW;
+  const offset =
+    Math.min(page, Math.max(0, Math.ceil(groups.length / PEOPLE_NAME_GROUP_WINDOW) - 1)) * PEOPLE_NAME_GROUP_WINDOW;
   return (
-    <section id="supplied-names" data-slot="supplied-names" className="min-w-0 space-y-3 [overflow-wrap:anywhere]" data-names-page={offset / PEOPLE_NAME_GROUP_WINDOW}>
+    <section
+      id="supplied-names"
+      data-slot="supplied-names"
+      className="min-w-0 space-y-3 [overflow-wrap:anywhere]"
+      data-names-page={offset / PEOPLE_NAME_GROUP_WINDOW}
+    >
       {kind === 'people' && <h3 className="text-xl font-semibold">{m.people_names_heading({}, o)}</h3>}
       {!retired && names.state === 'ready' && names.selected.text && (
         <p className="text-sm text-muted-foreground">
           {names.selected.lang && names.selected.lang !== locale
-            ? (kind === 'work' ? m.work_names_fallback({}, o) : m.people_names_fallback({}, o))
-            : (kind === 'work' ? m.work_names_selected({}, o) : m.people_names_selected({}, o))}{' '}
+            ? kind === 'work'
+              ? m.work_names_fallback({}, o)
+              : m.people_names_fallback({}, o)
+            : kind === 'work'
+              ? m.work_names_selected({}, o)
+              : m.people_names_selected({}, o)}{' '}
           <span lang={names.selected.lang ?? locale} dir="auto">
             {names.selected.text}
           </span>
@@ -124,7 +134,14 @@ export function PeopleNamesView({
                   <>
                     <div className="space-y-3" key={query}>
                       {groups.slice(offset, offset + PEOPLE_NAME_GROUP_WINDOW).map((group, index) => (
-                        <NameGroup key={group.language} group={group} locale={locale} current={current} index={offset + index} restored={restored?.groups.find(g => g.index === offset + index)} />
+                        <NameGroup
+                          key={group.language}
+                          group={group}
+                          locale={locale}
+                          current={current}
+                          index={offset + index}
+                          restored={restored?.groups.find((g) => g.index === offset + index)}
+                        />
                       ))}
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
@@ -188,7 +205,9 @@ export function PeopleNamesView({
               </Button>
             )}
             <span data-names-terms>
-              <Link href={termsHref} className={control}>{m.catalogue_terms_title({}, o)}</Link>
+              <Link href={termsHref} className={control}>
+                {m.catalogue_terms_title({}, o)}
+              </Link>
             </span>
             <Link href={sourcesHref} className={control}>
               {m.work_names_sources({}, o)}
@@ -200,13 +219,32 @@ export function PeopleNamesView({
   );
 }
 
-function NameGroup({ group, locale, current, index, restored }: { group: WorkNameGroup; locale: string; current: () => boolean; index: number; restored?: NamesWindow['groups'][number] | undefined }) {
+function NameGroup({
+  group,
+  locale,
+  current,
+  index,
+  restored,
+}: {
+  group: WorkNameGroup;
+  locale: string;
+  current: () => boolean;
+  index: number;
+  restored?: NamesWindow['groups'][number] | undefined;
+}) {
   const o = { locale: locale as never };
   const summary = useRef<HTMLElement>(null);
   const [page, setPage] = useState(restored?.page ?? 0);
-  const offset = Math.min(page, Math.max(0, Math.ceil(group.names.length / PEOPLE_NAME_ROW_WINDOW) - 1)) * PEOPLE_NAME_ROW_WINDOW;
+  const offset =
+    Math.min(page, Math.max(0, Math.ceil(group.names.length / PEOPLE_NAME_ROW_WINDOW) - 1)) * PEOPLE_NAME_ROW_WINDOW;
   return (
-    <details className="min-w-0 rounded-md border border-border p-3" data-name-language={group.language} data-name-index={index} data-name-page={offset / PEOPLE_NAME_ROW_WINDOW} open={restored?.open}>
+    <details
+      className="min-w-0 rounded-md border border-border p-3"
+      data-name-language={group.language}
+      data-name-index={index}
+      data-name-page={offset / PEOPLE_NAME_ROW_WINDOW}
+      open={restored?.open}
+    >
       <summary ref={summary} className={control}>
         <span lang={group.language} dir="auto">
           {languageName(group.language, group.language) ?? group.language}

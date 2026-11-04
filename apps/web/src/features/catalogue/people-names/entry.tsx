@@ -11,21 +11,36 @@ import { NamesHandoff, namesReturnHref } from '../work-names/navigation';
 import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 
 export type PeopleNamesReading = {
-  public: SubjectRead; locale: string; link?: PageLink; release?: object; reader?: object;
+  public: SubjectRead;
+  locale: string;
+  link?: PageLink;
+  release?: object;
+  reader?: object;
 };
 export type { NamesAdviceLoader } from '../work-names/advice';
 
-export function PeopleNamesEntry({ reading, adviceLoader = loadNamesAdvice }: {
-  reading: PeopleNamesReading; adviceLoader?: NamesAdviceLoader;
+export function PeopleNamesEntry({
+  reading,
+  adviceLoader = loadNamesAdvice,
+}: {
+  reading: PeopleNamesReading;
+  adviceLoader?: NamesAdviceLoader;
 }) {
   const { subject } = reading.public;
   const incarnation = useRef({ public: reading.public, release: reading.release, reader: reading.reader });
   const identity = useRef(0);
-  if (incarnation.current.public !== reading.public || incarnation.current.release !== reading.release || incarnation.current.reader !== reading.reader) {
+  if (
+    incarnation.current.public !== reading.public ||
+    incarnation.current.release !== reading.release ||
+    incarnation.current.reader !== reading.reader
+  ) {
     incarnation.current = { public: reading.public, release: reading.release, reader: reading.reader };
     identity.current++;
   }
-  const lifetime = useNamesLifetime(reading.public, JSON.stringify([subject.id, subject.context, reading.locale, identity.current]));
+  const lifetime = useNamesLifetime(
+    reading.public,
+    JSON.stringify([subject.id, subject.context, reading.locale, identity.current]),
+  );
   const host = useRef<HTMLDivElement>(null);
   const focused = useRef<EventTarget | null>(null);
   useLayoutEffect(() => {
@@ -35,25 +50,69 @@ export function PeopleNamesEntry({ reading, adviceLoader = loadNamesAdvice }: {
   const names = useMemo(() => peopleNames(subject, reading.locale), [subject, reading.locale]);
   const address = { id: subject.id, label: names.state === 'ready' ? names.selected.text : '', locale: reading.locale };
   const href = subjectHref(address, reading.locale).href;
-  return <div ref={host} className="min-w-0" onFocusCapture={event => { focused.current = event.target; }}>
-    <NamesVisit key={lifetime.generation} {...{ names, reading, lifetime, adviceLoader, href }} termsHref={catalogueEntries.terms(address).href} />
-  </div>;
+  return (
+    <div
+      ref={host}
+      className="min-w-0"
+      onFocusCapture={(event) => {
+        focused.current = event.target;
+      }}
+    >
+      <NamesVisit
+        key={lifetime.generation}
+        {...{ names, reading, lifetime, adviceLoader, href }}
+        termsHref={catalogueEntries.terms(address).href}
+      />
+    </div>
+  );
 }
 
-function NamesVisit({ names, reading, lifetime, adviceLoader, href, termsHref }: {
-  names: ReturnType<typeof peopleNames>; reading: PeopleNamesReading; lifetime: ReturnType<typeof useNamesLifetime>;
-  adviceLoader: NamesAdviceLoader; href: string; termsHref: string;
+function NamesVisit({
+  names,
+  reading,
+  lifetime,
+  adviceLoader,
+  href,
+  termsHref,
+}: {
+  names: ReturnType<typeof peopleNames>;
+  reading: PeopleNamesReading;
+  lifetime: ReturnType<typeof useNamesLifetime>;
+  adviceLoader: NamesAdviceLoader;
+  href: string;
+  termsHref: string;
 }) {
   const advice = useNamesAdvice(lifetime.observation, lifetime.current, adviceLoader);
   const subject = reading.public.subject;
   const Link = reading.link ?? PlainLink;
   // The page link adapter applies the selected Realm; capture the final link address at activation.
   const returnHref = namesReturnHref(href, reading.locale);
-  const binding = lifetime.caller ? JSON.stringify([subject.id, subject.context, reading.locale,
-    Reflect.get(subject, 'release'), Reflect.get(subject, 'revision'), lifetime.caller]) : undefined;
-  return <NamesHandoff {...{ binding, returnHref }} locale={reading.locale} current={lifetime.current}>
-    {restored => <PeopleNamesView key={restored ? 'returned' : 'initial'} names={names} locale={reading.locale}
-      retired={lifetime.retired} current={lifetime.current} {...advice} restored={restored}
-      sourcesHref={`${href}/sources`} termsHref={withSubjectVisitReturn(termsHref, returnHref ?? '', reading.locale)} link={Link} />}
-  </NamesHandoff>;
+  const binding = lifetime.caller
+    ? JSON.stringify([
+        subject.id,
+        subject.context,
+        reading.locale,
+        Reflect.get(subject, 'release'),
+        Reflect.get(subject, 'revision'),
+        lifetime.caller,
+      ])
+    : undefined;
+  return (
+    <NamesHandoff {...{ binding, returnHref }} locale={reading.locale} current={lifetime.current}>
+      {(restored) => (
+        <PeopleNamesView
+          key={restored ? 'returned' : 'initial'}
+          names={names}
+          locale={reading.locale}
+          retired={lifetime.retired}
+          current={lifetime.current}
+          {...advice}
+          restored={restored}
+          sourcesHref={`${href}/sources`}
+          termsHref={withSubjectVisitReturn(termsHref, returnHref ?? '', reading.locale)}
+          link={Link}
+        />
+      )}
+    </NamesHandoff>
+  );
 }

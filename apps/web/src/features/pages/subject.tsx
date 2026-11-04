@@ -315,11 +315,24 @@ export async function loadSubjectPage(
     // An advice outage must never fail or conceal the admitted public page.
     const currentPage = page as SubjectPageData;
     const reading = subjectBody(currentPage);
-    const eligible = reading && currentPage.catalogue?.state === 'released' && supportsReleasedWorkNames(reading.subject.type, currentPage.catalogue.definitions);
+    const eligible =
+      reading &&
+      currentPage.catalogue?.state === 'released' &&
+      supportsReleasedWorkNames(reading.subject.type, currentPage.catalogue.definitions);
     const termsAuthority = eligible
-      ? await (await import('../catalogue/subject-terms-request')).readTermsPageAuthority(client, options.authorization ? 'signed-in' : 'signed-out', options.authorization)
+      ? await (
+          await import('../catalogue/subject-terms-request')
+        ).readTermsPageAuthority(client, options.authorization ? 'signed-in' : 'signed-out', options.authorization)
       : undefined;
-    return { kind: 'page', page: { ...page, subject: page.subject ?? null, requestedRealm: options.realm, ...(termsAuthority ? { termsAuthority } : {}) } };
+    return {
+      kind: 'page',
+      page: {
+        ...page,
+        subject: page.subject ?? null,
+        requestedRealm: options.realm,
+        ...(termsAuthority ? { termsAuthority } : {}),
+      },
+    };
   }
   throw problemError(result.error?.value, result.status, result.headers);
 }

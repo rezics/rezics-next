@@ -14,53 +14,105 @@ import { readSubjectTerms } from '../src/features/catalogue/subject-terms-reques
 import { work } from './work-title-variants.test';
 
 test('native-valid complete term sets can exceed the Web presentation budget', () => {
-  const s = work(); s.labels = { ja: '名' }; s.aliases = {};
-  for (let i = 0; i < 16; i++) s.aliases[`ja-x-${i}`] = Array.from({ length: i === 15 ? 31 : 32 }, (_, j) => `${i}-${j}${'旅'.repeat(240)}`);
+  const s = work();
+  s.labels = { ja: '名' };
+  s.aliases = {};
+  for (let i = 0; i < 16; i++)
+    s.aliases[`ja-x-${i}`] = Array.from({ length: i === 15 ? 31 : 32 }, (_, j) => `${i}-${j}${'旅'.repeat(240)}`);
   expect(checkSubjectStructure({ type: s.type, labels: s.labels, aliases: s.aliases }).violations).toEqual([]);
   const names = workNames(s, 'ja');
-  expect(names.state).toBe('unavailable'); expect(names.bytes).toBeGreaterThan(WORK_NAMES_BYTES);
+  expect(names.state).toBe('unavailable');
+  expect(names.bytes).toBeGreaterThan(WORK_NAMES_BYTES);
 });
 
 test('composition charges page/action/refresh/Terms response bytes at all three unrelated Subject and obsolete-history scales', async () => {
   const id = fixtures.subjects[0]!.id;
   let previous: unknown;
   for (const size of [64, 512, 4096]) {
-    const unrelated = Array.from({ length: size }, (_, i) => ({ ...fixtures.subjects[0]!,
-      id: `00000000-0000-4000-8000-${i.toString().padStart(12, '0')}`, type: 'schema:Thing', labels: { en: `Unrelated ${i}` }, statements: {} }));
+    const unrelated = Array.from({ length: size }, (_, i) => ({
+      ...fixtures.subjects[0]!,
+      id: `00000000-0000-4000-8000-${i.toString().padStart(12, '0')}`,
+      type: 'schema:Thing',
+      labels: { en: `Unrelated ${i}` },
+      statements: {},
+    }));
     const local = createFakeKernelFetch({ ...fixtures, subjects: [...fixtures.subjects, ...unrelated] } as never);
-    const requests: string[] = []; const responses: number[] = [];
+    const requests: string[] = [];
+    const responses: number[] = [];
     let actionCount = 0;
-    const client = createKernelClient('https://kernel.invalid', { fetch: (async (input, init) => {
-      const request = new Request(input, init); const path = new URL(request.url).pathname; requests.push(path);
-      let response = path.includes('viewer-actions')
-        ? new Response(JSON.stringify(++actionCount === 1 ? { code: 'unavailable' } : { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT, viewerActions: [] }] }), { status: actionCount === 1 ? 503 : 200, headers: { 'content-type': 'application/json' } })
-        : await local(request);
-      if (path === '/v1/pages:read') {
-        const page = await response.json();
-        response = new Response(JSON.stringify({ ...page, catalogue: { state: 'released', type: 'schema:Book', digest: definitions.digest, definitions: definitions.release } }), { headers: { 'content-type': 'application/json' } });
-      }
-      responses.push(new TextEncoder().encode(await response.clone().text()).length);
-      return response;
-    }) as typeof fetch });
+    const client = createKernelClient('https://kernel.invalid', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        const path = new URL(request.url).pathname;
+        requests.push(path);
+        let response =
+          path === '/v1/viewerActions'
+            ? new Response(
+                JSON.stringify(
+                  ++actionCount === 1
+                    ? { code: 'unavailable' }
+                    : { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT, viewerActions: [] }] },
+                ),
+                { status: actionCount === 1 ? 503 : 200, headers: { 'content-type': 'application/json' } },
+              )
+            : await local(request);
+        if (path === '/v1/pages:read') {
+          const page = await response.json();
+          response = new Response(
+            JSON.stringify({
+              ...page,
+              catalogue: {
+                state: 'released',
+                type: 'schema:Book',
+                digest: definitions.digest,
+                definitions: definitions.release,
+              },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          );
+        }
+        responses.push(new TextEncoder().encode(await response.clone().text()).length);
+        return response;
+      }) as typeof fetch,
+    });
     const loaded = await loadSubjectPage(client, id, undefined, 'en', { authorization: 'Bearer fixture' });
-    expect(loaded.kind).toBe('page'); if (loaded.kind !== 'page') throw Error('Expected page');
+    expect(loaded.kind).toBe('page');
+    if (loaded.kind !== 'page') throw Error('Expected page');
     expect(loaded.page.termsAuthority?.actions.state).toBe('unavailable');
     const admitted = subjectBody(loaded.page)!;
-    const names = workNames(admitted.subject, 'en'); expect(names.state).toBe('ready');
+    const names = workNames(admitted.subject, 'en');
+    expect(names.state).toBe('ready');
     expect((await readTermsPageAuthority(client, 'signed-in', 'Bearer fixture')).actions.state).toBe('ready'); // the one explicit failed-section refresh
     await readSubjectTerms(client, id, 'en', 'Bearer fixture'); // original Terms candidate, never the names projection
     await readTermsPageAuthority(client, 'signed-in', 'Bearer fixture');
     // Definitions are a separate Terms-owned projection. Charge its bytes as well.
-    await client.definitions({ digest: definitions.digest }).get();
-    const saved = { binding: JSON.stringify([id, 'global', 'en', admitted.subject.release, admitted.subject.revision, 'cache-incarnation']),
-      href: `/en/subjects/${id}/title#supplied-names`, window: { query: '心', page: 0, expanded: true, groups: [{ index: 0, page: 0, open: true }] } };
+    await client.definitions.active.get();
+    await client.definitions.releases({ digest: definitions.digest }).get();
+    const saved = {
+      binding: JSON.stringify([
+        id,
+        'global',
+        'en',
+        admitted.subject.release,
+        admitted.subject.revision,
+        'cache-incarnation',
+      ]),
+      href: `/en/subjects/${id}/title#supplied-names`,
+      window: { query: '心', page: 0, expanded: true, groups: [{ index: 0, page: 0, open: true }] },
+    };
     const obsoleteHistory = Array.from({ length: size }, () => ({ namesReturn: { binding: 'obsolete' } }));
     obsoleteHistory.push({ namesReturn: saved } as never);
     expect(namesReturn(obsoleteHistory.at(-1)!.namesReturn, 'en')).toEqual(saved);
     const returnBytes = new TextEncoder().encode(JSON.stringify(saved)).length;
     expect(returnBytes).toBeLessThanOrEqual(NAMES_RETURN_BYTES);
-    expect(requests).toHaveLength(6);
-    const accounting = { requests, responses, termBytes: names.bytes, returnBytes, decodeBytes: responses.reduce((a, b) => a + b, 0) };
+    expect(requests).toHaveLength(7);
+    const accounting = {
+      requests,
+      responses,
+      termBytes: names.bytes,
+      returnBytes,
+      decodeBytes: responses.reduce((a, b) => a + b, 0),
+    };
     if (previous) expect(accounting).toEqual(previous);
     previous = accounting;
   }

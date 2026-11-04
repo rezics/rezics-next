@@ -2237,7 +2237,8 @@ whole-page byte bound; the complete response remains owned by the existing page 
 One work visit uses one page projection request plus one existing Terms authority request when signed in (zero for
 signed-out); the latter is included in the Web page aggregate. A people visit uses its existing one authority read.
 At most one explicit failed-advice refresh adds one action request and its A bytes. Opening Terms adds one original
-Subject projection, one current authority read and one definitions read under existing Terms recovery; charge their
+Subject projection, one current authority read and a definitions read (at most two native requests on a cold cache: active pointer and
+released artifact) under existing Terms recovery; charge their
 actual complete response bytes, not T alone. No grouping, opening, paging, filtering or copying adds requests.
 The exact Terms commands and drafts remain private editor-owned state and are not charged as names-return payloads.
 
