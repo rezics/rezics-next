@@ -166,7 +166,7 @@ test('direct and inverse traversal return opposite current populations with the 
   const direct = {
     and: [types, { statement: { property, in: [actor.id], qualifiers } }],
   };
-  const inverse = { and: [types, selected(work.id)] };
+  const inverse = { and: [types, selected(id(4))] };
 
   const directResults = await lookup(f, direct, [hit, workHit]);
   const inverseResults = await lookup(f, inverse, [hit, workHit]);

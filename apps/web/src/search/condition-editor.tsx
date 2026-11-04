@@ -46,6 +46,7 @@ import {
   searchConditionEntities,
   type ConditionEntityContext,
   type ConditionEntityFailure,
+  type ResolvedConditionEntity,
 } from './condition-entity';
 import {
   conditionTreeCanSubmit,
@@ -493,6 +494,17 @@ function NodeEditor({
   const property = 'statement' in value ? value.statement.property : undefined;
   const definition = property ? context.metadata.properties[property] : undefined;
   const statementValue = 'statement' in value ? value.statement : undefined;
+  const [resolvedOperands, setResolvedOperands] = useState<
+    { request: string; labels: Record<string, ResolvedConditionEntity> } | undefined
+  >();
+  const operandRequest =
+    property && statementValue && 'in' in statementValue && context.entityLookup
+      ? conditionEntityRequestIdentity(`${draft.key}:statement`, property, definition?.targets ?? [], context.entityLookup)
+      : undefined;
+  const reportResolvedOperands = useCallback(
+    (request: string, labels: Record<string, ResolvedConditionEntity>) => setResolvedOperands({ request, labels }),
+    [],
+  );
   const relationDirectionVisible = Boolean(
     statementValue &&
       (('inverse' in statementValue && statementValue.inverse === true) ||
@@ -500,9 +512,14 @@ function NodeEditor({
   );
   const selectedOperandLabels =
     statementValue && 'in' in statementValue
-      ? statementValue.in
-          .filter(Boolean)
-          .map((id) => name(context.values[property ?? '']?.find((choice) => choice.value === id)?.labels, id))
+      ? statementValue.in.filter(Boolean).map((id) => {
+          const resolved =
+            resolvedOperands?.request === operandRequest ? resolvedOperands.labels[id.toLowerCase()]?.label : undefined;
+          if (resolved) return resolved;
+          if (!context.entityLookup)
+            return name(context.values[property ?? '']?.find((choice) => choice.value === id)?.labels, id);
+          return m.condition_entity_unresolved({}, options);
+        })
       : [];
   const relationOperandLabel = selectedOperandLabels.length
     ? new Intl.ListFormat(messageOptions(context.locale).locale, { style: 'long', type: 'conjunction' }).format(
@@ -870,6 +887,7 @@ function NodeEditor({
                       }
                     : undefined
                 }
+                onResolvedLabels={reportResolvedOperands}
                 onChange={(selected) => replaceStatement({ in: selected })}
               />
             )
@@ -1030,6 +1048,7 @@ function ConditionEntityValues({
   occurrence,
   nodeKey,
   lookup,
+  onResolvedLabels,
   context,
 }: {
   values: readonly string[];
@@ -1040,6 +1059,7 @@ function ConditionEntityValues({
   occurrence: string;
   nodeKey: number;
   lookup: ConditionEntityContext;
+  onResolvedLabels?: ((request: string, labels: Record<string, ResolvedConditionEntity>) => void) | undefined;
   context: EditorContext;
 }) {
   const { options } = context;
@@ -1070,6 +1090,8 @@ function ConditionEntityValues({
     setResolveFailure(undefined);
     setSuggestionFailure(undefined);
   }, [identifiers.join('|')]);
+
+  useEffect(() => onResolvedLabels?.(requestIdentity, resolved), [onResolvedLabels, requestIdentity, resolved]);
 
   useEffect(() => {
     if (context.disabled) {
@@ -1265,6 +1287,7 @@ function ValueFields({
   context,
   closed = false,
   entity,
+  onResolvedLabels,
 }: {
   values: readonly string[];
   choices?: Choice[] | undefined;
@@ -1273,6 +1296,7 @@ function ValueFields({
   context: EditorContext;
   closed?: boolean;
   entity?: { property: string; targets: readonly string[]; occurrence: string; nodeKey: number } | undefined;
+  onResolvedLabels?: ((request: string, labels: Record<string, ResolvedConditionEntity>) => void) | undefined;
 }) {
   if (entity && context.entityLookup)
     return (
@@ -1286,6 +1310,7 @@ function ValueFields({
         occurrence={entity.occurrence}
         nodeKey={entity.nodeKey}
         lookup={context.entityLookup}
+        onResolvedLabels={onResolvedLabels}
         context={context}
       />
     );
