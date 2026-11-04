@@ -612,7 +612,13 @@ function LinkSection(
       {listed.items.length === 0 && (
         <p role="status">{m.subject_relation_empty_page({}, { locale: value.locale as never })}</p>
       )}
-      <CoverList items={listed.items} value={value} label={text.text || title} preview={props.paged !== true} />
+      <CoverList
+        items={listed.items}
+        value={value}
+        label={text.text || title}
+        preview={props.paged !== true}
+        openExactEditions={view === 'editions' && props.property === 'schema:exampleOfWork'}
+      />
       {props.paged === true && section.ok && typeof section.body.next === 'string' && (
         <StreamLink value={value} view={view} node={id} cursor={section.body.next} title={text.text || title} />
       )}

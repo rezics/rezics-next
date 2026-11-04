@@ -41,6 +41,8 @@ type Read = { status: number; body: unknown };
 /** The view a `SubjectList` previews, by the property it lists. A list of any other property belongs to no view. */
 const LIST_VIEWS: Readonly<Record<string, View>> = {
   'schema:exampleOfWork': 'editions',
+  'schema:workExample': 'editions',
+  'rezics:representativeEdition': 'editions',
   'schema:isPartOf': 'contents',
   'wdt:P179': 'contents',
   'schema:author': 'works',

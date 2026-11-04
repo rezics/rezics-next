@@ -25,6 +25,7 @@ import { recordingType } from '../catalogue/recording-reader/model';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
+import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { OrganizationOverview } from '../catalogue/organization-reader/overview';
@@ -713,6 +714,14 @@ export function SubjectPage({
           {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
         >
           <div className="flex w-full flex-col gap-8">
+            {overview && !page.account && read?.subject.type === 'schema:Book' ? (
+              <LiteraryReaderEntry
+                work={read.subject}
+                source={page}
+                locale={locale}
+                context={page.context?.id ?? null}
+              />
+            ) : null}
             {!overview && heading && (
               <header className="min-w-0 space-y-1" data-slot="view-heading">
                 <p className="text-sm break-words">

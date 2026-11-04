@@ -15,6 +15,19 @@ import { relationTargetHref } from './edition-work';
 import type { Item, RowValue } from './overview';
 import { QualifiedCredit } from './qualified-credit';
 import { SpoilerGate } from './values';
+import type { LinkProps } from './shared';
+
+export function ExactEditionLink({ href, lang, className, children }: LinkProps) {
+  return (
+    <a href={href} lang={lang} className={className} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+}
+
+export function isExactEdition(item: Item): boolean {
+  return item.type === 'bf:Instance' || item.summary?.types?.includes('bf:Instance') === true;
+}
 
 /** DTO object allocation and member order do not change an accepted relation's content. */
 function contentIdentity(value: unknown): string {
@@ -32,12 +45,14 @@ function ItemCard({
   listPresentationFor,
   facts,
   credit = false,
+  openExactEdition = false,
 }: {
   item: Item;
   value: RowValue;
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
   facts?: Readonly<Record<string, readonly Fact[]>>;
   credit?: boolean;
+  openExactEdition?: boolean;
 }) {
   const title = item.label.text || value.unlabelled;
   const subject = coverSubject(item.id, title, item.summary, item.type);
@@ -66,6 +81,7 @@ function ItemCard({
     labels: value.labels.cover,
   };
   const href = relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
+  const exactEdition = openExactEdition && isExactEdition(item);
   const card = credit ? (
     <QualifiedCredit
       title={title}
@@ -75,10 +91,11 @@ function ItemCard({
       notes={notes}
       qualified={item.qualified ?? []}
       value={value}
+      openInNewTab={exactEdition}
     />
   ) : (
     <CoverCard
-      link={value.link}
+      link={exactEdition ? ExactEditionLink : value.link}
       href={href}
       title={title}
       {...(item.label.lang ? { titleLang: item.label.lang } : {})}
@@ -110,6 +127,7 @@ export function CoverList({
   preview = false,
   listPresentationFor,
   memberFacts,
+  openExactEditions = false,
 }: {
   items: Item[];
   value: RowValue & { subject?: string | null };
@@ -119,6 +137,8 @@ export function CoverList({
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
   /** Already supplied current-page facts by member ID. No fact producer or per-member read is implied. */
   memberFacts?: Readonly<Record<string, Readonly<Record<string, readonly Fact[]>>>>;
+  /** Open only exact released bf:Instance destinations in a separate tab. */
+  openExactEditions?: boolean;
 }) {
   const context = value.context;
   const disclosure = [
@@ -149,6 +169,7 @@ export function CoverList({
         item={item}
         value={value}
         credit={credits}
+        openExactEdition={openExactEditions}
         {...(listPresentationFor ? { listPresentationFor } : {})}
         {...(facts ? { facts } : {})}
       />

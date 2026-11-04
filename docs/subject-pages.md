@@ -74,6 +74,27 @@ opener or reader heading; replaced authority or source retires old results, curs
 page), no target hydration or writes. The [reader Cost](../apps/web/src/features/catalogue/game-reader/README.md#cost)
 bounds bytes, cursors and retained windows. Shared Subject wiring adds no View enum or route ownership.
 
+## Read a literary work
+
+The ordinary `schema:Book` Subject presents the work identity, its admitted multilingual names and work-level facts.
+The existing composed editions list keeps each related `bf:Instance` exact; each edition destination opens in a new
+tab and its current release-fidelity reader owns ISBN, publisher, publication date, language and page count. The
+work's ordinary Details view remains the generic facts path when the release does not provide a useful domain view.
+The existing Literary profile action remains the correction path. Parts and personal copies keep their own identities
+and owners.
+
+Decision: Open each exact edition in a new tab so the bounded work view remains the return target; retire retained data when authority, locale, Subject identity or the composed read changes.
+
+### Literary work reader Cost
+
+- **Page:** zero reads beyond the Subject page's existing composition plan. The reader consumes the bounded
+  `SubjectList` preview and does not hydrate edition targets. The existing Editions view retains its native bounded
+  continuation.
+- **Display:** up to 32 work titles, 48 aliases and 16 descriptions from the current Subject read. No work-level
+  ISBN or page count is created from edition data.
+- **Navigation:** opening one exact edition is a deliberate destination read owned by that edition's existing
+  release-fidelity page. Returning to the original tab preserves the current work page and its bounded window.
+
 ## Read a music edition
 
 The ordinary Subject overview offers the [music release reader](../apps/web/src/features/catalogue/music-release-reader/README.md)

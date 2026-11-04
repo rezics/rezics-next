@@ -6,6 +6,15 @@ import { relationTargetHref } from './edition-work';
 import type { RowValue } from './overview';
 import type { QualifiedNote } from './qualified-relations';
 import { LanguageTag } from './values';
+import type { LinkProps } from './shared';
+
+function ExactEditionLink({ href, lang, className, children }: LinkProps) {
+  return (
+    <a href={href} lang={lang} className={className} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+}
 
 /** A wrapping current credit beside its subject cover; shadcn has no qualified-credit presentation. */
 export function QualifiedCredit({
@@ -16,6 +25,7 @@ export function QualifiedCredit({
   notes,
   qualified,
   value,
+  openInNewTab = false,
 }: {
   title: string;
   titleLang?: string | undefined;
@@ -24,6 +34,7 @@ export function QualifiedCredit({
   notes: readonly ReactNode[];
   qualified: readonly QualifiedNote[];
   value: RowValue;
+  openInNewTab?: boolean;
 }) {
   return (
     <div className="min-w-0 [&_h3_a]:inline-block [&_h3_a]:min-h-11 [&_h3_a]:max-w-full [&_h3_a]:min-w-11 [&_h3_a]:whitespace-pre-wrap">
@@ -31,7 +42,7 @@ export function QualifiedCredit({
         title={title}
         {...(titleLang ? { titleLang } : {})}
         href={href}
-        link={value.link}
+        link={openInNewTab ? ExactEditionLink : value.link}
         cover={{ ...cover, ...(value.ratio ? { ratio: value.ratio } : {}) }}
         essentialCredit={
           <>
