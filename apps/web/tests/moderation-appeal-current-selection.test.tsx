@@ -9,7 +9,6 @@ mock.module('../src/threads/authoring-departure', () => ({
   AuthoringDepartureBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
   useAuthoringDeparture: () => ({ release() {} }),
 }));
-mock.module('../src/session/query', () => ({ useSession: () => session }));
 const sent: ResolutionCommand[] = [];
 mock.module('../src/moderation/actions', () => ({
   actionOnReport: async () => ({ ok: true }),
@@ -39,6 +38,8 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const sessionModule = await import('../src/session/query');
+mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
 const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
 const { prepareWorkbenchRead } = await import('../src/moderation/workbench-queue/read');
 const { workbenchSearch, workbenchReadKey } = await import('../src/moderation/workbench-queue/scope');
