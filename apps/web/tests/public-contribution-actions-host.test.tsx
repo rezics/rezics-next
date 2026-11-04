@@ -835,10 +835,13 @@ test('PostActions retains the original report body, sender, key and credential f
     expect(more).toBeDefined();
     await clickButton(node, m.report_more());
     await clickButton(node, m.report_action());
-    const other = node.querySelector<HTMLButtonElement>('[role="radio"][value="other"]');
+    const other = [...document.querySelectorAll<HTMLElement>('[role="radio"]')].find((candidate) => {
+      const label = candidate.getAttribute('aria-labelledby');
+      return label ? document.getElementById(label)?.textContent?.trim() === m.report_other() : false;
+    });
     expect(other).toBeDefined();
     await act(async () => other!.click());
-    const details = node.querySelector<HTMLTextAreaElement>('textarea');
+    const details = document.querySelector<HTMLTextAreaElement>('textarea');
     expect(details).toBeDefined();
     await act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value')?.set?.call(
