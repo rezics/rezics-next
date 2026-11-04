@@ -55,7 +55,8 @@ export function WorkRelation({
   const evidence = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     if (!restoreFocus?.current()) return;
-    const target = restoreFocus.control === 'evidence' ? evidence.current : browse.current?.querySelector<HTMLElement>('a');
+    const target =
+      restoreFocus.control === 'evidence' ? evidence.current : browse.current?.querySelector<HTMLElement>('a');
     if (!target) return;
     target.focus({ preventScroll: true });
     restoreFocus.complete();
@@ -65,8 +66,12 @@ export function WorkRelation({
   const holderHref = subjectHref({ id: relation.holder, label: holderLabel }, value.locale).href;
   const BaseLink = value.link;
   const evidenceReturn = returnToFor?.('evidence') ?? returnHref;
-  const Link: PageLink = (props) => <BaseLink {...props} href={evidenceReturn
-    ? withSubjectVisitReturn(props.href, evidenceReturn, value.locale) : props.href} />;
+  const Link: PageLink = (props) => (
+    <BaseLink
+      {...props}
+      href={evidenceReturn ? withSubjectVisitReturn(props.href, evidenceReturn, value.locale) : props.href}
+    />
+  );
   const metadata: unknown = Reflect.get(relation.statement, 'rezics');
   const related = {
     ...relation.related,
@@ -104,20 +109,20 @@ export function WorkRelation({
       </p>
       <p className="text-sm text-muted-foreground">{kindLabel(relation.kind, value.locale)}</p>
       <div ref={browse} data-work-action="browse">
-      <CoverList
-        items={[
-          {
-            ...item,
-            label: pageText(related[relation.id]?.labels, value.locale).text
-              ? pageText(related[relation.id]?.labels, value.locale)
-              : item.label,
-            qualified: [],
-            gated: false,
-          },
-        ]}
-        value={value}
-        label={label}
-      />
+        <CoverList
+          items={[
+            {
+              ...item,
+              label: pageText(related[relation.id]?.labels, value.locale).text
+                ? pageText(related[relation.id]?.labels, value.locale)
+                : item.label,
+              qualified: [],
+              gated: false,
+            },
+          ]}
+          value={value}
+          label={label}
+        />
       </div>
       {relation.statement.qualifiers.length > 0 && (
         <section className="space-y-2" aria-label={m.value_qualifiers({}, o)}>
@@ -136,7 +141,9 @@ export function WorkRelation({
           explanation.current.querySelector('summary')?.focus();
         }}
       >
-        <summary ref={evidence} data-work-action="evidence" className={`${action} cursor-pointer`}>{m.value_why({}, o)}</summary>
+        <summary ref={evidence} data-work-action="evidence" className={`${action} cursor-pointer`}>
+          {m.value_why({}, o)}
+        </summary>
         <h4 id={heading} className="font-semibold">
           {label}
         </h4>

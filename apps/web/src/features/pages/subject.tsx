@@ -858,7 +858,7 @@ export function SubjectPage({
                 descriptorState={page.catalogue?.state}
                 digest={page.catalogue?.digest}
                 directions={page.catalogue?.directions}
-                windows={workWindows}
+                windows={profileRelationWindows(page)}
                 reader={reader ?? defaultReader}
                 view={view}
                 realm={realm}
@@ -933,7 +933,7 @@ export function SubjectPage({
                 continuation={page.continuation}
                 viewer={page.requestedReader ?? null}
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
-                windows={workWindows}
+                windows={profileRelationWindows(page)}
                 reader={reader ?? defaultReader}
                 link={ContextLink}
               />

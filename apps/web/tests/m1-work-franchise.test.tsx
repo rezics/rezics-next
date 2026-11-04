@@ -431,38 +431,71 @@ test('evidence inspection is independent of browsing and retires on preference a
   }
 });
 
-
 test('each VN, anime and book relation stream keeps its selected region through Connections and inspection', async () => {
-  const { subjectVisitReturn, connectionReturnWindow, workFranchiseReturnHref } = await import('../src/features/pages/subject-visit-navigation');
+  const { subjectVisitReturn, connectionReturnWindow, workFranchiseReturnHref } =
+    await import('../src/features/pages/subject-visit-navigation');
   const { workFranchiseReturn } = await import('../src/features/catalogue/work-franchise-reading/navigation');
   for (const type of ['wd:Q689445', 'schema:TVSeries', 'schema:Book']) {
     const source = read(type, publicBook.name, id(950), 'schema:Book', publicBook.name, id(951));
     const page = pageFor(source);
-    page.document = { ...page.document, content: [
-      ...(page.document as CompositionDocument).content,
-      { type: 'RelationGroups', props: { id: 'inverse', property, limit: 8 } },
-      { type: 'OutgoingRelations', props: { id: 'empty', property: 'schema:hasPart', limit: 8 } },
-      { type: 'OutgoingRelations', props: { id: 'unavailable', property: 'schema:author', limit: 8 } },
-    ] } as CompositionDocument;
+    page.document = {
+      ...page.document,
+      content: [
+        ...(page.document as CompositionDocument).content,
+        { type: 'RelationGroups', props: { id: 'inverse', property, limit: 8 } },
+        { type: 'OutgoingRelations', props: { id: 'empty', property: 'schema:hasPart', limit: 8 } },
+        { type: 'OutgoingRelations', props: { id: 'unavailable', property: 'schema:author', limit: 8 } },
+      ],
+    } as CompositionDocument;
     const plan = planReads(platformRegistry, page.document as CompositionDocument, { subject: source.subject.id });
     const row = source.subject.statements[property]![0]!;
-    page.reads[plan.nodes.franchise!] = { status: 200, body: { relations: [{
-      target: id(951), statement: row,
-      summary: { id: id(951), type: 'schema:Book', label: { value: publicBook.name, language: 'ja' } }, related: {},
-    }], next: 'native-next' } };
-    page.reads[plan.nodes.inverse!] = { status: 200, body: { links: [{
-      subject: id(952), property, statement: { ...row, id: id(953), value: { type: 'value', content: id(950) } },
-      summary: { id: id(952), type: 'schema:Book', label: { value: publicBook.name, language: 'ja' } }, related: {},
-    }], next: null } };
+    page.reads[plan.nodes.franchise!] = {
+      status: 200,
+      body: {
+        relations: [
+          {
+            target: id(951),
+            statement: row,
+            summary: { id: id(951), type: 'schema:Book', label: { value: publicBook.name, language: 'ja' } },
+            related: {},
+          },
+        ],
+        next: 'native-next',
+      },
+    };
+    page.reads[plan.nodes.inverse!] = {
+      status: 200,
+      body: {
+        links: [
+          {
+            subject: id(952),
+            property,
+            statement: { ...row, id: id(953), value: { type: 'value', content: id(950) } },
+            summary: { id: id(952), type: 'schema:Book', label: { value: publicBook.name, language: 'ja' } },
+            related: {},
+          },
+        ],
+        next: null,
+      },
+    };
     page.reads[plan.nodes.empty!] = { status: 200, body: { relations: [], next: null } };
     page.reads[plan.nodes.unavailable!] = { status: 503, body: {} };
     const origin = `/ja/subjects/${id(950)}/book?realm=${id(960)}`;
     const html = await render(source, page, origin);
-    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.invalid'));
-    for (const [stream, node] of [['out:wdt:P144', 'franchise'], ['in:wdt:P144', 'inverse'], ['out:schema:hasPart', 'empty'], ['out:schema:author', 'unavailable']]) {
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map(
+      (match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.invalid'),
+    );
+    for (const [stream, node] of [
+      ['out:wdt:P144', 'franchise'],
+      ['in:wdt:P144', 'inverse'],
+      ['out:schema:hasPart', 'empty'],
+      ['out:schema:author', 'unavailable'],
+    ]) {
       const destination = hrefs.find((url) => {
         const via = url.searchParams.get('via');
-        return connectionReturnWindow(url.hash)?.stream === stream && via && new URL(via, url).hash.includes(`node=${node}`);
+        return (
+          connectionReturnWindow(url.hash)?.stream === stream && via && new URL(via, url).hash.includes(`node=${node}`)
+        );
       });
       expect(destination).toBeDefined();
       const via = destination!.searchParams.get('via')!;
@@ -472,9 +505,18 @@ test('each VN, anime and book relation stream keeps its selected region through 
     const inspection = hrefs.find((url) => url.pathname.endsWith('/values') || url.pathname.includes('/values/'));
     expect(inspection).toBeDefined();
     const via = inspection!.searchParams.get('via')!;
-    expect(workFranchiseReturn(new URL(via, inspection).hash)).toMatchObject({ focus: 'evidence', statement: id(101), holder: id(950), node: 'franchise' });
+    expect(workFranchiseReturn(new URL(via, inspection).hash)).toMatchObject({
+      focus: 'evidence',
+      statement: id(101),
+      holder: id(950),
+      node: 'franchise',
+    });
     const finite = `${origin.replace('?realm=', '/relations?realm=')}&node=franchise&cursor=opaque%2Bcursor&property=wdt%3AP144`;
-    const restored = workFranchiseReturnHref(finite, origin, 'ja', { stream: 'out:wdt:P144', node: 'franchise', spoiler: 0 });
+    const restored = workFranchiseReturnHref(finite, origin, 'ja', {
+      stream: 'out:wdt:P144',
+      node: 'franchise',
+      spoiler: 0,
+    });
     const restoredUrl = new URL(restored, 'https://rezics.invalid');
     expect(restoredUrl.pathname).toEndWith('/relations');
     expect(restoredUrl.searchParams.get('cursor')).toBe('opaque+cursor');

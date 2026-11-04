@@ -45,7 +45,13 @@ export function WorkFranchiseOverview({
   const value = useContext(OverviewContext);
   const journey = useWorkRegionReturn({
     sources: [subject, related, definitions, windows],
-    descriptor: JSON.stringify([value?.context, value?.reader, value?.cacheReader, value?.releaseDigest, value?.viewer]),
+    descriptor: JSON.stringify([
+      value?.context,
+      value?.reader,
+      value?.cacheReader,
+      value?.releaseDigest,
+      value?.viewer,
+    ]),
     currentHref,
     fallbackHref: returnTo,
     locale,
@@ -53,13 +59,18 @@ export function WorkFranchiseOverview({
     release: subject.release,
     revision: subject.revision,
   });
-  if (!journey.available) return (
-    <section id="work-franchise" data-slot="work-franchise" aria-labelledby={heading} className="space-y-3">
-      <h2 id={heading} ref={journey.heading} tabIndex={-1}>{m.work_franchise_title({}, options)}</h2>
-      <p role="status">{m.subject_relation_changed({}, options)}</p>
-      <a href={journey.restartHref} className={workLink}>{m.subject_relation_restart({}, options)}</a>
-    </section>
-  );
+  if (!journey.available)
+    return (
+      <section id="work-franchise" data-slot="work-franchise" aria-labelledby={heading} className="space-y-3">
+        <h2 id={heading} ref={journey.heading} tabIndex={-1}>
+          {m.work_franchise_title({}, options)}
+        </h2>
+        <p role="status">{m.subject_relation_changed({}, options)}</p>
+        <a href={journey.restartHref} className={workLink}>
+          {m.subject_relation_restart({}, options)}
+        </a>
+      </section>
+    );
   if (windows !== undefined) {
     const groups = workFranchiseGroups(subject.id, windows, definitions);
     const Link = link;
@@ -77,7 +88,9 @@ export function WorkFranchiseOverview({
         {journey.missing && (
           <div role="status" className="space-y-2">
             <p>{m.character_work_return_missing({}, options)}</p>
-            <a href={journey.restartHref} className={workLink}>{m.subject_relation_restart({}, options)}</a>
+            <a href={journey.restartHref} className={workLink}>
+              {m.subject_relation_restart({}, options)}
+            </a>
           </div>
         )}
         {!groups.length && <p role="status">{m.work_relations_unsupported({}, options)}</p>}
@@ -143,9 +156,14 @@ export function WorkFranchiseOverview({
                     (item) => item.statement === relation.statement.id && item.id === relation.id,
                   );
                   if (!item) return null;
-                  const returnToFor = (focus: 'browse' | 'evidence') => journey.returnToFor({
-                    stream, node: window.node, statement: relation.statement.id, holder: relation.holder, focus,
-                  });
+                  const returnToFor = (focus: 'browse' | 'evidence') =>
+                    journey.returnToFor({
+                      stream,
+                      node: window.node,
+                      statement: relation.statement.id,
+                      holder: relation.holder,
+                      focus,
+                    });
                   const rowReturn = returnToFor('browse');
                   const WorkLink: PageLink = (props) => (
                     <Link {...props} href={withSubjectVisitReturn(props.href, rowReturn, locale)} />

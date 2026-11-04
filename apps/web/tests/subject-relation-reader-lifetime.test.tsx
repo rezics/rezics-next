@@ -1048,36 +1048,116 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
 });
 
 test('work region return focuses its actual inspection control once and retires replacement and concealed readings', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const browser = new Window({ url: 'https://rezics.test/en/subjects/00000000-0000-4000-8000-000000000970/book' });
   const restoreGlobals = installWindow(browser);
   const { createElement: h } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { OverviewContext } = await import('../src/features/pages/overview');
   const { WorkFranchiseOverview } = await import('../src/features/pages/showcase-work/overview');
-  const { workFranchiseReturnHref, subjectVisitReturn, connectionReturnHref, connectionReturnWindow } = await import('../src/features/pages/subject-visit-navigation');
+  const { workFranchiseReturnHref, subjectVisitReturn, connectionReturnHref, connectionReturnWindow } =
+    await import('../src/features/pages/subject-visit-navigation');
   const { defaultReader } = await import('../src/subject/reader');
   const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-  const subject = { id: id(970), type: 'schema:Book', release: 'sha256:reading', revision: 1, context: id(974), labels: { en: 'Book' }, statements: {}, aliases: {}, descriptions: {}, resolution: {} } as unknown as import('../src/subject/types').Subject;
-  const statement = { id: id(971), rank: 'normal', property: { id: 'wdt:P144', data_type: 'wikibase-item' }, value: { type: 'value', content: id(972) }, qualifiers: [], references: [] };
-  const windows: import('../src/features/pages/views').ProfileRelationWindow[] = [{ node: 'franchise', property: 'wdt:P144', direction: 'forward', status: 200, valid: true, complete: false, next: 'old-next', rows: [{ target: id(972), statement, summary: { id: id(972), type: 'schema:Book', label: { value: 'Related book', language: 'en' } }, related: {} }] }];
+  const subject = {
+    id: id(970),
+    type: 'schema:Book',
+    release: 'sha256:reading',
+    revision: 1,
+    context: id(974),
+    labels: { en: 'Book' },
+    statements: {},
+    aliases: {},
+    descriptions: {},
+    resolution: {},
+  } as unknown as import('../src/subject/types').Subject;
+  const statement = {
+    id: id(971),
+    rank: 'normal',
+    property: { id: 'wdt:P144', data_type: 'wikibase-item' },
+    value: { type: 'value', content: id(972) },
+    qualifiers: [],
+    references: [],
+  };
+  const windows: import('../src/features/pages/views').ProfileRelationWindow[] = [
+    {
+      node: 'franchise',
+      property: 'wdt:P144',
+      direction: 'forward',
+      status: 200,
+      valid: true,
+      complete: false,
+      next: 'old-next',
+      rows: [
+        {
+          target: id(972),
+          statement,
+          summary: { id: id(972), type: 'schema:Book', label: { value: 'Related book', language: 'en' } },
+          related: {},
+        },
+      ],
+    },
+  ];
   const related = { [id(972)]: { type: 'schema:Book', labels: { en: 'Related book' } } };
-  const definitions = { 'wdt:P144': { label: 'Based on', forwardLabel: 'Based on', symmetric: false, group: 'derivation' as const } };
-  const value = { locale: 'en', subject: subject.id, subjectLabel: 'Book', reader: defaultReader, labels: { spoilerShow: 'Show', cover: { withheld: '', reveal: '', credit: '', via: '' } }, link: ({ children, ...props }: never) => h('a', props, children), sections: new Map(), relations: definitions, relationNodes: [], unlabelled: 'Untitled' } as unknown as OverviewValue;
+  const definitions = {
+    'wdt:P144': { label: 'Based on', forwardLabel: 'Based on', symmetric: false, group: 'derivation' as const },
+  };
+  const value = {
+    locale: 'en',
+    subject: subject.id,
+    subjectLabel: 'Book',
+    reader: defaultReader,
+    labels: { spoilerShow: 'Show', cover: { withheld: '', reveal: '', credit: '', via: '' } },
+    link: ({ children, ...props }: never) => h('a', props, children),
+    sections: new Map(),
+    relations: definitions,
+    relationNodes: [],
+    unlabelled: 'Untitled',
+  } as unknown as OverviewValue;
   const base = browser.location.pathname;
-  const selection = { stream: 'out:wdt:P144', node: 'franchise', statement: id(971), holder: subject.id, spoiler: 0, focus: 'evidence' as const, release: subject.release, revision: 1 };
+  const selection = {
+    stream: 'out:wdt:P144',
+    node: 'franchise',
+    statement: id(971),
+    holder: subject.id,
+    spoiler: 0,
+    focus: 'evidence' as const,
+    release: subject.release,
+    revision: 1,
+  };
   let href = workFranchiseReturnHref(base, base, 'en', selection);
   const host = browser.document.createElement('div');
   browser.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const outside = browser.document.createElement('button');
   browser.document.body.append(outside);
-  const draw = (source = subject, supplied = windows, reader = defaultReader) => act(async () => root.render(h(OverviewContext.Provider, { value: { ...value, reader } }, h(WorkFranchiseOverview, { subject: source, windows: supplied, related, definitions, locale: 'en', returnTo: base, currentHref: href }))));
+  const draw = (source = subject, supplied = windows, reader = defaultReader) =>
+    act(async () =>
+      root.render(
+        h(
+          OverviewContext.Provider,
+          { value: { ...value, reader } },
+          h(WorkFranchiseOverview, {
+            subject: source,
+            windows: supplied,
+            related,
+            definitions,
+            locale: 'en',
+            returnTo: base,
+            currentHref: href,
+          }),
+        ),
+      ),
+    );
   try {
     await draw();
     expect(browser.document.activeElement?.getAttribute('data-work-action')).toBe('evidence');
     expect(host.querySelector('details')?.open).toBe(false);
-    await act(async () => { host.querySelector('details')!.open = true; });
+    await act(async () => {
+      host.querySelector('details')!.open = true;
+    });
     outside.focus();
     await draw(structuredClone(subject), structuredClone(windows));
     expect(host.querySelector('details')?.open).toBe(false);
@@ -1100,12 +1180,22 @@ test('work region return focuses its actual inspection control once and retires 
     expect(host.querySelector('[data-work-action]')).toBeNull();
     expect(browser.document.activeElement).toBe(outside);
     const origin = workFranchiseReturnHref(base, base, 'en', selection);
-    const returnWindow = connectionReturnHref(subject.id, 'Book', 'en', undefined, { stream: selection.stream, reading: 'a'.repeat(64), cursor: 'native-cursor', focus: statement.id, holder: subject.id, control: 'evidence' });
+    const returnWindow = connectionReturnHref(subject.id, 'Book', 'en', undefined, {
+      stream: selection.stream,
+      reading: 'a'.repeat(64),
+      cursor: 'native-cursor',
+      focus: statement.id,
+      holder: subject.id,
+      control: 'evidence',
+    });
     const address = new URL(returnWindow, browser.location.href);
     address.searchParams.set('via', origin);
     const accepted = subjectVisitReturn(`${address.pathname}${address.search}${address.hash}`, 'en')!;
     expect(accepted).toBeDefined();
-    expect(connectionReturnWindow(new URL(accepted, browser.location.href).hash)).toMatchObject({ cursor: 'native-cursor', control: 'evidence' });
+    expect(connectionReturnWindow(new URL(accepted, browser.location.href).hash)).toMatchObject({
+      cursor: 'native-cursor',
+      control: 'evidence',
+    });
   } finally {
     await act(async () => root.unmount());
     restoreGlobals();
