@@ -223,7 +223,10 @@ async function factualPage(
   const subjectReads = Object.entries(plan.reads).filter(([, read]) => read.kind === 'subject');
   expect(subjectReads).toHaveLength(1);
   for (const [readKey] of subjectReads) {
-    expect(page.reads[readKey]).toEqual({ status: 200, body: factual.body });
+    const read = page.reads[readKey] as { status: number; body: Record<string, unknown> };
+    const { documents, ...body } = read.body;
+    expect({ status: read.status, body }).toEqual({ status: 200, body: factual.body });
+    if (documents !== undefined) expect(documents).toEqual({});
   }
   for (const [readKey, value] of Object.entries(page.reads))
     expect(value.status, `${type}/${view} ${persona} ${readKey}: ${JSON.stringify(value.body)}`).toBe(200);

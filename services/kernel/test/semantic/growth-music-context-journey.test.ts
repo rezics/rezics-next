@@ -6,10 +6,10 @@ import { PUBLICATION_LIMITS, publicationLimits, RELEASE_LIMITS, validateRelease 
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { newId, partitionOf } from '../../src/route/route.ts';
+import { newId } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 import { verticalManifests } from '../support/manifests.ts';
@@ -56,57 +56,43 @@ beforeAll(async () => {
     routeKey: new Uint8Array(32).fill(61),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(62)]]) },
   });
-  const selected: { id: string; route: number } = { id: '', route: 0 };
-  await seed(
-    db,
-    {
-      name: 'music-context-selected-event',
-      hotPartition: partitionOf(route),
-      hotShare: 1,
-      rows: ({ route: placed }) => {
-        const id = newId(placed);
-        selected.id = id;
-        selected.route = placed;
-        const transaction = randomUUID();
-        const facts = itemFacts(id, { labels: { en: 'Selected concert' } }, 'schema:MusicEvent', bundledRelease);
-        return {
-          'semantic.subject': [
-            {
-              route: placed,
-              subject_id: id,
-              type: 'schema:MusicEvent',
-              recorded_transaction_id: transaction,
-              visibility: 'visible',
-              security_revision: 0,
-              current_facts: facts.length,
-              current_release: bundledDigest,
-              projection_pending: false,
-            },
-          ],
-          'semantic.revision': [
-            {
-              route: placed,
-              subject_id: id,
-              revision: 1,
-              kind: 'create',
-              release: bundledDigest,
-              recorded_transaction_id: transaction,
-            },
-          ],
-          'semantic.fact': facts.map((fact) => ({
-            ...fact,
-            route: placed,
-            subject_id: id,
-            recorded_transaction_id: transaction,
-            release: fact.kind === 'statement' ? bundledDigest : null,
-            relation: false,
-          })),
-        };
-      },
-    },
-    { from: 0, to: 1 },
+  eventId = newId(route);
+  const transaction = randomUUID();
+  const facts = itemFacts(eventId, { labels: { en: 'Selected concert' } }, 'schema:MusicEvent', bundledRelease);
+  await db.admin.query(
+    `INSERT INTO semantic.subject(
+       route, subject_id, type, recorded_transaction_id, visibility, security_revision,
+       current_facts, current_release, projection_pending)
+     VALUES ($1, $2, 'schema:MusicEvent', $3, 'visible', 0, $4, $5, false)`,
+    [route, eventId, transaction, facts.length, bundledDigest],
   );
-  eventId = selected.id;
+  await db.admin.query(
+    `INSERT INTO semantic.revision(route, subject_id, revision, kind, release, recorded_transaction_id)
+     VALUES ($1, $2, 1, 'create', $3, $4)`,
+    [route, eventId, bundledDigest, transaction],
+  );
+  for (const fact of facts) {
+    await db.admin.query(
+      `INSERT INTO semantic.fact(
+         route, subject_id, slot_id, log_seq, operation, kind, language, property, statement_id,
+         body, recorded_transaction_id, release, relation)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false)`,
+      [
+        route,
+        eventId,
+        fact.slot_id,
+        fact.log_seq,
+        fact.operation,
+        fact.kind,
+        fact.language,
+        fact.property,
+        fact.statement_id,
+        fact.body,
+        transaction,
+        fact.kind === 'statement' ? bundledDigest : null,
+      ],
+    );
+  }
   await db.admin.query(
     `INSERT INTO semantic.outbound_link(
        route, subject_id, property, filter_value, order_key, target_subject_id, statement_id, slot_id,
@@ -115,12 +101,12 @@ beforeAll(async () => {
      SELECT $1, $2, 'schema:location', $3, lpad(n::text, 8, '0'), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(),
             true, 'schema:MusicEvent', lpad(n::text, 8, '0'), 'name', 1, 0, 1, 'schema:MusicVenue', NULL, 'value', true, gen_random_uuid()
      FROM generate_series(1, 20) n`,
-    [selected.route, eventId, NIL],
+    [route, eventId, NIL],
   );
   await db.admin.query(
     `INSERT INTO semantic.outbound_link_count(route, subject_id, property, filter_value, value)
      VALUES ($1, $2, 'schema:location', $3, 20)`,
-    [selected.route, eventId, NIL],
+    [route, eventId, NIL],
   );
 }, 60_000);
 
@@ -135,7 +121,7 @@ test('a selected music-event window stays fixed at 64/512/4096 unrelated events 
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async (_database, scale, previous) => {
-      await seedSemanticPopulation(db, unrelated.population, { from: previous * 500, to: scale * 500 });
+      await seedSemanticPopulation(db, unrelated.population, { from: previous, to: scale });
     },
     operation: async () => {
       const page = await call('POST', '/v1/pages:read', { target: { subject: eventId } });

@@ -57,10 +57,14 @@ test('a reader follows a sourced music event through native review and a bounded
       const proposed = await driver.request('editor', 'POST', `${path}/candidates`, { statement }, key());
       expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
       const candidate = proposed.body.candidate as string;
+      const target =
+        statement.value.type === 'value' && typeof statement.value.content === 'string'
+          ? `&target=${statement.value.content}`
+          : '';
       const listing = await driver.request(
         'acceptor',
         'GET',
-        `${path}/candidates?property=${encodeURIComponent(statement.property.id)}`,
+        `${path}/candidates?property=${encodeURIComponent(statement.property.id)}${target}`,
       );
       const pending = (listing.body.candidates as { id: string; head: number | null }[]).find(
         (row) => row.id === candidate,
