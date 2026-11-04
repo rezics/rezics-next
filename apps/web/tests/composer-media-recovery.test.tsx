@@ -7,6 +7,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 afterAll(() => mock.restore());
+const imageId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -159,7 +160,7 @@ test('mounted attachment rows explain actual stages and recover only the selecte
       if (reservations === 4) return removed.promise;
       return Response.json({
         media: {
-          id: `image-${reservations}`,
+          id: imageId(reservations),
           containerId: 'native-container',
           state: 'reserved',
           mediaType: 'image/png',
@@ -169,14 +170,14 @@ test('mounted attachment rows explain actual stages and recover only the selecte
     }
     if (init.method === 'PUT') {
       puts.set(path, (puts.get(path) ?? 0) + 1);
-      if (path === '/media/image-1' && puts.get(path) === 1) return transfer.promise;
+      if (path === `/media/${imageId(1)}` && puts.get(path) === 1) return transfer.promise;
       return new Response(null, { status: 204 });
     }
-    if (path === '/media/image-3') return processing.promise;
+    if (path === `/media/${imageId(3)}`) return processing.promise;
     return Response.json({
       media: {
         id: path.split('/').at(-1),
-        state: path.endsWith('image-2') ? 'rejected' : puts.get(path) === 1 ? 'reserved' : 'available',
+        state: path.endsWith(imageId(2)) ? 'rejected' : puts.get(path) === 1 ? 'reserved' : 'available',
         mediaType: 'image/png',
         byteCount: 3,
       },
@@ -197,7 +198,7 @@ test('mounted attachment rows explain actual stages and recover only the selecte
       reserve.resolve(
         Response.json({
           media: {
-            id: 'image-1',
+            id: imageId(1),
             containerId: 'native-container',
             state: 'reserved',
             mediaType: 'image/png',
@@ -222,9 +223,9 @@ test('mounted attachment rows explain actual stages and recover only the selecte
     await page.click(page.m.editor_retry_upload(), row('First description'));
     await page.settle(() => !row('First description'));
     expect(calls.slice(boundary).map(({ path, init }) => [init.method, path])).toEqual([
-      ['GET', '/media/image-1'],
-      ['PUT', '/media/image-1'],
-      ['GET', '/media/image-1'],
+      ['GET', `/media/${imageId(1)}`],
+      ['PUT', `/media/${imageId(1)}`],
+      ['GET', `/media/${imageId(1)}`],
     ]);
     expect(await (calls.at(-2)!.init.body as Blob).text()).toBe('png');
     expect(page.host.querySelectorAll('[role="img"][aria-label="First description"]')).toHaveLength(1);
@@ -239,7 +240,7 @@ test('mounted attachment rows explain actual stages and recover only the selecte
     await page.settle(() => page.host.textContent?.includes(page.m.thread_attachment_processing()) === true);
     await act(async () =>
       processing.resolve(
-        Response.json({ media: { id: 'image-3', state: 'available', mediaType: 'image/png', byteCount: 3 } }),
+        Response.json({ media: { id: imageId(3), state: 'available', mediaType: 'image/png', byteCount: 3 } }),
       ),
     );
     await page.settle(() => !row('Second description'));
@@ -257,9 +258,10 @@ test('mounted attachment rows explain actual stages and recover only the selecte
     expect(JSON.stringify(page.submitted)).toContain('First description');
     expect(JSON.stringify(page.submitted)).toContain('Second description');
     expect(JSON.stringify(page.submitted)).not.toContain('Removed description');
+    expect(page.submitted[0]).toMatchObject({ mediaIds: expect.arrayContaining([imageId(1), imageId(3)]) });
     await act(async () =>
       removed.resolve(
-        Response.json({ media: { id: 'image-4', state: 'reserved', mediaType: 'image/png', byteCount: 3 } }),
+        Response.json({ media: { id: imageId(4), state: 'reserved', mediaType: 'image/png', byteCount: 3 } }),
       ),
     );
     expect(calls).toHaveLength(beforeLate);
@@ -277,7 +279,7 @@ test('board and command-key replacements retire old attachment callbacks while t
     let puts = 0;
     const media = (state: string) =>
       Response.json({
-        media: { id: 'current-image', containerId: 'current-container', state, mediaType: 'image/png', byteCount: 3 },
+        media: { id: imageId(9), containerId: 'current-container', state, mediaType: 'image/png', byteCount: 3 },
       });
     const transport = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
       if (init?.method === 'POST') {
