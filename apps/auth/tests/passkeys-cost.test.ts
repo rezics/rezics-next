@@ -76,7 +76,9 @@ const fake = Bun.serve({
     if (url.pathname === '/passkeys/register') {
       const response = JSON.parse(body).response;
       if (!accepts(response)) return json({ error: 'registration_denied' }, 400);
-      return json({ id: response.id, name: 'Added', created_at: new Date().toISOString() }, 201);
+      const saved = { id: response.id, name: 'Added', created_at: new Date().toISOString(), last_used_at: null };
+      passkeys.push(saved);
+      return json(saved, 201);
     }
     if (url.pathname === '/passkeys/remove') {
       passkeys = passkeys.filter((passkey) => passkey.id !== JSON.parse(body).id);
@@ -283,7 +285,7 @@ test(
 );
 
 test(
-  'adding a passkey makes two Auth requests however many passkeys the person has',
+  'adding a passkey uses its two commands and refreshes native advice however many passkeys the person has',
   async () => {
     for (const count of scales) {
       seed(count);
@@ -314,7 +316,7 @@ test(
 );
 
 test(
-  'removing a passkey makes one Auth request however many passkeys the person has',
+  'removing a passkey checks the current account and sends one command however many passkeys the person has',
   async () => {
     for (const count of scales) {
       seed(count);
@@ -329,7 +331,7 @@ test(
           rows.first().getByRole('button').click(),
         ]);
         await page.getByRole('status').waitFor();
-        expect(authRequests(before), `${count} passkeys`).toEqual(['POST /passkeys/remove']);
+        expect(authRequests(before), `${count} passkeys`).toEqual(['GET /session', 'POST /passkeys/remove']);
       } finally {
         await page.context().close();
       }
