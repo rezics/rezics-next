@@ -12,7 +12,7 @@ import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { workStepDeadline } from '../../src/library/command-support.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
