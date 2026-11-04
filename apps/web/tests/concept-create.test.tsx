@@ -36,12 +36,9 @@ let submitImpl: (command: { item: InitialSubject; key: string }) => Promise<Crea
   reason: 'unavailable',
 });
 let readImpl: (id: string) => Promise<CreatedReader> = async () => ({ state: 'unavailable' });
-let admitCreated: (
-  reader: CreatedReader,
-  id: string,
-  release: typeof bundledRelease,
-  type: string,
-) => CreatedReader = (reader) => reader;
+let admitCreated: (reader: CreatedReader, id: string, release: typeof bundledRelease, type: string) => CreatedReader = (
+  reader,
+) => reader;
 
 mock.module('../src/session/query', () => ({
   useSession: () => viewer,
@@ -208,10 +205,7 @@ test('Concept fields distinguish scheme from concept and review multilingual ter
   });
 });
 
-async function conceptCreateSession(options?: {
-  token?: string;
-  prepare?: (storage: Storage) => string | undefined;
-}) {
+async function conceptCreateSession(options?: { token?: string; prepare?: (storage: Storage) => string | undefined }) {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -315,11 +309,7 @@ async function conceptCreateSession(options?: {
   };
 }
 
-async function chooseTypeAndName(
-  page: Awaited<ReturnType<typeof conceptCreateSession>>,
-  type: string,
-  label: string,
-) {
+async function chooseTypeAndName(page: Awaited<ReturnType<typeof conceptCreateSession>>, type: string, label: string) {
   await act(async () =>
     page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), type),
   );
@@ -428,9 +418,9 @@ test('Concept Type drafts stay per Type; viewer replacement drops a late allowed
     await act(async () =>
       page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), concept),
     );
-    expect((page.canvas.getByRole('textbox', { name: page.m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
-      'Night',
-    );
+    expect(
+      (page.canvas.getByRole('textbox', { name: page.m.catalogue_create_label() }) as HTMLInputElement).value,
+    ).toBe('Night');
   } finally {
     await page.close();
   }
