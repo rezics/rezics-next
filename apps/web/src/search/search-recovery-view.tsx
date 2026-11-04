@@ -24,6 +24,10 @@ export function searchRecoveryMessage(state: SearchRecoveryState, locale?: strin
         : m.discovery_invalid({}, options);
     case 'invalid-cursor':
       return m.search_recovery_cursor({}, options);
+    case 'sparse':
+      return m.search_recovery_sparse({}, options);
+    case 'exhausted':
+      return m.search_recovery_exhausted({}, options);
     case 'session':
       return m.search_recovery_session({}, options);
     case 'closed':
@@ -63,7 +67,7 @@ export function SearchRecovery({
   if (state.status === 'ready') return null;
   const options = locale === undefined ? undefined : messageOptions(locale);
   const retry = ['index-not-ready', 'source-not-ready', 'unavailable'].includes(state.status);
-  const restart = state.status === 'restart' || state.status === 'invalid-cursor';
+  const restart = ['restart', 'invalid-cursor', 'sparse', 'exhausted'].includes(state.status);
   return (
     <Empty
       className="border"

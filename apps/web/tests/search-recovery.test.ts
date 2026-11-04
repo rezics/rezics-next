@@ -85,7 +85,7 @@ test('restart removes only continuation, while readiness retry transports the or
   expect(restart.searchParams.get('q')).toBe(state.query);
 });
 
-test('only real useful or final native pages become ready; empty nonfinal, repeated cursors and malformed successes stay unavailable', async () => {
+test('native sparse continuations, exhausted continuations, complete empty first pages and malformed responses stay distinct', async () => {
   const pages = [
     discoveryExample,
     { ...discoveryExample, hits: [], next: null },
@@ -98,22 +98,27 @@ test('only real useful or final native pages become ready; empty nonfinal, repea
   for (const page of pages) outcomes.push(await readSearchOutcome(request, async () => ({ status: 200, data: page })));
   expect(outcomes.map(({ recovery }) => recovery.status)).toEqual([
     'ready',
-    'ready',
-    'unavailable',
+    'exhausted',
+    'sparse',
     'unavailable',
     'unavailable',
     'unavailable',
   ]);
-  expect(outcomes[1]?.discovery?.status === 'ready' && outcomes[1].discovery.page.next).toBeNull();
+  expect(outcomes[1]?.recovery).toEqual({ status: 'exhausted', asOf: discoveryExample.as_of });
+  expect(outcomes[2]?.recovery).toEqual({ status: 'sparse', asOf: discoveryExample.as_of });
   const legacy = { subjects: [], next: 'next', as_of: discoveryExample.as_of };
   const { representation: _representation, kindPage: _kindPage, ...legacyRequest } = request;
-  expect((await readSearchOutcome(legacyRequest, async () => ({ status: 200, data: legacy }))).recovery.status).toBe(
-    'unavailable',
-  );
+  expect((await readSearchOutcome(legacyRequest, async () => ({ status: 200, data: legacy }))).recovery).toEqual({
+    status: 'sparse',
+    asOf: discoveryExample.as_of,
+  });
   expect(
-    (await readSearchOutcome(legacyRequest, async () => ({ status: 200, data: { ...legacy, next: null } }))).recovery
-      .status,
-  ).toBe('ready');
+    (await readSearchOutcome(legacyRequest, async () => ({ status: 200, data: { ...legacy, next: null } }))).recovery,
+  ).toEqual({ status: 'exhausted', asOf: discoveryExample.as_of });
+  const firstPage = { ...legacyRequest, cursor: undefined };
+  expect(
+    (await readSearchOutcome(firstPage, async () => ({ status: 200, data: { ...legacy, next: null } }))).recovery,
+  ).toEqual({ status: 'ready' });
 });
 
 test('current authority and restart invalidation remove hits and independently retained facet labels, while preserving the editable draft', () => {

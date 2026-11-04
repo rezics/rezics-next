@@ -37,6 +37,7 @@ import {
   type SearchRecoveryState,
 } from './search-recovery';
 import { SearchRecovery } from './search-recovery-view';
+import { EmptySearchRecovery } from './empty-recovery';
 import { useSearchRetryFocus } from './search-retry-focus';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
 import {
@@ -858,6 +859,7 @@ export function SearchPage({
   const filterEntrance = (
     <div className="space-y-3" onClick={follow}>
       <Button
+        id="search-filter-entry"
         type="button"
         variant="outline"
         aria-controls="search-filters"
@@ -1219,6 +1221,7 @@ function renderResults(
     ? (subject: { id: string; label: string }) => realmCatalogueSubjectHref(subject, locale, currentSearchHref)
     : undefined;
   const next = continuationAllowed
+    && (!data?.recovery || data.recovery.status === 'ready')
     ? data?.discovery?.status === 'ready'
       ? data.discovery.page.next
       : result?.next
@@ -1286,7 +1289,12 @@ function renderResults(
         aria-label={m.search_results({}, options)}
         data-search-results
       >
-        {data?.recovery && data.recovery.status !== 'ready' && data.queryState ? (
+        {data?.recovery && data.recovery.status !== 'ready' && data.queryState &&
+        !(
+          ['loading', 'sparse', 'exhausted', 'index-not-ready', 'source-not-ready', 'unavailable'].includes(
+            data.recovery.status,
+          ) && (data.discovery || result)
+        ) ? (
           <SearchRecovery
             state={data.recovery}
             retryHref={discoverySearchHref(locale, retryState ?? data.queryState)}
@@ -1296,22 +1304,67 @@ function renderResults(
             {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
           />
         ) : data?.discovery ? (
-          <DiscoveryResults
-            state={data.discovery}
-            renderPersonal={personal?.renderPersonal}
-            locale={locale}
-            yearProperties={data.yearProperties}
-            subjectHrefFor={subjectHrefFor}
-            restartHref={
-              data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
-            }
-          />
+          <>
+            {data.recovery && data.recovery.status !== 'ready' ? (
+              <SearchRecovery
+                state={data.recovery}
+                retryHref={discoverySearchHref(locale, retryState ?? data.queryState!)}
+                restartHref={discoverySearchHref(locale, { ...data.queryState!, cursor: undefined })}
+                onRetry={onRetry}
+                locale={locale}
+                {...(retryFocus ? { retryRef: retryFocus.retryRef, onRetryFocus: retryFocus.captureRetryFocus } : {})}
+              />
+            ) : null}
+            <DiscoveryResults
+              state={data.discovery}
+              renderPersonal={personal?.renderPersonal}
+              locale={locale}
+              yearProperties={data.yearProperties}
+              subjectHrefFor={subjectHrefFor}
+              restartHref={
+                data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
+              }
+            />
+            {data.recovery?.status === 'ready' && data.queryState && data.discovery.status === 'ready' &&
+            data.discovery.page.hits.length === 0 &&
+            data.discovery.page.next === null && data.queryState.cursor === undefined &&
+            data.discovery.page.emptyRecovery ? (
+              <EmptySearchRecovery
+                recovery={data.discovery.page.emptyRecovery}
+                state={data.queryState}
+                locale={locale}
+                labels={{
+                  typeLabels: data.typeLabels,
+                  typeChoices: data.typeChoices,
+                  selectedFacetLabels: data.selectedFacetLabels,
+                  groups: data.groups,
+                }}
+                onRetry={onRetry}
+              />
+            ) : null}
+          </>
         ) : result?.subjects.length === 0 ? (
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
-            </EmptyHeader>
-          </Empty>
+          <>
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
+            {data?.queryState && data.queryState.cursor === undefined && result.next === null && result.emptyRecovery ? (
+              <EmptySearchRecovery
+                recovery={result.emptyRecovery}
+                state={data.queryState}
+                locale={locale}
+                labels={{
+                  typeLabels: data.typeLabels,
+                  typeChoices: data.typeChoices,
+                  selectedFacetLabels: data.selectedFacetLabels,
+                  groups: data.groups,
+                }}
+                onRetry={onRetry}
+              />
+            ) : null}
+          </>
         ) : (
           <>
             <ResultList

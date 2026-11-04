@@ -1276,6 +1276,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   retaining their full key, and replay repairing existing values before bounded-read readiness remains separate and
   pending. Source/replay/default-worker/native API readiness requires its own integration/runtime evidence.
 
+### Empty Search recovery
+
+Decision: a confirmed-empty first page may offer at most three current public near-title queries from two native Suggest reads of at most eight candidates each; only phrase editing and removal of URL-owned type, kind, facet or range selections are offered, while opaque filters, scope, rating population, ordered languages and principal stay unchanged. Each suggestion keeps the admitted filter and scope, and freshness mismatch or unavailable native authority yields an explicit component state without a global fallback. The recovery envelope is capped at 16 KiB UTF-8 and eight action projections.
+
 ### Suggest
 
 The request-only Realm and Collection prefix path uses the same operation and retained native prefix producer; its
