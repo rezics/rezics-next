@@ -66,10 +66,13 @@ export function CollectionMemberOccurrenceDetails<Member extends CollectionReadM
 }) {
   const locale = getLocale();
   const subject = member.subject;
-  const title = subject
+  const title = subject?.label
     ? pageText(libraryTitleValue(subject.label), locale).text || m.subject_value_unlabelled()
-    : m.library_subject_unavailable();
+    : subject
+      ? m.subject_value_unlabelled()
+      : m.library_subject_unavailable();
   const occurrence = m.library_member_occurrence({ title, position });
+  const pagePosition = m.library_collection_position_on_page({ position });
   const occurrenceId = member.id ? `collection-member-${member.id}` : undefined;
 
   return (
@@ -77,14 +80,14 @@ export function CollectionMemberOccurrenceDetails<Member extends CollectionReadM
       id={occurrenceId}
       tabIndex={member.id ? -1 : undefined}
       role="group"
-      aria-label={occurrence}
+      aria-label={`${occurrence}. ${pagePosition}`}
       data-collection-member-id={member.id}
       data-collection-occurrence-availability={subject ? 'available' : 'unavailable'}
       data-collection-page-scope={scope}
       className="min-w-0 space-y-2 [overflow-wrap:anywhere]"
     >
       <p data-slot="collection-member-position" className="text-xs text-muted-foreground">
-        {m.library_collection_position_on_page({ position })}
+        {pagePosition}
       </p>
       {subject ? (
         <>
