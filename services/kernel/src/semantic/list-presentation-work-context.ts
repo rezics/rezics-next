@@ -1,4 +1,9 @@
-import { releaseDigest, type Release } from '@rezics/definitions';
+import {
+  createReleasedRelationDirectionResolver,
+  releaseDigest,
+  type Release,
+  type ReleasedRelationDirectionResolver,
+} from '@rezics/definitions';
 import { readNativeCalendarDate } from '@rezics/filter';
 import { chooseTexts } from '../search/hits.ts';
 import {
@@ -11,10 +16,6 @@ import {
   type WorkContextValue,
 } from '../search/work-context.ts';
 import type { FactRow } from './item.ts';
-import {
-  createReleasedRelationDirectionResolver,
-  type ReleasedRelationDirectionResolver,
-} from './released-relation-direction.ts';
 
 export type WorkGroup = 'creators' | 'relations' | 'dates';
 export type WorkPlan = { kind: CurrentWorkContext['kind']; creators: string[]; relations: string[]; dates: string[] };

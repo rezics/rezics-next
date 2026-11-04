@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createReleasedRelationDirectionResolver } from '@rezics/definitions';
 import { releaseDigest, valueSchema, DATA_TYPES, type Release } from '../src/index.ts';
 import { bundledDigest, bundledRelease } from '../src/bundled.ts';
 import { releaseDigest as portableDigest } from '../src/browser.ts';
@@ -51,6 +52,30 @@ test('browser package exports load portable helpers and compiled data without na
   expect(loaded.bundled.bundledRelease).toEqual(bundledRelease);
   expect(loaded.bundled.bundledDigest).toBe(bundledDigest);
   expect(loaded.definitions.releaseDigest(loaded.bundled.bundledRelease)).toBe(bundledDigest);
+  const defaultDirections = createReleasedRelationDirectionResolver(bundledRelease, bundledDigest);
+  const browserDirections = loaded.definitions.createReleasedRelationDirectionResolver(
+    loaded.bundled.bundledRelease,
+    loaded.bundled.bundledDigest,
+  );
+  const requests: Parameters<typeof defaultDirections.resolve>[] = [
+    ['schema:Person', 'wdt:P725', 'inverse'],
+    ['wd:Q95074', 'schema:character', 'inverse'],
+    ['wd:Q95074', 'wdt:P725', 'inverse', { viaQualifier: 'wdt:P453' }],
+    ['wd:Q95074', 'wdt:P453', 'inverse'],
+    ['schema:Movie', 'wdt:P725', 'inverse'],
+    ['schema:Person', 'rezics:notReleased', 'forward'],
+  ];
+  for (const request of requests)
+    expect(browserDirections.resolve(...request)).toEqual(defaultDirections.resolve(...request));
+  expect(
+    loaded.definitions.createReleasedRelationDirectionResolver(undefined, undefined).resolve(
+      'schema:Person',
+      'wdt:P725',
+      'inverse',
+    ),
+  ).toEqual(
+    createReleasedRelationDirectionResolver(undefined, undefined).resolve('schema:Person', 'wdt:P725', 'inverse'),
+  );
   const input = { type: 'schema:Person', labels: { en: 'Browser helper' } };
   expect(loaded.validation.checkSubjectInput(input, loaded.bundled.bundledRelease).violations).toEqual([]);
   expect(loaded.validation.checkSubjectStructure({ ...input, labels: {} }).violations).toContainEqual({

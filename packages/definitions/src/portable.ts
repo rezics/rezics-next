@@ -1,4 +1,10 @@
 export * from './catalogue.ts';
+export { releaseDigest } from './release-digest.ts';
+export { createReleasedRelationDirectionResolver } from './released-relation-direction.ts';
+export type {
+  ReleasedRelationDirectionKind,
+  ReleasedRelationDirectionResolver,
+} from './released-relation-direction.ts';
 import type { FilterDocument } from '@rezics/filter';
 import schema from '../schema/release.json';
 import type { LibraryProfile, LibraryProfileReference } from './library-profile.ts';

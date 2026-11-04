@@ -1,4 +1,8 @@
-import type { Release } from '@rezics/definitions';
+import {
+  createReleasedRelationDirectionResolver,
+  type Release,
+  type ReleasedRelationDirectionResolver,
+} from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -21,10 +25,6 @@ import {
 import type { WorkContext } from '../search/work-context.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import { activeRelease } from './definitions.ts';
-import {
-  createReleasedRelationDirectionResolver,
-  type ReleasedRelationDirectionResolver,
-} from './released-relation-direction.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { fenceKey, sourceTuple } from './fences.ts';
 import type { IdentityMapping } from './identity-epoch-contract.ts';

@@ -17,8 +17,7 @@ import {
 } from './source.ts';
 import { chooseTexts } from './hits.ts';
 import type { CharacterPersonDiscoveryContexts, DiscoveryContextSubject } from './discovery.ts';
-import type { Release } from '@rezics/definitions';
-import { createReleasedRelationDirectionResolver } from '../semantic/released-relation-direction.ts';
+import { createReleasedRelationDirectionResolver, type Release } from '@rezics/definitions';
 
 /** An inverse edge from a selected work to the candidate Character or Person. */
 export type InverseRelationFacetProbe = {
