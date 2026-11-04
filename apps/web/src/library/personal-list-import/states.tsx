@@ -64,8 +64,9 @@ export function VndbRemoved({ outcomes, effects }: { outcomes: VndbOutcome[]; ef
       {outcomes.length ? (
         <ul className="space-y-2">
           {outcomes.map((outcome) => {
-            const id = 'scoreReviewId' in outcome ? outcome.scoreReviewId : outcome.reviewId;
-            const kind = 'scoreReviewId' in outcome ? 'score' : 'entry-state';
+            const score = typeof outcome.scoreReviewId === 'string';
+            const id = score ? outcome.scoreReviewId! : outcome.reviewId!;
+            const kind = score ? 'score' : 'entry-state';
             const effect = references.get(`${outcome.ordinal}:${kind}:${id}`);
             return (
               <li key={`${outcome.ordinal}:${kind}:${id}`} className="break-words rounded-md border p-3 text-sm">

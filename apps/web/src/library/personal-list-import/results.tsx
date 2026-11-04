@@ -6,11 +6,11 @@ import { VndbAction } from './controls';
 import type { VndbOutcome } from './contract';
 
 function outcomeId(outcome: VndbOutcome): string {
-  return 'scoreReviewId' in outcome ? outcome.scoreReviewId : outcome.reviewId;
+  return typeof outcome.scoreReviewId === 'string' ? outcome.scoreReviewId : outcome.reviewId!;
 }
 
 function outcomeKind(outcome: VndbOutcome): 'score' | 'entry-state' {
-  return 'scoreReviewId' in outcome ? 'score' : 'entry-state';
+  return typeof outcome.scoreReviewId === 'string' ? 'score' : 'entry-state';
 }
 
 function resultLabel(status: string): string {
@@ -72,7 +72,7 @@ export function VndbResultPage({
           >
             <p className="break-words font-medium">
               {title.get(outcome.ordinal) ?? `#${outcome.ordinal + 1}`} ·{' '}
-              {'scoreReviewId' in outcome ? m.library_vndb_score_effect() : m.library_vndb_entry_state_effect()}
+              {outcomeKind(outcome) === 'score' ? m.library_vndb_score_effect() : m.library_vndb_entry_state_effect()}
             </p>
             <p>{resultLabel(outcome.status)}</p>
             <p className="break-words text-sm">{m.library_vndb_effect_review_id({ id: outcomeId(outcome) })}</p>

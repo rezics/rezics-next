@@ -167,7 +167,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
             onDiscard={() => void act((current) => current.discard())}
           />
           <CurrentImportLibrary
-            key={`${snap.uploadId}:${snap.outcomes.map((row) => `${'scoreReviewId' in row ? row.scoreReviewId : row.reviewId}:${row.status}`).join(',')}`}
+            key={`${snap.uploadId}:${snap.outcomes.map((row) => `${typeof row.scoreReviewId === 'string' ? 'score' : 'entry-state'}:${typeof row.scoreReviewId === 'string' ? row.scoreReviewId : row.reviewId}:${row.status}`).join(',')}`}
             visit={visit}
           />
         </>

@@ -62,7 +62,7 @@ export type VndbJourneySnapshot = {
 };
 
 function outcomeReviewId(outcome: VndbOutcome): string {
-  return 'reviewId' in outcome ? outcome.reviewId : outcome.scoreReviewId;
+  return typeof outcome.reviewId === 'string' ? outcome.reviewId : outcome.scoreReviewId!;
 }
 
 function effectKey(ordinal: number, reviewId: string, kind: VndbEffect['kind']): string {
@@ -85,6 +85,7 @@ function isVndbUnknown(value: unknown): value is VndbUnknown {
 
 function rowEffects(row: VndbRow): VndbEffect[] {
   const effects: VndbEffect[] = [];
+  const score = scoreDecision(row);
   if (row.decision && ['reviewed', 'skipped', 'unsupported'].includes(row.decision.status)) {
     effects.push({
       ordinal: row.ordinal,
@@ -94,20 +95,20 @@ function rowEffects(row: VndbRow): VndbEffect[] {
       status: row.decision.status,
     });
   }
-  if (row.scoreDecision?.status === 'reviewed') {
+  if (score?.status === 'reviewed') {
     effects.push({
       ordinal: row.ordinal,
       kind: 'score',
-      reviewId: row.scoreDecision.reviewId,
-      targetId: row.scoreDecision.targetId,
-      status: row.scoreDecision.status,
+      reviewId: score.reviewId,
+      targetId: score.targetId,
+      status: score.status,
     });
   }
   return effects;
 }
 
 function scoreReviewMatchesPreview(row: VndbRow): boolean {
-  const decision = row.scoreDecision;
+  const decision = scoreDecision(row);
   const question = row.nativeScore.question;
   if (!decision || decision.status !== 'reviewed' || !question || !row.target) return false;
   return (
@@ -118,6 +119,13 @@ function scoreReviewMatchesPreview(row: VndbRow): boolean {
     JSON.stringify(decision.question.scale) === JSON.stringify(question.scale) &&
     JSON.stringify(decision.currentVote) === JSON.stringify(row.nativeScore.currentVote)
   );
+}
+
+function scoreDecision(row: VndbRow): VndbScoreDecision | null {
+  const decision = row.scoreDecision;
+  return decision && 'action' in decision && (decision.action === 'vote' || decision.action === 'clear')
+    ? decision
+    : null;
 }
 
 function effectRow(effect: VndbEffect): VndbApplyRow {
@@ -152,11 +160,12 @@ function effectsFromCommands(
         });
       }
       if (row.scoreReviewId) {
+        const score = current ? scoreDecision(current) : null;
         effects.push({
           ordinal: row.ordinal,
           kind: 'score',
           reviewId: row.scoreReviewId,
-          targetId: current?.scoreDecision?.reviewId === row.scoreReviewId ? current.scoreDecision.targetId : null,
+          targetId: score?.reviewId === row.scoreReviewId ? score.targetId : null,
           status: 'pending',
         });
       }
@@ -171,9 +180,10 @@ function outcomeEffects(outcomes: readonly VndbOutcome[], rows: readonly VndbRow
     const score = 'scoreReviewId' in outcome;
     const id = outcomeReviewId(outcome);
     const row = byOrdinal.get(outcome.ordinal);
+    const decision = row ? scoreDecision(row) : null;
     const targetId = score
-      ? row?.scoreDecision?.reviewId === id
-        ? row.scoreDecision.targetId
+      ? decision?.reviewId === id
+        ? decision.targetId
         : null
       : row?.decision?.reviewId === id
         ? row.decision.targetId
@@ -453,12 +463,13 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     pageOffset = offset;
     total = response.value.total;
     for (const row of response.value.rows) {
-      if (row.scoreDecision?.status === 'reviewed' && !scoreReviewMatchesPreview(row)) {
+      const decision = scoreDecision(row);
+      if (decision?.status === 'reviewed' && !scoreReviewMatchesPreview(row)) {
         scoreNotices.set(row.ordinal, {
           ordinal: row.ordinal,
           reason: 'native-current-vote-changed',
-          reviewId: row.scoreDecision.reviewId,
-          targetId: row.scoreDecision.targetId,
+          reviewId: decision.reviewId,
+          targetId: decision.targetId,
         });
         const refreshed = { ...row, scoreDecision: null };
         rows.set(row.ordinal, refreshed);

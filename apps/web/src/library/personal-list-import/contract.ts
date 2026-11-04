@@ -50,7 +50,7 @@ export type VndbPreview = {
 
 export type VndbPage = Omit<GeneratedVndbPage, 'rows'> & { rows: VndbRow[] };
 export type VndbDecision = Extract<GeneratedVndbDecision, { state: string | null }>;
-export type VndbScoreDecision = NonNullable<VndbRow['scoreDecision']>;
+export type VndbScoreDecision = Extract<NonNullable<VndbRow['scoreDecision']>, { action: 'vote' | 'clear' }>;
 export type VndbReviewResult = GeneratedVndbDecision;
 /** Keep both independent review identities exactly as published by the native importer. */
 export type VndbApplyRow = GeneratedVndbApply['rows'][number];

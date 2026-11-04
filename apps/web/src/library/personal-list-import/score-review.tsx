@@ -87,7 +87,11 @@ export function VndbScoreReview({
     native.currentVote.state !== 'unavailable' &&
     ((choice === 'vote' && exactCandidate !== null && units !== '' && (!currentSet || replace)) ||
       (choice === 'clear' && currentSet));
-  const scoreDecision = row.scoreDecision;
+  const scoreValue = row.scoreDecision;
+  const scoreDecision =
+    scoreValue && 'action' in scoreValue && (scoreValue.action === 'vote' || scoreValue.action === 'clear')
+      ? scoreValue
+      : null;
 
   useEffect(() => {
     setChoice('');
