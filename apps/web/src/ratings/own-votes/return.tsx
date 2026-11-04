@@ -35,6 +35,7 @@ type ReturnState = {
   receipt: OwnVotesReturnReceipt | null;
   depart: (input: Omit<OwnVotesReturnReceipt, 'id' | 'phase' | 'focusVersion'>, phase?: OwnVotesReturnReceipt['phase']) => OwnVotesReturnReceipt;
   begin: (id: string) => boolean;
+  owns: (id: string, owner: OwnVotesReturnOwner, phase: OwnVotesReturnReceipt['phase']) => boolean;
   fail: (id: string) => void;
   resolve: (id: string) => number | null;
   clear: (id?: string) => void;
@@ -47,6 +48,7 @@ const noReturnState: ReturnState = {
     throw new Error('My ratings return context is not mounted');
   },
   begin: () => false,
+  owns: () => false,
   fail: () => undefined,
   resolve: () => null,
   clear: () => undefined,
@@ -103,6 +105,13 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
     publish({ ...current, phase: 'refreshing' });
     return true;
   }, [publish]);
+  const owns = useCallback(
+    (id: string, owner: OwnVotesReturnOwner, phase: OwnVotesReturnReceipt['phase']) => {
+      const current = receiptRef.current;
+      return current?.id === id && current.owner === owner && current.phase === phase;
+    },
+    [],
+  );
   const fail = useCallback((id: string) => {
     const current = receiptRef.current;
     if (current?.id === id && current.phase === 'refreshing') publish({ ...current, phase: 'failed' });
@@ -164,8 +173,8 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
   }, [router, publish]);
 
   const value = useMemo<ReturnState>(
-    () => ({ receipt, depart, begin, fail, resolve, clear, focusUnchanged }),
-    [receipt, depart, begin, fail, resolve, clear, focusUnchanged],
+    () => ({ receipt, depart, begin, owns, fail, resolve, clear, focusUnchanged }),
+    [receipt, depart, begin, owns, fail, resolve, clear, focusUnchanged],
   );
   return <OwnVotesReturnContext.Provider value={value}>{children}</OwnVotesReturnContext.Provider>;
 }
@@ -288,13 +297,7 @@ export function useOwnVotesReturn({
     }
     const requestOwner = owner();
     const ownsRequest = () => {
-      const active = state.receipt;
-      return (
-        active?.id === returnReceipt.id &&
-        active.phase === 'refreshing' &&
-        active.owner === returnReceipt.owner &&
-        requestOwner.canRead()
-      );
+      return state.owns(returnReceipt.id, returnReceipt.owner, 'refreshing') && requestOwner.canRead();
     };
     try {
       const result = await refresh();
@@ -322,11 +325,8 @@ export function useOwnVotesReturn({
           if (focusVersion === null) return;
           onResolved(outcome, index, read.page);
           requestAnimationFrame(() => {
-            const active = state.receipt;
             if (
-              active?.id === returnReceipt.id &&
-              active.phase === 'resolved' &&
-              active.owner === returnReceipt.owner &&
+              state.owns(returnReceipt.id, returnReceipt.owner, 'resolved') &&
               state.focusUnchanged(focusVersion) &&
               requestOwner.canRead() &&
               requestOwner.validateResult(result) === read
@@ -344,11 +344,8 @@ export function useOwnVotesReturn({
       if (focusVersion === null) return;
       onResolved(outcome, indexOwnVotes(read.page), read.page);
       requestAnimationFrame(() => {
-        const active = state.receipt;
         if (
-          active?.id === returnReceipt.id &&
-          active.phase === 'resolved' &&
-          active.owner === returnReceipt.owner &&
+          state.owns(returnReceipt.id, returnReceipt.owner, 'resolved') &&
           state.focusUnchanged(focusVersion) &&
           requestOwner.canRead() &&
           requestOwner.validateResult(result) === read
