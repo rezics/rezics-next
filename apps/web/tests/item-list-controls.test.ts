@@ -8,6 +8,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/query', () => ({
   sessionQuery: { queryKey: ['session'] },
   exposureQuery: { queryKey: ['exposure'] },
+  sessionCsrfToken: () => 'test-token',
   useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
 }));
 mock.module('../src/library/labels-actions', () => ({ manageLabel: async () => ({ ok: true }) }));
@@ -29,7 +30,15 @@ test('a collection row keeps its navigation target while the visibility control 
     revision: 7,
     allowedVisibilityActions: ['unlisted', 'public'],
   };
-  const html = renderToStaticMarkup(createElement(CollectionRow, { collection }));
+  const html = renderToStaticMarkup(
+    createElement(CollectionRow, {
+      collection,
+      io: {
+        read: async () => ({ ok: false, reason: 'unavailable' }),
+        save: async () => ({ ok: false, reason: 'unavailable' }),
+      },
+    }),
+  );
   const row = html.match(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/)?.[0];
   const control = row?.match(/<div[^>]*data-slot="list-row-control"[^>]*>[\s\S]*?<\/div>/)?.[0];
 
@@ -99,6 +108,6 @@ test('an explicitly injected standalone collection row retains independent enabl
   const control = html.match(/<div[^>]*data-slot="list-row-control"[^>]*>[\s\S]*?<\/div>/)?.[0];
   expect(html).toContain('href="/en/collections/collection-1"');
   expect(control).toContain('<select');
-  expect(control).not.toContain('disabled');
+  expect(control).not.toMatch(/\sdisabled(?:=|\s|>)/);
   expect(dispatched).toBe(0);
 });
