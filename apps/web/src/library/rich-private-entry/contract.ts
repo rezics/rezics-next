@@ -1,4 +1,9 @@
-import type { PersonalEntry, PersonalEntryAnnotationWrite, PersonalEntryFieldChange } from '@rezics/client';
+import type {
+  PersonalEntry,
+  PersonalEntryAnnotationWrite,
+  PersonalEntryFieldChange,
+  PersonalEntryGuard,
+} from '@rezics/client';
 
 export const PRIVATE_NOTE_BYTES = 4096;
 export const PERSONAL_PRIORITY_MIN = 1;
@@ -17,7 +22,12 @@ function fieldChange<T>(unchanged: boolean, cleared: boolean, value: T): Persona
 }
 
 /** Build field-local operations so changing a note cannot erase a priority or provider observation. */
-export function annotationWrite(entry: PersonalEntry, draft: AnnotationDraft): PersonalEntryAnnotationWrite | null {
+export function annotationWrite(
+  entry: PersonalEntry,
+  draft: AnnotationDraft,
+  entryGuard: PersonalEntryGuard | null,
+): PersonalEntryAnnotationWrite | null {
+  if (!entryGuard) return null;
   const noteBytes = new TextEncoder().encode(draft.note).byteLength;
   if (noteBytes > PRIVATE_NOTE_BYTES) return null;
   const note = fieldChange(draft.note === (entry.note ?? ''), draft.note === '', draft.note);
@@ -39,5 +49,5 @@ export function annotationWrite(entry: PersonalEntry, draft: AnnotationDraft): P
     priorityValue ?? PERSONAL_PRIORITY_MIN,
   );
   if (note.op === 'unchanged' && priority.op === 'unchanged') return null;
-  return { revision: entry.annotationRevision, note, priority };
+  return { revision: entry.annotationRevision, note, priority, entryGuard };
 }
