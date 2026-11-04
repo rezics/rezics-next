@@ -82,9 +82,7 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
   }
   async function retryAuthority() {
-    await act(async () =>
-      user.click(canvas().getByRole('button', { name: m.identity_intake_authority_retry() })),
-    );
+    await act(async () => user.click(canvas().getByRole('button', { name: m.identity_intake_authority_retry() })));
   }
   async function add(property: string) {
     await act(async () =>
