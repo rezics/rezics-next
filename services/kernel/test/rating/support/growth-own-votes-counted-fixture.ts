@@ -52,7 +52,8 @@ export async function createCountedGrowthFixture() {
     await bootstrapRelease(db.pool, bundledRelease);
     configureTestReceiptKeys(db.pool);
     const scopes = ['subject:create', 'subject:read', 'definitions:read', 'rating:vote'];
-    const real = await createRealAccess(db.admin, { voter: newId(0x23a1) }, scopes);
+    const accountId = newId(0x23a1);
+    const real = await createRealAccess(db.admin, { voter: accountId }, scopes);
     const access = createAccess({
       auth: real.auth,
       actions: new Map(
@@ -67,6 +68,17 @@ export async function createCountedGrowthFixture() {
     const global = { route: 0, id: GLOBAL_CONTEXT };
     await real.grant(global, 'voter', 'subject:create');
     await real.grant(accessGlobal, 'voter', 'definitions:read');
+    // Match the retained native lifecycle account and its fixed Global authority.
+    await db.admin.query(
+      'UPDATE access.account SET membership_inverse_complete=true WHERE route=$1 AND account_id=$2',
+      [routeOf(accountId), accountId],
+    );
+    await db.admin.query(
+      `INSERT INTO access.resource_role_grant
+       (route,resource_id,subject_kind,subject_id,subject_role,grant_role,valid,transaction_id)
+       VALUES(0,$1,'identity',$2,'','platform.governance','[2020-01-01T00:00:00Z,)',$2)`,
+      [GLOBAL_CONTEXT, accountId],
+    );
     const actor = await access.authenticate(real.bearer('voter'), { pool: db.pool, deadline: Date.now() + 120_000 });
     const subject = async (route: number) => {
       const key = crypto.randomUUID();
@@ -364,13 +376,30 @@ export async function createCountedGrowthFixture() {
       },
       async grow(axis: CountedAxis, scale: number, previous: number) {
         const sourceHome = partitionOf(sourceRoute);
+        const originals = new Map<number, string>();
+        if (axis === 'selected retained votes' || axis === 'identity/source/authority history') {
+          // Complete the referenced subjects before dependent batches; a batch can split within an ordinal.
+          await seed(
+            db,
+            {
+              name: `counted ${axis} originals`,
+              hotPartition: sourceHome,
+              rows: ({ ordinal }) => {
+                const id = newId(sourceRoute);
+                originals.set(ordinal, id);
+                return { 'semantic.subject': [storedSubject(id)] };
+              },
+            },
+            { from: previous, to: scale },
+          );
+        }
         await seed(
           db,
           {
             name: `counted ${axis}`,
             hotPartition: axis.includes('votes') || axis === 'repair backlog' ? partitionOf(voterRoute) : sourceHome,
             rows: ({ ordinal }): Record<string, readonly Row[]> => {
-              const id = newId(sourceRoute);
+              const id = originals.get(ordinal) ?? newId(sourceRoute);
               if (axis === 'unrelated votes')
                 return {
                   'rating.vote': [
@@ -384,7 +413,6 @@ export async function createCountedGrowthFixture() {
                   'rating.vote': [vote(id, 7, null)],
                   // These are losing original slots of this selected destination, rather than arbitrary nulls.
                   // Their original identities grow, while the supplied source's own history stays fixed.
-                  'semantic.subject': [storedSubject(id)],
                   'semantic.redirect': [
                     {
                       route: sourceRoute,
@@ -434,22 +462,8 @@ export async function createCountedGrowthFixture() {
                       mode: 'repair',
                     },
                   ],
-                  'semantic.identity_epoch_job': [
-                    {
-                      partition_no: controlHome,
-                      job_id: id,
-                      epoch: ordinal + 2,
-                      intent: { kind: 'merge', survivor: terminal, redirected: id },
-                      receipt_key: id,
-                      receipt: {},
-                      scope_digest: 'd'.repeat(64),
-                      state: 'pending',
-                      recorded_transaction_id: transaction,
-                    },
-                  ],
                 };
               return {
-                'semantic.subject': [storedSubject(id)],
                 'access.resource_role_grant': [
                   {
                     route: sourceRoute,
