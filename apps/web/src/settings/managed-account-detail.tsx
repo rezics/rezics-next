@@ -96,14 +96,15 @@ function Failure({
   restart,
   section,
   pending,
+  waiting,
 }: {
   failure: DetailFailure;
   retry?: (() => void) | undefined;
   restart?: (() => void) | undefined;
   section?: DetailSection;
   pending: boolean;
+  waiting: boolean;
 }) {
-  const waiting = usePreferenceRetry(failure);
   const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
   return (
     <Alert
@@ -116,7 +117,6 @@ function Failure({
       <AlertTitle className="min-w-0">{m.managed_unavailable_title()}</AlertTitle>
       <AlertDescription className="min-w-0 space-y-3">
         <p>{m.settings_managed_unavailable()}</p>
-        {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
         <div className="flex min-w-0 max-w-full flex-wrap gap-2">
           {retry ? (
             <Button
@@ -209,6 +209,7 @@ export function ManagedAccountDetailCard({
   const members = state.members;
   const responsibilities = state.responsibilities;
   const busy = state.pending || members.pending || responsibilities.pending;
+  const waiting = usePreferenceRetry(undefined, state.retryAt ?? 0);
   return (
     <Card className="min-w-0 max-w-full wrap-anywhere">
       <CardHeader className="min-w-0">
@@ -224,6 +225,7 @@ export function ManagedAccountDetailCard({
         <CardDescription>{m.settings_managed_read_only()}</CardDescription>
       </CardHeader>
       <CardContent className="min-w-0 space-y-6">
+        {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
         {state.pending || (reader && !detail && !state.failure) ? (
           <p role="status">{m.settings_managed_detail_loading()}</p>
         ) : null}
@@ -231,6 +233,7 @@ export function ManagedAccountDetailCard({
           <Failure
             failure={state.failure}
             pending={busy}
+            waiting={waiting}
             retry={reader ? () => void reader.load() : () => window.location.reload()}
           />
         ) : null}
@@ -267,6 +270,7 @@ export function ManagedAccountDetailCard({
                 <Failure
                   failure={members.failure}
                   pending={state.pending || members.pending}
+                  waiting={waiting}
                   section="members"
                   retry={() => void reader.load('members', members.cursor)}
                   restart={members.cursor ? () => void reader.load('members') : undefined}
@@ -300,7 +304,7 @@ export function ManagedAccountDetailCard({
                       section="members"
                       next={members.page.next}
                       cursor={members.cursor}
-                      pending={state.pending || members.pending}
+                      pending={state.pending || members.pending || waiting}
                     />
                   ) : null}
                 </>
@@ -318,6 +322,7 @@ export function ManagedAccountDetailCard({
                 <Failure
                   failure={responsibilities.failure}
                   pending={state.pending || responsibilities.pending}
+                  waiting={waiting}
                   section="responsibilities"
                   retry={() => void reader.load('responsibilities', responsibilities.cursor)}
                   restart={responsibilities.cursor ? () => void reader.load('responsibilities') : undefined}
@@ -351,7 +356,7 @@ export function ManagedAccountDetailCard({
                       section="responsibilities"
                       next={responsibilities.page.next}
                       cursor={responsibilities.cursor}
-                      pending={state.pending || responsibilities.pending}
+                      pending={state.pending || responsibilities.pending || waiting}
                     />
                   ) : null}
                 </>
@@ -371,7 +376,7 @@ export function ManagedAccountDetailCard({
                 type="button"
                 variant="outline"
                 className={recoveryButtonClassName}
-                disabled={busy}
+                disabled={busy || waiting}
                 onClick={() => void reader.load()}
               >
                 {m.managed_refresh()}

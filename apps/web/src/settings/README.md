@@ -94,6 +94,14 @@ The existing shelf editor adds exact type-URI layouts to its versioned dirty-fie
 
 ## Account safety
 
+Managed detail captures Retry-After at response receipt in its immutable viewer/target reader. The longest observed
+endpoint deadline guards every new detail read, including captured callbacks, feed recovery, first-page restart and
+whole-detail refresh. Already admitted sibling responses may settle without shortening that wait. Expiry only enables
+deliberate controls; it never dispatches. Missing or malformed headers add no delay. Failed first-page reads retain a
+cursor-free recovery request, and blocked controls preserve failure feedback, retained pages and native action advice.
+Installed-navigation continuation owns official viewer/navigation admission and directory/detail/back integration;
+detail response-wait recovery is owned by this existing reader and is outside that continuation's scope.
+
 The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.
 
 Directory identities, membership roles and responsibility holds supply no detail admission. Until Content's serial successor to `d9c5a408-5c67-4d33-bf97-76a9918a21b5` installs the complete native viewer/navigation envelope and callable/root, identity rows have no detail links and show explicit unavailable feedback; the strict transport decoder continues to reject incompatible responses. This consumer does not publish declarations or infer missing authority.

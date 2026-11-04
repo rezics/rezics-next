@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -119,7 +119,12 @@ test('A native managed target opens from settings with independently paged curre
   denied.responsibilities = null;
   body = denied;
   status = 200;
-  await reader.load();
+  const clock = spyOn(Date, 'now').mockReturnValue(reader.snapshot().retryAt!);
+  try {
+    await reader.load();
+  } finally {
+    clock.mockRestore();
+  }
   html = markup(reader);
   expect(html).toContain(m.managed_holders_denied());
   expect(html).toContain(m.settings_managed_responsibilities_unavailable());
@@ -492,46 +497,68 @@ test('a failed first-page reset stays an honest section error; native refusals o
 });
 
 test('transient continuation failures retain their page while Retry-After disables both actions; a pending reset admits no duplicate or global read', async () => {
-  for (const section of ['members', 'responsibilities'] satisfies DetailSection[]) {
-    let result = ready();
-    let resolve: ((value: DetailResult) => void) | undefined;
-    let defer = false;
-    const inputs: DetailRequest[] = [];
-    const reader = new ManagedAccountReader(viewerId, accountId, (input) => {
-      inputs.push(input);
-      return defer
-        ? new Promise((done) => {
-            resolve = done;
-          })
-        : Promise.resolve(result);
-    });
-    await reader.load();
-    result = { ok: false, failure: detailFailure(429, {}, { 'retry-after': '3' }) };
-    await reader.load(section, section === 'members' ? memberCursor : operatorCursor);
-    const html = markup(reader);
-    const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
-    const actions = (html.match(/<button\b[^>]*>/g) ?? []).filter((button) =>
-      [m.settings_retry(), m.settings_managed_start_first_page()].some((action) =>
-        button.includes(`aria-label="${action} · ${label}"`),
-      ),
-    );
-    expect(html).toContain(m.settings_retry_wait());
-    expect(actions).toHaveLength(2);
-    for (const action of actions) expect(action).toContain('disabled=""');
-    expect(html).toContain('Current native owner');
-    expect(html).toContain('Current indexer');
-    expect(html).not.toContain(`aria-label="${m.settings_managed_first_page()} ·`);
-    expect(inputs).toHaveLength(2); // Rendering the waiting state never dispatches a request.
-    defer = true;
-    const reset = reader.load(section);
-    expect(reader.snapshot()[section].pending).toBe(true);
-    expect(reader.snapshot()[section === 'members' ? 'responsibilities' : 'members'].pending).toBe(false);
-    await reader.load(section);
-    await reader.load(section, 'another-cursor');
-    await reader.load();
-    expect(inputs).toHaveLength(3);
-    resolve!(ready());
-    await reset;
-    expect(reader.snapshot()[section].cursor).toBeUndefined();
+  const clock = spyOn(Date, 'now');
+  try {
+    for (const section of ['members', 'responsibilities'] satisfies DetailSection[]) {
+      let result = ready();
+      let resolve: ((value: DetailResult) => void) | undefined;
+      let defer = false;
+      const inputs: DetailRequest[] = [];
+      const reader = new ManagedAccountReader(viewerId, accountId, (input) => {
+        inputs.push(input);
+        return defer
+          ? new Promise((done) => {
+              resolve = done;
+            })
+          : Promise.resolve(result);
+      });
+      await reader.load();
+      const sibling = section === 'members' ? 'responsibilities' : 'members';
+      defer = true;
+      const admitted = reader.load(sibling);
+      defer = false;
+      const captured = reader.load.bind(reader, section, section === 'members' ? memberCursor : operatorCursor);
+      result = { ok: false, failure: detailFailure(429, {}, { 'retry-after': '3' }) };
+      await reader.load(section, section === 'members' ? memberCursor : operatorCursor);
+      const deadline = reader.snapshot().retryAt!;
+      clock.mockReturnValue(deadline - 1000);
+      resolve!(ready());
+      await admitted;
+      expect(reader.snapshot().retryAt).toBe(deadline);
+      const saved = reader.snapshot();
+      await captured();
+      await reader.load();
+      await reader.load(section);
+      expect(reader.snapshot()).toBe(saved);
+      const html = markup(reader);
+      const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
+      const actions = (html.match(/<button\b[^>]*>/g) ?? []).filter((button) =>
+        [m.settings_retry(), m.settings_managed_start_first_page()].some((action) =>
+          button.includes(`aria-label="${action} · ${label}"`),
+        ),
+      );
+      expect(html).toContain(m.settings_retry_wait());
+      expect(actions).toHaveLength(2);
+      for (const action of actions) expect(action).toContain('disabled=""');
+      expect(html).toContain('Current native owner');
+      expect(html).toContain('Current indexer');
+      expect(html).not.toContain(`aria-label="${m.settings_managed_first_page()} ·`);
+      expect(inputs).toHaveLength(3); // Only the already admitted sibling may settle during the wait.
+      clock.mockReturnValue(deadline);
+      expect(inputs).toHaveLength(3); // Expiry never sends IO.
+      defer = true;
+      const reset = reader.load(section);
+      expect(reader.snapshot()[section].pending).toBe(true);
+      expect(reader.snapshot()[section === 'members' ? 'responsibilities' : 'members'].pending).toBe(false);
+      await reader.load(section);
+      await reader.load(section, 'another-cursor');
+      await reader.load();
+      expect(inputs).toHaveLength(4);
+      resolve!(ready());
+      await reset;
+      expect(reader.snapshot()[section].cursor).toBeUndefined();
+    }
+  } finally {
+    clock.mockRestore();
   }
 });

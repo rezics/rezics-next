@@ -142,6 +142,7 @@ test('whole-detail retry recovers initial and refreshed reads without leaving a 
     calls.push(input);
     return result;
   });
+  const refresh = reader.load.bind(reader);
   await reader.load();
   const { host, close } = await mount(reader);
   try {
@@ -153,6 +154,10 @@ test('whole-detail retry recovers initial and refreshed reads without leaving a 
     result = { ok: false, failure: { status: 429, transient: true, retryAfter: '60' } };
     await settle(() => button(host, m.managed_refresh()).click());
     expect(button(host, m.settings_retry()).disabled).toBe(true);
+    const saved = reader.snapshot();
+    await refresh();
+    await reader.load();
+    expect(reader.snapshot()).toBe(saved);
     expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.managed_refresh())).toBe(false);
     expect(host.textContent).toContain(longName);
     expect(calls).toEqual(Array.from({ length: 3 }, () => ({ viewerId: viewer, accountId: target })));
@@ -185,13 +190,14 @@ test('each feed retries its exact failed cursor and restarts only itself; first-
       expect(calls[3]).toEqual({ viewerId: viewer, accountId: target, section });
       expect(reader.snapshot()[sibling].page).toBe(retained.page);
       expect(reader.snapshot()[sibling].cursor).toBe(retained.cursor);
+      await settle(() => reader.load(section, cursor));
       result = { ok: false, failure: { status: 503, transient: true } };
       await settle(() => reader.load(section));
       result = ready();
       await settle(() => button(host, `${m.settings_retry()} · ${label}`).click());
-      expect(calls[5]).toEqual(calls[4]);
+      expect(calls[6]).toEqual(calls[5]);
       expect(calls[1]).toEqual({ viewerId: viewer, accountId: target, section, cursor });
-      expect(calls).toHaveLength(6);
+      expect(calls).toHaveLength(7);
       expect(host.querySelector('[role="alert"]')).toBeNull();
       expect(reader.snapshot()[sibling].page).toBe(retained.page);
       expect(reader.snapshot()[sibling].cursor).toBe(retained.cursor);
@@ -230,7 +236,7 @@ test('each continuation retains its page during Retry-After and disables both re
     const { host, close } = await mount(reader);
     const label = section === 'members' ? m.managed_holders_title() : m.managed_operated_title();
     try {
-      result = { ok: false, failure: { status: 429, transient: true, retryAfter: '60' } };
+      result = { ok: false, failure: { status: 429, transient: true, retryAfter: '1' } };
       await settle(() => button(host, `${m.managed_next()} · ${label}`).click());
       for (const action of [m.settings_retry(), m.settings_managed_start_first_page()]) {
         const control = button(host, `${action} · ${label}`);
@@ -240,8 +246,14 @@ test('each continuation retains its page during Retry-After and disables both re
         }
         await settle(() => control.click());
       }
+      expect(button(host, m.managed_refresh()).disabled).toBe(true);
       expect(reader.snapshot()[section].page).toBe(retained);
+      await settle(() => new Promise((resolve) => setTimeout(resolve, 1100)));
+      expect(button(host, `${m.settings_retry()} · ${label}`).disabled).toBe(false);
       expect(calls).toHaveLength(2);
+      result = ready();
+      await settle(() => button(host, `${m.settings_retry()} · ${label}`).click());
+      expect(calls[2]).toEqual(calls[1]);
     } finally {
       await close();
     }
