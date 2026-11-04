@@ -70,19 +70,23 @@ export const contextViewerActionResource: ViewerActionResource = {
       async actionAvailability(client, keys, actor, time) {
         const available = await contextNativeActions(client, keys, actor, time);
         return Object.fromEntries(
-          keys.map((id) => [
-            id,
-            {
-              ...Object.fromEntries(
-                ['context:read', 'context:create', 'context:delete', 'context:restore'].map((action) => [
-                  action,
-                  available[id]?.includes(action) ?? false,
-                ]),
-              ),
-              'context:accept': visible.get(id)?.state === 'active',
-              'context:adopt': visible.get(id)?.state === 'active',
-            },
-          ]),
+          keys.map((id) => {
+            const actions = Object.fromEntries(
+              ['context:read', 'context:create', 'context:delete', 'context:restore'].map((action) => [
+                action,
+                available[id]?.includes(action) ?? false,
+              ]),
+            );
+            return [
+              id,
+              {
+                ...actions,
+                'context:accept': visible.get(id)?.state === 'active',
+                'context:adopt': visible.get(id)?.state === 'active',
+                'statement:propose': id === GLOBAL_CONTEXT.id,
+              },
+            ];
+          }),
         );
       },
     };
