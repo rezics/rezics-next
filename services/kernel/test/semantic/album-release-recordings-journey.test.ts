@@ -56,7 +56,13 @@ async function adopted(holder: CreatedSubject, input: Proposed, key?: string) {
     expect(receipt.release).toBe(bundledDigest);
     return receipt;
   }
-  const proposed = await fixture.request('editor', 'POST', `/v1/subjects/${holder.id}/candidates`, { statement: input }, discoveryKey());
+  const proposed = await fixture.request(
+    'editor',
+    'POST',
+    `/v1/subjects/${holder.id}/candidates`,
+    { statement: input },
+    discoveryKey(),
+  );
   ok(proposed, 201);
   const candidate = proposed.body.candidate as string;
   ok(
@@ -68,7 +74,8 @@ async function adopted(holder: CreatedSubject, input: Proposed, key?: string) {
       discoveryKey(),
     ),
   );
-  const target = input.value.type === 'value' && typeof input.value.content === 'string' ? input.value.content : undefined;
+  const target =
+    input.value.type === 'value' && typeof input.value.content === 'string' ? input.value.content : undefined;
   ok(
     await fixture.request(
       'acceptor',
@@ -175,7 +182,22 @@ test('a reader follows an album through two released editions and ordered record
   expect([400, 422]).toContain(wrong.status);
   expect(wrong.body.effect_status ?? 'not_applied').not.toBe('applied');
 
-  await fixture.catchUp([album, cd, vinyl, recording, copy, label, format, vinylFormat, firstSlot, encoreSlot, artist, role, tba, none]);
+  await fixture.catchUp([
+    album,
+    cd,
+    vinyl,
+    recording,
+    copy,
+    label,
+    format,
+    vinylFormat,
+    firstSlot,
+    encoreSlot,
+    artist,
+    role,
+    tba,
+    none,
+  ]);
   const editions = ok(
     await fixture.request('anonymous', 'GET', `/v1/subjects/${album.id}/links?property=schema%3AreleaseOf&limit=20`),
   );
@@ -183,13 +205,20 @@ test('a reader follows an album through two released editions and ordered record
     [cd.id, vinyl.id, tba.id, none.id].sort(),
   );
   expect(editions.next).toBeNull();
-  const tracks = ok(await fixture.request('anonymous', 'GET', `/v1/subjects/${cd.id}/relations?property=schema%3Atrack&limit=20`));
-  const rows = tracks.relations as { target: string; statement: { id: string; qualifiers: { property: { id: string }; value: { content: string } }[] } }[];
+  const tracks = ok(
+    await fixture.request('anonymous', 'GET', `/v1/subjects/${cd.id}/relations?property=schema%3Atrack&limit=20`),
+  );
+  const rows = tracks.relations as {
+    target: string;
+    statement: { id: string; qualifiers: { property: { id: string }; value: { content: string } }[] };
+  }[];
   expect(rows).toHaveLength(2);
   expect(rows.map((row) => row.target)).toEqual([recording.id, recording.id]);
   expect(new Set(rows.map((row) => row.statement.id)).size).toBe(2);
   expect(
-    rows.map((row) => row.statement.qualifiers.find((qualifier) => qualifier.property.id === 'schema:position')?.value.content),
+    rows.map(
+      (row) => row.statement.qualifiers.find((qualifier) => qualifier.property.id === 'schema:position')?.value.content,
+    ),
   ).toEqual(['1', '3']);
   expect(facts(subject(await fixture.read(copy)), 'schema:releaseOf')).toEqual([]);
   expect(facts(subject(await fixture.read(cd)), 'schema:releaseOf')[0]?.value.content).toBe(album.id);
@@ -200,7 +229,9 @@ test('a reader follows an album through two released editions and ordered record
   expect(facts(subject(await fixture.read(none)), 'schema:datePublished')[0]?.value as unknown).toEqual({
     type: 'novalue',
   });
-  expect(facts(subject(await fixture.read(vinyl)), 'schema:datePublished')[0]?.value.content).toMatchObject({ precision: 9 });
+  expect(facts(subject(await fixture.read(vinyl)), 'schema:datePublished')[0]?.value.content).toMatchObject({
+    precision: 9,
+  });
   expect(facts(subject(await fixture.read(album)), 'schema:datePublished')).toEqual([]);
 
   for (const persona of ['anonymous', 'outsider', 'bob'] as const) {
@@ -237,7 +268,10 @@ test('a reader follows an album through two released editions and ordered record
   expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(actionStatus);
   expect(Object.keys(page.reads as object).length).toBeLessThanOrEqual(16);
   const editorPage = ok(await fixture.request('editor', 'POST', '/v1/pages:read', { target: { subject: cd.id } }));
-  expect(editorPage.viewer).toMatchObject({ state: 'account', actions: { statementPropose: expect.stringMatching(/^(allowed|denied|unavailable)$/) } });
+  expect(editorPage.viewer).toMatchObject({
+    state: 'account',
+    actions: { statementPropose: expect.stringMatching(/^(allowed|denied|unavailable)$/) },
+  });
   const { viewer: _v, actions: _a, ...publicAnonymous } = page;
   const { viewer: _ev, actions: _ea, ...publicEditor } = editorPage;
   expect(publicEditor).toEqual(publicAnonymous);
@@ -253,7 +287,9 @@ test('a reader follows an album through two released editions and ordered record
     ),
   );
   expect((await fixture.read(recording, 'anonymous')).status).toBe(404);
-  const hiddenPage = await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: recording.id } });
+  const hiddenPage = await fixture.request('anonymous', 'POST', '/v1/pages:read', {
+    target: { subject: recording.id },
+  });
   expect(hiddenPage.status).toBe(404);
   const remaining = ok(
     await fixture.request('anonymous', 'GET', `/v1/subjects/${cd.id}/relations?property=schema%3Atrack&limit=20`),
