@@ -142,7 +142,8 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
-      (cursor !== null && (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
+      (cursor !== null &&
+        (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
       (property !== null &&
         (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f\u007f]/u.test(property))) ||
       (screenReturn &&
