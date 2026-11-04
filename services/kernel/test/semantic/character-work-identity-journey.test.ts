@@ -229,12 +229,14 @@ test('a reader follows a Character identity and work appearance ages through nat
   expect(editorPage.viewer).toMatchObject({ state: 'account', actions: { statementPropose: 'allowed' } });
   expect(acceptorPage.viewer.state).toBe('account');
   const acceptorActions = new Set(
-    (acceptorPage.actions?.status === 'ready' ? (acceptorPage.actions.viewerActions ?? []) : []).flatMap(
-      (entry) => entry.operations.map((operation) => `${entry.action}:${operation}`),
+    (acceptorPage.actions?.status === 'ready' ? (acceptorPage.actions.viewerActions ?? []) : []).flatMap((entry) =>
+      entry.operations.map((operation) => `${entry.action}:${operation}`),
     ),
   );
   expect(
-    [...acceptorActions].some((entry) => entry.includes('accept') || entry.includes('adopt') || entry.includes('propose')),
+    [...acceptorActions].some(
+      (entry) => entry.includes('accept') || entry.includes('adopt') || entry.includes('propose'),
+    ),
   ).toBe(true);
   expect(anonymous.headers.get('cache-control')).toBe('private, no-store');
 
