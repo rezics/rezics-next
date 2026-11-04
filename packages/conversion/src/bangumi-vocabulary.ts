@@ -174,7 +174,13 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
     case 'person-career': {
       const code = environment.sourceCode(row.code);
       const mapping = code ? mapSourceEnumeration('bangumi', 'person.career', code) : undefined;
-      if (!code || mapping?.status !== 'existing' || !mapping.concept || mapping.concept.scheme !== personCareerScheme || mapping.concept.id !== `${personCareerScheme}/${code}`) {
+      if (
+        !code ||
+        (mapping?.status !== 'existing' && mapping?.status !== 'proposed') ||
+        !mapping.concept ||
+        mapping.concept.scheme !== personCareerScheme ||
+        mapping.concept.id !== `${personCareerScheme}/${code}`
+      ) {
         environment.pushGap({ path, ...(code ? { code } : {}), reason: 'unknown_code', property: 'person.career' });
         return;
       }

@@ -61,7 +61,7 @@ function mappingEvidence(taxonomyId: Taxonomy, code: unknown, ownerKey: string):
   const mapped = mapSourceEnumeration('bangumi', definition.group, code);
   if (
     !mapped ||
-    mapped.status !== 'existing' ||
+    (mapped.status !== 'existing' && mapped.status !== 'proposed') ||
     !mapped.concept ||
     mapped.concept.scheme !== definition.scheme ||
     mapped.concept.id !== `${definition.scheme}/${String(code)}`
