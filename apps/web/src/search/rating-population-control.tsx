@@ -1,4 +1,6 @@
 import { useId } from 'react';
+import { m } from '../paraglide/messages.js';
+import { locales } from '../paraglide/runtime.js';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import {
@@ -9,62 +11,59 @@ import {
   type RealmRatingReadiness,
 } from './rating-population';
 
-function ReadinessMessage({ readiness, restartHref }: { readiness: RealmRatingReadiness; restartHref: string }) {
-  switch (readiness.status) {
-    case 'ready':
-      return (
-        <p role="status" aria-live="polite">
-          Native Realm rating order is ready for the standard question and one subject partition.
-        </p>
-      );
-    case 'preparing':
-      return (
-        <p role="status" aria-live="polite">
-          Realm rating order is being prepared. The selected population and search conditions are kept in place.{' '}
+function ReadinessMessage({
+  readiness,
+  restartHref,
+  locale,
+}: {
+  readiness: RealmRatingReadiness;
+  restartHref: string;
+  locale: string;
+}) {
+  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
+  const messages = {
+    ready: m.search_population_ready,
+    preparing: m.search_population_preparing,
+    unavailable: m.search_population_unavailable,
+    refused: m.search_population_refused,
+    'generation-change': m.search_population_generation_change,
+  };
+  const action =
+    readiness.status === 'preparing'
+      ? m.search_population_check_again
+      : readiness.status === 'unavailable'
+        ? m.search_population_retry
+        : readiness.status === 'generation-change'
+          ? m.search_population_restart
+          : undefined;
+  return (
+    <p
+      role={readiness.status === 'unavailable' || readiness.status === 'refused' ? 'alert' : 'status'}
+      aria-live="polite"
+      className="text-sm"
+    >
+      {messages[readiness.status]({}, options)}
+      {action && (
+        <>
+          {' '}
           <a className="underline underline-offset-2" href={restartHref}>
-            Check again
+            {action({}, options)}
           </a>
-          .
-        </p>
-      );
-    case 'unavailable':
-      return (
-        <p role="alert">
-          Realm rating order is unavailable. Native Search did not rank a loaded preview or replace this order with
-          Global rating.{' '}
-          <a className="underline underline-offset-2" href={restartHref}>
-            Retry this Realm search
-          </a>
-          .
-        </p>
-      );
-    case 'refused':
-      return (
-        <p role="alert">
-          Native Search refused this Realm rating request. The population choice is separate from resource membership;
-          review the supported Realm choice or search conditions, or select Relevance.
-        </p>
-      );
-    case 'generation-change':
-      return (
-        <p role="status" aria-live="polite">
-          Realm ranking changed during this traversal.{' '}
-          <a className="underline underline-offset-2" href={restartHref}>
-            Restart the same search
-          </a>{' '}
-          with the current population and filters. This is a recovery step, not a correction to your conditions.
-        </p>
-      );
-  }
+        </>
+      )}
+    </p>
+  );
 }
 
 export function RatingPopulationControl({
+  locale = 'en',
   populations,
   selectedPopulationId,
   readiness,
   restartHref,
   disabled = false,
 }: {
+  locale?: string;
   populations?: readonly RealmRatingPopulationOption[] | undefined;
   selectedPopulationId?: string | undefined;
   readiness?: RealmRatingReadiness | undefined;
@@ -72,25 +71,28 @@ export function RatingPopulationControl({
   disabled?: boolean;
 }) {
   const id = useId();
+  const helpId = `${id}-help`;
+  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const choices = supportedRealmRatingPopulations(populations);
   const selected = canonicalRealmRatingPopulationId(selectedPopulationId);
   const selectedIsListed = selected ? choices.some((choice) => choice.id === selected) : true;
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:max-w-full">
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:max-w-full">
       <Field orientation="vertical" className="min-w-0 gap-1">
         <FieldLabel htmlFor={id} className="text-sm">
-          Rating population
+          {m.search_population_label({}, options)}
         </FieldLabel>
         <NativeSelect
           id={id}
+          aria-describedby={helpId}
           name={disabled ? undefined : RATING_POPULATION_FIELD}
           disabled={disabled}
           defaultValue={selected ?? ''}
-          className="h-9 max-w-full rounded-md border border-input bg-background px-2 text-sm"
+          className="w-full min-w-0 [&_select]:block [&_select]:min-h-11"
         >
-          <NativeSelectOption value="">Global</NativeSelectOption>
+          <NativeSelectOption value="">{m.search_population_global({}, options)}</NativeSelectOption>
           {selected && !selectedIsListed && (
-            <NativeSelectOption value={selected}>Selected Realm population</NativeSelectOption>
+            <NativeSelectOption value={selected}>{m.search_population_selected({}, options)}</NativeSelectOption>
           )}
           {choices.map((choice) => (
             <NativeSelectOption key={choice.id} value={choice.id}>
@@ -98,13 +100,12 @@ export function RatingPopulationControl({
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        <p className="max-w-prose text-xs text-muted-foreground">
-          This choice sets the rating population only. It does not add or remove a Realm or Collection membership
-          filter.
+        <p id={helpId} className="max-w-prose text-xs text-muted-foreground">
+          {m.search_population_help({}, options)}
         </p>
       </Field>
       {disabled && selected && <input type="hidden" name={RATING_POPULATION_FIELD} value={selected} />}
-      {selected && readiness && <ReadinessMessage readiness={readiness} restartHref={restartHref} />}
+      {selected && readiness && <ReadinessMessage readiness={readiness} restartHref={restartHref} locale={locale} />}
     </div>
   );
 }

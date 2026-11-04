@@ -8753,5 +8753,20 @@
   "work_names_copy": "Copy",
   "work_names_copied": "Copied",
   "work_names_copy_failed": "Could not copy. Select the text to copy it.",
-  "work_names_sources": "Sources"
+  "work_names_sources": "Sources",
+  "search_population_label": "Rating population",
+  "search_population_global": "Global",
+  "search_population_selected": "Selected Realm population",
+  "search_population_help": "This choice sets the rating population only. It does not add or remove a Realm or Collection membership filter.",
+  "search_population_order_help": "When Rating is selected, native Search uses the Realm’s published score for the standard question within one subject partition. It intersects the query and filters together; it does not rank a loaded preview.",
+  "search_population_ready": "Native Realm rating order is ready for the standard question and one subject partition.",
+  "search_population_preparing": "Realm rating order is being prepared. The selected population and search conditions are kept in place.",
+  "search_population_unavailable": "Realm rating order is unavailable. Native Search did not rank a loaded preview or replace this order with Global rating.",
+  "search_population_refused": "Native Search refused this Realm rating request. The population choice is separate from resource membership; review the supported Realm choice or search conditions, or select Relevance.",
+  "search_population_generation_change": "Realm ranking changed during this traversal. Restart with the current population and filters. This is a recovery step, not a correction to your conditions.",
+  "search_population_check_again": "Check again",
+  "search_population_retry": "Retry this Realm search",
+  "search_population_restart": "Restart the same search",
+  "shell_client_unavailable": "Interactive controls could not load. The server response below is still available. Reload this page to try again.",
+  "shell_client_reload": "Reload this page"
 }

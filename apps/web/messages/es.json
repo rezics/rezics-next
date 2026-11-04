@@ -8661,5 +8661,20 @@
   "work_names_copy": "Copiar",
   "work_names_copied": "Copiado",
   "work_names_copy_failed": "No se pudo copiar. Selecciona el texto para copiarlo.",
-  "work_names_sources": "Fuentes"
+  "work_names_sources": "Fuentes",
+  "search_population_label": "Población de valoraciones",
+  "search_population_global": "Global",
+  "search_population_selected": "Población del Realm seleccionado",
+  "search_population_help": "Esta opción solo establece la población de valoraciones. No añade ni elimina filtros de pertenencia a un Realm o una Collection.",
+  "search_population_order_help": "Al ordenar por valoración, la búsqueda usa las puntuaciones publicadas del Realm para la pregunta estándar dentro de una sola partición de temas. Aplica el texto y todos los filtros a la vez; no reordena una vista previa ya cargada.",
+  "search_population_ready": "El orden por valoración del Realm está listo para la pregunta estándar y una sola partición de temas.",
+  "search_population_preparing": "Se está preparando el orden por valoración del Realm. Se conservan la población elegida y las condiciones de búsqueda.",
+  "search_population_unavailable": "El orden por valoración del Realm no está disponible. La búsqueda no ha reordenado una vista previa cargada ni ha sustituido este orden por la valoración global.",
+  "search_population_refused": "La búsqueda ha rechazado esta solicitud de valoración del Realm. La población es independiente de la pertenencia a recursos; revisa el Realm admitido o las condiciones, o elige Relevancia.",
+  "search_population_generation_change": "La clasificación del Realm ha cambiado durante la navegación. Reinicia con la población y los filtros actuales. Es un paso de recuperación, no una corrección de tus condiciones.",
+  "search_population_check_again": "Volver a comprobar",
+  "search_population_retry": "Reintentar esta búsqueda de Realm",
+  "search_population_restart": "Reiniciar la misma búsqueda",
+  "shell_client_unavailable": "No se pudieron cargar los controles interactivos. La respuesta del servidor sigue disponible abajo. Recarga esta página para reintentarlo.",
+  "shell_client_reload": "Recargar esta página"
 }

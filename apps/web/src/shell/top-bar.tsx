@@ -138,7 +138,7 @@ export function ShellTopActions({
           </a>
         </>
       ) : session === 'unknown' ? (
-        <div role="status" aria-busy="true" className="flex items-center gap-1">
+        <div data-session-pending role="status" aria-busy="true" className="flex items-center gap-1">
           <span className="sr-only">{m.candidate_loading()}</span>
           <Skeleton aria-hidden className="size-11 rounded-full motion-reduce:animate-none" />
           <Skeleton aria-hidden className="hidden size-11 rounded-full motion-reduce:animate-none md:block" />

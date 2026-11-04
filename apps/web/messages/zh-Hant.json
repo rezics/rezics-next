@@ -8661,5 +8661,20 @@
   "work_names_copy": "複製",
   "work_names_copied": "已複製",
   "work_names_copy_failed": "無法複製。請選取文字後複製。",
-  "work_names_sources": "來源"
+  "work_names_sources": "來源",
+  "search_population_label": "評分母體",
+  "search_population_global": "全站",
+  "search_population_selected": "已選擇的 Realm 評分母體",
+  "search_population_help": "此選項只決定採用哪個母體的評分，不會新增或移除 Realm 或 Collection 的成員篩選條件。",
+  "search_population_order_help": "選擇依評分排序時，搜尋會在單一條目分區內，採用該 Realm 標準問題的已發布分數，並同時套用搜尋文字與所有篩選條件，不會只對已載入的預覽結果排序。",
+  "search_population_ready": "此 Realm 的評分排序已就緒，適用於標準問題與單一條目分區。",
+  "search_population_preparing": "此 Realm 的評分排序正在準備中。已保留所選的評分母體與搜尋條件。",
+  "search_population_unavailable": "目前無法取得此 Realm 的評分排序。搜尋未對已載入的預覽結果排序，也未改用全站評分。",
+  "search_population_refused": "搜尋拒絕了這次 Realm 評分請求。評分母體與資源成員資格各自獨立；請檢查支援的 Realm 選項與搜尋條件，或改用相關度排序。",
+  "search_population_generation_change": "瀏覽期間 Realm 排名已變更。請保留目前的評分母體與篩選條件，重新開始搜尋。這是復原步驟，不代表需要修正搜尋條件。",
+  "search_population_check_again": "再次檢查",
+  "search_population_retry": "重試此 Realm 搜尋",
+  "search_population_restart": "重新開始相同搜尋",
+  "shell_client_unavailable": "互動控制項載入失敗。下方仍可查看伺服器回應；請重新載入此頁再試一次。",
+  "shell_client_reload": "重新載入此頁"
 }

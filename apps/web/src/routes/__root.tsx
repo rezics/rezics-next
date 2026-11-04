@@ -140,9 +140,28 @@ export const Route = createRootRouteWithContext<{
   notFoundComponent: NotFoundPage,
   errorComponent: ClosedErrorPage,
 });
+// This listener precedes the module entry and survives a failed import of client.tsx itself.
+// Only an observed module failure exposes recovery; a pending operation has no deadline.
+const clientLoadRecovery = String.raw`(() => {
+  const failed = () => {
+    if (!document.documentElement.hasAttribute('data-hydrated'))
+      document.documentElement.dataset.clientLoadFailed = '';
+  };
+  window.addEventListener('error', (event) => {
+    if (event.target instanceof HTMLScriptElement && event.target.type === 'module') failed();
+  }, true);
+  window.addEventListener('unhandledrejection', (event) => {
+    const message = String(event.reason?.message ?? event.reason);
+    if (/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(message)) failed();
+  });
+})()`;
+
 function Root({ children }: { children: ReactNode }) {
   const router = useRouter();
   const nonce = router.options.ssr?.nonce;
+  const href = useRouterState({ select: (state) => state.location.publicHref });
+  const locale = getLocale();
+  const options = { locale };
   const { state: session } = useSession();
   const platformClosed = useRouterState({
     select: (state) => state.matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error)),
@@ -191,6 +210,17 @@ function Root({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: clientLoadRecovery }} />
+        <div
+          data-client-load-recovery
+          role="alert"
+          className="border-b border-border bg-background p-4 text-foreground"
+        >
+          <p>{m.shell_client_unavailable({}, options)}</p>
+          <a href={href} className="inline-flex min-h-11 items-center text-primary underline">
+            {m.shell_client_reload({}, options)}
+          </a>
+        </div>
         <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
           {platformClosed ? <ClosedPage /> : children}
         </AppShell>

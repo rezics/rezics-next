@@ -36,3 +36,12 @@ query/filter integration and native cursor ownership.
 
 Decision: Search uses the separate ratingPopulation field for the canonical Realm ID; blank or missing means
 Global, and changing that basis clears the continuation.
+
+Search renders both native selectors with their own boundary and an unconstrained wrapper; population help stays
+below the control and is its accessible description. All population and Realm-readiness copy uses the page locale,
+including when presenters in different locales coexist.
+
+Decision: a failed client-module load exposes a same-URL document reload beside the retained native server response;
+pending operations keep their loading state, and rejected session or Search observations settle as unavailable.
+The unhydrated inline filter form remains a native fallback. After hydration, phone filters open in the scrolling
+sheet; an expanded fallback by itself does not establish that a result or session request is pending.
