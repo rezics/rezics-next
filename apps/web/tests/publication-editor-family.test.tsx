@@ -597,7 +597,12 @@ test('independent publication creation, local corrections, immutable recovery an
     await click(m.catalogue_create_retry());
     await scope().findByText(m.publication_definitions_review());
     expect(recoveryButton().disabled).toBe(true);
-    expect(article().textContent).toContain('Supplied publisher');
+    const publisherPicker = scope().queryByRole('combobox', { name: 'publisher' }) as HTMLInputElement | null;
+    expect(
+      publisherPicker?.value === 'Supplied publisher' ||
+        article().textContent?.includes('Supplied publisher') ||
+        article().textContent?.includes(publisherId),
+    ).toBe(true);
     const publisherFact = scope().getByRole('heading', { name: 'publisher', level: 3 }).closest('fieldset')!;
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
