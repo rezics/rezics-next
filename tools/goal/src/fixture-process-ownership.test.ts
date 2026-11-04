@@ -18,7 +18,6 @@ import {
   processIdentity,
   sameProcess,
   terminateProcessGroup,
-  getProcessOwnershipAdapter,
   installProcessOwnershipAdapter,
   normalProcessOwnershipAdapter,
   waitForWorkerExit,
@@ -26,18 +25,22 @@ import {
   waitForProcessGroup,
 } from './process.ts';
 
-test('process ownership adapters preserve the normal default and inject fixture child tracking', async () => {
+test('normal ownership is inert and the fixture adapter injects child tracking', async () => {
   const f = fixtureDirectory();
-  const restore = installProcessOwnershipAdapter(normalProcessOwnershipAdapter);
-  expect(getProcessOwnershipAdapter()).toBe(normalProcessOwnershipAdapter);
-  restore();
+  const owner = createFixtureProcessOwner(f.state);
+  const identity = processIdentity()!;
+  normalProcessOwnershipAdapter.assertWorkerLaunchAllowed(f.log);
+  normalProcessOwnershipAdapter.workerStarted(f.log, identity);
+  expect(normalProcessOwnershipAdapter.waiterStarted(f.log)).toBeUndefined();
+  normalProcessOwnershipAdapter.trackWait(f.log, Promise.resolve());
+  expect(fixtureOwnedProcesses(f.state, owner)).toEqual([]);
+  expect(hasUnsettledFixtureWaits(f.state, owner)).toBe(false);
 
   const restoreFixture = installProcessOwnershipAdapter(fixtureProcessOwnershipAdapter);
-  let identity: ReturnType<typeof processIdentity> = null;
+  let childIdentity: ReturnType<typeof processIdentity> = null;
   let waiting: Promise<unknown> | undefined;
   let child: ReturnType<typeof spawn> | undefined;
   try {
-    const token = createFixtureProcessOwner(f.state);
     child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
       detached: true,
       stdio: 'ignore',
@@ -46,18 +49,18 @@ test('process ownership adapters preserve the normal default and inject fixture 
       child!.once('error', reject);
       child!.once('spawn', resolve);
     });
-    identity = processIdentity(child.pid!);
-    expect(identity).not.toBeNull();
-    waiting = waitForWorkerExit(identity, f.log);
-    expect(fixtureOwnedProcesses(f.state, token).map((process) => process.role)).toEqual(['waiter']);
-    expect(hasUnsettledFixtureWaits(f.state, token)).toBe(true);
+    childIdentity = processIdentity(child.pid!);
+    expect(childIdentity).not.toBeNull();
+    waiting = waitForWorkerExit(childIdentity, f.log);
+    expect(fixtureOwnedProcesses(f.state, owner).map((process) => process.role)).toEqual(['waiter']);
+    expect(hasUnsettledFixtureWaits(f.state, owner)).toBe(true);
 
-    await terminateProcessGroup(identity, 50);
+    await terminateProcessGroup(childIdentity, 50);
     await waiting;
-    await settleFixtureWaits(f.state, token);
-    expect(hasUnsettledFixtureWaits(f.state, token)).toBe(false);
+    await settleFixtureWaits(f.state, owner);
+    expect(hasUnsettledFixtureWaits(f.state, owner)).toBe(false);
   } finally {
-    const remaining = identity ?? (child?.pid ? processIdentity(child.pid) : null);
+    const remaining = childIdentity ?? (child?.pid ? processIdentity(child.pid) : null);
     if (remaining && sameProcess(remaining)) await terminateProcessGroup(remaining, 50);
     await waiting?.catch(() => {});
     child?.unref();
