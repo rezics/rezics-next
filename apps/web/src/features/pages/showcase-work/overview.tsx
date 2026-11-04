@@ -82,7 +82,7 @@ export function WorkFranchiseOverview({
         return <WorkRelation key={JSON.stringify([subject.id, subject.context, subject.release, subject.revision, destination, value.reader])}
           relation={{ holder: subject.id, direction: 'out', property: destination.property, statement: destination.statement,
             id: destination.id, label: title.text, kind: destination.kind, related }}
-          item={{ id: destination.id, label: { text: title.text, lang: title.lang ?? undefined }, notes: [] }}
+          item={{ id: destination.id, label: { text: title.text, lang: title.lang ?? undefined }, notes: [], gated: false }}
           value={{ ...value, link: WorkLink }} label={destination.relation.forwardLabel ?? ''} returnHref={href} />;
       })}
       <Link href={connectionReturnHref(subject.id, value.subjectLabel ?? value.unlabelled, locale, value.realm)} className={workLink}>

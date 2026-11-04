@@ -17,7 +17,7 @@ type Props = { state: 'ready' | 'loading' | 'failure' | 'empty' | 'withheld' | '
 function DirectedVisit({ state, locale, inverse }: Props) {
   const property = 'wdt:P144';
   const descriptor = release.properties[property];
-  const direction = inverse ? 'in' : 'out';
+  const direction: 'in' | 'out' = inverse ? 'in' : 'out';
   const label = pickText(inverse ? descriptor.relation.inverseLabels : descriptor.labels, locale).text;
   const stream = { key: `${direction}:${property}`, property, direction, group: 'relations' as const, label, forwardLabel: pickText(descriptor.labels, locale).text, language: locale };
   const original = { id: statement, rank: 'normal', property: { id: property, data_type: 'wikibase-item' },
