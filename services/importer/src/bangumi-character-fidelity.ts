@@ -7,12 +7,12 @@ import type {
   SourceVocabularyRequest,
   SourceVocabularyRow,
 } from '@rezics/conversion';
-import { converter_revision as entityRevision, mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
+import { mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
 import type { ImportConversion, SourceRegistration } from './import-contract.ts';
 import { ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import type { Importer, ImportRunResult } from './importer.ts';
 import type { BangumiCharacterAppearance } from './cross-media-seed.ts';
-import { createSourceRegistration, type SourceAssets } from './source-registry.ts';
+import { bangumiCrossMediaSeedRevision, createSourceRegistration, type SourceAssets } from './source-registry.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const schemes = {
@@ -273,7 +273,7 @@ export async function runBangumiCharacterFidelity(input: {
 
   const base = createSourceRegistration('bangumi', {
     source: input.sourceAlias,
-    converterRevision: entityRevision,
+    converterRevision: bangumiCrossMediaSeedRevision,
   });
   const gaps: SourceVocabularyGap[] = [];
   const registration: SourceRegistration<SourceAssets> = {
