@@ -1184,6 +1184,10 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   permitted. Future safe aggregates require separately admitted complete disclosure dependencies
   and query-level privacy acknowledgement. The adopted count-free discovery wire is owned by
   [Public facet discovery](../../../../docs/search-facets.md); it does not make this preview complete.
+- Resource-language refinement reuses that wire: the page requests `schema:inLanguage` in its one aggregate facet
+  page at size 10, then continues one property at a time within the existing 64-cursor window. Its option predicate
+  omits only the selected resource-language facet; Search retains that selection and every authored Boolean
+  language condition. The UI adds no per-result reads, counts, aggregate producer or disclosure path.
 - Growth check: existing facet/overflow tests retain their scoped evidence. Native paused-indexer local/foreign
   reduction, NOT and order/count cases and three-scale engine/native captures remain required before safe aggregate
   claims; the shared matrix in [Filtered lists](../../../../docs/filtered-lists.md#shared-acceptance-matrix) owns outcomes.

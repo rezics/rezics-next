@@ -10,6 +10,8 @@ import { compileRefinement, refinementHref, refinementProperties } from '../src/
 import { facetRequest, readFacetPage, refinementKey, type FacetRequest } from '../src/search/refinement/request';
 import { searchFormFields, searchLoaderDeps } from '../src/search/search-params';
 import { readSearchPage } from '../src/search/search-request';
+import { scopedRefinementRequests } from '../src/search/refinement/scoped-refinement';
+import { withoutResourceLanguageSelection, RESOURCE_LANGUAGE_PROPERTY } from '../src/search/language-refinement';
 
 const release = recording.release;
 const book = 'schema:Book';
@@ -193,9 +195,23 @@ test('predicate edits, header submission and generation restarts keep conditions
   expect(refinementKey(context)).not.toBe(refinementKey({ ...context, languages: ['ja'] }));
 });
 
-test('the real visible Search journey consumes its actual typed API and current data through the shared Web shell with no fake trends counts or permission', async () => {
+test('the mounted Search language refinement uses the generated facet client and current count-free options', async () => {
   const calls: unknown[] = [];
-  const request = facetRequest({ text: 'reading', languages: ['en'] }, [{ property: 'schema:inLanguage' }]);
+  const selectedCondition: FilterDocument = {
+    not: { statement: { property: RESOURCE_LANGUAGE_PROPERTY, in: ['de'] } },
+  };
+  const searchState = searchLoaderDeps({
+    q: 'reading',
+    type: book,
+    language: ['en'],
+    'f.schema:inLanguage': ['pt-BR'],
+    condition: JSON.stringify(selectedCondition),
+  });
+  const request = scopedRefinementRequests(
+    withoutResourceLanguageSelection(searchState),
+    ['en'],
+    [{ property: RESOURCE_LANGUAGE_PROPERTY }],
+  ).facets!;
   const client = createKernelClient('http://kernel.local', {
     fetch: async (url, init) => {
       calls.push({
@@ -204,19 +220,35 @@ test('the real visible Search journey consumes its actual typed API and current 
         authorization: new Headers(init?.headers).get('authorization'),
       });
       return Response.json({
-        facets: [{ property: 'schema:inLanguage', values: [{ value: 'en', labels: { en: 'English' } }], next: null }],
+        facets: [
+          {
+            property: 'schema:inLanguage',
+            values: [
+              { value: 'ja', labels: { ja: '日本語' } },
+              { value: 'zh-Hant', labels: { en: 'Traditional Chinese' } },
+              { value: 'pt-BR', labels: { pt: 'Português (Brasil)' } },
+              { value: 'es-419', labels: { es: 'Español (Latinoamérica)' } },
+            ],
+            next: null,
+          },
+        ],
         as_of,
       });
     },
   });
   const state = await readFacetPage(request, (body) => client.subjects.$facets.post(body));
+  expect(state.status).toBe('ready');
+  expect(request.filter).toMatchObject({
+    and: expect.arrayContaining([selectedCondition, { type: { in: [book] } }]),
+  });
+  expect(JSON.stringify(request.filter)).not.toContain('pt-BR');
   const render = (initial: typeof state) =>
     renderToStaticMarkup(
       createElement(HeaderSearchFilterProvider, {
         children: createElement(Refinement, {
           query: 'reading',
           locale: 'en',
-          conditions: { facetValues: { 'schema:inLanguage': ['en'] } },
+          conditions: { facetValues: { [RESOURCE_LANGUAGE_PROPERTY]: ['pt-BR'] } },
           data: { key: 'actual-response', properties: refinementProperties(release, book), initial },
           load: async () => initial,
         }),
@@ -224,7 +256,11 @@ test('the real visible Search journey consumes its actual typed API and current 
     );
   const html = render(state);
   expect(calls).toEqual([{ url: 'http://kernel.local/v1/subjects:facets', body: request, authorization: null }]);
-  expect(html).toContain('English');
+  expect(html).toContain('日本語');
+  expect(html).toContain('lang="ja"');
+  expect(html).toContain('zh-Hant');
+  expect(html).toContain('pt-BR');
+  expect(html).toContain('es-419');
   expect(html).toContain('checked=""');
   expect(html).toContain('Choose a property');
   expect(html).toContain('Clear filters');

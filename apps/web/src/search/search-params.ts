@@ -8,6 +8,7 @@ import {
   type SearchResourceScope,
 } from './advanced-scope';
 import { canonicalRealmRatingPopulationId, RATING_POPULATION_FIELD } from './rating-population';
+import { canonicalResourceLanguageValues, RESOURCE_LANGUAGE_PROPERTY } from './language-refinement';
 
 const facetValue = v.optional(v.union([v.string(), v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))]));
 
@@ -131,11 +132,14 @@ export function facetValuesFromSearch(search: Record<string, unknown>): SearchFa
   for (const [key, value] of Object.entries(search)) {
     if (!key.startsWith('f.') || key.length <= 2) continue;
     const property = key.slice(2);
-    if (typeof value === 'string') facets[property] = [value];
+    if (typeof value === 'string')
+      facets[property] =
+        property === RESOURCE_LANGUAGE_PROPERTY ? canonicalResourceLanguageValues([value]) : [value];
     else if (Array.isArray(value)) {
       if (value.length > FILTER_LIMITS.in || value.some((item) => typeof item !== 'string'))
         throw new Error('Invalid facet values');
-      facets[property] = value;
+      facets[property] =
+        property === RESOURCE_LANGUAGE_PROPERTY ? canonicalResourceLanguageValues(value as string[]) : value;
     }
   }
   return facets;

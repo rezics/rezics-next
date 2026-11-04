@@ -79,3 +79,20 @@ test('keyboard reorder and removal keep focus on the surviving control with exac
   expect(tags()).toEqual([]);
   expect(document.activeElement).toBe(host.querySelector('select'));
 });
+
+test('adding a valid non-interface BCP 47 preference keeps its exact tag and moves focus into the new row', async () => {
+  held.languages = ['en'];
+  await act(() => render());
+  const input = host.querySelector<HTMLInputElement>('input')!;
+  const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+  await act(() => {
+    setValue.call(input, 'PT-br');
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
+  const add = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === m.condition_languages_add_custom({}, { locale: 'en' }),
+  )!;
+  await press(add);
+  expect(tags()).toEqual(['en', 'pt-BR']);
+  expect(document.activeElement).toBe(control(row('pt-BR'), m.condition_languages_move_up({ language: 'pt-BR' })));
+});

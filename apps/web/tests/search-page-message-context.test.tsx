@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { searchLoaderDeps } from '../src/search/search-params';
+import { RESOURCE_LANGUAGE_PROPERTY, resourceLanguageRefinement } from '../src/search/language-refinement';
+import type { FacetState } from '../src/search/refinement/request';
 import { SearchInputRecovery } from '../src/search/search-input-recovery';
 import type { SearchPageData } from '../src/search/search';
 
@@ -81,6 +83,56 @@ function pageData(editing = false): SearchPageData {
     staleCursorRestarted: true,
     sort: 'relevance',
     result: { subjects: [], next: null, as_of: '2026-11-03T00:00:00.000Z' },
+  };
+}
+
+function resourceLanguagePageData(): SearchPageData {
+  const queryState = searchLoaderDeps({
+    q: 'Mira',
+    type: 'schema:Book',
+    language: ['en'],
+    'f.schema:inLanguage': ['pt-BR'],
+    condition: JSON.stringify({ not: { statement: { property: RESOURCE_LANGUAGE_PROPERTY, in: ['ja'] } } }),
+  });
+  const properties = [
+    {
+      property: RESOURCE_LANGUAGE_PROPERTY,
+      labels: { en: 'Language' },
+      mode: 'values' as const,
+      datatype: 'string',
+      units: [],
+    },
+  ];
+  const initial: FacetState = {
+    status: 'ready',
+    page: {
+      as_of: '2026-11-03T00:00:00.000Z',
+      facets: [
+        {
+          property: RESOURCE_LANGUAGE_PROPERTY,
+          values: [
+            { value: 'ja', labels: { ja: '日本語' } },
+            { value: 'zh-Hant', labels: { en: 'Traditional Chinese' } },
+            { value: 'es-419', labels: { es: 'español' } },
+          ],
+          next: 'opaque-language-cursor',
+        },
+      ],
+    },
+  };
+  return {
+    ...pageData(),
+    queryState,
+    type: queryState.type,
+    condition: queryState.condition,
+    selectedFacets: queryState.facets,
+    selectedFacetLabels: {},
+    refinement: { key: 'resource-language-test', properties, initial },
+    resourceLanguage: resourceLanguageRefinement(
+      properties,
+      queryState.facets[RESOURCE_LANGUAGE_PROPERTY] ?? [],
+      initial,
+    ),
   };
 }
 
@@ -193,6 +245,78 @@ test('Search page chrome and malformed-input recovery follow the page locale aga
   } finally {
     setLocale(previous, { reload: false });
   }
+});
+
+test('the live Search filter renders a separate resource-language refinement with current labels and removable absent values', () => {
+  const html = renderToStaticMarkup(
+    createElement(SearchPage, { query: 'Mira', data: resourceLanguagePageData(), locale: 'en' }),
+  );
+  const en = options.en;
+  const selectedSummary = m.search_constraint_identity_filter(
+    { number: '2', label: `${m.search_resource_language({}, en)}: pt-BR` },
+    en,
+  );
+  const date = new Intl.DateTimeFormat('en', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  }).format(new Date('2026-11-03T00:00:00.000Z'));
+  expect(html).toContain(m.search_resource_language({}, en));
+  expect(html).toContain(m.search_resource_language_help({}, en));
+  expect(html).toContain(m.search_resource_language_current({ date }, en));
+  expect(html).toContain(m.condition_languages_label({}, en));
+  expect(html).toContain('日本語');
+  expect(html).toContain('lang="ja"');
+  expect(html).toContain('name="f.schema:inLanguage"');
+  expect(html).toMatch(/name="f\.schema:inLanguage"[^>]*value="pt-BR"[^>]*checked/);
+  expect(html).toContain(`aria-label="${m.refinement_remove({ value: selectedSummary }, en)}"`);
+  expect(html).toContain(m.search_resource_language_clear({}, en));
+  expect(html).toContain(m.refinement_more_values({}, en));
+  expect(html).not.toContain('count=');
+});
+
+test('resource-language refusal, preparation, unavailable and missing-release states keep selected values repairable', () => {
+  const stateMessages = [
+    [{ status: 'refused', httpStatus: 403, code: 'forbidden' } as const, m.refinement_refused({}, options.en)],
+    [{ status: 'preparing', httpStatus: 202, code: 'index_not_ready' } as const, m.search_reader_facets_not_ready({}, options.en)],
+    [{ status: 'unavailable', code: 'transport_error' } as const, m.search_reader_facets_unavailable({}, options.en)],
+  ] as const;
+  for (const [state, message] of stateMessages) {
+    const data = resourceLanguagePageData();
+    data.refinement = { ...data.refinement!, initial: state };
+    data.resourceLanguage = resourceLanguageRefinement(
+      data.refinement.properties,
+      data.selectedFacets[RESOURCE_LANGUAGE_PROPERTY] ?? [],
+      state,
+    );
+    const html = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data, locale: 'en' }));
+    expect(html).toContain(message);
+    expect(html).toMatch(/name="f\.schema:inLanguage"[^>]*value="pt-BR"[^>]*checked/);
+  }
+
+  const stale = resourceLanguagePageData();
+  stale.refinement = undefined;
+  stale.resourceLanguage = resourceLanguageRefinement(
+    [],
+    stale.selectedFacets[RESOURCE_LANGUAGE_PROPERTY] ?? [],
+    { status: 'unavailable', code: 'release_unavailable' },
+    false,
+  );
+  const staleHtml = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data: stale, locale: 'en' }));
+  expect(staleHtml).toContain(m.search_resource_language_metadata_unavailable({}, options.en));
+  expect(staleHtml).toContain(m.search_resource_language_clear({}, options.en));
+
+  const missing = resourceLanguagePageData();
+  const refused = { status: 'refused', httpStatus: 404, code: 'property_not_applicable' } as const;
+  missing.refinement = { ...missing.refinement!, properties: [], initial: refused };
+  missing.resourceLanguage = resourceLanguageRefinement(
+    [],
+    missing.selectedFacets[RESOURCE_LANGUAGE_PROPERTY] ?? [],
+    refused,
+  );
+  const missingHtml = renderToStaticMarkup(createElement(SearchPage, { query: 'Mira', data: missing, locale: 'en' }));
+  expect(missingHtml).toContain(m.search_resource_language_not_applicable({}, options.en));
+  expect(missingHtml).toContain(m.search_resource_language_clear({}, options.en));
 });
 
 test('mobile Filters heading follows the supplied locale while ambient English differs', async () => {

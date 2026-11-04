@@ -17,6 +17,7 @@ export type RefinementProperty = {
   mode: 'values' | 'types' | 'range' | 'unsupported';
   datatype: string;
   units: readonly string[];
+  help?: string;
 };
 export type RefinementConditions = {
   kinds?: string[];
