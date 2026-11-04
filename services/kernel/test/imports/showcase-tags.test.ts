@@ -441,11 +441,7 @@ function guessedTagCreate(input: {
   };
 }
 
-async function acceptAdopted(
-  editor: Awaited<ReturnType<typeof openApiObserver>>,
-  subjectId: string,
-  property: string,
-) {
+async function acceptAdopted(editor: Awaited<ReturnType<typeof openApiObserver>>, subjectId: string, property: string) {
   const seen = new Set<string>();
   for (;;) {
     const page = await editor.http(
@@ -507,7 +503,14 @@ test('default selected VN tag publication keeps language-less names as und throu
     const port = captureShowcaseCommands(runtime.importTransport, journal);
     const tables = dictionaryTables();
     const plan = await planShowcaseTags({ tables, selectedVids: ['v410'] });
-    await prepareShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal, stage: 'schemes' });
+    await prepareShowcaseVndbPublicTagVocabulary({
+      tables,
+      selectedVids: ['v410'],
+      plan,
+      port,
+      journal,
+      stage: 'schemes',
+    });
     await prepareShowcaseVndbPublicTagVocabulary({
       tables,
       selectedVids: ['v410'],
@@ -517,9 +520,13 @@ test('default selected VN tag publication keeps language-less names as und throu
       stage: 'concepts',
     });
     const created = new Map(
-      journal.acknowledgedCommands().flatMap((ack) =>
-        ack.command.op === 'create' && ack.subjectId ? [[ack.command.source.external_id, ack.subjectId] as const] : [],
-      ),
+      journal
+        .acknowledgedCommands()
+        .flatMap((ack) =>
+          ack.command.op === 'create' && ack.subjectId
+            ? [[ack.command.source.external_id, ack.subjectId] as const]
+            : [],
+        ),
     );
     const hanId = created.get('vocabulary:vndb.tag.cont:g311')!;
     const kanaId = created.get('vocabulary:vndb.tag.cont:g12')!;
@@ -631,7 +638,10 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
     journal.prepareCommand(kana);
     const sealed = await runtime.importTransport.batch({ commands: [kana] });
     expect(sealed.results[0]?.status).toBe(201);
-    journal.acknowledgeCommand(kana, sealed.results[0] as Extract<(typeof sealed.results)[number], { status: 200 | 201 }>);
+    journal.acknowledgeCommand(
+      kana,
+      sealed.results[0] as Extract<(typeof sealed.results)[number], { status: 200 | 201 }>,
+    );
     const sealedKanaId = (sealed.results[0] as { value: { id: string } }).value.id;
     journal.prepareCommand(han);
     journal.close();
@@ -647,7 +657,14 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
     };
     const tables = dictionaryTables();
     const plan = await planShowcaseTags({ tables, selectedVids: ['v410'] });
-    await prepareShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal, stage: 'schemes' });
+    await prepareShowcaseVndbPublicTagVocabulary({
+      tables,
+      selectedVids: ['v410'],
+      plan,
+      port,
+      journal,
+      stage: 'schemes',
+    });
     await prepareShowcaseVndbPublicTagVocabulary({
       tables,
       selectedVids: ['v410'],
@@ -665,18 +682,24 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
     expect(recoveredHan?.key).toBe(han.key);
     expect(recoveredHan?.subject.labels).toEqual({ 'zh-Hant': '学園' });
     expect(creates.filter((command) => command.source.external_id === han.source.external_id)).toHaveLength(1);
-    expect(creates.find((command) => command.source.external_id === 'vocabulary:vndb.tag.ero:g44')?.subject.labels).toEqual(
-      { und: 'Authored erotic tag' },
-    );
+    expect(
+      creates.find((command) => command.source.external_id === 'vocabulary:vndb.tag.ero:g44')?.subject.labels,
+    ).toEqual({ und: 'Authored erotic tag' });
     const created = new Map(
-      journal.acknowledgedCommands().flatMap((ack) =>
-        ack.command.op === 'create' && ack.subjectId ? [[ack.command.source.external_id, ack.subjectId] as const] : [],
-      ),
+      journal
+        .acknowledgedCommands()
+        .flatMap((ack) =>
+          ack.command.op === 'create' && ack.subjectId
+            ? [[ack.command.source.external_id, ack.subjectId] as const]
+            : [],
+        ),
     );
     expect(created.get(kana.source.external_id)).toBe(sealedKanaId);
     const kanaRead = await editor.http(`/v1/subjects/${sealedKanaId}?context=${globalContext}`);
     expect(kanaRead.status).toBe(200);
-    expect((kanaRead.body as { subject: { labels?: Record<string, string> } }).subject.labels).toEqual({ ja: '親タグ' });
+    expect((kanaRead.body as { subject: { labels?: Record<string, string> } }).subject.labels).toEqual({
+      ja: '親タグ',
+    });
     const hanId = created.get(han.source.external_id)!;
     const latinId = created.get('vocabulary:vndb.tag.ero:g44')!;
     for (const [id, property] of [

@@ -614,7 +614,9 @@ test('reopening a pre-repair journal recovers sealed sends and original Concept 
     expect(recoveredHan?.key).toBe(han.key);
     expect(recoveredHan?.subject.labels).toEqual({ 'zh-Hant': '学園' });
     expect(creates.filter((command) => command.source.external_id === han.source.external_id)).toHaveLength(1);
-    expect(creates.find((command) => command.source.external_id === 'vocabulary:vndb.tag.ero:g44')?.subject.labels).toEqual({
+    expect(
+      creates.find((command) => command.source.external_id === 'vocabulary:vndb.tag.ero:g44')?.subject.labels,
+    ).toEqual({
       und: 'Authored erotic tag',
     });
     const current = await readShowcaseVndbPublicTagVocabulary({
@@ -648,9 +650,12 @@ test('reopening a pre-repair journal recovers sealed sends and original Concept 
         ?.statement.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel')?.value;
     expect(spoiler(g311)).toEqual({ type: 'value', content: { amount: '+0', unit: '1' } });
     expect(spoiler(g44)).toEqual({ type: 'value', content: { amount: '+2', unit: '1' } });
-    expect(imported.vocabulary.filter((item) => item.state === 'adopted').map((item) => item.key).sort()).toEqual(
-      ['cont', 'ero', 'g12', 'g311', 'g44', 'g88'].sort(),
-    );
+    expect(
+      imported.vocabulary
+        .filter((item) => item.state === 'adopted')
+        .map((item) => item.key)
+        .sort(),
+    ).toEqual(['cont', 'ero', 'g12', 'g311', 'g44', 'g88'].sort());
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
