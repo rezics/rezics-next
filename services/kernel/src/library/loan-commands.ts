@@ -426,7 +426,7 @@ export async function loanPeopleDisplay(
 
 export function createLoanCommands(config: Dependencies) {
   const { pool, access, routeKey, tokens, clock = systemClock } = config;
-  const runner = createLibraryCommandRunner({ pool, access, clock });
+  const runner = createLibraryCommandRunner({ pool, clock });
 
   async function createLoan(actor: Actor, input: unknown, requestKey: string) {
     const owner = requireActor(actor, 'copy:create');
