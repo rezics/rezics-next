@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { DeleteAccountContent } from '../src/routes/account.delete';
-import { creationFixture, open, button, flush, fill, send } from './creation-page-fixture';
+import { creationFixture, open, button, flush, fill, send, dom } from './creation-page-fixture';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
 import { readPendingAccountOperationStepUp } from '../src/account-operation-step-up';
 creationFixture();
@@ -22,11 +22,15 @@ test('direct ordinary visit authenticates without confirmation or approval and r
     await flush(() => button(page.host, 'Authenticate and return to review')!.click());
     expect(assign).toHaveBeenCalledWith('/step-up?account_operation=delete&return_to=%2Faccount%2Fdelete');
     const saved = readPendingAccountOperationStepUp()!;
+    expect(saved.submitted).toBe(false);
     expect(page.calls).toHaveLength(0);
     await page.render(<DeleteAccountContent key="returned" {...props} initial={review} />);
     expect(page.host.querySelector('input')!.value).toBe('');
     expect(button(page.host, 'Delete account')!.disabled).toBe(true);
     expect(page.host.textContent).toContain('No action has been executed by returning here');
+    const departure = new dom.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(departure);
+    expect(departure.defaultPrevented).toBe(false);
     await flush(() => {
       fill(page.host.querySelector('input')!, ' DELETE MY ACCOUNT ');
       send(page.host);

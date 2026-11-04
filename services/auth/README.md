@@ -2924,6 +2924,8 @@ JSON content type, no query or bearer header, and private/no-store responses. It
 the live human session. Ordinary sessions receive only `authentication-required` and their session account id;
 they cause neither a private identity read nor deletion preparation. The existing deletion step-up continuation
 returns to a new review and requires a new typed confirmation. It never executes deletion on return.
+Decision: authentication before review saves an unsent continuation; only dispatch marks it submitted, and older
+continuations retain their conservative submitted interpretation. This local departure hint grants no authority.
 
 The exact deletion management profile admits the narrow native `readAccountDeletionAdvice` producer installed
 by `createNativeAccountBindings`. It uses `managedAuthWorkflowDescriptor('delete', human.account_id)` and the

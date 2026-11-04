@@ -273,7 +273,7 @@ export function DeleteAccountContent({
             intendedAccount.current = result.accountId;
             activeAccount.current = result.accountId;
             setAccountId(result.accountId);
-            unresolved.current = Boolean(pendingOperation);
+            unresolved.current = Boolean(pendingOperation && pendingOperation.submitted !== false);
             setReturned(Boolean(pendingOperation));
             setAdvice(result);
             setLoadState('ready');
@@ -417,7 +417,13 @@ export function DeleteAccountContent({
       return;
     }
     const operationKey = state.kind === 'pending' ? state.value.operationKey : operationKeyFor(operation, accountId);
-    if (!storePendingAccountOperationStepUp({ kind: 'delete', accountId, operationKey, operation })) {
+    if (!storePendingAccountOperationStepUp({
+      kind: 'delete',
+      accountId,
+      operationKey,
+      operation,
+      submitted: state.kind === 'pending' ? (state.value.submitted ?? true) : false,
+    })) {
       setMessage(m.auth_account_operation_failure());
       return;
     }
