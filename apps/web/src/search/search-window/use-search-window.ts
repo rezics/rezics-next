@@ -10,7 +10,7 @@ import { searchWindowFocus } from './focus';
 
 const operations = [] as const;
 type Transition = { request: string; from: string | null; to: string | null; action: string };
-type Visit = { request: string; history: SearchWindowHistory; cursor: string | null; checkpoint?: string };
+type Visit = { request: string; history: SearchWindowHistory; cursor: string | null; checkpoint?: string | undefined };
 
 /** A single Search visit owns its address history; browser entries carry only its bounded admitted addresses. */
 export function useSearchWindow({
