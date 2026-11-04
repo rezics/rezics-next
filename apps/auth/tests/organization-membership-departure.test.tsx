@@ -73,9 +73,19 @@ async function mount() {
   list.mockResolvedValue({
     kind: 'ready',
     organizationId: org,
-    role: 'owner',
-    holders: [{ accountId: member, role: 'member', reservationId: reservation }],
-    next: 'next',
+    viewer: { accountId: account, role: 'owner', leave: 'unavailable' },
+    members: {
+      state: 'ready',
+      holders: [
+        {
+          accountId: member,
+          account: { id: member, kind: 'actor', handle: 'member', displayName: 'Current Member' },
+          role: 'member',
+          actions: { changeRole: 'allowed', remove: 'allowed' },
+        },
+      ],
+      next: 'next',
+    },
   });
   const parent = createRootRoute({ component: Outlet });
   const review = createRoute({
@@ -83,10 +93,11 @@ async function mount() {
     path: '/organizations/members',
     component: () => <OrganizationMembersPage organizationId={org} />,
   });
+  const security = createRoute({ getParentRoute: () => parent, path: '/security', component: () => 'Security' });
   const away = createRoute({ getParentRoute: () => parent, path: '/away', component: () => 'Away' });
   router = createRouter({
     history: createMemoryHistory({ initialEntries: ['/organizations/members'] }),
-    routeTree: parent.addChildren([review, away]),
+    routeTree: parent.addChildren([review, security, away]),
   });
   host = document.body.appendChild(document.createElement('div'));
   root = createRoot(host);
@@ -108,29 +119,21 @@ afterAll(async () => {
   await dom.happyDOM.close();
 });
 
-test('changed draft alone warns; Stay restores focus and values, Leave discards, clean visits leave normally', async () => {
+test('an unsent selected-member command warns; Stay preserves it and Leave discards it', async () => {
   await mount();
   expect(unload()).toBe(false);
-  const field = host.querySelector<HTMLInputElement>('#membership-account')!;
-  await flush(() => {
-    field.focus();
-    Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(field, member);
-    field.dispatchEvent(new dom.Event('input', { bubbles: true }) as unknown as Event);
-    const role = host.querySelector<HTMLSelectElement>('#membership-role')!;
-    role.value = 'owner';
-    role.dispatchEvent(new dom.Event('change', { bubbles: true }) as unknown as Event);
-  });
+  await click(m.auth_members_change_role());
   expect(unload()).toBe(true);
   await navigate('/away');
   await click(m.auth_members_stay());
-  expect(document.activeElement).toBe(field);
-  expect(field.value).toBe(member);
-  expect(host.querySelector<HTMLSelectElement>('#membership-role')!.value).toBe('owner');
+  expect(document.activeElement).toBe(host.querySelector('#membership-confirmation'));
+  const saved = membership.readMembershipCommand();
+  expect(saved && saved !== 'invalid' ? saved.operation.role : null).toBe('owner');
   await navigate('/away');
   await click(m.auth_members_leave());
   expect(host.textContent).toBe('Away');
   await navigate('/organizations/members');
-  expect(host.querySelector<HTMLInputElement>('#membership-account')!.value).toBe('');
+  expect(membership.readMembershipCommand()).toBeNull();
   await navigate('/away');
   expect(host.textContent).toBe('Away');
 });

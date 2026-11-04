@@ -2820,6 +2820,20 @@ operator and exact reservation still match, while `reconciling` means the hold r
 state asserts a workflow's completion or cancellation. Responses are allowlisted and `private, no-store`, with no
 credentials, approval references, private profile or suspension reason. These read endpoints add no write capability.
 
+`organization-membership-page-source.ts` is a separate Auth page read. It admits the roster with native
+`organization:membership`, seeks at most 21 full member UUID keys for a 20-row page, then verifies each displayed
+role at one authoritative read time and batches only the public identity allowlist. Its opaque cursor binds the
+organization and current viewer. Each row gets bounded read-only owner-cardinality evidence and distinct native
+role-change/removal advice; a member's self-leave advice has its own native check. The whole call observes at most
+20 current roles, 20 public identity lookups grouped by account route, 20 owner probes, and three separate action
+checks, in addition to the single 21-key candidate seek and fixed viewer/organization and preparation reads.
+`lifecycle-owners.sql` is a non-locking observation;
+the command-time membership writer keeps the last-owner lock and is still authoritative. This DTO carries no
+reservation or version. `/account-management/organizations/member` remains the exact selected-member metadata
+source for the reservation operand; the operator management projection is not used for this roster.
+One operational read time is prepared before source reads, shared by the checks and role/owner observations, and
+released only after the full response is assembled; each pooled read or check returns its connection before the next.
+
 The detail DTO adds optional `authActions`: `{state: "ready", operations: [...]}` or
 `{state: "unavailable"}`. Each positive entry contains only `operationId`, `action` and
 `resource: {route, id}`. Older DTOs may omit the field. The native producer emits its current observation;
