@@ -31,7 +31,7 @@ test('createKernel mounts pin advice with its authenticated action, separate fro
   });
   const actions = actionCatalogue(kernel);
   expect(actions.get('board:read')?.anonymous).toBe(true);
-  expect(actions.get('board:pin-advice')?.anonymous).toBe(false);
+  expect(actions.get('board:pin_advice')?.anonymous).toBe(false);
 });
 
 // These are composition outcomes, not native authority or growth evidence.
