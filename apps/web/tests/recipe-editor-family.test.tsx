@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act, type ComponentProps, type ReactNode } from 'react';
+import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { ScalarControl } from '../src/features/catalogue/statement-editor-view';
 import type { RichTextEditor } from '@rezics/ui/rich-text-editor';
 import type { EntityPicker } from '@rezics/ui/entity-picker';
@@ -264,6 +265,7 @@ test('Recipe creation and current correction share complete frames with independ
   const longCitation = `https://cook.example/original/${'precise-citation-'.repeat(16)}?language=ja#page-24`;
   try {
     const creation = recipeFixture('uncertain');
+    creation.transport.eligibility = async () => allowedCreateAuthority;
     const correction = recipeFixture();
     const loadCreation = creation.transport.load;
     const createCreation = creation.transport.create;
@@ -332,6 +334,9 @@ test('Recipe creation and current correction share complete frames with independ
     await show(pair());
     await until(() => host.querySelectorAll('select').length === 2);
     const [a, b] = articles() as [HTMLElement, HTMLElement];
+    await until(() => a.textContent!.includes(m.identity_intake_authority_allowed()));
+    expect(b.textContent).not.toContain(m.identity_intake_authority_allowed());
+    expect(b.textContent).not.toContain(m.identity_intake_authority_refused_permission());
     const cleanDeparture = new window.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(cleanDeparture);
     expect(cleanDeparture.defaultPrevented).toBe(false);
@@ -1000,12 +1005,16 @@ test('Recipe creation and current correction share complete frames with independ
         key="signed-out"
         locale="en"
         session="signed-out"
-        transport={signedOut.transport}
+        transport={{
+          ...signedOut.transport,
+          eligibility: async () => ({ state: 'guest' }),
+        }}
         search={search}
       />,
     );
     await until(() => !!host.querySelector('select'));
-    expect(host.textContent).toContain(m.catalogue_create_signed_out());
+    expect(host.textContent).toContain(m.identity_intake_authority_guest());
+    expect(host.textContent).not.toContain(m.identity_intake_authority_refused_permission());
     expect((within(host).getByRole('button', { name: m.recipe_title() }) as HTMLButtonElement).disabled).toBe(true);
     expect(signedOut.calls.every((call) => call.method === 'GET')).toBe(true);
 
@@ -1127,6 +1136,76 @@ test('Recipe creation and current correction share complete frames with independ
       expect(host.textContent).toContain(freshValue);
       expect(host.textContent).not.toContain(m.correction_unavailable());
     }
+
+    let observation: CreateAuthority = { state: 'refused', reason: 'permission' };
+    const refused = recipeFixture();
+    await show(
+      <RecipeEditor
+        key="refused-eligibility"
+        locale="en"
+        session="signed-in"
+        search={search}
+        transport={{ ...refused.transport, eligibility: async () => observation }}
+      />,
+    );
+    await until(() => host.textContent!.includes(m.identity_intake_authority_refused_permission()));
+    expect(host.querySelector('select')).not.toBeNull();
+    await replace(input(host, m.catalogue_create_label()), 'Kept recipe draft');
+    expect((within(host).getByRole('button', { name: m.recipe_review() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(host).getByRole('button', { name: m.recipe_title() }) as HTMLButtonElement).disabled).toBe(true);
+    expect(posts(refused, '/subjects')).toHaveLength(0);
+    observation = { state: 'unknown', reason: 'unavailable' };
+    await click(host, m.identity_intake_authority_retry());
+    await until(() => host.textContent!.includes(m.identity_intake_authority_unknown()));
+    expect((input(host, m.catalogue_create_label()) as HTMLInputElement).value).toBe('Kept recipe draft');
+    observation = allowedCreateAuthority;
+    await click(host, m.identity_intake_authority_retry());
+    await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
+    expect((input(host, m.catalogue_create_label()) as HTMLInputElement).value).toBe('Kept recipe draft');
+    await reviewRecipe(host);
+    await until(() => !!within(host).queryByRole('region', { name: m.recipe_review_title() }));
+    observation = { state: 'refused', reason: 'permission' };
+    await click(host, m.recipe_title());
+    await until(() => host.textContent!.includes(m.identity_intake_authority_refused_permission()));
+    expect(posts(refused, '/subjects')).toHaveLength(0);
+
+    const late = deferred<CreateAuthority>();
+    let eligibilityCalls = 0;
+    const replacement = recipeFixture();
+    await show(
+      <RecipeEditor
+        key="eligibility-late"
+        locale="en"
+        session="signed-in"
+        search={search}
+        transport={{
+          ...replacement.transport,
+          eligibility: async () => {
+            eligibilityCalls += 1;
+            return eligibilityCalls === 1 ? late.promise : allowedCreateAuthority;
+          },
+        }}
+      />,
+    );
+    await until(() => host.textContent!.includes(m.identity_intake_authority_reading()));
+    await show(
+      <RecipeEditor
+        key="eligibility-replaced"
+        locale="en"
+        session="signed-out"
+        search={search}
+        transport={{
+          ...replacement.transport,
+          eligibility: async () => ({ state: 'guest' }),
+        }}
+      />,
+    );
+    await until(() => host.textContent!.includes(m.identity_intake_authority_guest()));
+    await act(async () => late.resolve(allowedCreateAuthority));
+    await settle();
+    expect(host.textContent).toContain(m.identity_intake_authority_guest());
+    expect(host.textContent).not.toContain(m.identity_intake_authority_allowed());
+    expect(posts(replacement, '/subjects')).toHaveLength(0);
     await show(null);
   } finally {
     await act(async () => root.unmount());
@@ -1136,4 +1215,4 @@ test('Recipe creation and current correction share complete frames with independ
     for (const [key, descriptor] of previous)
       descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
   }
-}, 60_000);
+}, 90_000);

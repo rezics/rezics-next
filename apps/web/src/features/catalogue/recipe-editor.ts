@@ -11,6 +11,7 @@ import {
   type TermDraft,
 } from './create-subject';
 import { createSubjectRecord } from './create-subject-request';
+import type { CreateAuthority } from './identity-intake';
 import { proposeStatement, type ProposalCommand, type ProposalResult, type StatementInput } from './statement-editor';
 
 export type RecipeItem = InitialSubject & { statements: Record<string, StatementInput[]> };
@@ -21,6 +22,8 @@ export type RecipeRead =
   | { ok: true; release: Release; public: SubjectRead | null; fields: string[] };
 export type RecipeTransport = {
   load: () => Promise<RecipeRead>;
+  /** Current parent subject.create observation. Fresh create only; later correction omits it. */
+  eligibility?: () => Promise<CreateAuthority>;
   create: (command: RecipeCommand, replay?: boolean) => Promise<CreateResult>;
   propose: (command: ProposalCommand, replay?: boolean) => Promise<ProposalResult>;
   read: (id: string) => Promise<CreatedReader>;

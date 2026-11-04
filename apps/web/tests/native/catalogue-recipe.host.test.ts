@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { Page } from 'playwright';
+import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
@@ -143,6 +144,7 @@ test('native Recipe website creation selects structured facts; later per-field c
   });
 
   await page.locator('form').waitFor({ state: 'visible' });
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
   const offered = await page
     .getByRole('combobox', { name: 'Add fact' })
     .locator('option')
@@ -312,3 +314,60 @@ test('native Recipe website creation selects structured facts; later per-field c
   const allBrowserHeaders = await Promise.all(browserHeaders);
   expect(allBrowserHeaders.every((headers) => !headers.has('authorization'))).toBe(true);
 }, 900_000);
+
+test('guest eligibility stays searchable and does not create a Recipe', async () => {
+  const page = await (await auth.context('anonymous')).newPage();
+  page.setDefaultTimeout(30_000);
+  await page.goto(`${stack.web}/en/catalogue/recipe`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/sign in to create a catalogue identity/i).waitFor({ state: 'visible' });
+  await page.locator('form').waitFor({ state: 'visible' });
+  expect(await page.getByRole('button', { name: 'Review this recipe' }).isDisabled()).toBe(true);
+  expect(await page.getByRole('link', { name: /search/i }).getAttribute('href')).toMatch(/\/en\/search/);
+  expect(await recipePosts(`Guest recipe ${crypto.randomUUID()}`)).toHaveLength(0);
+  await page.close();
+}, 300_000);
+
+test('unavailable Recipe create observation keeps the draft; revoked authority does not create', async () => {
+  const journey = await auth.signIn('alice', { returnTo: '/en/catalogue/recipe' });
+  const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(30_000);
+  await stack.injectKernelFailureOnce({
+    method: 'POST',
+    path: '/v1/viewerActions',
+    status: 503,
+    body: '{"title":"Temporarily unavailable","status":503,"code":"dependency_unavailable"}',
+  });
+  await page.goto(`${stack.web}/en/catalogue/recipe`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/required service is unavailable/i).waitFor({ state: 'visible' });
+  await page.locator('form').waitFor({ state: 'visible' });
+  const kept = `Retained recipe ${crypto.randomUUID()}`;
+  await page.getByRole('textbox', { name: 'Name' }).fill(kept);
+  expect(await page.getByRole('button', { name: 'Review this recipe' }).isDisabled()).toBe(true);
+  await page.getByRole('button', { name: /retry creation eligibility/i }).click();
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  expect(await page.getByRole('textbox', { name: 'Name' }).inputValue()).toBe(kept);
+
+  const alice = await stack.authPersona('alice');
+  const revoked = await stack.kernel(
+    '/v1/grants:revoke',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: alice.accountId },
+        actions: ['subject:create'],
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+  expect([200, 201, 204, 409]).toContain(revoked.status);
+  await page.goto(`${stack.web}/en/catalogue/recipe`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/does not allow creating a catalogue identity/i).waitFor({ state: 'visible' });
+  await page.locator('form').waitFor({ state: 'visible' });
+  const refused = `Refused recipe ${crypto.randomUUID()}`;
+  await page.getByRole('textbox', { name: 'Name' }).fill(refused);
+  expect(await page.getByRole('button', { name: 'Review this recipe' }).isDisabled()).toBe(true);
+  expect(await recipePosts(refused)).toHaveLength(0);
+}, 300_000);
