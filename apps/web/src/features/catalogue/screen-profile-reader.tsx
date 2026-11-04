@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from '@tanstack/react-router';
-import { useId, useRef } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
-import type { Release } from '@rezics/definitions';
+import { releaseDigest, type Release } from '@rezics/definitions';
 import { m } from '../../paraglide/messages.js';
 import { PlainLink, type PageLink } from '../pages/shared';
 import { ScreenProfileEntry } from './screen-profile-entry';
@@ -167,6 +167,7 @@ export function ScreenProfileOverview({
     observationGeneration.current += 1;
   }
   const episodeCursor = screenEpisodeCursor(location.searchStr);
+  const realmKey = new URLSearchParams(location.searchStr).get('realm') ?? '';
   const query = useQuery({
     queryKey: [
       'screen-profile-reader',
@@ -175,6 +176,7 @@ export function ScreenProfileOverview({
       publicRead.subject.type,
       publicRead.subject.context,
       context ?? '',
+      realmKey,
       viewerKey ?? '',
       locale,
       episodeCursor ?? '',
@@ -201,18 +203,63 @@ export function ScreenProfileOverview({
   const release = profile?.ok ? profile.release : undefined;
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
   const episodeRead = query.data?.episodes;
+  const [episodeRetryRead, setEpisodeRetryRead] = useState<{ visitKey: string; read: ScreenEpisodeRead }>();
+  const [retryingVisitKey, setRetryingVisitKey] = useState<string>();
+  const retryToken = useRef(0);
   const episodeVisitKey = [
     publicRead.subject.id,
     publicRead.subject.type,
     publicRead.subject.context,
     context ?? '',
+    realmKey,
     viewerKey ?? '',
     locale,
     readerSpoilerLevel,
     episodeCursor ?? '',
+    release ? releaseDigest(release) : '',
     query.dataUpdatedAt,
     observationGeneration.current,
   ].join(':');
+  const currentVisitKey = useRef(episodeVisitKey);
+  currentVisitKey.current = episodeVisitKey;
+  const retryEpisodes = async () => {
+    const token = ++retryToken.current;
+    const visitKey = episodeVisitKey;
+    setRetryingVisitKey(visitKey);
+    if (!release) {
+      void query.refetch();
+      setRetryingVisitKey(undefined);
+      return;
+    }
+    try {
+      const result = await loadScreenProfileForReader({
+        data: {
+          id: publicRead.subject.id,
+          expectedType: publicRead.subject.type,
+          locale,
+          ...(context ? { context } : {}),
+          ...(episodeCursor !== undefined ? { cursor: episodeCursor } : {}),
+        },
+      });
+      if (currentVisitKey.current !== visitKey || retryToken.current !== token) return;
+      if (result.profile.ok && releaseDigest(result.profile.release) !== releaseDigest(release)) {
+        setEpisodeRetryRead(undefined);
+        void query.refetch();
+        return;
+      }
+      setEpisodeRetryRead({
+        visitKey,
+        read: result.episodes ?? { ok: false, reason: 'unavailable' },
+      });
+    } catch {
+      if (currentVisitKey.current === visitKey && retryToken.current === token)
+        setEpisodeRetryRead({ visitKey, read: { ok: false, reason: 'unavailable' } });
+    } finally {
+      if (retryToken.current === token) setRetryingVisitKey(undefined);
+    }
+  };
+  const currentEpisodeRead =
+    episodeRetryRead?.visitKey === episodeVisitKey ? episodeRetryRead.read : episodeRead;
   return (
     <ScreenProfileReader
       locale={locale}
@@ -222,9 +269,11 @@ export function ScreenProfileOverview({
       {...(reason ? { reason } : {})}
       {...(query.isPending ? { loading: true } : {})}
       onRetry={() => void query.refetch()}
-      {...(episodeRead ? { episodeRead } : {})}
-      {...(query.isPending || query.isFetching ? { episodeLoading: true } : {})}
-      onEpisodeRetry={() => void query.refetch()}
+      {...(currentEpisodeRead ? { episodeRead: currentEpisodeRead } : {})}
+      {...(query.isPending || query.isFetching || retryingVisitKey === episodeVisitKey
+        ? { episodeLoading: true }
+        : {})}
+      onEpisodeRetry={() => void retryEpisodes()}
       episodeOrigin={{ pathname: location.pathname, searchStr: location.searchStr, hash: location.hash }}
       readerSpoilerLevel={readerSpoilerLevel}
       episodeVisitKey={episodeVisitKey}
