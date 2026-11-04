@@ -9,12 +9,14 @@ import type { RealmJoinAdvice } from '../src/community/native-operations';
 import type { RealmViewer } from '../src/community/realm-membership-queries';
 import { realmMembershipQuery } from '../src/community/realm-membership-queries';
 import { useRealmMembershipCaller } from '../src/community/realm-membership-lifetime';
+import { realmMembershipTestReaders } from './realm-membership-test-fixture';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => start.getRequest() }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const spaceActions = await import('../src/community/space-actions');
+const realmMembershipActions = await import('../src/community/realm-membership-actions');
 
 type MembershipCommand = {
   data: { realmId: string; action: 'join' | 'leave'; idempotencyKey: string };
@@ -32,13 +34,14 @@ let sendMembership: (input: MembershipCommand) => Promise<MembershipResult> = as
 });
 
 mock.module('../src/community/realm-membership-actions', () => ({
+  ...realmMembershipActions,
   readRealmMembership: ({ data }: { data: { realmId: string } }) => {
     standingReads.push(data.realmId);
-    return readMembership(data.realmId);
+    return realmMembershipTestReaders.readMembership(data.realmId);
   },
   readRealmJoinAdvice: ({ data }: { data: { realmId: string } }) => {
     joinAdviceReads.push(data.realmId);
-    return readJoinAdvice(data.realmId);
+    return realmMembershipTestReaders.readJoinAdvice(data.realmId);
   },
 }));
 mock.module('../src/community/space-actions', () => ({
@@ -229,6 +232,8 @@ function resetFixtures() {
   membershipCommands.length = 0;
   readMembership = async () => viewer('member');
   readJoinAdvice = async () => ({ state: 'current', allowed: true });
+  realmMembershipTestReaders.readMembership = (id) => readMembership(id);
+  realmMembershipTestReaders.readJoinAdvice = (id) => readJoinAdvice(id);
   sendMembership = async () => ({ outcome: 'accepted', workflowId: 'lifetime-workflow' });
 }
 
