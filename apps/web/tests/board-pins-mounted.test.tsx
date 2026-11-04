@@ -287,9 +287,9 @@ test('unknown retry keeps its original command and missing rows move focus to th
     toggles[0]!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-    (button) => button.textContent === m.board_pin_confirm(),
-  );
+  const dialog = document.querySelector<HTMLElement>('[data-slot="alert-dialog-content"]');
+  expect(dialog?.textContent).toContain(m.board_pin_confirm_title_pin());
+  const confirm = dialog?.querySelectorAll<HTMLButtonElement>('button').item(1);
   expect(confirm).toBeDefined();
   await act(async () => {
     confirm!.click();
