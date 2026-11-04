@@ -45,10 +45,11 @@ async function boundedBody(response: Response): Promise<Uint8Array> {
   } finally {
     reader.releaseLock();
   }
-  const body = new Uint8Array(length);
+  const body = new ArrayBuffer(length);
+  const view = new Uint8Array(body);
   let offset = 0;
   for (const chunk of chunks) {
-    body.set(chunk, offset);
+    view.set(chunk, offset);
     offset += chunk.byteLength;
   }
   return body;

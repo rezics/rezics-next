@@ -251,8 +251,8 @@ export const readQuestionManagementHistory = createServerFn({ method: 'GET' })
       const currentVisit = visitFor(
         {
           realmId: data.visit.realmId,
-          selectedQuestionId: data.visit.selectedQuestionId ?? undefined,
-          cursor: data.visit.cursor ?? undefined,
+          ...(data.visit.selectedQuestionId === null ? {} : { selectedQuestionId: data.visit.selectedQuestionId }),
+          ...(data.visit.cursor === null ? {} : { cursor: data.visit.cursor }),
         },
         session,
       );
@@ -304,8 +304,8 @@ export const executeQuestionManagementIntent = createServerFn({ method: 'POST' }
       const currentVisit = visitFor(
         {
           realmId: data.visit.realmId,
-          selectedQuestionId: data.visit.selectedQuestionId ?? undefined,
-          cursor: data.visit.cursor ?? undefined,
+          ...(data.visit.selectedQuestionId === null ? {} : { selectedQuestionId: data.visit.selectedQuestionId }),
+          ...(data.visit.cursor === null ? {} : { cursor: data.visit.cursor }),
         },
         session,
       );
