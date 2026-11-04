@@ -211,7 +211,7 @@ export function useOwnVotesCurrentOrigin(
       canRead,
       validateResult: (result) => {
         if (!canRead() || !result || typeof result !== 'object') return null;
-        const candidate = result as { data?: unknown; isSuccess?: boolean };
+        const candidate = result as { data?: unknown; isSuccess?: boolean; responseVersion?: number };
         const state = client.getQueryState(options.queryKey);
         const exactQueryRead =
           responseReads.current.started === requestNumber + 1 &&

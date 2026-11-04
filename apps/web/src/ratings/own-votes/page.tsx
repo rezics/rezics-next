@@ -33,7 +33,7 @@ export function CurrentViewerOwnVotesPage({
   invalidAddress?: boolean;
   responseVersion?: number;
 }) {
-  const historyKey = useRouterState({ select: (state) => state.location.key });
+  const historyKey = useRouterState({ select: (state) => state.location.state.key });
   const locale = getLocale();
   const receipt = useOwnVotesReturnReceipt(historyKey, cursor, locale);
   const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt, responseVersion);
@@ -87,7 +87,7 @@ export function CurrentViewerOwnVotesPage({
       review={({ data }) => voteReadbackForIntent(data.intent, data.after)}
       returnPending={returnVisit.pending && !returnVisit.failed}
       returnOutcome={returnOutcome}
-      returnIndex={returnIndex?.page === page ? returnIndex.index : undefined}
+      {...(returnIndex?.page === page ? { returnIndex: returnIndex.index } : {})}
       onDeparturePair={returnVisit.inspect}
     />
   );

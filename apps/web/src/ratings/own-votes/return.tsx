@@ -60,11 +60,15 @@ function routePath(pathname: string) {
 }
 
 function sameReturnAddress(
-  location: { pathname: string; search: Record<string, unknown>; key: string },
+  location: { pathname: string; search: Record<string, unknown>; state: { key: string } },
   receipt: OwnVotesReturnReceipt,
 ) {
   const cursor = typeof location.search.cursor === 'string' ? location.search.cursor : null;
-  return routePath(location.pathname) === '/library/ratings' && location.key === receipt.historyKey && cursor === receipt.owner.cursor;
+  return (
+    routePath(location.pathname) === '/library/ratings' &&
+    location.state.key === receipt.historyKey &&
+    cursor === receipt.owner.cursor
+  );
 }
 
 export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
@@ -107,6 +111,7 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!router) return;
     const stop = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
+      if (!fromLocation) return;
       const current = receiptRef.current;
       if (!current) return;
       if (
@@ -135,7 +140,7 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
       const current = receiptRef.current;
       if (!event.persisted || current?.phase !== 'bfcache-away') return;
       if (
-        current.historyKey === router.state.location.key &&
+        current.historyKey === router.state.location.state.key &&
         current.owner.locale === getLocale() &&
         current.owner.eligible()
       )
@@ -209,6 +214,7 @@ export function useOwnVotesReturn({
   useEffect(() => {
     if (!router || !state) return;
     const stop = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
+      if (!fromLocation) return;
       if (routePath(fromLocation.pathname) !== '/library/ratings') return;
       const destination = routePath(toLocation.pathname);
       if (!destination.startsWith('/subjects/')) {
@@ -224,7 +230,7 @@ export function useOwnVotesReturn({
       const selected = pair.current.visitKey === visitKey ? pair.current.value : null;
       state.depart(
         {
-          historyKey: fromLocation.key,
+          historyKey: fromLocation.state.key,
           pair: selected,
           owner: activeOwner,
         },
@@ -239,7 +245,7 @@ export function useOwnVotesReturn({
       if (activeOwner.cursor !== addressCursor) return;
       state.depart(
         {
-          historyKey: location.key,
+          historyKey: location.state.key,
           pair: pair.current.visitKey === visitKey ? pair.current.value : null,
           owner: activeOwner,
         },
