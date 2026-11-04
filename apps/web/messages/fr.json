@@ -9458,5 +9458,17 @@
   "creator_review_different_titles": "{count} titres enregistrés distincts",
   "creator_review_same_settlement": "Même état de paiement fourni ; ventes indépendantes",
   "creator_review_different_settlements": "{count} états de paiement distincts",
-  "creator_review_identity_hint": "Seule la référence précise identifie une vente. Des titres, offres, dates ou états identiques ne fusionnent pas les enregistrements et ne prouvent pas un versement commun."
+  "creator_review_identity_hint": "Seule la référence précise identifie une vente. Des titres, offres, dates ou états identiques ne fusionnent pas les enregistrements et ne prouvent pas un versement commun.",
+  "creator_review_refreshing_action": "Actualisation des ventes…",
+  "creator_review_refreshing_hint": "Actualisation de cette adresse de vente. Les sélections privées expirent ; sélectionner à nouveau les ventes précises dans le résultat reçu.",
+  "creator_review_page_context": "Contexte de la page reçue",
+  "creator_review_page_context_hint": "Décrit la page native fournie, indépendamment des filtres locaux. Ce n’est pas un total ou une recherche sur tout le compte.",
+  "creator_review_page_projection": "Observation de la projection native",
+  "creator_review_page_incomplete": "Préparation en cours ; les lignes reçues sont incomplètes",
+  "creator_review_page_received": "Page reçue ; les nombres restent propres à cette page",
+  "creator_review_page_continuation": "Continuation fournie",
+  "creator_review_page_more": "Une page plus ancienne peut être demandée explicitement",
+  "creator_review_page_no_cursor": "Aucun curseur de continuation fourni",
+  "creator_review_page_cursor_hint": "Le curseur natif est opaque. Les filtres locaux ne le modifient pas et ne transportent aucune condition cachée au redémarrage. Son absence ne certifie pas un historique financier complet.",
+  "creator_review_refresh_reselection": "L’actualisation peut remplacer la page même si les titres ou références semblent identiques. L’examen et la comparaison imposent une nouvelle sélection explicite."
 }

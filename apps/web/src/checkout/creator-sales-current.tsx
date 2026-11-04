@@ -134,6 +134,7 @@ function CurrentSalesRead({
   const sourceIsCurrent = () =>
     origin.isCurrent() &&
     client.getQueryState(queryKey)?.dataUpdateCount === observation &&
+    client.getQueryState(queryKey)?.fetchStatus !== 'fetching' &&
     client.getQueryData(queryKey) === value;
   if (hydrated && !origin.isCurrent())
     return (
@@ -146,6 +147,10 @@ function CurrentSalesRead({
       page={page}
       source={source}
       isCurrent={sourceIsCurrent}
+      refreshing={query.isFetching}
+      refresh={() => {
+        if (sourceIsCurrent()) void query.refetch();
+      }}
       locale={locale}
       {...(cursor === undefined ? {} : { cursor })}
     />

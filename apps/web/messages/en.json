@@ -9554,5 +9554,17 @@
   "creator_review_different_titles": "{count} distinct captured titles",
   "creator_review_same_settlement": "Same supplied payment state; independent sales",
   "creator_review_different_settlements": "{count} distinct supplied payment states",
-  "creator_review_identity_hint": "Only the exact sale reference identifies a sale. Matching titles, offers, dates or payment states do not merge records or prove a common payout."
+  "creator_review_identity_hint": "Only the exact sale reference identifies a sale. Matching titles, offers, dates or payment states do not merge records or prove a common payout.",
+  "creator_review_refreshing_action": "Refreshing sales…",
+  "creator_review_refreshing_hint": "Refreshing this sales address. Private selections are retired; choose exact sales again from the received result.",
+  "creator_review_page_context": "Received page context",
+  "creator_review_page_context_hint": "This describes the supplied native page, independently of local filters. It is not an account-wide count or search result.",
+  "creator_review_page_projection": "Native projection observation",
+  "creator_review_page_incomplete": "Preparation in progress; received rows are incomplete",
+  "creator_review_page_received": "Page received; counts remain page-local",
+  "creator_review_page_continuation": "Supplied continuation",
+  "creator_review_page_more": "An older page can be requested explicitly",
+  "creator_review_page_no_cursor": "No continuation cursor was supplied",
+  "creator_review_page_cursor_hint": "The native cursor is opaque. Local filters do not alter it or carry hidden conditions into a restart. No cursor does not certify complete financial history.",
+  "creator_review_refresh_reselection": "Refreshing can replace this page even if titles or sale references look the same. Inspection and comparison require deliberate reselection."
 }

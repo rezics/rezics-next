@@ -9458,5 +9458,17 @@
   "creator_review_different_titles": "{count} títulos registrados distintos",
   "creator_review_same_settlement": "Mismo estado de pago recibido; ventas independientes",
   "creator_review_different_settlements": "{count} estados de pago distintos",
-  "creator_review_identity_hint": "Solo la referencia exacta identifica una venta. Títulos, ofertas, fechas o estados iguales no fusionan registros ni prueban un desembolso común."
+  "creator_review_identity_hint": "Solo la referencia exacta identifica una venta. Títulos, ofertas, fechas o estados iguales no fusionan registros ni prueban un desembolso común.",
+  "creator_review_refreshing_action": "Actualizando ventas…",
+  "creator_review_refreshing_hint": "Se actualiza esta dirección de ventas. Las selecciones privadas caducan; vuelve a seleccionar las ventas exactas del resultado recibido.",
+  "creator_review_page_context": "Contexto de la página recibida",
+  "creator_review_page_context_hint": "Describe la página nativa recibida, independientemente de los filtros locales. No es un recuento ni una búsqueda de toda la cuenta.",
+  "creator_review_page_projection": "Observación de la proyección nativa",
+  "creator_review_page_incomplete": "Preparación en curso; las filas recibidas están incompletas",
+  "creator_review_page_received": "Página recibida; los recuentos solo cubren esta página",
+  "creator_review_page_continuation": "Continuación recibida",
+  "creator_review_page_more": "Se puede solicitar explícitamente una página anterior",
+  "creator_review_page_no_cursor": "No se recibió cursor de continuación",
+  "creator_review_page_cursor_hint": "El cursor nativo es opaco. Los filtros locales no lo cambian ni llevan condiciones ocultas al reinicio. Su ausencia no certifica un historial financiero completo.",
+  "creator_review_refresh_reselection": "Actualizar puede sustituir esta página aunque los títulos o referencias parezcan iguales. La inspección y la comparación requieren volver a seleccionar explícitamente."
 }

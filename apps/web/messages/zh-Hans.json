@@ -9458,5 +9458,17 @@
   "creator_review_different_titles": "{count} 个不同记录标题",
   "creator_review_same_settlement": "提供的付款状态相同，销售各自独立",
   "creator_review_different_settlements": "{count} 种不同的付款状态",
-  "creator_review_identity_hint": "只有确切销售引用能识别销售。相同标题、方案、日期或付款状态不会合并记录，也不证明同属一笔付款发放。"
+  "creator_review_identity_hint": "只有确切销售引用能识别销售。相同标题、方案、日期或付款状态不会合并记录，也不证明同属一笔付款发放。",
+  "creator_review_refreshing_action": "正在刷新销售…",
+  "creator_review_refreshing_hint": "正在刷新此销售地址。私人选择已失效；请从收到的结果中再次选择确切销售。",
+  "creator_review_page_context": "已收到的页面背景",
+  "creator_review_page_context_hint": "这是提供的原生页面信息，不受本页筛选影响，不是整个账户的计数或搜索结果。",
+  "creator_review_page_projection": "原生投影观察",
+  "creator_review_page_incomplete": "准备中；已收到的行仍不完整",
+  "creator_review_page_received": "页面已收到；计数仍只涵盖本页",
+  "creator_review_page_continuation": "提供的后续页",
+  "creator_review_page_more": "可明确请求较旧的页面",
+  "creator_review_page_no_cursor": "未提供后续页游标",
+  "creator_review_page_cursor_hint": "原生游标不透明。本页筛选不会更改游标，也不会在重新开始时带入隐藏条件。没有游标不代表财务历史完整。",
+  "creator_review_refresh_reselection": "刷新可能替换本页，即使标题或销售引用看似相同。查看与比较都必须再次明确选择。"
 }

@@ -9461,5 +9461,17 @@
   "creator_review_different_titles": "異なる記録タイトル {count} 件",
   "creator_review_same_settlement": "提供された支払い状態は同じでも独立した売上",
   "creator_review_different_settlements": "異なる支払い状態 {count} 件",
-  "creator_review_identity_hint": "売上を識別するのは正確な売上参照だけです。同じタイトル、オファー、日付、支払い状態でも記録の統合や共通の振込は証明しません。"
+  "creator_review_identity_hint": "売上を識別するのは正確な売上参照だけです。同じタイトル、オファー、日付、支払い状態でも記録の統合や共通の振込は証明しません。",
+  "creator_review_refreshing_action": "売上を更新中…",
+  "creator_review_refreshing_hint": "この売上アドレスを更新しています。非公開の選択は失効しました。受信結果から売上を選び直してください。",
+  "creator_review_page_context": "受信ページの状況",
+  "creator_review_page_context_hint": "ローカル条件と独立したネイティブページの情報です。アカウント全体の件数や検索結果ではありません。",
+  "creator_review_page_projection": "ネイティブ投影の観測",
+  "creator_review_page_incomplete": "準備中のため受信行は不完全",
+  "creator_review_page_received": "ページ受信済み。件数はこのページのみ",
+  "creator_review_page_continuation": "提供された継続情報",
+  "creator_review_page_more": "古いページを明示的に読み込めます",
+  "creator_review_page_no_cursor": "継続カーソルは提供されていません",
+  "creator_review_page_cursor_hint": "ネイティブカーソルは不透明です。ローカル条件で変更したり、再開時に隠れた条件を持ち越したりしません。カーソルがなくても財務履歴全体の完全性は証明しません。",
+  "creator_review_refresh_reselection": "タイトルや売上参照が同じでも更新でページが置き換わる場合があります。詳細や比較には選び直しが必要です。"
 }

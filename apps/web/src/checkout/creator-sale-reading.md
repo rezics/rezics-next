@@ -34,7 +34,8 @@ feedback. Authorization remains exclusively with the existing origin; preparatio
 retain an old reading. A native partial projection may contain supplied rows and its preparing notice; that
 projection state does not imply authorization preparation or completeness.
 
-Explicit refresh and page links alone request sales. The native `next` remains opaque. A stale cursor offers a
+Explicit refresh uses the existing current-source Query reader at the original cursor, retires selection during
+the request and admits a new observation before reselection. Page links retain ordinary native pagination. The native `next` remains opaque. A stale cursor offers a
 restart; empty first and continuation pages remain distinct, and a preparing projection never asserts zero sales.
 
 ## Destinations and ownership

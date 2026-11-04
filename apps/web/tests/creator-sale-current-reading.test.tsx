@@ -214,9 +214,7 @@ for (const size of [1, 10, 20])
       await tick();
       expect(inspection()?.textContent).not.toContain('Sale reference copied.');
       // An explicit native refresh retires equal-ID readings without extra inspection reads.
-      await act(async () => {
-        await client.invalidateQueries({ queryKey: ['creator-sales-current'] });
-      });
+      await click('Refresh');
       await tick();
       expect(read).toHaveBeenCalledTimes(1);
       expect(inspection()).toBeNull();
