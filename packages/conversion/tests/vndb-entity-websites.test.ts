@@ -11,7 +11,9 @@ function urls(commands: readonly BatchCommand[]): string[] {
   return commands
     .filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:url')
     .map((command) =>
-      command.op === 'propose' && command.statement.value.type === 'value' ? String(command.statement.value.content) : '',
+      command.op === 'propose' && command.statement.value.type === 'value'
+        ? String(command.statement.value.content)
+        : '',
     );
 }
 
@@ -19,9 +21,15 @@ function citation(commands: readonly BatchCommand[], id: string): void {
   for (const command of commands) {
     if (command.op !== 'propose') continue;
     expect(
-      command.statement.references.flatMap((reference) => reference.parts).some((part) => {
-        return part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === `https://vndb.org/${id}`;
-      }),
+      command.statement.references
+        .flatMap((reference) => reference.parts)
+        .some((part) => {
+          return (
+            part.property.id === 'schema:url' &&
+            part.value.type === 'value' &&
+            part.value.content === `https://vndb.org/${id}`
+          );
+        }),
     ).toBe(true);
   }
 }
@@ -72,9 +80,9 @@ test('selected staff, producer and release websites become sourced schema:url fa
     context,
   );
   expect(converter_revision).toBe('cross-media-entities@4');
-  expect(staff.proposals[0] && staff.proposals[0].op === 'propose' ? staff.proposals[0].source.converter_revision : '').toBe(
-    converter_revision,
-  );
+  expect(
+    staff.proposals[0] && staff.proposals[0].op === 'propose' ? staff.proposals[0].source.converter_revision : '',
+  ).toBe(converter_revision);
   const previousRevision = convertCrossMediaEntity(
     { external_id: 's4', record_revision: null, record: staff.normalizedRecord },
     context,
@@ -231,7 +239,11 @@ test('unsupported sites stay source losses; Bangumi-looking websites stay schema
           id: 's4',
           name: 'Authored staff',
           staff_extlinks: overflow,
-          extlinks: overflow.map((row) => ({ id: row.link, site: 'website', value: `https://example.org/${row.link}` })),
+          extlinks: overflow.map((row) => ({
+            id: row.link,
+            site: 'website',
+            value: `https://example.org/${row.link}`,
+          })),
         },
       },
       context,

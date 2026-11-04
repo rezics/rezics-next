@@ -4,11 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { converter_revision, convertCrossMediaEntity } from '@rezics/conversion/cross-media-entities';
 import { VNDB_DUMP_TABLES } from '../../../scripts/datasets/fetch-dumps.ts';
-import {
-  CrossMediaDumpFiles,
-  planCrossMediaSeed,
-  type CrossMediaTables,
-} from '../src/cross-media-seed.ts';
+import { CrossMediaDumpFiles, planCrossMediaSeed, type CrossMediaTables } from '../src/cross-media-seed.ts';
 
 function familyTables(extra: Record<string, Record<string, unknown>[]> = {}): CrossMediaTables {
   const rows: Record<string, Record<string, unknown>[]> = {
@@ -70,7 +66,9 @@ function familyTables(extra: Record<string, Record<string, unknown>[]> = {}): Cr
 }
 
 test('production seed joins selected staff, producer and release websites without reusing vnLinks as uniqueness', async () => {
-  expect(VNDB_DUMP_TABLES).toEqual(expect.arrayContaining(['staff_extlinks', 'producers_extlinks', 'releases_extlinks']));
+  expect(VNDB_DUMP_TABLES).toEqual(
+    expect.arrayContaining(['staff_extlinks', 'producers_extlinks', 'releases_extlinks']),
+  );
   const plan = await planCrossMediaSeed(familyTables());
   const staff = plan.entities.vndb.find((row) => row.key === 's4')!;
   const producer = plan.entities.vndb.find((row) => row.key === 'p1')!;
@@ -107,7 +105,9 @@ test('production seed joins selected staff, producer and release websites withou
   );
   expect(staffConverted.converter_revision).toBe(converter_revision);
   expect(
-    staffConverted.proposals.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:url'),
+    staffConverted.proposals.filter(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:url',
+    ),
   ).toHaveLength(2);
   const withoutLinks = convertCrossMediaEntity(
     { external_id: 's4', record_revision: null, record: { id: 's4', name: 'Authored staff' } },
@@ -115,7 +115,9 @@ test('production seed joins selected staff, producer and release websites withou
   );
   expect(withoutLinks.digest).not.toBe(staffConverted.digest);
   expect(
-    withoutLinks.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:url'),
+    withoutLinks.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:url',
+    ),
   ).toBe(false);
 });
 
@@ -128,9 +130,11 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
     await mkdir(db, { recursive: true });
     await writeFile(
       join(bangumi, 'subject.jsonlines'),
-      ['{"id":1,"type":2,"name":"STEINS;GATE"}', '{"id":2,"type":2,"name":"CLANNAD"}', '{"id":3,"type":2,"name":"Fate/stay night"}'].join(
-        '\n',
-      ) + '\n',
+      [
+        '{"id":1,"type":2,"name":"STEINS;GATE"}',
+        '{"id":2,"type":2,"name":"CLANNAD"}',
+        '{"id":3,"type":2,"name":"Fate/stay night"}',
+      ].join('\n') + '\n',
     );
     for (const table of [
       'subject-relations',
@@ -225,7 +229,7 @@ test('COPY headers keep integer link keys, overflow fails, and unsupported sites
   });
   const unresolvedPlan = await planCrossMediaSeed(unresolvedOwner);
   expect(unresolvedPlan.entities.vndb.some((row) => row.key === 's99')).toBe(false);
-  expect(
-    unresolvedPlan.entities.vndb.find((row) => row.key === 's4')?.payload,
-  ).not.toMatchObject({ extlinks: [{ id: 7, value: 'https://example.org/unresolved' }] });
+  expect(unresolvedPlan.entities.vndb.find((row) => row.key === 's4')?.payload).not.toMatchObject({
+    extlinks: [{ id: 7, value: 'https://example.org/unresolved' }],
+  });
 });
