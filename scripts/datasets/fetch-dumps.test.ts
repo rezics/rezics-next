@@ -26,6 +26,7 @@ const INDEX_HTML = `<h1>VNDB Database Downloads</h1>
 const CURRENT_DUMP_URL = 'https://dl.vndb.org/dump/vndb-db-2026-11-03.tar.zst';
 
 async function packVndbArchive(archive: string): Promise<void> {
+  // Authored table files and headers; this fixture is not observed provider data.
   const root = await mkdtemp(`${archive}.src-`);
   await writeFile(join(root, 'README.txt'), 'VNDB dump\n');
   await writeFile(join(root, 'schema_vndbid.sql'), 'CREATE TYPE vndbid;\n');
@@ -53,8 +54,12 @@ async function tempCache(): Promise<{ cacheRoot: string; dispose: () => Promise<
   return { cacheRoot: join(temp, 'cache'), dispose: () => rm(temp, { recursive: true, force: true }) };
 }
 
-test('VNDB dump cache requires releases_titles and its header', () => {
-  expect(VNDB_DUMP_TABLES).toContain('releases_titles');
+test('VNDB dump cache requires release platform and medium tables with their pinned headers', () => {
+  expect(VNDB_DUMP_TABLES).toEqual(expect.arrayContaining(['releases_media', 'releases_platforms']));
+  expect(VNDB_DUMP_HEADERS).toMatchObject({
+    releases_media: ['id', 'medium', 'qty'],
+    releases_platforms: ['id', 'platform'],
+  });
 });
 
 test("When the pinned VNDB dump URL is gone, the fetch resolves the current dump from VNDB's published dump index (or the documented durable location), verifies it, and records the resolved file and checksum; it never silently seeds without VNDB.", async () => {
@@ -87,6 +92,13 @@ test("When the pinned VNDB dump URL is gone, the fetch resolves the current dump
     expect(await readFile(result.vndbArchive)).toEqual(bytes);
     expect(await readFile(join(result.vndb, 'README.txt'), 'utf8')).toBe('VNDB dump\n');
     expect(seen).toEqual([VNDB_ARCHIVE_URL, VNDB_DUMP_INDEX_URL, CURRENT_DUMP_URL]);
+
+    await rm(join(result.vndb, 'db', 'releases_media'));
+    await rm(join(result.vndb, 'db', 'releases_platforms.header'));
+    const repaired = await fetchVndbDump({ cacheRoot, fetchImpl });
+    expect(repaired.vndb).toBe(result.vndb);
+    expect(await readFile(join(repaired.vndb, 'db', 'releases_media'), 'utf8')).toBe('v1\n');
+    expect(await readFile(join(repaired.vndb, 'db', 'releases_platforms.header'), 'utf8')).toBe('id\tplatform\n');
   } finally {
     await dispose();
   }

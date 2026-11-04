@@ -29,6 +29,8 @@ const BANGUMI_TABLES = [
 ];
 export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
   producers_relations: ['id', 'pid', 'relation'],
+  releases_media: ['id', 'medium', 'qty'],
+  releases_platforms: ['id', 'platform'],
 };
 export const VNDB_DUMP_TABLES = [
   'anime',
@@ -39,6 +41,8 @@ export const VNDB_DUMP_TABLES = [
   'producers',
   'producers_relations',
   'releases',
+  'releases_media',
+  'releases_platforms',
   'releases_producers',
   'releases_supersedes',
   'releases_titles',

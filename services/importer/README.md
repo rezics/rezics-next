@@ -2003,11 +2003,29 @@ facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to T
 and 00/99 omitted components to year or month precision.
 
 The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@3`.
+selected release payload and convert them through `cross-media-entities@4`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
 owned. Decision: label order is language then text; `mtl` never ranks names.
+
+The release-fidelity operator also reads `releases_platforms` and
+`releases_media` for its selected release keys. It proposes every supported,
+reviewed current platform Concept on `schema:gamePlatform` and medium Concept on
+`wdt:P437` on the same Release. Duplicate associations collapse, unknown or
+unbound codes retain bounded gaps, and `qty` is ignored. The source-specific
+schemes are described in the conversion contract.
+
+- Touches: selected release keys, the two extracted COPY child tables, at most
+  64 schemes/512 Concepts through cached current reads, and ordinary cited
+  Release proposals.
+- Bound: 4,096 selected child rows across both tables, at most 64
+  source-vocabulary rows per Release after date/work rows, and 64 planner gaps.
+  The existing batch and tuple-home fence paths remain in use.
+- Growth check: the focused importer test covers multiple values, duplicate
+  rows, an unsupported code and refresh. The connected native test covers
+  independent acceptance/adoption, current disclosures, unavailable bindings
+  and a facts fence; this attempt defers its execution to integration.
 
 The production VNDB public-tag operator
 [`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and

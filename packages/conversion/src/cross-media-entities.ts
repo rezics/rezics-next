@@ -20,9 +20,10 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@3';
+export const converter_revision = 'cross-media-entities@4';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
+  maxClassificationAssociations: 64,
   maxNames: vndbLimits.maxTitleCandidates,
   maxAlternateNames: vndbLimits.maxAliases,
   stringBytes: vndbLimits.stringBytes,
@@ -515,6 +516,35 @@ function projectReleaseTitles(
   return { titles, names: [...uniqueNames.values()], alternateNames, labels, aliases, diagnostics };
 }
 
+function projectReleaseAssociations(
+  raw: object,
+  releaseId: string,
+  property: 'releases_platforms' | 'releases_media',
+  field: 'platform' | 'medium',
+): { id: string; platform?: string; medium?: string }[] | undefined {
+  const pointer = `/${property}`;
+  const value = own(raw, property, pointer);
+  if (value === undefined) return;
+  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
+    fail(pointer);
+  const rows = value as object;
+  const length = Object.getOwnPropertyDescriptor(rows, 'length')!.value as number;
+  if (length > vndbReleaseNameLimits.maxClassificationAssociations) fail(pointer, 'invalid_record_row_limit');
+  const byCode = new Map<string, { id: string; platform?: string; medium?: string }>();
+  for (let index = 0; index < length; index += 1) {
+    const rowPointer = `${pointer}/${index}`;
+    const row = object(own(rows, String(index), rowPointer), rowPointer);
+    const id = own(row, 'id', `${rowPointer}/id`);
+    if (id !== releaseId) fail(`${rowPointer}/id`, 'invalid_identifier');
+    const code = text(own(row, field, `${rowPointer}/${field}`), `${rowPointer}/${field}`, 64);
+    if (!/^[a-z][a-z0-9]{0,15}$/u.test(code)) fail(`${rowPointer}/${field}`, 'invalid_source_value');
+    byCode.set(code, field === 'platform' ? { id: releaseId, platform: code } : { id: releaseId, medium: code });
+  }
+  return [...byCode.entries()]
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([, association]) => association);
+}
+
 function project(kind: EntityKind, input: ConversionInput): Projected {
   const raw = object(input.record, '');
   const idField = kind.startsWith('vndb')
@@ -542,6 +572,10 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const normalized: Normalized = { id: nativeId, releases_titles: projectedTitles.titles };
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    const platforms = projectReleaseAssociations(raw, expected, 'releases_platforms', 'platform');
+    const media = projectReleaseAssociations(raw, expected, 'releases_media', 'medium');
+    if (platforms !== undefined) normalized.releases_platforms = platforms;
+    if (media !== undefined) normalized.releases_media = media;
     if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbReleaseNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     const aliases = Object.keys(projectedTitles.aliases).length ? projectedTitles.aliases : undefined;
@@ -604,6 +638,10 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   if (kind === 'vndb-release') {
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    const platforms = projectReleaseAssociations(raw, expected, 'releases_platforms', 'platform');
+    const media = projectReleaseAssociations(raw, expected, 'releases_media', 'medium');
+    if (platforms !== undefined) normalized.releases_platforms = platforms;
+    if (media !== undefined) normalized.releases_media = media;
   }
   if (kind === 'bangumi-episode') {
     const sort = own(raw, 'sort', '/sort');

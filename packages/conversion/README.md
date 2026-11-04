@@ -325,7 +325,7 @@ statistics, or publication capability.
 
 ### VNDB release titles
 
-`cross-media-entities@3` projects admitted `releases_titles` rows onto
+`cross-media-entities@4` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -334,6 +334,28 @@ on this table and does not inherit the `vn_titles` empty-cell decision. Title
 language is not a whole-release `schema:inLanguage` fact. Scalar `{id,title}`
 payloads remain the untagged legacy envelope for sealed journals. Date, status
 and completeness stay on the release-fidelity vocabulary path.
+
+### VNDB release platforms and distribution media
+
+The production release operator carries selected `releases_platforms.platform`
+and `releases_media.medium` codes on that same Release. Inventory-admitted
+platform codes propose `schema:gamePlatform`; the finite medium inventory
+proposes `wdt:P437`. Each requires an independently adopted source Concept in
+the matching current scheme. Several codes remain several values; unknown or
+unbound codes become source-path gaps. Platform and medium lists never combine,
+and `releases_media.qty` is omitted.
+
+- Touches: selected release projection, exact source scheme/Concept bindings,
+  and the Release's existing multi-valued classification properties.
+- Bound: at most 64 selected releases and 4,096 selected child rows across the
+  two tables; per-release vocabulary rows fit the existing 64-row ceiling after
+  its date and work-link rows. Binding reads retain at most 64 schemes and 512
+  concepts, with one cached current read per identity.
+- Growth check: the focused importer test covers shuffled duplicates, multiple
+  values, an unknown code and refresh. The connected native review/adoption test
+  is registered; native execution is deferred to integration.
+
+Decision: source-specific schemes are `https://vndb.org/releases/platforms` and `https://vndb.org/releases/media`, with taxonomies `vndb.releases.platform` and `vndb.releases.media`; these Concepts do not assert canonical equivalence.
 
 ### VNDB native alternate-name contract
 
