@@ -298,12 +298,20 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     ),
   );
   expect(
-    await json(await request('PATCH', path(shelf.id), {
-      revision: 1,
-      title: 'Private title',
-      description: 'Private description',
-      visibility: 'public',
-    }, 'owner', firstKey)),
+    await json(
+      await request(
+        'PATCH',
+        path(shelf.id),
+        {
+          revision: 1,
+          title: 'Private title',
+          description: 'Private description',
+          visibility: 'public',
+        },
+        'owner',
+        firstKey,
+      ),
+    ),
   ).toEqual(publicRevision);
   await problem(await request('GET', history(shelf.id), undefined, 'other'), 404, 'not_found');
 
@@ -321,8 +329,16 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
   }>(await request('GET', `${history(shelf.id)}?limit=2`));
   expect(page.coverage.coverage).toBe('complete');
   expect(page.items).toEqual([
-    { revision: privateRevision.collection.revision, recordedAt: expect.any(String), changedFields: ['title', 'description', 'visibility'] },
-    { revision: publicRevision.collection.revision, recordedAt: expect.any(String), changedFields: ['title', 'description', 'visibility'] },
+    {
+      revision: privateRevision.collection.revision,
+      recordedAt: expect.any(String),
+      changedFields: ['title', 'description', 'visibility'],
+    },
+    {
+      revision: publicRevision.collection.revision,
+      recordedAt: expect.any(String),
+      changedFields: ['title', 'description', 'visibility'],
+    },
   ]);
   const firstChange = await json<{
     revision: number;
@@ -333,7 +349,12 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
   expect(firstChange).toMatchObject({
     revision: publicRevision.collection.revision,
     before: { title: shelf.title, description: shelf.description, visibility: 'private', cover: { state: 'none' } },
-    after: { title: 'Private title', description: 'Private description', visibility: 'public', cover: { state: 'none' } },
+    after: {
+      title: 'Private title',
+      description: 'Private description',
+      visibility: 'public',
+      cover: { state: 'none' },
+    },
     actions: { review: true, reapply: false },
   });
   const secondChange = await json<{
@@ -346,7 +367,11 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     before: { title: 'Private title', description: 'Private description', visibility: 'public' },
     after: { title: 'Private again', description: null, visibility: 'private' },
   });
-  await problem(await request('GET', `${history(shelf.id)}/${publicRevision.collection.revision}`, undefined, 'other'), 404, 'not_found');
+  await problem(
+    await request('GET', `${history(shelf.id)}/${publicRevision.collection.revision}`, undefined, 'other'),
+    404,
+    'not_found',
+  );
   await problem(await request('GET', history(shelf.id), undefined, 'other'), 404, 'not_found');
 
   const stalePage = await json<{ next: string | null }>(await request('GET', `${history(shelf.id)}?limit=1`));
@@ -370,7 +395,9 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     replayKey,
   );
   expect(await replay.json()).toEqual(await replayedAgain.json());
-  const afterReplay = await json<{ items: { revision: number }[] }>(await request('GET', `${history(shelf.id)}?limit=50`));
+  const afterReplay = await json<{ items: { revision: number }[] }>(
+    await request('GET', `${history(shelf.id)}?limit=50`),
+  );
   expect(afterReplay.items.filter((item) => item.revision === 6)).toHaveLength(1);
   expect(replayed.collection.revision).toBe(5);
 
@@ -383,7 +410,10 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     FOR EACH ROW EXECUTE FUNCTION library.reject_collection_metadata_history_for_test();
   `);
   try {
-    const rejected = await request('PATCH', path(rollbackShelf.id), { revision: rollbackShelf.revision, title: 'Must roll back' });
+    const rejected = await request('PATCH', path(rollbackShelf.id), {
+      revision: rollbackShelf.revision,
+      title: 'Must roll back',
+    });
     expect(rejected.status).toBe(500);
     const current = await db.admin.query<{ revision: number; title: string }>(
       'SELECT revision,title FROM library.collection WHERE route=$1 AND collection_id=$2',
@@ -391,10 +421,12 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     );
     expect(current.rows).toEqual([{ revision: rollbackShelf.revision, title: rollbackShelf.title }]);
     expect(
-      (await db.admin.query(
-        'SELECT 1 FROM library.collection_metadata_history WHERE route=$1 AND collection_id=$2',
-        [routeOf(rollbackShelf.id), rollbackShelf.id],
-      )).rows,
+      (
+        await db.admin.query('SELECT 1 FROM library.collection_metadata_history WHERE route=$1 AND collection_id=$2', [
+          routeOf(rollbackShelf.id),
+          rollbackShelf.id,
+        ])
+      ).rows,
     ).toEqual([]);
   } finally {
     await db.admin.query(`
@@ -405,7 +437,10 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
 
   const reassigned = await collection();
   const held = await json<{ collection: CollectionView }>(
-    await request('PATCH', path(reassigned.id), { revision: reassigned.revision, title: 'Owner-only historical title' }),
+    await request('PATCH', path(reassigned.id), {
+      revision: reassigned.revision,
+      title: 'Owner-only historical title',
+    }),
   );
   await db.admin.query(
     `UPDATE library.collection SET curator_account_id=$3,revision=revision+1,updated_at=clock_timestamp()
@@ -426,9 +461,7 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     items: unknown[];
     next: string | null;
     actions: { review: boolean; reapply: boolean };
-  }>(
-    await request('GET', history(unknown.id)),
-  );
+  }>(await request('GET', history(unknown.id)));
   expect(unknownPage).toEqual({
     collectionId: unknown.id,
     basis: expect.any(Object),
@@ -454,7 +487,9 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
       items: { revision: number }[];
       next: string | null;
       coverage: { coverage: string; knownFromRevision: number | null; prunedBeforeRevision: number | null };
-    } = await json(await request('GET', `${history(retained.id)}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
+    } = await json(
+      await request('GET', `${history(retained.id)}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+    );
     count += nextPage.items.length;
     cursor = nextPage.next;
     coverage = nextPage.coverage.coverage;
@@ -467,8 +502,9 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     409,
     'conflict',
   );
-  expect((await json<{ items: { revision: number }[] }>(await request('GET', `${history(retained.id)}?limit=50`))).items)
-    .toHaveLength(50);
+  expect(
+    (await json<{ items: { revision: number }[] }>(await request('GET', `${history(retained.id)}?limit=50`))).items,
+  ).toHaveLength(50);
 });
 
 test('curator creates replays updates conflicts and deletes with only the contracted public view', async () => {
