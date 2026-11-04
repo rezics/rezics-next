@@ -4,11 +4,13 @@ import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { createPool } from '../../src/database/pool.ts';
+import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
 import { quotationTypeAdmitted } from '../../src/presentation/semantic-page.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
@@ -16,6 +18,7 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
 const accounts = {
   editor: '019a1b2c-3d4e-7f00-8a00-ed170e000221',
   acceptor: '019a1b2c-3d4e-7f00-8a00-ed170e000222',
@@ -59,6 +62,7 @@ beforeAll(async () => {
   await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
 });
 afterAll(async () => {
+  await relays.stop();
   await pool.end();
   await admin.end();
 });

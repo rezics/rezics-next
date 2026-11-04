@@ -8,10 +8,9 @@ import {
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { viewerActionReadTime } from '../access/index.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, prepareReadDecisions, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
@@ -86,27 +85,22 @@ export async function readQuotationPageAuthority(deps: {
   }));
   const context = { pool: deps.pool, deadline: deps.deadline };
   try {
-    const decisions = await prepareReadDecisions(deps.access, {
-      actor: deps.actor,
-      actions: new Set(quotationCorrectionActions.map((entry) => entry.action)),
-      context,
-    });
-    const time = viewerActionReadTime(deps.access, context);
+    const resource = { route: 0, id: GLOBAL_CONTEXT };
+    const checks = await Promise.all(
+      quotationCorrectionActions.map((entry) =>
+        accessCheck(deps.access, deps.actor, entry.action, resource, context),
+      ),
+    );
     const actions = await withReadTransaction(
       deps.pool,
       async (client) => {
         const result: PageAction[] = [];
-        for (const entry of quotationCorrectionActions) {
+        for (const [index, entry] of quotationCorrectionActions.entries()) {
           try {
-            const answers = await decisions.decide(
-              client,
-              { action: entry.action, resourceType: 'semantic.context', ids: [GLOBAL_CONTEXT] },
-              time,
-            );
             result.push({
               action: entry.action,
               operationId: entry.operationId,
-              state: answers[GLOBAL_CONTEXT]?.allowed ? 'allowed' : 'denied',
+              state: (await checks[index]!(client)) ? 'allowed' : 'denied',
             });
           } catch (error) {
             if (classifyUnavailability(error))

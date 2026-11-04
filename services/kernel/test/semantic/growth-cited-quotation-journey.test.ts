@@ -6,8 +6,9 @@ import { RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
 import { setupPresentation } from '../../src/presentation/setup.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import {
   checkGrowth,
@@ -102,6 +103,21 @@ beforeAll(async () => {
   };
   expect(createdBody.subject.statements['schema:spokenByCharacter']?.[0]?.value.type).toBe('somevalue');
   quotationId = createdBody.subject.id;
+  const projection = linkProjection(db.pool);
+  const partition = partitionOf(routeOf(quotationId)!);
+  let caughtUp = false;
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partition);
+    if (result.status === 'busy') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    if (result.envelopes === 0) {
+      caughtUp = true;
+      break;
+    }
+  }
+  if (!caughtUp) throw new Error('Semantic link projection did not catch up');
 }, 60_000);
 afterAll(async () => {
   if (db) await db.close();
