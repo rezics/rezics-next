@@ -206,10 +206,11 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       ].sort(),
     );
     const genres = commands.filter(
-      (command) => command.op === 'propose' && command.statement.property.id === 'schema:genre',
+      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+        command.op === 'propose' && command.statement.property.id === 'schema:genre',
     );
     expect(genres).toHaveLength(2);
-    const content = (command: (typeof genres)[number]) =>
+    const content = (command: Extract<BatchCommand, { op: 'propose' }>) =>
       command.statement.value.type === 'value' ? command.statement.value.content : undefined;
     expect(new Set(genres.map(content))).toEqual(new Set([conceptIds.g311, conceptIds.g44]));
     const spoiler = (id: string) =>
@@ -231,7 +232,6 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       'vndb/tags_vn': parseAuthoredVndbCopy('tags_vn', associationHeader, original),
       'vndb/tags_parents': parseAuthoredVndbCopy('tags_parents', parentHeader, parentCopy),
     };
-    void changed;
     const refreshed = await importShowcaseTags({
       tables: {
         async *rows(provider, table) {
@@ -245,7 +245,8 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     });
     expect(refreshed.readings.map((row) => row.externalId)).toEqual(['v410']);
     const nextGenres = commands.filter(
-      (command) => command.op === 'propose' && command.statement.property.id === 'schema:genre',
+      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+        command.op === 'propose' && command.statement.property.id === 'schema:genre',
     );
     expect(nextGenres.map((command) => command.key).slice(0, keys.length)).toEqual(keys);
     expect(nextGenres.length).toBeGreaterThan(keys.length);

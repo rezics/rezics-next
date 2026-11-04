@@ -20,6 +20,7 @@ import {
   projectVndbPublicTagAssociation,
   projectVndbPublicTagParent,
   vndbPublicTagLimits,
+  type VndbPublicTagDictionaryRow,
 } from './vndb-tables.ts';
 
 type Row = Record<string, unknown>;
@@ -417,7 +418,7 @@ export async function importShowcaseTags(input: {
     path: input.path,
     port: input.port,
     bindings,
-    destination: input.destination,
+    ...(input.destination ? { destination: input.destination } : {}),
   });
   return {
     ...imported,
