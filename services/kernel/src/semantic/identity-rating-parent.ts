@@ -8,6 +8,13 @@ export type IdentityRatingRepairScope = Readonly<{
 
 export type IdentityRatingCursor = string | null;
 
+/** Identity of retained native work, independent of a scheduler's delivery number. */
+export type IdentityRatingNativeFrontier = Readonly<{
+  frontier: string;
+  phase: string;
+  revision: string;
+}>;
+
 export type IdentityRatingWorkItem = Readonly<{
   id: string;
   revision: string;
@@ -28,6 +35,7 @@ export type IdentityRatingSelectedPage = Readonly<{
   next: IdentityRatingCursor;
   terminal: boolean;
   items: readonly IdentityRatingWorkItem[];
+  native?: IdentityRatingNativeFrontier;
 }>;
 
 export type IdentityRatingPageBinding = Readonly<{
@@ -40,6 +48,7 @@ export type IdentityRatingPageBinding = Readonly<{
   after: IdentityRatingCursor;
   next: IdentityRatingCursor;
   terminal: boolean;
+  native?: IdentityRatingNativeFrontier;
 }>;
 
 export type IdentityRatingCommitReceipt = Readonly<{
@@ -57,10 +66,25 @@ export type IdentityRatingCommitResult =
   | Readonly<{ status: 'committed'; receipt: IdentityRatingCommitReceipt }>
   | Readonly<{ status: 'pending'; reason: 'owner-aba' | 'redirect-chain' | 'epoch-pending' | 'source-pending' }>;
 
-export type IdentityRatingProvenanceResult = 'reclaimed' | 'still-referenced' | 'already-reclaimed' | 'stale';
+export type IdentityRatingProvenanceResult =
+  | 'reclaimed'
+  | 'still-referenced'
+  | 'already-reclaimed'
+  | 'stale'
+  | 'continuing';
+
+/** Persist with the caller's continuation. These fields locate evidence, never authorize effects. */
+export type IdentityRatingRepairCheckpoint = Readonly<{
+  scope: IdentityRatingRepairScope;
+  phase: 'repair' | 'reclamation' | 'complete';
+  binding: IdentityRatingPageBinding & Readonly<{ native: IdentityRatingNativeFrontier }>;
+  receipt: IdentityRatingCommitReceipt;
+}>;
 
 export const IDENTITY_RATING_PAGE_LIMIT = 64;
 export const IDENTITY_RATING_REPAIR_PAGE_LIMIT = 8;
+export const IDENTITY_RATING_TEXT_BYTES = 256;
+export const IDENTITY_RATING_SELECTION_BYTES = 65_536;
 
 /**
  * Native Performance boundary. Implementations persist selected-page receipts with the effect in
@@ -69,7 +93,14 @@ export const IDENTITY_RATING_REPAIR_PAGE_LIMIT = 8;
  * and acknowledgement make a page safe to replay after a process interruption.
  */
 export type IdentityRatingParent = Readonly<{
-  selectPage(input: IdentityRatingRepairScope, limit: number): Promise<IdentityRatingSelectedPage>;
+  /** Native checkpoint committed with acknowledgement, retained even after payload deletion. */
+  readRepairCheckpoint?(input: IdentityRatingRepairScope): Promise<IdentityRatingRepairCheckpoint | null>;
+  // A replay binding selects its exact retained page even if acknowledgement advanced the frontier.
+  selectPage(
+    input: IdentityRatingRepairScope,
+    limit: number,
+    replay?: IdentityRatingPageBinding,
+  ): Promise<IdentityRatingSelectedPage>;
   readCommitReceipt(binding: IdentityRatingPageBinding): Promise<IdentityRatingCommitReceipt | null>;
   commitSelectedPage(
     input: IdentityRatingRepairScope,
@@ -92,4 +123,10 @@ export type IdentityRatingParent = Readonly<{
     input: IdentityRatingRepairScope,
     terminalReceipt: IdentityRatingCommitReceipt,
   ): Promise<IdentityRatingProvenanceResult>;
+  /** Full-key native tombstone verification after page payload reclamation. Recheck owner incarnation
+   * and scope, digest and receipt. A serialized checkpoint alone is never a successful replay. */
+  verifyReclaimedCheckpoint?(
+    input: IdentityRatingRepairScope,
+    checkpoint: IdentityRatingRepairCheckpoint,
+  ): Promise<'current' | 'stale' | 'pending'>;
 }>;
