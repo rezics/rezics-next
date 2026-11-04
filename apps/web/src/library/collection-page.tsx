@@ -453,6 +453,7 @@ function CollectionPageLifetime({
   const router = useRouter();
   const queryClient = useQueryClient();
   const session = useSession();
+  const mounted = useRef(false);
   const currentHref = useLocation({ select: (location) => location.publicHref });
   const viewerId = session.state === 'signed-in' ? (session.subject ?? null) : null;
   const viewerProjection = collectionViewerProjection(
@@ -596,7 +597,6 @@ function CollectionPageLifetime({
   const saveIntent = useRef<ReturnType<typeof captureSave> | null>(null);
   const draftFrozen = saveIntent.current !== null;
   const boundaryRef = useRef<BoundaryMove | null>(null);
-  const mounted = useRef(false);
   function isCurrent(operation: CollectionOperation = 'collection.get') {
     return mounted.current && current(operation);
   }
