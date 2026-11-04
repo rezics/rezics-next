@@ -8,6 +8,18 @@ export {
 } from './agents.ts';
 export type { AgentSelfSource } from './subject.ts';
 export { readSemanticLifecycle } from './lifecycle-state.ts';
+export {
+  readWorkReleaseCards,
+  workReleaseCardFieldLimit,
+  workReleaseCardLimit,
+  workReleaseCardProperties,
+  workReleaseCardQualifierLimit,
+  workReleaseCardReferenceLimit,
+  workReleaseCardReferencePartLimit,
+  workReleaseCardStatementBytes,
+  workReleaseCardResponseBytes,
+} from './work-release-cards.ts';
+export type { WorkReleaseCard, WorkReleaseCardField, WorkReleaseCards } from './work-release-cards.ts';
 export { readListPresentationFacts } from './list-presentation.ts';
 export {
   readCopyWorkDisclosure,

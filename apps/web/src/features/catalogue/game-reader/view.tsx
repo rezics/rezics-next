@@ -126,7 +126,9 @@ function GameWindow({
     const turn = ++sequence.current;
     // A continuation replaces only its bounded release window. Keep the work reading available
     // while the new window loads or its transport fails; never retain the old release destinations.
-    setPage((previous) => (address.cursor && previous ? { ...previous, editions: [], next: null } : undefined));
+    setPage((previous) =>
+      address.cursor && previous ? { ...previous, editions: [], workReleaseCards: undefined, next: null } : undefined,
+    );
     setFailure(undefined);
     if (address.cursor && (acceptedCursors.current.has(address.cursor) || successfulWindows.current >= 64)) {
       inFlight.current = false;
@@ -250,6 +252,9 @@ function GameWindow({
             <p role="status">{m.game_reader_unsupported({}, o)}</p>
           ) : (
             <>
+              {page.public.viewerActions?.state === 'unavailable' ? (
+                <p role="status">{m.game_reader_advice_unavailable({}, o)}</p>
+              ) : null}
               {page.unsupported.length ? (
                 <p role="status">
                   {m.game_reader_missing({ fields: page.unsupported.map((kind) => unsupported[kind]).join(', ') }, o)}
@@ -299,12 +304,31 @@ function GameWindow({
                   <p role="status">{m.game_reader_editions_unsupported({}, o)}</p>
                 ) : (
                   <>
+                    {page.workReleaseCards?.state !== 'available' ? (
+                      <div role="status">
+                        <p>{m.game_reader_compare_unavailable({}, o)}</p>
+                        <button
+                          type="button"
+                          className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                          disabled={busy}
+                          onClick={request(pending.current)}
+                        >
+                          {m.album_tracks_retry({}, o)}
+                        </button>
+                      </div>
+                    ) : null}
                     {!page.editions.length ? <p>{m.game_reader_editions_empty({}, o)}</p> : null}
                     <ul className="space-y-4">
                       {page.editions.map((row) => {
                         const summary = row.summary;
                         const title = summary?.label;
                         const statement = row.assertion;
+                        const card =
+                          page.workReleaseCards?.state === 'available'
+                            ? page.workReleaseCards.cards.find(
+                                (candidate) => candidate.subject === row.subject && candidate.membership.id === row.statement,
+                              )
+                            : undefined;
                         const related = Object.fromEntries(
                           Object.entries(row.related ?? {}).map(([key, item]) => [
                             key,
@@ -345,6 +369,7 @@ function GameWindow({
                                 link={Link}
                               />
                             ) : null}
+                            {card ? <WorkReleaseComparison card={card} page={page} locale={locale} link={Link} /> : null}
                           </>
                         );
                         return (
@@ -421,6 +446,97 @@ type FactProps = {
   locale: string;
   link: typeof import('../../pages/shared').PlainLink;
 };
+
+type WorkReleaseCardView = Extract<NonNullable<GameReaderReady['workReleaseCards']>, { state: 'available' }>['cards'][number];
+type WorkReleaseCardProperty = keyof WorkReleaseCardView['fields'];
+
+function WorkReleaseComparison({
+  card,
+  page,
+  locale,
+  link,
+}: {
+  card: WorkReleaseCardView;
+  page: GameReaderReady;
+  locale: string;
+  link: FactProps['link'];
+}) {
+  const o = { locale: locale as never };
+  const related = Object.fromEntries(
+    Object.entries(card.related).map(([id, item]) => [
+      id,
+      {
+        type: item.type,
+        labels: item.label ? { [item.label.language]: item.label.value } : {},
+      },
+    ]),
+  );
+  const groups: { id: string; label: string; properties: WorkReleaseCardProperty[] }[] = [
+    { id: 'platform', label: m.game_reader_compare_platform_label({}, o), properties: ['schema:gamePlatform'] },
+    { id: 'language', label: m.game_reader_compare_language_label({}, o), properties: ['schema:inLanguage'] },
+    { id: 'date', label: m.game_reader_compare_date_label({}, o), properties: ['schema:datePublished'] },
+    {
+      id: 'status',
+      label: m.game_reader_compare_status_label({}, o),
+      properties: ['schema:creativeWorkStatus', 'wdt:P5804', 'rezics:releaseStatus'],
+    },
+    { id: 'age', label: m.game_reader_compare_age_label({}, o), properties: ['wdt:P2899', 'schema:contentRating'] },
+    { id: 'publisher', label: m.game_reader_compare_publisher_label({}, o), properties: ['schema:publisher'] },
+    {
+      id: 'producer',
+      label: m.game_reader_compare_producer_label({}, o),
+      properties: ['schema:producer', 'wdt:P162'],
+    },
+    { id: 'developer', label: m.game_reader_compare_developer_label({}, o), properties: ['wdt:P178'] },
+  ];
+  return (
+    <section className="mt-3 space-y-2" data-slot="work-release-comparison">
+      <h4 className="font-semibold">{m.game_reader_compare_title({}, o)}</h4>
+      <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
+        {groups.map((group) => {
+          const fields = group.properties.map((property) => card.fields[property]!);
+          const available = fields.filter((field) => field.state === 'available');
+          return (
+            <div key={group.id} className="min-w-0 rounded-md bg-muted/40 p-2">
+              <dt className="font-medium">{group.label}</dt>
+              <dd className="mt-1 space-y-2">
+                {available.flatMap((field) =>
+                  field.statements.map((statement) => (
+                    <GameFact
+                      key={statement.id}
+                      statement={statement}
+                      page={page}
+                      related={related}
+                      locale={locale}
+                      date={statement.property.id === 'schema:datePublished'}
+                      link={link}
+                    />
+                  )),
+                )}
+                {!available.length ? (
+                  fields.some((field) => field.state === 'unavailable') ? (
+                    <p>{m.game_reader_compare_field_unavailable({}, o)}</p>
+                  ) : fields.some((field) => field.state === 'withheld') ? (
+                    <p>{m.game_reader_compare_withheld({}, o)}</p>
+                  ) : fields.some((field) => field.state === 'missing') ? (
+                    <p>{m.game_reader_compare_missing({}, o)}</p>
+                  ) : (
+                    <p>{m.game_reader_compare_unsupported({}, o)}</p>
+                  )
+                ) : fields.some((field) => field.state === 'withheld') ? (
+                  <p className="text-sm text-muted-foreground">{m.game_reader_compare_withheld({}, o)}</p>
+                ) : fields.some((field) => field.state === 'unavailable') ? (
+                  <p className="text-sm text-muted-foreground">{m.game_reader_compare_field_unavailable({}, o)}</p>
+                ) : null}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </section>
+  );
+}
+
 function GameFact(props: FactProps & { date: boolean }) {
   const { statement, page, related, locale, link: Link } = props;
   const o = { locale: locale as never };

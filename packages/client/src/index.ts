@@ -376,6 +376,10 @@ export type { InboxNoticeSelection } from './kernel/content/notice-inbox-selecti
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
   ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
+type SubjectPath = ReturnType<KernelClient['subjects']>;
+export type SubjectLinksResponse = NonNullable<Awaited<ReturnType<SubjectPath['links']['get']>>['data']>;
+export type WorkReleaseCards = NonNullable<SubjectLinksResponse['workReleaseCards']>;
+export type WorkReleaseCard = Extract<WorkReleaseCards, { state: 'available' }>['cards'][number];
 
 type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];
 export type SourceStatisticListResponse = SubjectSourceStatisticsRoute['get']['response'][200];

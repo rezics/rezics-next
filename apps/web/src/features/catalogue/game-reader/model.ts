@@ -1,4 +1,4 @@
-import type { KernelClient, SubjectRead } from '@rezics/client';
+import type { KernelClient, SubjectRead, WorkReleaseCards } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { gameGroups, gameType, gameUuid, type GameGroup } from '../game-profile';
 import type { GuideRelease } from '../definition-guide';
@@ -21,6 +21,7 @@ export type GameReaderRead =
       groups: { id: GameGroup; fields: GameReaderField[] }[];
       unsupported: ('platform' | 'engine' | 'language' | 'status')[];
       editions: Links['links'];
+      workReleaseCards?: WorkReleaseCards;
       editionTypes: string[];
       editionsAdmitted: boolean;
       next: string | null;
@@ -80,7 +81,9 @@ export async function readGameReader(
   if (!validGameReaderAddress(address)) return { ok: false, reason: 'invalid' };
   try {
     const [current, release] = await Promise.all([
-      client.subjects({ id: address.id }).get({ query: { context: address.context, language: locale } }),
+      client.subjects({ id: address.id }).get({
+        query: { context: address.context, language: locale, includeViewerActions: true },
+      }),
       definitions,
     ]);
     if (current.status !== 200 || !current.data) return failure(current.status);
@@ -166,9 +169,11 @@ export async function readGameReader(
     if (response.status === 400 && address.cursor) return { ok: false, reason: 'restart' };
     if (response.status !== 200 || !response.data) return failure(response.status);
     const page = response.data;
+    const { workReleaseCards, ...membershipPage } = page;
     if (
       page.links.length > gameReaderLimit ||
-      encodedBytes(page) > gameReaderLimit * 128 * 1024 + 64 * 1024 ||
+      encodedBytes(membershipPage) > gameReaderLimit * 128 * 1024 + 64 * 1024 ||
+      (workReleaseCards !== undefined && encodedBytes(workReleaseCards) > 2 * 1024 * 1024) ||
       (page.next !== null &&
         (typeof page.next !== 'string' || !page.next.length || page.next.length > 4096 || page.next === address.cursor))
     )
@@ -192,7 +197,13 @@ export async function readGameReader(
         return { ok: false, reason: 'unavailable' };
       seen.add(key);
     }
-    return { ...common, editions: page.links, next: page.next, caughtUp: page.freshness.caught_up };
+    return {
+      ...common,
+      editions: page.links,
+      workReleaseCards: workReleaseCards ?? { state: 'unavailable' },
+      next: page.next,
+      caughtUp: page.freshness.caught_up,
+    };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }

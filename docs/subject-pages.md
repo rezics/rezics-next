@@ -72,6 +72,8 @@ Admitted public containment is independently readable through the [album content
 
 ## Read a game work and its editions
 
+Decision: Comparison cards retain the native inverse-link order of the current bounded release page.
+
 The ordinary Game and Visual Novel overview mounts the [Game reader](../apps/web/src/features/catalogue/game-reader/README.md).
 It groups admitted work facts, classifications, qualified credits and relations using the active immutable Release.
 Work, software release and independently referable add-on remain separate identities. Missing platform, engine,

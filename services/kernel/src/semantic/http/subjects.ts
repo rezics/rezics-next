@@ -71,6 +71,7 @@ import readRedirect from '../read-redirect.sql';
 import { SourceRecordSchema } from '../source-records.ts';
 import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts';
 import { readSubjectCorrectionActions } from '../viewer-actions.ts';
+import { workReleaseCardFieldLimit, workReleaseCardLimit } from '../work-release-cards.ts';
 import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
 import { requireAccessDeadline } from '../../access/unavailable.ts';
 import { withReadTransaction } from '../read.ts';
@@ -322,6 +323,54 @@ const readResponse = t.Object(
   },
   { additionalProperties: false },
 );
+const WorkReleaseCardFieldSchema = t.Union([
+  t.Object({ state: t.Literal('unsupported') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('withheld') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('missing') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+  t.Object(
+    {
+      state: t.Literal('available'),
+      statements: t.Array(StatementSchema, { maxItems: workReleaseCardFieldLimit }),
+      related: t.Record(t.String(), SubjectSummarySchema),
+    },
+    { additionalProperties: false },
+  ),
+]);
+const WorkReleaseCardSchema = t.Object(
+  {
+    subject: t.String({ format: 'uuid' }),
+    type: t.String(),
+    summary: SubjectSummarySchema,
+    membership: StatementSchema,
+    related: t.Record(t.String(), SubjectSummarySchema),
+    fields: t.Object(
+      {
+        'schema:gamePlatform': WorkReleaseCardFieldSchema,
+        'schema:inLanguage': WorkReleaseCardFieldSchema,
+        'schema:datePublished': WorkReleaseCardFieldSchema,
+        'schema:creativeWorkStatus': WorkReleaseCardFieldSchema,
+        'wdt:P5804': WorkReleaseCardFieldSchema,
+        'rezics:releaseStatus': WorkReleaseCardFieldSchema,
+        'schema:contentRating': WorkReleaseCardFieldSchema,
+        'schema:publisher': WorkReleaseCardFieldSchema,
+        'schema:producer': WorkReleaseCardFieldSchema,
+        'wdt:P178': WorkReleaseCardFieldSchema,
+        'wdt:P162': WorkReleaseCardFieldSchema,
+        'wdt:P2899': WorkReleaseCardFieldSchema,
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+const WorkReleaseCardsSchema = t.Union([
+  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+  t.Object(
+    { state: t.Literal('available'), cards: t.Array(WorkReleaseCardSchema, { maxItems: workReleaseCardLimit }) },
+    { additionalProperties: false },
+  ),
+]);
 const SubjectCountsSchema = t.Unsafe<SubjectRelationCountResponse>(
   t.Object(
     {
@@ -1088,7 +1137,7 @@ function subjectRoutes(
             } catch {
               actionRead = { state: 'unavailable' };
             }
-            if (actionRead.state === 'concealed') throw new ProblemError('not_found');
+            // Failed action advice is independent of the public Subject reading.
             currentViewerActions =
               actionRead.state === 'available'
                 ? { state: 'available', actions: actionRead.actions }
@@ -2509,6 +2558,7 @@ function subjectRoutes(
                     { additionalProperties: false },
                   ),
                 ),
+                workReleaseCards: t.Optional(WorkReleaseCardsSchema),
                 count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() })),
                 freshness: t.Object(
                   {
