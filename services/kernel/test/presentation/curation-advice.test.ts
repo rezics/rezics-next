@@ -65,12 +65,18 @@ beforeAll(async () => {
     tokens,
     receiptKeys: testReceiptKeys(),
     routeKey: new Uint8Array(32).fill(6),
-    writeRate: { async spend() { return { allowed: true }; } },
+    writeRate: {
+      async spend() {
+        return { allowed: true };
+      },
+    },
   });
   const published = await call('/v1/presentation/profiles', curatorToken, 'POST', { profile });
   expect(published.response.status).toBe(201);
   expect(published.body).toEqual({ digest });
-  const activated = await call(`/v1/presentation/profiles/${digest}:activate`, curatorToken, 'POST', { expected_head: null });
+  const activated = await call(`/v1/presentation/profiles/${digest}:activate`, curatorToken, 'POST', {
+    expected_head: null,
+  });
   expect(activated.response.status).toBe(200);
 });
 
@@ -94,7 +100,11 @@ test('the opening API reports independent native actions and has no command effe
   const anonymous = await call('/v1/presentation/curation');
   expect(anonymous.response.status).toBe(200);
   expect(anonymous.response.headers.get('cache-control')).toBe('private, no-store');
-  expect(anonymous.body).toMatchObject({ viewer: 'anonymous', digest, advice: { publish: 'denied', activate: 'denied' } });
+  expect(anonymous.body).toMatchObject({
+    viewer: 'anonymous',
+    digest,
+    advice: { publish: 'denied', activate: 'denied' },
+  });
 
   const allowed = await call('/v1/presentation/curation', curatorToken);
   expect(allowed.body).toMatchObject({ viewer: 'account', advice: { publish: 'allowed', activate: 'allowed' } });
