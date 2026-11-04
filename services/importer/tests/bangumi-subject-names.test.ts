@@ -13,7 +13,7 @@ import {
   type CrossMediaPort,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
-import { createSourceRegistration } from '../src/source-registry.ts';
+import { createSourceRegistration, crossMediaBangumiRevision } from '../src/source-registry.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const targetId = 990301;
@@ -157,7 +157,7 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
         source: crossMediaAliases.bangumi,
         external_id: String(targetId),
         record_revision: 'unversioned',
-        converter_revision: entityRevision,
+        converter_revision: crossMediaBangumiRevision,
       });
       expect(command.statement.references).toEqual([
         {

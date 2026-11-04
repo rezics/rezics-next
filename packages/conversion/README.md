@@ -813,9 +813,9 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 
 ## Bangumi TVAnime subject names
 
-`bangumi@6` consumes only `中文名` and `别名` from the exact pinned
-`{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
-Bangumi converter and selected-family registrations share this pure extraction.
+The `bangumi@7` name projection consumes only `中文名` and `别名` from the exact
+pinned `{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The
+ordinary Bangumi converter and selected-family registrations share this pure extraction.
 The existing top-level `name` and `name_cn` bootstrap labels keep their current
 meanings; infobox names become cited native name facts after subject binding and
 do not set `inLanguage`. The complete infobox remains in the existing bounded
@@ -828,3 +828,36 @@ Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
 omissions, with no source prose copied into diagnostics. Parsing scans at most 64
 field occurrences, retains at most 24 distinct name values, and emits at most 16
 omission diagnostics.
+
+## Bangumi TVAnime work evidence
+
+Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
+`官方网站` stays with the separate `schema:url` mapping, and the parser removes
+only horizontal template/list boundary whitespace.
+
+`bangumi@7` also consumes the exact pinned TVAnime `链接` and `Copyright`
+fields. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
+source spelling and URL bytes are kept, and the URL is never a source citation
+or identity claim. A plain notice becomes `schema:copyrightNotice` with its
+source text preserved. Both facts cite only the exact Bangumi subject record.
+Neither fact supplies a reuse licence, summary permission, or media import
+permission. Existing summary and cover rights remain separate.
+
+Values may be inline scalars, one plain continuation, or bullet-list items.
+Markup, display-text links, custom schemes, malformed URLs, mixed scalar/list
+forms, and notices containing wiki markup are omissions with source-free
+diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
+1,500 characters. One conversion visits at most 64 fields, emits at most 16
+descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
+Values are rejected on overflow; none are truncated or canonicalized.
+
+- Touches: one TVAnime source record, its exact Bangumi citation, admitted work
+  evidence, and the existing proposal/review/adoption/current-read path.
+- Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
+  alias/key, record digest and revision, existing journal recovery, rights
+  admission, and facts fence. No linked-page fetch or hostname identity lookup.
+- Growth check: importer `tests/bangumi-work-evidence.test.ts` covers the
+  selected-family caller, source refresh, citations, malformed neighbor and
+  repair. Kernel `test/imports/bangumi-work-evidence.test.ts` covers ordinary
+  independent acceptance/adoption, reopen, current reads and the facts fence;
+  neither fixture claims a real-dump walkthrough.

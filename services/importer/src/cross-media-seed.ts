@@ -49,7 +49,7 @@ import { createImportTransport, type ReviewedSubjectRead } from './import-client
 import { createPublicBulkClient } from './public-bulk-client.ts';
 import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from './showcase-publication.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 import {
@@ -1521,7 +1521,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   for (const provider of ['bangumi', 'vndb'] as const) {
     const registration = createSourceRegistration(provider, {
       source: crossMediaAliases[provider],
-      converterRevision: entityRevision,
+      converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
     });
     for (const row of [...plan.records[provider], ...plan.entities[provider]])
       registration.convert(
@@ -1765,7 +1765,7 @@ export async function seedCrossMedia(
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
       const registration = createSourceRegistration(provider, {
         source: crossMediaAliases[provider],
-        converterRevision: entityRevision,
+        converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
       });
       for (const record of [...plan.records[provider], ...plan.entities[provider]]) {
         const conversion = registration.convert(

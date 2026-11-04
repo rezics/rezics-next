@@ -9,7 +9,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
-import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
+import { extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -22,13 +22,14 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@6';
+export const converter_revision = 'bangumi@7';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Twelve projected top-level fields; at most eight commands, one cover intent,
-// and one citation envelope per statement with at most two URL parts.
+// Twelve projected top-level fields; one cover intent and one citation envelope
+// per statement with at most two URL parts. Catalogue and batch validators own
+// the final command limits.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
@@ -157,7 +158,7 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
 
 function retainedFieldDiagnostics(
   record: NormalizedRecord,
-  nameDiagnostics: readonly { pointer: string; code: string }[],
+  fieldDiagnostics: readonly { pointer: string; code: string }[],
 ): { pointer: string; code: string }[] {
   const citedDate =
     (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
@@ -176,7 +177,9 @@ function retainedFieldDiagnostics(
               ? 'unsupported_infobox_mapping'
               : `catalogue_has_no_${field}_property`,
     }));
-  return [...retained, ...nameDiagnostics];
+  const combined = [...retained, ...fieldDiagnostics];
+  if (combined.length <= 16) return combined;
+  return [...combined.slice(0, 15), { pointer: '/infobox', code: 'additional_infobox_omissions' }];
 }
 
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
@@ -268,10 +271,11 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     value: { type: 'value', content },
     references: references(),
   });
-  const extractedNames = extractBangumiSubjectNames(record);
+  const extractedFields = extractBangumiTVAnimeEvidence(record);
   const facts = [
     fact('wdt:P5732', input.external_id),
-    ...extractedNames.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
+    ...extractedFields.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
+    ...extractedFields.workEvidence.map((evidence) => fact(evidence.property, evidence.value)),
   ];
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
@@ -396,9 +400,9 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     proposals,
     digest,
     normalizedRecord: record,
-    // These source-only fields have no declared mapping in this converter. Their
-    // values are retained only in normalizedRecord, never invented catalogue slots.
-    diagnostics: retainedFieldDiagnostics(record, extractedNames.diagnostics),
+    // Remaining unsupported source-only fields are retained only in normalizedRecord;
+    // they never become invented catalogue slots.
+    diagnostics: retainedFieldDiagnostics(record, extractedFields.diagnostics),
     coverAssets,
     mediaImportIntents,
     sourceMetadata,

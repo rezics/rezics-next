@@ -2282,7 +2282,8 @@ The result carries provider and native type bindings, source keys, source and co
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
+`cross-media-entities@7+bangumi@7` revision while the ordinary caller uses
+`bangumi@7`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2299,3 +2300,26 @@ revision exists, the normalized digest and the acknowledged native UUID.
   exact citations and omissions. The connected ordinary caller is
   `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
   remains controller-owned.
+
+### Bangumi TVAnime work evidence
+
+Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright`
+reach the work-evidence converter. `链接` can produce a `wdt:P973` descriptive
+page fact; `Copyright` can produce a verbatim `schema:copyrightNotice`. Each
+statement cites the Bangumi subject record. The descriptive URL remains its
+value, never its citation, identity, or official website. A copyright notice
+does not grant prose reuse, cover import, or rights clearance.
+
+- Touches: ordinary `bangumi@7` registration and selected-family
+  `cross-media-entities@7+bangumi@7` registration, one TVSeries record, exact
+  source citations, the current journal and candidate review flow.
+- Bound: 64 visited infobox fields, 16 descriptive links, 16 notices and 16
+  diagnostics; URLs and notices follow the compiled TVSeries 1,500-character
+  limits. The parser accepts plain scalar and bullet-list forms only, retains
+  source spelling/text, and does not fetch linked pages or infer identities.
+  Summary and cover rights decisions remain unchanged.
+- Growth check: `tests/bangumi-work-evidence.test.ts` runs the selected-family
+  seed, validates source refresh and repair on the same acknowledged identity,
+  and checks exact values/citations. The connected Kernel test is
+  `../kernel/test/imports/bangumi-work-evidence.test.ts`; its authored fixture
+  is not a real-data walkthrough.
