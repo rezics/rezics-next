@@ -52,8 +52,6 @@ test('VNDB character names retain language and romanization while aliases remain
   const create = authored.proposals[0];
   if (create?.op !== 'create') throw new Error('Expected bootstrap');
   expect(create.subject.labels).toEqual({ ja: '美咲', 'ja-Latn': 'Misaki', 'zh-Hant': '美咲' });
-  expect(create.subject.labels).toEqual({ ja: '美咲', 'ja-Latn': 'Misaki' });
-  expect(create.subject.aliases).toBeUndefined();
   expect(JSON.stringify(create.subject)).not.toContain('Other Name');
 
   const bound = convertCrossMediaEntity(record('c1', names, aliases), { subjectId });
@@ -123,7 +121,8 @@ test('unrepresentable spoiler levels withhold the complete alias without leaking
   const bootstrap = convertCrossMediaEntity(input);
   const create = bootstrap.proposals[0];
   if (create?.op !== 'create') throw new Error('Expected bootstrap');
-  expect(create.subject.aliases).toEqual({ 'ja-Latn': ['Misaki'] });
+  expect(create.subject.labels).toEqual({ ja: '美咲', 'ja-Latn': 'Misaki' });
+  expect(create.subject.aliases).toBeUndefined();
   expect(JSON.stringify(create.subject)).not.toContain('Hidden');
   expect(bootstrap.diagnostics).toEqual([{ pointer: '/chars_alias/0/spoil', code: 'unrepresentable_qualifier' }]);
   expect(facts(convertCrossMediaEntity(input, { subjectId }), 'schema:alternateName')).toEqual([
