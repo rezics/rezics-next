@@ -1808,10 +1808,10 @@ export function createSearchService({
         hits?: readonly CheckedHit[],
       ) =>
         completeSuggestionWorkContext(page, {
-          reader: suggestionWorkContext,
+          ...(suggestionWorkContext ? { reader: suggestionWorkContext } : {}),
           languages: options.languages ?? [],
           deadline: contextDeadline,
-          complete: read?.complete,
+          ...(read?.complete ? { complete: read.complete } : {}),
           ...(hits
             ? {
                 verifyCurrent: () =>
