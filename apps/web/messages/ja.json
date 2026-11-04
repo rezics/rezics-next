@@ -9303,5 +9303,9 @@
   "work_franchise_preview_more": "この関係には続きがある場合があります。「つながり」で確認できます。",
   "work_franchise_stream_unsupported": "公開済みの定義では、この関係の方向はサポートされていません。",
   "work_franchise_stream_refused": "この関係の読み取りは拒否されました。",
-  "work_franchise_stream_concealed": "この関係の情報は開示されていません。"
+  "work_franchise_stream_concealed": "この関係の情報は開示されていません。",
+  "quotation_authoring": "引用の編集を開く",
+  "quotation_body_missing": "引用の本文は記録されていません。",
+  "quotation_language": "引用の言語",
+  "quotation_language_choice": "{number}. {language}"
 }

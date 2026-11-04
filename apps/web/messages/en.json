@@ -9396,5 +9396,9 @@
   "work_franchise_preview_more": "More may be available in this stream. Continue in Connections.",
   "work_franchise_stream_unsupported": "This relationship direction is not supported by the released definitions.",
   "work_franchise_stream_refused": "This relationship reading was refused.",
-  "work_franchise_stream_concealed": "No relationship reading is disclosed."
+  "work_franchise_stream_concealed": "No relationship reading is disclosed.",
+  "quotation_authoring": "Open quotation authoring",
+  "quotation_body_missing": "No quotation body is recorded.",
+  "quotation_language": "Quotation language",
+  "quotation_language_choice": "{number}. {language}"
 }

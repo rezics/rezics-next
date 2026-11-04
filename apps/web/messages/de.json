@@ -9300,5 +9300,9 @@
   "work_franchise_preview_more": "In diesem Datenstrom können weitere Einträge verfügbar sein. Unter Verbindungen fortfahren.",
   "work_franchise_stream_unsupported": "Die veröffentlichten Definitionen unterstützen diese Beziehungsrichtung nicht.",
   "work_franchise_stream_refused": "Diese Beziehungsabfrage wurde abgelehnt.",
-  "work_franchise_stream_concealed": "Es werden keine Beziehungsdaten offengelegt."
+  "work_franchise_stream_concealed": "Es werden keine Beziehungsdaten offengelegt.",
+  "quotation_authoring": "Zitat bearbeiten öffnen",
+  "quotation_body_missing": "Es ist kein Zitattext erfasst.",
+  "quotation_language": "Sprache des Zitats",
+  "quotation_language_choice": "{number}. {language}"
 }

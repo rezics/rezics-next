@@ -9303,5 +9303,9 @@
   "work_franchise_preview_more": "此關係串流可能還有更多內容。可在「關聯」中繼續查看。",
   "work_franchise_stream_unsupported": "已發布的定義不支援此關係方向。",
   "work_franchise_stream_refused": "此關係的讀取請求已被拒絕。",
-  "work_franchise_stream_concealed": "此關係的讀取內容未披露。"
+  "work_franchise_stream_concealed": "此關係的讀取內容未披露。",
+  "quotation_authoring": "開啟引文編輯",
+  "quotation_body_missing": "尚未記錄引文內文。",
+  "quotation_language": "引文語言",
+  "quotation_language_choice": "{number}. {language}"
 }

@@ -9300,5 +9300,9 @@
   "work_franchise_preview_more": "D’autres entrées peuvent être disponibles. Continuez dans Connexions.",
   "work_franchise_stream_unsupported": "Les définitions publiées ne prennent pas en charge ce sens de relation.",
   "work_franchise_stream_refused": "La consultation de cette relation a été refusée.",
-  "work_franchise_stream_concealed": "Aucune donnée de relation n’est divulguée."
+  "work_franchise_stream_concealed": "Aucune donnée de relation n’est divulguée.",
+  "quotation_authoring": "Ouvrir la rédaction de la citation",
+  "quotation_body_missing": "Aucun texte de citation n’est enregistré.",
+  "quotation_language": "Langue de la citation",
+  "quotation_language_choice": "{number}. {language}"
 }

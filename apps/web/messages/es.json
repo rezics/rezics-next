@@ -9300,5 +9300,9 @@
   "work_franchise_preview_more": "Puede haber más entradas en esta relación. Continúa en Conexiones.",
   "work_franchise_stream_unsupported": "Las definiciones publicadas no admiten esta dirección de relación.",
   "work_franchise_stream_refused": "Se ha rechazado la consulta de esta relación.",
-  "work_franchise_stream_concealed": "No se muestran datos de esta relación."
+  "work_franchise_stream_concealed": "No se muestran datos de esta relación.",
+  "quotation_authoring": "Abrir la edición de citas",
+  "quotation_body_missing": "No se ha registrado el texto de la cita.",
+  "quotation_language": "Idioma de la cita",
+  "quotation_language_choice": "{number}. {language}"
 }

@@ -297,6 +297,30 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const url = new URL(value, 'https://rezics.invalid');
     const collection = collectionReturn(url, locale);
     if (collection) return collection;
+    const quotation = subjectDestination.exec(url.pathname);
+    if (quotation?.[2] === 'quotations') {
+      const keys = [...url.searchParams.keys()];
+      const quote = url.searchParams.get('quote');
+      const marker = url.searchParams.get('quotationReturn');
+      const origin = url.searchParams.get('returnTo');
+      if (
+        url.origin !== 'https://rezics.invalid' ||
+        (locale !== undefined && quotation[1] !== locale) ||
+        url.hash ||
+        new Set(keys).size !== keys.length ||
+        keys.some((key) => !['quote', 'quotationReturn', 'returnTo'].includes(key)) ||
+        (quote !== null && !new RegExp(`^${uuid}$`, 'i').test(quote)) ||
+        (marker !== null && !boundedToken(marker, 128)) ||
+        (origin !== null &&
+          (origin.length > 2048 ||
+            !origin.startsWith('/') ||
+            origin.startsWith('//') ||
+            origin.includes('\\') ||
+            /[\u0000-\u001f\u007f]/u.test(origin)))
+      )
+        return;
+      return `${url.pathname}${url.search}`;
+    }
     const musicContext = musicContextDestination.exec(url.pathname);
     if (musicContext) {
       const keys = [...url.searchParams.keys()];

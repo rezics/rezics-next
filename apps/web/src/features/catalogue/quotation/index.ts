@@ -2,7 +2,9 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { checkDocument } from '@rezics/document';
-import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
+import { candidateFailure, type CandidateFailure, type CandidateViewerActions } from '../../../subject/candidates';
+import { readCorrectionActions } from '../statement-editor';
+import { personBounds, personEvidenceFits } from '../person-reader/model';
 import { typeExtends, QUOTATION_PAGE_CAP } from '../../pages/graph-browser';
 import { spoilerLevel, webUrl } from '../../pages/shared';
 import { readAuthoredBody, type AuthoredBody, type AuthoredDocument } from '../authored-field';
@@ -25,7 +27,18 @@ export type QuotationContextStatus =
   | 'missing'
   | 'withheld'
   | 'unsupported';
+export type QuotationAssertion = {
+  holder: string;
+  context: string;
+  release: string;
+  revision: number;
+  statement: Statement;
+};
 export type QuotationContext = {
+  assertion?: QuotationAssertion | undefined;
+  spoiler?: boolean | undefined;
+  qualifiers?: QuotationPart[] | undefined;
+  references?: QuotationReference[] | undefined;
   kind: QuotationContextKind;
   status: QuotationContextStatus;
   property?: string | undefined;
@@ -49,6 +62,7 @@ export type QuotationReference = {
   parts: QuotationPart[];
 };
 export type QuotationText = {
+  assertion?: QuotationAssertion | undefined;
   statementId?: string | undefined;
   property: string;
   status: 'current' | 'missing' | 'withheld' | 'unsupported' | 'unavailable' | 'stale';
@@ -90,6 +104,7 @@ export type QuotationRead =
       session?: string | undefined;
       viewer?: QuotationViewer | undefined;
       actions?: QuotationAction[] | undefined;
+      viewerActions?: CandidateViewerActions | undefined;
     };
 
 type Definitions = Pick<Release, 'types' | 'properties'>;
@@ -138,6 +153,16 @@ function ranked(statements: readonly Statement[]) {
   return preferred.length ? preferred : statements.filter((statement) => statement.rank === 'normal');
 }
 
+function assertionFor(subject: SubjectRead, statement: Statement): QuotationAssertion {
+  return {
+    holder: subject.subject.id,
+    context: subject.subject.context,
+    release: subject.subject.release,
+    revision: subject.subject.revision,
+    statement,
+  };
+}
+
 function contextsFor(
   subject: SubjectRead,
   release: Definitions,
@@ -154,14 +179,22 @@ function contextsFor(
     if (!statements.length)
       return [{ kind, property, status: kind === 'speaker' || kind === 'credited' ? 'missing' : 'unknown' }];
     return statements.map((statement): QuotationContext => {
-      const base = { kind, property, statementId: statement.id };
+      const base = {
+        kind,
+        property,
+        statementId: statement.id,
+        assertion: assertionFor(subject, statement),
+        spoiler: spoilerLevel(statement) > 0,
+        qualifiers: projectQualifiers(statement, release, subject.related, locale),
+        references: projectReferences(statement, release, subject.related, locale),
+      };
       if (statement.value.type === 'somevalue') return { ...base, status: 'withheld' };
       if (statement.value.type === 'novalue') return { ...base, status: 'missing' };
       const id = statement.value.content;
       if (typeof id !== 'string' || !id) return { ...base, status: 'unsupported' };
-      if (!Object.hasOwn(subject.related, id)) return { ...base, status: 'concealed', id };
+      if (!Object.hasOwn(subject.related, id)) return { ...base, status: 'concealed' };
       const label = relatedLabel(subject.related, id, locale);
-      if (!label) return { ...base, status: 'restricted', id };
+      if (!label) return { ...base, status: 'restricted' };
       return { ...base, status: 'current', id, label };
     });
   });
@@ -178,11 +211,11 @@ function projectPart(release: Definitions, snak: Snak, related: SubjectRead['rel
   const content = snak.value.content;
   if (definition.datatype === 'wikibase-item') {
     if (typeof content !== 'string' || !content) return { property, label, status: 'unsupported' };
-    if (!Object.hasOwn(related, content)) return { property, label, id: content, status: 'concealed' };
+    if (!Object.hasOwn(related, content)) return { property, label, status: 'concealed' };
     const itemLabel = relatedLabel(related, content, locale);
     return itemLabel
       ? { property, label, id: content, value: itemLabel, status: 'current' }
-      : { property, label, id: content, status: 'restricted' };
+      : { property, label, status: 'restricted' };
   }
   if (definition.datatype === 'url') {
     if (typeof content !== 'string') return { property, label, status: 'unsupported' };
@@ -237,9 +270,8 @@ function projectQualifiers(
   related: SubjectRead['related'],
   locale: string,
 ): QuotationPart[] {
-  const allowed = release.properties[statement.property.id]?.qualifiers ?? [];
   return statement.qualifiers
-    .filter((qualifier) => qualifier.property.id !== 'rezics:spoilerLevel' && allowed.includes(qualifier.property.id))
+    .filter((qualifier) => qualifier.property.id !== 'rezics:spoilerLevel')
     .map((qualifier) => projectPart(release, qualifier, related, locale));
 }
 
@@ -272,10 +304,10 @@ function pageDocumentBody(documents: unknown, subjectId: string, statement: Stat
     document.candidateId !== statement.id ||
     document.digest !== content.digest ||
     document.language !== content.language ||
-    document.availability !== 'available' ||
-    !checkDocument(document.body)
+    !['available', 'erased'].includes(String(document.availability))
   )
     return candidateFailure(503);
+  if (document.availability === 'available' && !checkDocument(document.body)) return candidateFailure(400);
   return { ok: true, document: document as AuthoredDocument };
 }
 
@@ -302,7 +334,11 @@ async function quotationText(
   const status = textState(statement, property);
   const qualifiers = projectQualifiers(statement, release, subject.related, locale);
   const references = projectReferences(statement, release, subject.related, locale);
+  const content = statement.value.type === 'value' ? statement.value.content : undefined;
+  const language = isRecord(content) && typeof content.language === 'string' ? content.language : undefined;
   const exact = {
+    assertion: assertionFor(subject, statement),
+    ...(language ? { language } : {}),
     statementId: statement.id,
     property,
     qualifiers,
@@ -320,7 +356,20 @@ async function quotationText(
         : client
           ? await readAuthoredBody(client, subject.subject.id, statement, authorization, session)
           : candidateFailure(503);
-    if (!body.ok) return { ...exact, status: body.reason === 'stale' ? 'stale' : 'unavailable', body };
+    if (!body.ok)
+      return {
+        ...exact,
+        status:
+          body.reason === 'stale'
+            ? 'stale'
+            : body.reason === 'invalid'
+              ? 'unsupported'
+              : body.reason === 'denied'
+                ? 'withheld'
+                : 'unavailable',
+        body,
+      };
+    if (body.document.availability !== 'available') return { ...exact, status: 'unavailable', body };
     return {
       ...exact,
       status: 'current',
@@ -329,7 +378,6 @@ async function quotationText(
     };
   }
   if (statement.value.type !== 'value') return { ...exact, status: 'unsupported' };
-  const content = statement.value.content;
   if (definition.datatype === 'monolingualtext') {
     if (!isRecord(content) || typeof content.text !== 'string' || !content.text.trim())
       return { ...exact, status: 'unavailable' };
@@ -358,6 +406,35 @@ async function quotationRow(
   session?: string,
   documents?: unknown,
 ): Promise<QuotationRow> {
+  const properties = [
+    ...quotationRequested.text,
+    ...quotationRequested.speaker,
+    ...quotationRequested.credited,
+    ...quotationRequested.work,
+    ...quotationRequested.voice,
+  ];
+  let count = 0;
+  for (const property of properties) {
+    const statements = subject.subject.statements[property] ?? [];
+    count += statements.length;
+    if (count > personBounds.facts || statements.some((statement) => !personEvidenceFits(statement)))
+      return {
+        id: subject.subject.id,
+        state: 'current',
+        observation: observationOf(subject.subject),
+        contexts: [],
+        statements: [
+          {
+            property: quotationRequested.text[0],
+            status: 'unavailable',
+            qualifiers: [],
+            references: [],
+            sourceStatus: 'unknown',
+            spoiler: false,
+          },
+        ],
+      };
+  }
   const type = subject.subject.type;
   const textProperty = quotationProperty(release, type, quotationRequested.text);
   if (!textProperty || !typeExtends(release, type, quotationRequested.type))
@@ -377,20 +454,8 @@ async function quotationRow(
         },
       ],
     };
-  const selected = ranked(subject.subject.statements[textProperty] ?? []).filter(
-    (statement) => statement.property.id === textProperty,
-  );
-  const text = selected.length === 1 ? selected[0] : undefined;
-  const details = await quotationText(
-    client,
-    authorization,
-    release,
-    subject,
-    text,
-    textProperty,
-    locale,
-    session,
-    documents,
+  const selected = (subject.subject.statements[textProperty] ?? []).filter(
+    (statement) => statement.rank !== 'deprecated' && statement.property.id === textProperty,
   );
   const contexts = [
     ...contextsFor(subject, release, 'speaker', quotationRequested.speaker, locale),
@@ -403,18 +468,25 @@ async function quotationRow(
     state: 'current',
     observation: observationOf(subject.subject),
     contexts,
-    statements: [
-      selected.length > 1
-        ? {
-            property: textProperty,
-            status: 'unsupported',
-            qualifiers: [],
-            references: [],
-            sourceStatus: 'unsupported',
-            spoiler: false,
-          }
-        : details,
-    ],
+    statements: selected.length
+      ? await Promise.all(
+          selected.map((statement) =>
+            quotationText(client, authorization, release, subject, statement, textProperty, locale, session, documents),
+          ),
+        )
+      : [
+          await quotationText(
+            client,
+            authorization,
+            release,
+            subject,
+            undefined,
+            textProperty,
+            locale,
+            session,
+            documents,
+          ),
+        ],
   };
 }
 
@@ -515,12 +587,14 @@ export async function readQuotationPage(
       }
     }
     const selected = rows.find((row) => row.state === 'current') ?? null;
+    const viewerActions = selected ? await readCorrectionActions(client, authorization, selected.id) : undefined;
     return {
       ok: true,
       public: current.data,
       admitted: true,
       rows,
       selected,
+      viewerActions,
       next,
       observation,
       unsupportedCount,

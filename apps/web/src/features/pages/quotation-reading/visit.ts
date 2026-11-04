@@ -30,6 +30,7 @@ let receipt:
       id: string;
       locale: string;
       page: Page;
+      text?: string | undefined;
       previous?: Page | undefined;
       origin?: string | undefined;
       current: () => boolean;
@@ -77,6 +78,9 @@ export function useQuotationVisit(props: {
       : null;
   });
   const safeOrigin = safePath(props.returnTo) ?? restoration?.origin;
+  const [text, setText] = useState<string | undefined>(restoration?.text);
+  const chosenText = useRef(text);
+  chosenText.current = text;
   const [visit, setVisit] = useState<Visit>(() => ({
     intent: restoration?.page ?? {
       quote: quote ?? (initial?.ok ? initial.selected?.id : undefined),
@@ -201,6 +205,7 @@ export function useQuotationVisit(props: {
       id,
       locale,
       page: { ...current.current.intent, quote: read.selected.id },
+      text: chosenText.current,
       previous: current.current.previous,
       origin: safeOrigin,
       current: () => store.getSnapshot() === observed && client.getQueryState(sessionQueryKey) === sessionState,
@@ -223,6 +228,8 @@ export function useQuotationVisit(props: {
 
   return {
     read,
+    text,
+    chooseText: (id?: string) => setText(id),
     error,
     selectedRef,
     safeOrigin,

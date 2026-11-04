@@ -6,12 +6,12 @@ import type { SubjectRead } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { QuotationView } from '../features/pages/quotation-view';
-import type { QuotationRead } from '../features/catalogue/quotation';
+import type { QuotationRead, QuotationRow } from '../features/catalogue/quotation';
 import recordedSubject from '../kernel/recorded/subject.json';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-type State = 'sourced' | 'withheld' | 'unsupported' | 'later' | 'recovery' | 'stale';
+type State = 'sourced' | 'withheld' | 'unsupported' | 'later' | 'recovery' | 'stale' | 'spoiler' | 'languages';
 const quoteId = '00000000-0000-4000-8000-000000000921';
 const textStatementId = '00000000-0000-4000-8000-000000000922';
 const speakerId = '00000000-0000-4000-8000-000000000923';
@@ -23,7 +23,7 @@ const sourceUrl = 'https://archive.example.test/records/steins-gate/quotation-42
 
 function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
   const publicSubject = structuredClone(recordedSubject) as unknown as SubjectRead;
-  const row = {
+  const row: QuotationRow = {
     id: quoteId,
     state: 'current' as const,
     observation: 'recorded quotation observation',
@@ -35,6 +35,7 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
         statementId: textStatementId,
         id: speakerId,
         label: 'Okabe Rintaro',
+        spoiler: state === 'spoiler',
       },
       {
         kind: 'credited' as const,
@@ -74,9 +75,12 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
           {
             statementId: textStatementId,
             hash: sourceHash,
-            status: state === 'sourced' ? ('current' as const) : ('withheld' as const),
+            status:
+              state === 'sourced' || state === 'spoiler' || state === 'languages'
+                ? ('current' as const)
+                : ('withheld' as const),
             parts:
-              state === 'sourced'
+              state === 'sourced' || state === 'spoiler' || state === 'languages'
                 ? [
                     {
                       property: 'schema:url',
@@ -95,11 +99,25 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
                 : [{ property: 'schema:url', label: 'Source URL', status: 'withheld' as const }],
           },
         ],
-        sourceStatus: state === 'sourced' ? ('current' as const) : ('withheld' as const),
-        spoiler: false,
+        sourceStatus:
+          state === 'sourced' || state === 'spoiler' || state === 'languages'
+            ? ('current' as const)
+            : ('withheld' as const),
+        spoiler: state === 'spoiler',
       },
     ],
   };
+  if (state === 'languages')
+    row.statements.push({
+      statementId: '00000000-0000-4000-8000-000000000927',
+      property: 'schema:text',
+      language: 'ja',
+      status: 'unavailable',
+      qualifiers: [],
+      references: [],
+      sourceStatus: 'unknown',
+      spoiler: false,
+    });
   return {
     ok: true,
     public: publicSubject,
@@ -220,4 +238,11 @@ export const StaleReturn: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.quotation_restart() }));
     await expect(await canvas.findByText('I will return. The source and the speaker remain distinct.')).toBeTruthy();
   },
+};
+
+export const IndependentSpoilers: Story = {
+  args: { state: 'spoiler' },
+};
+export const LanguageBodyUnavailable: Story = {
+  args: { state: 'languages' },
 };

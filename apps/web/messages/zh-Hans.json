@@ -9300,5 +9300,9 @@
   "work_franchise_preview_more": "此关系流可能还有更多内容。可在“关联”中继续查看。",
   "work_franchise_stream_unsupported": "已发布的定义不支持此关系方向。",
   "work_franchise_stream_refused": "此关系的读取请求已被拒绝。",
-  "work_franchise_stream_concealed": "此关系的读取内容未披露。"
+  "work_franchise_stream_concealed": "此关系的读取内容未披露。",
+  "quotation_authoring": "打开引文编辑",
+  "quotation_body_missing": "未记录引文正文。",
+  "quotation_language": "引文语言",
+  "quotation_language_choice": "{number}. {language}"
 }
