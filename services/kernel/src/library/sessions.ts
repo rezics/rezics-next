@@ -226,10 +226,13 @@ export function createSessionCommands(config: Dependencies) {
         const { source, version } = prepared;
         if (!source || (parsed.versionSubjectId !== null && !version)) throw new LibraryNotFoundError();
         if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
-        valid(parseSessionCreate(parsed, descriptor(source.profile, parsed)));
+        const acceptedDescriptor = descriptor(source.profile, parsed);
+        valid(parseSessionCreate(parsed, acceptedDescriptor));
+        const meaningDescriptors = [{ mode: parsed.mode, descriptor: acceptedDescriptor }];
         for (const measure of parsed.additionalMeasures ?? []) {
           const unit = descriptor(source.profile, { mode: 'scalar_amount', unit: measure.unit });
           valid(parseProgressMeasureCreate(measure, unit));
+          meaningDescriptors.push({ mode: 'scalar_amount', descriptor: unit });
         }
         const route = requireRoute(owner.accountId);
         const write = { client: tx, route, accountId: owner.accountId };
@@ -248,6 +251,7 @@ export function createSessionCommands(config: Dependencies) {
           },
           { transactionId: command.transactionId, time },
           source.pin,
+          meaningDescriptors,
         );
         await activity.touch(write, { subjectId: session.subjectId, time, completed: false });
         return { value: session, events: [event(session)] };

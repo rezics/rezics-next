@@ -228,3 +228,29 @@ test('mounted profile read retains owner admission, strict year input and cancel
     createReadingInsightsProfileReads(native).profiles(owner.actor, 2020, Date.now() + 30_000, controller.signal),
   ).rejects.toMatchObject({ code: 'deadline_exceeded' });
 }, 120_000);
+
+test('native session creation retains its accepting unit meaning and session deletion removes it', async () => {
+  const owner = await native.identity(sessionScopes);
+  const id = await occurrence(owner, game, false);
+  const route = routeOf(owner.actor.accountId)!;
+  const meaning = await native.pool.query(
+    `SELECT m.unit_id,m.meaning_revision,m.mode,m.profile_pin,m.dimension,m.precision,
+      m.minimum::text AS minimum,m.maximum::text AS maximum,m.total_policy,m.identity_kind,m.structure_kind,
+      s.library_profile_pin AS current_pin
+     FROM library.reading_insights_progress_meaning m
+     JOIN library.progress_session s USING(route,session_id)
+     WHERE m.route=$1 AND m.session_id=$2`,
+    [route, id],
+  );
+  expect(meaning.rows).toHaveLength(1);
+  expect(meaning.rows[0]).toMatchObject({ unit_id: 'minute', meaning_revision: 1, mode: 'scalar_amount' });
+  expect(meaning.rows[0].profile_pin).toEqual(meaning.rows[0].current_pin);
+  expect(meaning.rows[0].structure_kind).toBe('none');
+  await native.pool.query('DELETE FROM library.progress_session WHERE route=$1 AND session_id=$2', [route, id]);
+  expect(
+    (await native.pool.query(
+      'SELECT 1 FROM library.reading_insights_progress_meaning WHERE route=$1 AND session_id=$2',
+      [route, id],
+    )).rows,
+  ).toEqual([]);
+}, 120_000);
