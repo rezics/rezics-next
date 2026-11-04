@@ -1,3 +1,4 @@
+import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.ts';
 import { expect, test } from 'bun:test';
 import { composeFeedViewerPersonalActions, feedViewerReferences } from '../../src/content/feed-viewer.ts';
 import { FeedViewerPersonalActionsSchema } from '../../src/content/feed-viewer-schema.ts';
@@ -7,10 +8,7 @@ import type {
   ViewerPersonalActionsReader,
   ViewerPersonalActionsPage,
 } from '../../src/library/viewer-personal-actions.ts';
-import { readViewerPersonalActionsPage } from '../../src/library/viewer-personal-actions.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
-import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.ts';
 
 const work = (id: string, rowKey: string): FeedItem => ({
   id: rowKey,
@@ -22,6 +20,8 @@ const work = (id: string, rowKey: string): FeedItem => ({
 });
 
 test('Home keeps native private states, duplicate occurrence keys and independent delayed page cohorts', async () => {
+  const { readViewerPersonalActionsPage } = await import('../../src/library/viewer-personal-actions.ts');
+  const { STANDARD_QUESTION_ID } = await import('../../src/rating/votes.ts');
   const f = await createReviewLifecycleFixture();
   try {
     const actor = f.system.actors.author.actor;

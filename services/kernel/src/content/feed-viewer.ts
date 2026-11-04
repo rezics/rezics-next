@@ -1,8 +1,6 @@
 import type { Actor } from '../request/access.ts';
 import type { ViewerPersonalActionInput, ViewerPersonalActionsPage } from '../library/viewer-personal-actions.ts';
-import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { routeOf } from '../route/route.ts';
-import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import type { FeedDependencies } from './feed.ts';
 import type { FeedItem } from './feed-contract.ts';
 
@@ -37,6 +35,12 @@ export async function composeFeedViewerPersonalActions(
   languages: readonly string[],
   finalAdmission: () => Promise<readonly FeedItem[]>,
 ): Promise<ViewerPersonalActionsPage> {
+  // Native owners also import mounted Content contracts. Resolve their runtime
+  // readers only after route/schema initialization has completed.
+  const [{ readSubjectSummaryObservation }, { STANDARD_QUESTION_ID }] = await Promise.all([
+    import('../semantic/summaries.ts'),
+    import('../rating/votes.ts'),
+  ]);
   const references = feedViewerReferences(items);
   const subjects = await readSubjectSummaryObservation(
     { ...deps, actor, deadline },
