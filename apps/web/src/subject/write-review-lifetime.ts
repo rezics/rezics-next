@@ -43,6 +43,7 @@ export type ReviewEntryReadTicket = {
   readonly visit: ReviewEntryVisit;
   readonly generation: number;
   readonly kind: 'realms' | 'boards';
+  readonly controller: AbortController;
 };
 
 const sources = new WeakMap<QueryClient, SessionSource>();
@@ -155,8 +156,8 @@ export function retireReviewEntryVisit(visit: ReviewEntryVisit) {
   if (visit.retired) return;
   visit.retired = true;
   visit.connection.connected = false;
-  visit.pending.realms = null;
-  visit.pending.boards = null;
+  if (visit.pending.realms) cancelReviewEntryRead(visit.pending.realms);
+  if (visit.pending.boards) cancelReviewEntryRead(visit.pending.boards);
   visit.source.visits.delete(visit);
 }
 
@@ -231,7 +232,7 @@ export function beginReviewEntryRead(
   kind: ReviewEntryReadTicket['kind'],
 ): ReviewEntryReadTicket | null {
   if (!visit.ready || !reviewEntryVisitIsCurrent(visit) || visit.pending[kind]) return null;
-  const ticket: ReviewEntryReadTicket = { visit, generation: ++visit.readGeneration, kind };
+  const ticket: ReviewEntryReadTicket = { visit, generation: ++visit.readGeneration, kind, controller: new AbortController() };
   visit.pending[kind] = ticket;
   return ticket;
 }
@@ -242,6 +243,11 @@ export function reviewEntryReadIsCurrent(ticket: ReviewEntryReadTicket) {
 
 export function finishReviewEntryRead(ticket: ReviewEntryReadTicket) {
   if (ticket.visit.pending[ticket.kind] === ticket) ticket.visit.pending[ticket.kind] = null;
+}
+
+export function cancelReviewEntryRead(ticket: ReviewEntryReadTicket) {
+  ticket.controller.abort();
+  finishReviewEntryRead(ticket);
 }
 
 export function claimReviewEntryNavigation(ticket: ReviewEntryReadTicket) {

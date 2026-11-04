@@ -46,9 +46,10 @@ function gate<T>(): Gate<T> {
 
 const calls: { path: string; query: string; authorization: string | null; method: string }[] = [];
 const headers: string[] = [];
+const serverFunctionSignals: (AbortSignal | undefined)[] = [];
 let realmRead: (cursor: string | null) => Promise<Response> = async (cursor) =>
   cursor ? Response.json({ items: [laterRealm], next: null }) : Response.json({ items: [firstRealm], next: 'later-page' });
-let destinationRead: (realmId: string, boardId: string | null) => Promise<Response> = async (realmId, boardId) =>
+let destinationRead: (realmId: string, _boardId: string | null) => Promise<Response> = async (realmId) =>
   Response.json({
     state: 'choices',
     viewer: { state: 'current' },
@@ -56,7 +57,7 @@ let destinationRead: (realmId: string, boardId: string | null) => Promise<Respon
       subject: { id: subjectId, label: { value: subjectTitle, language: 'en' }, source },
       realm: { id: realmId, title: laterRealm.name, spaceId, headRevisionId },
     },
-    items: boardId ? [candidate] : [candidate],
+    items: [candidate],
     next: null,
   });
 let serverReader = reader;
@@ -85,7 +86,8 @@ mock.module('@tanstack/react-start', () => ({
         return this;
       },
       handler(handler: (input: { data: unknown }) => Promise<unknown>) {
-        return async (input: { data?: unknown } = {}) => {
+        return async (input: { data?: unknown; signal?: AbortSignal } = {}) => {
+          serverFunctionSignals.push(input.signal);
           const data = validate ? validate(input.data) : input.data;
           request = new Request('https://review.test/en/_server/review', {
             headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
@@ -192,11 +194,12 @@ async function surface(session: 'signed-in' | 'signed-out' | 'unavailable' = 'si
 function reset() {
   calls.length = 0;
   headers.length = 0;
+  serverFunctionSignals.length = 0;
   navigations.length = 0;
   serverReader = reader;
   realmRead = async (cursor) =>
     cursor ? Response.json({ items: [laterRealm], next: null }) : Response.json({ items: [firstRealm], next: 'later-page' });
-  destinationRead = async (realmId, boardId) =>
+  destinationRead = async (realmId) =>
     Response.json({
       state: 'choices',
       viewer: { state: 'current' },
@@ -291,6 +294,7 @@ test('a Realm replacement retires a late destination page and its selection', as
     await settle();
     await act(async () => view.query.setQueryData(sessionQuery.queryKey, signedIn()));
     await view.render({ subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000096', locale: 'zh-Hant', subjectTitle: '替換後的作品' });
+    expect(serverFunctionSignals.at(-1)?.aborted).toBe(true);
     pending.resolve(
       Response.json({
         state: 'choices',
