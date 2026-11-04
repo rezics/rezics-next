@@ -49,6 +49,7 @@ export type RulesAuthoringResponse = Omit<v.InferOutput<typeof rulesAuthoringRes
     | { state: 'available'; reference: { postId: string; revisionId: string }; title: string | null; authorId: string; threadId: string; boardId: string; boardTitle: string | null; mediaIds: readonly string[]; body: DocumentSnapshot; language: string | null; licence: string; sha256: string; currentRevision: boolean }
     | { state: 'erased' | 'concealed'; reference: { postId: string; revisionId: string } }
     | { state: 'unavailable'; reference: { postId: string; revisionId: string } | null };
+};
 export type RulesAuthoringRead =
   | { kind: 'ready'; value: RulesAuthoringResponse }
   | { kind: 'denied' | 'unavailable' };
