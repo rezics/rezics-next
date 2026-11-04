@@ -12,7 +12,12 @@ import {
   vndbReleasePlatformTaxonomy,
 } from '../../../packages/conversion/src/support.ts';
 import { CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
-import { importVndbReleaseFidelity, type VndbReleaseBindingGroup } from '../src/vndb-release-fidelity.ts';
+import {
+  importVndbReleaseFidelity,
+  planVndbReleaseFidelity,
+  readVndbReleaseBindings,
+  type VndbReleaseBindingGroup,
+} from '../src/vndb-release-fidelity.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 /** Authored COPY rows; they are not observations of a provider record. */
@@ -104,6 +109,14 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
     const targetOf = (command: BatchCommand) =>
       command.op === 'propose' && command.statement.value.type === 'value' ? command.statement.value.content : undefined;
     const firstTables = await authoredTables(directory, ['mac', 'win', 'win', 'xyz'], [['dvd', '5'], ['cd', '1'], ['dvd', '2']]);
+    const planned = await planVndbReleaseFidelity(firstTables);
+    expect(planned.releasePlatforms.get('r1')).toMatchObject({
+      platforms: [{ code: 'mac' }, { code: 'win' }],
+      media: [{ code: 'cd' }, { code: 'dvd' }],
+    });
+    expect((await readVndbReleaseBindings(port, groups)).concepts.map((item) => item.id).sort()).toEqual(
+      [...ids.values()].sort(),
+    );
     const first = await importVndbReleaseFidelity({
       tables: firstTables,
       path: join(directory, 'state.sqlite'),
