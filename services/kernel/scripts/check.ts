@@ -32,6 +32,7 @@ import { readLatest, timingsDirectory } from './check-timings.ts';
 import { runOnCheckHost } from '../../../scripts/stack-run.ts';
 import { affectedTests } from './affected.ts';
 import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
+import { withCommandPhase } from './command-phases.ts';
 import {
   captureArtifactReturns,
   registerArtifactDeclarations,
@@ -911,17 +912,24 @@ async function main(): Promise<void> {
 
   // Remote hosts are shared: only this run's explicit cleanup may remove their containers.
   if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) cleanupStale();
-  container = startPostgresContainer();
+  let url = '';
+  let env: NodeJS.ProcessEnv = process.env;
+  await withCommandPhase('database-image', () => {
+    container = startPostgresContainer();
+    const portOutput = docker(['port', container, '5432/tcp']);
+    const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
+    if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
+    url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
+    process.env.KERNEL_DATABASE_CONTAINER = container;
+    env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
+  });
 
-  const portOutput = docker(['port', container, '5432/tcp']);
-  const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
-  if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
-  const url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
-  process.env.KERNEL_DATABASE_CONTAINER = container;
-  const env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
-
-  migrate(url);
-  await assertSchemaConsistency(schemaDumps(url));
+  await withCommandPhase('migrations', () => {
+    migrate(url);
+  });
+  await withCommandPhase('sql-schema', async () => {
+    await assertSchemaConsistency(schemaDumps(url));
+  });
 
   // The copies share the template's schema and object ids, so one analysis holds for all of them.
   await psql(`CREATE DATABASE ${ANALYSIS_DATABASE} TEMPLATE rezics`);
@@ -941,7 +949,9 @@ async function main(): Promise<void> {
     async () => {
       if (plan.files === null) {
         let phaseStarted = performance.now();
-        invokeTypecheck(tsc, null, analysisEnvironment, reyloConfig, run);
+        await withCommandPhase('compiler', () => {
+          invokeTypecheck(tsc, null, analysisEnvironment, reyloConfig, run);
+        });
         compilerSeconds += seconds(phaseStarted);
         phaseStarted = performance.now();
         run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], analysisEnvironment);
@@ -949,7 +959,9 @@ async function main(): Promise<void> {
         qualitySeconds += seconds(phaseStarted);
       } else {
         const compilerStarted = performance.now();
-        const typecheck = await invokeTypecheck(tsc, plan.files, analysisEnvironment, reyloConfig, capture);
+        const typecheck = await withCommandPhase('compiler', () =>
+          invokeTypecheck(tsc, plan.files, analysisEnvironment, reyloConfig, capture),
+        );
         compilerSeconds += seconds(compilerStarted);
         const diagnostics = ownDiagnostics(
           typecheck.output,
@@ -975,37 +987,38 @@ async function main(): Promise<void> {
         qualitySeconds += seconds(qualityStarted);
       }
     },
-    async () => {
-      const searchImage = buildSearchImage();
-      searchContainer = docker([
-        'run',
-        '-d',
-        ...cgroupArgs(),
-        '--label',
-        `rezics.kernel.check.pid=${pid}`,
-        '-p',
-        '127.0.0.1::9200',
-        '--tmpfs',
-        '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
-        '-e',
-        'discovery.type=single-node',
-        '-e',
-        subjectAutoCreateIndexSetting,
-        '-e',
-        'DISABLE_SECURITY_PLUGIN=true',
-        '-e',
-        'DISABLE_INSTALL_DEMO_CONFIG=true',
-        '-e',
-        'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
-        searchImage,
-      ]);
-      const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
-      const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
-      if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
-      const url = `http://127.0.0.1:${searchPortMatch[1]}`;
-      await waitForSearch(url, searchContainer);
-      return url;
-    },
+    async () =>
+      withCommandPhase('database-image', async () => {
+        const searchImage = buildSearchImage();
+        searchContainer = docker([
+          'run',
+          '-d',
+          ...cgroupArgs(),
+          '--label',
+          `rezics.kernel.check.pid=${pid}`,
+          '-p',
+          '127.0.0.1::9200',
+          '--tmpfs',
+          '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
+          '-e',
+          'discovery.type=single-node',
+          '-e',
+          subjectAutoCreateIndexSetting,
+          '-e',
+          'DISABLE_SECURITY_PLUGIN=true',
+          '-e',
+          'DISABLE_INSTALL_DEMO_CONFIG=true',
+          '-e',
+          'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+          searchImage,
+        ]);
+        const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
+        const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
+        if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
+        const searchUrl = `http://127.0.0.1:${searchPortMatch[1]}`;
+        await waitForSearch(searchUrl, searchContainer);
+        return searchUrl;
+      }),
   ).then((url) => {
     searchUrl = url ?? undefined;
   });
@@ -1122,6 +1135,6 @@ if (import.meta.main) {
     process.exitCode = reportCheckFailure(container, failedFileOutputs);
     console.error(error);
   } finally {
-    cleanup();
+    await withCommandPhase('cleanup', () => cleanup());
   }
 }

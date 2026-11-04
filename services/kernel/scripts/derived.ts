@@ -15,6 +15,8 @@ import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { migrate, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
 import { cleanup, docker, run } from './check.ts';
+import { cgroupArgs } from './search.ts';
+import { withCommandPhase } from './command-phases.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repository = resolve(directory, '../..');
@@ -273,6 +275,34 @@ function createDatabaseContainer(name: string, checkout: string): string {
   ]).trim();
 }
 
+/** One-run compiler database: slice-confined, disk-backed, never a checkout bind mount. */
+export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
+  return [
+    'run',
+    '-d',
+    ...cgroupArgs(),
+    '--label',
+    `rezics.kernel.derived.pid=${pid}`,
+    '-p',
+    '127.0.0.1::5432',
+    '--mount',
+    `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.derived.pid=${pid}`,
+    '-e',
+    'POSTGRES_USER=rezics',
+    '-e',
+    'POSTGRES_PASSWORD=rezics',
+    '-e',
+    'POSTGRES_DB=rezics',
+    POSTGRES_IMAGE,
+    '-c',
+    'fsync=off',
+    '-c',
+    'synchronous_commit=off',
+    '-c',
+    'full_page_writes=off',
+  ];
+}
+
 function reusableDatabaseUrl(migrations: string): { container: string; url: string } {
   const checkout = checkoutKey();
   const name = `rezics-kernel-derived-${checkout}`;
@@ -344,47 +374,28 @@ export async function withThrowawayDatabase<T>(
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   try {
-    let url: string;
+    let url = '';
     if (reuse) {
       const migrations = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
       const prepared = reusableDatabaseUrl(migrationFingerprint(migrations));
       container = prepared.container;
       url = prepared.url;
     } else {
-      container = docker([
-        'run',
-        '-d',
-        '--rm',
-        '--label',
-        `rezics.kernel.derived.pid=${process.pid}`,
-        '-p',
-        '127.0.0.1::5432',
-        '--tmpfs',
-        '/var/lib/postgresql:rw,size=1g',
-        '-e',
-        'POSTGRES_USER=rezics',
-        '-e',
-        'POSTGRES_PASSWORD=rezics',
-        '-e',
-        'POSTGRES_DB=rezics',
-        POSTGRES_IMAGE,
-        '-c',
-        'fsync=off',
-        '-c',
-        'synchronous_commit=off',
-        '-c',
-        'full_page_writes=off',
-      ]);
-      const port = mappedPort(container);
-      url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-      migrate(url);
+      await withCommandPhase('database-image', () => {
+        container = docker(throwawayDatabaseRunArgs());
+        const port = mappedPort(container);
+        url = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
+      });
+      await withCommandPhase('migrations', () => {
+        migrate(url);
+      });
     }
     process.env.KERNEL_DATABASE_CONTAINER = container;
     process.env.DATABASE_URL = url;
     const env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
     return await work(env);
   } finally {
-    if (!reuse) cleanup([container]);
+    if (!reuse) await withCommandPhase('cleanup', () => cleanup([container]));
     // A later consumer must not inherit a URL this one-run container no longer serves.
     if (inheritedUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = inheritedUrl;

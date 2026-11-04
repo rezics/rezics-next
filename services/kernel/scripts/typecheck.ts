@@ -10,6 +10,7 @@ import {
   type CompilerPlacementDependencies,
 } from '../../../scripts/typecheck.ts';
 import { schemaDumps, validateMigrationVersions } from './database.ts';
+import { withCommandPhase, writeCommandObservation, commandObservation } from './command-phases.ts';
 
 const directory = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repository = resolve(directory, '../..');
@@ -75,27 +76,41 @@ async function typecheck(
   emitSchema?: string,
   emitOpenApi = false,
 ): Promise<number> {
-  // Client-dependent tests must see declarations from the source being checked.
-  // The generator checks all source modules; the full workspace checks still run before publication.
-  if (emitClient) {
-    const emitted = await command(['bun', 'scripts/client.ts'], env);
-    if (emitted !== 0) return emitted;
-  }
-  const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
-  if (tsc !== 0) return tsc;
-  const constructed = await command(['bun', 'run', 'construct'], env);
-  if (constructed !== 0) return constructed;
-  if (emitOpenApi) {
-    const contract = await command(['bun', 'scripts/openapi.ts'], env);
-    if (contract !== 0) return contract;
-  }
+  const compiled = await withCommandPhase(
+    'compiler',
+    async () => {
+      // Client-dependent tests must see declarations from the source being checked.
+      // The generator checks all source modules; the full workspace checks still run before publication.
+      if (emitClient) {
+        const emitted = await command(['bun', 'scripts/client.ts'], env);
+        if (emitted !== 0) return emitted;
+      }
+      const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+      if (tsc !== 0) return tsc;
+      const constructed = await command(['bun', 'run', 'construct'], env);
+      if (constructed !== 0) return constructed;
+      if (emitOpenApi) {
+        const contract = await command(['bun', 'scripts/openapi.ts'], env);
+        if (contract !== 0) return contract;
+      }
+      return 0;
+    },
+    env,
+  );
+  if (compiled !== 0) return compiled;
   // Migration work can refresh its own snapshot using this same compiler database.
   // No additional database, native check or change to other modules' snapshots is needed.
   if (emitSchema !== undefined) {
-    const path = emitSchema === 'core' ? 'db/schema.sql' : `db/${emitSchema}/schema.sql`;
-    const dump = schemaDumps(env.DATABASE_URL!, directory)[path];
-    if (dump === undefined) throw new Error(`Unknown schema module: ${emitSchema}`);
-    await Bun.write(resolve(directory, path), dump);
+    await withCommandPhase(
+      'sql-schema',
+      async () => {
+        const path = emitSchema === 'core' ? 'db/schema.sql' : `db/${emitSchema}/schema.sql`;
+        const dump = schemaDumps(env.DATABASE_URL!, directory)[path];
+        if (dump === undefined) throw new Error(`Unknown schema module: ${emitSchema}`);
+        await Bun.write(resolve(directory, path), dump);
+      },
+      env,
+    );
   }
   return 0;
 }
@@ -124,19 +139,20 @@ export async function runKernelTypecheck(
   };
   const config = compilerConfigArgs(env, repository, [directory]);
   const returns = returnedPaths(env, emitClient, emitSchema, emitOpenApi);
+  const remoteCommand = [
+    'bun',
+    'scripts/typecheck.ts',
+    ...(emitClient ? ['--emit-client'] : []),
+    ...(emitOpenApi ? ['--emit-openapi'] : []),
+    ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
+    ...config,
+  ];
   const placed = await placeCompilerRun(
     {
       label: 'kernel typecheck',
       root: repository,
       cwd: directory,
-      command: [
-        'bun',
-        'scripts/typecheck.ts',
-        ...(emitClient ? ['--emit-client'] : []),
-        ...(emitOpenApi ? ['--emit-openapi'] : []),
-        ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
-        ...config,
-      ],
+      command: remoteCommand,
       keepsFiles: emitClient || emitOpenApi || emitSchema !== undefined || returns === undefined,
       ...(returns === undefined ? {} : { returns }),
     },
@@ -145,6 +161,7 @@ export async function runKernelTypecheck(
     dependencies,
   );
   if (placed !== null) return placed;
+  writeCommandObservation('kernel typecheck', commandObservation(remoteCommand, repository, env), env);
   // The compiler database applies the same migrations as derived generation, in admitted custody only.
   validateMigrationVersions(
     Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory })),
