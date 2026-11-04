@@ -408,6 +408,8 @@ test('failed return stays unavailable until the user retries the same page', asy
     await back(view);
     await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
     expect(view.refreshCount.value).toBe(1);
+    if (!view.host.textContent?.includes(m.library_my_ratings_unavailable()))
+      throw new Error(JSON.stringify({ attempts, routeTrace: view.routeTrace, receiptTrace, callbackTrace, text: view.host.textContent }));
     expect(view.host.textContent).toContain(m.library_my_ratings_unavailable());
     expect(view.host.textContent).not.toContain(m.library_my_ratings_sparse());
     await click(view, button(view, m.library_my_ratings_retry_page()));
