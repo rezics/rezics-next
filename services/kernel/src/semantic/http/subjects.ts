@@ -73,6 +73,8 @@ import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts
 import { requireAccessDeadline } from '../../access/unavailable.ts';
 import { withReadTransaction } from '../read.ts';
 import { readPartition } from '../../partition/partition.ts';
+import { readContributionLifecycle } from '../contribution-lifecycle-read.ts';
+import { compileViewerActionBindings, type ViewerActionBindings } from '../../access/viewer-actions.ts';
 import readContributionLifecycleLocator from '../contribution-lifecycle-read-locator.sql';
 import {
   contributionAuthorResource,
@@ -494,6 +496,7 @@ const reactionCountResponse = t.Object(
   { additionalProperties: false },
 );
 type SubjectRouteDependencies = {
+  viewerBindings?: () => ViewerActionBindings;
   pool: Pool;
   routeKey: Uint8Array;
   tokens: KeyRing;
@@ -587,7 +590,7 @@ function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<
 
 function subjectRoutes(
   app: ReturnType<typeof createApp>,
-  { pool, routeKey, tokens, access, clock }: SubjectRouteDependencies,
+  { pool, routeKey, tokens, access, clock, viewerBindings }: SubjectRouteDependencies,
 ) {
   function contributionAuthorization(
     actor: AccountActor,
@@ -1355,6 +1358,47 @@ function subjectRoutes(
             if (error instanceof StaleRevisionAuthorshipError) continue;
             return candidateError(error);
           }
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/candidates/:candidate/lifecycle',
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        query: t.Object({ property: t.String({ minLength: 1, maxLength: 256 }) }, { additionalProperties: false }),
+        response: {
+          200: withHeaders(t.Object({
+            subject: t.String({ format: 'uuid' }), candidate: t.String({ format: 'uuid' }), property: t.String(),
+            viewer: t.Union([t.Literal('account'), t.Literal('anonymous')]),
+            state: t.Union([t.Literal('available'), t.Literal('deleted')]), selected: t.Boolean(),
+            actions: t.Union([
+              t.Object({ state: t.Literal('available'), operations: t.Array(t.Union([t.Literal('delete'), t.Literal('restore')]), { maxItems: 2 }) }),
+              t.Object({ state: t.Literal('unavailable') }),
+            ]),
+          }), cacheControl),
+          ...listingErrors,
+        },
+        detail: { operationId: 'statement.read_lifecycle', 'x-action': 'subject:read', 'x-exposure': 'public', security: [{ bearerAuth: [] }, {}] },
+      },
+      async ({ params, query, actor, authorize, admission, job, session, set }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const resource = { route, id: params.id };
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const propose = await accessCheck(access(), actor, 'statement:propose', globalContextAnchor.resource, { pool, deadline: job.deadline });
+        set.headers['cache-control'] = 'private, no-store';
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            readStatementAs(pool, access(), actor, job.deadline, () => readContributionLifecycle(
+              { pool, access: access(), bindings: viewerBindings?.() ?? compileViewerActionBindings(app.routes), clock, routeKey },
+              { subject: params.id, candidate: params.candidate, property: query.property, actor, deadline: job.deadline, authorize: check, propose },
+            )),
+          );
+          session.record(component);
+          return result;
+        } catch (error) {
+          if (error instanceof ContributionLifecycleNotFoundError) throw new ProblemError('not_found');
+          return candidateError(error);
         }
       },
     )

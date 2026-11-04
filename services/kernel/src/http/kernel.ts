@@ -407,6 +407,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       clock,
       tokens,
       access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+      viewerBindings: () => {
+        if (!viewerBindings) throw new ProblemError('dependency_unavailable');
+        return viewerBindings;
+      },
     },
   );
   let publication: SubjectPagePublication | undefined;
