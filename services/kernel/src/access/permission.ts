@@ -1249,7 +1249,7 @@ export function createAccess(config: PermissionConfig): Access {
                     : undefined;
                   result[id] = Object.freeze({
                     allowed: ordinary.decision === 'allow',
-                    explicit: explicit?.decision === 'allow' ?? false,
+                    explicit: explicit !== undefined && explicit.decision === 'allow',
                   });
                 } else {
                   result[id] = Object.freeze({
