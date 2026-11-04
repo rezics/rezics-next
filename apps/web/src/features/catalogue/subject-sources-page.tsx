@@ -160,7 +160,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
               ? m.sources_correction_denied({}, o)
               : m.sources_current_reading({}, o)}
       </p>
-      {!page.realm && !page.viewer?.account && (
+      {!page.realm && page.viewer?.state !== 'signed-in' && (
         <a className={linkClassName} href={`/auth/sign-in?return_to=${encodeURIComponent(page.sourcesHref)}`}>
           {m.account_sign_in({}, o)}
         </a>

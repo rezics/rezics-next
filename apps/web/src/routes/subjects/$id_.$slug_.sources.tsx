@@ -67,7 +67,7 @@ function SourcesRoute() {
   const [current, setCurrent] = useState<{ scope: string; result: SourcesResult }>();
   useEffect(() => {
     let live = true;
-    if (!realm && session.state === 'signed-in' && session.subject) {
+    if (!realm && result.kind === 'ready' && session.state === 'signed-in' && session.subject) {
       void readCurrentSubjectSources({
         data: {
           id: result.kind === 'ready' ? result.page.id : '',
@@ -88,7 +88,7 @@ function SourcesRoute() {
     };
   }, [scope, realm]);
   const selected =
-    !realm && session.state === 'signed-in'
+    !realm && result.kind === 'ready' && session.state === 'signed-in'
       ? current?.scope === scope
         ? current.result
         : { kind: 'loading' as const }

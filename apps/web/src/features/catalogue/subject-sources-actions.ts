@@ -43,7 +43,7 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
       kind: 'ready',
       page: {
         ...page,
-        viewer: { account: read.account, actions: { state: 'unavailable' } },
+        viewer: { state: 'public', actions: { state: 'unavailable' } },
         realm: data.realm,
         context: loaded.page.context,
         // A candidate comparison is a separate editorial journey with independent Context authority.
