@@ -14,6 +14,7 @@ import * as start from '../.storybook/react-start';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => start.getRequest() }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const spaceActions = await import('../src/community/space-actions');
 
 type MembershipCommand = {
   data: { realmId: string; action: 'join' | 'leave'; idempotencyKey: string };
@@ -41,6 +42,7 @@ mock.module('../src/community/realm-membership-actions', () => ({
   },
 }));
 mock.module('../src/community/space-actions', () => ({
+  ...spaceActions,
   changeRealmMembership: (input: MembershipCommand) => {
     membershipCommands.push(input);
     return sendMembership(input);
