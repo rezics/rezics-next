@@ -9431,5 +9431,19 @@
   "library_journal_retry_identity": "The original command is retained. Retry sends the same fields, revision and key. Reading current values does not settle an uncertain save.",
   "library_journal_preserve_field": "Keep field untouched",
   "library_journal_no_value": "No value",
-  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work."
+  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work.",
+  "search_text_label": "查询文字",
+  "search_text_expected_operand": "请在此加入词语、短语或分组。| 两侧都需要查询内容。",
+  "search_text_unexpected_close": "移除此右括号，或加入对应的左括号。",
+  "search_text_unclosed_group": "请用 ) 关闭从此处开始的分组。",
+  "search_text_unclosed_phrase": "请用双引号（\"）关闭从此处开始的短语。",
+  "search_text_unsupported_escape": "反斜线后只能接 \\、\"、|、(、) 或 -。其他字符前请移除反斜线。",
+  "search_text_empty_phrase": "请在引号之间输入文字，或移除空短语。",
+  "search_text_negated_operand": "请在 - 后直接输入词语、短语或分组。",
+  "search_text_byte_limit": "请将查询缩短至最多 {maximum} 个 UTF-8 字节。中日韩字符通常占 3 个字节，表情符号通常占 4 个。",
+  "search_text_depth_limit": "分组最多可嵌套 {maximum} 层。请移除一组括号。",
+  "search_text_leaf_limit": "最多可使用 {maximum} 个词语或短语。请移除一个查询词。",
+  "search_text_phrase_token_limit": "请将此短语缩短至最多 {maximum} 个词元：中日韩字符各计一个，其他连续的字母与数字计为一个词。",
+  "search_text_position": "位于第 {position} 个字符（按 Unicode 码位计算）。",
+  "search_text_grammar": "空格表示两项都须匹配；| 表示任一项匹配；- 排除后面的词语或分组。用 ( ) 分组，双引号表示完整短语。反斜线可将 \\、\"、|、(、) 和 - 作为普通字符。请编辑原文，再应用修正。"
 }

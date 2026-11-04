@@ -114,3 +114,40 @@ test('compiles to named match and match_phrase clauses with lineage', () => {
     match_phrase: { f: { query: 'a b', _name: 'q0' } },
   });
 });
+
+test('Unicode diagnostics use UTF-16 selection boundaries, code points and UTF-8 bytes separately', () => {
+  expect(failure('😀 心 "こころ').diagnostic).toEqual({
+    reason: 'unclosed_phrase',
+    unit: 'utf16',
+    start: 5,
+    end: 6,
+    codePointStart: 4,
+    codePointEnd: 5,
+    byteOffset: 9,
+  });
+  expect(failure('😀 \\界').diagnostic).toMatchObject({
+    reason: 'unsupported_escape',
+    start: 3,
+    end: 5,
+    codePointStart: 2,
+    codePointEnd: 4,
+    byteOffset: 5,
+  });
+  expect(failure('😀'.repeat(129)).diagnostic).toMatchObject({
+    reason: 'byte_limit',
+    start: 256,
+    end: 258,
+    codePointStart: 128,
+    codePointEnd: 129,
+    byteOffset: 512,
+  });
+  expect(failure('界'.repeat(171)).diagnostic).toMatchObject({
+    reason: 'byte_limit',
+    start: 170,
+    end: 171,
+    byteOffset: 510,
+  });
+  expect(failure('心 |').diagnostic).toMatchObject({ reason: 'expected_operand', start: 3, end: 3 });
+  expect(failure('(こころ').diagnostic.reason).toBe('unclosed_group');
+  expect(parseText('😀 心 "こころ"')).toEqual(and(term('😀'), term('心'), phrase('こころ')));
+});

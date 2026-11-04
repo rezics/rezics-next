@@ -86,7 +86,7 @@ import { ScopeWork, scopeAllowance } from './scope-execution.ts';
 import type { ScopeBasis } from './scope-source.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
-import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
+import { compileText, parseText, positiveText, rejectTextSyntax, TextSyntaxError } from './text.ts';
 import { collectUsefulPage } from './useful-page.ts';
 import { readPublicSearchPage, type DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type {
@@ -366,7 +366,7 @@ function validate(request: SearchRequest) {
       text = parseText(request.text);
     }
   } catch (error) {
-    if (error instanceof TextSyntaxError) unsupported('/text', error.code);
+    if (error instanceof TextSyntaxError) rejectTextSyntax(error);
     throw error;
   }
 

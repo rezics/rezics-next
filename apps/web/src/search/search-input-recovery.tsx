@@ -1,3 +1,5 @@
+import { diagnoseText } from '../../../../packages/search-text/src/index.ts';
+import { QueryTextRecovery } from './query-text-recovery';
 import { useState } from 'react';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { m } from '../paraglide/messages.js';
@@ -26,6 +28,20 @@ export function SearchInputRecovery({
 }) {
   const [draft, setDraft] = useState(value);
   const options = locale === undefined ? undefined : messageOptions(locale);
+
+  if (parameter === 'q')
+    return (
+      <section className="mx-auto max-w-5xl space-y-6">
+        <PageHeading>{m.search_heading({}, options)}</PageHeading>
+        <QueryTextRecovery
+          key={JSON.stringify([value, locale])}
+          value={value}
+          diagnostic={diagnoseText(value)}
+          locale={locale}
+          onApply={onApply}
+        />
+      </section>
+    );
 
   return (
     <section className="mx-auto max-w-5xl space-y-6">

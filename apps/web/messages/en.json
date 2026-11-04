@@ -9527,5 +9527,19 @@
   "library_journal_retry_identity": "The original command is retained. Retry sends the same fields, revision and key. Reading current values does not settle an uncertain save.",
   "library_journal_preserve_field": "Keep field untouched",
   "library_journal_no_value": "No value",
-  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work."
+  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work.",
+  "search_text_label": "Query text",
+  "search_text_expected_operand": "Add a word, phrase or group here. Each side of | needs a query.",
+  "search_text_unexpected_close": "Remove this closing parenthesis or add its opening parenthesis.",
+  "search_text_unclosed_group": "Close the group opened here with ).",
+  "search_text_unclosed_phrase": "Close the phrase opened here with a double quote (\").",
+  "search_text_unsupported_escape": "After a backslash, use only \\, \", |, (, ) or -. Remove the backslash for other characters.",
+  "search_text_empty_phrase": "Put text between these quotes, or remove the empty phrase.",
+  "search_text_negated_operand": "Put a word, phrase or group directly after -.",
+  "search_text_byte_limit": "Shorten the query to at most {maximum} UTF-8 bytes. CJK characters usually use 3 bytes and emoji usually use 4.",
+  "search_text_depth_limit": "Use at most {maximum} nested groups. Remove a pair of parentheses.",
+  "search_text_leaf_limit": "Use at most {maximum} words or phrases. Remove a query term.",
+  "search_text_phrase_token_limit": "Shorten this phrase to at most {maximum} tokens: each CJK character counts separately; other consecutive letters and numbers count as one word.",
+  "search_text_position": "At character {position} (counting Unicode code points).",
+  "search_text_grammar": "Spaces require both terms; | allows either side; - excludes the following term or group. Use ( ) to group and double quotes for an exact phrase. A backslash makes \\, \", |, (, ) and - literal. Edit the original text, then apply your correction."
 }

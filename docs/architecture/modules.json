@@ -169,6 +169,11 @@
       "path": "packages/progress/src",
       "extensions": [".ts"],
       "exclude": ["**/*.test.*"]
+    },
+    {
+      "path": "packages/search-text/src",
+      "extensions": [".ts"],
+      "exclude": []
     }
   ],
   "modules": [
@@ -320,7 +325,8 @@
         "kernel-library",
         "kernel-platform",
         "kernel-rating",
-        "kernel-semantic"
+        "kernel-semantic",
+        "search-text"
       ],
       "capabilities": ["search", "presentation"],
       "postgresPaths": ["services/kernel/src/search/**", "services/kernel/src/presentation/**"]
@@ -503,7 +509,8 @@
         "web-content",
         "web-library",
         "web-performance",
-        "web-semantic"
+        "web-semantic",
+        "search-text"
       ],
       "capabilities": ["search-pages"]
     },
@@ -814,6 +821,15 @@
       "publicEntries": ["@rezics/progress"],
       "allowedDependencies": [],
       "capabilities": ["progress-rules"]
+    },
+    {
+      "id": "search-text",
+      "kind": "core",
+      "owner": "search",
+      "paths": ["packages/search-text/src/**"],
+      "publicEntries": ["packages/search-text/src/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["text-query-grammar"]
     }
   ]
 }

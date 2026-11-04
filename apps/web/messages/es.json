@@ -9431,5 +9431,19 @@
   "library_journal_retry_identity": "The original command is retained. Retry sends the same fields, revision and key. Reading current values does not settle an uncertain save.",
   "library_journal_preserve_field": "Keep field untouched",
   "library_journal_no_value": "No value",
-  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work."
+  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work.",
+  "search_text_label": "Texto de búsqueda",
+  "search_text_expected_operand": "Añade aquí una palabra, frase o grupo. Ambos lados de | necesitan una consulta.",
+  "search_text_unexpected_close": "Elimina este paréntesis de cierre o añade el de apertura.",
+  "search_text_unclosed_group": "Cierra con ) el grupo que empieza aquí.",
+  "search_text_unclosed_phrase": "Cierra con comillas dobles (\") la frase que empieza aquí.",
+  "search_text_unsupported_escape": "Después de una barra inversa solo se permiten \\, \", |, (, ) y -. Elimínala delante de otros caracteres.",
+  "search_text_empty_phrase": "Escribe texto entre las comillas o elimina la frase vacía.",
+  "search_text_negated_operand": "Coloca una palabra, frase o grupo justo después de -.",
+  "search_text_byte_limit": "Acorta la consulta a un máximo de {maximum} bytes UTF-8. Los caracteres CJK suelen usar 3 bytes y los emojis 4.",
+  "search_text_depth_limit": "Usa como máximo {maximum} niveles de grupos anidados. Elimina un par de paréntesis.",
+  "search_text_leaf_limit": "Usa como máximo {maximum} palabras o frases. Elimina un término.",
+  "search_text_phrase_token_limit": "Acorta esta frase a un máximo de {maximum} unidades: cada carácter CJK cuenta por separado; las demás letras y números consecutivos cuentan como una palabra.",
+  "search_text_position": "En el carácter {position} (puntos de código Unicode).",
+  "search_text_grammar": "Los espacios requieren ambos términos; | permite cualquiera de los lados; - excluye el término o grupo siguiente. Usa ( ) para agrupar y comillas dobles para una frase exacta. Una barra inversa convierte \\, \", |, (, ) y - en caracteres literales. Edita el texto original y aplica la corrección."
 }

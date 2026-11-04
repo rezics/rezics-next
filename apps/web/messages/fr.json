@@ -9431,5 +9431,19 @@
   "library_journal_retry_identity": "The original command is retained. Retry sends the same fields, revision and key. Reading current values does not settle an uncertain save.",
   "library_journal_preserve_field": "Keep field untouched",
   "library_journal_no_value": "No value",
-  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work."
+  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work.",
+  "search_text_label": "Texte de recherche",
+  "search_text_expected_operand": "Ajoutez ici un mot, une expression ou un groupe. Chaque côté de | doit contenir une recherche.",
+  "search_text_unexpected_close": "Supprimez cette parenthèse fermante ou ajoutez la parenthèse ouvrante.",
+  "search_text_unclosed_group": "Fermez le groupe qui commence ici avec ).",
+  "search_text_unclosed_phrase": "Fermez l’expression qui commence ici avec un guillemet droit (\").",
+  "search_text_unsupported_escape": "Après une barre oblique inverse, seuls \\, \", |, (, ) et - sont permis. Supprimez-la devant les autres caractères.",
+  "search_text_empty_phrase": "Saisissez du texte entre les guillemets ou supprimez l’expression vide.",
+  "search_text_negated_operand": "Placez un mot, une expression ou un groupe juste après -.",
+  "search_text_byte_limit": "Raccourcissez la recherche à {maximum} octets UTF-8 au maximum. Les caractères CJK utilisent généralement 3 octets et les émojis 4.",
+  "search_text_depth_limit": "Limitez les groupes imbriqués à {maximum} niveaux. Supprimez une paire de parenthèses.",
+  "search_text_leaf_limit": "Utilisez au maximum {maximum} mots ou expressions. Supprimez un terme.",
+  "search_text_phrase_token_limit": "Raccourcissez cette expression à {maximum} unités : chaque caractère CJK compte séparément ; les autres lettres et chiffres consécutifs comptent comme un mot.",
+  "search_text_position": "Au caractère {position} (points de code Unicode).",
+  "search_text_grammar": "Une espace exige les deux termes ; | autorise l’un ou l’autre ; - exclut le terme ou groupe suivant. ( ) regroupe et les guillemets droits délimitent une expression exacte. Une barre oblique inverse rend \\, \", |, (, ) et - littéraux. Modifiez le texte d’origine, puis appliquez la correction."
 }

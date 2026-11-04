@@ -200,3 +200,23 @@ test('mixed confidential cursors retain the actual observation and bind request,
     expect(await decodeDiscoveryCursor(ring, changed, token, 1001)).toEqual({ ok: false, reason: 'invalid' });
   expect(await decodeDiscoveryCursor(ring, binding, token, 1_000_000)).toEqual({ ok: false, reason: 'expired' });
 });
+
+test('rejected text has a bounded operation diagnostic and deliberate repair preserves the full request', () => {
+  const original = { ...request, text: '😀 心 "こころ', languages: ['zh-Hant', 'ja'] };
+  try {
+    admitDiscoveryRequest(original, registry, bundledRelease);
+    throw new Error('Expected rejected text');
+  } catch (error) {
+    expect(error).toMatchObject({
+      code: 'unsupported_query',
+      errors: [{ pointer: '/text', code: 'unsupported' }],
+      extensions: { textDiagnostic: { reason: 'unclosed_phrase', start: 5, end: 6, byteOffset: 9 } },
+    });
+    expect(JSON.stringify(error)).not.toContain('こころ');
+    expect(JSON.stringify(error)).not.toContain('schema:Person');
+  }
+  const repaired = admitDiscoveryRequest({ ...original, text: `${original.text}"` }, registry, bundledRelease);
+  expect(repaired.text).toMatchObject({ kind: 'and' });
+  expect(repaired.filter).toEqual(request.filter);
+  expect(repaired.languages).toEqual(['zh-Hant', 'ja']);
+});

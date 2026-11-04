@@ -1,3 +1,4 @@
+import { isWithinGlobalSearchQueryLimit } from './query-text-limit';
 import { parseFilter, FILTER_LIMITS, type FilterDocument, type FilterRange } from '@rezics/filter';
 import * as v from 'valibot';
 import {
@@ -83,7 +84,7 @@ function filterInputsFromSearch(search: Record<string, unknown>): {
   const ranges: Record<string, FilterRange> = Object.create(null);
   let condition: FilterDocument | undefined;
   let invalidInput: InvalidSearchInput | undefined;
-  if (typeof search.q === 'string' && new TextEncoder().encode(search.q).length > 512)
+  if (typeof search.q === 'string' && !isWithinGlobalSearchQueryLimit(search.q))
     invalidInput = { key: 'q', value: search.q };
   if (typeof search.filter === 'string' && new TextEncoder().encode(search.filter).length > 16384)
     invalidInput ??= { key: 'filter', value: search.filter };

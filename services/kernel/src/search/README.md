@@ -1,5 +1,7 @@
 # Search
 
+[Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
+
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
 generations.
 
