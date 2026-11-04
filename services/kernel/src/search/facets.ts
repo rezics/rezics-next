@@ -67,7 +67,7 @@ function closed(input: unknown, fields: string[], pointer: string): Record<strin
 
 export function validateFacets(request: FacetRequest): Facet[] {
   const body = closed(request, ['text', 'filter', 'kinds', 'facets'], '');
-  validateFacetKinds(body.kinds, '/kinds');
+  if (body.kinds !== undefined) validateFacetKinds(body.kinds, '/kinds');
   if (body.facets === undefined) invalid('/facets', 'required');
   if (!Array.isArray(body.facets)) invalid('/facets', 'invalid_type');
   if (body.facets.length < 1 || body.facets.length > 8) invalid('/facets', 'out_of_range');
@@ -91,8 +91,8 @@ export function validateFacets(request: FacetRequest): Facet[] {
   });
 }
 
-function validateFacetKinds(value: unknown, pointer: string): string[] | undefined {
-  if (value === undefined) return undefined;
+function validateFacetKinds(value: unknown, pointer: string): string[] {
+  if (value === undefined) invalid(pointer, 'invalid_type');
   if (!Array.isArray(value)) invalid(pointer, 'invalid_type');
   if (value.length < 1 || value.length > FILTER_LIMITS.in) invalid(pointer, 'out_of_range');
   if (
@@ -120,10 +120,11 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
     (!Array.isArray(body.languages) || body.languages.some((v) => typeof v !== 'string'))
   )
     invalid('/languages', 'invalid_type');
+  const kinds = body.kinds === undefined ? undefined : validateFacetKinds(body.kinds, '/kinds');
   const facets = validateFacets({
     ...(body.text === undefined ? {} : { text: body.text as string }),
     ...(body.filter === undefined ? {} : { filter: body.filter }),
-    ...(body.kinds === undefined ? {} : { kinds: validateFacetKinds(body.kinds, '/kinds') }),
+    ...(kinds === undefined ? {} : { kinds }),
     facets: body.facets as FacetRequest['facets'],
   });
   return {
@@ -131,7 +132,7 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
     ...(body.conditions === undefined ? {} : { conditions: body.conditions }),
     ...(body.text === undefined ? {} : { text: body.text as string }),
     ...(body.filter === undefined ? {} : { filter: body.filter }),
-    ...(body.kinds === undefined ? {} : { kinds: validateFacetKinds(body.kinds, '/kinds') }),
+    ...(kinds === undefined ? {} : { kinds }),
     ...(body.languages === undefined ? {} : { languages: body.languages as string[] }),
     facets,
   };

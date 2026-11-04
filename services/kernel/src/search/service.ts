@@ -1772,7 +1772,7 @@ export function createSearchService({
         principal,
         text,
         originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
-        kinds,
+        ...(kinds ? { kinds } : {}),
         facets,
         languages,
         now,
