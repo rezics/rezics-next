@@ -1165,3 +1165,13 @@ native acceptance/current reads for two same-spelling owners. The Kernel
 scenario is authored but its execution is deferred to the controller after
 integration; this entry records no native pass receipt. Existing shared
 unknown-send recovery remains the recovery evidence for sealed commands.
+
+## Explicit local showcase publication
+
+Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.
+
+The local task reuses Accounts' development persona and private seed wiring, then persists publication intent in a separate SQLite journal. The intent is bounded to selected dump records and exact acknowledged candidate UUIDs. Candidate acceptance and adoption use their separate current review APIs; adoption retains existing selections. Restart reuses sealed command/action bodies after unknown sends and keeps acknowledged source UUIDs after refused review actions. Current source identity and vocabulary bindings are checked before dependent facts, then a tokenless public reader verifies the selected facts. Result entries include provider/native bindings and public reader paths from the bounded read set. They make no claim about search or indexing.
+
+- Touches: at most 768 source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 review candidates per page, and 256 bounded omissions.
+- Bound: publication reads only the selected family, its current bindings and exact subject/property pages. It does not scan all pending candidates or alter ordinary importer behavior.
+- Growth check: the focused importer journal scenario is `services/importer/tests/showcase-publication.test.ts`. The native API scenario is `services/kernel/test/imports/showcase-publication.test.ts`; it remains deferred to integration, with no native pass claimed here.
