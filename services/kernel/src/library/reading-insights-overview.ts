@@ -92,17 +92,15 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }) {
         readPanel(() => yearReads.summary(actor, year, deadline, signal)),
         readPanel(() => profileReads.profiles(actor, year, deadline, signal)),
         readPanel(() => assessmentReads.assessments(actor, deadline, signal)),
-      ]);
+      ] as const);
       const unwrap = <T>(result: PromiseSettledResult<T>): T => {
         if (result.status === 'rejected') throw result.reason;
         return result.value;
       };
-      const [allTime, reportedYear, profiles, assessments] = settled.map(unwrap) as [
-        ReadingInsightsPanel<ConsumptionSummary>,
-        ReadingInsightsPanel<ReportedYearSummary>,
-        ReadingInsightsPanel<ReadingInsightsProfiles>,
-        ReadingInsightsPanel<ReadingInsightsAssessments>,
-      ];
+      const allTime = unwrap(settled[0]);
+      const reportedYear = unwrap(settled[1]);
+      const profiles = unwrap(settled[2]);
+      const assessments = unwrap(settled[3]);
       if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       const value: ReadingInsightsOverview = {
         scope: 'private_reading_insights',
