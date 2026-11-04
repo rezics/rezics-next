@@ -170,7 +170,7 @@ export async function readVndbReleaseBindings(
       continue;
     const schemeRead = await read(group.schemeId);
     const scheme = (schemeRead as { subject?: { id?: string; type?: string } } | undefined)?.subject;
-    if (scheme?.id !== group.schemeId || scheme.type !== 'skos:ConceptScheme') continue;
+    if (!scheme || scheme.id !== group.schemeId || scheme.type !== 'skos:ConceptScheme') continue;
     if (!adoptedContents(schemeRead, 'schema:url').includes(group.uri)) continue;
     schemes.push({
       taxonomy: group.taxonomy,
@@ -180,9 +180,13 @@ export async function readVndbReleaseBindings(
       releaseDigest: bundledDigest,
     });
     const conceptLimit = Math.min(group.concepts.length, sourceVocabularyLimits.concepts - conceptCount);
-    const orderedConcepts = group.concepts
+    const groupConcepts: VndbReleaseBindingGroup['concepts'] = group.concepts;
+    const orderedConcepts = groupConcepts
       .slice(0, conceptLimit)
-      .filter((item) => item && typeof item.code === 'string' && typeof item.id === 'string')
+      .filter(
+        (item): item is VndbReleaseBindingGroup['concepts'][number] =>
+          !!item && typeof item.code === 'string' && typeof item.id === 'string',
+      )
       .sort((left, right) => compareText(left.code, right.code) || compareText(left.id, right.id));
     conceptCount += conceptLimit;
     for (const item of orderedConcepts) {
@@ -190,7 +194,7 @@ export async function readVndbReleaseBindings(
         continue;
       const conceptRead = await read(item.id);
       const concept = (conceptRead as { subject?: { id?: string; type?: string } } | undefined)?.subject;
-      if (concept?.id !== item.id || concept.type !== 'skos:Concept') continue;
+      if (!concept || concept.id !== item.id || concept.type !== 'skos:Concept') continue;
       if (!adoptedContents(conceptRead, 'schema:url').includes(`${group.uri}/${item.code}`)) continue;
       if (!adoptedContents(conceptRead, 'skos:inScheme').includes(group.schemeId)) continue;
       concepts.push({
@@ -476,9 +480,10 @@ export async function importVndbReleaseFidelity(input: {
         const wanted = group && typeof group.taxonomy === 'string' ? neededCodes.get(group.taxonomy) : undefined;
         if (!wanted) continue;
         if (!Array.isArray(group.concepts)) continue;
+        const concepts: VndbReleaseBindingGroup['concepts'] = group.concepts;
         boundedGroups.push({
           ...group,
-          concepts: group.concepts.filter((item) => item && wanted.has(item.code)),
+          concepts: concepts.filter((item) => wanted.has(item.code)),
         });
       }
     }
