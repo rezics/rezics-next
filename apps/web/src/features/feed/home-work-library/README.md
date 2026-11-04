@@ -2,6 +2,8 @@
 
 Decision: Until Content publishes the generated admitted personal-actions page, retain the unavailable native seam, remove arbitrary control callbacks and keep local prepared facts separate from permission.
 
+Decision: Fact reconciliation retains its original source lifetime; only a new source observation can admit fresh facts after retirement, including replacement back to the same reader.
+
 The local presentation model is not a transport declaration. Content owns composing
 `FeedDependencies.viewerPersonalActions` into the existing Home page and rechecking source admission after foreign
 work. The receiver must consume that one page using original occurrence keys and original Subjects. It must not

@@ -1,9 +1,10 @@
-import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { LibraryBigIcon } from 'lucide-react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { browserObservation, type BrowserReader } from '../../../session/observation';
+import { browserObservation } from '../../../session/observation';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
+import { createHomeWorkLibraryAdmission } from './admission';
 import {
   homeWorkLibraryRow,
   isValidProjection,
@@ -44,13 +45,37 @@ export function HomeWorkLibraryProvider({
     observation?.getSnapshot ?? readerNothing,
     observation?.getServerSnapshot ?? readerNothing,
   );
-  const admission = useMemo<{ reader?: BrowserReader; retired: boolean }>(
-    () => ({ retired: false }),
-    [observation, projection],
+  const sourceKey = projection
+    ? JSON.stringify([
+        projection.scope.reader,
+        projection.scope.credentialEpoch,
+        projection.scope.source,
+        projection.scope.observation,
+        projection.scope.locale,
+        projection.scope.route,
+      ])
+    : undefined;
+  const admissions = useMemo(
+    () => new WeakMap<NonNullable<typeof lease>, Map<string, ReturnType<typeof createHomeWorkLibraryAdmission>>>(),
+    [observation],
   );
-  if (admission.reader && (reading?.state !== 'signed-in' || reading.observation.id !== admission.reader.id))
-    admission.retired = true;
-  if (!admission.retired && !admission.reader && reading?.state === 'signed-in') admission.reader = reading.observation;
+  const admission = useMemo(() => {
+    if (!projection || sourceKey === undefined) return;
+    let scopes = admissions.get(projection.lease);
+    if (!scopes) {
+      scopes = new Map();
+      admissions.set(projection.lease, scopes);
+    }
+    let retained = scopes.get(sourceKey);
+    if (!retained) {
+      retained = createHomeWorkLibraryAdmission(projection, observation);
+      scopes.set(sourceKey, retained);
+    }
+    return retained;
+  }, [admissions, lease, sourceKey]);
+  const previousAdmission = useRef(admission);
+  if (previousAdmission.current !== admission) previousAdmission.current?.retire();
+  previousAdmission.current = admission;
   if (
     hydrated &&
     projection &&
@@ -59,10 +84,10 @@ export function HomeWorkLibraryProvider({
       !sameHomeWorkLibraryScope(expectedScope, projection.scope) ||
       !projection.lease.isCurrent())
   )
-    admission.retired = true;
+    admission?.retire();
   const subscribe = useMemo(
-    () => (lease ? (listener: () => void) => lease.subscribe(listener) : subscribeNothing),
-    [lease],
+    () => (admission ? (listener: () => void) => admission.lease.subscribe(listener) : subscribeNothing),
+    [admission],
   );
   const snapshot = useMemo(() => (lease ? () => lease.snapshot() : snapshotNothing), [lease]);
   const revision = useSyncExternalStore(subscribe, snapshot, snapshotNothing);
@@ -71,16 +96,13 @@ export function HomeWorkLibraryProvider({
     enabled &&
     signedIn &&
     projection &&
-    !admission.retired &&
-    (!client ||
-      (!admission.retired &&
-        reading?.state === 'signed-in' &&
-        reading.observation.subject === projection.scope.reader)) &&
+    admission?.lease.isCurrent() &&
+    (!client || reading?.state === 'signed-in') &&
     revision >= 0 &&
     projection.lease.isCurrent() &&
     sameHomeWorkLibraryScope(expectedScope, projection.scope) &&
     isValidProjection(projection)
-      ? projection
+      ? { ...projection, lease: admission.lease }
       : undefined;
   return (
     <HomeWorkLibraryContext.Provider value={{ ...(current ? { projection: current } : {}), signedIn, enabled }}>
