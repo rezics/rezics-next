@@ -177,12 +177,19 @@ function ActionVisit({
   isCurrent,
 }: FeedActionBarProps & { isCurrent(): boolean }) {
   const options = { locale: locale as Locale };
-  const replyCountValue = typeof replyCount === 'number' ? replyCount : replyCount?.value;
-  const replyCountIsLowerBound = typeof replyCount === 'object' && replyCount?.kind === 'lower-bound';
+  const replyCountOperand =
+    typeof replyCount === 'number'
+      ? { kind: 'exact' as const, value: replyCount }
+      : typeof replyCount === 'object' &&
+          replyCount !== null &&
+          (replyCount.kind === 'exact' || replyCount.kind === 'lower-bound')
+        ? replyCount
+        : undefined;
   const safeReplyCount =
-    typeof replyCountValue === 'number' && Number.isSafeInteger(replyCountValue) && replyCountValue >= 0
-      ? replyCountValue
+    replyCountOperand && Number.isSafeInteger(replyCountOperand.value) && replyCountOperand.value >= 0
+      ? replyCountOperand.value
       : undefined;
+  const replyCountIsLowerBound = replyCountOperand?.kind === 'lower-bound';
   const replyLabel = m.feed_action_reply({}, options);
   const exactReplyCount =
     safeReplyCount === undefined

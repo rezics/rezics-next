@@ -180,6 +180,38 @@ test('reaction names expose exact localized operands and the signed score', asyn
   );
 });
 
+test('lower-bound reply counts retain the plus sign, exact operand, and reply destination', async () => {
+  const value = 987654321012;
+  const replyHref = '/en/threads/thread/reading#reply';
+  await paint(
+    <FeedActionBar
+      {...props()}
+      replyCount={{ kind: 'lower-bound', value }}
+      reply={{ href: replyHref }}
+    />,
+  );
+  const action = host.querySelector<HTMLAnchorElement>('[data-slot="feed-reply-action"]');
+  const exact = new Intl.NumberFormat('en').format(value);
+  const compact = new Intl.NumberFormat('en', { notation: 'compact' }).format(value);
+  expect(action?.getAttribute('aria-label')).toBe(`${m.feed_action_reply()} ${exact}+`);
+  expect(action?.textContent).toContain(`${compact}+`);
+  expect(action?.getAttribute('href')).toBe(replyHref);
+
+  const invalidCounts = [
+    -1,
+    Number.MAX_SAFE_INTEGER + 1,
+    { kind: 'exact' as const, value: -1 },
+    { kind: 'lower-bound' as const, value: Number.MAX_SAFE_INTEGER + 1 },
+    { kind: 'unsupported', value: 0 } as never,
+  ];
+  for (const replyCount of invalidCounts) {
+    await paint(<FeedActionBar {...props()} replyCount={replyCount} />);
+    const unavailable = host.querySelector<HTMLAnchorElement>('[data-slot="feed-reply-action"]');
+    expect(unavailable?.getAttribute('aria-label')).toBe(m.feed_action_reply());
+    expect(unavailable?.getAttribute('href')).toBe(replyHref);
+  }
+});
+
 test('reply counts distinguish zero from unavailable and retain the exact reply destination', async () => {
   await paint(<FeedActionBar {...props()} replyCount={0} />);
   let action = host.querySelector<HTMLAnchorElement>('[data-slot="feed-reply-action"]');

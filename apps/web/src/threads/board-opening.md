@@ -9,9 +9,10 @@ Content now has a source-side opening reader and a mounted `GET /v1/boards/:id/p
 
 Each card contains the current `ThreadView`, its exact thread and Board target, separate thread/opening-post author
 availability, media availability, reaction counts with a freshness witness or an explicit unavailable state, viewer
-reaction state, unavailable conversation comments, and reply/react/share advice. Missing count keys stay missing;
-zero and unavailable remain distinct. The page does not provide authoritative comment totals. Pin, watch and slow-mode
-commands retain their existing owners.
+reaction state, current conversation comment evidence or an explicit unavailable state, and reply/react/share advice.
+Missing reaction count keys stay missing; zero and unavailable remain distinct. A current comment witness carries an
+exact or lower-bound count; Web preserves that operand and does not derive totals from loaded rows. Pin, watch and
+slow-mode commands retain their existing owners.
 
 The source query admits `new`, `active` and `hot`, with a cursor of at most 4,096 characters. Content selects at most
 five initial pins and twenty ordinary candidates in native order. Continuation advances the ordinary source, keeps
@@ -66,6 +67,10 @@ interaction: { target: { kind: 'thread', id: threadId }, counts: { state: 'unava
 // Failed and changed-witness responses carry no partial page; retry the exact input.
 HTTP 503 { code: 'dependency_unavailable' }
 ```
+
+Reply actions display a current exact comment count as an exact number and a lower-bound count with a trailing `+`;
+missing, unsupported, negative and unsafe counts remain unavailable. The accessible name keeps the exact localized
+operand and the existing reply destination. Prepared fixtures prove receiving only, not native delivery.
 
 The reaction aggregate only supplies a target summary when at least one installed target row carries a source
 watermark. Its zero-valued kind rows are retained as tombstones, so omitted kinds in a represented target are zero;

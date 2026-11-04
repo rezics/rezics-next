@@ -263,8 +263,9 @@ without changing report submission, verification, session retirement or copy rec
 Decision: Work Library actions navigate to the existing Subject Library slot; post actions create no Library mutation
 or mount read. Browser share/copy results belong to the current session/source visit. The board owner consumes the
 exported port as described in [feed actions](../features/feed/README.md#card-actions), retaining pins and slow mode.
-Board reply actions show only a safe admitted count, with an exact accessible name and the existing reply destination;
-missing counts remain unavailable, and prepared fixtures do not establish native delivery.
+Board reply actions show only a safe admitted exact or lower-bound count, with the exact localized operand in the
+accessible name and the existing reply destination. Lower bounds retain a trailing `+`; missing, unsupported,
+negative and unsafe counts remain unavailable, and prepared fixtures do not establish native delivery.
 
 ## Post reading rhythm
 

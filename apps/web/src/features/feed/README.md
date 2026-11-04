@@ -128,8 +128,9 @@ visit command and explicit retry. A refused change restores the last projection 
 No command runs on mount or on a session observation. Account/token replacement and away/back retire old callers.
 
 `reply` accepts an existing reply-intent callback or an admitted link; missing reply destinations remain unavailable.
-An optional safe native `replyCount` is shown compactly and named exactly in the action's accessible label. Zero remains
-visible as zero; absence or an unsafe value remains unavailable. The count does not replace or wrap the reply link.
+An optional safe native `replyCount` may be exact or a lower bound. Exact and compact operands retain locale formatting;
+lower bounds append `+` to both visible and accessible counts. Zero remains visible as zero; absence, unsupported,
+negative or unsafe values remain unavailable. The count does not replace or wrap the reply link.
 `library` accepts the existing Library control or its owner destination. `overflow` accepts the installed author/report
 menu so detail hosts keep edit, erasure and report ownership. Reporting is never a visible action button. Without a
 delivered command/configuration the default menu labels report, mute and hide as unavailable. It never hides a row
