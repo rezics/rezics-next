@@ -30,7 +30,17 @@ type EditorState = {
   receipt: VisibilityReceipt | null;
   outcomeUnknown: boolean;
   readRefusal: 'closed' | 'forbidden' | null;
-  phase: 'idle' | 'saving' | 'uncertain' | 'readback' | 'conflict' | 'refused' | 'review' | 'reloading' | 'saved' | 'abandoned';
+  phase:
+    | 'idle'
+    | 'saving'
+    | 'uncertain'
+    | 'readback'
+    | 'conflict'
+    | 'refused'
+    | 'review'
+    | 'reloading'
+    | 'saved'
+    | 'abandoned';
   failure?: CollectionPrivacyFailure | 'invalid' | undefined;
   nativeFailure?: NativePreferenceFailure | undefined;
 };
@@ -122,7 +132,11 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       (current.revision === existing.revision && current.visibility !== existing.visibility)
     )
       return;
-    this.update({ current, desired: current.visibility, phase: this.state.phase === 'abandoned' ? 'abandoned' : 'idle' });
+    this.update({
+      current,
+      desired: current.visibility,
+      phase: this.state.phase === 'abandoned' ? 'abandoned' : 'idle',
+    });
   }
   async edit(desired: CollectionVisibility) {
     if (!this.live() || !this.canWrite() || this.state.phase === 'abandoned') return;
@@ -282,7 +296,12 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const current = this.state.current;
     const attempt = this.state.attempt;
     const collectionId = current?.id ?? attempt?.collectionId;
-    if (!collectionId || this.state.phase === 'saving' || this.state.phase === 'reloading' || this.state.phase === 'abandoned')
+    if (
+      !collectionId ||
+      this.state.phase === 'saving' ||
+      this.state.phase === 'reloading' ||
+      this.state.phase === 'abandoned'
+    )
       return;
     const generation = this.generation;
     const edits = this.edits;
@@ -297,13 +316,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         const refused = readRefusal !== null;
         this.update({
           ...(refused ? { current: null, ...(attempt ? {} : { desired: 'private' as const }) } : {}),
-          phase: refused
-            ? attempt
-              ? receipt
-                ? 'readback'
-                : 'uncertain'
-              : 'refused'
-            : previous,
+          phase: refused ? (attempt ? (receipt ? 'readback' : 'uncertain') : 'refused') : previous,
           failure: read.reason,
           nativeFailure: read.failure,
           readRefusal: readRefusal ?? this.state.readRefusal,
@@ -312,7 +325,10 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       }
       if (
         read.value.id !== collectionId ||
-        (current?.revision !== null && current?.revision !== undefined && read.value.revision !== null && read.value.revision < current.revision) ||
+        (current?.revision !== null &&
+          current?.revision !== undefined &&
+          read.value.revision !== null &&
+          read.value.revision < current.revision) ||
         (current && read.value.revision === current.revision && read.value.visibility !== current.visibility) ||
         (attempt && read.value.revision !== null && read.value.revision < (receipt?.revision ?? attempt.revision)) ||
         (receipt &&

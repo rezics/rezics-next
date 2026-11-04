@@ -1,5 +1,14 @@
 import { QueryClientContext } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -153,17 +162,18 @@ function CollectionRowView({
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const busy = state.phase === 'saving' || state.phase === 'reloading' || !!pageState?.loading;
   const { current, desired, phase } = state;
-  const abandonAction = state.attempt && ['uncertain', 'readback'].includes(phase) ? (
-    <Button
-      className={preferenceActionClassName}
-      type="button"
-      variant="outline"
-      disabled={busy || waiting}
-      onClick={() => setConfirmAbandon(true)}
-    >
-      {m.settings_privacy_stop_tracking()}
-    </Button>
-  ) : null;
+  const abandonAction =
+    state.attempt && ['uncertain', 'readback'].includes(phase) ? (
+      <Button
+        className={preferenceActionClassName}
+        type="button"
+        variant="outline"
+        disabled={busy || waiting}
+        onClick={() => setConfirmAbandon(true)}
+      >
+        {m.settings_privacy_stop_tracking()}
+      </Button>
+    ) : null;
   const abandonmentDialog = state.attempt ? (
     <AlertDialog open={confirmAbandon} onOpenChange={setConfirmAbandon}>
       <AlertDialogContent className="min-w-0 w-[calc(100vw-2rem)] max-w-sm">
@@ -377,7 +387,9 @@ function CollectionRowView({
                     {m.settings_privacy_reload_row()}
                   </Button>
                 </div>
-                <p>{state.attempt ? m.settings_privacy_reload_keeps_original() : m.settings_privacy_reload_discards()}</p>
+                <p>
+                  {state.attempt ? m.settings_privacy_reload_keeps_original() : m.settings_privacy_reload_discards()}
+                </p>
               </AlertDescription>
             </Alert>
           ) : null}
@@ -480,7 +492,11 @@ export function CollectionPrivacyView({
           <ListRestartContext.Provider value={pager}>
             <ul className="space-y-3">
               {state.collections.map((collection) => (
-                <CollectionRow key={`${state.window}:${collection.id}`} collection={collection} {...(io ? { io } : {})} />
+                <CollectionRow
+                  key={`${state.window}:${collection.id}`}
+                  collection={collection}
+                  {...(io ? { io } : {})}
+                />
               ))}
             </ul>
           </ListRestartContext.Provider>
