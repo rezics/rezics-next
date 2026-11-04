@@ -28,7 +28,10 @@ const original = (n: number, inverse = false, spoiler = false) => ({
     { property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: 'Side story' } },
     {
       property: { id: 'schema:datePublished', data_type: 'time' },
-      value: { type: 'value', content: { time: '+2001-00-00T', precision: 9 } },
+      value: {
+        type: 'value',
+        content: { time: '+2001-00-00T', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+      },
     },
     ...(spoiler
       ? [
