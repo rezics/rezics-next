@@ -31,9 +31,13 @@ async function authoredCopy(directory: string, gtin = supported) {
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25 00:00:00+00\nv2\t1\t2026-10-25 00:00:00+00'],
     releases: [
       'id\tgtin\treleased',
-      [`r1\t${gtin}\t20200229`, 'r2\t0\t20200300', 'r3\t12a\t20200401', 'r4\t12345\t20200501', 'r5\t\\N\t20200601'].join(
-        '\n',
-      ),
+      [
+        `r1\t${gtin}\t20200229`,
+        'r2\t0\t20200300',
+        'r3\t12a\t20200401',
+        'r4\t12345\t20200501',
+        'r5\t\\N\t20200601',
+      ].join('\n'),
     ],
     releases_titles: [
       'id\tlang\tmtl\ttitle\tlatin',
@@ -45,7 +49,10 @@ async function authoredCopy(directory: string, gtin = supported) {
         'r5\tja\tt\tAuthored absent barcode\t\\N',
       ].join('\n'),
     ],
-    releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete\nr1\tv2\tcomplete\nr2\tv1\tcomplete\nr3\tv1\tcomplete\nr4\tv1\tcomplete\nr5\tv1\tcomplete'],
+    releases_vn: [
+      'id\tvid\trtype',
+      'r1\tv1\tcomplete\nr1\tv2\tcomplete\nr2\tv1\tcomplete\nr3\tv1\tcomplete\nr4\tv1\tcomplete\nr5\tv1\tcomplete',
+    ],
     releases_supersedes: ['id\trid', ''],
   };
   for (const [name, [header, body]] of Object.entries(files)) {
@@ -104,7 +111,8 @@ test('operator COPY import preserves a supported release GTIN, withholds unknown
   try {
     const tables = await authoredCopy(directory);
     const plan = await planVndbReleaseIdentifiers(tables);
-    const payload = (id: string) => plan.entities.vndb.find((row) => row.key === id)?.payload as Record<string, unknown>;
+    const payload = (id: string) =>
+      plan.entities.vndb.find((row) => row.key === id)?.payload as Record<string, unknown>;
     expect(payload('r1')).toMatchObject({ id: 'r1', gtin: supported });
     expect(payload('r2').gtin).toBe('0');
     expect(payload('r3').gtin).toBe('12a');

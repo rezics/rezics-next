@@ -157,9 +157,9 @@ test('A production COPY/operator import preserves a supported explicit release G
     });
     expect(successor.runs.vndb?.counts.changed).toBeGreaterThan(0);
     const updated = await candidates(releaseId!);
-    expect(updated.candidates.some((item) => item.statement.value.content === changed && item.source && !item.retracted)).toBe(
-      true,
-    );
+    expect(
+      updated.candidates.some((item) => item.statement.value.content === changed && item.source && !item.retracted),
+    ).toBe(true);
     expect((await read(releaseId!)).subject.statements['schema:gtin']?.map((item) => item.value.content)).toEqual([
       supported,
     ]);
