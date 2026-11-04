@@ -377,7 +377,8 @@ export function ReadingCard({
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   adviceRef.current = state.advice;
-  const mayWrite = credentialed && ownerMayChangeReading(state.advice);
+  const ownerMayChange = ownerMayChangeReading(state.advice);
+  const mayWrite = credentialed && ownerMayChange;
   const offered = state.advice?.reading.supported.spoilerLevels ?? [];
   const offeredImages = state.advice?.reading.supported.suitability ?? [];
   const choicesReady = offered.length > 0 && offeredImages.length > 0;
@@ -430,7 +431,7 @@ export function ReadingCard({
         <CardDescription>{m.settings_reading_text()}</CardDescription>
         {choicesReady ? (
           <CardDescription>
-            {mayWrite || !hydrated ? m.settings_automatic_save_help() : m.settings_reading_read_only_text()}
+            {ownerMayChange ? m.settings_automatic_save_help() : m.settings_reading_read_only_text()}
           </CardDescription>
         ) : null}
       </CardHeader>
@@ -498,12 +499,12 @@ export function ReadingCard({
               })}
             </p>
             <ReadingPreview ids={ids} draft={state.draft} confirmed={state.known} />
-            {mayWrite && !recovery && (state.known.spoilerLevel !== 0 || state.known.suitability !== 'blur') ? (
+            {ownerMayChange && !recovery && (state.known.spoilerLevel !== 0 || state.known.suitability !== 'blur') ? (
               <Button
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
-                disabled={busy}
+                disabled={busy || !mayWrite}
                 onClick={() => void editor.resetToNativeDefaults()}
               >
                 {m.settings_reading_reset()}
@@ -527,7 +528,7 @@ export function ReadingCard({
             </AlertDescription>
           </Alert>
         )}
-        {choicesReady && hydrated && !mayWrite && state.advice ? (
+        {choicesReady && !ownerMayChange && state.advice ? (
           <Alert>
             <AlertTitle>{m.settings_reading_read_only_title()}</AlertTitle>
             <AlertDescription>{m.settings_reading_read_only_text()}</AlertDescription>
