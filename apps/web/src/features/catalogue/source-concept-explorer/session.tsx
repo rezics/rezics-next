@@ -45,7 +45,7 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
       id={id}
       locale={locale}
       role={role}
-      reader={preferences.data?.preferences}
+      reader={!preferences.isError && !preferences.isFetching ? preferences.data?.preferences : undefined}
       returnTo={returnTo}
       {...(pinUnsupported === undefined ? {} : { pinUnsupported })}
       worksRoute={worksRoute}
