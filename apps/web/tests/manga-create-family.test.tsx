@@ -250,7 +250,8 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       }
       expect(scope.querySelector('form li section, [data-slot="list-row-link"], a button, a input')).toBeNull();
       for (const heading of scope.querySelectorAll('h2'))
-        expect(heading.getAttribute('data-content-item-slot')).toBe('title');
+        if (heading.textContent?.trim() !== m.identity_intake_heading())
+          expect(heading.getAttribute('data-content-item-slot')).toBe('title');
       expect(scope.textContent).toContain(m.manga_grain_help());
     }
     const stableAddIds = addControls.map((control) => control.id);

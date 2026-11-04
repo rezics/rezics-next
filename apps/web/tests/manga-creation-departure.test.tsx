@@ -45,6 +45,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     globals[key] = window[key];
   for (const key of ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia'])
     globals[key] = window[key].bind(window);
+  globals.scrollTo = () => {};
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
