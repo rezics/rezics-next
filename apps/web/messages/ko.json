@@ -8633,6 +8633,7 @@
   "profile_contribution_actions_sign_in": "로그인하여 현재 기여 작업 확인",
   "profile_contribution_actions_preparing": "현재 기여 작업을 확인하는 중…",
   "profile_contribution_actions_unavailable": "비공개 작업을 사용할 수 없습니다. 각 기여는 계속 열 수 있습니다.",
+  "profile_contribution_return_recovered": "원래 기여나 목적지가 이 페이지에 더 이상 없습니다. 현재 기여 목록에서 계속 둘러보세요.",
   "profile_contribution_actions_retired": "이 작업은 만료되었습니다. 현재 페이지로 돌아가 다시 확인하세요.",
   "library_collection_metadata_history": "기록",
   "library_collection_metadata_history_description": "이 컬렉션의 제목, 설명, 공개 범위 및 표시 방식의 변경 기록을 확인합니다.",

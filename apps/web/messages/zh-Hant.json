@@ -8633,6 +8633,7 @@
   "profile_contribution_actions_sign_in": "登入以查看貢獻內容目前可用的操作",
   "profile_contribution_actions_preparing": "正在檢查貢獻內容目前可用的操作…",
   "profile_contribution_actions_unavailable": "私人操作暫時無法使用。你仍可開啟各筆貢獻內容。",
+  "profile_contribution_return_recovered": "原始貢獻或目的地已不在此頁。請從目前的貢獻繼續瀏覽。",
   "profile_contribution_actions_retired": "這些操作已失效。請返回目前頁面重新檢查。",
   "library_collection_metadata_history": "歷史",
   "library_collection_metadata_history_description": "檢視此集合的標題、描述、可見性和呈現方式的變更記錄。",

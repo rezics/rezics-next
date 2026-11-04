@@ -8633,6 +8633,7 @@
   "profile_contribution_actions_sign_in": "Inicia sesión para consultar las acciones actuales de las contribuciones",
   "profile_contribution_actions_preparing": "Comprobando las acciones actuales de las contribuciones…",
   "profile_contribution_actions_unavailable": "Las acciones privadas no están disponibles. Puedes seguir abriendo cada contribución.",
+  "profile_contribution_return_recovered": "La contribución original o su destino ya no están en esta página. Continúa con las contribuciones actuales.",
   "profile_contribution_actions_retired": "Estas acciones han caducado. Vuelve a la página actual para consultarlas de nuevo.",
   "library_collection_metadata_history": "Historial",
   "library_collection_metadata_history_description": "Revisa los cambios registrados en el título, la descripción, la visibilidad y la presentación de esta colección.",

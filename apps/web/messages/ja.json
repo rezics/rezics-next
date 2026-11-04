@@ -8633,6 +8633,7 @@
   "profile_contribution_actions_sign_in": "ログインして投稿で現在利用できる操作を確認",
   "profile_contribution_actions_preparing": "投稿で現在利用できる操作を確認中…",
   "profile_contribution_actions_unavailable": "非公開の操作は利用できません。各投稿は引き続き開けます。",
+  "profile_contribution_return_recovered": "元の投稿または移動先はこのページにありません。現在の投稿から閲覧を続けてください。",
   "profile_contribution_actions_retired": "これらの操作は期限切れです。現在のページに戻って再度確認してください。",
   "library_collection_metadata_history": "履歴",
   "library_collection_metadata_history_description": "このコレクションのタイトル、説明、公開範囲、表示方法に記録された変更を確認します。",

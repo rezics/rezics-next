@@ -8751,6 +8751,7 @@
   "profile_contribution_actions_sign_in": "Sign in to check current contribution actions",
   "profile_contribution_actions_preparing": "Checking current contribution actions…",
   "profile_contribution_actions_unavailable": "Private actions are unavailable. You can still open each contribution.",
+  "profile_contribution_return_recovered": "The original contribution or destination is no longer on this page. Continue with the current contributions.",
   "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again.",
   "thread_attachment_image": "Image attachment",
   "thread_attachment_reserving": "Reserving this image…",

@@ -13,7 +13,7 @@ import { accountHref } from '../../../subject/subject-href';
 import { coverSrc } from '../../../media/cover-src';
 import { m } from '../../../paraglide/messages.js';
 import { locales, type Locale } from '../../../paraglide/runtime.js';
-import { rememberContribution, restoreContribution } from './navigation';
+import { rememberContribution, restoreContribution, restoreContributionRecovery } from './navigation';
 
 export type ContributionKind = 'reply' | 'review' | 'discussion';
 
@@ -57,6 +57,42 @@ export function ContributionRow(props: {
     return null;
   }
   return <ContributionVisit key={visit.generation} {...props} />;
+}
+
+/** Keep the public list usable when the clicked contribution or its exact destination has changed. */
+export function ContributionReturnRecovery({
+  rows,
+  locale,
+}: {
+  rows: readonly Record<string, unknown>[];
+  locale: string;
+}) {
+  const notice = useRef<HTMLParagraphElement>(null);
+  const activeLocale = locales.find((candidate) => candidate === locale) ?? 'en';
+  useEffect(() => {
+    const restore = () => {
+      if (notice.current) restoreContributionRecovery(notice.current);
+    };
+    restore();
+    window.addEventListener('pageshow', restore);
+    window.addEventListener('popstate', restore);
+    return () => {
+      window.removeEventListener('pageshow', restore);
+      window.removeEventListener('popstate', restore);
+    };
+  }, [rows]);
+  return (
+    <p
+      ref={notice}
+      hidden
+      tabIndex={-1}
+      role="status"
+      data-slot="contribution-return-recovery"
+      className="text-sm text-muted-foreground"
+    >
+      {m.profile_contribution_return_recovered({}, { locale: activeLocale })}
+    </p>
+  );
 }
 
 function ContributionVisit({
