@@ -149,7 +149,7 @@ for (const size of [1, 10, 20])
       await tick();
       expect(read).not.toHaveBeenCalled();
       expect(buttons('Inspect sale')).toHaveLength(size);
-      const opener = await click('Inspect sale');
+      await click('Inspect sale');
       expect(document.activeElement?.id).toBe('creator-sale-inspection-heading');
       expect(inspection()?.textContent).toContain(creatorSaleFixture.createdAt);
       const links = [...inspection()!.querySelectorAll('a')];
@@ -185,7 +185,7 @@ for (const size of [1, 10, 20])
       await tick();
       expect(inspection()).toBeNull();
       expect(host.textContent).not.toContain('Sale reference copied.');
-      await click('Inspect sale');
+      const currentOpener = await click('Inspect sale');
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
       await click('Copy sale reference');
       expect(inspection()?.textContent).toContain('Select and copy');
@@ -193,7 +193,7 @@ for (const size of [1, 10, 20])
         inspection()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
       );
       expect(inspection()).toBeNull();
-      expect(document.activeElement).toBe(opener);
+      expect(document.activeElement === currentOpener).toBe(true);
       expect(read).not.toHaveBeenCalled();
       // Closing/reopening the same identity cannot accept the prior selection's completion.
       await click('Inspect sale');
