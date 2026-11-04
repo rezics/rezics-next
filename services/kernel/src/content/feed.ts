@@ -847,7 +847,11 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
               const finalContexts = await (
                 await prepareFeedContentContext(
                   content,
-                  contextReferences.map(({ key, threadId, postId }) => ({ key, threadId, postId })),
+                  contextReferences.map(({ key, threadId, postId }) => ({
+                    key,
+                    threadId,
+                    ...(postId === undefined ? {} : { postId }),
+                  })),
                   { actor, deadline },
                   languages,
                 )
