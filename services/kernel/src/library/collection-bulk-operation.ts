@@ -406,12 +406,9 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                       ? explicitCollectionBulkAdd(materialized, { allowEmptyQueryCapture: true })
                       : explicitBulkStatus(materialized, { allowEmptyQueryCapture: true })
                   : parsed;
-            const base = {
-              capture,
-              selectionSource: captured?.source ?? null,
-              input: executable,
-            };
+            const base = { capture, selectionSource: captured?.source ?? null };
             if (executable.action === 'remove_from_collection') {
+              const input = executable;
               try {
                 const targets = captured
                   ? await captureCollectionBulkOccurrencesForSubjects(
@@ -430,36 +427,42 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                       attempt,
                       context.deadline,
                     );
-                return { ...base, targets };
+                return { ...base, input, targets };
               } catch (error) {
-                return { ...base, targets: [] as CollectionBulkTarget[], error };
+                return { ...base, input, targets: [] as CollectionBulkTarget[], error };
               }
             }
             if (executable.action === 'remove_from_library') {
+              if (executable.selection.kind !== 'explicit') throw new ProblemError('dependency_unavailable');
+              const input = explicitLibraryRemoval(executable);
               try {
-                const resolved = await resolveLibraryRemovalSubjects(deps, owner, executable, attempt.time, context);
-                return { ...base, resolved };
+                const resolved = await resolveLibraryRemovalSubjects(deps, owner, input, attempt.time, context);
+                return { ...base, input, resolved };
               } catch (error) {
                 return {
                   ...base,
+                  input,
                   resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
                   error,
                 };
               }
             }
             if (executable.action === 'add_to_collection') {
+              if (executable.selection.kind !== 'explicit') throw new ProblemError('dependency_unavailable');
+              const input = explicitCollectionBulkAdd(executable);
               try {
                 const resolved = await prepareCollectionBulkAddAdmission(
                   deps,
                   owner,
-                  executable,
+                  input,
                   attempt.time,
                   context,
                 );
-                return { ...base, resolved };
+                return { ...base, input, resolved };
               } catch (error) {
                 return {
                   ...base,
+                  input,
                   resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
                   error,
                 };
@@ -478,9 +481,9 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                 }
               }
             } catch (error) {
-              return { ...base, resolved, error };
+              return { ...base, input: explicitBulkStatus(executable), resolved, error };
             }
-            return { ...base, resolved };
+            return { ...base, input: explicitBulkStatus(executable), resolved };
           },
         },
         async (tx, command, prepared) => {
