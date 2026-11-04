@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "Quitter cette vérification ?",
   "auth_consent_departure_description": "Une approbation peut prendre effet après votre départ. Quitter ne l’annule pas et ne résout pas un résultat inconnu. Restez pour consulter les autorisations actuelles, ou quittez cette page.",
   "auth_rename_acknowledged": "Le changement initial a été confirmé. Le nom actuel n’a pas pu être confirmé. Vérifiez le compte actuel.",
-  "auth_rename_observation": "Le nom actuel est une observation. Il ne confirme pas le résultat du changement précédent."
+  "auth_rename_observation": "Le nom actuel est une observation. Il ne confirme pas le résultat du changement précédent.",
+  "auth_automated_operator_invalid": "Saisissez l’identifiant complet du compte opérateur (UUID).",
+  "auth_automated_operator_unlabelled": "Opérateur sans nom public",
+  "auth_automated_pending": "Vérification de la demande de création en cours…",
+  "auth_automated_responsibility": "L’opérateur sera publiquement désigné comme responsable de cet acteur. La création n’ajoute ni connexion ni autorisations héritées ; changer d’opérateur nécessite une action autorisée distincte."
 }

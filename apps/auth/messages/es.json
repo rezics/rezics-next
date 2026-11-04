@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "¿Salir de esta revisión?",
   "auth_consent_departure_description": "Una aprobación puede aplicarse incluso después de salir. Salir no la cancela ni resuelve un resultado desconocido. Quédate para revisar los permisos actuales o sal de esta página.",
   "auth_rename_acknowledged": "El cambio original fue confirmado. No se pudo confirmar el nombre actual. Revisa la cuenta actual.",
-  "auth_rename_observation": "El nombre actual es una observación. No confirma el resultado del cambio anterior."
+  "auth_rename_observation": "El nombre actual es una observación. No confirma el resultado del cambio anterior.",
+  "auth_automated_operator_invalid": "Introduce el ID completo de la cuenta operadora (UUID).",
+  "auth_automated_operator_unlabelled": "Operador sin nombre público",
+  "auth_automated_pending": "Comprobando la solicitud de creación actual…",
+  "auth_automated_responsibility": "El operador aparecerá públicamente como responsable de este actor. La creación no añade inicio de sesión ni permisos heredados; cambiar el operador requiere una acción autorizada independiente."
 }

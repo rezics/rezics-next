@@ -75,6 +75,30 @@ export async function open(page: ReactNode, sessionBody: object) {
           recoveryPage(JSON.parse(String(init?.body)).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
         ),
       );
+    if (path === '/account-management/automated/operator') {
+      const { operatorAccountId } = JSON.parse(String(init?.body));
+      const saved = JSON.parse(window.sessionStorage.getItem('rezics.automated-create.attempt') ?? 'null');
+      if (operatorAccountId === null || saved?.operator.id === operatorAccountId) {
+        const session = sessionBody as { account_id: string; client_id: string; scope: string[] };
+        const ordinary =
+          session.client_id !== 'rezics-auth-account-management' || !session.scope.includes('account:manage');
+        const readiness = ordinary ? 'authentication-needed' : operatorAccountId ? 'review' : 'select-operator';
+        return Promise.resolve(
+          Response.json({
+            viewer: { accountId: session.account_id },
+            readiness,
+            operator: readiness === 'review' ? saved.operator : null,
+            handleRules: {
+              minLength: 3,
+              maxLength: 64,
+              normalization: 'lowercase',
+              pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]',
+            },
+            action: ordinary ? 'authenticate' : operatorAccountId ? 'confirm' : 'select-operator',
+          }),
+        );
+      }
+    }
     if (['/session', '/account-management/deletion-page'].includes(String(path)))
       return Promise.resolve(Response.json(sessionBody));
     const request = Promise.withResolvers<Response>();

@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "Diese Prüfung verlassen?",
   "auth_consent_departure_description": "Eine Zustimmung kann auch nach dem Verlassen wirksam werden. Das Verlassen bricht sie nicht ab und klärt kein unbekanntes Ergebnis. Bleibe, um die aktuellen Berechtigungen zu prüfen, oder verlasse diese Seite.",
   "auth_rename_acknowledged": "Die ursprüngliche Umbenennung wurde bestätigt. Der aktuelle Name konnte nicht bestätigt werden. Prüfe das aktuelle Konto.",
-  "auth_rename_observation": "Der aktuelle Name ist eine Beobachtung. Er bestätigt nicht das Ergebnis der früheren Umbenennung."
+  "auth_rename_observation": "Der aktuelle Name ist eine Beobachtung. Er bestätigt nicht das Ergebnis der früheren Umbenennung.",
+  "auth_automated_operator_invalid": "Gib eine vollständige Betreiber-Konto-ID (UUID) ein.",
+  "auth_automated_operator_unlabelled": "Betreiber ohne öffentlichen Namen",
+  "auth_automated_pending": "Die aktuelle Erstellungsanfrage wird geprüft…",
+  "auth_automated_responsibility": "Der Betreiber wird öffentlich als verantwortlich für diesen Akteur ausgewiesen. Die Erstellung fügt weder eine Anmeldung noch geerbte Berechtigungen hinzu. Ein Betreiberwechsel erfordert eine eigene autorisierte Aktion."
 }

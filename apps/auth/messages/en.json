@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "Leave this review?",
   "auth_consent_departure_description": "An approval may still take effect after you leave. Leaving does not cancel it or resolve an unknown result. Stay to review current permissions, or leave this page.",
   "auth_rename_acknowledged": "The original rename was acknowledged. Its current handle could not be confirmed. Review the current account.",
-  "auth_rename_observation": "The current handle is an observation. It does not confirm the outcome of the earlier rename."
+  "auth_rename_observation": "The current handle is an observation. It does not confirm the outcome of the earlier rename.",
+  "auth_automated_operator_invalid": "Enter a complete operator account ID (UUID).",
+  "auth_automated_operator_unlabelled": "Operator without a public name",
+  "auth_automated_pending": "Checking the current creation request…",
+  "auth_automated_responsibility": "The operator will be publicly identified as responsible for this actor. Creation adds no actor sign-in or inherited grants; changing the operator requires its own authorized action."
 }

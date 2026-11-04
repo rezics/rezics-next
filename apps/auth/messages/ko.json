@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "이 검토를 떠날까요?",
   "auth_consent_departure_description": "페이지를 떠난 후에도 승인이 적용될 수 있습니다. 떠나도 승인이 취소되거나 알 수 없는 결과가 확정되지는 않습니다. 남아서 현재 권한을 확인하거나 이 페이지를 떠나세요.",
   "auth_rename_acknowledged": "원래 변경이 승인되었습니다. 현재 핸들은 확인하지 못했습니다. 현재 계정을 확인하세요.",
-  "auth_rename_observation": "현재 핸들은 관찰된 상태입니다. 이전 변경의 결과를 확정하지 않습니다."
+  "auth_rename_observation": "현재 핸들은 관찰된 상태입니다. 이전 변경의 결과를 확정하지 않습니다.",
+  "auth_automated_operator_invalid": "운영자의 전체 계정 ID(UUID)를 입력하세요.",
+  "auth_automated_operator_unlabelled": "공개 이름이 없는 운영자",
+  "auth_automated_pending": "현재 생성 요청을 확인하는 중…",
+  "auth_automated_responsibility": "운영자는 이 액터의 책임자로 공개 표시됩니다. 생성 시 로그인 수단이나 권한이 상속되지 않습니다. 운영자 변경에는 별도로 승인된 작업이 필요합니다."
 }

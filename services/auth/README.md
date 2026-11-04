@@ -1490,6 +1490,18 @@ Auth host binds the page reader in production and rejects a missing port.
 Decision: a null selection bootstraps only admitted caller/readiness advice; an
 ordinary session's non-null selection never causes an operator point read.
 
+Decision: the completed result returns to supported Security navigation; a missing
+operator label uses localized text with the exact ID displayed separately.
+
+The form initializes from the native page envelope, including ordinary-session
+advice before any privileged selected-operator read. It validates fields in place,
+freezes the initiating human, selected ID and normalized handle for inline sign-in,
+then observes that exact selected page again. Credentials are transient and return
+requires a new explicit confirmation. Session replacement retires stale controls;
+submitted work remains in storage. Refusal after an uncertain dispatch cannot prove
+non-commit and keeps unknown recovery on the original key. Pending feedback is
+announced, and only a closed committed result exposes the Security return link.
+
 The page explicitly confirms the exact operator ID, handle and initiating human.
 It retains one immutable key and business body in session storage across lost
 responses, reload and inline step-up. Reauthentication clears its transient password

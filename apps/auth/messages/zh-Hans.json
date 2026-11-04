@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "离开此权限审核？",
   "auth_consent_departure_description": "离开后，批准仍可能生效。离开不会取消批准，也不能确定未知结果。你可以留下查看当前权限，或离开此页面。",
   "auth_rename_acknowledged": "原改名请求已获确认，但无法确认当前用户名。请查看当前账户。",
-  "auth_rename_observation": "当前用户名仅表示观察到的现状，不能确认先前改名请求的结果。"
+  "auth_rename_observation": "当前用户名仅表示观察到的现状，不能确认先前改名请求的结果。",
+  "auth_automated_operator_invalid": "请输入完整的运营者账号 ID（UUID）。",
+  "auth_automated_operator_unlabelled": "未设置公开名称的运营者",
+  "auth_automated_pending": "正在检查当前创建请求…",
+  "auth_automated_responsibility": "运营者将被公开标示为此角色的责任方。创建不会赋予角色登录方式或继承权限；更换运营者需要另行获得授权。"
 }

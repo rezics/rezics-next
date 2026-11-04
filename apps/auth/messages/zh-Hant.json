@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "離開此權限審核？",
   "auth_consent_departure_description": "離開後，核准仍可能生效。離開不會取消核准，也無法確定未知結果。你可以留下查看目前權限，或離開此頁面。",
   "auth_rename_acknowledged": "原改名請求已獲確認，但無法確認目前使用者名稱。請查看目前帳戶。",
-  "auth_rename_observation": "目前使用者名稱僅表示觀察到的現況，不能確認先前改名請求的結果。"
+  "auth_rename_observation": "目前使用者名稱僅表示觀察到的現況，不能確認先前改名請求的結果。",
+  "auth_automated_operator_invalid": "請輸入完整的營運者帳號 ID（UUID）。",
+  "auth_automated_operator_unlabelled": "未設定公開名稱的營運者",
+  "auth_automated_pending": "正在檢查目前的建立請求…",
+  "auth_automated_responsibility": "營運者將被公開標示為此角色的責任方。建立不會賦予角色登入方式或繼承權限；更換營運者需要另行取得授權。"
 }

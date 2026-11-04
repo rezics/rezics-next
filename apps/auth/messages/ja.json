@@ -682,5 +682,9 @@
   "auth_consent_departure_heading": "この確認ページを離れますか？",
   "auth_consent_departure_description": "ページを離れた後も承認が反映される可能性があります。離れても承認は取り消されず、不明な結果も確定しません。現在の権限を確認するには残るか、このページを離れてください。",
   "auth_rename_acknowledged": "元の変更は受理されました。現在のハンドルは確認できませんでした。現在のアカウントを確認してください。",
-  "auth_rename_observation": "現在のハンドルは現状を示す情報です。以前の変更の結果を確定するものではありません。"
+  "auth_rename_observation": "現在のハンドルは現状を示す情報です。以前の変更の結果を確定するものではありません。",
+  "auth_automated_operator_invalid": "運営者の完全なアカウントID（UUID）を入力してください。",
+  "auth_automated_operator_unlabelled": "公開名のない運営者",
+  "auth_automated_pending": "現在の作成リクエストを確認中…",
+  "auth_automated_responsibility": "このアクターの責任を持つ運営者が公開表示されます。作成によってログイン手段や権限が引き継がれることはありません。運営者の変更には、別途承認された操作が必要です。"
 }

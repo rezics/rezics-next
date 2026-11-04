@@ -239,10 +239,16 @@ export function saveAutomatedAttempt(attempt: AutomatedAttempt): boolean {
       (previous &&
         (previous.accountId !== parsed.accountId ||
           previous.operationKey !== parsed.operationKey ||
-          JSON.stringify(previous.operation) !== JSON.stringify(parsed.operation)))
+          JSON.stringify(previous.operation) !== JSON.stringify(parsed.operation) ||
+          JSON.stringify(previous.operator) !== JSON.stringify(parsed.operator)))
     )
       return false;
-    window.sessionStorage.setItem(storageKey, JSON.stringify(parsed));
+    const retained = {
+      ...parsed,
+      ...(previous?.submitted ? { submitted: true as const } : {}),
+      ...(previous?.reference && !parsed.reference ? { reference: previous.reference } : {}),
+    };
+    window.sessionStorage.setItem(storageKey, JSON.stringify(retained));
     return true;
   } catch {
     return false;
@@ -264,7 +270,10 @@ export function discardAutomatedReview(attempt: AutomatedAttempt | null): void {
     !attempt ||
     !saved ||
     saved === 'invalid' ||
+    saved.accountId !== attempt.accountId ||
     saved.operationKey !== attempt.operationKey ||
+    JSON.stringify(saved.operation) !== JSON.stringify(attempt.operation) ||
+    JSON.stringify(saved.operator) !== JSON.stringify(attempt.operator) ||
     saved.submitted ||
     saved.reference
   )
@@ -302,16 +311,25 @@ export async function submitAutomatedAttempt(
   input: AutomatedAttempt,
   isCurrent: () => boolean = () => true,
 ): Promise<AutomatedOutcome> {
-  let attempt = parseAutomatedAttempt({ ...input, submitted: true });
+  let attempt = parseAutomatedAttempt(input);
   if (!isCurrent() || !attempt || !saveAutomatedAttempt(attempt)) return { kind: 'refused' };
+  const retained = restoreAutomatedAttempt();
+  if (!retained || retained === 'invalid') return { kind: 'unavailable' };
+  attempt = retained;
+  const uncertain = !!(attempt.submitted || attempt.reference);
   const denied = await boundSession(attempt.accountId);
   if (!isCurrent()) return { kind: 'unavailable' };
-  if (denied) return denied;
+  if (denied) return uncertain && denied.kind === 'refused' ? { kind: 'unknown' } : denied;
   const { operation, operationKey, accountId } = attempt;
   {
+    attempt = parseAutomatedAttempt({ ...attempt, submitted: true })!;
+    if (!saveAutomatedAttempt(attempt)) return { kind: 'unavailable' };
     const approval = await authPost('/account-operations/approve', { operation, operationKey, accountId });
     if (!isCurrent()) return { kind: 'unavailable' };
-    if (!approval.ok) return failure(approval);
+    if (!approval.ok) {
+      const outcome = failure(approval);
+      return uncertain && outcome.kind === 'refused' ? { kind: 'unknown' } : outcome;
+    }
     if (
       !record(approval.body) ||
       !fields(approval.body, ['reference', 'expiresAt']) ||
@@ -325,14 +343,18 @@ export async function submitAutomatedAttempt(
   }
   const current = await boundSession(accountId);
   if (!isCurrent()) return { kind: 'unavailable' };
-  if (current) return current;
+  if (current) return current.kind === 'refused' ? { kind: 'unknown' } : current;
   const result = await authPost('/account-operations/execute', {
     operation,
     operationKey,
     accountId,
     reference: attempt.reference,
   });
-  if (!result.ok) return failure(result);
+  if (!isCurrent()) return { kind: 'unavailable' };
+  if (!result.ok) {
+    const outcome = failure(result);
+    return outcome.kind === 'refused' ? { kind: 'unknown' } : outcome;
+  }
   if (!record(result.body) || !fields(result.body, ['accountId']) || !automatedId(result.body.accountId))
     return { kind: 'unknown' };
   // Retain the immutable attempt even after success: navigation cannot accidentally
@@ -353,5 +375,6 @@ export async function reauthenticateAutomated(
   const result = await authPost('/signin', { email, password, ...AUTOMATED_PROFILE });
   if (!isCurrent()) return { kind: 'unavailable' };
   if (!result.ok) return { kind: 'unavailable' };
-  return boundSession(accountId);
+  const current = await boundSession(accountId);
+  return isCurrent() ? current : { kind: 'unavailable' };
 }
