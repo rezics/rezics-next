@@ -417,13 +417,15 @@ export function DeleteAccountContent({
       return;
     }
     const operationKey = state.kind === 'pending' ? state.value.operationKey : operationKeyFor(operation, accountId);
-    if (!storePendingAccountOperationStepUp({
-      kind: 'delete',
-      accountId,
-      operationKey,
-      operation,
-      submitted: state.kind === 'pending' ? (state.value.submitted ?? true) : false,
-    })) {
+    if (
+      !storePendingAccountOperationStepUp({
+        kind: 'delete',
+        accountId,
+        operationKey,
+        operation,
+        submitted: state.kind === 'pending' ? (state.value.submitted ?? true) : false,
+      })
+    ) {
       setMessage(m.auth_account_operation_failure());
       return;
     }

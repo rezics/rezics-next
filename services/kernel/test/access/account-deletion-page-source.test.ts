@@ -151,7 +151,9 @@ test.each(['floor', 'home', 'session', 'dependency'] as const)(
       },
     };
     let nativeFailure: unknown;
-    const response = await read(human.exact, access, (error) => { nativeFailure = error; });
+    const response = await read(human.exact, access, (error) => {
+      nativeFailure = error;
+    });
     const body = await response.json();
     expect(body.kind, nativeFailure instanceof Error ? nativeFailure.stack : String(nativeFailure)).toBe(
       change === 'home' ? 'changed' : change === 'dependency' ? 'unavailable' : 'signed-out',
