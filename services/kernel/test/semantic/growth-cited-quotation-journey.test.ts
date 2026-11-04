@@ -11,13 +11,7 @@ import { derivedId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import {
-  checkGrowth,
-  openGrowthDatabase,
-  seed,
-  type GrowthDatabase,
-  type Population,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
