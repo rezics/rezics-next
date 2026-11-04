@@ -933,6 +933,7 @@ export class Importer {
     const acknowledgedEffects = this.acknowledge(owner, request, result);
     this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     const bound = bindings.claim(owner);
+    if (owner.external_id === 'v1') console.error('showcase-credit bootstrap result:', bound);
     return bound?.state === 'bound' ? bound.subject : null;
   }
 
@@ -1909,6 +1910,7 @@ export class Importer {
         !('outcome' in conversion && conversion.outcome === 'ignored')
       ) {
         subject = await this.bootstrap(registration, staged, conversion, signal, write);
+        if (!subject && owner.external_id === 'v1') console.error('showcase-credit bootstrap returned no subject');
         if (!subject) return null;
         await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
       }
