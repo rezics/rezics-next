@@ -16,6 +16,7 @@ const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
 const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
 const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
 const receiptTrace: string[] = [];
+const callbackTrace: string[] = [];
 let nextScreenInstance = 0;
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -134,12 +135,18 @@ function RatingsScreen() {
     locale: 'en',
     source: 'rating.own_votes_page/v1',
     eligible: () => true,
-    canRead: () => true,
+    canRead: () => {
+      callbackTrace.push('canRead');
+      return true;
+    },
     validateResult: (result) => {
+      callbackTrace.push('validate');
       if (!result || typeof result !== 'object' || !('data' in result) || !('isSuccess' in result) || result.isSuccess !== true)
         return null;
       const read = result.data as OwnVotesRead;
-      return read.state === 'ready' && read.subject === viewer && read.cursor === value.cursor ? read : null;
+      const valid = read.state === 'ready' && read.subject === viewer && read.cursor === value.cursor;
+      callbackTrace.push(`valid:${valid}`);
+      return valid ? read : null;
     },
   });
   const returnVisit = useOwnVotesReturn({
@@ -150,7 +157,10 @@ function RatingsScreen() {
     isCurrent: () => true,
     refresh: value.refresh,
     receipt,
-    onResolved: (next) => setOutcome(next),
+    onResolved: (next) => {
+      callbackTrace.push(`resolved:${next.kind}`);
+      setOutcome(next);
+    },
     onFocus: (next) => {
       if (next.kind === 'found') {
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-own-vote-target]')).find(
@@ -362,7 +372,7 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
       throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, location: view.router.state.location }));
     expect(view.refreshCount.value).toBe(1);
     if (!view.host.querySelector('[data-own-vote-return-status]'))
-      throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, text: view.host.textContent }));
+      throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, callbackTrace, text: view.host.textContent }));
     expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
     expect(view.window.document.activeElement).toBe(
       view.host.querySelector(`[data-own-vote-target="${target}"][data-own-vote-question="${question}"] button`),
