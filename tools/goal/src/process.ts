@@ -42,10 +42,9 @@ function inspectProcessSnapshot(
     return {
       identity: { pid, start: fields[19]!, boot, group: Number(fields[2]) },
       dead: fields[0] === 'Z' || fields[0] === 'X',
-      cpuTicks:
-        /^\d+$/.test(fields[11] ?? '') && /^\d+$/.test(fields[12] ?? '')
-          ? BigInt(fields[11]!) + BigInt(fields[12]!)
-          : undefined,
+      ...(/^\d+$/.test(fields[11] ?? '') && /^\d+$/.test(fields[12] ?? '')
+        ? { cpuTicks: BigInt(fields[11]!) + BigInt(fields[12]!) }
+        : {}),
     };
   } catch (error) {
     throw new Error(`process visibility unknown for PID ${pid}: boot identity unavailable`, { cause: error });
