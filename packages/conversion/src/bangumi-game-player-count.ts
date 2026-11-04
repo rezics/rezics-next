@@ -2,6 +2,7 @@ import type { ConversionDiagnostic } from './index.ts';
 
 export const bangumiGameTemplateHead = '{{Infobox Game';
 const countKey = '游玩人数';
+const publicationKey = '发行日期';
 const fieldLimit = 64;
 const diagnosticLimit = 16;
 const occurrenceLimit = 8;
@@ -26,12 +27,19 @@ export type GamePlayerCountMapping = {
   readonly diagnostics: readonly ConversionDiagnostic[];
 };
 
-type InfoboxField = {
+export type BangumiGameInfoboxField = {
   key: string;
   value: string;
   nested: boolean;
   continued: boolean;
   pointer: string;
+};
+
+export type BangumiGameInfoboxScan = {
+  readonly handledInfobox: boolean;
+  readonly fields: readonly BangumiGameInfoboxField[];
+  readonly overflow: boolean;
+  readonly malformed: boolean;
 };
 
 function infoboxPointer(key: string): string {
@@ -46,51 +54,99 @@ function notGreater(left: string, right: string): boolean {
   return left.length !== right.length ? left.length < right.length : left <= right;
 }
 
-function parseFields(infobox: string): { fields: InfoboxField[]; overflow: boolean } {
-  const fields: InfoboxField[] = [];
+/** Scan the pinned Game template once; both Game field mappers consume these bounded occurrences. */
+export function scanBangumiGameInfobox(record: {
+  readonly type: number;
+  readonly infobox?: string;
+}): BangumiGameInfoboxScan {
+  if (record.type !== 4 || record.infobox === undefined)
+    return { handledInfobox: false, fields: [], overflow: false, malformed: false };
+
+  const fields: BangumiGameInfoboxField[] = [];
   let overflow = false;
-  let active: InfoboxField | undefined;
-  for (const raw of infobox.split('\n')) {
+  let malformed = false;
+  let active: BangumiGameInfoboxField | undefined;
+  let foundTemplate = false;
+  let closed = false;
+  let depth = 0;
+  for (const raw of record.infobox.split('\n')) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     const trimmed = line.replace(horizontalSpace, '');
     if (!trimmed) continue;
-    if (trimmed === '}}') {
-      active = undefined;
+    if (!foundTemplate) {
+      if (trimmed !== bangumiGameTemplateHead)
+        return { handledInfobox: false, fields: [], overflow: false, malformed: false };
+      foundTemplate = true;
+      depth = 1;
       continue;
     }
-    if (!trimmed.startsWith('|')) {
-      if (active) active.continued = true;
-      continue;
-    }
-    if (fields.length >= fieldLimit) {
-      overflow = true;
-      active = undefined;
+    if (closed) {
+      malformed = true;
       break;
     }
-    const equals = trimmed.indexOf('=');
-    const pointer = `/infobox/fields/${fields.length}`;
-    if (equals < 2) {
-      const field = { key: '', value: '', nested: false, continued: false, pointer };
-      fields.push(field);
-      active = field;
+
+    if (depth === 1 && trimmed.startsWith('|')) {
+      if (fields.length >= fieldLimit) {
+        overflow = true;
+        break;
+      }
+      const equals = trimmed.indexOf('=');
+      const pointer = `/infobox/fields/${fields.length}`;
+      if (equals < 2) {
+        active = { key: '', value: '', nested: false, continued: false, pointer };
+        fields.push(active);
+      } else {
+        const key = trimmed.slice(1, equals).replace(horizontalSpace, '');
+        const value = trimmed.slice(equals + 1);
+        active = {
+          key,
+          value,
+          nested: value.includes('{{') || value.includes('}}') || value.includes('[[') || value.includes(']]'),
+          continued: false,
+          pointer: key ? infoboxPointer(key) : pointer,
+        };
+        fields.push(active);
+      }
+    } else if (depth === 1 && active && trimmed !== '}}') {
+      active.continued = true;
+    }
+
+    for (let index = 0; index < line.length; ) {
+      if (line.startsWith('{{', index)) {
+        depth += 1;
+        if (depth > 2) malformed = true;
+        index += 2;
+      } else if (line.startsWith('}}', index)) {
+        depth -= 1;
+        if (depth < 0) malformed = true;
+        index += 2;
+        if (depth === 0) {
+          closed = true;
+          if (line.slice(index).trim()) malformed = true;
+          break;
+        }
+      } else index += 1;
+      if (malformed) break;
+    }
+    if (malformed) break;
+    if (depth === 0) {
+      closed = true;
+      active = undefined;
+    }
+    if (closed && trimmed === '}}') {
+      active = undefined;
       continue;
     }
-    const key = trimmed.slice(1, equals).replace(horizontalSpace, '');
-    const value = trimmed.slice(equals + 1);
-    const field = {
-      key,
-      value,
-      nested: value.replace(horizontalSpace, '').startsWith('{') || value.includes('{{') || value.includes('[['),
-      continued: false,
-      pointer: key ? infoboxPointer(key) : pointer,
-    };
-    fields.push(field);
-    active = field;
   }
-  return { fields, overflow };
+  return {
+    handledInfobox: foundTemplate,
+    fields,
+    overflow,
+    malformed: !overflow && (malformed || (foundTemplate && !closed)),
+  };
 }
 
-function parseCount(field: InfoboxField): {
+function parseCount(field: BangumiGameInfoboxField): {
   readonly fact?: GamePlayerCountFact;
   readonly code?: string;
 } {
@@ -123,17 +179,8 @@ function parseCount(field: InfoboxField): {
 export function bangumiGamePlayerCount(record: {
   readonly type: number;
   readonly infobox?: string;
-}): GamePlayerCountMapping {
-  if (record.type !== 4 || record.infobox === undefined) return { handledInfobox: false, facts: [], diagnostics: [] };
-  let header: string | undefined;
-  for (const raw of record.infobox.split('\n')) {
-    const line = (raw.endsWith('\r') ? raw.slice(0, -1) : raw).replace(horizontalSpace, '');
-    if (line) {
-      header = line;
-      break;
-    }
-  }
-  if (header !== bangumiGameTemplateHead) return { handledInfobox: false, facts: [], diagnostics: [] };
+}, scan = scanBangumiGameInfobox(record)): GamePlayerCountMapping {
+  if (!scan.handledInfobox) return { handledInfobox: false, facts: [], diagnostics: [] };
 
   const diagnostics: ConversionDiagnostic[] = [];
   const omit = (pointer: string, code: string) => {
@@ -141,16 +188,18 @@ export function bangumiGamePlayerCount(record: {
     else if (!diagnostics.some((item) => item.code === 'additional_infobox_omissions'))
       diagnostics.push({ pointer: '/infobox', code: 'additional_infobox_omissions' });
   };
-  const { fields, overflow } = parseFields(record.infobox);
-  if (overflow) omit('/infobox', 'infobox_field_limit');
-  const counts: InfoboxField[] = [];
+  const fields = scan.fields;
+  if (scan.overflow) omit('/infobox', 'infobox_field_limit');
+  if (scan.malformed) omit('/infobox', 'unsupported_infobox_structure');
+  const counts: BangumiGameInfoboxField[] = [];
   let examined = 0;
-  let bounded = false;
+  let bounded = scan.overflow || scan.malformed;
   for (const field of fields) {
     if (!field.key) {
       omit(field.pointer, 'unsupported_infobox_structure');
       continue;
     }
+    if (field.key === publicationKey) continue;
     if (field.key === countKey) {
       examined++;
       if (examined > occurrenceLimit) {

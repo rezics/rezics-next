@@ -770,7 +770,7 @@ not additional check requests.
   same-title extras stay excluded; ISBN does not invent an edition; missing
   volumes and missing author-role bindings stay gaps. Refresh keeps the same
   book, volume and person identities. Decision: type 1 Book/BookSeries dispatch
-  uses the current `bangumi@12` converter, preserving Book names, TVAnime
+  uses the current `bangumi@13` converter, preserving Book names, TVAnime
   original-run, Game player-count and work evidence while adding TVAnime official
   websites. Decision: selected Book Girl
   records join the common showcase manifest; book review gaps stay in the seed
@@ -1311,7 +1311,7 @@ explicit `0` is a stated zero.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-The original-run mapping was introduced in `bangumi@8`; current `bangumi@12`
+The original-run mapping was introduced in `bangumi@8`; current `bangumi@13`
 continues to convert pinned TVAnime `放送开始`, `播放结束` and `话数` through
 ordinary Bangumi registration and selected-family rows, preserving the
 `bangumi@9` player-count mapping and earlier name extraction. Native read is on
@@ -1339,7 +1339,7 @@ the whole occurrence.
 Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
 unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
 
-The player-count mapping was introduced in `bangumi@9`; current `bangumi@12`
+The player-count mapping was introduced in `bangumi@9`; current `bangumi@13`
 continues to convert pinned Game `游玩人数` through ordinary Bangumi
 registration and selected-family rows, preserving the `bangumi@8` original-run
 mapping. Native read is on the acknowledged VideoGame.
@@ -1486,8 +1486,8 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
 
 Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).
 
-Ordinary conversion uses `bangumi@12`. The selected-family Bangumi caller uses
-`cross-media-entities@11+bangumi@12` so source refresh replays the new mapping
+Ordinary conversion uses `bangumi@13`. The selected-family Bangumi caller uses
+`cross-media-entities@11+bangumi@13` so source refresh replays the new mapping
 under an honest revision without revising the VNDB adapter. Only the exact
 TVAnime `链接` and `Copyright` fields are admitted. Descriptive destinations
 retain their URL spelling and cite the Bangumi subject record; copyright
@@ -1572,7 +1572,7 @@ The selected default Bangumi seed already elects character IDs through the selec
 ## Bangumi Game subject names
 
 Decision: scalar Game `中文名` supplies `zh`; scalar or single-level bullet `别名` stays `und`.
-Ordinary conversion uses `bangumi@12`; selected-family registration uses `cross-media-entities@11+bangumi@12`.
+Ordinary conversion uses `bangumi@13`; selected-family registration uses `cross-media-entities@11+bangumi@13`.
 
 The pinned `{{Infobox Game` grammar is distinct from TVAnime. Type 4 remains
 `schema:VideoGame`; admitted values become cited `schema:name` or
@@ -1604,3 +1604,36 @@ A selected type-4 Game keeps top-level `subject.platform` as the profile selecto
 - Touches: one selected or ordinary Game record, at most 16 platform and 8 engine Concept relations, exact infobox field citations, and independent accept/adopt/read.
 - Bound: 65,536 infobox bytes, 64 fields, depth 2, 16 diagnostics, 24 cached current Concept reads, 64 KiB command envelope. No catalogue label scan or second publisher.
 - Growth check: `services/importer/tests/bangumi-game-environment.test.ts` covers selected-family and ordinary registration. `services/kernel/test/imports/bangumi-game-environment.test.ts` covers native review, adoption, current read and per-occurrence concealment; native execution is deferred to integration.
+
+## Bangumi Game first publication date
+
+Decision: Game publication advances `bangumi@12` to `bangumi@13`, preserving Game names and TVAnime official websites.
+
+Decision: accept only one unqualified strict ISO Gregorian `发行日期` value
+(`YYYY`, `YYYY-MM` or `YYYY-MM-DD`); type-4 top-level `date`, qualified,
+duplicate and unsupported occurrences remain unavailable. Selected-family
+Bangumi envelopes use `cross-media-entities@11+bangumi@13` so an unchanged
+selected row refreshes when either mapping changes.
+
+The pinned Game mapping already admits `schema:datePublished` on
+`schema:VideoGame` as the publication or first-release date with source
+precision. `bangumi@13` reads only that Game-template field. It uses the current
+Gregorian year/month/day parser, preserves the exact precision, and cites the
+exact Bangumi subject URL. Qualified platform, market, edition and region dates
+are withheld as a whole; no type-4 top-level fallback, release subject or work
+identity inference is added. Type-3/6 date and TVAnime original-run behavior
+remain on their existing paths.
+
+- Touches: one source-identified Bangumi Game and at most one cited
+  `schema:datePublished` candidate on its VideoGame.
+- Bound: one shared Game-field scan visits at most 64 top-level fields, at most
+  16 combined diagnostic entries, and the
+  existing 65,536-character infobox plus 64 KiB projected source/command
+  envelopes. The parser does not recursively evaluate wiki syntax or fetch a
+  linked page.
+- Growth check: `services/importer/tests/bangumi-game-publication.test.ts`
+  covers ordinary and selected-family proposals, qualified omission and a
+  corrected partial date. `services/kernel/test/imports/bangumi-game-publication.test.ts`
+  covers the acknowledged UUID, independent acceptance/adoption, exact current
+  value/citation and the facts fence. Native acceptance remains deferred to
+  integration.

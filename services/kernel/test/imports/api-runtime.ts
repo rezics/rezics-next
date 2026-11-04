@@ -811,6 +811,7 @@ export async function openApiRuntime(
     await warm();
     recordPhase('runtime setup total', started);
     return {
+      origin,
       identity,
       get bulk() {
         return bulk;

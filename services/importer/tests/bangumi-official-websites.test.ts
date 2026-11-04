@@ -131,7 +131,7 @@ test('ordinary and selected-family Bangumi TVAnime imports propose cited literal
     );
     for (const { command, url } of ordinarySites) {
       expect(url).not.toBe(sourceUrl);
-      expect(command.source.converter_revision).toBe('bangumi@12');
+      expect(command.source.converter_revision).toBe('bangumi@13');
       expect(command.op === 'propose' && command.statement.references).toEqual([
         {
           parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: sourceUrl } }],

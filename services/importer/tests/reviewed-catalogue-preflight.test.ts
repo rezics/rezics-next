@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
 import {
@@ -43,9 +44,7 @@ test('invalid truncated duplicated or mass-disappeared finite inventory has zero
 });
 
 test('reviewed metadata accepts the public transport null-prototype JSON snapshot', async () => {
-  const root = resolve(import.meta.dir, '../../../.temp');
-  await mkdir(root, { recursive: true });
-  const directory = await mkdtemp(resolve(root, 'reviewed-json-'));
+  const directory = await mkdtemp(resolve(tmpdir(), 'reviewed-json-'));
   const reachedBootstrap = new Error('Stopped after metadata provenance was checked');
   let creates = 0;
   const port = {

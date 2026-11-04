@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
-import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource } from './cross-media-bindings.ts';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
@@ -234,10 +234,7 @@ function selectedEnvelopes(
 ): Set<string> {
   const allowed = new Set<string>();
   for (const provider of ['bangumi', 'vndb'] as const) {
-    const registration = createSourceRegistration(provider, {
-      source: aliases[provider],
-      converterRevision: entityRevision,
-    });
+    const registration = createSelectedFamilySourceRegistration(provider, aliases[provider]);
     for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
       const context =
         provider === 'bangumi'
@@ -415,7 +412,7 @@ export function buildShowcaseManifest(input: {
             ...(subject?.id ? { containerId: subject.id } : {}),
           })
         : undefined;
-    const registration = createSourceRegistration(provider, { source: alias, converterRevision: entityRevision });
+    const registration = createSelectedFamilySourceRegistration(provider, alias);
     const conversion = registration.convert(
       { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
       { source: alias, ...(mediaContext ?? {}) },
@@ -468,7 +465,7 @@ export function buildShowcaseManifest(input: {
       sourceRevision: row.revision ?? 'unversioned',
       rawDigest: sourceDigest(row.payload),
       semanticDigest: conversion.digest,
-      converterRevision: conversion.converter_revision ?? entityRevision,
+      converterRevision: conversion.converter_revision ?? registration.converter_revision,
       kind: member?.kind ?? (bootstrap?.op === 'create' ? kindFromType(bootstrap.subject.type) : 'work'),
       subjectId: subject?.id ?? null,
       nativeType: subject?.type ?? (bootstrap?.op === 'create' ? bootstrap.subject.type : null),

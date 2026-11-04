@@ -58,6 +58,7 @@ type VocabularySource = {
 
 // This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
 const VNDB_DUMP_AS_OF = '2026-10-25';
+const selectedBangumiRevision = `${crossMediaRevision}+${bangumiRevision}`;
 
 type NativeSource = Readonly<{
   source: string;
@@ -305,4 +306,14 @@ export function createSourceRegistration(
       return addAliases(result, source, sourceKind, context);
     },
   };
+}
+
+/** Selected-family Bangumi records use a revision that tracks both native and entity conversion. */
+export function createSelectedFamilySourceRegistration(
+  sourceKind: 'bangumi' | 'vndb',
+  source: string,
+): SourceRegistration<SourceAssets> {
+  return sourceKind === 'bangumi'
+    ? createSourceRegistration('bangumi', { source, converterRevision: selectedBangumiRevision })
+    : createSourceRegistration('vndb', { source, converterRevision: crossMediaRevision });
 }

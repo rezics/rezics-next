@@ -1013,7 +1013,7 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 Decision: `bangumi@12` adds official websites to the integrated `bangumi@11`
 Game-name mapping; the combined registration keeps `cross-media-entities@11`.
 
-Current `bangumi@12` shares one bounded infobox scan for the exact pinned
+Current `bangumi@13` shares one bounded infobox scan for the exact pinned
 `{{Infobox animanga/TVAnime` template on selected type-2 `schema:TVSeries`
 records. It preserves the existing cited name, original-run and work-evidence
 mappings while adding the explicit `官方网站` URL fact. The top-level `name` and
@@ -1111,13 +1111,13 @@ identity; the connected native acceptance is
 
 ## Bangumi book grain
 
-The current `bangumi@12` converter dispatches type 1 Book versus BookSeries from
+The current `bangumi@13` converter dispatches type 1 Book versus BookSeries from
 the source series flag, novel platform and wiki template. Comic/manga stays
 generic Book so a novel family is never filled with manga. Type 1 cites a
 parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
-Decision: type 1 Book/BookSeries dispatch remains in `bangumi@12`, preserving
+Decision: type 1 Book/BookSeries dispatch remains in `bangumi@13`, preserving
 TVAnime names, Book-template names, original-run, Game player-count and work
 evidence and Game names while the new revision adds official websites. One Bangumi subject stays one
 identity; ISBN does not create a `bf:Instance`.
@@ -1134,9 +1134,7 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 only horizontal template/list boundary whitespace.
 
 `bangumi@10` introduced the exact pinned TVAnime `链接` and `Copyright`
-mapping, retained by current `bangumi@12`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
-`bangumi@11` also consumes the exact pinned TVAnime `链接` and `Copyright`
-fields. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
+mapping, retained by current `bangumi@13`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
 source text preserved. Both facts cite only the exact Bangumi subject record.
@@ -1151,8 +1149,8 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: ordinary `bangumi@12` and selected-family
-  `cross-media-entities@11+bangumi@12` publication for one TVAnime source record,
+- Touches: ordinary `bangumi@13` and selected-family
+  `cross-media-entities@11+bangumi@13` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
@@ -1185,3 +1183,24 @@ platform, genre, player-count, summary or cover ownership.
   neighbor exclusion. The native journey is
   `services/kernel/test/imports/bangumi-game-names.test.ts`; execution remains
   controller-owned.
+
+## Bangumi Game publication date
+
+`bangumi@13` reads only one unqualified `发行日期` occurrence from the pinned
+Game infobox. The accepted scalar grammar is the strict Gregorian `YYYY`,
+`YYYY-MM` or `YYYY-MM-DD` form; its native time representation retains source
+precision. Type-4 top-level `date`, qualified dates and duplicate fields remain
+unavailable. Other Game fields stay on their current paths.
+
+- Touches: ordinary `bangumi@13` and selected-family
+  `cross-media-entities@11+bangumi@13` publication for one source-bound
+  VideoGame, with the exact Bangumi subject citation.
+- Bound: one shared pass visits at most 64 top-level infobox fields and retains
+  at most 16 source-free omission diagnostics within existing infobox,
+  projection and command limits. No recursive wiki evaluation or linked-page
+  fetch is used.
+- Growth check: `services/importer/tests/bangumi-game-publication.test.ts`
+  covers ordinary and selected-family proposals, qualified omission and a
+  corrected partial date. The native review/adoption and read scenario is
+  `services/kernel/test/imports/bangumi-game-publication.test.ts`; execution
+  remains controller-owned.
