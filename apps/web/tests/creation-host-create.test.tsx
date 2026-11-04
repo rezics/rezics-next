@@ -14,6 +14,13 @@ test('all three creation profiles retain populated type drafts through withdrawa
   const { useCreationHost } = await import('../src/features/catalogue/creation-host/use-creation-host');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { StatementSummary } = await import('../src/features/catalogue/statement-summary');
+  const initialRelease = structuredClone(bundledRelease);
+  initialRelease.types['schema:Place'] ??= {
+    ...Object.values(initialRelease.types)[0]!,
+    labels: { en: 'Place' },
+    bases: [],
+    properties: [],
+  };
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window();
@@ -32,14 +39,14 @@ test('all three creation profiles retain populated type drafts through withdrawa
   const root = createRoot(window.document.body);
   try {
     for (const types of [musicContextCreateTypes, catalogueFileCreateTypes, conceptCreateTypes]) {
-      const type = types(bundledRelease, 'en')[0]!.id;
-      const release = structuredClone(bundledRelease);
+      const type = types(initialRelease, 'en')[0]!.id;
+      const release = structuredClone(initialRelease);
       delete release.types[type];
       let next: CreationRead = { ok: true, digest: 'withdrawn', release };
       let host!: ReturnType<typeof useCreationHost<StatementInput, string[]>>;
       function Harness() {
         host = useCreationHost<StatementInput, string[]>({
-          initial: { ok: true, digest: 'initial', release: bundledRelease },
+          initial: { ok: true, digest: 'initial', release: initialRelease },
           scope: 'test',
           locale: 'en',
           types,
@@ -75,7 +82,7 @@ test('all three creation profiles retain populated type drafts through withdrawa
       expect(host.metadata.ready).toBe(false);
       expect(host.types.some((entry) => entry.id === type)).toBe(true);
       expect(host.factsByType[type]).toEqual([statement]);
-      next = { ok: true, digest: 'initial', release: bundledRelease };
+      next = { ok: true, digest: 'initial', release: initialRelease };
       await act(async () => host.refreshMetadata());
       expect(host.metadata.ready).toBe(true);
       expect(host.types.filter((entry) => entry.id === type)).toHaveLength(1);
