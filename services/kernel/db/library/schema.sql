@@ -7249,10 +7249,52 @@ CREATE INDEX copy_account_created ON library.copy USING btree (route, account_id
 
 
 --
+-- Name: copy_account_kind_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_kind_created ON library.copy USING btree (route, account_id, kind, created_at, copy_id) WHERE ((deletion_id IS NULL) AND (kind IS NOT NULL));
+
+
+--
+-- Name: copy_account_kind_status_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_kind_status_created ON library.copy USING btree (route, account_id, kind, status, created_at, copy_id) WHERE ((deletion_id IS NULL) AND (kind IS NOT NULL));
+
+
+--
+-- Name: copy_account_status_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_status_created ON library.copy USING btree (route, account_id, status, created_at, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
 -- Name: copy_account_subject_created; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX copy_account_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id);
+
+
+--
+-- Name: copy_account_subject_kind_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_subject_kind_created ON library.copy USING btree (route, account_id, subject_id, kind, created_at, copy_id) WHERE ((deletion_id IS NULL) AND (kind IS NOT NULL));
+
+
+--
+-- Name: copy_account_subject_kind_status_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_subject_kind_status_created ON library.copy USING btree (route, account_id, subject_id, kind, status, created_at, copy_id) WHERE ((deletion_id IS NULL) AND (kind IS NOT NULL));
+
+
+--
+-- Name: copy_account_subject_status_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_subject_status_created ON library.copy USING btree (route, account_id, subject_id, status, created_at, copy_id) WHERE (deletion_id IS NULL);
 
 
 --
