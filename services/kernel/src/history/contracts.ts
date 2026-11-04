@@ -314,6 +314,11 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.semantic.links.moving.v1': personal('subject'),
   'com.rezics.semantic.links.projected.v1': nonPersonal,
   'com.rezics.semantic.links.visibility-changed.v1': personal('subject'),
+  // Public subject-page publication envelopes have no account payload; command identity stays independent.
+  'com.rezics.semantic.subject_page.dependencies_changed.v1': nonPersonal,
+  'com.rezics.semantic.subject_page.repair_queued.v1': nonPersonal,
+  'com.rezics.semantic.subject_page.repair_requested.v1': nonPersonal,
+  'com.rezics.semantic.subject_page.work_committed.v1': nonPersonal,
   'com.rezics.statement.accepted.v1': nonPersonal,
   'com.rezics.statement.proposed.v1': nonPersonal,
   'com.rezics.statement.rejected.v1': nonPersonal,
