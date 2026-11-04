@@ -122,7 +122,7 @@ test('default selected-family COPY planning joins only selected VN links and kee
     });
     const converted = registration.convert(
       { external_id: selected.key, record_revision: selected.revision, record: selected.payload },
-      { source: crossMediaAliases.vndb },
+      { source: crossMediaAliases.vndb, subjectId: '00000000-0000-4000-8000-000000000411' },
     );
     const urls = converted.proposals.flatMap((command) =>
       command.op === 'propose' && command.statement.property.id === 'schema:url'
