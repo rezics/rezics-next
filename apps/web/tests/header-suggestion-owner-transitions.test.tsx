@@ -60,6 +60,13 @@ const contextualResult = (): SuggestionResult => ({
           property: 'schema:illustrator',
           role: { value: 'Illustrator', language: 'en' },
         },
+        relation: {
+          kind: 'work',
+          id: '123e4567-e89b-12d3-a456-426614174022',
+          label: { value: 'A Tale of Two Cities', language: 'en' },
+          date: { state: 'value', property: 'schema:datePublished', value: '1859-04', precision: 'month' },
+        },
+        overflow: true,
       },
     },
   ],
@@ -352,6 +359,11 @@ test('same-title context stays accessible and pointer and keyboard choose the sa
         ['Illustrator', 'en', 'auto'],
         ['Milo Manara', 'en', 'auto'],
       ]);
+      const relation = app.options()[1]!.querySelector('[data-suggestion-work-relation]')!;
+      expect(relation.querySelector('bdi')?.textContent).toBe('A Tale of Two Cities');
+      expect(relation.querySelector('bdi')?.lang).toBe('en');
+      expect(relation.querySelector('time')?.getAttribute('dateTime')).toBe('1859-04');
+      expect(relation.textContent).toContain('1859');
       const href = app.options()[1]!.querySelector('a')!.getAttribute('href')!;
       if (mode === 'keyboard') {
         await act(async () => app.key('ArrowDown'));

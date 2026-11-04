@@ -8,6 +8,7 @@ import { DiscoveryPageSchema, discoveryHttpPage, type DiscoveryHttpPage } from '
 import { chooseLabel } from '../../semantic/language.ts';
 import { compileKinds } from '../query.ts';
 import { readSubjectSummaries, summaryAuthorization, type SubjectSummary } from '../../semantic/summaries.ts';
+import { createNativeSuggestionWorkContextReader } from '../suggestion-context-native.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../../semantic/http/summaries.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
 import { relatedReadEligibility } from '../../semantic/eligibility.ts';
@@ -115,18 +116,7 @@ const workContext = t.Union([
         ),
       ),
       overflow: t.Optional(
-        t.Object(
-          {
-            destination: t.Object(
-              {
-                id: t.String({ format: 'uuid' }),
-                kind: t.Union([t.Literal('subject'), t.Literal('work'), t.Literal('release')]),
-              },
-              object,
-            ),
-          },
-          object,
-        ),
+        t.Boolean(),
       ),
     },
     object,
@@ -896,11 +886,15 @@ export function searchRoutes<App>(
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           const scopeAccess = routeAccess();
+          const suggestionWorkContext = scopeAccess
+            ? createNativeSuggestionWorkContextReader({ pool, access: scopeAccess, actor, routeKey })
+            : undefined;
           let completed: Static<typeof suggestResponse> | undefined;
           await search.suggest(query.q, query.limit, query.languages, {
             deadline: job.deadline,
             ...(filter === undefined ? {} : { filter }),
             ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
+            ...(suggestionWorkContext ? { suggestionWorkContext } : {}),
             async complete(page) {
               completed = await fill(page, authorize, query.languages);
             },

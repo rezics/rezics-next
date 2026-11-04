@@ -26,8 +26,8 @@ export type SuggestionWorkContext =
         label: SuggestionContextLabel;
         date?: SuggestionContextDate;
       }>;
-      /** An admitted continuation destination, never a guessed Subject route or count. */
-      overflow?: Readonly<{ destination: Readonly<{ id: string; kind: 'subject' | 'work' | 'release' }> }>;
+      /** Disclosed producer overflow only; it supplies no destination or count. */
+      overflow?: boolean;
     }>
   | Readonly<{
       subjectId: string;
@@ -162,13 +162,8 @@ function validContext(value: unknown, subjectId: string): value is SuggestionWor
   if (value.overflow !== undefined) {
     const overflow = value.overflow;
     if (
-      !record(overflow) ||
-      !exact(overflow, ['destination']) ||
-      !record(overflow.destination) ||
-      !exact(overflow.destination, ['id', 'kind']) ||
-      typeof overflow.destination.id !== 'string' ||
-      !uuid.test(overflow.destination.id) ||
-      !['subject', 'work', 'release'].includes(String(overflow.destination.kind))
+      typeof overflow !== 'boolean' ||
+      overflow !== true
     )
       return false;
   }
@@ -201,7 +196,9 @@ async function readContexts(
       languages: [...options.languages],
       deadline: options.deadline,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ProblemError && ['index_not_ready', 'search_restart_required'].includes(error.code))
+      throw error;
     return unavailablePage(subjectIds);
   }
 

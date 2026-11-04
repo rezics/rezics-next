@@ -1785,6 +1785,7 @@ export function createSearchService({
         deadline: number;
         filter?: unknown;
         scope?: LeafOptions;
+        suggestionWorkContext?: SuggestionWorkContextReader;
         complete(page: { subjects: Result[]; as_of: string }): Promise<void>;
       },
     ) {
@@ -1815,7 +1816,9 @@ export function createSearchService({
         hits?: readonly CheckedHit[],
       ) =>
         completeSuggestionWorkContext(page, {
-          ...(suggestionWorkContext ? { reader: suggestionWorkContext } : {}),
+          ...((read?.suggestionWorkContext ?? suggestionWorkContext)
+            ? { reader: read?.suggestionWorkContext ?? suggestionWorkContext }
+            : {}),
           languages: options.languages ?? [],
           deadline: contextDeadline,
           ...(read?.complete ? { complete: read.complete } : {}),

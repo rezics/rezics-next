@@ -421624,35 +421624,7 @@
                                     "type": "object"
                                   },
                                   "overflow": {
-                                    "additionalProperties": false,
-                                    "properties": {
-                                      "destination": {
-                                        "additionalProperties": false,
-                                        "properties": {
-                                          "id": {
-                                            "type": "string",
-                                            "format": "uuid"
-                                          },
-                                          "kind": {
-                                            "enum": [
-                                              "subject",
-                                              "work",
-                                              "release"
-                                            ],
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "id",
-                                          "kind"
-                                        ],
-                                        "type": "object"
-                                      }
-                                    },
-                                    "required": [
-                                      "destination"
-                                    ],
-                                    "type": "object"
+                                    "type": "boolean"
                                   }
                                 },
                                 "required": [

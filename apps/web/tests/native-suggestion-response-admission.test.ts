@@ -54,7 +54,7 @@ const workContext = (subjectId: string) => ({
     label: { value: 'Earthsea', language: 'en' },
     date: { state: 'value', property: 'schema:datePublished', value: '1968-06', precision: 'month' },
   },
-  overflow: { destination: { id: second, kind: 'subject' } },
+  overflow: true,
 });
 const page = (subjects: unknown[], extra: Record<string, unknown> = {}) => ({ subjects, as_of: stamp, ...extra });
 
@@ -113,7 +113,7 @@ test('a trailing malformed native row is refused before truncation or type-label
   expect(JSON.stringify(body)).not.toContain(sentinel);
 });
 
-test('qualified context preserves partial dates and admitted overflow, while mismatched trailing context is refused', async () => {
+test('qualified context preserves partial dates and disclosed overflow, while mismatched trailing context is refused', async () => {
   release = { types: { 'schema:Book': { en: sentinel } } };
   native = page([row(first, { workContext: workContext(first) })]);
   const admitted = await (await admit(1)).json();

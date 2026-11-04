@@ -30,7 +30,7 @@ type SuggestionWorkContextSchema = import("typebox").TUnion<[
         status: import("typebox").TLiteral<"available">;
         creator: import("typebox").TObject<{ id: import("typebox").TString; label: SuggestionContextLabelSchema; property: import("typebox").TString; role: SuggestionContextLabelSchema }>;
         relation: import("typebox").TOptional<import("typebox").TObject<{ kind: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]>; id: import("typebox").TString; label: SuggestionContextLabelSchema; date: import("typebox").TOptional<SuggestionContextDateSchema> }>>;
-        overflow: import("typebox").TOptional<import("typebox").TObject<{ destination: import("typebox").TObject<{ id: import("typebox").TString; kind: import("typebox").TUnion<[import("typebox").TLiteral<"subject">, import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">]> }> }>>;
+        overflow: import("typebox").TOptional<import("typebox").TBoolean>;
     }>,
     import("typebox").TObject<{ subjectId: import("typebox").TString; status: import("typebox").TUnion<[import("typebox").TLiteral<"absent">, import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"withheld">, import("typebox").TLiteral<"unavailable">]> }>
 ]>;
@@ -39,7 +39,7 @@ type SuggestionContextDate =
     | { state: "value"; property: string; value: string; precision: "year" | "month" | "day" }
     | { state: "unknown" | "no_value" | "withheld" | "unavailable" | "not_applicable"; property: string };
 type SuggestionWorkContext =
-    | { subjectId: string; status: "available"; creator: { id: string; label: SuggestionContextLabel; property: string; role: SuggestionContextLabel }; relation?: { kind: "work" | "release"; id: string; label: SuggestionContextLabel; date?: SuggestionContextDate }; overflow?: { destination: { id: string; kind: "subject" | "work" | "release" } } }
+    | { subjectId: string; status: "available"; creator: { id: string; label: SuggestionContextLabel; property: string; role: SuggestionContextLabel }; relation?: { kind: "work" | "release"; id: string; label: SuggestionContextLabel; date?: SuggestionContextDate }; overflow?: boolean }
     | { subjectId: string; status: "absent" | "not_applicable" | "empty" | "withheld" | "unavailable" };
 export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
     kind: import("typebox").TLiteral<"item">;

@@ -50,7 +50,7 @@ export const suggestionWorkContextSchema: v.GenericSchema<SuggestionWorkContext>
         date: v.exactOptional(date),
       }),
     ),
-    overflow: v.exactOptional(v.strictObject({ destination: v.strictObject({ id, kind: v.picklist(['subject', 'work', 'release']) }) })),
+    overflow: v.exactOptional(v.literal(true)),
   }),
   v.strictObject({
     subjectId: id,
