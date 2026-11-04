@@ -253,7 +253,7 @@ export function ProfileCard({
             : null}
         </div>
         {profile && advice ? (
-          <form>
+          <form
             className="space-y-5"
             noValidate
             aria-busy={busy || uploading}
