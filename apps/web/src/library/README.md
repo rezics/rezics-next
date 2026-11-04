@@ -1,5 +1,17 @@
 # Saved Library views
 
+## My uploaded media
+
+`/library/media` reads one native `GET /v1/media` page for the admitted account and its opaque cursor. Sparse empty
+pages retain their continuation; each cursor replaces the current page instead of accumulating history. The page
+shows only the native purpose, state, admitted type and sizes, timestamps, disclosed container kind and action
+advice. It never fetches image bodies for inventory. A media destination appears only for a native-advised variant
+and still passes through the Worker download authorization at use. Erasure uses the current `media.erase` owner
+command; uncertain results keep the original same-key intent and current readback never turns it into a receipt.
+
+Decision: inventory resume stays guidance unless the original browser composer still owns the matching reservation
+identity and file; the Library never recreates or reuploads either one.
+
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
 otherwise use `all`. Settings edits `all` and individual admitted types. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`

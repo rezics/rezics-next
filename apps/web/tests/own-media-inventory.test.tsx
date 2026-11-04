@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { OwnMediaInventoryPage } from '../src/media/own-inventory/wire';
+import { parseOwnMediaInventoryPage, type OwnMediaInventoryPage } from '../src/media/own-inventory/wire';
 import { advisedMediaDestinations, eraseIntentFor, indexOwnMediaPage } from '../src/media/own-inventory/inventory';
 
 const id = '01a1a3b1-b7d4-7738-9f8b-2200fe3e8395';
@@ -37,6 +37,21 @@ test('inventory pages keep sparse continuation distinct from terminal empty and 
   expect(indexOwnMediaPage(page([], 'opaque-cursor'))).toMatchObject({ entries: [], nextCursor: 'opaque-cursor' });
   expect(indexOwnMediaPage(page([], null)).nextCursor).toBeNull();
   expect(() => indexOwnMediaPage(page([entry(), entry()]))).toThrow();
+});
+
+test('the wire consumer copies only admitted public fields and rejects advice for an unusable row', () => {
+  const parsed = parseOwnMediaInventoryPage({
+    ...page([entry()]),
+    entries: [{ ...entry(), storageKey: 'private-key', heldReason: 'private-reason' }],
+  });
+  expect(parsed?.entries[0]).not.toHaveProperty('storageKey');
+  expect(parsed?.entries[0]).not.toHaveProperty('heldReason');
+  const available = entry();
+  expect(
+    parseOwnMediaInventoryPage(
+      page([{ ...available, state: 'uploaded', actions: { ...available.actions, read: available.actions.read } }]),
+    ),
+  ).toBeNull();
 });
 
 test('download links come only from current native advice and erase intent binds the selected owner row', () => {
