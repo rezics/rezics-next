@@ -241,7 +241,7 @@ export function OrganizationDeleteContent({
         uncertain.kind === 'pending'
           ? uncertain.value.operationKey
           : saved?.organizationId === selected
-            ? saved.operationKey
+            ? saved?.operationKey
             : undefined,
       active: true,
       source: organizationId,
