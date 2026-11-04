@@ -7780,7 +7780,7 @@
   "library_vndb_action_skip": "Diese Zeile überspringen",
   "library_vndb_action_state": "Einen Bibliotheksstatus wählen",
   "library_vndb_admission_error": "Native Zulassung meldete {code}. Ungültiges XML oder XML über 2 MiB wird mit HTTP 400 abgelehnt.",
-  "library_vndb_apply_progress": "{applied} Zeilen angewendet; für {total} ausgewählte Zeilen liegen Quittungen vor.",
+  "library_vndb_apply_progress": "{applied} Zeilen angewendet; {total} Zeilen in dieser Auswahl.",
   "library_vndb_apply_selection": "{count} geprüfte Zeilen anwenden",
   "library_vndb_applying": "{applied} von {total} Zeilen angewendet; {applying} werden gerade verarbeitet.",
   "library_vndb_bounds": "Die native Zulassung prüft XML unabhängig: UTF-8-XML ist auf 2 MiB begrenzt; ungültiges XML und überschrittene XML-Größe ergeben HTTP 400. Für maskiertes JSON gilt zusätzlich eine Leitungslänge von 12 MiB + 64 Byte und HTTP 413. Die Browser-Dateigröße ist nicht die Leitungslänge; nur die native Zulassung entscheidet.",

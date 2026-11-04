@@ -7780,7 +7780,7 @@
   "library_vndb_action_skip": "이 행 건너뛰기",
   "library_vndb_action_state": "라이브러리 상태 선택",
   "library_vndb_admission_error": "네이티브 접수에서 {code}을(를) 반환했습니다. 잘못된 XML 또는 2MiB 초과 XML은 HTTP 400으로 거부됩니다.",
-  "library_vndb_apply_progress": "{applied}개 행을 적용했습니다. 선택한 {total}개 행의 영수증이 있습니다.",
+  "library_vndb_apply_progress": "{applied}개 행을 적용했습니다. 이번 선택은 총 {total}개 행입니다.",
   "library_vndb_apply_selection": "검토한 {count}개 행 적용",
   "library_vndb_applying": "{total}개 중 {applied}개 행 적용, 현재 {applying}개 처리 중.",
   "library_vndb_bounds": "네이티브 접수는 XML 크기를 별도로 확인합니다. UTF-8 XML은 2MiB까지이며, 잘못되었거나 초과하면 HTTP 400을 반환합니다. 이스케이프된 JSON에는 별도의 12MiB + 64바이트 전송 한도가 있으며 초과하면 HTTP 413입니다. 브라우저 파일 크기는 전송 크기가 아닙니다. 요청 허용 여부는 네이티브 접수만 판단합니다.",

@@ -7780,7 +7780,7 @@
   "library_vndb_action_skip": "略過此列",
   "library_vndb_action_state": "選擇一個收藏庫狀態",
   "library_vndb_admission_error": "原生接納回傳 {code}。無效 XML 或超過 2 MiB 的 XML 會被 HTTP 400 拒絕。",
-  "library_vndb_apply_progress": "已套用 {applied} 列；所選 {total} 列已有回執。",
+  "library_vndb_apply_progress": "已套用 {applied} 列；這次選取共 {total} 列。",
   "library_vndb_apply_selection": "套用已審核的 {count} 列",
   "library_vndb_applying": "已套用 {total} 列中的 {applied} 列；正在處理 {applying} 列。",
   "library_vndb_bounds": "原生接納會個別檢查 XML：UTF-8 XML 上限為 2 MiB；無效或超限的 XML 會回傳 HTTP 400。轉義後的 JSON 另有 12 MiB + 64 位元組的傳輸上限，超限會回傳 HTTP 413。瀏覽器檔案大小不等於傳輸大小，只有原生接納能判斷要求是否符合限制。",

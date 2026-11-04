@@ -7780,7 +7780,7 @@
   "library_vndb_action_skip": "Omitir esta fila",
   "library_vndb_action_state": "Elegir un estado de Biblioteca",
   "library_vndb_admission_error": "La admisión nativa devolvió {code}. El XML no válido o de más de 2 MiB se rechaza con HTTP 400.",
-  "library_vndb_apply_progress": "Se aplicaron {applied} filas; {total} filas seleccionadas tienen recibos.",
+  "library_vndb_apply_progress": "{applied} filas aplicadas; {total} filas en esta selección.",
   "library_vndb_apply_selection": "Aplicar {count} filas revisadas",
   "library_vndb_applying": "Se aplicaron {applied} de {total} filas; se están procesando {applying}.",
   "library_vndb_bounds": "La admisión nativa comprueba el XML por separado: el XML UTF-8 tiene un límite de 2 MiB; el XML no válido o demasiado grande devuelve HTTP 400. El JSON escapado tiene un límite independiente de 12 MiB + 64 bytes y devuelve HTTP 413. El tamaño del archivo en el navegador no es el tamaño de la solicitud; solo la admisión nativa decide si cabe.",
