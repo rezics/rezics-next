@@ -58,8 +58,14 @@ export function useOrganizationEpisode(
     holder.current = createEpisode(source, descriptor, viewer, cache, ++next.current);
   }
   const episode = holder.current;
-  if (episode.descriptor !== descriptor || episode.viewer !== viewer || episode.cache !== cache) episode.retire();
-  if (episode.admitted && (!ready || episode.session !== session)) episode.retire();
+  if (episode.descriptor !== descriptor || episode.viewer !== viewer || episode.cache !== cache) {
+    if (!episode.retired) console.error('organization-debug cache', episode.key, episode.cache, cache);
+    episode.retire();
+  }
+  if (episode.admitted && (!ready || episode.session !== session)) {
+    if (!episode.retired) console.error('organization-debug session', episode.key, episode.session, session, ready);
+    episode.retire();
+  }
   if (ready && !episode.admitted && !episode.retired) {
     episode.admitted = true;
     episode.session = session;
