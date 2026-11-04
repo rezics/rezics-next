@@ -46,6 +46,7 @@ test('watch pages strictly decode the installed kinds and conceal unavailable ta
 test('generated inventory and exact removal operations preserve kind, cursor, revision and JSON key codec', async () => {
   const requests: { request: Request; body: unknown }[] = [];
   const client = createKernelClient('http://kernel.local', {
+    headers: { authorization: 'Bearer alice' },
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);

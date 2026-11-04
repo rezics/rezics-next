@@ -6,7 +6,7 @@ import { NotificationEditor } from '../src/settings/notification-recovery';
 import type { NotificationChange, NotificationWriteResult } from '../src/settings/preferences';
 import { WatchNotificationGuide } from '../src/settings/watch-notification-guide';
 import { threadLocation } from '../src/threads/thread-href';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, locales, overwriteGetLocale, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { decodeInboxPage, loadInboxPage, resolveInboxItems } = await import('../src/inbox/inbox-read');
@@ -153,6 +153,7 @@ test('all locales explain watch categories and mandatory outcomes, link preferen
   const original = getLocale();
   try {
     for (const locale of locales) {
+      overwriteGetLocale(() => locale);
       setLocale(locale, { reload: false });
       const item = base;
       const html = renderToStaticMarkup(
@@ -175,6 +176,7 @@ test('all locales explain watch categories and mandatory outcomes, link preferen
       expect(renderToStaticMarkup(createElement(InboxPreferencesLink))).toContain(`/${locale}/settings#notifications`);
     }
   } finally {
+    overwriteGetLocale(() => original);
     setLocale(original, { reload: false });
   }
 });

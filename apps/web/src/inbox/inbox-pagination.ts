@@ -54,7 +54,7 @@ export function receiveInboxPage(
   if (state.result === result) return state;
   if (result?.signedIn && result.state === 'ready') {
     // The last successful page replaces the prior window so retained rows stay bounded by 20.
-    return { ...state, earlier: null, current: result, result };
+    return { ...state, earlier: null, current: { items: result.items, next: result.next }, result };
   }
   if (result && !transient(result)) return { ...state, earlier: null, current: null, result };
   return { ...state, result };

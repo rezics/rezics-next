@@ -171,9 +171,9 @@ test('fixed 20-row visits do not fan out or retain unrelated notices across 1, 1
       ...Array.from({ length: unrelated }, (_, index) => notice(`unrelated-${index}`, 'reply')),
     ];
     const pageWire = JSON.stringify({ items: serverRows.slice(0, 20), next: null });
-    let wireBytes = 0;
     for (const visits of [1, 10, 100]) {
       let requests = 0;
+      let wireBytes = 0;
       let retainedRows = 0;
       let materializedBytes = 0;
       const client = createKernelClient('http://kernel.local', {
