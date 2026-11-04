@@ -2549,9 +2549,14 @@ test('admission reclaims inactive file pages once, re-probes, then reports no-sl
     new Response(child.stderr).text(),
   ]);
   expect(code, stderr).toBe(0);
-  expect(JSON.parse(stdout.split('\n').filter((line) => line.startsWith('TRY_ONCE '))[0]!.slice('TRY_ONCE '.length)).status).toBe(
-    'no-slot',
-  );
+  expect(
+    JSON.parse(
+      stdout
+        .split('\n')
+        .filter((line) => line.startsWith('TRY_ONCE '))[0]!
+        .slice('TRY_ONCE '.length),
+    ).status,
+  ).toBe('no-slot');
   const reclaim = events().filter((event) => event.kind === 'reclaim');
   expect(reclaim).toHaveLength(1);
   expect(reclaim[0]).toMatchObject({ bytes: inactive, writable: true });
@@ -2599,9 +2604,14 @@ test('a host without writable memory.reclaim keeps current admission and never f
       new Response(child.stderr).text(),
     ]);
     expect(code, stderr).toBe(0);
-    expect(JSON.parse(stdout.split('\n').filter((line) => line.startsWith('TRY_ONCE '))[0]!.slice('TRY_ONCE '.length)).status).toBe(
-      'no-slot',
-    );
+    expect(
+      JSON.parse(
+        stdout
+          .split('\n')
+          .filter((line) => line.startsWith('TRY_ONCE '))[0]!
+          .slice('TRY_ONCE '.length),
+      ).status,
+    ).toBe('no-slot');
     expect(stderr).not.toContain('memory.reclaim');
     const reclaim = events().filter((event) => event.kind === 'reclaim');
     expect(reclaim).toHaveLength(1);
