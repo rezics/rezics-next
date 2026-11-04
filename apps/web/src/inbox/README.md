@@ -1,36 +1,32 @@
-# Inbox watch presentation
+# Inbox
 
-Inbox uses the current private notifications list, capped count and forward seen marker. The retained native
-DTO and Accounts kind catalogue admit `reply`, `mention` and `moderation_decision`. Content has adopted
-`board_activity` for new published thread openings, but this base has neither that registered optional kind nor a
-released watch notice DTO. No native thread-watch kind name is assumed.
+Inbox reads the signed-in account's private `GET /v1/accounts/{accountId}/notifications` page. The native response is
+the disclosure boundary: each closed item supplies its current actor and target state, owner summary, allowed open
+identity, one-item mark-seen identity and unread state. The Web page uses a default limit of 20 and carries the opaque
+continuation unchanged. A malformed or unknown item fails the whole page. Empty pages may still offer continuation.
 
-Decision: keep watch decoding behind an unavailable local consumer binding until Content releases its native DTO;
-unsupported notices fail the entire page instead of being filtered out or described as replies.
+The browser performs no actor or target hydration for an Inbox page. It uses owner summaries instead of fetching post
+bodies. Withheld actors are shown neutrally and withheld target titles or IDs are not rendered. A reporter outcome may
+still open its admitted report-status destination with withheld target context. Open actions use only the supported
+native identity and existing localized route builders; supplied URLs are never executed.
+When native disclosure names both a thread and a board, the row shows both current titles while opening only the
+admitted thread-post destination.
 
-`watch-notices.ts` defines presentation categories, not wire kinds, routes or stored subscriptions. A future native
-adapter supplies exact kind/field decoding and a current thread-only target read under the page's credential.
-`loadInboxPage` accepts that adapter explicitly; its production default is unavailable. The adapter must return
-null for unknown wire kinds, and null from a target read only for an undisclosed, removed or missing target.
-Malformed responses and transport failures must throw. This port does not bind a producer or invent a watch API.
-Post-backed notices reuse the existing post read; watch destinations additionally require the current post's exact
-post and thread identities. Thread-only destinations require a matching current thread identity. Board notices open
-the disclosed new thread, never a guessed board destination. Only current target text enters the presentation.
+Reading the page or opening a destination does not acknowledge notices. A chosen unread notice has an explicit
+keyboard-reachable action which acknowledges only that notice. The existing bulk action still acknowledges through
+the latest loaded notice. Each command uses its original account, identity and idempotency key for an explicit retry;
+an uncertain result does not change unread rows or subtract from the badge. The badge preserves the native basis,
+capped state and disclosure witness, and lower bounds are labelled as lower bounds.
 
-Native and adapter notices share validation, distinct-target caching and one distinct-author batch. One page has
-at most 20 notices, one private list read, at most 20 target reads and one optional public actor batch. Unavailable
-targets have no actor identity, text or destination; they never borrow a moderation actor. A malformed/unsupported
-row fails the page. Unrecognized presentation kinds use neutral notification language. Opaque continuation,
-retained unread counts and explicit forward seen recovery retain their existing semantics. No failed read marks
-anything seen. Viewer retirement continues to discard late reads and seen recovery.
+Inbox links to `/settings#notifications` for supported preferences. The thread watch toggle remains on its existing
+thread page; board subscription management remains in the existing Settings Watches section.
 
-Inbox links to `/settings#notifications`. Settings explains thread updates, new thread openings on watched boards,
-in-app-only delivery and mandatory moderation outcomes in every locale. It renders only the optional controls
-returned by Accounts. `board_activity` has a localized name when natively supported; no default, storage or
-thread-watch preference key is introduced. Existing `NotificationEditor` retains expected version, original
-semantic patch and key, current-read recovery and session retirement. Watch management stays in Settings' existing
-private Watches section; page watch controls remain with Web.
+**Decision:** Page reads and target navigation never imply acknowledgement; only the selected-item command or the
+existing explicit bulk frontier may mark notices read.
 
-The mixed-watch, inaccessible-target and read-failure Page stories are illustrative consumer examples, not native
-acceptance evidence. Root owns screenshot approval. The actual watch binding remains unavailable until the native
-contract is delivered; no email, backfill, subscription store or second API is provided here.
+**Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. A
+successful continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed
+continuation it retains only the prior 20-row window. A chosen or bulk acknowledgement dispatches one native command,
+followed by the existing deliberate badge/list invalidation. Sequential visits release the previous page and callbacks;
+the browser growth check varies unrelated list size and visits while checking request, retained-row and materialized-byte
+bounds. Native database and Access history growth are owned by Content, not inferred from browser requests.

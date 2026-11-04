@@ -5,13 +5,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { NotificationEditor } from '../src/settings/notification-recovery';
 import type { NotificationChange, NotificationWriteResult } from '../src/settings/preferences';
 import { WatchNotificationGuide } from '../src/settings/watch-notification-guide';
+import { threadLocation } from '../src/threads/thread-href';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
-import type { InboxWatchBinding, WatchInboxNotice } from '../src/inbox/watch-notices';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { decodeInboxPage, loadInboxPage, resolveInboxItems } = await import('../src/inbox/inbox-read');
 const { InboxRows, InboxPreferencesLink } = await import('../src/inbox/inbox-page');
-const base = {
+type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
+type ResolvedNotice = import('../src/inbox/inbox-read').ResolvedInboxPage['items'][number];
+
+function wireNotice(overrides: Partial<InboxNotice> = {}, accountId = 'viewer'): InboxNotice {
+  const base = {
   id: 'notice',
   kind: 'reply',
   createdAt: '2026-11-03T10:00:00.000Z',
@@ -21,142 +25,128 @@ const base = {
   postId: 'post',
   decisionId: null,
   reportId: null,
-};
-const binding: InboxWatchBinding = {
-  decode: (value) => {
-    const fixture = value as { example?: 'thread' | 'board' };
-    return fixture?.example
-      ? {
-          ...base,
-          id: fixture.example,
-          kind: 'owner-fixture',
-          watch: fixture.example,
-          postId: fixture.example === 'board' ? null : 'post',
-        }
-      : null;
-  },
-  readThread: async (id) => ({ id, title: 'New discussion' }),
-};
-const raw = {
-  items: [
-    base,
-    { example: 'thread' },
-    { example: 'board' },
-    { ...base, id: 'mention', kind: 'mention' },
-    {
-      ...base,
-      id: 'decision',
-      kind: 'moderation_decision',
-      actorId: null,
-      postId: null,
-      threadId: null,
-      decisionId: 'decision',
+  ...overrides,
+  };
+  const target = overrides.target ?? {
+    state: base.kind === 'moderation_decision' ? 'withheld' as const : 'available' as const,
+    threadId: base.kind === 'moderation_decision' ? null : base.threadId,
+    postId: base.kind === 'moderation_decision' ? null : base.postId,
+    boardId: base.kind === 'board_activity' ? 'board' : null,
+    threadTitle: base.kind === 'moderation_decision' ? null : 'A current thread',
+    boardTitle: base.kind === 'board_activity' ? 'Books' : null,
+  };
+  const actor = overrides.actor ?? (base.kind === 'moderation_decision'
+    ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
+    : {
+        state: 'available' as const,
+        accountId: base.actorId ?? 'actor',
+        displayName: 'Momo',
+        handle: 'momo',
+        avatarUrl: null,
+        automated: false,
+      });
+  const open = overrides.actions?.open ?? (base.kind === 'moderation_decision'
+    ? base.reportId
+      ? { kind: 'report_outcome' as const, reportId: base.reportId }
+      : base.decisionId
+        ? { kind: 'moderation_decision' as const, decisionId: base.decisionId }
+        : null
+    : { kind: 'thread_post' as const, threadId: base.threadId!, postId: base.postId! });
+  return {
+    ...base,
+    threadId: target.state === 'withheld' ? null : target.threadId,
+    postId: target.state === 'withheld' ? null : target.postId,
+    actorId: actor.state === 'available' ? actor.accountId : null,
+    actor,
+    target,
+    summary: 'A current owner summary',
+    actions: overrides.actions ?? {
+      open,
+      markSeen: { method: 'POST', path: `/v1/accounts/${accountId}/notifications/${base.id}:markSeen` },
     },
-  ],
-  next: 'opaque/+cursor==',
-};
+  };
+}
 
-test('mixed native and owner-adapted watch notices batch current targets and actors with exact destinations', async () => {
+const base: ResolvedNotice = { ...wireNotice(), text: 'Title', unavailable: false };
+
+test('an uncertain chosen acknowledgement keeps its exact retry visible after a fresh read', () => {
+  const item = { ...base, unread: false };
+  const html = renderToStaticMarkup(
+    createElement(InboxRows, {
+      page: { items: [item], next: null },
+      onMarkSeen: () => {},
+      onRetrySeen: () => {},
+      uncertainNoticeId: item.id,
+    }),
+  );
+  expect(html).toContain(m.inbox_notice_seen_retry());
+});
+
+test('the composed Inbox page includes installed watch kinds and does not hydrate actors or targets', async () => {
+  const raw = {
+    items: [
+      wireNotice({ id: 'reply' }),
+      wireNotice({ id: 'mention', kind: 'mention' }),
+      wireNotice({ id: 'thread-watch', kind: 'thread_watch' }),
+      wireNotice({ id: 'board-activity', kind: 'board_activity' }),
+      wireNotice({ id: 'decision', kind: 'moderation_decision', actorId: null, threadId: null, postId: null, decisionId: 'decision' }),
+    ],
+    next: 'opaque/+cursor==',
+  };
   const calls: string[] = [];
   const client = createKernelClient('http://kernel.local', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       const url = new URL(request.url);
       calls.push(url.pathname);
-      if (url.pathname === '/v1/accounts') {
-        expect(url.searchParams.get('ids')).toBe('actor');
-        return Response.json({ accounts: [{ id: 'actor', displayName: 'Momo' }] });
-      }
       expect(request.headers.get('authorization')).toBe('Bearer current');
       if (url.pathname.endsWith('/notifications')) {
         expect(url.searchParams.get('cursor')).toBe('opaque-input/+==');
         return Response.json(raw);
       }
-      if (url.pathname === '/v1/posts/post')
-        return Response.json({
-          post: {
-            id: 'post',
-            threadId: 'thread',
-            body: { type: 'doc', content: [{ type: 'text', text: 'Current post' }] },
-          },
-        });
-      if (url.pathname === '/v1/moderation-decisions/decision') return Response.json({ statement: 'Outcome' });
       throw new Error(`Unexpected request ${url.pathname}`);
     }) as typeof fetch,
   });
-  let threads = 0;
-  const page = await loadInboxPage(client, 'viewer', 'Bearer current', 'opaque-input/+==', {
-    ...binding,
-    readThread: async (id, context) => {
-      threads++;
-      expect(context.authorization).toBe('Bearer current');
-      return binding.readThread(id, context);
-    },
-  });
+  const page = await loadInboxPage(client, 'viewer', 'Bearer current', 'opaque-input/+==');
   expect(page.next).toBe(raw.next);
   expect(page.items).toHaveLength(5);
-  expect(page.items[1]).toMatchObject({
-    watch: 'thread',
-    actorName: 'Momo',
-    text: 'Current post',
-    href: `/${getLocale()}/threads/thread?post=post#post-post`,
-  });
-  expect(page.items[2]?.href).toContain('/threads/thread/new-discussion');
-  expect(calls.filter((path) => path === '/v1/posts/post')).toHaveLength(1);
-  expect(calls.filter((path) => path === '/v1/accounts')).toHaveLength(1);
-  expect(threads).toBe(1);
+  expect(page.items.map((item) => item.kind)).toEqual(['reply', 'mention', 'thread_watch', 'board_activity', 'moderation_decision']);
+  expect(page.items[1]).toMatchObject({ actorName: 'Momo', text: 'A current owner summary' });
+  const currentPost = threadLocation(getLocale(), { id: 'thread', title: 'A current thread' }, undefined, 'post');
+  expect(page.items[2]?.href).toBe(currentPost);
+  expect(page.items[3]?.href).toBe(currentPost);
+  expect(page.items[4]?.href).toBe(`/${getLocale()}/moderation/decisions/decision`);
+  expect(calls).toEqual(['/v1/accounts/viewer/notifications']);
 });
 
-test('unbound, unsupported and malformed rows fail the whole page without inheriting reply semantics', () => {
-  expect(() => decodeInboxPage(raw)).toThrow();
-  expect(
-    decodeInboxPage({ items: [{ ...base, watch: 'board', actorName: 'stale', href: '/stale' }], next: null }).items[0],
-  ).not.toHaveProperty('watch');
+test('malformed and unknown native kinds fail the whole page', () => {
+  const valid = wireNotice();
   for (const bad of [
-    { ...base, kind: 'unknown' },
-    { ...base, postId: null },
-    { ...base, createdAt: 'yesterday' },
-    { ...base, actorId: '../private' },
+    { ...valid, kind: 'unknown' },
+    { ...valid, postId: null },
+    { ...valid, createdAt: 'yesterday' },
+    { ...valid, actorId: '../private' },
+    { ...valid, actions: { ...valid.actions!, open: { kind: 'external', url: 'https://evil.test' } } },
   ])
-    expect(() => decodeInboxPage({ ...raw, items: [base, bad] }, binding)).toThrow();
-  const malformed = {
-    ...binding,
-    decode: () => ({ ...base, kind: 'owner-fixture', watch: 'board', threadId: '../secret' }) as WatchInboxNotice,
-  };
-  expect(() => decodeInboxPage({ items: [{}], next: null }, malformed)).toThrow();
+    expect(() => decodeInboxPage({ items: [valid, bad], next: null }, 'viewer')).toThrow();
 });
 
-test('withheld watch targets disclose no actor, title or destination; failed and mismatched reads fail truthfully', async () => {
-  const page = decodeInboxPage(raw, binding);
-  const reads = {
-    post: async () => null,
-    decision: async () => null,
-    report: async () => null,
-    thread: async () => null,
-  };
-  const hidden = await resolveInboxItems(page, reads);
-  for (const item of hidden.items) expect(item).toMatchObject({ unavailable: true, actorId: null, text: '' });
-  const html = renderToStaticMarkup(createElement(InboxRows, { page: hidden }));
-  expect(html).not.toContain('href=');
+test('withheld actors and report targets conceal private context while the admitted report link remains usable', async () => {
+  const hiddenNotice = wireNotice({
+    id: 'hidden-report', kind: 'moderation_decision', actorId: null, threadId: null, postId: null, reportId: 'report', decisionId: null,
+    target: { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null },
+    actions: {
+      open: { kind: 'report_outcome', reportId: 'report' },
+      markSeen: { method: 'POST', path: '/v1/accounts/viewer/notifications/hidden-report:markSeen' },
+    },
+  });
+  const page = await resolveInboxItems({ items: decodeInboxPage({ items: [hiddenNotice], next: null }, 'viewer').items, next: null });
+  expect(page.items[0]).toMatchObject({ unavailable: true, actorId: null, href: `/${getLocale()}/moderation/reports/report` });
+  const html = renderToStaticMarkup(createElement(InboxRows, { page }));
+  expect(html).toContain(`href="/${getLocale()}/moderation/reports/report"`);
   expect(html).not.toContain('data-actor-id=');
-  expect(html).not.toContain('Current post');
-  await expect(
-    resolveInboxItems(page, {
-      ...reads,
-      post: async () => {
-        throw new Error('offline');
-      },
-    }),
-  ).rejects.toThrow();
-  await expect(
-    resolveInboxItems(page, {
-      ...reads,
-      post: async () => ({ text: 'Wrong post', id: 'different', threadId: 'thread' }),
-    }),
-  ).rejects.toThrow();
-  await expect(
-    resolveInboxItems(page, { ...reads, thread: async () => ({ id: 'different', title: 'Secret' }) }),
-  ).rejects.toThrow();
+  expect(html).not.toContain('boardTitle');
+  expect(html).not.toContain('threadTitle');
 });
 
 test('all locales explain watch categories and mandatory outcomes, link preferences and label unknown kinds neutrally', () => {
@@ -164,7 +154,7 @@ test('all locales explain watch categories and mandatory outcomes, link preferen
   try {
     for (const locale of locales) {
       setLocale(locale, { reload: false });
-      const item = { ...base, text: 'Title', unavailable: false };
+      const item = base;
       const html = renderToStaticMarkup(
         createElement(InboxRows, {
           page: {

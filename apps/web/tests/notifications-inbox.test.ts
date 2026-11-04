@@ -16,18 +16,17 @@ import {
   restartInboxPage,
 } from '../src/inbox/inbox-pagination';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { resolveInboxItems } = await import('../src/inbox/inbox-read');
+const { decodeInboxPage, resolveInboxItems } = await import('../src/inbox/inbox-read');
 const { unreadBadgeLabel } = await import('../src/inbox/unread-badge');
 type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
-type InboxReads = import('../src/inbox/inbox-read').InboxReads;
 
 const thread = 'thread-1';
 const post = 'post-1';
 const decision = 'decision-1';
 const report = 'report-1';
 
-function notice(overrides: Partial<InboxNotice> = {}): InboxNotice {
-  return {
+function notice(overrides: Partial<InboxNotice> = {}, accountId = 'reporter-1'): InboxNotice {
+  const base: InboxNotice = {
     id: 'notice-1',
     kind: 'reply',
     createdAt: '2026-10-29T10:00:00.000Z',
@@ -39,121 +38,89 @@ function notice(overrides: Partial<InboxNotice> = {}): InboxNotice {
     unread: true,
     ...overrides,
   };
+  const target = overrides.target ?? {
+    state: base.kind === 'moderation_decision' ? 'withheld' as const : 'available' as const,
+    threadId: base.kind === 'moderation_decision' ? null : base.threadId,
+    postId: base.kind === 'moderation_decision' ? null : base.postId,
+    boardId: base.kind === 'board_activity' ? 'board-1' : null,
+    threadTitle: base.kind === 'moderation_decision' ? null : 'A current thread',
+    boardTitle: base.kind === 'board_activity' ? 'A current board' : null,
+  };
+  const actor = overrides.actor ?? (base.kind === 'moderation_decision'
+    ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
+    : base.actorId
+      ? {
+          state: 'available' as const,
+          accountId: base.actorId,
+          displayName: 'Momo',
+          handle: 'momo',
+          avatarUrl: null,
+          automated: false,
+        }
+      : { state: 'withheld' as const, displayName: 'Former or unavailable account' as const, handle: null, avatarUrl: null });
+  const open = overrides.actions?.open ?? (base.kind === 'moderation_decision'
+    ? base.reportId
+      ? { kind: 'report_outcome' as const, reportId: base.reportId }
+      : base.decisionId
+        ? { kind: 'moderation_decision' as const, decisionId: base.decisionId }
+        : null
+    : { kind: 'thread_post' as const, threadId: base.threadId!, postId: base.postId! });
+  return {
+    ...base,
+    threadId: target.state === 'withheld' ? null : target.threadId,
+    postId: target.state === 'withheld' ? null : target.postId,
+    actorId: actor.state === 'available' ? actor.accountId : null,
+    actor,
+    target,
+    summary: overrides.summary ?? 'A useful update summary',
+    actions: overrides.actions ?? {
+      open,
+      markSeen: {
+        method: 'POST',
+        path: `/v1/accounts/${encodeURIComponent(accountId)}/notifications/${encodeURIComponent(base.id)}:markSeen`,
+      },
+    },
+  };
 }
 
-test('inbox lists the kernel notification page newest first and renders each item from its named existing read', async () => {
-  const newest = notice({ id: 'newest', postId: 'post-2' });
-  const oldest = notice({ id: 'oldest', kind: 'mention', createdAt: '2026-10-28T10:00:00.000Z' });
-  const moderation = notice({
-    id: 'moderation',
-    kind: 'moderation_decision',
-    threadId: null,
-    postId: null,
-    decisionId: decision,
-    reportId: null,
+test('the composed notice supplies current summaries and exact localized destinations without hydration IO', async () => {
+  const page = await resolveInboxItems({
+    items: [
+      notice({ id: 'reply-雪', threadId: 'thread-雪', postId: 'post-雪' }),
+      notice({ id: 'mention', kind: 'mention', threadId: thread, postId: 'mentioned-post' }),
+      notice({ id: 'report', kind: 'moderation_decision', reportId: report, decisionId: null }),
+      notice({ id: 'decision', kind: 'moderation_decision', reportId: null, decisionId: decision }),
+    ],
+    next: 'opaque/+cursor==',
   });
-  const calls: string[] = [];
-  const reads: InboxReads = {
-    post: async (threadId, postId) => {
-      calls.push(`post:${threadId}:${postId}`);
-      return { title: 'A readable reply', href: `/threads/${threadId}#${postId}` };
-    },
-    decision: async (id) => {
-      calls.push(`decision:${id}`);
-      return { statement: 'A moderation statement', href: `/moderation/decisions/${id}` };
-    },
-    report: async (id) => {
-      calls.push(`report:${id}`);
-      return { outcome: 'actioned', href: `/reports/${id}` };
-    },
-  };
-
-  const page = await resolveInboxItems({ items: [newest, moderation, oldest], next: 'cursor-2' }, reads);
-
-  expect(page.items.map((item) => item.id)).toEqual(['newest', 'moderation', 'oldest']);
-  expect(page.items[0]?.href).toBe(`/threads/${thread}#post-2`);
-  expect(page.items[1]?.href).toBe(`/moderation/decisions/${decision}`);
-  expect(page.items[1]?.text).toBe('A moderation statement');
-  expect(page.next).toBe('cursor-2');
-  expect(calls).toEqual([`post:${thread}:post-2`, `decision:${decision}`, `post:${thread}:${post}`]);
-});
-
-test('readable replies and mentions carry their exact post through localized thread links', async () => {
-  const reads: InboxReads = {
-    post: async (_threadId, postId) => ({ text: `Readable ${postId}` }),
-    decision: async () => null,
-    report: async () => null,
-  };
-  const page = await resolveInboxItems(
-    {
-      items: [
-        notice({ id: 'reply-without-href', threadId: 'thread-雪', postId: 'reply-雪' }),
-        notice({ id: 'mention-without-href', kind: 'mention', threadId: 'thread-雪', postId: 'mentioned-雪' }),
-      ],
-      next: null,
-    },
-    reads,
-  );
-
-  expect(page.items.map(({ href, unavailable }) => ({ href, unavailable }))).toEqual([
-    { href: `/${getLocale()}/threads/thread-%E9%9B%AA?post=reply-%E9%9B%AA#post-reply-%E9%9B%AA`, unavailable: false },
-    {
-      href: `/${getLocale()}/threads/thread-%E9%9B%AA?post=mentioned-%E9%9B%AA#post-mentioned-%E9%9B%AA`,
-      unavailable: false,
-    },
+  expect(page.items.map((item) => item.href)).toEqual([
+    `/${getLocale()}/threads/thread-%E9%9B%AA?post=post-%E9%9B%AA#post-post-%E9%9B%AA`,
+    `/${getLocale()}/threads/${thread}?post=mentioned-post#post-mentioned-post`,
+    `/${getLocale()}/moderation/reports/${report}`,
+    `/${getLocale()}/moderation/decisions/${decision}`,
   ]);
+  expect(page.items.map((item) => item.text)).toEqual(Array(4).fill('A useful update summary'));
+  expect(page.items[0]).toMatchObject({ actorName: 'Momo', context: 'A current thread', unavailable: false });
+  expect(page.next).toBe('opaque/+cursor==');
 });
 
-test('items the reader can no longer see render as neutral unavailable rows', async () => {
-  const reads: InboxReads = {
-    post: async () => null,
-    decision: async () => null,
-    report: async () => null,
-  };
-  const page = await resolveInboxItems({ items: [notice()], next: null }, reads);
-
-  expect(page.items[0]?.unavailable).toBe(true);
-  expect(page.items[0]?.href).toBeUndefined();
-  expect(page.items[0]?.text).not.toMatch(/error|failed|forbidden|not found/i);
+test('unreadable ordinary notices fail the page while reporter outcomes remain openable', async () => {
+  const withheld = notice({
+    id: 'withheld', actorId: null, threadId: null, postId: null,
+    target: { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null },
+    actions: {
+      open: null,
+      markSeen: { method: 'POST', path: '/v1/accounts/reporter-1/notifications/withheld:markSeen' },
+    },
+  });
+  expect(() => decodeInboxPage({ items: [withheld], next: null }, 'reporter-1')).toThrow();
+  const reportNotice = notice({ id: 'report', kind: 'moderation_decision', reportId: report, decisionId: null });
+  const page = await resolveInboxItems(decodeInboxPage({ items: [reportNotice], next: null }, 'reporter-1'));
+  expect(page.items[0]).toMatchObject({ href: `/${getLocale()}/moderation/reports/${report}`, unavailable: true });
+  expect(JSON.stringify(page.items[0])).not.toContain('Hidden target text');
 });
 
-test('report outcomes use the reporter-readable report and appeal or takedown decisions link to the decision', async () => {
-  const calls: string[] = [];
-  const reads: InboxReads = {
-    post: async () => null,
-    decision: async (id) => {
-      calls.push(`decision:${id}`);
-      return { statement: 'Decision statement', href: `/moderation/decisions/${id}` };
-    },
-    report: async (id) => {
-      calls.push(`report:${id}`);
-      return { outcome: 'dismissed', href: `/reports/${id}` };
-    },
-  };
-  const page = await resolveInboxItems(
-    {
-      items: [
-        notice({ id: 'report-outcome', decisionId: null, reportId: report, threadId: null, postId: null }),
-        notice({
-          id: 'appeal-outcome',
-          kind: 'moderation_decision',
-          decisionId: decision,
-          reportId: null,
-          threadId: null,
-          postId: null,
-        }),
-      ],
-      next: null,
-    },
-    reads,
-  );
-
-  expect(page.items.map((item) => item.href)).toEqual([`/reports/${report}`, `/moderation/decisions/${decision}`]);
-  expect(page.items[0]?.text).toBe('dismissed');
-  expect(calls).toEqual([`report:${report}`, `decision:${decision}`]);
-});
-
-test('page and badge use private browser reads, open marks only the newest notice once, and the inbox is noindex', async () => {
+test('page and badge use private reads, require deliberate acknowledgement, and preserve honest lower bounds', async () => {
   const source = await readFile(new URL('../src/inbox/inbox-read.ts', import.meta.url), 'utf8');
   const route = await readFile(new URL('../src/routes/inbox.tsx', import.meta.url), 'utf8');
   const shell = await readFile(new URL('../src/shell/shell.tsx', import.meta.url), 'utf8');
@@ -161,36 +128,20 @@ test('page and badge use private browser reads, open marks only the newest notic
   expect(source).toContain('private, no-store');
   expect(route).toMatch(/noindex/);
   expect(source).toMatch(/markSeen/);
+  expect(source).toMatch(/markInboxNoticeSeen/);
+  expect(source).toMatch(/markInboxThrough/);
   expect(shell).toMatch(/unreadBadgeLabel|UnreadBadge/);
   expect(unreadBadgeLabel({ count: 99, capped: false })).toBe('99');
   expect(unreadBadgeLabel({ count: 100, capped: false })).toBe('99+');
-  expect(unreadBadgeLabel({ count: 4, capped: true })).toBe('99+');
-});
-
-test('inbox resolves repeated records once and stays within one list read plus one read per distinct record', async () => {
-  for (const pageSize of [5, 20]) {
-    const records = Array.from({ length: pageSize }, (_, index) =>
-      notice({ id: `notice-${index}`, postId: `post-${index % 3}` }),
-    );
-    let postReads = 0;
-    const reads: InboxReads = {
-      post: async () => {
-        postReads += 1;
-        return { title: 'Reply', href: '/threads/thread-1#post' };
-      },
-      decision: async () => null,
-      report: async () => null,
-    };
-    await resolveInboxItems({ items: records, next: null }, reads);
-    expect(postReads).toBe(3);
-    expect(1 + postReads + 1).toBeLessThanOrEqual(1 + 3 + 1);
-  }
+  expect(unreadBadgeLabel({ count: 4, capped: true })).toBe('≥4');
+  expect(unreadBadgeLabel({ count: 0, capped: true, basis: 'current-visible-lower-bound' })).toBe('≥0');
+  expect(unreadBadgeLabel({ count: 4, capped: false, basis: 'current-visible-lower-bound' })).toBe('≥4');
 });
 
 const { loadInboxPage, markInboxThrough } = await import('../src/inbox/inbox-read');
 const { loadReporterStatus } = await import('../src/moderation/reporter-status-read');
 
-test('a readable native post gets its exact Thread post anchor through loadInboxPage', async () => {
+test('the composed native post action gets its exact Thread post anchor without point reads', async () => {
   const readableNotice = notice({ id: 'native-post-notice', actorId: null, postId: 'native-post' });
   const requests: string[] = [];
   const client = createKernelClient('http://kernel.local', {
@@ -200,13 +151,7 @@ test('a readable native post gets its exact Thread post anchor through loadInbox
       requests.push(`${request.method} ${path}`);
       if (path === '/v1/accounts/reporter-1/notifications')
         return Response.json({ items: [readableNotice], next: null });
-      expect(path).toBe('/v1/posts/native-post');
-      return Response.json({
-        post: {
-          threadId: thread,
-          body: { type: 'paragraph', content: [{ type: 'text', text: 'A readable reply.' }] },
-        },
-      });
+      throw new Error(`Unexpected point read ${path}`);
     }) as typeof fetch,
   });
 
@@ -214,40 +159,10 @@ test('a readable native post gets its exact Thread post anchor through loadInbox
 
   expect(page.items[0]).toMatchObject({
     href: `/${getLocale()}/threads/${thread}?post=native-post#post-native-post`,
-    text: 'A readable reply.',
+    text: 'A useful update summary',
     unavailable: false,
   });
-  expect(requests).toEqual(['GET /v1/accounts/reporter-1/notifications', 'GET /v1/posts/native-post']);
-});
-
-test('missing, wrong-thread and erased native posts stay unavailable within one page and one target read', async () => {
-  const unreadableNotice = notice({ id: 'guarded-post-notice', actorId: null, postId: 'guarded-post' });
-  const cases = [
-    { name: 'missing', status: 404, post: undefined },
-    { name: 'wrong-thread', status: 200, post: { threadId: 'another-thread', body: {} } },
-    { name: 'erased', status: 200, post: { threadId: thread, availability: 'erased', body: {} } },
-  ] as const;
-
-  for (const target of cases) {
-    const requests: string[] = [];
-    const client = createKernelClient('http://kernel.local', {
-      fetch: (async (input, init) => {
-        const request = new Request(input, init);
-        const path = new URL(request.url).pathname;
-        requests.push(`${request.method} ${path}`);
-        if (path === '/v1/accounts/reporter-1/notifications')
-          return Response.json({ items: [unreadableNotice], next: null });
-        expect(path).toBe('/v1/posts/guarded-post');
-        return Response.json(target.post ? { post: target.post } : { code: 'not_found' }, { status: target.status });
-      }) as typeof fetch,
-    });
-
-    const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
-
-    expect(page.items[0]?.unavailable, target.name).toBe(true);
-    expect(page.items[0]?.href, target.name).toBeUndefined();
-    expect(requests, target.name).toEqual(['GET /v1/accounts/reporter-1/notifications', 'GET /v1/posts/guarded-post']);
-  }
+  expect(requests).toEqual(['GET /v1/accounts/reporter-1/notifications']);
 });
 
 const submittedReport: ReporterStatus = {
@@ -270,10 +185,11 @@ const reporterNotice = notice({
   reportId: report,
 });
 
-test('a reporter notice reaches its delivered own-submission status page by report ID even when the target is unavailable without leaking hidden content or losing native seen/read semantics', async () => {
+test('a reporter notice keeps its admitted status destination with withheld target context', async () => {
   for (const targetAvailability of ['available', 'unavailable'] as const) {
     for (const outcome of ['actioned', 'dismissed'] as const) {
       const submission = { ...submittedReport, targetAvailability, outcome };
+      const currentReporterNotice = notice({ ...reporterNotice, summary: outcome === 'actioned' ? 'Actioned' : 'Dismissed' });
       const calls: string[] = [];
       const client = createKernelClient('http://kernel.local', {
         fetch: (async (input, init) => {
@@ -282,7 +198,7 @@ test('a reporter notice reaches its delivered own-submission status page by repo
           calls.push(`${request.method} ${path}`);
           expect(request.headers.get('authorization')).toBe('Bearer reporter');
           if (path === '/v1/accounts/reporter-1/notifications')
-            return Response.json({ items: [reporterNotice], next: 'native-continuation' });
+            return Response.json({ items: [currentReporterNotice], next: 'native-continuation' });
           expect(path).toBe(`/v1/reports/${report}`);
           return Response.json({
             report: {
@@ -296,15 +212,13 @@ test('a reporter notice reaches its delivered own-submission status page by repo
       });
       const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
       expect(page.next).toBe('native-continuation');
-      expect(page.items).toEqual([
-        {
-          ...reporterNotice,
-          href: `/moderation/reports/${report}`,
-          text: outcome === 'actioned' ? 'Actioned' : 'Dismissed',
-          unavailable: false,
-        },
-      ]);
-      expect(calls).toEqual(['GET /v1/accounts/reporter-1/notifications', `GET /v1/reports/${report}`]);
+      expect(page.items[0]).toMatchObject({
+        href: `/${getLocale()}/moderation/reports/${report}`,
+        text: outcome === 'actioned' ? 'Actioned' : 'Dismissed',
+        unavailable: true,
+        target: { state: 'withheld', threadId: null, postId: null, boardId: null },
+      });
+      expect(calls).toEqual(['GET /v1/accounts/reporter-1/notifications']);
       const destination = await loadReporterStatus(client, report, 'Bearer reporter');
       expect(destination).toEqual(submission);
       const html = renderToStaticMarkup(createElement(ReporterStatusView, { report: destination! }));
@@ -317,13 +231,14 @@ test('a reporter notice reaches its delivered own-submission status page by repo
         expect(JSON.stringify(page)).not.toContain(secret);
         expect(html).not.toContain(secret);
       }
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(2);
       expect(page.items[0]?.unread).toBe(true);
+      expect(JSON.stringify(page.items[0])).not.toMatch(/Hidden target text|Private note|Other reporter/);
     }
   }
 });
 
-test('report denial, absence and moderator inspection cannot become an own-status link, while dependency failure stays a failure', async () => {
+test('report destination reads remain reporter-scoped after the Inbox admits the status route', async () => {
   const { targetAvailability: _availability, ...moderator } = submittedReport;
   for (const status of [200, 403, 404, 503]) {
     const client = createKernelClient('http://kernel.local', {
@@ -339,14 +254,10 @@ test('report denial, absence and moderator inspection cannot become an own-statu
         );
       }) as typeof fetch,
     });
-    if (status === 503) {
-      await expect(loadInboxPage(client, 'reporter-1', 'Bearer reporter')).rejects.toThrow();
-    } else {
-      const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
-      expect(page.items).toEqual([{ ...reporterNotice, text: '', unavailable: true }]);
-      if (status === 404) expect(await loadReporterStatus(client, report, 'Bearer reporter')).toBeNull();
-      if (status === 403) await expect(loadReporterStatus(client, report, 'Bearer reporter')).rejects.toThrow();
-    }
+    const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
+    expect(page.items[0]?.href).toBe(`/${getLocale()}/moderation/reports/${report}`);
+    if (status === 200 || status === 404) expect(await loadReporterStatus(client, report, 'Bearer reporter')).toBeNull();
+    else await expect(loadReporterStatus(client, report, 'Bearer reporter')).rejects.toThrow();
   }
 });
 
@@ -487,9 +398,23 @@ test('stale seen outcomes cannot invalidate the next viewer badge or dispatch an
       const bobCountKey = unreadCountQueryFor(bob).queryKey;
       const bobPageKey = inboxPageQuery(bob).queryKey;
       const aliceCountKey = unreadCountQueryFor(alice).queryKey;
-      client.setQueryData(bobCountKey, { signedIn: true, state: 'ready', count: 2, capped: false });
+      client.setQueryData(bobCountKey, {
+        signedIn: true,
+        state: 'ready',
+        count: 2,
+        capped: false,
+        basis: 'current-visible-unread',
+        witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+      });
       client.setQueryData(bobPageKey, { signedIn: true, state: 'ready', items: [], next: null });
-      client.setQueryData(aliceCountKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+      client.setQueryData(aliceCountKey, {
+        signedIn: true,
+        state: 'ready',
+        count: 7,
+        capped: false,
+        basis: 'current-visible-unread',
+        witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+      });
       if (outcome === 'confirmed') pending.resolve({ signedIn: true });
       else pending.reject(new Error('Response lost'));
       await oldMark;
@@ -558,13 +483,12 @@ test('native service failures never claim preparation, preserve problem details,
   }
 });
 
-test('actual Retry-After survives list, target and thrown native failures; only a valid header supplies a wait', async () => {
+test('actual Retry-After survives the composed list failure; only a valid header supplies a wait', async () => {
   const { inboxReadFailure } = await import('../src/inbox/inbox-read');
   const { MediaProblem } = await import('../src/media/kernel');
   const { preferenceRetryDeadline } = await import('../src/settings/preference-failure-retry');
   const now = Date.parse('2026-10-31T00:00:00.000Z');
-  for (const targetFailure of [false, true]) {
-    for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', 'invalid', undefined]) {
+  for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', 'invalid', undefined]) {
       const paths: string[] = [];
       const client = createKernelClient('http://kernel.local', {
         fetch: (async (input, init) => {
@@ -572,8 +496,6 @@ test('actual Retry-After survives list, target and thrown native failures; only 
           const path = new URL(request.url).pathname;
           paths.push(path);
           expect(request.method).toBe('GET');
-          if (targetFailure && path.endsWith('/notifications'))
-            return Response.json({ items: [{ ...reporterNotice, decisionId: decision }], next: null });
           return Response.json(
             {
               status: 503,
@@ -598,14 +520,10 @@ test('actual Retry-After survives list, target and thrown native failures; only 
           ...(retryAfter === undefined ? {} : { retryAfter }),
         },
       });
-      expect(paths).toEqual([
-        '/v1/accounts/reporter-1/notifications',
-        ...(targetFailure ? [`/v1/reports/${report}`] : []),
-      ]);
+      expect(paths).toEqual(['/v1/accounts/reporter-1/notifications']);
       expect(preferenceRetryDeadline(retryAfter, now)).toBe(
         retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0,
       );
-    }
   }
   const native = new MediaProblem(
     {
@@ -618,16 +536,7 @@ test('actual Retry-After survives list, target and thrown native failures; only 
     } as ConstructorParameters<typeof MediaProblem>[0],
     { 'Retry-After': '30' },
   );
-  const result = await resolveInboxItems(
-    { items: [reporterNotice], next: null },
-    {
-      post: async () => null,
-      decision: async () => null,
-      report: async () => {
-        throw native;
-      },
-    },
-  ).catch(inboxReadFailure);
+  const result = inboxReadFailure(native);
   expect(result).toEqual({
     signedIn: true,
     state: 'unavailable',
@@ -688,16 +597,11 @@ test('rejected native cursors retry the identical GET and only an explicit resta
           }
           firstPages++;
           return Response.json({
-            items: [0, 1].map((index) => notice({ id: `${firstPages === 1 ? 'old' : 'current'}-${index}` })),
+            items: [0, 1].map((index) => notice({ id: `${firstPages === 1 ? 'old' : 'current'}-${index}` }, 'reader')),
             next: firstPages === 1 ? cursor : null,
           });
         }
-        if (url.pathname === '/v1/accounts') {
-          expect(url.searchParams.get('ids')).toBe('actor-1');
-          return Response.json({ accounts: [{ id: 'actor-1', displayName: 'Momo' }] });
-        }
-        expect(url.pathname).toBe(`/v1/posts/${post}`);
-        return Response.json({ post: { threadId: thread, body: { type: 'doc', content: [] } } });
+        throw new Error(`Unexpected point read ${url.pathname}`);
       }) as typeof fetch,
     });
     const read = async (value?: string): Promise<InboxPage> =>
@@ -726,9 +630,9 @@ test('rejected native cursors retry the identical GET and only an explicit resta
     expect(
       urls.filter((url) => url.pathname.endsWith('/notifications')).map((url) => url.searchParams.get('cursor')),
     ).toEqual([null, cursor, cursor, null]);
-    expect(urls.filter((url) => url.pathname === `/v1/posts/${post}`)).toHaveLength(2);
-    expect(urls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(2);
-    expect(requests).toHaveLength(8);
+    expect(urls.filter((url) => url.pathname.startsWith('/v1/posts/'))).toHaveLength(0);
+    expect(urls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(0);
+    expect(requests).toHaveLength(4);
   }
 });
 
@@ -741,7 +645,14 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
       client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'same-token' });
       const viewer = store.snapshot()!;
       const countKey = unreadCountQueryFor(viewer).queryKey;
-      client.setQueryData(countKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+      client.setQueryData(countKey, {
+        signedIn: true,
+        state: 'ready',
+        count: 7,
+        capped: false,
+        basis: 'current-visible-unread',
+        witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+      });
       const oldPage = deferred<InboxPage>();
       const old = client.fetchQuery(inboxPageQuery(viewer, undefined, () => oldPage.promise)).catch(() => null);
       const loaded = receiveInboxPage(emptyInboxPagination, {
@@ -859,7 +770,14 @@ test('Retain native failure metadata when marking Inbox notices seen with origin
       client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: token });
       const viewer = inboxViewerStore(client).snapshot()!;
       const countKey = unreadCountQueryFor(viewer).queryKey;
-      client.setQueryData(countKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+      client.setQueryData(countKey, {
+        signedIn: true,
+        state: 'ready',
+        count: 7,
+        capped: false,
+        basis: 'current-visible-unread',
+        witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+      });
       try {
         const send = async ({ data, headers }: { data: typeof attempt; headers: HeadersInit }) => {
           const result = await loadInboxSeen(
@@ -957,7 +875,14 @@ test('seen failure envelopes bound diagnostics, preserve non-204 uncertainty, an
     );
     client.setQueryData(['session'], { state: 'signed-in', subject: 'bob' });
     const bob = store.snapshot()!;
-    client.setQueryData(unreadCountQueryFor(bob).queryKey, { signedIn: true, state: 'ready', count: 2, capped: false });
+    client.setQueryData(unreadCountQueryFor(bob).queryKey, {
+      signedIn: true,
+      state: 'ready',
+      count: 2,
+      capped: false,
+      basis: 'current-visible-unread',
+      witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+    });
     late.resolve({ signedIn: true, failure: { status: 429, code: 'rate_limited', retryAfter: '30' } });
     expect(await pending).toBe('AbortError');
     await expect(markInboxViewerSeen(client, alice, attempt, 'bob-token', send)).rejects.toThrow(

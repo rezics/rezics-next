@@ -1,4 +1,4 @@
-# Settings account reads
+# Settings
 
 Embedded inventory, detail, action-entry and rename-entry reads use a ten-second deadline including response bodies, composed with caller cancellation; timeout releases pending state into the existing localized retry views, and only deliberate recovery rechecks the current account. Independent feeds retain valid cursors and usable pages on transient failure; session retirement discards late replies. Cancellation never proves that a dispatched command had no effect and never replays a mutation.
 
@@ -6,43 +6,18 @@ Applicant verification requests use the same ten-second account budget, includin
 
 ## Watches
 
-`/settings#watches` is a retained private destination for signed-in viewers, independent of preference-read
-availability. `watches.tsx` uses `WatchController` with the installed `SettingsSessionOwner`; retirement removes
-private rows and the original stop command, aborts reads and rejects late results. A failed refresh withdraws the
-previous rows instead of lending them current disclosure or mutation authority. Reads share the account deadline.
-A watch whose target cannot be disclosed has no title or link, but retains its owner-provided subscription identity
-for removal. Removing a watch and losing access to its target are separate outcomes.
+`/settings#watches` is the existing private destination for a signed-in viewer. It reads one replaceable page for the selected `thread` or `board` kind through the generated `accounts({accountId}).watches.get` operation, with the exact opaque cursor and a limit of 20. Available rows link through existing localized thread or board routes. A withheld row exposes only its personal subscription identity, kind and revision so its owner can still remove it.
 
-Decision: use replacement pages of at most 20 watches, preserving the owner's opaque continuation unchanged;
-an empty page with a continuation offers the next page instead of claiming there are no watches.
+Removal uses the generated watch ID delete operation with the original kind, expected revision and JSON-string idempotency key. A confirmed removal applies only to that subscription episode; creating a later watch has a new identity. An uncertain result retains the original command and blocks another removal until the person retries it. Refresh may update the visible page but never claims the command succeeded. The existing dirty-departure recovery guards a pending removal. Session, account or route retirement clears rows and callbacks before another visit can act.
 
-`watch-native.ts` is a local consumer port, not an HTTP or subscription API. The retained Content README and generated
-client on this base expose no typed watch-management reader or command. The default therefore reports unavailable;
-it never returns an empty list, permission or successful command. Content owns the native private inventory,
-subscription identities, current target disclosure and canonical links, sealed cursors, and stop command receipts.
-Bind `WatchManagementIO` to those actual typed operations when released, using existing Settings account/CSRF custody
-and preserving the exact original semantic command and idempotency key at the transport boundary. No native route
-is guessed here. Board selection and thread/board page controls remain with their existing Web consumers.
+Keep the existing thread watch toggle on the thread page. Settings does not add a second subscription inventory, board toggle, watcher census or producer.
 
-An unresolved stop blocks another intent and survives category navigation. Explicit recovery retries the immutable
-original command, including its subscription identity and key. Reading the current list never settles or replaces
-that command. Timeout or cancellation after dispatch leaves the outcome uncertain; only an explicit native command
-result confirms removal or refusal. Leaving Settings uses the shared unsaved-work decision.
+**Decision:** Settings removes the exact current thread or board subscription, including when its target is withheld; opening, returning or starting a later subscription does not acknowledge or replay that removal.
 
-The illustrative Page stories cover populated, inaccessible-target, failed and uncertain-unwatch states at phone
-and desktop sizes. They exercise the consumer seam, not a delivered native wire; final screenshot approval belongs
-to Root.
+**Cost:** Each selected-kind Settings page dispatches one inventory request and retains at most 20 rows. Removal is one native command; deliberate refresh and explicit retry remain user actions. One controller owns one active read and one unresolved original command, and retirement releases its rows and callbacks. Native SQL and history growth are owned by Content. Browser growth coverage varies unrelated watches across 1, 10 and 100 sequential visits while checking request counts, retained rows and bytes, active controller release and command attempts.
 
 ## Layout defaults by type
 
-The existing shelf editor adds exact type-URI layouts to its versioned dirty-field draft. A bounded Library owner-index
-page supplies released type choices and batch-localized names; unavailable discovery never means an empty library.
-Stored scopes absent from that page remain inspectable and removable, with their original URI and no invented name.
-Keys longer than the native preference limit cannot create an override. The merged layout map remains within 32 entries.
-Single-type removal sends `{ layouts: { [type]: null } }`; the existing global reset still sends `shelf: null`.
-Conflict reload refreshes clean fields and preserves dirty ones for review. Unknown outcomes keep the original payload
-and command key until replay and current readback resolve them. Installed account/credential ownership retires private
-choices, drafts and late completions on replacement. The Library resolver and score currentness fence remain shared.
+The existing shelf editor adds exact type-URI layouts to its versioned dirty-field draft. A bounded Library owner-index page supplies released type choices and batch-localized names; unavailable discovery never means an empty library. Stored scopes absent from that page remain inspectable and removable, with their original URI and no invented name. Keys longer than the native preference limit cannot create an override. The merged layout map remains within 32 entries. Single-type removal sends `{ layouts: { [type]: null } }`; the existing global reset still sends `shelf: null`. Conflict reload refreshes clean fields and preserves dirty ones for review. Unknown outcomes keep the original payload and command key until replay and current readback resolve them. Installed account/credential ownership retires private choices, drafts and late completions on replacement. The Library resolver and score currentness fence remain shared.
 
-Decision: selecting a type is a view operation; a missing saved type offers removal, while setting a new override
-requires that type in the current admitted choices. Open Library links omit layout overrides to show the saved result.
+**Decision:** Selecting a type is a view operation; a missing saved type offers removal, while setting a new override requires that type in the current admitted choices. Open Library links omit layout overrides to show the saved result.

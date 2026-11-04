@@ -193,7 +193,14 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
         items: [{ text: 'old private row' }],
         next: 'old-next',
       });
-      client.setQueryData(oldBadgeKey, { signedIn: true, state: 'ready', count: 7, capped: false });
+      client.setQueryData(oldBadgeKey, {
+        signedIn: true,
+        state: 'ready',
+        count: 7,
+        capped: false,
+        basis: 'current-visible-unread',
+        witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+      });
       for (const state of ['unknown', 'signed-out', 'unavailable'] as const) {
         const sessionKey: readonly unknown[] = sessionQuery.queryKey;
         client.setQueryData(sessionKey, { state, subject: null, csrfToken: 'same-token' });

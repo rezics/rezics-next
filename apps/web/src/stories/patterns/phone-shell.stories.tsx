@@ -157,7 +157,14 @@ function Connected({ state, loadRealms = emptyRealms }: { state: State; loadReal
     const unread: UnreadCount =
       state === 'unavailable'
         ? { signedIn: true, state: 'unavailable', failure: { status: 503 } }
-        : { signedIn: true, state: 'ready', count: state === 'unread' ? 3 : 0, capped: false };
+        : {
+            signedIn: true,
+            state: 'ready',
+            count: state === 'unread' ? 3 : 0,
+            capped: false,
+            basis: 'current-visible-unread',
+            witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+          };
     client.setQueryData<UnreadCount>(unreadCountQueryFor(currentInboxViewer(client)).queryKey, () => unread);
     return state === 'recent'
       ? rememberRecent(rememberRecent([], recording.query), '', {

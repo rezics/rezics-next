@@ -1,46 +1,53 @@
 import type { KernelClient } from '@rezics/client';
-import { documentText, type DocumentSnapshot } from '@rezics/document';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
-import { readPageAuthors } from '../identity/read';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { reporterStatusResponse } from '../moderation/reporter-status-model';
 import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { threadLocation } from '../threads/thread-href';
-import { unavailableInboxWatch, type InboxWatchBinding } from './watch-notices';
 
 export const INBOX_PAGE_SIZE = 20;
-/** One private list read, one batched author read, and at most one target read per notice. */
-export const INBOX_PAGE_KERNEL_READ_CEILING = 2 + INBOX_PAGE_SIZE;
+/** One composed private list read; disclosure and destinations arrive with each admitted item. */
+export const INBOX_PAGE_KERNEL_READ_CEILING = 1;
 
 type NoticeRead = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['notifications']['get']>>;
 type NativeNotice = NonNullable<NoticeRead['data']>['items'][number];
-/** watch is a local presentation category, never a new native kind. */
-export type InboxNotice = Omit<NativeNotice, 'kind'> & { kind: string; watch?: 'thread' | 'board' };
+type NativeActor = NativeNotice['actor'];
+type NativeTarget = NativeNotice['target'];
+type NativeActions = NativeNotice['actions'];
+
+/** Optional composed fields keep presentational test seams small; native decoding requires every field. */
+export type InboxNotice = {
+  id: string;
+  kind: string;
+  createdAt: string;
+  unread: boolean;
+  actorId: string | null;
+  threadId: string | null;
+  postId: string | null;
+  decisionId: string | null;
+  reportId: string | null;
+  actor?: NativeActor;
+  target?: NativeTarget;
+  summary?: string;
+  actions?: NativeActions;
+  /** Retained for older presentation fixtures; the native wire uses thread_watch/board_activity. */
+  watch?: 'thread' | 'board';
+};
 type NoticePage = { items: InboxNotice[]; next: string | null };
 type ResolvedNotice = InboxNotice & {
   href?: string;
   text: string;
   unavailable: boolean;
   actorName?: string;
+  context?: string;
 };
 export type ResolvedInboxPage = { items: ResolvedNotice[]; next: string | null };
-export type InboxReads = {
-  post: (
-    threadId: string,
-    postId: string,
-  ) => Promise<{ title?: string; href?: string; text?: string; id?: string; threadId?: string } | null>;
-  decision: (id: string) => Promise<{ statement: string; href?: string } | null>;
-  report: (id: string) => Promise<{ outcome: string; href?: string } | null>;
-  /** Until Content releases a watch binding, thread-only watch targets remain unavailable. */
-  thread?: (id: string) => Promise<{ id: string; title: string } | null>;
-};
 
 export type NativeInboxFailure = {
   status: number | null;
@@ -113,285 +120,272 @@ function noticeId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
 }
 
-function validNotice(value: unknown, watch = false): value is InboxNotice {
+function exactKeys(value: Record<string, unknown>, expected: readonly string[]) {
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length && actual.every((key, index) => key === [...expected].sort()[index]);
+}
+
+function validActor(value: unknown): value is NativeActor {
+  if (!isRecord(value)) return false;
+  if (value.state === 'available')
+    return (
+      exactKeys(value, ['state', 'accountId', 'displayName', 'handle', 'avatarUrl', 'automated']) &&
+      noticeId(value.accountId) &&
+      typeof value.displayName === 'string' &&
+      (value.handle === null || typeof value.handle === 'string') &&
+      (value.avatarUrl === null || typeof value.avatarUrl === 'string') &&
+      typeof value.automated === 'boolean'
+    );
+  if (value.state === 'withheld')
+    return (
+      exactKeys(value, ['state', 'displayName', 'handle', 'avatarUrl']) &&
+      value.displayName === 'Former or unavailable account' &&
+      value.handle === null &&
+      value.avatarUrl === null
+    );
+  return (
+    exactKeys(value, ['state', 'displayName', 'handle', 'avatarUrl']) &&
+    value.state === 'system' &&
+    value.displayName === 'Moderation team' &&
+    value.handle === null &&
+    value.avatarUrl === null
+  );
+}
+
+function validTarget(value: unknown): value is NativeTarget {
+  if (!isRecord(value) || !exactKeys(value, ['state', 'threadId', 'postId', 'boardId', 'threadTitle', 'boardTitle']))
+    return false;
+  if (value.state !== 'available' && value.state !== 'withheld') return false;
+  for (const field of ['threadId', 'postId', 'boardId'] as const)
+    if (value[field] !== null && !noticeId(value[field])) return false;
+  for (const field of ['threadTitle', 'boardTitle'] as const)
+    if (value[field] !== null && typeof value[field] !== 'string') return false;
+  return true;
+}
+
+function validOpenAction(value: unknown): value is NativeActions['open'] {
+  if (value === null) return true;
+  if (!isRecord(value) || typeof value.kind !== 'string') return false;
+  if (value.kind === 'board') return exactKeys(value, ['kind', 'boardId']) && noticeId(value.boardId);
+  if (value.kind === 'thread') return exactKeys(value, ['kind', 'threadId']) && noticeId(value.threadId);
+  if (value.kind === 'thread_post')
+    return exactKeys(value, ['kind', 'threadId', 'postId']) && noticeId(value.threadId) && noticeId(value.postId);
+  if (value.kind === 'moderation_decision')
+    return exactKeys(value, ['kind', 'decisionId']) && noticeId(value.decisionId);
+  if (value.kind === 'report_outcome')
+    return exactKeys(value, ['kind', 'reportId']) && noticeId(value.reportId);
+  return false;
+}
+
+function openMatchesNotice(open: NativeActions['open'], item: Record<string, unknown>) {
+  if (open === null) return true;
+  const target = item.target as NativeTarget;
+  if (open.kind === 'board') return target.state === 'available' && target.boardId === open.boardId;
+  if (open.kind === 'thread') return target.state === 'available' && target.threadId === open.threadId;
+  if (open.kind === 'thread_post')
+    return target.state === 'available' && target.threadId === open.threadId && target.postId === open.postId;
+  if (open.kind === 'moderation_decision')
+    return item.kind === 'moderation_decision' && item.decisionId === open.decisionId;
+  return item.kind === 'moderation_decision' && item.reportId === open.reportId;
+}
+
+function validNotice(value: unknown, accountId?: string): value is NativeNotice {
   if (
     !isRecord(value) ||
+    !exactKeys(value, [
+      'id',
+      'kind',
+      'createdAt',
+      'actorId',
+      'threadId',
+      'postId',
+      'decisionId',
+      'reportId',
+      'actor',
+      'target',
+      'summary',
+      'actions',
+      'unread',
+    ]) ||
     !noticeId(value.id) ||
-    (watch
-      ? typeof value.kind !== 'string' ||
-        !value.kind ||
-        ['reply', 'mention', 'moderation_decision'].includes(value.kind)
-      : value.kind !== 'reply' && value.kind !== 'mention' && value.kind !== 'moderation_decision') ||
+    !['reply', 'mention', 'moderation_decision', 'thread_watch', 'board_activity'].includes(String(value.kind)) ||
     typeof value.createdAt !== 'string' ||
     !Number.isFinite(Date.parse(value.createdAt)) ||
     new Date(value.createdAt).toISOString() !== value.createdAt ||
-    typeof value.unread !== 'boolean'
+    typeof value.unread !== 'boolean' ||
+    typeof value.summary !== 'string' ||
+    !validActor(value.actor) ||
+    !validTarget(value.target) ||
+    !isRecord(value.actions) ||
+    !exactKeys(value.actions, ['open', 'markSeen']) ||
+    !validOpenAction(value.actions.open) ||
+    !isRecord(value.actions.markSeen) ||
+    !exactKeys(value.actions.markSeen, ['method', 'path']) ||
+    value.actions.markSeen.method !== 'POST' ||
+    typeof value.actions.markSeen.path !== 'string'
   )
     return false;
-  for (const field of ['actorId', 'threadId', 'postId', 'decisionId', 'reportId'] as const) {
+  for (const field of ['actorId', 'threadId', 'postId', 'decisionId', 'reportId'] as const)
     if (value[field] !== null && !noticeId(value[field])) return false;
-  }
   if (value.postId !== null && value.threadId === null) return false;
-  if (watch) {
+  if (value.actor.state === 'system' && value.kind !== 'moderation_decision') return false;
+  if (value.actor.state === 'available' && value.actorId !== value.actor.accountId) return false;
+  const expectedPath = accountId
+    ? `/v1/accounts/${encodeURIComponent(accountId)}/notifications/${encodeURIComponent(value.id)}:markSeen`
+    : /^\/v1\/accounts\/[^/]+\/notifications\/[^/]+:markSeen$/.test(value.actions.markSeen.path)
+      ? value.actions.markSeen.path
+      : '';
+  if (!expectedPath || value.actions.markSeen.path !== expectedPath) return false;
+  const target = value.target;
+  if (value.threadId !== target.threadId || value.postId !== target.postId) return false;
+  const open = value.actions.open as NativeActions['open'];
+  if (value.kind === 'reply' || value.kind === 'mention')
     return (
-      (value.watch === 'thread' || value.watch === 'board') &&
-      value.threadId !== null &&
+      target.state === 'available' &&
+      target.threadId !== null &&
+      target.postId !== null &&
       value.decisionId === null &&
-      value.reportId === null
+      value.reportId === null &&
+      openMatchesNotice(open, value)
     );
-  }
+  if (value.kind === 'thread_watch')
+    return (
+      target.state === 'available' &&
+      target.threadId !== null &&
+      value.decisionId === null &&
+      value.reportId === null &&
+      openMatchesNotice(open, value)
+    );
+  if (value.kind === 'board_activity')
+    return (
+      target.state === 'available' &&
+      target.boardId !== null &&
+      value.decisionId === null &&
+      value.reportId === null &&
+      openMatchesNotice(open, value)
+    );
   if (value.kind === 'moderation_decision') {
-    // Actioned reports can carry both report and decision IDs. Decisions can also retain post/thread IDs.
-    return value.actorId === null && (value.reportId !== null || value.decisionId !== null);
+    if (value.decisionId === null && value.reportId === null) return open === null;
+    if (value.decisionId !== null && value.reportId !== null) return false;
+    return openMatchesNotice(open, value);
   }
-  return value.threadId !== null && value.postId !== null && value.decisionId === null && value.reportId === null;
+  return false;
 }
 
-/** A rejected row fails the whole page; no filtering can claim a partial successful read. */
-export function decodeInboxPage(value: unknown, binding: InboxWatchBinding = unavailableInboxWatch): NoticePage {
-  if (
-    !isRecord(value) ||
-    !Array.isArray(value.items) ||
-    value.items.length > INBOX_PAGE_SIZE ||
-    !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096))
-  )
-    throw new InboxReadError({ status: 200 });
-  const items = value.items.map((item): InboxNotice => {
-    if (validNotice(item)) return projectNotice(item);
-    // Only the installed owner adapter knows the native watch kinds and wire fields.
-    // A malformed existing native kind must never be rescued as a watch notice.
-    if (isRecord(item) && ['reply', 'mention', 'moderation_decision'].includes(String(item.kind)))
-      throw new InboxReadError({ status: 200 });
-    const watch = binding.decode(item);
-    if (!validNotice(watch, true)) throw new InboxReadError({ status: 200 });
-    return projectNotice(watch, true);
-  });
-  return { items, next: value.next as string | null };
-}
-
-/** Native extensions cannot smuggle stale presentation or actor fields through the private response. */
-function projectNotice(item: InboxNotice, includeWatch = false): InboxNotice {
+function projectNativeNotice(item: NativeNotice): InboxNotice {
+  const target: NativeTarget = item.target.state === 'withheld'
+    ? { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null }
+    : item.target;
   return {
     id: item.id,
     kind: item.kind,
     createdAt: item.createdAt,
     unread: item.unread,
-    actorId: item.actorId,
-    threadId: item.threadId,
-    postId: item.postId,
+    actorId: item.actor.state === 'available' ? item.actor.accountId : null,
+    threadId: target.threadId,
+    postId: target.postId,
     decisionId: item.decisionId,
     reportId: item.reportId,
-    ...(includeWatch && item.watch ? { watch: item.watch } : {}),
+    actor: item.actor,
+    target,
+    summary: item.summary,
+    actions: item.actions,
   };
 }
 
-type CurrentTarget = { href?: string; text: string; identity?: { id: string; threadId: string } };
+/** A malformed or unknown row fails the complete page; the native page already owns disclosure and destinations. */
+export function decodeInboxPage(value: unknown, accountId?: string): NoticePage {
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ['items', 'next']) ||
+    !Array.isArray(value.items) ||
+    value.items.length > INBOX_PAGE_SIZE ||
+    !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096))
+  )
+    throw new InboxReadError({ status: 200 });
+  const items = value.items.map((item) => {
+    if (!validNotice(item, accountId)) throw new InboxReadError({ status: 200 });
+    return projectNativeNotice(item);
+  });
+  return { items, next: value.next as string | null };
+}
 
-/** Resolves thin notice identities through their existing owner reads, once per distinct target. */
-export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Promise<ResolvedInboxPage> {
-  const cache = new Map<string, Promise<CurrentTarget | null>>();
-  const resolve = (key: string, read: () => Promise<CurrentTarget | null>) => {
-    let result = cache.get(key);
-    if (!result) {
-      result = read().catch((error: unknown) => {
-        if (error instanceof InboxReadError) throw error;
-        throw new InboxReadError(nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined));
-      });
-      cache.set(key, result);
-    }
-    return result;
-  };
-  const items = await Promise.all(
-    page.items.map(async (notice): Promise<ResolvedNotice> => {
-      let target: CurrentTarget | null = null;
-      if (!notice.watch && notice.reportId) {
-        target = await resolve(`report:${notice.reportId}`, async () => {
-          const report = await reads.report(notice.reportId!);
-          return report
-            ? { href: report.href ?? `/moderation/reports/${notice.reportId}`, text: report.outcome }
-            : null;
-        });
-      } else if (notice.kind === 'moderation_decision' && notice.decisionId) {
-        target = await resolve(`decision:${notice.decisionId}`, async () => {
-          const decision = await reads.decision(notice.decisionId!);
-          return decision
-            ? {
-                href: decision.href ?? `/moderation/decisions/${notice.decisionId}`,
-                text: decision.statement,
-              }
-            : null;
-        });
-      } else if (notice.threadId && notice.postId) {
-        target = await resolve(`post:${notice.threadId}:${notice.postId}`, async () => {
-          const post = await reads.post(notice.threadId!, notice.postId!);
-          return post
-            ? {
-                href: post.href ?? threadLocation(getLocale(), { id: notice.threadId! }, undefined, notice.postId!),
-                text: post.text ?? post.title ?? '',
-                ...(post.id && post.threadId ? { identity: { id: post.id, threadId: post.threadId } } : {}),
-              }
-            : null;
-        });
-      } else if (notice.watch && notice.threadId && reads.thread) {
-        target = await resolve(`thread:${notice.threadId}`, async () => {
-          const thread = await reads.thread!(notice.threadId!);
-          if (!thread) return null;
-          if (thread.id !== notice.threadId || !noticeId(thread.id) || typeof thread.title !== 'string')
-            throw new InboxReadError({ status: 200 });
-          return { text: thread.title, href: threadLocation(getLocale(), thread) };
-        });
-      }
-      if (
-        notice.watch &&
-        notice.postId &&
-        target &&
-        (target.identity?.id !== notice.postId || target.identity.threadId !== notice.threadId)
-      )
-        throw new InboxReadError({ status: 200 });
+/** Convert only native action identities to existing localized routes; never consume a supplied URL. */
+export function inboxOpenHref(item: InboxNotice): string | undefined {
+  const open = item.actions?.open;
+  if (!open || !item.target || item.target.state !== 'available' && open.kind !== 'report_outcome' && open.kind !== 'moderation_decision')
+    return undefined;
+  if (open.kind === 'board' && item.target.boardId === open.boardId)
+    return localizeHref(`/boards/${encodeURIComponent(open.boardId)}`);
+  if (open.kind === 'thread' && item.target.threadId === open.threadId)
+    return threadLocation(getLocale(), { id: open.threadId, title: item.target.threadTitle });
+  if (open.kind === 'thread_post' && item.target.threadId === open.threadId && item.target.postId === open.postId)
+    return threadLocation(getLocale(), { id: open.threadId, title: item.target.threadTitle }, undefined, open.postId);
+  if (open.kind === 'moderation_decision' && item.kind === 'moderation_decision' && item.decisionId === open.decisionId)
+    return localizeHref(`/moderation/decisions/${encodeURIComponent(open.decisionId)}`);
+  if (open.kind === 'report_outcome' && item.kind === 'moderation_decision' && item.reportId === open.reportId)
+    return localizeHref(`/moderation/reports/${encodeURIComponent(open.reportId)}`);
+  return undefined;
+}
+
+export function inboxTargetContext(target: NativeTarget | undefined): string | undefined {
+  if (!target || target.state !== 'available') return undefined;
+  const titles = [target.threadTitle, target.boardTitle].filter(
+    (title): title is string => typeof title === 'string' && title.trim().length > 0,
+  );
+  return titles.length ? titles.join(' · ') : undefined;
+}
+
+/** The composed response supplies owner summary, current actor and target disclosure without point reads. */
+export async function resolveInboxItems(page: NoticePage): Promise<ResolvedInboxPage> {
+  return {
+    items: page.items.map((notice) => {
+      const native = notice.actor && notice.target && notice.actions;
+      const actorName = notice.actor?.state === 'available' ? notice.actor.displayName.trim() : undefined;
+      const context = inboxTargetContext(notice.target);
       return {
-        ...projectNotice(notice, true),
-        ...(!target ? { actorId: null } : {}),
-        ...(target?.href ? { href: target.href } : {}),
-        text: target?.text ?? '',
-        unavailable: !target,
+        ...notice,
+        ...(inboxOpenHref(notice) ? { href: inboxOpenHref(notice) } : {}),
+        text: notice.summary ?? '',
+        unavailable: !native || notice.target?.state === 'withheld',
+        ...(actorName ? { actorName } : {}),
+        ...(context ? { context } : {}),
       };
     }),
-  );
-  return { items, next: page.next };
+    next: page.next,
+  };
 }
 
-type ReadResult = { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit | undefined };
-type InboxKernelClient = {
-  accounts: (params: { accountId: string }) => {
-    notifications: {
-      get: (options: unknown) => Promise<ReadResult>;
-      count: { get: (options: unknown) => Promise<ReadResult> };
-      $markSeen: { post: (options: unknown) => Promise<{ error?: unknown }> };
-    };
-  };
-  posts: (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
-  'moderation-decisions': (params: { id: string }) => { get: (options: unknown) => Promise<ReadResult> };
-  reports: KernelClient['reports'];
-};
 function authHeaders(authorization: string) {
   return { authorization };
 }
 
-function failTargetRead(result: ReadResult): boolean {
-  if (!result.error && result.status === 200) return false;
-  const failure = nativeFailure(result.error, result.status, result.headers);
-  if (
-    failure.code !== 'platform_closed' &&
-    (failure.status === 401 || failure.status === 403 || failure.status === 404)
-  )
-    return true;
-  throw new InboxReadError(failure);
-}
-
 async function readNoticePage(
-  client: InboxKernelClient,
+  client: Pick<KernelClient, 'accounts'>,
   accountId: string,
   authorization: string,
   cursor: string | undefined,
-  binding: InboxWatchBinding,
+  signal?: AbortSignal,
 ) {
   const result = await client.accounts({ accountId }).notifications.get({
     query: { limit: INBOX_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
     headers: authHeaders(authorization),
+    ...(signal ? { fetch: { signal } } : {}),
   });
   if (result.error || result.status !== 200)
     throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
-  return decodeInboxPage(result.data, binding);
+  return decodeInboxPage(result.data, accountId);
 }
 
-async function currentInboxReads(client: InboxKernelClient, authorization: string): Promise<InboxReads> {
-  return {
-    post: async (threadId, postId) => {
-      const result = await client.posts({ id: postId }).get({ headers: authHeaders(authorization) });
-      if (failTargetRead(result)) return null;
-      const data = result.data as
-        | { post?: { id?: string; threadId?: string; availability?: string; removed?: boolean; body?: unknown } }
-        | undefined;
-      if (
-        result.error ||
-        !data?.post ||
-        data.post.threadId !== threadId ||
-        (data.post.id !== undefined && data.post.id !== postId) ||
-        data.post.availability === 'erased' ||
-        data.post.removed === true
-      )
-        return null;
-      return { text: postText(data.post), ...(data.post.id ? { id: data.post.id } : {}), threadId: data.post.threadId };
-    },
-    decision: async (id) => {
-      const result = await client['moderation-decisions']({ id }).get({ headers: authHeaders(authorization) });
-      if (failTargetRead(result)) return null;
-      const data = result.data as { statement?: string } | undefined;
-      if (result.error || !data?.statement) return null;
-      return { statement: data.statement, href: `/moderation/decisions/${id}` };
-    },
-    report: async (id) => {
-      const result = await client.reports({ id }).get({ headers: authHeaders(authorization) });
-      if (failTargetRead(result)) return null;
-      // Moderator inspection is a different authorized response, never an own-status notice.
-      if (!result.data?.report || !('targetAvailability' in result.data.report)) return null;
-      const report = reporterStatusResponse(result.data);
-      if (report.id !== id) throw new InboxReadError({ status: result.status });
-      return {
-        outcome:
-          report.outcome === 'actioned'
-            ? m.moderation_actioned()
-            : report.outcome === 'dismissed'
-              ? m.moderation_dismissed()
-              : m.reporter_status_pending(),
-        href: `/moderation/reports/${report.id}`,
-      };
-    },
-  };
-}
-
-function postText(post: unknown): string {
-  if (!post || typeof post !== 'object') return '';
-  const record = post as Record<string, unknown>;
-  const revision =
-    record.revision && typeof record.revision === 'object' ? (record.revision as Record<string, unknown>) : record;
-  const document = record.body ?? revision.body ?? revision.document;
-  if (!document || typeof document !== 'object') return '';
-  if ('doc' in document) return documentText(document as DocumentSnapshot);
-  const text: string[] = [];
-  const visit = (node: unknown) => {
-    if (!node || typeof node !== 'object') return;
-    const value = node as Record<string, unknown>;
-    if (value.type === 'text' && typeof value.text === 'string') text.push(value.text);
-    if (Array.isArray(value.content)) value.content.forEach(visit);
-  };
-  visit(document);
-  return text.join('');
-}
-
-/** One native page, its distinct targets and one batched public identity read. */
+/** One native page contains all current disclosure and exact admitted destinations. */
 export async function loadInboxPage(
   client: KernelClient,
   accountId: string,
   authorization: string,
   cursor?: string,
-  binding: InboxWatchBinding = unavailableInboxWatch,
+  signal?: AbortSignal,
 ): Promise<ResolvedInboxPage> {
-  const typedClient = client as unknown as InboxKernelClient;
-  const page = await readNoticePage(typedClient, accountId, authorization, cursor, binding);
-  const reads = await currentInboxReads(typedClient, authorization);
-  const resolved = await resolveInboxItems(page, {
-    ...reads,
-    thread: (id) => binding.readThread(id, { client, authorization }),
-  });
-  const authorIds = resolved.items.flatMap((item) => (!item.unavailable && item.actorId ? [item.actorId] : []));
-  const authors = await readPageAuthors(client, authorIds);
-  const items = resolved.items.map((item) => {
-    const author = authors?.[item.actorId ?? ''] as { displayName?: string | null; handle?: string | null } | undefined;
-    const actorName = author?.displayName?.trim() || author?.handle?.trim();
-    return actorName ? { ...item, actorName } : item;
-  });
-  return { items, next: resolved.next };
+  return resolveInboxItems(await readNoticePage(client, accountId, authorization, cursor, signal));
 }
 
 export const setInboxResponsePolicy = createServerFn({ method: 'GET' }).handler(() => {
@@ -421,7 +415,7 @@ export const readInboxPage = createServerFn({ method: 'GET' })
       return {
         signedIn: true,
         state: 'ready',
-        ...(await loadInboxPage(kernelClient(), accountId, authorization, data.cursor)),
+        ...(await loadInboxPage(kernelClient(), accountId, authorization, data.cursor, request.signal)),
       };
     } catch (error) {
       return inboxReadFailure(error);
@@ -430,7 +424,14 @@ export const readInboxPage = createServerFn({ method: 'GET' })
 
 export type UnreadCount =
   | { signedIn: false }
-  | { signedIn: true; state: 'ready'; count: number; capped: boolean }
+  | {
+      signedIn: true;
+      state: 'ready';
+      count: number;
+      capped: boolean;
+      basis: 'current-visible-unread' | 'current-visible-lower-bound';
+      witness: { kind: 'current-disclosure'; at: string };
+    }
   | { signedIn: true; state: 'unavailable'; failure: NativeInboxFailure };
 
 /** The badge has one private count read. A dependency failure never becomes a zero count. */
@@ -438,6 +439,7 @@ export async function loadUnreadCount(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
+  signal?: AbortSignal,
 ): Promise<UnreadCount> {
   try {
     await prepareSession(request, sessionEnv, { refresh: false });
@@ -446,7 +448,10 @@ export async function loadUnreadCount(
     if (!authorization || !accountId) return { signedIn: false };
     const result = await client
       .accounts({ accountId })
-      .notifications.count.get({ headers: authHeaders(authorization) });
+      .notifications.count.get({
+        headers: authHeaders(authorization),
+        ...(signal ? { fetch: { signal } } : {}),
+      });
     if (result.error || !result.data)
       throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
     const count = result.data;
@@ -455,10 +460,24 @@ export async function loadUnreadCount(
       count.count < 0 ||
       count.count > 100 ||
       typeof count.capped !== 'boolean' ||
-      (count.capped && count.count !== 100)
+      (count.capped && count.count !== 100) ||
+      (count.basis !== 'current-visible-unread' && count.basis !== 'current-visible-lower-bound') ||
+      !isRecord(count.witness) ||
+      !exactKeys(count.witness, ['kind', 'at']) ||
+      count.witness.kind !== 'current-disclosure' ||
+      typeof count.witness.at !== 'string' ||
+      !Number.isFinite(Date.parse(count.witness.at)) ||
+      new Date(count.witness.at).toISOString() !== count.witness.at
     )
       throw new InboxReadError({ status: result.status });
-    return { signedIn: true, state: 'ready', count: count.count, capped: count.capped };
+    return {
+      signedIn: true,
+      state: 'ready',
+      count: count.count,
+      capped: count.capped,
+      basis: count.basis,
+      witness: { kind: count.witness.kind, at: count.witness.at },
+    };
   } catch (error) {
     return {
       signedIn: true,
@@ -470,10 +489,12 @@ export async function loadUnreadCount(
 
 export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async (): Promise<UnreadCount> => {
   setResponseHeader('cache-control', 'private, no-store');
-  return loadUnreadCount(kernelClient(), getRequest(), env as Partial<SessionEnv>);
+  const request = getRequest();
+  return loadUnreadCount(kernelClient(), request, env as Partial<SessionEnv>, request.signal);
 });
 
 export type InboxSeenAttempt = { through: string; idempotencyKey: string };
+export type InboxNoticeSeenAttempt = { accountId: string; noticeId: string; idempotencyKey: string };
 
 /** Success keeps the original signedIn envelope; failures cross the wire as data, never Error fields. */
 export type InboxSeenResult = { signedIn: boolean } | { signedIn: true; failure: NativeInboxFailure };
@@ -525,6 +546,25 @@ export async function markInboxThrough(
     throw new InboxSeenError(nativeFailure(result.error, result.status, result.headers));
 }
 
+/** A chosen notice has its own native identity; it never advances the bulk through frontier. */
+export async function markInboxNoticeSeen(
+  client: Pick<KernelClient, 'accounts'>,
+  accountId: string,
+  authorization: string,
+  attempt: InboxNoticeSeenAttempt,
+): Promise<void> {
+  if (attempt.accountId !== accountId || !noticeId(attempt.noticeId))
+    throw new InboxSeenError({ status: 403, code: 'forbidden', retryable: false });
+  const result = await client
+    .accounts({ accountId })
+    .notifications({ noticeId: attempt.noticeId })
+    .$markSeen.post(undefined, {
+      headers: { ...authHeaders(authorization), 'idempotency-key': JSON.stringify(attempt.idempotencyKey) },
+    });
+  if (result.error || result.status !== 204)
+    throw new InboxSeenError(nativeFailure(result.error, result.status, result.headers));
+}
+
 /** The private server-function result, including session/CSRF refusals, has one serializable failure shape. */
 export async function loadInboxSeen(
   client: Pick<KernelClient, 'accounts'>,
@@ -558,4 +598,39 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     return loadInboxSeen(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export async function loadInboxNoticeSeen(
+  client: Pick<KernelClient, 'accounts'>,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  attempt: InboxNoticeSeenAttempt,
+): Promise<InboxSeenResult> {
+  try {
+    await prepareSession(request, sessionEnv);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId) return { signedIn: false };
+    await markInboxNoticeSeen(client, accountId, authorization, attempt);
+    return { signedIn: true };
+  } catch (error) {
+    return inboxSeenFailure(error);
+  }
+}
+
+export const markInboxItemSeen = createServerFn({ method: 'POST' })
+  .validator((input: unknown): InboxNoticeSeenAttempt => {
+    if (
+      !isRecord(input) ||
+      !noticeId(input.accountId) ||
+      !noticeId(input.noticeId) ||
+      typeof input.idempotencyKey !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.idempotencyKey)
+    )
+      throw new Error('Invalid notice id');
+    return { accountId: input.accountId, noticeId: input.noticeId, idempotencyKey: input.idempotencyKey };
+  })
+  .handler(async ({ data }): Promise<InboxSeenResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadInboxNoticeSeen(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });

@@ -2,10 +2,12 @@ import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import { personalRead, readQueryKey } from '../kernel/query';
 import {
   InboxSeenError,
+  markInboxItemSeen,
   markInboxSeen,
   readInboxPage,
   readUnreadCount,
   type InboxPage,
+  type InboxNoticeSeenAttempt,
   type InboxSeenAttempt,
   type InboxSeenResult,
 } from './inbox-read';
@@ -60,6 +62,33 @@ export function unreadCountQueryFor(viewer: InboxViewer | null) {
 }
 
 type SeenTransport = (request: { data: InboxSeenAttempt; headers: HeadersInit }) => Promise<InboxSeenResult>;
+type NoticeSeenTransport = (request: {
+  data: InboxNoticeSeenAttempt;
+  headers: HeadersInit;
+}) => Promise<InboxSeenResult>;
+
+export async function markInboxViewerNoticeSeen(
+  client: QueryClient,
+  viewer: InboxViewer,
+  attempt: InboxNoticeSeenAttempt,
+  csrfToken: string,
+  send: NoticeSeenTransport = markInboxItemSeen,
+) {
+  if (attempt.accountId !== viewer.subject) throw new InboxSeenError({ status: 403, code: 'forbidden' });
+  return forInboxViewer(viewer, async () => {
+    const result = await forInboxViewer(viewer, () =>
+      send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }),
+    );
+    if ('failure' in result) throw new InboxSeenError(result.failure);
+    if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
+    await Promise.all([
+      forInboxViewer(viewer, () =>
+        client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
+      ),
+      forInboxViewer(viewer, () => client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) })),
+    ]);
+  });
+}
 
 export async function markInboxViewerSeen(
   client: QueryClient,
