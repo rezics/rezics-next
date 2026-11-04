@@ -521,6 +521,7 @@ export function SubjectPage({
   relations,
   view = 'overview',
   returnTo,
+  currentHref,
   tabs,
   tabLabels,
   heading,
@@ -562,8 +563,10 @@ export function SubjectPage({
   relations?: Record<string, RelationDefinition>;
   /** The view this document is. */
   view?: View;
-  /** The validated single-hop subject visit return address, when supplied by a Recording journey. */
+  /** The validated Subject visit return address, when supplied by a Recording journey. */
   returnTo?: string;
+  /** This Subject visit's supported address, including search and fragment state. */
+  currentHref?: string;
   /** The views to offer, from `subjectTabs` of the subject's overview. */
   tabs?: readonly ViewTab[];
   tabLabels?: ViewTabLabels;
@@ -954,6 +957,7 @@ export function SubjectPage({
                 bounds={boundedProfileRelations(page)}
                 {...(page.context ? { context: page.context } : {})}
                 {...(visitReturn ? { returnTo: visitReturn } : {})}
+                {...(currentHref ? { currentHref } : {})}
                 link={ContextLink}
               />
             ) : null}

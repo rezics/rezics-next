@@ -89,7 +89,8 @@ function collectionReturn(url: URL, locale?: string): string | undefined {
 }
 
 /** A public return address may restore one admitted Subject or Collection view window. */
-export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
+/** Keep one existing nested Subject return intent, but never grow an unbounded URL history. */
+function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested: boolean): string | undefined {
   if (typeof value !== 'string' || value.length > returnAddressCap) return;
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
@@ -123,6 +124,11 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     }
     const allowed = new Set(['realm', 'node', 'cursor', 'property', 'screenCursor', 'screenSelection']);
     const keys = [...url.searchParams.keys()];
+    const nestedVia = url.searchParams.getAll('via');
+    if (nestedVia.length) {
+      if (!subject || nested || nestedVia.length !== 1 || !subjectVisitReturnAt(nestedVia[0], locale, true)) return;
+      allowed.add('via');
+    }
     if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return;
     const selectedRealm = url.searchParams.get('realm');
     const node = url.searchParams.get('node');
@@ -131,6 +137,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     const screenCursor = url.searchParams.get('screenCursor');
     const screenSelection = url.searchParams.get('screenSelection');
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
+    const recordingStatement = new RegExp(`^#recording-statement-${uuid}$`, 'i').test(url.hash);
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
@@ -155,6 +162,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       fragment !== '#manga-reader' &&
       fragment !== '#screen-episode-list' &&
       screenEntry === null &&
+      !recordingStatement &&
       !(subject?.[2] === 'sources' && fragment === '#subject-sources-heading')
     )
       return;
@@ -162,6 +170,11 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
   } catch {
     return;
   }
+}
+
+/** A public return address may restore one admitted Subject or Collection view window. */
+export function subjectVisitReturn(value: unknown, locale?: string): string | undefined {
+  return subjectVisitReturnAt(value, locale, false);
 }
 
 /** Bound route search by its fixed fields plus one validated opaque return address and current cursor. */
