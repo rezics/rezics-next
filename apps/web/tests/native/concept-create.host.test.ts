@@ -1,91 +1,206 @@
-import { expect, mock, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
-import definitions from '../../src/kernel/recorded/definitions-release.json';
-import { createConceptSubject } from '../../src/features/catalogue/concept-create';
-import type { SessionEnv } from '../../src/session/client';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import type { Page } from 'playwright';
+import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
+import { startAuthStack } from './auth-stack.ts';
+import { startNativeWebStack } from './stack.ts';
 
-mock.module('cloudflare:workers', () => ({ env: {} }));
+setDefaultTimeout(900_000);
+let stack: Awaited<ReturnType<typeof startNativeWebStack>>;
+let auth: Awaited<ReturnType<typeof startAuthStack>>;
 
-const createdId = '00000000-0000-4000-8000-00000000c301';
+beforeAll(async () => {
+  stack = await startNativeWebStack();
+  auth = await startAuthStack(stack);
+}, 300_000);
 
-test('native Concept create posts once, retries only readback, and returns the exact identity', async () => {
-  const calls: { method: string; path: string; key: string | null }[] = [];
-  let lost = false;
-  const item = {
-    type: 'skos:Concept',
-    labels: { en: 'Night', ja: '夜' },
-    descriptions: { en: 'A time of day' },
-    statements: {
-      'skos:inScheme': [
-        {
-          property: { id: 'skos:inScheme' },
-          value: { type: 'value', content: '00000000-0000-4000-8000-00000000c102' },
-          qualifiers: [],
-          references: [],
-          rank: 'normal',
-        },
-      ],
-    },
-  };
-  const client = createKernelClient('https://kernel.invalid', {
-    fetch: (async (input, init) => {
-      const request = input instanceof Request ? input : new Request(String(input), init);
-      const path = new URL(request.url).pathname;
-      calls.push({ method: request.method, path, key: request.headers.get('idempotency-key') });
-      const json = (body: unknown, status = 200) =>
-        new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-      if (request.method === 'GET' && path === '/v1/definitions/active') return json({ digest: definitions.digest });
-      if (request.method === 'GET' && path === `/v1/definitions/releases/${definitions.digest}`)
-        return json({ digest: definitions.digest, release: definitions.release });
-      if (request.method === 'POST' && path === '/v1/subjects') {
-        if (!lost) {
-          lost = true;
-          throw new TypeError('Response lost');
-        }
-        return json({ subject: { id: createdId, type: item.type, labels: item.labels } }, 201);
-      }
-      if (request.method === 'GET' && path === `/v1/subjects/${createdId}`)
-        return json({
-          subject: {
-            id: createdId,
-            type: item.type,
-            labels: item.labels,
-            descriptions: item.descriptions,
-            aliases: {},
-            statements: {},
-            revision: 1,
-            release: definitions.digest,
-            context: '00000000-0000-8000-8000-000000000000',
-            resolution: {},
-            relationCounts: {},
-            sourceRecords: [],
-          },
-          account: null,
-          summary: null,
-          related: {},
-        });
-      return json({ code: 'not_found' }, 404);
-    }) as typeof fetch,
+afterAll(async () => {
+  await auth?.stop();
+  await stack?.stop();
+}, 180_000);
+
+async function json<T>(response: Response, action: string): Promise<T> {
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${action} returned ${response.status}: ${text}`);
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
+function posts(label: string) {
+  return stack.kernelRequests().filter((request) => {
+    if (request.method !== 'POST' || request.url !== '/v1/subjects' || !request.body) return false;
+    return (JSON.parse(request.body) as { labels?: { en?: string } }).labels?.en === label;
   });
-  const request = new Request('https://site.invalid/api', {
+}
+
+function candidateWrites() {
+  return stack.kernelRequests().filter((request) => {
+    if (request.fixtureRequest || !request.body) return false;
+    return request.method === 'POST' && request.url.includes('/candidates');
+  });
+}
+
+async function selectConceptType(page: Page) {
+  const type = page.getByLabel('Type', { exact: true });
+  await type.waitFor({ state: 'visible' });
+  const values = await type
+    .locator('option')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value).filter((value) => value.length > 0));
+  const concept = values.find((value) => value === 'skos:Concept') ?? values[0];
+  expect(concept).toBeTruthy();
+  await type.selectOption(concept!);
+}
+
+async function confirmIdentity(page: Page, label: string) {
+  await page.locator('#create-language-0').fill('en');
+  await page.locator('#create-label-0').fill(label);
+  await page.getByRole('button', { name: /search catalogue identities/i }).click();
+  await page.getByRole('button', { name: /continue with this type/i }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: /continue with this type/i }).click();
+}
+
+async function confirmCreate(page: Page) {
+  const submit = page.getByRole('button', { name: 'Create subject', exact: true });
+  await submit.click();
+  await page.locator('[data-concept-create-review]').waitFor({ state: 'visible' });
+  await submit.click();
+}
+
+test('eligible Concept create retries unknown delivery with the same key and recovers a known id', async () => {
+  const journey = await auth.signIn('alice', { returnTo: '/en/catalogue/concept' });
+  expect(journey.url).toBe(`${stack.web}/en/catalogue/concept`);
+  const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(60_000);
+  await page.locator('form').waitFor({ state: 'visible' });
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  await selectConceptType(page);
+  const label = `Native concept ${crypto.randomUUID().slice(0, 8)}`;
+  await confirmIdentity(page, label);
+  let dropped = false;
+  await page.route('**/_serverFn/**', async (route) => {
+    if (!dropped && route.request().method() === 'POST') {
+      dropped = true;
+      await route.abort('failed');
+      return;
+    }
+    await route.continue();
+  });
+  await confirmCreate(page);
+  await page.getByRole('alert').waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.waitForURL((url) => url.pathname.includes('/subjects/'));
+  const createdId = new URL(page.url()).pathname.match(/^\/en\/subjects\/([^/]+)/)?.[1];
+  expect(createdId).toBeTruthy();
+  await page.unroute('**/_serverFn/**');
+  await stack.syncKernelRequests();
+  const created = posts(label);
+  expect(created.length).toBeGreaterThanOrEqual(2);
+  expect(created.every((request) => request.idempotencyKey === created[0]?.idempotencyKey)).toBe(true);
+  expect(created.every((request) => request.body === created[0]?.body)).toBe(true);
+
+  await page.goto(`${stack.web}/en/catalogue/concept`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  await selectConceptType(page);
+  const recoveredLabel = `Recovered concept ${crypto.randomUUID().slice(0, 8)}`;
+  await confirmIdentity(page, recoveredLabel);
+  await stack.injectCreatedSubjectReadFailureOnce({ status: 503, body: '{"title":"Reader temporarily unavailable"}' });
+  await confirmCreate(page);
+  const outcome = page.locator('section[role="status"]');
+  await outcome.waitFor({ state: 'visible' });
+  const recoveredId = (await outcome.locator('code').innerText()).trim();
+  expect(recoveredId).toMatch(/^[0-9a-f-]{36}$/i);
+  expect(await posts(recoveredLabel)).toHaveLength(1);
+  await outcome.getByRole('button', { name: /retry/i }).click();
+  await page.waitForURL((url) => url.pathname.includes(`/subjects/${recoveredId}`));
+  await stack.syncKernelRequests();
+  expect(posts(recoveredLabel)).toHaveLength(1);
+});
+
+test('guest, unavailable observation, and revoked grant stay distinct from Concept creation', async () => {
+  const guest = await (await auth.context('anonymous')).newPage();
+  guest.setDefaultTimeout(30_000);
+  await guest.goto(`${stack.web}/en/catalogue/concept`, { waitUntil: 'domcontentloaded' });
+  await guest.getByText(/sign in to create a catalogue identity/i).waitFor({ state: 'visible' });
+  expect(await guest.getByLabel('Type', { exact: true }).count()).toBeGreaterThan(0);
+  expect(await guest.locator('#create-subject-submit').isDisabled()).toBe(true);
+  await guest.close();
+
+  const journey = await auth.signIn('alice', { returnTo: '/en/catalogue/concept' });
+  const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(60_000);
+  await stack.injectKernelFailureOnce({
     method: 'POST',
-    headers: {
-      cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
-      origin: 'https://site.invalid',
-      'X-CSRF-Token': 'A'.repeat(22),
+    path: '/v1/viewerActions',
+    status: 503,
+    body: '{"title":"Temporarily unavailable","status":503,"code":"dependency_unavailable"}',
+  });
+  await page.goto(`${stack.web}/en/catalogue/concept`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/required service is unavailable/i).waitFor({ state: 'visible' });
+  expect(await page.getByLabel('Type', { exact: true }).count()).toBeGreaterThan(0);
+  expect(await page.locator('#create-subject-submit').isDisabled()).toBe(true);
+  await page.getByRole('button', { name: /retry creation eligibility/i }).click();
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+
+  const alice = await stack.authPersona('alice');
+  const revoked = await stack.kernel(
+    '/v1/grants:revoke',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: alice.accountId },
+        actions: ['subject:create'],
+        valid: '(,)',
+      }),
     },
+    'governor',
+  );
+  expect([200, 201, 204, 409]).toContain(revoked.status);
+  await page.goto(`${stack.web}/en/catalogue/concept`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/does not allow creating a catalogue identity/i).waitFor({ state: 'visible' });
+  await selectConceptType(page);
+  const refusedLabel = `Refused concept ${crypto.randomUUID().slice(0, 8)}`;
+  await page.locator('#create-label-0').fill(refusedLabel);
+  expect(await page.locator('#create-subject-submit').isDisabled()).toBe(true);
+  expect(posts(refusedLabel)).toHaveLength(0);
+
+  await json(
+    await stack.kernel(
+      '/v1/grants',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({
+          resource: { route: 0, id: GLOBAL_CONTEXT },
+          subject: { kind: 'account', id: alice.accountId },
+          actions: ['subject:create'],
+          valid: '(,)',
+        }),
+      },
+      'governor',
+    ),
+    'restore subject:create',
+  );
+});
+
+test('an expired classification handoff still creates and never writes a classification', async () => {
+  const token = crypto.randomUUID();
+  const journey = await auth.signIn('alice', {
+    returnTo: `/en/catalogue/concept?classificationHandoff=${token}`,
   });
-  const env = { AUTH_ISSUER: 'https://auth.invalid' } as Partial<SessionEnv>;
-  const key = crypto.randomUUID();
-  const first = await createConceptSubject(client, request, env, { key, item }, 'en', 'Bearer token');
-  expect(first).toMatchObject({ ok: false, reason: 'unavailable' });
-  const second = await createConceptSubject(client, request, env, { key, item }, 'en', 'Bearer token');
-  expect(second).toMatchObject({
-    ok: true,
-    id: createdId,
-    reader: { state: 'ready' },
+  const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(60_000);
+  await page.getByText(/this classification return is not valid for the current reader/i).waitFor({
+    state: 'visible',
   });
-  expect(
-    calls.filter((call) => call.method === 'POST' && call.path === '/v1/subjects').map((call) => call.key),
-  ).toEqual([key, key]);
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  await selectConceptType(page);
+  const label = `Handoff concept ${crypto.randomUUID().slice(0, 8)}`;
+  await confirmIdentity(page, label);
+  await confirmCreate(page);
+  await page.waitForURL((url) => url.pathname.includes('/subjects/'));
+  const createdId = new URL(page.url()).pathname.match(/^\/en\/subjects\/([^/]+)/)?.[1];
+  expect(createdId).toBeTruthy();
+  await stack.syncKernelRequests();
+  expect(posts(label)).toHaveLength(1);
+  expect(candidateWrites()).toHaveLength(0);
 });

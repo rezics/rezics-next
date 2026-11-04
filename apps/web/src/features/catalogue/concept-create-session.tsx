@@ -19,7 +19,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { editorRequest } from './editor-request';
 import { CreateSubjectForm } from './create-subject-form';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import type { CreateResult, CreateType, InitialSubject } from './create-subject';
 import { relationTargetSearch } from './relation-editor-search';
 import { createCatalogueConcept, loadConceptCreate } from './concept-create-actions';
@@ -175,6 +175,7 @@ function ConceptCreateSessionLive({
 
   const transport = useMemo(
     () => ({
+      eligibility: () => readCatalogueCreateEligibility(),
       submit: (command: { item: InitialSubject; key: string }) =>
         createCatalogueConcept({
           data: editorRequest(command as ConceptCreateCommand, work),
