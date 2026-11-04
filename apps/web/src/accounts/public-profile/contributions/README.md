@@ -77,3 +77,22 @@ Decision: show sign-in and private recovery once per contribution page, leaving 
 usable while private advice is unavailable. The sign-in return keeps the actual path, cursor query bytes and hash.
 Preparing, unavailable and retired notices describe private advice rather than claiming that the public page failed.
 Retry refreshes only the same admitted page input; readback never acknowledges a native write.
+
+## Exact native advice preparation
+
+Decision: prepare exact occurrence and operation selection against the installed native reading-page contract;
+leave contribution response adaptation and production controls unavailable until the official mounted callable and
+DTO are published, rather than inventing a contribution response type.
+
+`contribution-actions/advice.ts` derives its contribution response alias from the mounted account method. That
+alias is `never` on the current installed declaration. Its separate native advice selector uses the existing
+`ReadingPageResponse` declaration and does not accept the receiver's unknown wire result. It requires the exact
+reader, target, source revision, action and operation together. Missing advice, denied advice, withheld advice,
+failure and retirement stay distinct; duplicate references or operations cannot admit a command. A Post's watch
+target is its containing thread with the original thread revision. Original-occurrence matching also checks the
+author, public availability, place, containing thread and first-post revision against the admitted selection.
+
+This preparation does not install private controls or connect command owners. The mounted contribution response
+adapter, native reaction/watch/report/reply controls and their command recovery remain to be completed against the
+publisher's official contract. Existing public links and the shared host retirement and recovery notice continue
+to own the production journey meanwhile.

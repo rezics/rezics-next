@@ -24,8 +24,121 @@ const { unavailableAuthorContributionActionsWire } =
   await import('../src/accounts/public-profile/contribution-actions/receiver');
 const { rememberContribution, restoreContributionRecovery } =
   await import('../src/accounts/public-profile/contributions/navigation');
+const { originalContributionReference, contributionCommandTarget, contributionOperationAdvice } =
+  await import('../src/accounts/public-profile/contribution-actions/advice');
+type NativeAdvice = import('../src/accounts/public-profile/contribution-actions/advice').NativeContributionAdvice;
 
 const id = '00000000-0000-4000-8000-000000000001';
+
+test('private advice selects the exact native action, operation, revision and reader without treating missing as denied', () => {
+  const reference = { type: 'content.thread' as const, id, placeId: id, sourceRevisionId: id };
+  const operation = { action: 'reaction:set', operationId: 'reaction.set', state: 'available' as const };
+  const nativeReference = {
+    type: 'content.thread' as const,
+    id,
+    sourceRevisionId: id,
+    state: 'current' as const,
+    operations: [operation],
+  };
+  const source: NativeAdvice = {
+    viewer: { kind: 'account', id },
+    currentness: { actions: 'current' },
+    actions: { state: 'current', retryable: false, references: [nativeReference] },
+  };
+  const request = {
+    reference,
+    operation: 'reaction' as const,
+    action: operation.action,
+    operationId: operation.operationId,
+    source,
+    reader: id,
+    isCurrent: () => true,
+  };
+  expect(contributionOperationAdvice(request)).toBe('available');
+  for (const state of ['denied', 'sign_in_required', 'withheld', 'unavailable', 'not_applicable'] as const) {
+    expect(
+      contributionOperationAdvice({
+        ...request,
+        source: {
+          ...source,
+          actions: { ...source.actions, references: [{ ...nativeReference, operations: [{ ...operation, state }] }] },
+        },
+      }),
+    ).toBe(state);
+  }
+  expect(contributionOperationAdvice({ ...request, action: 'different-action' })).toBe('missing');
+  expect(contributionOperationAdvice({ ...request, operationId: 'different-operation' })).toBe('missing');
+  expect(contributionOperationAdvice({ ...request, source: undefined })).toBe('missing');
+  expect(contributionOperationAdvice({ ...request, reader: 'replacement-reader' })).toBe('unavailable');
+  expect(contributionOperationAdvice({ ...request, isCurrent: () => false, failed: true })).toBe('retired');
+  expect(contributionOperationAdvice({ ...request, failed: true })).toBe('failed');
+  for (const replacement of [
+    { ...nativeReference, sourceRevisionId: 'replacement-revision' },
+    { ...nativeReference, operations: [operation, operation] },
+  ]) {
+    expect(
+      contributionOperationAdvice({
+        ...request,
+        source: {
+          ...source,
+          actions: { ...source.actions, references: [replacement] },
+        },
+      }),
+    ).toBe('unavailable');
+  }
+  expect(
+    contributionOperationAdvice({
+      ...request,
+      source: {
+        ...source,
+        currentness: { actions: 'unavailable' },
+      },
+    }),
+  ).toBe('unavailable');
+  expect(
+    contributionOperationAdvice({
+      ...request,
+      source: {
+        ...source,
+        actions: { ...source.actions, references: [{ ...nativeReference, state: 'withheld' }] },
+      },
+    }),
+  ).toBe('withheld');
+});
+
+test('only surviving original Discussion, Review and Post occurrences select advice; Post watch keeps its thread', () => {
+  const publicState = { availability: 'available', visibility: 'published' };
+  const firstPost = { ...publicState, threadId: id, revisionId: id };
+  const thread = { ...publicState, id, boardId: id, authorId: id, firstPost, kind: 'discussion' };
+  const threadReference = { type: 'content.thread' as const, id, placeId: id, sourceRevisionId: id };
+  const input = {
+    accountId: id,
+    cursor: 'original+/=',
+    proof: 'native-proof',
+    view: 'discussion' as const,
+    references: [threadReference],
+  };
+  expect(originalContributionReference(input, thread)).toBe(threadReference);
+  expect(originalContributionReference({ ...input, view: 'reviews' }, { ...thread, kind: 'review' })).toBe(
+    threadReference,
+  );
+  for (const replacement of [
+    { ...thread, authorId: 'another-author' },
+    { ...thread, visibility: 'hidden' },
+    { ...thread, firstPost: { ...firstPost, revisionId: 'replacement-revision' } },
+  ])
+    expect(originalContributionReference(input, replacement)).toBeUndefined();
+  const postReference = { ...threadReference, type: 'content.post' as const, threadId: id, threadRevisionId: id };
+  const postInput = { ...input, view: 'posts' as const, references: [postReference] };
+  const post = { ...publicState, id, authorId: id, threadId: id, revisionId: id, thread };
+  expect(originalContributionReference(postInput, post)).toBe(postReference);
+  expect(
+    originalContributionReference(postInput, { ...post, thread: { ...thread, boardId: 'replacement-board' } }),
+  ).toBeUndefined();
+  expect(contributionCommandTarget(postReference, 'watch')).toEqual({ type: 'content.thread', id, revisionId: id });
+  for (const operation of ['reaction', 'report', 'reply'] as const)
+    expect(contributionCommandTarget(postReference, operation)).toEqual({ type: 'content.post', id, revisionId: id });
+});
 
 function episode(client: QueryClient, row: Record<string, unknown>): ContributionActionsEpisode {
   return {
