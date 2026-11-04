@@ -70,3 +70,5 @@ Commerce producer dependency; neither is a generic multi-provider client parser 
 AniList, Bangumi and MAL confirmation pages admit source observations through the installed
 `libraryEntries(...).sourceObservations.post` method after the existing import apply. VNDB keeps its own generated
 client contract and does not add a second parser or provider synchronizer.
+
+Decision: after apply, an explicit fresh read shows up to eight current Library entries in activity order; normal Library navigation owns continuation, and returning to source review repeats its native page read.

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useOperation } from '../../kernel/exposure';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLibraryWorkspaceAdmission } from '../library-workspace-admission';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -10,10 +10,11 @@ import { VndbDeparture } from './departure';
 import { useVndbImportPort } from './port';
 import { VndbResultPage } from './results';
 import { VndbReviewPage } from './review';
-import { VndbApplying, VndbRemoved, VndbSignedOut } from './states';
+import { VndbApplying, VndbRemoved, VndbSignedOut, VndbUnavailable } from './states';
 import { VndbUploadForm } from './upload';
 import { useVndbVisit, type VndbVisit } from './visit';
 import type { VndbNotice } from './controller';
+import { CurrentImportLibrary } from '../showcase-import-return/current';
 
 function noticeText(notice: VndbNotice): string | null {
   if (!notice) return null;
@@ -46,10 +47,32 @@ export function PersonalVndbImportPage({ visit }: { visit?: VndbVisit | null }) 
   return <VndbImportAccess visit={current} />;
 }
 
+const importOperations = ['library_entry.put'] as const;
+
 function VndbImportAccess({ visit }: { visit: VndbVisit }) {
-  const admitted = useOperation('library_entry.put');
-  const identity = [visit.subject, visit.csrfToken, getLocale(), String(admitted)].join(':');
-  return <VndbImportSession key={identity} visit={visit} />;
+  const { store, value } = useLibraryWorkspaceAdmission(importOperations);
+  const version = value.dispatch[0];
+  const scoped = useMemo<VndbVisit>(() => {
+    const controller = new AbortController();
+    return {
+      subject: visit.subject,
+      csrfToken: visit.csrfToken,
+      controller,
+      retire: () => controller.abort(),
+      current: (signal) => {
+        if (
+          !visit.current(signal) ||
+          !store.allowed('library_entry.put') ||
+          store.dispatchVersion('library_entry.put') !== version
+        )
+          controller.abort();
+        return !controller.signal.aborted;
+      },
+    };
+  }, [visit, store, version]);
+  const identity = [visit.subject, visit.csrfToken, getLocale(), version].join(':');
+  if (!value.allowed[0]) return <VndbUnavailable />;
+  return <VndbImportSession key={identity} visit={scoped} />;
 }
 
 function VndbImportSession({ visit }: { visit: VndbVisit }) {
@@ -65,10 +88,12 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
 
   async function act(run: (current: VndbJourney) => Promise<VndbJourneySnapshot> | VndbJourneySnapshot) {
     if (!journey.current) return;
-    setSnap(await run(journey.current));
+    const result = run(journey.current);
+    setSnap(journey.current.snapshot());
+    setSnap(await result);
   }
 
-  const locked = snap.busy || snap.notice?.kind === 'unknown';
+  const locked = snap.busy || !!snap.retryCommand;
   const showSourceRetry = snap.notice?.kind === 'unknown' && snap.notice.command.kind === 'source';
   return (
     <main ref={main} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
@@ -78,7 +103,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
           {noticeText(snap.notice)}
         </p>
       ) : null}
-      {snap.notice?.kind === 'unknown' ? (
+      {snap.retryCommand ? (
         <VndbAction type="button" disabled={snap.busy} onClick={() => void act((current) => current.retryUnknown())}>
           {m.library_bangumi_retry_command()}
         </VndbAction>
@@ -109,6 +134,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
             busy={snap.busy || locked}
             onReview={(body) => void act((current) => current.review(body))}
             onNext={() => void act((current) => current.loadPage(snap.page?.next ?? 0))}
+            onPrevious={() => void act((current) => current.loadPage(Math.max(0, snap.offset - 8)))}
             onConfirm={() => void act((current) => current.openConfirm())}
             onSource={() => void act((current) => current.source())}
             onHideSource={() => void act((current) => current.hideSource())}
@@ -131,13 +157,19 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
         />
       ) : null}
       {snap.stage === 'results' ? (
-        <VndbResultPage
-          snap={snap}
-          busy={snap.busy}
-          onResume={() => void act((current) => current.resume())}
-          onReview={() => void act((current) => current.backToReview())}
-          onDiscard={() => void act((current) => current.discard())}
-        />
+        <>
+          <VndbResultPage
+            snap={snap}
+            busy={snap.busy}
+            onResume={() => void act((current) => current.resume())}
+            onReview={() => void act((current) => current.backToReview())}
+            onDiscard={() => void act((current) => current.discard())}
+          />
+          <CurrentImportLibrary
+            key={`${snap.uploadId}:${snap.outcomes.map((row) => `${row.reviewId}:${row.status}`).join(',')}`}
+            visit={visit}
+          />
+        </>
       ) : null}
       {snap.stage === 'removed' ? <VndbRemoved outcomes={snap.outcomes} /> : null}
       {snap.sourceVisible && snap.sourceXML !== null ? (
@@ -147,6 +179,16 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
       ) : null}
       {snap.uploadId && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
+          {snap.stage === 'review' || snap.stage === 'results' ? (
+            <VndbAction
+              type="button"
+              variant="outline"
+              disabled={locked}
+              onClick={() => void act((current) => current.replaceSource())}
+            >
+              {m.library_vndb_replace_source()}
+            </VndbAction>
+          ) : null}
           {snap.stage !== 'results' || !snap.cancelled ? (
             <VndbAction
               type="button"
@@ -173,7 +215,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
         active={!!snap.uploadId && snap.stage !== 'removed'}
         locked={locked}
         onLeave={async () => {
-          if (snap.notice?.kind === 'unknown' || snap.busy) return false;
+          if (snap.retryCommand || snap.busy) return false;
           if (snap.cancelled) return true;
           const result = await journey.current?.cancelAdmission();
           if (result) setSnap(result);

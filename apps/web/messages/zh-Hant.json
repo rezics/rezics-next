@@ -8533,5 +8533,21 @@
   "library_consolidation_source_retained": "目標已接受；來源歸屬保留",
   "library_consolidation_active": "已確認；仍有剩餘項目",
   "library_consolidation_completed": "已完成；請查看每項結果",
-  "library_consolidation_cancelled": "已取消；已接受的變更保留"
+  "library_consolidation_cancelled": "已取消；已接受的變更保留",
+  "library_vndb_use_match": "選擇這個原生精確匹配",
+  "library_vndb_replace_source": "更換 XML 匯出檔",
+  "library_vndb_previous_page": "讀取上一頁",
+  "library_vndb_result_unchanged": "未變更；已略過此列",
+  "library_vndb_result_rejected": "遭拒；請重新讀取此列的審核後再選擇其他變更",
+  "library_vndb_result_uncertain": "結果尚未確定；請重試原先顯示的選取內容",
+  "library_vndb_apply_refused": "套用要求遭拒；已保留原先的選取內容，供您明確重試",
+  "library_vndb_review_withdrawn": "來源審核已非目前版本。請更換匯出檔以開始新的審核。",
+  "library_vndb_library_title": "前往您的資料庫",
+  "library_vndb_library_help": "讀取最多八筆目前的資料庫項目，依最近活動排序。這是重新讀取的資料庫內容，並非 XML 的推算結果。來源分數與進度不會產生本機效果。離開會停止新的匯入工作；已確認的變更會保留。",
+  "library_vndb_library_refresh": "讀取目前資料庫",
+  "library_vndb_library_loading": "正在讀取目前資料庫…",
+  "library_vndb_library_open": "開啟資料庫",
+  "library_vndb_library_count": "目前顯示的資料庫項目：{count}",
+  "library_vndb_library_state": "資料庫狀態：{state}",
+  "library_vndb_library_more": "開啟資料庫以瀏覽更多目前項目。"
 }

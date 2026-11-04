@@ -8645,5 +8645,21 @@
   "library_consolidation_source_retained": "Target accepted; source retained",
   "library_consolidation_active": "Confirmed; more items remain",
   "library_consolidation_completed": "Completed; see each item’s result",
-  "library_consolidation_cancelled": "Cancelled; accepted changes remain"
+  "library_consolidation_cancelled": "Cancelled; accepted changes remain",
+  "library_vndb_use_match": "Choose this exact native match",
+  "library_vndb_replace_source": "Replace XML export",
+  "library_vndb_previous_page": "Read previous page",
+  "library_vndb_result_unchanged": "Unchanged; this row was skipped",
+  "library_vndb_result_rejected": "Rejected; refresh this row’s review before choosing another change",
+  "library_vndb_result_uncertain": "Outcome uncertain; retry the original displayed selection",
+  "library_vndb_apply_refused": "Apply request refused; the original selection is retained for deliberate retry",
+  "library_vndb_review_withdrawn": "The source review is no longer current. Replace the export to start a new review.",
+  "library_vndb_library_title": "Continue in your Library",
+  "library_vndb_library_help": "Read up to eight current Library entries, ordered by recent activity. This is a fresh Library read, not a projection of your XML. Source scores and progress create no local effects. Leaving stops new import work; acknowledged changes remain.",
+  "library_vndb_library_refresh": "Read current Library",
+  "library_vndb_library_loading": "Reading current Library…",
+  "library_vndb_library_open": "Open Library",
+  "library_vndb_library_count": "Current Library entries shown: {count}",
+  "library_vndb_library_state": "Library state: {state}",
+  "library_vndb_library_more": "Open Library to browse more current entries."
 }

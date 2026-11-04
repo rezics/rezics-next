@@ -8533,5 +8533,21 @@
   "library_consolidation_source_retained": "目标已接受；源归属保留",
   "library_consolidation_active": "已确认；仍有剩余项目",
   "library_consolidation_completed": "已完成；请查看每项结果",
-  "library_consolidation_cancelled": "已取消；已接受的更改保留"
+  "library_consolidation_cancelled": "已取消；已接受的更改保留",
+  "library_vndb_use_match": "选择这个原生精确匹配",
+  "library_vndb_replace_source": "更换 XML 导出文件",
+  "library_vndb_previous_page": "读取上一页",
+  "library_vndb_result_unchanged": "未更改；已跳过此行",
+  "library_vndb_result_rejected": "已拒绝；请刷新此行的审核后再选择其他更改",
+  "library_vndb_result_uncertain": "结果尚未确定；请重试原先显示的选择内容",
+  "library_vndb_apply_refused": "应用请求被拒绝；已保留原先的选择内容，供您明确重试",
+  "library_vndb_review_withdrawn": "来源审核已不再有效。请更换导出文件以开始新的审核。",
+  "library_vndb_library_title": "前往您的资料库",
+  "library_vndb_library_help": "读取最多八条当前资料库条目，按最近活动排序。这是重新读取的资料库内容，并非 XML 的推算结果。来源分数与进度不会产生本地效果。离开会停止新的导入工作；已确认的更改会保留。",
+  "library_vndb_library_refresh": "读取当前资料库",
+  "library_vndb_library_loading": "正在读取当前资料库…",
+  "library_vndb_library_open": "打开资料库",
+  "library_vndb_library_count": "当前显示的资料库条目：{count}",
+  "library_vndb_library_state": "资料库状态：{state}",
+  "library_vndb_library_more": "打开资料库以浏览更多当前条目。"
 }

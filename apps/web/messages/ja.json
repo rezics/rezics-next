@@ -8533,5 +8533,21 @@
   "library_consolidation_source_retained": "移動先で受け入れ済み。移動元は保持",
   "library_consolidation_active": "確認済み。未処理の項目があります",
   "library_consolidation_completed": "完了。各項目の結果をご確認ください",
-  "library_consolidation_cancelled": "中止済み。受け入れ済みの変更は残ります"
+  "library_consolidation_cancelled": "中止済み。受け入れ済みの変更は残ります",
+  "library_vndb_use_match": "この厳密な照合先を選ぶ",
+  "library_vndb_replace_source": "XML エクスポートを差し替える",
+  "library_vndb_previous_page": "前のページを読み込む",
+  "library_vndb_result_unchanged": "変更なし。この行はスキップされました",
+  "library_vndb_result_rejected": "拒否されました。別の変更を選ぶ前に、この行の確認を更新してください",
+  "library_vndb_result_uncertain": "結果は未確定です。元の表示済みの選択内容で再試行してください",
+  "library_vndb_apply_refused": "適用要求が拒否されました。明示的に再試行できるよう元の選択内容を保持しています",
+  "library_vndb_review_withdrawn": "元データの確認は現在有効ではありません。エクスポートを差し替えて確認をやり直してください。",
+  "library_vndb_library_title": "ライブラリへ進む",
+  "library_vndb_library_help": "現在のライブラリから最近のアクティビティ順に最大 8 件を読み込みます。XML から推測せず、ライブラリを新たに読み込みます。元のスコアや進捗はローカルの値を変更しません。離れると新たなインポート処理は停止しますが、確認済みの変更は残ります。",
+  "library_vndb_library_refresh": "現在のライブラリを読み込む",
+  "library_vndb_library_loading": "現在のライブラリを読み込み中…",
+  "library_vndb_library_open": "ライブラリを開く",
+  "library_vndb_library_count": "表示中の現在のライブラリ項目：{count}",
+  "library_vndb_library_state": "ライブラリの状態：{state}",
+  "library_vndb_library_more": "続きはライブラリで確認できます。"
 }
