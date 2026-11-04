@@ -935,6 +935,48 @@ export const BoardPageResponseSchema = t.Object(
   },
   closed,
 );
+/** Private, exact selected inspection; it is not a Board page or command. */
+export const BoardPinAdviceInputSchema = t.Object(
+  {
+    selected: t.Array(
+      t.Object(
+        {
+          threadId: ContentIdSchema,
+          placeId: ContentIdSchema,
+          sourceRevisionId: ContentIdSchema,
+        },
+        closed,
+      ),
+      { maxItems: 25 },
+    ),
+    pinRevision: t.Optional(t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' })),
+  },
+  closed,
+);
+export const BoardPinAdviceResponseSchema = t.Union([
+  t.Object({ state: t.Literal('stale') }, closed),
+  t.Object(
+    {
+      state: t.Literal('ready'),
+      viewer: t.Object({ kind: t.Literal('account'), id: ContentIdSchema }, closed),
+      boardId: ContentIdSchema,
+      pinRevision: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
+      management: t.Union([t.Literal('allowed'), t.Literal('denied')]),
+      threads: t.Array(
+        t.Object(
+          {
+            threadId: ContentIdSchema,
+            pinned: t.Boolean(),
+            actions: t.Array(t.Union([t.Literal('pin'), t.Literal('unpin')]), { maxItems: 1 }),
+          },
+          closed,
+        ),
+        { maxItems: 25 },
+      ),
+    },
+    closed,
+  ),
+]);
 export const BoardThreadPinInputSchema = t.Object({ pinned: t.Boolean() }, closed);
 export const BoardThreadPinResponseSchema = t.Object(
   {

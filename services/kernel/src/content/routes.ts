@@ -7,6 +7,7 @@ import { listOwnDrafts, resumeOwnDraft } from './own-drafts.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { BoardOpeningChangedError, createBoardPageReader, type BoardOpeningPage } from './board-page.ts';
 import { BoardPinLimitError, setBoardThreadPin } from './board-pin.ts';
+import { readSelectedBoardPinAdvice } from './board-pin-advice.ts';
 import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
 import { listSubjectThreads } from './subject-threads.ts';
 import { InvalidSitemapCursorError, listSitemapBoards, listSitemapThreads } from './sitemap.ts';
@@ -94,6 +95,8 @@ import {
   BoardThreadsResponseSchema,
   BoardPageQuerySchema,
   BoardPageResponseSchema,
+  BoardPinAdviceInputSchema,
+  BoardPinAdviceResponseSchema,
   BoardThreadPinInputSchema,
   BoardThreadPinResponseSchema,
   SitemapBoardPageSchema,
@@ -248,6 +251,8 @@ const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
 const boardPageQuery = strictContentSchema(BoardPageQuerySchema);
 const boardPageResponse = strictContentSchema(BoardPageResponseSchema);
+const boardPinAdviceInput = strictContentSchema(BoardPinAdviceInputSchema);
+const boardPinAdviceResponse = strictContentSchema(BoardPinAdviceResponseSchema);
 const boardThreadPinInput = strictContentSchema(BoardThreadPinInputSchema);
 const boardThreadPinResponse = strictContentSchema(BoardThreadPinResponseSchema);
 const sitemapQuery = strictContentSchema(SitemapQuerySchema);
@@ -1248,6 +1253,35 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             const { anchors: _anchors, ...response } = page;
             return response;
+          }),
+        );
+      },
+    )
+    .post(
+      '/v1/boards/:id/pin-advice',
+      {
+        params,
+        parse: [parseBody, 'json'],
+        body: boardPinAdviceInput,
+        response: { 200: withHeaders(boardPinAdviceResponse, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'board_pin_advice.inspect',
+          description: 'Inspect current native pin actions for at most twenty-five exact displayed thread sources.',
+          'x-resource-types': ['content.board', 'content.thread'],
+          'x-exposure': 'public',
+          'x-action': 'board:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id }, body, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        existingId(id);
+        set.headers['cache-control'] = 'private, no-store';
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const result = await readSelectedBoardPinAdvice(dependencies, id, body, { actor, deadline: job.deadline });
+            for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+            return result.value;
           }),
         );
       },

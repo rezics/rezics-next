@@ -554,6 +554,30 @@ board. Before receipt lookup, it also rechecks current board, Realm (when presen
 protected Realm board checks retain current ban and account-standing behavior. A replay repeats these checks. Web
 owns pin controls and restart UI; its existing deduplicating pin-author hydration consumes only disclosed threads.
 
+Decision: selected pin inspection rejects every duplicate reference, including identical repeats, and withholds
+an entire selection with the ordinary exact-read 404 when any selected source is missing, concealed or erased.
+
+`POST /v1/boards/{id}/pin-advice` is an authenticated, private `no-store` read. Its closed input is
+`{ selected: [{ threadId, placeId, sourceRevisionId }], pinRevision? }`: at most twenty-five unique references
+from the displayed ordinary/pinned cohort. Place must equal the route Board; source revision must belong to the
+thread's native route, which may differ from the Board home. All shape/size/duplicate checks precede native work.
+No membership or caller-supplied action is accepted. Available output is
+`{ state: "ready", viewer: { kind: "account", id }, boardId, pinRevision, management, threads }`, with only
+selected original thread IDs, current `pinned` and closed `actions` per row. Full native capacity removes only
+`pin`; current pins retain `unpin`. Current read access never supplies curation authority.
+
+The reader reuses native Board/Realm disclosure and two exact selected reading-card disclosure rounds, then
+prepares current curation and evaluates it in the final native pin snapshot. It compares source/security witnesses,
+Board parent, native home epochs and pin generation. A changed observed source or generation returns only
+`{ state: "stale" }`; the consumer must explicitly inspect fresh sources and restart its current Board sort without
+the prior cursor. Native dependency failure remains unavailable, separate from denial or unpinned state.
+The existing pin command and its authorize-before-receipt protocol are unchanged.
+
+This additive mounted route and `BoardPinAdviceInputSchema` / `BoardPinAdviceResponseSchema` are OpenAPI inputs
+for the retained complete-input publisher. No new generator or generated declarations are supplied here. The Web
+receiver and native/rendered journey acceptance remain continuation work; this mount does not make its existing
+production `readPage` seam available.
+
 Actual shared callsites: `boards.ts` alone reads the pin projection and uses the created/rank cursor encoders and
 decoders; `board-cursor.test.ts` exercises their format. The mounted `routes.ts` board page and pin command retain
 the existing native bindings. `schemas.ts` bounds both pin responses, and `board-events.ts` registers pin positions
@@ -2778,6 +2802,25 @@ check uses scales [256, 1024, 4096] with the series rule.
 - **Growth check:** `test/content/board-hot-http.test.ts`: “the hot page stays within its bound as boards and threads grow”.
 
 ### Board pins
+
+#### Selected pin advice
+
+- **Touches:** Three released Board/Realm native snapshots, fresh read-decision preparations and two precise
+  curation preparations/evaluations; each snapshot reads one Board generation; the two authority snapshots also read the indexed current pin prefix
+  of at most five. Two selected disclosure rounds use exact Board, Realm, thread, opening and revision keys through
+  the existing native Accounts/Access/Realm/Subject and account-standing owners. Their pools, runner work,
+  preparations, controls, evaluations and both disclosure observations remain part of the operation's cost.
+- **Bound:** Raw selection S <= 25 before all I/O; no candidate scan, history traversal, refill or pin census.
+  At most 50 thread/opening/revision materializations across the two rounds. Ordinary disclosure can load a 2 MiB
+  opening per selected row per round; these discarded raw bodies, parse copies, native parent/eligibility bodies and
+  Access work must still be charged. Retained advice contains at most 25 compact source witnesses, two five-pin
+  prefixes and 25 output rows; no body is copied into advice. Each output UUID is 36 ASCII bytes, the revision at
+  most 19 digits and each action at most five characters: the closed response fits 16 KiB before serialization.
+  Final byte validation is an invariant in addition to these upstream bounds.
+- **Growth check:** Composition tests cover fixed selection, full capacity, hidden-pin non-disclosure and source,
+  parent, generation, revocation and home changes. Independent native threads, pin/history, revisions and nested
+  Access/Accounts/Realm/Subject populations at 256/1024/4096, including actual indexed prefixes/rows/blocks,
+  authentication, every pool/runner, raw bytes, copies and serialization, remain deferred to native journey work.
 
 #### Pin and unpin
 
