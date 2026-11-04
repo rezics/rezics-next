@@ -462,6 +462,7 @@ export function bootSmokeRepairBrief(repair: BootSmokeRepair, policy = defaultPo
       manager: repair.owner.brief.manager,
       kind: 'implementation',
       paths,
+      riskAreas: repair.owner.brief.riskAreas ?? [],
       urgent: true,
       acceptance: { failing: true },
       criticalPath: false,

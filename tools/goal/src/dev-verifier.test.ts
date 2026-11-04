@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLease } from './lease.ts';
+import { parseBrief } from './briefs.ts';
 import { bootSmokeEnvironment } from './verification.ts';
 import {
   bootSmokeRepairBrief,
@@ -396,6 +397,7 @@ test('A new dev head whose Kernel entry throws on import gets a boot finding wit
   const ctx = setup(root, tasks);
   ctx.settings.bootSmoke = { tests: [KERNEL_BOOT] };
   const repairs: BootSmokeRepair[] = [];
+  const dispatchedBriefs: ReturnType<typeof parseBrief>[] = [];
   const order: string[] = [];
   const run = async (command: readonly string[], cwd: string) => {
     if (command.some((part) => part.includes('kernel-boots'))) {
@@ -410,6 +412,7 @@ test('A new dev head whose Kernel entry throws on import gets a boot finding wit
   };
   const dispatchRepair = (repair: BootSmokeRepair) => {
     repairs.push(repair);
+    dispatchedBriefs.push(parseBrief(bootSmokeRepairBrief(repair), { version: 1, areas: {} }));
     if (!repair.existingTaskId)
       tasks.push({
         id: 'boot-repair',
@@ -431,6 +434,7 @@ test('A new dev head whose Kernel entry throws on import gets a boot finding wit
       .some((finding) => finding.status === 'new' && finding.reason.includes('Boot smoke')),
   ).toBe(true);
   expect(repairs).toHaveLength(1);
+  expect(dispatchedBriefs[0]?.riskAreas).toEqual([]);
   expect(repairs[0]).toMatchObject({ test: KERNEL_BOOT, commit: breaking });
   expect(repairs[0]!.existingTaskId).toBeUndefined();
   expect(repairs[0]!.owner.id).toBe('breaking');
@@ -441,6 +445,29 @@ test('A new dev head whose Kernel entry throws on import gets a boot finding wit
   await verifyDev({ ...ctx, runGate: run, dispatchRepair });
   expect(repairs).toHaveLength(2);
   expect(repairs[1]!.existingTaskId).toBe('boot-repair');
+});
+
+test('boot-smoke repair briefs retain owner risk areas and pass dispatch validation', () => {
+  const repair = {
+    test: KERNEL_BOOT,
+    commit: 'broken-head',
+    error: 'Error: kernel did not boot',
+    owner: {
+      brief: {
+        goal: 'auth',
+        manager: 'auth-manager',
+        paths: ['services/auth/**'],
+        riskAreas: ['authorization'],
+      },
+    } as Task,
+  } as BootSmokeRepair;
+
+  expect(
+    parseBrief(bootSmokeRepairBrief(repair), {
+      version: 1,
+      areas: { authorization: ['**/auth/**'] },
+    }).riskAreas,
+  ).toEqual(['authorization']);
 });
 
 test('Boot smoke runs outside worker slots and never delays a landing.', async () => {
