@@ -26,11 +26,14 @@ import {
 } from './showcase-manifest.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
+  acquireShowcaseVndbTagRatings,
+  type VndbTagRatingObservation,
+} from './showcase-vndb-tag-ratings.ts';
+import {
   importVndbPublicTags,
   planVndbPublicTags,
   readVndbPublicTagBindings,
   vndbPublicTagVocabularyAdmission,
-  type AdmittedPublicTag,
   type VndbPublicTagKnownBindings,
   type VndbPublicTagPlan,
   type VndbPublicTagsResult,
@@ -48,11 +51,6 @@ type Provider = 'bangumi' | 'vndb';
 const workId = /^v[1-9][0-9]*$/u;
 const tagId = /^g[1-9][0-9]{0,9}$/u;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-
-/** Native qualifier Semantic still has to release for public VNDB tag weight. */
-export const showcaseTagWeightProperty = 'rezics:sourceTagWeight';
-export const showcaseTagWeightGapReason =
-  'Public VNDB tag weight (tags.rating in (0,3]) is not in the acquired COPY tables; tags_vn.vote is an individual admission filter, not a public score; native rezics:sourceTagWeight is not released';
 
 export type ShowcaseTagVocabularyRecord = Readonly<{
   kind: 'scheme' | 'concept';
@@ -72,7 +70,6 @@ export type ShowcaseTagManifest = Readonly<{
 
 export type ShowcaseTagPlan = VndbPublicTagPlan & {
   vocabulary: ShowcaseTagVocabularyRecord[];
-  weightGap: CrossMediaGap | null;
   truncated: boolean;
 };
 
@@ -367,17 +364,6 @@ function vocabularyRecords(
   return records;
 }
 
-function weightGap(admitted: readonly AdmittedPublicTag[]): CrossMediaGap | null {
-  if (!admitted.length) return null;
-  return {
-    source: 'vndb',
-    fields: ['tags_vn.vote'],
-    record: { metric: 'vndb.tags.rating', property: showcaseTagWeightProperty },
-    reason: showcaseTagWeightGapReason,
-    property: showcaseTagWeightProperty,
-  };
-}
-
 function markProposed(
   records: ShowcaseTagVocabularyRecord[],
   known: VndbPublicTagKnownBindings,
@@ -408,12 +394,10 @@ function composePlan(
   bindings: SourceVocabularyBindings,
   known: VndbPublicTagKnownBindings,
 ): ShowcaseTagPlan {
-  const obligation = weightGap(plan.admitted);
   return {
     ...plan,
-    gaps: mergeGaps([...projected.gaps, ...(obligation ? [obligation] : []), ...plan.gaps]),
+    gaps: mergeGaps([...projected.gaps, ...plan.gaps]),
     vocabulary: markProposed(vocabularyRecords(projected.dictionary, bindings), known),
-    weightGap: obligation,
     truncated: projected.truncated,
   };
 }
@@ -436,9 +420,10 @@ export async function planShowcaseTags(input: {
 
 export type ShowcaseTagsResult = VndbPublicTagsResult & {
   vocabulary: ShowcaseTagVocabularyRecord[];
-  weightGap: CrossMediaGap | null;
   truncated: boolean;
   bindings: SourceVocabularyBindings;
+  tagWeightObservations: readonly VndbTagRatingObservation[];
+  tagWeightRefreshes: readonly string[];
 };
 
 /** Prepare the selected tags for admission with the elected works' single reconciliation run. */
@@ -447,6 +432,7 @@ export async function prepareShowcaseTags(input: {
   selectedVids: readonly string[];
   port: CrossMediaPort;
   known?: VndbPublicTagKnownBindings;
+  fetch?: typeof fetch;
 }) {
   const known = input.known ?? { schemes: [], concepts: [] };
   const projected = await projectShowcaseTagTables(
@@ -456,7 +442,19 @@ export async function prepareShowcaseTags(input: {
   );
   const bindings = await readVndbPublicTagBindings(input.port, known);
   const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
-  return { ...planned, bindings, vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, planned.admitted) };
+  const ratingAcquisition = await acquireShowcaseVndbTagRatings({
+    selectedVids: input.selectedVids,
+    admitted: planned.admitted,
+    bindings,
+    ...(input.fetch ? { fetch: input.fetch } : {}),
+  });
+  return {
+    ...planned,
+    bindings,
+    vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, planned.admitted, ratingAcquisition.snapshots),
+    tagWeightObservations: ratingAcquisition.observations,
+    tagWeightRefreshes: [...new Set(input.selectedVids)],
+  };
 }
 
 /** Default adapter: bounded projection, current binding read, then the integrated public-tag importer. */
@@ -467,18 +465,26 @@ export async function importShowcaseTags(input: {
   port: CrossMediaPort;
   known?: VndbPublicTagKnownBindings;
   destination?: { origin: string };
+  fetch?: typeof fetch;
   manifest?: { recordVocabulary?(records: readonly ShowcaseTagVocabularyRecord[]): void };
 }): Promise<ShowcaseTagsResult> {
   const known = input.known ?? { schemes: [], concepts: [] };
   const projected = await projectShowcaseTagTables(input.tables, input.selectedVids);
   const bindings = await readVndbPublicTagBindings(input.port, known);
   const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
+  const ratingAcquisition = await acquireShowcaseVndbTagRatings({
+    selectedVids: input.selectedVids,
+    admitted: planned.admitted,
+    bindings,
+    ...(input.fetch ? { fetch: input.fetch } : {}),
+  });
   input.manifest?.recordVocabulary?.(planned.vocabulary);
   const imported = await importVndbPublicTags({
     tables: projected.tables,
     path: input.path,
     port: input.port,
     bindings,
+    ratings: ratingAcquisition.snapshots,
     ...(input.destination ? { destination: input.destination } : {}),
   });
   const gaps = mergeGaps([...planned.gaps, ...imported.gaps]);
@@ -487,9 +493,10 @@ export async function importShowcaseTags(input: {
     status: gaps.length ? 'imported-with-gaps' : imported.status,
     gaps,
     vocabulary: planned.vocabulary,
-    weightGap: planned.weightGap,
     truncated: planned.truncated,
     bindings,
+    tagWeightObservations: ratingAcquisition.observations,
+    tagWeightRefreshes: [...new Set(input.selectedVids)],
   };
 }
 

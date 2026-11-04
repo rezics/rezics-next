@@ -12,7 +12,7 @@ import { commandKey, safeSourceUrl, sourceEnvelope } from './support.ts';
 
 export const sourceVocabularyRevision = 'source-vocabulary@2';
 export const sourceVocabularyLimits = Object.freeze({
-  rows: 64,
+  rows: 128,
   commands: BATCH_LIMIT,
   gaps: 64,
   schemes: 64,
@@ -136,6 +136,17 @@ export type VndbVocabularyRow =
       spoiler: number;
     })
   | (RowBase & {
+      kind: 'tag-weight';
+      subject: NativeIdentity;
+      category: 'cont' | 'ero' | 'tech';
+      tagId: string;
+      subjectRecordId: string;
+      contextId: string;
+      endpoint: string;
+      requestBody: string;
+      snapshot: Uint8Array;
+    })
+  | (RowBase & {
       kind: 'character-trait';
       character: NativeIdentity;
       code: string;
@@ -245,6 +256,7 @@ export type MappingEnvironment = Readonly<{
     qualifiers?: readonly { property: string; content: unknown; identity?: NativeIdentity }[];
     target?: NativeIdentity;
     sourceEndpoint?: string;
+    references?: readonly BatchReference[];
     mappingRevision: string;
   }): void;
   concept(taxonomy: string, code: string, path: string, endpoint?: string): ResolvedConcept | null;
@@ -274,6 +286,7 @@ function requestSnapshot(value: unknown, depth = 0, state = { nodes: 0 }): unkno
   if (value === null || typeof value === 'boolean') return value;
   if (typeof value === 'string') return value.length <= 4096 ? value : null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (value instanceof Uint8Array) return value.byteLength <= 64 * 1024 ? { byteLength: value.byteLength } : null;
   if (typeof value !== 'object' || utilTypes.isProxy(value)) return null;
   if (Array.isArray(value)) {
     const length = Object.getOwnPropertyDescriptor(value, 'length')?.value;
@@ -555,6 +568,7 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
     qualifiers,
     target,
     sourceEndpoint,
+    references,
     mappingRevision,
   }) => {
     const path = sourcePath(row.path) ?? '/sourceVocabulary';
@@ -632,7 +646,10 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
     let url: string;
     try {
       const parsed = new URL(
-        safeSourceUrl(sourceUrl, metadata.provider === 'bangumi' ? ['bgm.tv', 'bangumi.tv', 'chii.in'] : ['vndb.org']),
+        safeSourceUrl(
+          sourceUrl,
+          metadata.provider === 'bangumi' ? ['bgm.tv', 'bangumi.tv', 'chii.in'] : ['vndb.org', 'api.vndb.org'],
+        ),
       );
       parsed.hash = path;
       url = parsed.href;
@@ -668,7 +685,7 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
       property: { id: property },
       value: { type: 'value', content: target?.id ?? content },
       ...(terms.length ? { qualifiers: terms.map((term) => textQualifier(term.property, term.content)) } : {}),
-      references: [reference],
+      references: references ? [...references] : [reference],
     };
     const proposalDigest = JSON.stringify([rowSource, statement, metadata.license, metadata.attribution]);
     const key = commandKey([

@@ -27,6 +27,9 @@ import { subjectSlug } from '@rezics/definitions/slug';
 import { safeSourceUrl } from '../../../packages/conversion/src/support.ts';
 import type { BangumiCoverSource, BangumiCoverSourceJournal, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { validAvailableCover } from './showcase-media.ts';
+import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
+import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
+import type { VndbTagRatingBinding } from './showcase-vndb-tag-ratings.ts';
 
 type ImportTransport = ReturnType<typeof createImportTransport>;
 export type ShowcaseReviewPort = Pick<
@@ -256,6 +259,8 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal {
         readHandoff: record.readHandoff ?? null,
         gap: record.gap ?? null,
       })),
+      tagWeightObservations: manifest.tagWeightObservations,
+      tagWeightRefreshes: manifest.tagWeightRefreshes,
     };
     const body = json(intent);
     const prior = this.#db
@@ -613,6 +618,35 @@ function publicHasValue(read: ReviewedSubjectRead, property: string, expected: u
   });
 }
 
+function sourceTagWeight(statement: BatchStatement): boolean {
+  return (
+    statement.qualifiers?.some(
+      (term) =>
+        term.property.id === 'rezics:sourceTagWeightMetric' &&
+        term.value.type === 'value' &&
+        term.value.content === vndbTagsRatingMetric,
+    ) ?? false
+  );
+}
+
+function sourceTagId(statement: BatchStatement): string | undefined {
+  for (const reference of statement.references ?? [])
+    for (const part of reference.parts)
+      if (part.property.id === 'rezics:sourceTagId' && part.value.type === 'value') return part.value.content;
+  return undefined;
+}
+
+function managedSourceTagWeight(candidate: CandidateRead, alias: string, workId: string): boolean {
+  return (
+    candidate.source?.source === alias &&
+    candidate.source.external_id === workId &&
+    candidate.source.field_group === 'facts' &&
+    candidate.statement.property.id === 'schema:genre' &&
+    sourceTagWeight(candidate.statement) &&
+    sourceTagId(candidate.statement) !== undefined
+  );
+}
+
 function publicStatementCites(value: unknown, uri: string): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const references = (value as { references?: unknown }).references;
@@ -843,6 +877,8 @@ export async function publishShowcase(input: {
   review: ShowcaseReviewPort;
   publicClient: PublicBulkClient;
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
+    tagWeightObservations?: ShowcaseManifest['tagWeightObservations'];
+    tagWeightRefreshes?: ShowcaseManifest['tagWeightRefreshes'];
 }): Promise<ShowcasePublicationResult> {
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
   const result = { ...input.result, mediaOutcomes };
@@ -865,6 +901,8 @@ export async function publishShowcase(input: {
     acknowledgements: [...acknowledgementByCandidate.values()],
     aliases: input.aliases,
     mediaOutcomes,
+    tagWeightObservations: input.tagWeightObservations,
+    tagWeightRefreshes: input.tagWeightRefreshes,
     ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
     ...(genre
       ? {
@@ -924,6 +962,47 @@ export async function publishShowcase(input: {
   const blockedSubjects = new Set<string>();
   const blockedCoverCandidates = new Set<string>();
   const vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
+  const observedTagBindings = new Map<string, VndbTagRatingBinding>();
+  for (const observation of manifest.tagWeightObservations)
+    if (observation.responseDigest)
+      for (const binding of observation.bindings)
+        observedTagBindings.set(`${observation.workId}\0${binding.tagId}\0${binding.conceptId}`, binding);
+  const currentTagBindings = new Set<string>();
+  const bindingReadIds = new Set<string>();
+  for (const binding of observedTagBindings.values()) {
+    bindingReadIds.add(binding.conceptId);
+    bindingReadIds.add(binding.schemeId);
+  }
+  const readCurrentSubject = async (id: string): Promise<ReviewedSubjectRead | null> => {
+    if (currentSubjectCache.has(id)) return currentSubjectCache.get(id) ?? null;
+    let read: ReviewedSubjectRead | null = null;
+    try {
+      read = await input.review.readReviewedSubject(id);
+    } catch {
+      read = null;
+    }
+    currentSubjectCache.set(id, read);
+    return read;
+  };
+  const bindingReadIdsList = [...bindingReadIds];
+  for (let offset = 0; offset < bindingReadIdsList.length; offset += 16)
+    await Promise.all(bindingReadIdsList.slice(offset, offset + 16).map(readCurrentSubject));
+  for (const [key, binding] of observedTagBindings) {
+    const conceptRead = currentSubjectCache.get(binding.conceptId) ?? null;
+    const schemeRead = currentSubjectCache.get(binding.schemeId) ?? null;
+    if (
+      conceptRead &&
+      schemeRead &&
+      subjectId(conceptRead) === binding.conceptId &&
+      subjectType(conceptRead) === 'skos:Concept' &&
+      publicHasValue(conceptRead, 'schema:url', vndbPublicTagConceptUri(binding.category, binding.tagId)) &&
+      publicHasValue(conceptRead, 'skos:inScheme', binding.schemeId) &&
+      subjectId(schemeRead) === binding.schemeId &&
+      subjectType(schemeRead) === 'skos:ConceptScheme' &&
+      publicHasValue(schemeRead, 'schema:url', vndbPublicTagScheme(binding.category))
+    )
+      currentTagBindings.add(key);
+  }
   for (const record of manifest.records) {
     if (!record.subjectId || recordHasSourceIdentity(record)) continue;
     blockedSubjects.add(record.subjectId);
@@ -988,6 +1067,14 @@ export async function publishShowcase(input: {
       continue;
     }
     if (blockedSubjects.has(id)) continue;
+    if (sourceTagWeight(assertion.statement)) {
+      const tagId = sourceTagId(assertion.statement);
+      const content = assertion.statement.value.type === 'value' ? assertion.statement.value.content : null;
+      if (!tagId || typeof content !== 'string' || !currentTagBindings.has(`${record.sourceKey}\0${tagId}\0${content}`)) {
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
+        continue;
+      }
+    }
     if (assertion.property === 'schema:image') {
       const outcome = admittedCoverMedia(input.plan, mediaOutcomes, record, assertion);
       if (!outcome) {
@@ -1142,6 +1229,14 @@ export async function publishShowcase(input: {
     group.ids.add(assertion.candidateId);
     grouped.set(key, group);
   }
+  for (const workId of manifest.tagWeightRefreshes) {
+    const record = manifest.records.find(
+      (item) => item.provider === 'vndb' && item.sourceAlias === input.aliases.vndb && item.sourceKey === workId,
+    );
+    if (!record?.subjectId) continue;
+    const key = groupKey(record.subjectId, 'schema:genre');
+    if (!grouped.has(key)) grouped.set(key, { record, property: 'schema:genre', ids: new Set<string>() });
+  }
 
   const publicSubjects = new Map<string, ReviewedSubjectRead | null>();
   const publicRead = async (id: string): Promise<ReviewedSubjectRead | null> => {
@@ -1157,7 +1252,8 @@ export async function publishShowcase(input: {
   };
   for (const [key, group] of grouped) {
     const [id] = key.split('\0');
-    if (!id || stoppedSubjects.has(id)) continue;
+    const refreshWeights = group.record.provider === 'vndb' && manifest.tagWeightRefreshes.includes(group.record.sourceKey);
+    if (!id || (stoppedSubjects.has(id) && !(refreshWeights && group.ids.size === 0))) continue;
     if (group.property === 'schema:image') {
       const assertion = assertions.find(
         (entry) =>
@@ -1199,9 +1295,18 @@ export async function publishShowcase(input: {
       if (group.property !== 'schema:image') stoppedSubjects.add(id);
       continue;
     }
+    if (refreshWeights && page.next !== null && page.next !== undefined) {
+      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: 'adoption-selection-bounded' });
+      continue;
+    }
     const selections = new Map<string, 'normal' | 'preferred'>();
-    for (const item of priorSelection)
-      if (item?.candidate) selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
+    for (const item of priorSelection) {
+      if (!item?.candidate) continue;
+      const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);
+      if (refreshWeights && selectedCandidate && managedSourceTagWeight(selectedCandidate, input.aliases.vndb, group.record.sourceKey))
+        continue;
+      selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
+    }
     for (const candidateId of group.ids) selections.set(candidateId, selections.get(candidateId) ?? 'normal');
     if (selections.size > showcaseLimits.reviewPage) {
       omissions.push({
@@ -1422,6 +1527,8 @@ export async function publishShowcase(input: {
     acknowledgements: [...acknowledgementByCandidate.values()],
     aliases: input.aliases,
     mediaOutcomes: finalMediaOutcomes,
+    tagWeightObservations: input.tagWeightObservations,
+    tagWeightRefreshes: input.tagWeightRefreshes,
     ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
     ...(genre
       ? {

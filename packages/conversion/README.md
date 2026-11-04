@@ -16,7 +16,7 @@ The [package exports](package.json) are only these entry points:
 | `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                                                            |
 | `@rezics/conversion/bangumi-vocabulary`   | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                                                              |
 | `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                                                                     |
-| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision` and VNDB row types                                                                                       |
+| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision`, `produceVndbSourceTagWeightCandidate`, Kana rating constants and VNDB row types                       |
 | `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                                  |
 | `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                                    |
 | `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                                        |
@@ -87,7 +87,7 @@ tables without an inventory scheme URI still require one explicit resolved
 released Scheme binding from the caller. Missing release pins, schemes,
 concepts, endpoints or profile admissions return finite `SourceVocabularyGap`
 records; no fallback label match or substitute property is emitted. Output is
-bounded to 64 input rows and the remaining slots in the existing 100-command
+bounded to 128 input rows and the remaining slots in the existing 100-command
 batch limit after ordinary source proposals. Unknown
 subtrees are never inspected; resolved scheme and concept bindings are capped
 at 64 and 512 entries per request. Bangumi reciprocal relation rows coalesce by
@@ -97,6 +97,18 @@ their exact content, erotic-content or technical category. VNDB `producers_relat
 same property losslessly reversed as pid → current id. Dictionary `P355` is not
 emitted, reciprocal rows are not fabricated, and a Person-typed producer stays a
 source loss instead of an Organization parent statement.
+
+The selected-family tag adapter may provide one bounded `tag-weight` row per
+currently admitted source association. Only an exact Kana `/vn` response for
+that VN and tag can produce a proposal: `tags.rating` is retained as a decimal
+in unit `1` with metric `vndbTagsRating`, and the API's spoiler qualifier stays
+independent from the COPY association spoiler. The row carries the actual
+response digest and API endpoint as its source origin; a changed response
+changes the command identity. COPY `tags_vn.vote` is never interpreted as a
+weight, vote, or confidence. The pure candidate producer validates the exact
+request fields, VN/tag IDs, unique tag occurrence, lie flag, spoiler range and
+rating range before the standard descriptor checks accept the resulting
+`BatchCommand`.
 
 VNDB release dates retain year, month or day precision. `TBA` and absent values
 remain distinct gaps when the release profile has no admitted status property;
@@ -441,7 +453,7 @@ defines `blood_type` as `unknown`, `a`, `b`, `ab` and `o`.
 `cross-media-entities@11` retains the classification input in the deterministic
 digest, preserves measurement cells when the character-name projection is
 present, and records actual versus spoiler gender as separate source variants.
-Only the four explicit blood types reach `vndb-vocabulary@3`; the bounded
+Only the four explicit blood types reach `vndb-vocabulary@4`; the bounded
 binding reader verifies the current `ConceptScheme` URI, each current Concept
 URI and its `skos:inScheme` association before proposing. The URI pattern is
 `https://rezics.com/schemes/vndb/character-blood-types/{code}` and does not

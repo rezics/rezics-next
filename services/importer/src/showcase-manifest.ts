@@ -3,13 +3,14 @@ import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
 import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
-import { vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
+import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource } from './cross-media-bindings.ts';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
 import { validAvailableCover } from './showcase-media.ts';
+import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
 
 export const showcaseLimits = Object.freeze({
   records: 768,
@@ -139,6 +140,8 @@ export type ShowcaseManifest = Readonly<{
   records: readonly ShowcaseRecord[];
   vocabulary: readonly ShowcaseVocabularyRecord[];
   media: readonly ShowcaseMediaRecord[];
+  tagWeightObservations: readonly VndbTagRatingObservation[];
+  tagWeightRefreshes: readonly string[];
   omissions: readonly ShowcaseOmission[];
 }>;
 
@@ -231,6 +234,7 @@ function selectedEnvelopes(
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>,
   requirements: readonly ShowcaseVocabularyRequirement[],
   mediaOutcomes: readonly CrossMediaMediaOutcome[],
+  tagWeightObservations: readonly VndbTagRatingObservation[],
 ): Set<string> {
   const allowed = new Set<string>();
   for (const provider of ['bangumi', 'vndb'] as const) {
@@ -284,7 +288,65 @@ function selectedEnvelopes(
   for (const appearance of plan.characterAppearances ?? [])
     allowed.add(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)));
   for (const requirement of requirements) allowed.add(envelopeKey(requirement.source));
+  for (const observation of tagWeightObservations) {
+    if (!/^[0-9a-f]{64}$/u.test(observation.responseDigest ?? '')) continue;
+    allowed.add(
+      envelopeKey({
+        source: aliases.vndb,
+        external_id: observation.workId,
+        record_revision: 'unversioned',
+        digest: observation.responseDigest!,
+        converter_revision: vndbVocabularyRevision,
+        field_group: 'facts',
+      }),
+    );
+  }
   return allowed;
+}
+
+function sourceTagWeight(assertion: ShowcaseAssertion): boolean {
+  return assertion.statement.qualifiers?.some(
+    (term) =>
+      term.property.id === 'rezics:sourceTagWeightMetric' &&
+      term.value.type === 'value' &&
+      term.value.content === vndbTagsRatingMetric,
+  ) ?? false;
+}
+
+function currentTagWeight(
+  record: SourceRecord,
+  alias: string,
+  assertion: ShowcaseAssertion,
+  observations: readonly VndbTagRatingObservation[],
+): boolean {
+  if (!sourceTagWeight(assertion)) return true;
+  const observation = observations.find((item) => item.workId === record.key);
+  if (
+    !observation ||
+    (observation.state !== 'available' && observation.state !== 'partial') ||
+    !observation.responseDigest ||
+    assertion.source.source !== alias ||
+    assertion.source.external_id !== record.key ||
+    assertion.source.record_revision !== 'unversioned' ||
+    assertion.source.digest !== observation.responseDigest ||
+    assertion.source.converter_revision !== vndbVocabularyRevision ||
+    assertion.source.field_group !== 'facts' ||
+    assertion.statement.property.id !== 'schema:genre' ||
+    assertion.statement.value.type !== 'value'
+  )
+    return false;
+  const tagId = assertion.statement.references?.flatMap((reference) => reference.parts).find(
+    (part) => part.property.id === 'rezics:sourceTagId',
+  )?.value.content;
+  const snapshot = assertion.statement.references?.flatMap((reference) => reference.parts).find(
+    (part) => part.property.id === 'rezics:sourceSnapshot',
+  )?.value.content;
+  const binding = observation.bindings.find((item) => item.tagId === tagId);
+  return !!(
+    binding &&
+    assertion.statement.value.content === binding.conceptId &&
+    snapshot === `unversioned:sha256:${observation.responseDigest}`
+  );
 }
 
 /** Return media IDs only for an exact available cover receipt attached to this selected record. */
@@ -352,6 +414,8 @@ export function buildShowcaseManifest(input: {
   reviewedVocabulary?: readonly ShowcaseVocabularyRecord[];
   currentBangumiGenreCandidateIds?: readonly string[];
   bangumiGenreOwnerKeys?: readonly string[];
+  tagWeightObservations?: readonly VndbTagRatingObservation[];
+  tagWeightRefreshes?: readonly string[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
   const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
@@ -367,6 +431,8 @@ export function buildShowcaseManifest(input: {
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
   const currentBangumiGenreCandidateIds = new Set(input.currentBangumiGenreCandidateIds ?? []);
   const bangumiGenreOwnerKeys = new Set(input.bangumiGenreOwnerKeys ?? []);
+  const tagWeightObservations = input.tagWeightObservations ?? [];
+  const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) => /^v[1-9][0-9]{0,9}$/u.test(id));
   for (const requirement of input.vocabularyRequirements ?? []) {
     if (vocabularyRequirements.length >= showcaseLimits.vocabulary) {
       omissions.push({
@@ -393,7 +459,13 @@ export function buildShowcaseManifest(input: {
     vocabularyRequirements.push(requirement);
   }
   const mediaOutcomes = input.mediaOutcomes ?? [];
-  const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements, mediaOutcomes);
+  const allowedSources = selectedEnvelopes(
+    plan,
+    aliases,
+    vocabularyRequirements,
+    mediaOutcomes,
+    tagWeightObservations,
+  );
 
   const records: ShowcaseRecord[] = [];
   let remainingCandidates: number = showcaseLimits.candidates;
@@ -440,6 +512,7 @@ export function buildShowcaseManifest(input: {
         continue;
       const assertion = candidateAssertion(ack);
       if (!assertion) continue;
+      if (provider === 'vndb' && !currentTagWeight(row, alias, assertion, tagWeightObservations)) continue;
       const ownerKey = appearanceOwners.get(envelopeKey(source));
       const ownedAssertion = ownerKey === undefined ? assertion : { ...assertion, ownerKey };
       if (sourceAssertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
@@ -647,8 +720,10 @@ export function buildShowcaseManifest(input: {
       assertions: record.assertions.map(({ candidateId, candidateDigest }) => ({ candidateId, candidateDigest })),
     })),
     media,
+    tagWeightObservations,
+    tagWeightRefreshes,
   });
-  return { version: 1, digest, records, vocabulary, media, omissions };
+  return { version: 1, digest, records, vocabulary, media, tagWeightObservations, tagWeightRefreshes, omissions };
 }
 
 function kindFromType(type: string): ShowcaseKind {

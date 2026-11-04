@@ -13,6 +13,7 @@ import {
   type VndbPublicTagCategory,
 } from '../../../packages/conversion/src/support.ts';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { vndbTagsRatingEndpoint, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import type { Owner } from './record-bindings.ts';
 import {
   emptyCrossMediaPlan,
@@ -26,6 +27,7 @@ import {
   type CrossMediaTables,
 } from './cross-media-seed.ts';
 import type { ImporterOptions } from './importer.ts';
+import type { VndbTagRatingSnapshot } from './showcase-vndb-tag-ratings.ts';
 import {
   parseVndbCopyHeader,
   parseVndbCopyLine,
@@ -184,11 +186,43 @@ export function vndbPublicTagVocabulary(
 export function vndbPublicTagVocabularyAdmission(
   bindings: SourceVocabularyBindings,
   admitted: readonly AdmittedPublicTag[],
+  ratings: ReadonlyMap<string, VndbTagRatingSnapshot> = new Map(),
 ): NonNullable<ImporterOptions['vocabularyAdmission']> {
   return {
     request({ owner, subject }) {
       if (!subject) return;
-      const rows = vndbPublicTagVocabulary(owner, subject, admitted);
+      const rows = [...vndbPublicTagVocabulary(owner, subject, admitted)];
+      const snapshot = ratings.get(owner.external_id);
+      if (snapshot) {
+        const work: NativeIdentity = { id: subject, type: 'wd:Q689445', releaseDigest: bundledDigest };
+        const selected = admitted.filter((row) => row.vid === owner.external_id);
+        for (const row of selected) {
+          const taxonomy = vndbPublicTagTaxonomy(row.category);
+          const concept = bindings.concepts.find((item) => item.taxonomy === taxonomy && item.code === row.tag);
+          const scheme = bindings.schemes.find((item) => item.taxonomy === taxonomy);
+          if (!snapshot.tagIds.includes(row.tag) || !concept || !scheme || concept.schemeId !== scheme.id) continue;
+          rows.push({
+            kind: 'tag-weight',
+            path: `/tags/${row.tag}/rating`,
+            subject: work,
+            category: row.category,
+            tagId: row.tag,
+            subjectRecordId: owner.external_id,
+            contextId: '00000000-0000-8000-8000-000000000000',
+            endpoint: vndbTagsRatingEndpoint,
+            requestBody: snapshot.requestBody,
+            snapshot: snapshot.bytes,
+            origin: {
+              externalId: owner.external_id,
+              revision: null,
+              digest: snapshot.digest,
+              url: vndbTagsRatingEndpoint,
+              converterRevision: vndbVocabularyRevision,
+            },
+          });
+          if (rows.length >= 128) break;
+        }
+      }
       if (!rows.length) return;
       return { bindings, rows };
     },
@@ -346,11 +380,12 @@ export async function importVndbPublicTags(input: {
   path: string;
   port: CrossMediaPort;
   bindings: SourceVocabularyBindings;
+  ratings?: ReadonlyMap<string, VndbTagRatingSnapshot>;
   destination?: { origin: string };
 }): Promise<VndbPublicTagsResult> {
   const plan = await planVndbPublicTags(input.tables);
   const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
-    vocabularyAdmission: vndbPublicTagVocabularyAdmission(input.bindings, plan.admitted),
+    vocabularyAdmission: vndbPublicTagVocabularyAdmission(input.bindings, plan.admitted, input.ratings),
     providers: ['vndb'],
   });
   return { ...result, converterRevision: entityRevision, admitted: plan.admitted };

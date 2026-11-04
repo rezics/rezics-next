@@ -1,10 +1,15 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { converter_revision, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import {
+  vndbTagsRatingDocumentation,
+  vndbTagsRatingEndpoint,
+  vndbTagsRatingMetric,
+} from '@rezics/conversion/vndb-vocabulary';
 import {
   commandKey,
   sourceDigest,
@@ -24,11 +29,10 @@ import {
   knownShowcaseTagBindings,
   parseShowcaseTagKnownBindings,
   planShowcaseTags,
+  prepareShowcaseTags,
   prepareShowcaseVndbPublicTagVocabulary,
   readShowcaseVndbPublicTagVocabulary,
   projectShowcaseTagTables,
-  showcaseTagWeightGapReason,
-  showcaseTagWeightProperty,
 } from '../src/showcase-tags.ts';
 
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');
@@ -50,6 +54,9 @@ const associationCopy = [
   '2026-10-24\tg900\tv999\tu9001\t3\t0\tf\tf\t\\N',
 ];
 const parentCopy = ['g311\tg12\tt'];
+const unavailableKanaFetch: typeof fetch = async () => {
+  throw new Error('Kana unavailable in authored test');
+};
 
 function authoredTables() {
   const rows: Record<string, Record<string, unknown>[]> = {
@@ -162,8 +169,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     ['g311', 'cont', 0],
     ['g44', 'ero', 2],
   ]);
-  expect(plan.weightGap?.property).toBe(showcaseTagWeightProperty);
-  expect(plan.weightGap?.reason).toBe(showcaseTagWeightGapReason);
+  expect(plan.gaps.some((gap) => gap.record.metric === 'vndb.tags.rating')).toBe(false);
   expect(plan.vocabulary.map((item) => [item.kind, item.key, item.uri])).toEqual([
     ['scheme', 'cont', vndbPublicTagScheme('cont')],
     ['scheme', 'ero', vndbPublicTagScheme('ero')],
@@ -193,6 +199,32 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-'));
   try {
+    const kanaResponse = (rating: number, spoiler: number) =>
+      JSON.stringify({
+        more: false,
+        results: [{ id: 'v410', tags: [{ id: 'g311', rating, spoiler, lie: false }, { id: 'g44', rating: 0.75, spoiler: 0, lie: false }] }],
+      });
+    const fetchRatings: typeof fetch = async (input, init) => {
+      expect(String(input)).toBe(vndbTagsRatingEndpoint);
+      expect(JSON.parse(String(init?.body))).toEqual({
+        filters: ['id', '=', 'v410'],
+        fields: 'id,tags{id,rating,spoiler,lie}',
+        results: 1,
+      });
+      return new Response(kanaResponse(1.25, 1), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const prepared = await prepareShowcaseTags({
+      tables: authoredTables(),
+      selectedVids: ['v410'],
+      port: port(commands),
+      known,
+      fetch: fetchRatings,
+    });
+    expect(prepared.tagWeightObservations).toMatchObject([
+      { workId: 'v410', state: 'available', bindings: [{ tagId: 'g311', conceptId: conceptIds.g311 }] },
+    ]);
+    expect(prepared.tagWeightRefreshes).toEqual(['v410']);
+
     const recorded: { uri: string; state: string }[] = [];
     const first = await importShowcaseTags({
       tables: authoredTables(),
@@ -200,6 +232,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       path: join(directory, 'state.sqlite'),
       port: port(commands),
       known,
+      fetch: fetchRatings,
       manifest: {
         recordVocabulary(records) {
           recorded.push(...records.map((item) => ({ uri: item.uri, state: item.state })));
@@ -208,7 +241,7 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     });
     expect(first.status).toBe('imported-with-gaps');
     expect(first.converterRevision).toBe(converter_revision);
-    expect(first.weightGap?.property).toBe(showcaseTagWeightProperty);
+    expect(first.tagWeightObservations[0]).toMatchObject({ workId: 'v410', state: 'available' });
     expect(first.bindings.concepts.map((item) => item.code).sort()).toEqual(['g311', 'g44']);
     expect(
       recorded
@@ -227,18 +260,43 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && command.statement.property.id === 'schema:genre',
     );
-    expect(genres).toHaveLength(2);
+    expect(genres).toHaveLength(4);
     const content = (command: Extract<BatchCommand, { op: 'propose' }>) =>
       command.statement.value.type === 'value' ? command.statement.value.content : undefined;
     expect(new Set(genres.map(content))).toEqual(new Set([conceptIds.g311, conceptIds.g44]));
-    const spoiler = (id: string) =>
-      genres
-        .find((command) => content(command) === id)
+    const hasMetric = (command: Extract<BatchCommand, { op: 'propose' }>) =>
+      command.statement.qualifiers?.some(
+        (term) => term.property.id === 'rezics:sourceTagWeightMetric' && term.value.content === vndbTagsRatingMetric,
+      );
+    const weights = genres.filter(hasMetric);
+    const associations = genres.filter((command) => !hasMetric(command));
+    expect(associations).toHaveLength(2);
+    expect(weights).toHaveLength(2);
+    const spoiler = (rows: Extract<BatchCommand, { op: 'propose' }>[], id: string) =>
+      rows
+        .find((command) => command.statement.value.type === 'value' && command.statement.value.content === id)
         ?.statement.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel')?.value;
-    expect(spoiler(conceptIds.g311)).toEqual({ type: 'value', content: { amount: '+0', unit: '1' } });
-    expect(spoiler(conceptIds.g44)).toEqual({ type: 'value', content: { amount: '+2', unit: '1' } });
-    expect(JSON.stringify(commands)).not.toContain(showcaseTagWeightProperty);
-    expect(JSON.stringify(commands)).not.toContain('vndb-tag-rating');
+    expect(spoiler(associations, conceptIds.g311)).toEqual({ type: 'value', content: { amount: '+0', unit: '1' } });
+    expect(spoiler(associations, conceptIds.g44)).toEqual({ type: 'value', content: { amount: '+2', unit: '1' } });
+    expect(spoiler(weights, conceptIds.g311)).toEqual({ type: 'value', content: { amount: '+1', unit: '1' } });
+    const referenceValue = (command: Extract<BatchCommand, { op: 'propose' }>, property: string) =>
+      command.statement.references?.flatMap((reference) => reference.parts).find((part) => part.property.id === property)
+        ?.value.content;
+    const weight = weights.find((command) => referenceValue(command, 'rezics:sourceTagId') === 'g311')!;
+    expect(weight.statement.qualifiers).toContainEqual({
+      property: { id: 'rezics:sourceTagWeight' },
+      value: { type: 'value', content: { amount: '+1.25', unit: '1' } },
+    });
+    expect(weight.statement.qualifiers).toContainEqual({
+      property: { id: 'rezics:sourceTagWeightMetric' },
+      value: { type: 'value', content: vndbTagsRatingMetric },
+    });
+    expect(weight.statement.references?.[1]?.parts[0]?.value.content).toBe(vndbTagsRatingDocumentation);
+    expect(referenceValue(weight, 'rezics:sourceSnapshot')).toBe(
+      `unversioned:sha256:${createHash('sha256').update(kanaResponse(1.25, 1)).digest('hex')}`,
+    );
+    expect(JSON.stringify(weights)).not.toContain('u9001');
+    expect(JSON.stringify(weights)).not.toContain('vote');
     const keys = genres.map((command) => command.key);
     const original = associationCopy.slice();
     original[0] = '2026-10-24\tg311\tv410\tu9001\t3\t1\tf\tf\tprivate note';
@@ -260,6 +318,8 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       path: join(directory, 'state.sqlite'),
       port: port(commands),
       known,
+      fetch: async () =>
+        new Response(kanaResponse(2.5, 2), { status: 200, headers: { 'content-type': 'application/json' } }),
     });
     expect(refreshed.readings.map((row) => row.externalId)).toEqual(['v410']);
     const nextGenres = commands.filter(
@@ -267,7 +327,78 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
         command.op === 'propose' && command.statement.property.id === 'schema:genre',
     );
     expect(nextGenres.map((command) => command.key).slice(0, keys.length)).toEqual(keys);
-    expect(nextGenres.length).toBeGreaterThan(keys.length);
+    const nextWeights = nextGenres.filter(hasMetric);
+    expect(nextWeights.length).toBeGreaterThan(weights.length);
+    expect(nextWeights.slice(weights.length).map((command) => command.subject)).toEqual(weights.map((command) => command.subject));
+    expect(nextWeights.slice(weights.length).map((command) => command.statement.value)).toEqual(weights.map((command) => command.statement.value));
+    expect(new Set(nextWeights.map((command) => referenceValue(command, 'rezics:sourceSnapshot'))).size).toBe(2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test('COPY votes never become weights and conflicting or unavailable Kana ratings withhold only weights', async () => {
+  const known = parseShowcaseTagKnownBindings({
+    schemes: [
+      { category: 'cont', id: schemeIds.cont },
+      { category: 'ero', id: schemeIds.ero },
+    ],
+    concepts: [
+      { category: 'cont', code: 'g311', id: conceptIds.g311 },
+      { category: 'ero', code: 'g44', id: conceptIds.g44 },
+    ],
+  });
+  const commands: BatchCommand[] = [];
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-invalid-'));
+  try {
+    const conflicting = await importShowcaseTags({
+      tables: authoredTables(),
+      selectedVids: ['v410'],
+      path: join(directory, 'state.sqlite'),
+      port: port(commands),
+      known,
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            more: false,
+            results: [
+              {
+                id: 'v410',
+                tags: [
+                  { id: 'g311', rating: 1.25, spoiler: 0, lie: false },
+                  { id: 'g311', rating: 2.5, spoiler: 0, lie: false },
+                  { id: 'g44', rating: 0, spoiler: 0, lie: false },
+                ],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    });
+    expect(conflicting.tagWeightObservations[0]).toMatchObject({ workId: 'v410', state: 'available' });
+    const genres = commands.filter(
+      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+        command.op === 'propose' && command.statement.property.id === 'schema:genre',
+    );
+    expect(genres).toHaveLength(2);
+    expect(
+      genres.every((command) =>
+        command.statement.qualifiers?.every((term) => term.property.id !== 'rezics:sourceTagWeightMetric'),
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(genres)).not.toContain('u9001');
+    expect(JSON.stringify(genres)).not.toContain('vote');
+
+    const unavailable = await importShowcaseTags({
+      tables: authoredTables(),
+      selectedVids: ['v410'],
+      path: join(directory, 'state.sqlite'),
+      port: port(commands),
+      known,
+      fetch: unavailableKanaFetch,
+    });
+    expect(unavailable.tagWeightObservations[0]).toMatchObject({ workId: 'v410', state: 'unavailable' });
+    expect(unavailable.admitted.map((row) => row.tag)).toEqual(['g311', 'g44']);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -423,6 +554,7 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
       path: join(directory, 'state.sqlite'),
       port,
       known: knownShowcaseTagBindings(current),
+      fetch: unavailableKanaFetch,
     });
     const genres = commands.filter(
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
@@ -484,6 +616,7 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
       path: join(directory, 'state.sqlite'),
       port,
       known: knownShowcaseTagBindings(withheld),
+      fetch: unavailableKanaFetch,
     });
     const laterGenres = commands.filter(
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
@@ -634,6 +767,7 @@ test('reopening a pre-repair journal recovers sealed sends and original Concept 
       path: join(directory, 'state.sqlite'),
       port,
       known: knownShowcaseTagBindings(current),
+      fetch: unavailableKanaFetch,
     });
     const genres = commands.filter(
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>

@@ -3572,9 +3572,10 @@ export async function runCrossMediaSeedCli(
       publicTags: {
         admitted: publicTags.admitted,
         vocabulary: publicTags.vocabulary,
-        weightGap: publicTags.weightGap,
         truncated: publicTags.truncated,
         adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
+        tagWeightObservations: publicTags.tagWeightObservations,
+        tagWeightRefreshes: publicTags.tagWeightRefreshes,
         gaps: publicTags.gaps,
       },
       vndbCreditVocabularyDelivery: vndbCreditVocabularyIssues,
@@ -3678,6 +3679,8 @@ export async function runCrossMediaSeedCli(
         review: importPort,
         publicClient,
         ...(vocabularyRequirements.length ? { vocabularyRequirements } : {}),
+        tagWeightObservations: publicTags.tagWeightObservations,
+        tagWeightRefreshes: publicTags.tagWeightRefreshes,
       });
     const { bangumiGenrePublication, ...publicCombinedResult } = combinedResult;
     await mkdir(dirname(resultPath), { recursive: true });
