@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { developmentKeys, localDatabase, publicKey } from '../scripts/dev-stack.ts';
+import { developmentKeys, localDatabase, openLocalShowcase, publicKey } from '../scripts/dev-stack.ts';
 
 test('first-run secrets remain private and stable across setup retries', async () => {
   await mkdir(resolve(import.meta.dir, '../../../.temp'), { recursive: true });
@@ -21,4 +21,35 @@ test('first-run secrets remain private and stable across setup retries', async (
 test('local setup refuses remote databases', () => {
   expect(() => localDatabase('postgres://rezics:rezics@production.example/rezics')).toThrow('127.0.0.1');
   expect(localDatabase('postgres://rezics:rezics@127.0.0.1:54329/rezics').hostname).toBe('127.0.0.1');
+});
+
+test('persona retries open mixed Search and POST facets alongside anonymous GET groups only', async () => {
+  const route = (method: string, group: string, security = [{}]) =>
+    ({ method, hooks: { detail: { 'x-exposure': `gate:${group}`, security } } });
+  const routes = [
+    route('GET', 'subjects'), route('GET', 'search'), route('POST', 'search_advanced'),
+    route('POST', 'write_gate'), route('GET', 'private_gate', [{ bearerAuth: [] }]),
+  ];
+  const receipts = new Map<string, string>();
+  const attempts: string[] = [];
+  const open = async ({ group, key }: { group: string; key: string }) => {
+    attempts.push(key);
+    receipts.set(key, group);
+  };
+  await openLocalShowcase(routes, open);
+  await openLocalShowcase(routes, open);
+  expect([...receipts.values()]).toEqual(['search', 'search_advanced', 'subjects']);
+  expect(attempts.slice(3)).toEqual(attempts.slice(0, 3));
+});
+
+test('a failed native opening stops persona setup and names the group, cause and retry', async () => {
+  const attempted: string[] = [];
+  await expect(openLocalShowcase([], async ({ group }) => {
+    attempted.push(group);
+    throw new Error('Exposure command denied');
+  })).rejects.toThrow(
+    'Local showcase opening search failed: Exposure command denied. ' +
+    'Resolve the native command failure, then rerun task dev:persona (or task seed:dev).',
+  );
+  expect(attempted).toEqual(['search']);
 });

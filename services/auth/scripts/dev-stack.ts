@@ -259,6 +259,40 @@ async function assemble() {
 
 const widgetScript = `window.turnstile={ready:function(callback){callback();},render:function(el,o){const box=document.createElement('span');box.textContent='Local development verification';el.appendChild(box);queueMicrotask(()=>o.callback('rezics-local-signup'));return 'local';},remove:function(){},reset:function(){}};`;
 
+// Explicit M1 additions supplement anonymous GETs; never discover all anonymous POST gates.
+const showcaseOpenings = [
+  'search', // M1 path 9: mixed works, characters and people.
+  'search_advanced', // M1 path 10: filters and POST /v1/subjects:facets.
+] as const;
+
+export async function openLocalShowcase(
+  routes: Iterable<{ method: string; hooks?: { detail?: unknown } }>,
+  open: (input: { group: string; key: string }) => Promise<unknown>,
+): Promise<void> {
+  const groups = new Set<string>(showcaseOpenings);
+  for (const route of routes) {
+    const detail = route.hooks?.detail as { 'x-exposure'?: string; security?: Record<string, unknown>[] } | undefined;
+    if (
+      route.method === 'GET' &&
+      detail?.security?.some((item) => Object.keys(item).length === 0) &&
+      detail['x-exposure']?.startsWith('gate:')
+    )
+      groups.add(detail['x-exposure'].slice(5));
+  }
+  for (const group of groups) {
+    try {
+      // Retain the ordinary command key on retries, including groups discovered by both paths.
+      await open({ group, key: `local-public-read:${group}` });
+    } catch (cause) {
+      throw new Error(
+        `Local showcase opening ${group} failed: ${cause instanceof Error ? cause.message : String(cause)}. ` +
+          'Resolve the native command failure, then rerun task dev:persona (or task seed:dev).',
+        { cause },
+      );
+    }
+  }
+}
+
 async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>>) {
   const { host, access, kernelPool, keys, kernel } = composition;
   const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../kernel/src/access/bootstrap-governance.ts');
@@ -341,19 +375,8 @@ async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>
   const context = { pool: kernelPool, deadline: Date.now() + 30_000 };
   const actor = await access.authenticate(bearer, context);
   if (actor.kind !== 'account') throw new Error('Local persona is not an account');
-  // Derive only anonymous GET gates from the mounted contract; private and write gates stay closed.
-  const groups = new Set<string>();
-  for (const route of kernel.routes) {
-    const detail = route.hooks?.detail as { 'x-exposure'?: string; security?: Record<string, unknown>[] } | undefined;
-    if (
-      route.method === 'GET' &&
-      detail?.security?.some((item) => Object.keys(item).length === 0) &&
-      detail['x-exposure']?.startsWith('gate:')
-    )
-      groups.add(detail['x-exposure'].slice(5));
-  }
   const exposure = createExposureCommands({ pool: kernelPool, clock: () => new Date() });
-  for (const group of groups) {
+  await openLocalShowcase(kernel.routes, async (input) => {
     const authorization = await accessCommandAuthorization(
       access,
       actor,
@@ -362,8 +385,8 @@ async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>
       context,
       () => new Error('Local public-read grant denied'),
     );
-    await exposure.open({ ...context, actor }, { group, key: `local-public-read:${group}`, authorization });
-  }
+    await exposure.open({ ...context, actor }, { ...input, authorization });
+  });
   await privateFile(
     resolve(state, 'seed.env'),
     Object.entries({
