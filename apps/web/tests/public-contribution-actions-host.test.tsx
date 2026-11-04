@@ -323,7 +323,11 @@ async function installDom() {
 }
 
 async function clickButton(root: HTMLElement, label: string) {
-  const button = [...root.querySelectorAll<HTMLElement>('button, [role="menuitem"]')].find(
+  const candidates = new Set([
+    ...root.querySelectorAll<HTMLElement>('button, [role="menuitem"]'),
+    ...document.querySelectorAll<HTMLElement>('button, [role="menuitem"]'),
+  ]);
+  const button = [...candidates].find(
     (candidate) => candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label,
   );
   expect(button).toBeDefined();
