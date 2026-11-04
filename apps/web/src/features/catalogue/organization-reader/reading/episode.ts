@@ -15,11 +15,12 @@ export function useOrganizationEpisode(
 ) {
   const client = useContext(QueryClientContext);
   const store = client ? browserObservation(client) : undefined;
-  const session = useSyncExternalStore(
+  useSyncExternalStore(
     store?.subscribe ?? noSubscribe,
     store?.getSnapshot ?? (() => undefined),
     store?.getServerSnapshot ?? (() => undefined),
   );
+  const session = store?.getSnapshot();
   const cacheSnapshot = useCallback(() => {
     if (!client) return anonymousSnapshot();
     const stamp = (key: readonly unknown[]) => {
@@ -47,7 +48,9 @@ export function useOrganizationEpisode(
         .map((query) => [query.queryHash, stamp(query.queryKey)]),
     ]);
   }, [client, session, cacheSource]);
-  const cache = useSyncExternalStore(store?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
+  useSyncExternalStore(store?.subscribeCache ?? noSubscribe, cacheSnapshot, cacheSnapshot);
+  // A replaced address binds the current getter, not the previous render's subscription snapshot.
+  const cache = cacheSnapshot();
   const ready =
     !client || viewer === null || (session?.state === 'signed-in' && session.observation.subject === viewer);
   const holder = useRef<ReturnType<typeof createEpisode> | undefined>(undefined);
@@ -58,14 +61,8 @@ export function useOrganizationEpisode(
     holder.current = createEpisode(source, descriptor, viewer, cache, ++next.current);
   }
   const episode = holder.current;
-  if (episode.descriptor !== descriptor || episode.viewer !== viewer || episode.cache !== cache) {
-    if (!episode.retired) console.error('organization-debug cache', episode.key, episode.cache, cache);
-    episode.retire();
-  }
-  if (episode.admitted && (!ready || episode.session !== session)) {
-    if (!episode.retired) console.error('organization-debug session', episode.key, episode.session, session, ready);
-    episode.retire();
-  }
+  if (episode.descriptor !== descriptor || episode.viewer !== viewer || episode.cache !== cache) episode.retire();
+  if (episode.admitted && (!ready || episode.session !== session)) episode.retire();
   if (ready && !episode.admitted && !episode.retired) {
     episode.admitted = true;
     episode.session = session;
