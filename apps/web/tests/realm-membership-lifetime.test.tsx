@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, useEffect, useRef } from 'react';
+import { act, createElement, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { MembershipResult } from '../src/community/space';
@@ -200,16 +200,20 @@ async function makeSurface(
 
   client.setQueryData(sessionModule.sessionQuery.queryKey, signedIn());
   const configRef = { current: config };
+  let publishConfig: (next: SurfaceConfig) => void = () => {};
   const route = createRootRoute({
-    component: () =>
-      createElement(
+    component: () => {
+      const [current, setCurrent] = useState(configRef.current);
+      publishConfig = setCurrent;
+      return createElement(
         'div',
         null,
         options.transitionWhileImportIsQueued
           ? createElement(TransitionWhileImportIsQueued, { realm: configRef.current.realmId })
           : null,
-        createElement(MembershipSurface, { config: configRef.current }),
-      ),
+        createElement(MembershipSurface, { config: current }),
+      );
+    },
   });
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();
@@ -243,6 +247,7 @@ async function makeSurface(
   async function updateConfig(next: SurfaceConfig, nextClient = client) {
     configRef.current = next;
     await act(async () => {
+      publishConfig(next);
       root.render(
         createElement(QueryClientProvider, { client: nextClient }, createElement(RouterProvider, { router })),
       );
@@ -735,7 +740,6 @@ test.each(['accepted', 'refused'] as const)(
       await surface.until(() => surface.hasText(m.realm_membership_command_uncertain()), 'native command settlement');
       expect(completions).toHaveLength(0);
       await surface.updateConfig({ realmId, nativeObservation: nativeHome('member'), onCompleted });
-      await act(async () => surface.router.invalidate());
       await surface.settle();
       expect(completions).toHaveLength(outcome === 'accepted' ? 1 : 0);
       await surface.settle();
