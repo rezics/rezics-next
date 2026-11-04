@@ -8890,5 +8890,15 @@
   "people_facts_route_return": "更正與來源使用既有頁面。離開此頁面後無法還原詳細位置；請返回此資料的事實欄位。",
   "people_facts_unsupported": "此欄位的資料類型不受支援。",
   "people_facts_suppressed": "此欄位在目前語境中已被抑制。",
-  "people_facts_unresolved": "此欄位在目前語境中尚未解決。"
+  "people_facts_unresolved": "此欄位在目前語境中尚未解決。",
+  "character_work_title": "此角色登場的作品",
+  "character_work_appearances": "作品登場",
+  "character_work_performances": "配音演出",
+  "character_work_window": "目前顯示已載入的範圍，可能仍有其他關聯。",
+  "character_work_unavailable": "目前無法讀取部分關聯或其原始陳述身分。",
+  "character_work_qualification_unavailable": "目前無法讀取角色定位或演出者的限定資訊。",
+  "character_work_performer": "演出者",
+  "character_work_original": "原始陳述",
+  "character_work_new_tab": "（在新分頁開啟）",
+  "character_work_return_missing": "選取的陳述已不在此範圍內。請重新讀取此關聯串流的目前內容。"
 }

@@ -8890,5 +8890,15 @@
   "people_facts_route_return": "Las correcciones y fuentes usan sus páginas existentes. La posición local detallada no puede restaurarse al salir de esta página; vuelve a este campo del perfil.",
   "people_facts_unsupported": "El tipo de datos de este campo no es compatible.",
   "people_facts_suppressed": "Este campo está suprimido en el contexto actual.",
-  "people_facts_unresolved": "Este campo no está resuelto en el contexto actual."
+  "people_facts_unresolved": "Este campo no está resuelto en el contexto actual.",
+  "character_work_title": "Obras donde aparece este personaje",
+  "character_work_appearances": "Apariciones en obras",
+  "character_work_performances": "Interpretaciones de voz",
+  "character_work_window": "Se muestra la ventana cargada. Puede haber más asociaciones.",
+  "character_work_unavailable": "Algunas asociaciones o su identidad original no están disponibles en esta lectura.",
+  "character_work_qualification_unavailable": "Los detalles del papel o del intérprete no están disponibles en esta lectura.",
+  "character_work_performer": "Intérprete",
+  "character_work_original": "Afirmación original",
+  "character_work_new_tab": "(se abre en una pestaña nueva)",
+  "character_work_return_missing": "La afirmación seleccionada ya no está en esta ventana. Reinicia este flujo para leer las asociaciones actuales."
 }

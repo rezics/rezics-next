@@ -29,6 +29,7 @@ import { createConnectionWindow, type ConnectionRead } from './subject-connectio
 import { loadSubjectConnections } from './subject-connections-query';
 import {
   connectionReturnHref,
+  connectionReturnGroup,
   connectionReturnWindow,
   subjectVisitReturn,
   withSubjectVisitReturn,
@@ -36,6 +37,9 @@ import {
 } from './subject-visit-navigation';
 import { directedWorkRelations } from './showcase-work/model';
 import { WorkRelation } from './showcase-work/relation';
+import { useSubjectCommunityReading } from './subject-community-lifetime';
+import { characterWorkStream } from '../catalogue/character-work-visit/model';
+import { CharacterWorkRows } from '../catalogue/character-work-visit/view';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -77,10 +81,17 @@ export function SubjectConnections({
     value?.context,
     value?.reader,
   ]);
+  const readingSource = useMemo(() => ({ page, reader }), [page, reader]);
+  const lifetime = useSubjectCommunityReading({
+    source: readingSource,
+    descriptor: reader,
+    reader: viewer.state === 'signed-in' ? (viewer.subject ?? null) : null,
+  });
   if (!value || !page.subject) return null;
-  const ready = viewer.state === 'signed-out' || (viewer.state === 'signed-in' && !!viewer.subject);
+  const ready =
+    lifetime.available && (viewer.state === 'signed-out' || (viewer.state === 'signed-in' && !!viewer.subject));
   const current = incarnation.current;
-  if (!current || current.page !== page || current.reader !== reader || current.read !== read) {
+  if (!current || current.page !== page || current.reader !== reader || current.read !== read || !lifetime.available) {
     current?.window.retire(true);
     const resume =
       typeof window !== 'undefined' && window.location.pathname.includes(`/subjects/${page.subject}/`)
@@ -94,7 +105,7 @@ export function SubjectConnections({
       ...(resume
         ? {
             selection: {
-              relations: {
+              [connectionReturnGroup(resume)]: {
                 stream: resume.stream,
                 ...(resume.cursor ? { cursor: resume.cursor } : {}),
                 ...(resume.reading ? { reading: resume.reading } : {}),
@@ -117,8 +128,9 @@ export function SubjectConnections({
     <ConnectionsReading
       key={incarnation.current!.serial}
       window={incarnation.current!.window}
+      character={subjectBody(page)?.subject.type === 'wd:Q95074'}
       ready={ready}
-      unavailable={viewer.state === 'unavailable'}
+      unavailable={viewer.state === 'unavailable' || !lifetime.available}
       returnTo={subjectVisitReturn(returnTo, value.locale)}
       resume={incarnation.current!.resume}
     />
@@ -127,12 +139,14 @@ export function SubjectConnections({
 
 function ConnectionsReading({
   window,
+  character,
   ready,
   unavailable,
   returnTo,
   resume,
 }: {
   window: ReturnType<typeof createConnectionWindow>;
+  character: boolean;
   ready: boolean;
   unavailable: boolean;
   returnTo?: string | undefined;
@@ -144,6 +158,7 @@ function ConnectionsReading({
   const status = useRef<HTMLParagraphElement>(null);
   const focusIntent = useRef<HTMLButtonElement | null>(null);
   const [completion, setCompletion] = useState('');
+  const [returnMissing, setReturnMissing] = useState(false);
   const region = useRef<HTMLElement>(null);
   const restore = useRef(resume?.focus ? resume : undefined);
   useEffect(() => {
@@ -164,13 +179,21 @@ function ConnectionsReading({
     const target = restore.current;
     if (!target || snapshot.pending.size || !snapshot.visit) return;
     restore.current = undefined;
-    const section = snapshot.visit.sections.relations;
+    const section = snapshot.visit.sections[connectionReturnGroup(target)];
     if (section?.section.ok && section.reading === target.reading) {
       const row = [...(region.current?.querySelectorAll<HTMLElement>('[data-work-statement]') ?? [])].find(
         (element) => element.dataset.workStatement === target.focus && element.dataset.workHolder === target.holder,
       );
-      row?.querySelector<HTMLElement>('a, summary')?.focus();
-    } else region.current?.querySelector<HTMLElement>('[data-connections-recovery="relations"]')?.focus();
+      if (row) row.querySelector<HTMLElement>('a, summary')?.focus();
+      else {
+        setReturnMissing(true);
+        setCompletion(m.character_work_return_missing({}, { locale: value.locale as never }));
+        status.current?.focus();
+      }
+    } else
+      region.current
+        ?.querySelector<HTMLElement>(`[data-connections-recovery="${connectionReturnGroup(target)}"]`)
+        ?.focus();
   }, [snapshot]);
   useEffect(() => {
     window.activate();
@@ -233,12 +256,12 @@ function ConnectionsReading({
         </a>
       )}
       <h2 id="connections-heading" className="font-sans text-2xl font-semibold">
-        {m.subject_connections_title({}, o)}
+        {character ? m.character_work_title({}, o) : m.subject_connections_title({}, o)}
       </h2>
       {unavailable ? (
         <p role="alert">
           {m.subject_section_failed({}, o)}{' '}
-          <a href={currentHref} className={`${actionClass} inline-flex underline`}>
+          <a href={currentHref.split('#', 1)[0]} className={`${actionClass} inline-flex underline`}>
             {m.subject_section_retry({}, o)}
           </a>
         </p>
@@ -249,7 +272,7 @@ function ConnectionsReading({
         <div role="alert" className="space-y-3">
           <p>{failure(snapshot.failure)}</p>
           {snapshot.failure === 409 ? (
-            <a href={currentHref} className={`${actionClass} inline-flex text-primary underline`}>
+            <a href={currentHref.split('#', 1)[0]} className={`${actionClass} inline-flex text-primary underline`}>
               {m.subject_relation_restart({}, o)}
             </a>
           ) : (
@@ -259,10 +282,31 @@ function ConnectionsReading({
           )}
         </div>
       )}
+      {returnMissing && resume && (
+        <Button
+          variant="outline"
+          className={actionClass}
+          onClick={(event) => {
+            setReturnMissing(false);
+            act(event, () => window.load(connectionReturnGroup(resume), { stream: resume.stream }));
+          }}
+        >
+          {m.subject_relation_restart({}, o)}
+        </Button>
+      )}
       {visit &&
         connectionGroups.map((group) => {
           const choices = visit.streams.filter((stream) => stream.group === group);
           const current = visit.sections[group];
+          const characterChoices = character
+            ? choices.filter((stream) => characterWorkStream(stream, value.subject!))
+            : [];
+          const characterKind = character && current ? characterWorkStream(current.stream, value.subject!) : undefined;
+          const title = characterChoices.length
+            ? group === 'characters'
+              ? m.character_work_appearances({}, o)
+              : m.character_work_performances({}, o)
+            : titles[group];
           const busy = snapshot.pending.has(group);
           const section = current?.section;
           const listed = section?.ok
@@ -281,9 +325,11 @@ function ConnectionsReading({
                 ) ?? [])
               : [];
           if (!choices.length)
-            return group === 'relations' ? (
+            return group === 'relations' || (character && group === 'characters') ? (
               <p key={group} role="status">
-                {m.work_relations_unsupported({}, o)}
+                {character && group === 'characters'
+                  ? m.people_biography_unsupported({}, o)
+                  : m.work_relations_unsupported({}, o)}
               </p>
             ) : null;
           return (
@@ -294,9 +340,11 @@ function ConnectionsReading({
               aria-busy={busy}
             >
               <h3 id={`connections-${group}`} className="text-xl font-semibold">
-                {titles[group]}
+                {title}
               </h3>
-              <label className="block min-w-0 space-y-2">
+              <label
+                className={characterChoices.length === 1 && choices.length === 1 ? 'hidden' : 'block min-w-0 space-y-2'}
+              >
                 <span className="text-sm font-medium">{m.subject_connections_relation({}, o)}</span>
                 <NativeSelect
                   className="min-h-11 w-full max-w-full"
@@ -320,13 +368,16 @@ function ConnectionsReading({
                 <p role="status">{m.subject_relation_loading({}, o)}</p>
               ) : listed ? (
                 <>
-                  {listed.count && (
+                  {!characterKind && listed.count && (
                     <p className="text-sm text-muted-foreground tabular-nums">
                       {formatCount(listed.count, value.locale)}
                     </p>
                   )}
                   {listed.items.length ? (
                     <div className="min-w-0 space-y-4" key={`${group}:${current?.stream.key}`}>
+                      {characterKind && current && section?.ok && (
+                        <CharacterWorkRows current={current} value={rowValue} kind={characterKind} />
+                      )}
                       {works.map((work) => {
                         const item = listed.items.find(
                           (item) => item.statement === work.statement.id && item.id === work.id,
@@ -367,13 +418,16 @@ function ConnectionsReading({
                           </div>
                         );
                       })}
-                      <CoverList
-                        items={listed.items.filter(
-                          (item) => !works.some((work) => item.statement === work.statement.id && item.id === work.id),
-                        )}
-                        value={rowValue}
-                        label={titles[group]}
-                      />
+                      {!characterKind && (
+                        <CoverList
+                          items={listed.items.filter(
+                            (item) =>
+                              !works.some((work) => item.statement === work.statement.id && item.id === work.id),
+                          )}
+                          value={rowValue}
+                          label={titles[group]}
+                        />
+                      )}
                     </div>
                   ) : (
                     <p role="status">
@@ -384,6 +438,7 @@ function ConnectionsReading({
                         : m.subject_relation_empty_page({}, o)}
                     </p>
                   )}
+                  {characterKind && <p className="text-sm text-muted-foreground">{m.character_work_window({}, o)}</p>}
                   {next && current && (
                     <Button
                       variant="outline"

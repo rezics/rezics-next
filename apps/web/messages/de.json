@@ -8890,5 +8890,15 @@
   "people_facts_route_return": "Korrekturen und Quellen verwenden ihre bestehenden Seiten. Die genaue lokale Position kann nach dem Verlassen nicht wiederhergestellt werden; kehren Sie zu diesem Profilfeld zurück.",
   "people_facts_unsupported": "Der Datentyp dieses Feldes wird nicht unterstützt.",
   "people_facts_suppressed": "Dieses Feld wird im aktuellen Kontext unterdrückt.",
-  "people_facts_unresolved": "Dieses Feld ist im aktuellen Kontext ungeklärt."
+  "people_facts_unresolved": "Dieses Feld ist im aktuellen Kontext ungeklärt.",
+  "character_work_title": "Werke mit dieser Figur",
+  "character_work_appearances": "Auftritte in Werken",
+  "character_work_performances": "Sprechrollen",
+  "character_work_window": "Dies ist das geladene Fenster. Weitere Verknüpfungen können vorhanden sein.",
+  "character_work_unavailable": "Einige Verknüpfungen oder ihre ursprüngliche Identität sind in dieser Ansicht nicht verfügbar.",
+  "character_work_qualification_unavailable": "Angaben zur Rolle oder zur darstellenden Person sind in dieser Ansicht nicht verfügbar.",
+  "character_work_performer": "Darstellende Person",
+  "character_work_original": "Ursprüngliche Aussage",
+  "character_work_new_tab": "(öffnet einen neuen Tab)",
+  "character_work_return_missing": "Die ausgewählte Aussage ist nicht mehr in diesem Fenster. Starten Sie diesen Verlauf neu, um die aktuellen Verknüpfungen zu lesen."
 }

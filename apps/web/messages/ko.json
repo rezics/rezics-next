@@ -8890,5 +8890,15 @@
   "people_facts_route_return": "수정과 출처는 기존 페이지를 사용합니다. 이 페이지를 떠나면 세부 위치를 복원할 수 없습니다. 이 프로필의 사실 필드로 돌아오세요.",
   "people_facts_unsupported": "이 필드의 데이터 유형은 지원되지 않습니다.",
   "people_facts_suppressed": "현재 컨텍스트에서 이 필드는 표시가 억제되었습니다.",
-  "people_facts_unresolved": "현재 컨텍스트에서 이 필드는 미해결 상태입니다."
+  "people_facts_unresolved": "현재 컨텍스트에서 이 필드는 미해결 상태입니다.",
+  "character_work_title": "이 캐릭터가 등장하는 작품",
+  "character_work_appearances": "작품 등장",
+  "character_work_performances": "성우 연기",
+  "character_work_window": "불러온 범위만 표시합니다. 다른 연결이 더 있을 수 있습니다.",
+  "character_work_unavailable": "이 열람에서는 일부 연결이나 원본 서술의 식별 정보를 확인할 수 없습니다.",
+  "character_work_qualification_unavailable": "이 열람에서는 역할 또는 연기자의 한정 정보를 확인할 수 없습니다.",
+  "character_work_performer": "연기자",
+  "character_work_original": "원본 서술",
+  "character_work_new_tab": "(새 탭에서 열기)",
+  "character_work_return_missing": "선택한 서술이 이 범위에 없습니다. 이 연결을 처음부터 다시 불러오세요."
 }

@@ -8890,5 +8890,15 @@
   "people_facts_route_return": "更正与来源使用现有页面。离开此页面后无法恢复详细位置；请返回此资料的事实字段。",
   "people_facts_unsupported": "此字段的数据类型不受支持。",
   "people_facts_suppressed": "此字段在当前语境中被抑制。",
-  "people_facts_unresolved": "此字段在当前语境中尚未解决。"
+  "people_facts_unresolved": "此字段在当前语境中尚未解决。",
+  "character_work_title": "此角色登场的作品",
+  "character_work_appearances": "作品登场",
+  "character_work_performances": "配音演出",
+  "character_work_window": "目前显示已加载的范围，可能仍有其他关联。",
+  "character_work_unavailable": "目前无法读取部分关联或其原始陈述身份。",
+  "character_work_qualification_unavailable": "目前无法读取角色定位或演出者的限定信息。",
+  "character_work_performer": "演出者",
+  "character_work_original": "原始陈述",
+  "character_work_new_tab": "（在新标签页打开）",
+  "character_work_return_missing": "所选陈述已不在此范围内。请重新读取此关联流的当前内容。"
 }

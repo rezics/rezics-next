@@ -8890,5 +8890,15 @@
   "people_facts_route_return": "修正と出典は既存のページで開きます。このページを離れると詳細な位置は復元できません。このプロフィールの項目に戻ってください。",
   "people_facts_unsupported": "この項目のデータ型は未対応です。",
   "people_facts_suppressed": "現在のコンテキストではこの項目は非表示に設定されています。",
-  "people_facts_unresolved": "現在のコンテキストではこの項目は未解決です。"
+  "people_facts_unresolved": "現在のコンテキストではこの項目は未解決です。",
+  "character_work_title": "このキャラクターが登場する作品",
+  "character_work_appearances": "作品への登場",
+  "character_work_performances": "声の出演",
+  "character_work_window": "読み込んだ範囲を表示しています。続きがある場合があります。",
+  "character_work_unavailable": "一部の関連情報または元の記述を、この閲覧では確認できません。",
+  "character_work_qualification_unavailable": "役割または演者の限定情報を、この閲覧では確認できません。",
+  "character_work_performer": "演者",
+  "character_work_original": "元の記述",
+  "character_work_new_tab": "（新しいタブで開く）",
+  "character_work_return_missing": "選択した記述はこの範囲にありません。この関連項目を最初から読み直してください。"
 }

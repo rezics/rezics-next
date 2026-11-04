@@ -8982,5 +8982,15 @@
   "people_facts_route_return": "Correction and Sources use their existing destinations. Detailed local position cannot be restored after leaving this page; use this profile fact section to return.",
   "people_facts_unsupported": "This field has an unsupported datatype.",
   "people_facts_suppressed": "This field is suppressed in the current Context.",
-  "people_facts_unresolved": "This field is unresolved in the current Context."
+  "people_facts_unresolved": "This field is unresolved in the current Context.",
+  "character_work_title": "Works featuring this character",
+  "character_work_appearances": "Work appearances",
+  "character_work_performances": "Voice performances",
+  "character_work_window": "This is the loaded window. Further associations may be available.",
+  "character_work_unavailable": "Some associations or their original identity are unavailable in this reading.",
+  "character_work_qualification_unavailable": "Role or performer qualification is unavailable in this reading.",
+  "character_work_performer": "Performer",
+  "character_work_original": "Original assertion",
+  "character_work_new_tab": "(opens in a new tab)",
+  "character_work_return_missing": "The selected assertion is no longer in this window. Restart this stream to read its current associations."
 }

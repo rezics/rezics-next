@@ -5,6 +5,7 @@ import { fetchGuideRelease } from '../catalogue/definition-guide';
 import { loadSubjectPage, subjectBody, type SubjectPageData } from './subject';
 import { isRecord } from './shared';
 import type { Section } from './overview';
+import { characterWorkStream } from '../catalogue/character-work-visit/intent';
 
 export const connectionGroups = ['relations', 'characters', 'credits'] as const;
 export type ConnectionGroup = (typeof connectionGroups)[number];
@@ -227,7 +228,10 @@ export async function readConnectionVisit(
           const counts = (reading.subject as unknown as { relationCounts?: Record<string, number> }).relationCounts;
           const stream = selected
             ? choices.find((stream) => stream.key === selected.stream)
-            : (choices.find((stream) => stream.direction === 'out' && (counts?.[stream.property] ?? 0) > 0) ??
+            : ((reading.subject.type === 'wd:Q95074'
+                ? choices.find((stream) => characterWorkStream(stream, address.id))
+                : undefined) ??
+              choices.find((stream) => stream.direction === 'out' && (counts?.[stream.property] ?? 0) > 0) ??
               choices[0]);
           if (!stream) {
             if (selected) throw new Error('Unknown connection stream');

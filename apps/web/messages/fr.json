@@ -8890,5 +8890,15 @@
   "people_facts_route_return": "Les corrections et les sources utilisent leurs pages existantes. La position détaillée ne peut pas être restaurée après avoir quitté cette page ; revenez à ce champ du profil.",
   "people_facts_unsupported": "Le type de données de ce champ n’est pas pris en charge.",
   "people_facts_suppressed": "Ce champ est supprimé de la sélection dans le contexte actuel.",
-  "people_facts_unresolved": "Ce champ est non résolu dans le contexte actuel."
+  "people_facts_unresolved": "Ce champ est non résolu dans le contexte actuel.",
+  "character_work_title": "Œuvres où figure ce personnage",
+  "character_work_appearances": "Apparitions dans des œuvres",
+  "character_work_performances": "Interprétations vocales",
+  "character_work_window": "Seule la fenêtre chargée est affichée. D’autres associations peuvent exister.",
+  "character_work_unavailable": "Certaines associations ou leur identité d’origine sont indisponibles dans cette lecture.",
+  "character_work_qualification_unavailable": "Les précisions sur le rôle ou l’interprète sont indisponibles dans cette lecture.",
+  "character_work_performer": "Interprète",
+  "character_work_original": "Assertion d’origine",
+  "character_work_new_tab": "(nouvel onglet)",
+  "character_work_return_missing": "L’assertion sélectionnée ne figure plus dans cette fenêtre. Recommencez ce flux pour lire les associations actuelles."
 }
