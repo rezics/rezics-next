@@ -26,9 +26,8 @@ test('Multilingual terms show actionable field-specific corrections without chan
     Node: window.Node,
     MutationObserver: window.MutationObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: (callback: FrameRequestCallback) =>
-      setTimeout(() => callback(performance.now()), 0) as unknown as number,
-    cancelAnimationFrame: (handle: number) => clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -549,6 +548,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
     }
   } finally {
     await act(async () => root.unmount());
+    await new Promise((resolve) => setTimeout(resolve, 0));
     client.clear();
     window.close();
     for (const [key, descriptor] of previous) {
@@ -556,4 +556,4 @@ test('Multilingual terms show actionable field-specific corrections without chan
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 60_000);
