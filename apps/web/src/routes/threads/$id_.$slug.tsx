@@ -23,7 +23,7 @@ import type { DocumentMentions } from '../../document-body';
 import type { ThreadDocumentMedia } from '../../threads/document-media-read';
 import { ContentActions } from '@rezics/ui/content-actions';
 import { useSession } from '../../session/query';
-import { createFileRoute, redirect, useLocation, useRouter } from '@tanstack/react-router';
+import { createFileRoute, redirect, useLocation, useRouter, useRouterState } from '@tanstack/react-router';
 import {
   useContext,
   useEffect,
@@ -102,8 +102,8 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
       rememberThreadSlug(page.redirect.id, page.redirect.title);
       caller.assertReadCurrent();
       const href = threadLocation(getLocale(), page.redirect, deps.cursor, deps.post, {
-        token: deps.historyReturn,
-        revisionId: deps.historyRevision,
+        ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
+        ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
       });
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
@@ -115,8 +115,8 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     caller.assertReadCurrent();
     if (!sameThreadSlug(params.slug, title)) {
       const href = threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor, deps.post, {
-        token: deps.historyReturn,
-        revisionId: deps.historyRevision,
+        ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
+        ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
       });
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
@@ -621,6 +621,9 @@ export function ThreadReadingPost({
   currentVote: VoteCitation | undefined;
   review: boolean;
 }) {
+  const router = useRouter();
+  const historyOriginHref = useRouterState({ select: (state) => state.location.publicHref });
+  const historyOrigin = new URL(historyOriginHref, 'https://rezics.invalid');
   const composedViewerCurrent = !composed || threadPageViewerMatches(composed, viewerId);
   const canReact =
     !composed ||
@@ -1134,8 +1137,8 @@ export function ThreadReadingPost({
                 postId={post.id}
                 readAuthority={historyScope}
                 returnOrigin={{
-                  pathname: new URL(location.publicHref, 'https://rezics.invalid').pathname,
-                  search: new URL(location.publicHref, 'https://rezics.invalid').search,
+                  pathname: historyOrigin.pathname,
+                  search: historyOrigin.search,
                 }}
                 navigateToExactRevision={(identity, historyReturn) => {
                   void router.navigate(exactRevisionRoute(identity, historyReturn));
