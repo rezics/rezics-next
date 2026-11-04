@@ -4,6 +4,7 @@ import { act, Profiler } from 'react';
 import type { FactCommand, FactsCurrent, FactResult } from '../src/features/catalogue/subject-facts';
 import type { EditorRead } from '../src/features/catalogue/statement-editor';
 import type { AlbumCommand, AlbumRead } from '../src/features/catalogue/album-profile';
+import type { CreateAuthority } from '../src/features/catalogue/identity-intake';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 test('Album recovery retires every current surface and retains private drafts and exact unresolved proposals', async () => {
@@ -485,18 +486,18 @@ test('Album recovery retires every current surface and retains private drafts an
     await click(m.album_create_review());
     await click(m.album_create());
     expect(submitted).toHaveLength(2);
-    const exact = structuredClone(submitted[1]);
+    const exactCommand = structuredClone(submitted[1]);
     metadata = new Error('metadata offline again');
     await click(m.correction_reload());
     await settle();
     await click(m.catalogue_create_retry());
     expect(submitted).toHaveLength(3);
     expect(submitted[2]).toBe(submitted[1]);
-    expect(submitted[2]).toEqual(exact);
+    expect(submitted[2]).toEqual(exactCommand);
     await act(async () => termEdit({ target: { value: 'Late uncertain edit' } }));
     expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album français');
     expect(submitted[1]).toBe(submitted[2]);
-    expect(submitted[2]).toEqual(exact);
+    expect(submitted[2]).toEqual(exactCommand);
     await click(m.catalogue_create_retry());
     await settle(() => finishReader({ state: 'ready', href: '/en/exact-returned-reader?session=kept' }));
     expect(within(host).getByRole('link', { name: m.catalogue_create_open() }).getAttribute('href')).toBe(
@@ -570,7 +571,7 @@ test('Album create uses current parent eligibility, keeps drafts when observatio
   const { AlbumProfile } = await import('../src/features/catalogue/album-profile-view');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { albumFixture } = await import('../src/kernel/fake/catalogue-album-profile');
-  const { allowedCreateAuthority, type CreateAuthority } = await import('../src/features/catalogue/identity-intake');
+  const { allowedCreateAuthority } = await import('../src/features/catalogue/identity-intake');
   const { m } = await import('../src/paraglide/messages.js');
   const testing = createRequire(require.resolve('storybook/test'));
   const { within } = await import(testing.resolve('@testing-library/dom'));
