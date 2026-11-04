@@ -54,6 +54,7 @@ async function mountPage(initial: PageConfig) {
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     FormData: window.FormData,
+    scrollTo: window.scrollTo.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),

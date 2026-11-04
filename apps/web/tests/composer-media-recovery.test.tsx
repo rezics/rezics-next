@@ -38,6 +38,7 @@ async function mountComposer() {
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     FormData: window.FormData,
+    scrollTo: window.scrollTo.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),
     matchMedia: window.matchMedia.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
@@ -87,7 +88,7 @@ async function mountComposer() {
       await act(async () => {
         await new Promise((resolve) => window.setTimeout(resolve, 10));
       });
-    expect(ready()).toBe(true);
+    expect(ready(), host.textContent ?? '').toBe(true);
   };
   const button = (name: string, scope: ParentNode = host) =>
     [...scope.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
