@@ -1589,7 +1589,10 @@ export class MergeTrain {
       })}`;
       const cached = this.options.queue.baseline(base, key);
       if (cached) {
-        appendFileSync(logPath, `Boot check baseline for dev ${base} reused (${cached.passed ? 'passed' : 'failed'})\n`);
+        appendFileSync(
+          logPath,
+          `Boot check baseline for dev ${base} reused (${cached.passed ? 'passed' : 'failed'})\n`,
+        );
         return cached;
       }
       let baseline: GateResult = { passed: false, output: 'Boot check baseline did not run', timedOut: false };
