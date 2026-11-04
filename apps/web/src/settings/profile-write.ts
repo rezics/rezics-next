@@ -361,11 +361,9 @@ export class ProfileEditor {
         attempt: resolved ? null : attempt,
         acknowledged: resolved ? false : this.state.acknowledged,
         phase: commandAcknowledged
-          ? hasDraftChanges
+          ? hasDraftChanges || !confirmed
             ? 'review'
-            : confirmed
-              ? 'saved'
-              : 'idle'
+            : 'saved'
           : !resolved
             ? 'uncertain'
             : confirmed && !hasDraftChanges
