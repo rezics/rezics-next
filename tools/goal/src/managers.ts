@@ -67,7 +67,7 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   kind?: 'managed';
   threadId: string | null;
   activeTurnId: string | null;
-  status: 'starting' | 'running' | 'paused' | 'complete';
+  status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
   startedAt: number;
   turns: number;
   turnsWithoutDecision: number;
@@ -81,6 +81,9 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   continuationRenewed?: boolean;
   continuationTokensUsed?: number;
   pendingRenewal?: { tokensUsed: number; oldThreadId: string | null; ready: boolean };
+  /** Automatic renewal attempts; `error` is the failure's first line, omitted when that attempt succeeded. */
+  renewalAttempts?: { at: number; error?: string }[];
+  nextRenewalRetryAt?: number;
 };
 export type ManagedManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
 /** An existing Claude session registered for authority only; it is not a managed model session. */
@@ -722,17 +725,21 @@ export class ManagerSessions {
       const goalCanRenew =
         current.engine === 'codex' &&
         (current.goalState?.status === 'budgetLimited' || current.goalState?.status === 'blocked');
-      if (current.status !== 'paused' && !goalCanRenew) throw new Error(`Manager must be paused to renew: ${id}`);
+      if (current.status !== 'paused' && current.status !== 'renewal-failed' && !goalCanRenew)
+        throw new Error(`Manager must be paused to renew: ${id}`);
       return this.renewInternal(id, spec);
     });
   }
   private async renewInternal(id: string, spec: ManagerSpec): Promise<ManagedManagerState> {
+    const current = this.get(id);
+    assertManagedManager(current);
+    const retryingFailed = current.status === 'renewal-failed';
     // Reapply the stop operation because a paused record can still have a live turn or viewer left behind.
     await this.stopInternal(id);
     const stopped = this.get(id);
     assertManagedManager(stopped);
-    const { history: _history, ...snapshot } = stopped;
-    const history = [...(stopped.history ?? []), snapshot];
+    const { history: _history, renewalAttempts: _attempts, nextRenewalRetryAt: _retry, ...snapshot } = stopped;
+    const history = retryingFailed ? (stopped.history ?? []) : [...(stopped.history ?? []), snapshot];
     return this.startSession(spec, history, stopped.pendingRenewal);
   }
 
@@ -754,6 +761,8 @@ export class ManagerSessions {
       continuationRenewed: _continuationRenewed,
       continuationTokensUsed: _continuationTokensUsed,
       pendingRenewal: _pendingRenewal,
+      renewalAttempts: _renewalAttempts,
+      nextRenewalRetryAt: _nextRenewalRetryAt,
       ...spec
     } = state;
     return spec;
@@ -797,7 +806,11 @@ export class ManagerSessions {
     const current = this.get(state.id);
     assertManagedManager(current);
     if (current.status !== 'running' || current.goalState?.status !== 'budgetLimited') return false;
-    await this.renewForContinuation(current.id, current.goalState.tokensUsed);
+    try {
+      await this.renewForContinuation(current.id, current.goalState.tokensUsed);
+    } catch (error) {
+      await this.failRenewal(current.id, error);
+    }
     return true;
   }
   private async deliverRenewalNotice(id: string): Promise<void> {
@@ -938,26 +951,12 @@ export class ManagerSessions {
     // Turn and wall-clock limits bound one session's context, so the host replaces the session and the brief carries
     // the work over. A manager that keeps turning without a decision stops for the supermanager to look at.
     if (reason !== 'turns without a decision limit') {
-      const {
-        threadId: _thread,
-        activeTurnId: _turn,
-        status: _status,
-        startedAt: _started,
-        turns: _turns,
-        turnsWithoutDecision: _empty,
-        decision: _decision,
-        countedTurn: _counted,
-        turnStartedAt: _turnStarted,
-        goalState: _goal,
-        usage: _usage,
-        history: _history,
-        ...spec
-      } = state;
       try {
-        await this.renewInternal(state.id, spec);
+        await this.renewInternal(state.id, this.specFromState(state));
         return true;
       } catch (error) {
-        this.error(error);
+        await this.failRenewal(state.id, error);
+        return true;
       }
     }
     try {
@@ -971,6 +970,54 @@ export class ManagerSessions {
       summary: `Manager ${state.id} paused after exceeding its ${reason}.`,
     });
     return true;
+  }
+  private renewalErrorLine(error: unknown): string {
+    return (error instanceof Error ? error.message : String(error)).trim().split(/\r?\n/, 1)[0] ?? '';
+  }
+  private async failRenewal(
+    id: string,
+    error: unknown,
+    previousAttempts?: { at: number; error?: string }[],
+  ): Promise<void> {
+    this.error(error);
+    const state = this.get(id);
+    assertManagedManager(state);
+    const line = this.renewalErrorLine(error);
+    state.status = 'renewal-failed';
+    state.renewalAttempts = [...(previousAttempts ?? state.renewalAttempts ?? []), { at: this.now(), error: line }];
+    state.nextRenewalRetryAt = this.now() + this.policy.manager.renewalRetryMs;
+    this.save(state);
+    this.inbox.deliver({
+      managerId: state.supermanager,
+      kind: 'blocker',
+      summary: `Manager ${state.id} renewal failed: ${line}`,
+    });
+    this.armRenewalRetry(state);
+  }
+  private armRenewalRetry(state: ManagedManagerState): void {
+    clearTimeout(this.timers.get(state.id));
+    if (this.closed) return;
+    const delay = Math.max(0, Math.min(this.policy.manager.renewalRetryMs, 2_147_483_647));
+    this.timers.set(
+      state.id,
+      setTimeout(() => this.background(state.id, () => this.retryFailedRenewal(state.id)), delay),
+    );
+  }
+  private async retryFailedRenewal(id: string): Promise<void> {
+    const state = this.get(id);
+    assertManagedManager(state);
+    if (state.status !== 'renewal-failed') return;
+    const attempts = state.renewalAttempts ?? [];
+    try {
+      await this.renewInternal(id, this.specFromState(state));
+      const renewed = this.get(id);
+      assertManagedManager(renewed);
+      renewed.renewalAttempts = [...attempts, { at: this.now() }];
+      delete renewed.nextRenewalRetryAt;
+      this.save(renewed);
+    } catch (error) {
+      await this.failRenewal(id, error, attempts);
+    }
   }
   private async pauseRemote(state: ManagerState): Promise<void> {
     assertManagedManager(state);
@@ -1163,7 +1210,13 @@ export class ManagerSessions {
   async recover(onProgress?: () => void): Promise<void> {
     const states = this.list()
       .filter(isManagedManager)
-      .filter((state) => state.status === 'running' || state.status === 'starting' || state.pendingRenewal);
+      .filter(
+        (state) =>
+          state.status === 'running' ||
+          state.status === 'starting' ||
+          state.status === 'renewal-failed' ||
+          state.pendingRenewal,
+      );
     let progressReported = false;
     const reportProgress = () => {
       if (progressReported) return;
@@ -1176,6 +1229,11 @@ export class ManagerSessions {
         this.serial(state.id, async () => {
           let current = this.get(state.id);
           assertManagedManager(current);
+          if (current.status === 'renewal-failed') {
+            reportProgress();
+            await this.retryFailedRenewal(current.id);
+            return;
+          }
           if (current.pendingRenewal) {
             reportProgress();
             if (
@@ -1187,7 +1245,11 @@ export class ManagerSessions {
               current = this.get(current.id);
               assertManagedManager(current);
             } else {
-              await this.renewInternal(current.id, this.specFromState(current));
+              try {
+                await this.renewInternal(current.id, this.specFromState(current));
+              } catch (error) {
+                await this.failRenewal(current.id, error);
+              }
               return;
             }
           }

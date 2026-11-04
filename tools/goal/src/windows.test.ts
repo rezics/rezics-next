@@ -17,7 +17,18 @@ test('resolves stable termspaces sessions and registers and unregisters only its
   expect(calls.filter((call) => call.argv.includes('new-window'))).toHaveLength(1);
   expect(calls.find((call) => call.argv.includes('new-window'))?.argv).toContain('$1:');
   windows.unregister('manager');
-  expect(calls.at(-1)?.argv).toEqual(['-S', '/socket', 'kill-window', '-t', '@3']);
+  expect(calls.at(-1)?.argv).toEqual(['-u', '-S', '/socket', 'kill-window', '-t', '@3']);
+  expect(calls.every((call) => call.executable !== 'tmux' || call.argv[0] === '-u')).toBe(true);
+});
+
+test('Window lookups find the termspaces session when the host runs without any locale variables (tmux prints tab separators as underscores in that case).', () => {
+  const windows = new TermspacesWindows({ socket: '/socket', session: 'rezics-agents' }, (_executable, argv) => {
+    if (argv.includes('list-sessions')) return '$1_rezics-agents_rezics-agents';
+    if (argv.includes('list-windows')) return '@2_other';
+    if (argv.includes('new-window')) return '@3';
+    return '';
+  });
+  expect(windows.register('manager', ['claude'], '/cwd')).toBe('@3');
 });
 
 test('Preserve a manager session when its window status is unavailable', () => {

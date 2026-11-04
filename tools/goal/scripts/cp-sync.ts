@@ -4,10 +4,11 @@
  * temporary worktree of main, then publishes it to main, stabilize and dev in one compare-and-swap transaction and
  * updates the main checkout's working tree. See "Control plane on dev: cp-sync" in tools/goal/README.md.
  *
- * Only pure policy/settings helpers are imported from the source checkout; older target checkouts need no runtime composition.
+ * Policy helpers and the resident unit list are imported from the source checkout; older target checkouts need no runtime composition.
  */
 import { readScriptPolicy, scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
 import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
+import { RESIDENT_CODE_UNITS } from '../src/service.ts';
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -983,14 +984,15 @@ export async function restartResident(
   run: ResidentCommand = residentCommand,
   install = false,
 ): Promise<void> {
-  const host = 'rezics-goal-host.service';
   const checked = async (argv: string[]) => {
     const result = await run(argv, checkout);
     if (result.code !== 0 && !(argv.includes('--property=LoadState') && result.output.trim() === 'not-found'))
       throw new Refusal(result.output.trim() || `${argv.join(' ')}: exit ${result.code}`);
     return result.output.trim();
   };
-  const load = await checked(['systemctl', '--user', 'show', '--property=LoadState', '--value', host]);
+  const loads: string[] = [];
+  for (const unit of RESIDENT_CODE_UNITS)
+    loads.push(await checked(['systemctl', '--user', 'show', '--property=LoadState', '--value', unit]));
   const legacy = await checked([
     'systemctl',
     '--user',
@@ -1002,16 +1004,28 @@ export async function restartResident(
   if (
     install ||
     !existsSync(join(checkout, '.temp/goal/goal.env')) ||
-    load === 'not-found' ||
+    loads.includes('not-found') ||
     legacy === 'loaded' ||
     existsSync(join(checkout, '.temp/goal/manager-host-supervisor.lease')) ||
     existsSync(join(checkout, '.temp/goal/manager-host-liveness.json'))
   )
     await checked([process.execPath, 'tools/goal/src/cli.ts', 'service', 'install']);
-  // Type=notify makes this wait for READY=1; only the host unit is restarted, preserving worker scopes.
-  await checked(['systemctl', '--user', 'restart', host]);
-  if ((await checked(['systemctl', '--user', 'show', '--property=ActiveState', '--value', host])) !== 'active')
-    throw new Refusal('Goal host did not become ready.');
+  // Host Type=notify waits for READY=1; KillMode=process keeps worker scopes. The verifier restarts on its own unit.
+  const publishedAtSec = Math.floor(Date.now() / 1000);
+  for (const unit of RESIDENT_CODE_UNITS) {
+    const restarted = await run(['systemctl', '--user', 'restart', unit], checkout);
+    if (restarted.code !== 0)
+      throw new Refusal(`${unit} failed to restart: ${restarted.output.trim() || `exit ${restarted.code}`}`);
+    const shown = await run(
+      ['systemctl', '--user', 'show', unit, '--property=ActiveState,ExecMainStartTimestamp', '--timestamp=unix'],
+      checkout,
+    );
+    const startedAtSec = Number(/^ExecMainStartTimestamp=@(\d+)$/m.exec(shown.output)?.[1]);
+    if (shown.code !== 0 || !/^ActiveState=active$/m.test(shown.output))
+      throw new Refusal(`${unit} did not become ready.`);
+    if (!Number.isSafeInteger(startedAtSec) || startedAtSec < publishedAtSec)
+      throw new Refusal(`${unit} did not start after publication.`);
+  }
 }
 
 export function residentRegression(_before: ResidentHealth, after: ResidentHealth): boolean {

@@ -284,6 +284,7 @@ function noLongerActiveManager(db: Database, managerId: string): boolean {
   return (
     state.status === 'paused' ||
     state.status === 'complete' ||
+    state.status === 'renewal-failed' ||
     state.goal_status === 'paused' ||
     state.goal_status === 'budgetLimited' ||
     state.goal_status === 'complete'
