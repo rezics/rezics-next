@@ -6,6 +6,7 @@ import type { TransferAttempt } from '../src/operator-transfer';
 
 creationFixture();
 const { createRoot } = await import('react-dom/client');
+const { createElement } = await import('react');
 const { OperatorTransferPage } = await import('../src/routes/operators.transfer');
 const { OPERATOR_MANAGEMENT_PROFILE, storeTransferAttempt } = await import('../src/operator-transfer');
 const { OPERATOR_TRANSFER_PAGE_PATH } = await import('../src/operator-transfer-page');
@@ -65,7 +66,7 @@ test('one deliberate recovery review is bounded to session binding and one selec
     host.remove();
   };
   await act(async () => {
-    root.render(<OperatorTransferPage initial={session} />);
+    root.render(createElement(OperatorTransferPage, { initial: session }));
     for (let turn = 0; turn < 16; turn++) await Promise.resolve();
   });
   expect(calls.map(({ path }) => path)).toEqual(['/session', OPERATOR_TRANSFER_PAGE_PATH]);

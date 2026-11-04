@@ -153,7 +153,7 @@ test('changed draft and validation survive Stay with usable focus; deliberate Le
   await page.choose('Leave');
   expect(page.router.history.location.pathname).toBe('/security');
   expect(page.unload()).toBe(false);
-  expect(page.input('request-input').value).toBe('');
+  expect(page.input('request-input')).toBeNull();
 });
 test('imported request and exact reviewed transfer survive Stay; Leave discards only the unsent review', async () => {
   const page = await setup();
@@ -176,7 +176,8 @@ test('imported request and exact reviewed transfer survive Stay; Leave discards 
   await page.navigate();
   await page.choose('Stay');
   expect(restoreTransferAttempt()).toEqual(attempt);
-  expect(page.input('confirm').checked).toBe(true);
+  expect(page.input('confirm').checked).toBe(false);
+  expect(button(page.host, m.auth_transfer_native_review())).not.toBeNull();
   await page.navigate();
   await page.choose('Leave');
   expect(restoreTransferAttempt()).toBeNull();
@@ -240,8 +241,7 @@ for (const stage of ['relation', 'approval'])
   });
 test('reconciled results leave normally and permission loss revokes a draft without prompting', async () => {
   const page = await setup({ ...source, phase: 'readback', reference: 'approval', acceptance: 'acceptance' });
-  await flush(() => page.input('confirm').click());
-  await page.submit('confirm');
+  await page.choose(m.auth_transfer_recovery_review());
   await flush(() =>
     page.calls[0]!.resolve(
       Response.json({

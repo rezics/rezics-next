@@ -53,7 +53,13 @@ async function settle(action: () => void = () => {}) {
   });
 }
 function response(review: object, viewer: string = 'ready') {
-  return Response.json({ viewer: { kind: viewer }, review });
+  return Response.json({
+    viewer: {
+      kind: viewer,
+      ...(viewer === 'authentication-required' ? { continuation: 'operator-transfer' } : {}),
+    },
+    review,
+  });
 }
 async function mount(
   attempt: TransferAttempt,
@@ -67,7 +73,7 @@ async function mount(
     { ...sessionBody, account_id: owner.kind === 'ready' ? owner.accountId : session.accountId },
   );
   await settle();
-  await settle(() => page.calls[0]!.resolve(response({ kind: 'readiness' }, viewer)));
+  if (page.calls[0]) await settle(() => page.calls[0]!.resolve(response({ kind: 'readiness' }, viewer)));
   return page;
 }
 function privateValues() {
