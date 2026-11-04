@@ -232,7 +232,7 @@ export function createVndbLabelAdoption(config: Config) {
             ordinal: selected.ordinal,
             reviewId: selected.reviewId,
             sourceDigest: digest(retained.row),
-            matchDigest: decision.matchDigest,
+            ...(decision.matchDigest ? { matchDigest: decision.matchDigest } : {}),
             subjectId,
             source: retained.target?.source ?? null,
             mapping: index,
