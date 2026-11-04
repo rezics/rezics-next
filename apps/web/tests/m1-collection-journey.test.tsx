@@ -13,11 +13,12 @@ import { m } from '../src/paraglide/messages.js';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
+const id = (n: number) => `01a1a000-0000-7000-8000-0030000000${String(n).padStart(2, '0')}`;
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
-const window = new Window({ url: `https://site.test/en/collections/${card.id}` });
-window.document.head.innerHTML = `<link rel="canonical" href="https://site.test/en/collections/${card.id}">`;
+const window = new Window({ url: `https://site.test/en/collections/${id(20)}` });
+window.document.head.innerHTML = `<link rel="canonical" href="https://site.test/en/collections/${id(20)}">`;
 const globals = {
   window,
   document: window.document,
@@ -49,7 +50,6 @@ const { CollectionPage, CollectionReadMembers } = await import('../src/library/c
 const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');
 const { NewCollectionForm } = await import('../src/routes/collections/new');
 const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
-const id = (n: number) => `01a1a000-0000-7000-8000-0030000000${String(n).padStart(2, '0')}`;
 const members: CollectionMember[] = [1, 2, 3].map((n) => ({
   id: id(n + 10),
   subjectId: id(n === 2 ? 1 : n),
