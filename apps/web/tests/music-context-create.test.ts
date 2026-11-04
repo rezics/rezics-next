@@ -9,6 +9,7 @@ import { allowedCreateAuthority, type CreateAuthority } from '../src/features/ca
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const sessionModule = await import('../src/session/query');
 
 const release = bundledRelease;
 const digest = 'sha256:music-context-create-eligibility';
@@ -27,7 +28,7 @@ let submitImpl: (command: { item: InitialSubject; key: string }) => Promise<Crea
 });
 let readImpl: (id: string) => Promise<CreatedReader> = async () => ({ state: 'unavailable' });
 
-mock.module('../src/session/query', () => ({ useSession: () => viewer }));
+mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => viewer }));
 mock.module('../src/features/catalogue/create-subject-actions', () => ({
   readCatalogueCreateEligibility: () => observe(),
   readCreatedCatalogueSubject: async ({ data }: { data: string }) => readImpl(data),
