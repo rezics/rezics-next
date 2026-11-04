@@ -6,6 +6,7 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { musicContextKind, readMusicContext } from '../src/features/catalogue/music-context-profile';
+import { MUSIC_CONTEXT_PAGE_CAP } from '../src/features/pages/graph-browser';
 import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
 import { MusicContextProfile } from '../src/features/pages/music-context-profile';
 
@@ -32,13 +33,17 @@ function admit(release: Release) {
   type('schema:Place', 'place', [
     'schema:startDate',
     'schema:location',
+    'wdt:P8000',
     'wdt:P1619',
     'wdt:P9000',
     'wdt:P9001',
     'wdt:P9002',
+    'wdt:P9003',
   ]);
   type('schema:Event', 'event', ['schema:startDate', 'schema:location']);
   type('schema:MusicInstrument', 'instrument', ['schema:name']);
+  type('schema:AdministrativeArea', 'area', []);
+  release.types['schema:AdministrativeArea']!.bases = ['schema:Event', 'schema:Place'];
   const time = {
     iri: 'http://schema.org/startDate',
     labels: { en: 'start' },
@@ -62,6 +67,18 @@ function admit(release: Release) {
     value: { type: 'string', pattern: '^[0-9a-f-]+$' },
     relation: { group: 'credit', order: 'time', inverse: 'none' },
   };
+  release.properties['wdt:P8000'] = {
+    iri: 'http://www.wikidata.org/prop/direct/P8000',
+    labels: { en: 'z other relation' },
+    descriptions: { en: 'another admitted relation' },
+    datatype: 'wikibase-item',
+    targets: ['schema:Event'],
+    mappings: [],
+    qualifiers: ['schema:startDate'],
+    multivalued: true,
+    value: { type: 'string', pattern: '^[0-9a-f-]+$' },
+    relation: { group: 'context', order: 'name', inverse: 'none' },
+  };
   release.properties['wdt:P1619'] = {
     ...time,
     iri: 'http://www.wikidata.org/prop/direct/P1619',
@@ -77,6 +94,16 @@ function admit(release: Release) {
       iri: `http://www.wikidata.org/prop/direct/${id.slice(4)}`,
       labels: { en: label },
     };
+  release.properties['wdt:P9003'] = {
+    iri: 'http://www.wikidata.org/prop/direct/P9003',
+    labels: { en: 'geographic coordinates' },
+    descriptions: { en: 'geographic coordinates' },
+    datatype: 'string',
+    mappings: [],
+    qualifiers: [],
+    multivalued: true,
+    value: { type: 'string' },
+  };
   return release;
 }
 
@@ -180,6 +207,24 @@ function placeRead(): SubjectRead {
             references: [],
           },
         ],
+        'wdt:P9003': [
+          {
+            id: '00000000-0000-4000-8000-00000000e037',
+            rank: 'normal',
+            property: { id: 'wdt:P9003', data_type: 'string' },
+            value: { type: 'somevalue' },
+            qualifiers: [],
+            references: [],
+          },
+          {
+            id: '00000000-0000-4000-8000-00000000e038',
+            rank: 'normal',
+            property: { id: 'wdt:P9003', data_type: 'string' },
+            value: { type: 'value', content: '35.1, 139.2' },
+            qualifiers: [],
+            references: [],
+          },
+        ],
       },
       resolution: {},
       relationCounts: {},
@@ -191,21 +236,32 @@ function placeRead(): SubjectRead {
   };
 }
 
-function client(mode: 'ok' | 'unreadable' | 'denied') {
+function client(
+  mode: 'ok' | 'unreadable' | 'denied',
+  relationReads: Array<{ property: string; limit: number; cursor?: string }> = [],
+  networkReads: Array<{ resource: 'subject' | 'relations'; cache?: string; redirect?: string }> = [],
+) {
   return {
     subjects: ({ id }: { id: string }) => ({
-      get: async () => {
+      get: async (options?: { fetch?: { cache?: string; redirect?: string } }) => {
+        networkReads.push({ resource: 'subject', ...options?.fetch });
         if (mode === 'denied') return { status: 401 };
         return { status: 200, data: placeRead() };
       },
       relations: {
-        get: async () => ({
-          status: 200,
-          data: {
-            relations: [
+        get: async ({
+          query,
+          fetch,
+        }: {
+          query: { property: string; limit: number; cursor?: string };
+          fetch?: { cache?: string; redirect?: string };
+        }) => {
+          relationReads.push({ property: query.property, limit: query.limit, cursor: query.cursor });
+          networkReads.push({ resource: 'relations', ...fetch });
+          const locationRows = [
               {
                 statement: {
-                  id: eventA,
+                  id: '00000000-0000-4000-8000-00000000e041',
                   property: { id: 'schema:location', data_type: 'wikibase-item' },
                   value: { type: 'value', content: eventA },
                   rank: 'normal',
@@ -229,7 +285,31 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
               },
               {
                 statement: {
-                  id: eventB,
+                  id: '00000000-0000-4000-8000-00000000e044',
+                  property: { id: 'schema:location', data_type: 'wikibase-item' },
+                  value: { type: 'value', content: eventA },
+                  rank: 'normal',
+                  qualifiers: [
+                    {
+                      property: { id: 'schema:startDate', data_type: 'time' },
+                      value: {
+                        type: 'value',
+                        content: {
+                          time: '+2001-05-00T00:00:00Z',
+                          precision: 10,
+                          calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
+                        },
+                      },
+                    },
+                  ],
+                  references: [],
+                },
+                summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
+                related: {},
+              },
+              {
+                statement: {
+                  id: '00000000-0000-4000-8000-00000000e042',
                   property: { id: 'schema:location', data_type: 'wikibase-item' },
                   value: { type: 'value', content: eventB },
                   rank: 'normal',
@@ -253,7 +333,7 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
               },
               {
                 statement: {
-                  id: recording,
+                  id: '00000000-0000-4000-8000-00000000e043',
                   property: { id: 'schema:location', data_type: 'wikibase-item' },
                   value: { type: 'value', content: recording },
                   rank: 'normal',
@@ -266,11 +346,16 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                     : { id: recording, type: 'schema:MusicAlbum', label: { value: 'Live', language: 'en' } },
                 related: {},
               },
-            ],
-            next: null,
-            freshness: { caught_up: true },
-          },
-        }),
+            ];
+          return {
+            status: 200,
+            data: {
+              relations: query.property === 'schema:location' ? locationRows : [],
+              next: query.cursor ? null : 'next-cursor',
+              freshness: { caught_up: true },
+            },
+          };
+        },
       },
     }),
   } as unknown as KernelClient;
@@ -281,19 +366,66 @@ test('music context keeps two events at a place, dated recordings, partial dates
   const definitions = admit(structuredClone(bundledRelease) as Release);
   expect(musicContextKind(definitions, 'schema:Place')).toBe('place');
   expect(musicContextKind(definitions, 'schema:MusicInstrument')).toBe('instrument');
-  const read = await readMusicContext(client('ok'), 'Bearer reader', definitions, place, 'en', {});
+  expect(musicContextKind(definitions, 'schema:AdministrativeArea')).toBe('area');
+  const relationReads: Array<{ property: string; limit: number; cursor?: string }> = [];
+  const networkReads: Array<{ resource: 'subject' | 'relations'; cache?: string; redirect?: string }> = [];
+  const read = await readMusicContext(
+    client('ok', relationReads, networkReads),
+    'Bearer reader',
+    definitions,
+    place,
+    'en',
+    { stream: 'schema:location', cursor: 'cursor-one' },
+  );
   if (!read.ok) throw new Error('expected place');
   expect(read.kind).toBe('place');
+  expect(read.public.subject).toMatchObject({
+    id: place,
+    type: 'schema:Place',
+    release: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  });
+  expect(read.streams).toEqual([
+    { id: 'schema:location', label: 'location' },
+    { id: 'wdt:P8000', label: 'z other relation' },
+  ]);
+  expect(relationReads).toEqual([{ property: 'schema:location', limit: MUSIC_CONTEXT_PAGE_CAP, cursor: 'cursor-one' }]);
+  expect(networkReads).toEqual([
+    { resource: 'subject', cache: 'no-store', redirect: 'manual' },
+    { resource: 'relations', cache: 'no-store', redirect: 'manual' },
+  ]);
   const timeFact = (property: string) => read.facts.find((fact) => fact.property === property)?.time;
   expect(timeFact('schema:startDate')).toMatchObject({ state: 'supported', date: '+1999', precision: 9 });
   expect(timeFact('wdt:P9000')).toMatchObject({ state: 'unsupported', reason: 'precision' });
   expect(timeFact('wdt:P9001')).toMatchObject({ state: 'unsupported', reason: 'calendar' });
   expect(timeFact('wdt:P9002')).toMatchObject({ state: 'unsupported', reason: 'uncertainty' });
   expect(timeFact('wdt:P1619')).toMatchObject({ state: 'novalue' });
-  expect(read.facts.some((fact) => fact.unknown)).toBe(false);
-  expect(read.links.map((link) => link.label)).toEqual(['Spring concert', 'Autumn concert', 'Live']);
-  expect(read.links[0]?.date).toMatchObject({ state: 'supported', date: '+2001-05', calendar: 'julian' });
-  expect(read.links[1]?.date).toMatchObject({ state: 'unsupported', reason: 'calendar' });
+  expect(read.facts.filter((fact) => fact.property === 'wdt:P9003').map((fact) => fact.unknown)).toEqual([
+    'somevalue',
+    'coordinates-unsupported',
+  ]);
+  expect(read.links.map((link) => link.label)).toEqual([
+    'Spring concert',
+    'Spring concert',
+    'Autumn concert',
+    'Live',
+  ]);
+  expect(read.links.map((link) => link.id)).toEqual([eventA, eventA, eventB, '']);
+  expect(read.links.map((link) => link.position)).toEqual([1, 2, 3, 4]);
+  expect(read.links[0]?.occurrence).not.toBe(read.links[1]?.occurrence);
+  expect(read.links[0]?.date?.time).toMatchObject({ state: 'supported', date: '+2001-05', calendar: 'julian' });
+  expect(read.links[2]?.date?.time).toMatchObject({ state: 'unsupported', reason: 'calendar' });
+  expect(read.links[3]).toMatchObject({ id: '', unreadable: true });
+  const otherReads: Array<{ property: string; limit: number; cursor?: string }> = [];
+  const other = await readMusicContext(
+    client('ok', otherReads),
+    'Bearer reader',
+    definitions,
+    place,
+    'en',
+    { stream: 'wdt:P8000' },
+  );
+  expect(other.ok && other.stream).toBe('wdt:P8000');
+  expect(otherReads).toEqual([{ property: 'wdt:P8000', limit: MUSIC_CONTEXT_PAGE_CAP, cursor: undefined }]);
   const queryClient = new QueryClient();
   const html = renderToStaticMarkup(
     createElement(
@@ -313,7 +445,14 @@ test('music context keeps two events at a place, dated recordings, partial dates
   expect(html).toContain('Unsupported calendar: https://example.org/calendar');
   expect(html).toContain('Unsupported time uncertainty');
   expect(html).not.toContain('Unknown date');
-  const unread = await readMusicContext(client('unreadable'), 'Bearer reader', definitions, place, 'en', {});
+  const unread = await readMusicContext(
+    client('unreadable'),
+    'Bearer reader',
+    definitions,
+    place,
+    'en',
+    { stream: 'schema:location' },
+  );
   expect(unread.ok && unread.links.some((link) => link.unreadable)).toBe(true);
   expect(await readMusicContext(client('denied'), 'Bearer reader', definitions, place, 'en', {})).toEqual({
     ok: false,
@@ -321,5 +460,16 @@ test('music context keeps two events at a place, dated recordings, partial dates
   });
   const closed = await readMusicContext(client('ok'), 'Bearer reader', bundledRelease, place, 'en', {});
   expect(closed.ok && closed.kind).toBe('unsupported');
+  const missingCalls: Array<{ property: string; limit: number; cursor?: string }> = [];
+  const missing = await readMusicContext(
+    client('ok', missingCalls),
+    'Bearer reader',
+    definitions,
+    place,
+    'en',
+    { stream: 'schema:removed' },
+  );
+  expect(missing.ok && missing.streamUnavailable).toBe(true);
+  expect(missingCalls).toEqual([]);
   expect(catalogueEntries.musicContext({ id: place, label: 'Hall', locale: 'en' }).href).toContain('/music-context');
 });
