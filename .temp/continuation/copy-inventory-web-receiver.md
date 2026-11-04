@@ -59,8 +59,9 @@ next }`. The current package source also references the missing `./kernel/rating
 handoff requested the precise query, response and generated typing update; do not add a local declaration or bypass the
 typed client. Implement the Web receiver once that published typing is installed.
 
-Native source head at handoff: `421ae50bc334e8d64b1fb279624868a44e1789f5`. The client package source was last changed at
-`7f71e1e858a2d18fd4e554fdd172e6a7198f939e`; no updated generated declaration head is available yet. Native cursors
+Native source head at handoff: `421ae50bc334e8d64b1fb279624868a44e1789f5`. The stale generated route declaration is at
+`3c8649474435786d59176800053cc3888458a8fb`; the client root export source was last changed at
+`7f71e1e858a2d18fd4e554fdd172e6a7198f939e`. No updated generated declaration head is available yet. Native cursors
 bind account lifetime, requesting actor, route, full Subject/kind/status tuple, order and partition epoch. Filter
 choices use the earliest retained copy's exact profile pin and distinguish unavailable meaning from unsupported IDs
 and empty vocabularies. The endpoint runs under the existing admitted reader and shared request deadline, with a
