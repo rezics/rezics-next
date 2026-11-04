@@ -117,10 +117,10 @@ export async function purgeExpiredBangumiUploadPage(
 type BangumiSweep = { root: string; sequence: number; after: BangumiExpiryCursor | null };
 
 export async function registerLibraryBangumiRetentionWork({ pool, client, clock }: WorkContext): Promise<void> {
-  const due = DBOS.registerStep(
-    async (after: BangumiExpiryCursor | null) => nextExpiredBangumiUpload(pool, after),
-    { name: 'library.bangumiRetentionDue', ...COMMAND_STEP_RETRIES },
-  );
+  const due = DBOS.registerStep(async (after: BangumiExpiryCursor | null) => nextExpiredBangumiUpload(pool, after), {
+    name: 'library.bangumiRetentionDue',
+    ...COMMAND_STEP_RETRIES,
+  });
   const page = DBOS.registerStep(
     async (input: BangumiExpiryPage) => purgeExpiredBangumiUploadPage({ pool, clock }, input),
     { name: 'library.bangumiRetentionPage', ...COMMAND_STEP_RETRIES },

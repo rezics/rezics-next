@@ -258,7 +258,7 @@ test('partial state application can stop after one accepted row and cancellation
 test('absolute expiry denies review and apply while scheduled cleanup deletes bounded pages with receipt replay', async () => {
   const expire = async (id: string) =>
     f.pool.query(
-      'UPDATE library.bangumi_upload SET expires_at=clock_timestamp()-interval \'1 second\' WHERE route=$1 AND account_id=$2 AND upload_id=$3',
+      "UPDATE library.bangumi_upload SET expires_at=clock_timestamp()-interval '1 second' WHERE route=$1 AND account_id=$2 AND upload_id=$3",
       [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, id],
     );
   const beforeReview = await preview([record(900101)]);
@@ -309,10 +309,12 @@ test('absolute expiry denies review and apply while scheduled cleanup deletes bo
     complete: true,
   });
   expect(
-    (await f.pool.query('SELECT 1 FROM library.bangumi_upload WHERE account_id=$1 AND upload_id=$2', [
-      f.owner.actor.accountId,
-      many.uploadId,
-    ])).rows,
+    (
+      await f.pool.query('SELECT 1 FROM library.bangumi_upload WHERE account_id=$1 AND upload_id=$2', [
+        f.owner.actor.accountId,
+        many.uploadId,
+      ])
+    ).rows,
   ).toEqual([]);
 });
 test('score review retains source scale and native vote while requiring separate consent', async () => {
