@@ -78,7 +78,11 @@ function makeVoiceRead(read: CharacterRelationshipsRead): CharacterRelationships
 function VisitExample({ scenario = 'appearance' }: { scenario?: Scenario }) {
   const locale = getLocale();
   const nativeScenario =
-    scenario === 'spoiler' || scenario === 'withheld' || scenario === 'unreadable' || scenario === 'unavailable' || scenario === 'denied'
+    scenario === 'spoiler' ||
+    scenario === 'withheld' ||
+    scenario === 'unreadable' ||
+    scenario === 'unavailable' ||
+    scenario === 'denied'
       ? scenario
       : 'appearances';
   const fixture = useMemo(() => characterRelationshipsFixture(nativeScenario, locale), [nativeScenario, locale]);
@@ -99,7 +103,8 @@ function VisitExample({ scenario = 'appearance' }: { scenario?: Scenario }) {
     void fixture.transport.read(stream).then((result) => {
       if (!active) return;
       let current = scenario === 'voice' ? makeVoiceRead(result) : result;
-      if (current.ok && scenario === 'changed') current = { ...current, rows: current.rows.filter((row) => row.holder !== appearanceWorkA) };
+      if (current.ok && scenario === 'changed')
+        current = { ...current, rows: current.rows.filter((row) => row.holder !== appearanceWorkA) };
       if (current.ok && (scenario === 'appearance' || scenario === 'late'))
         current = { ...current, next: scenario === 'late' ? 'late-cursor' : 'visit-cursor' };
       setReading(current);
@@ -144,18 +149,28 @@ function VisitExample({ scenario = 'appearance' }: { scenario?: Scenario }) {
 
   if (!reading)
     return (
-      <PatternStory visitor="Signed In" path={characterRelationshipsHref({ id: fixture.id, label: 'The traveler', locale })}>
-        <AppShell><main className="p-8">{m.candidate_loading()}</main></AppShell>
+      <PatternStory
+        visitor="Signed In"
+        path={characterRelationshipsHref({ id: fixture.id, label: 'The traveler', locale })}
+      >
+        <AppShell>
+          <main className="p-8">{m.candidate_loading()}</main>
+        </AppShell>
       </PatternStory>
     );
 
   return (
-    <PatternStory visitor="Signed In" path={characterRelationshipsHref({ id: fixture.id, label: 'The traveler', locale })}>
+    <PatternStory
+      visitor="Signed In"
+      path={characterRelationshipsHref({ id: fixture.id, label: 'The traveler', locale })}
+    >
       <AppShell>
         <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-8">
           {scenario === 'late' && (
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setRetired(true)}>Retire current reader</Button>
+              <Button variant="outline" onClick={() => setRetired(true)}>
+                Retire current reader
+              </Button>
               <Button variant="outline" disabled={!lateReady} onClick={() => releaseLate.current?.()}>
                 Release retired response
               </Button>
@@ -176,12 +191,14 @@ function VisitExample({ scenario = 'appearance' }: { scenario?: Scenario }) {
               initial={reading}
               origin={origin}
               {...(scenario === 'appearance' ? { work: appearanceWorkA } : {})}
-              {...(activeVisit ? {
-                visit: activeVisit,
-                work: activeVisit.work ?? undefined,
-                stream: activeVisit.stream ?? undefined,
-                cursor: activeVisit.cursors[activeVisit.index] ?? undefined,
-              } : {})}
+              {...(activeVisit
+                ? {
+                    visit: activeVisit,
+                    work: activeVisit.work ?? undefined,
+                    stream: activeVisit.stream ?? undefined,
+                    cursor: activeVisit.cursors[activeVisit.index] ?? undefined,
+                  }
+                : {})}
               saveVisit={setSavedVisit}
             />
           )}
@@ -193,7 +210,11 @@ function VisitExample({ scenario = 'appearance' }: { scenario?: Scenario }) {
 
 function NavigateAway() {
   const router = useRouter({ warn: false });
-  return <Button variant="outline" onClick={() => void router?.navigate({ to: '/subjects/after-character-visit' as never })}>Try to leave</Button>;
+  return (
+    <Button variant="outline" onClick={() => void router?.navigate({ to: '/subjects/after-character-visit' as never })}>
+      Try to leave
+    </Button>
+  );
 }
 
 function DirtyDepartureExample() {
@@ -247,7 +268,10 @@ function UnknownCommandExample() {
 function DenialExample({ nonGlobal = false }: { nonGlobal?: boolean }) {
   const locale = getLocale();
   return (
-    <PatternStory visitor={nonGlobal ? 'Signed In' : 'Signed Out'} path={characterRelationshipsHref({ id: characterRelationshipsId, label: 'The traveler', locale })}>
+    <PatternStory
+      visitor={nonGlobal ? 'Signed In' : 'Signed Out'}
+      path={characterRelationshipsHref({ id: characterRelationshipsId, label: 'The traveler', locale })}
+    >
       <AppShell>
         <main className="mx-auto w-full max-w-5xl space-y-4 p-4 sm:p-8">
           <h1 className="font-sans text-3xl font-semibold">{m.character_relationships_title()}</h1>
@@ -361,9 +385,11 @@ export const UnknownCommandKeepsTheOriginalDescriptor: Story = {
     const canvas = within(canvasElement);
     const editor = within(await canvas.findByRole('region', { name: m.relation_title() }));
     await userEvent.click(await editor.findByRole('button', { name: m.relation_propose() }));
-    const confirmation = within(await editor.findByRole('group', {
-      name: m.candidate_confirm_title({ action: m.relation_propose() }),
-    }));
+    const confirmation = within(
+      await editor.findByRole('group', {
+        name: m.candidate_confirm_title({ action: m.relation_propose() }),
+      }),
+    );
     await userEvent.click(confirmation.getByRole('button', { name: m.relation_propose() }));
     await editor.findByText(m.candidate_unavailable());
     await userEvent.click(confirmation.getByRole('button', { name: m.relation_propose() }));
