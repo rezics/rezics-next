@@ -111,7 +111,7 @@ test('keyboard continuation retries the exact window and keeps target/correction
     expect(mounted.host.textContent).toContain('May 2024');
     expect(mounted.host.textContent).toContain('CD');
     expect(mounted.host.querySelector(`a[href*="${albumId}"]`)).not.toBeNull();
-    expect(mounted.host.textContent).toContain('source:unknown');
+    expect(mounted.host.textContent).not.toContain('source:unknown');
     expect(mounted.host.textContent).toContain('provider-side-02?');
     expect(
       Array.from(mounted.host.querySelectorAll<HTMLAnchorElement>('a')).some(
