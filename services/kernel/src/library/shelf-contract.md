@@ -57,6 +57,14 @@ feed or Search field. Cursors bind the existing account, query, order and direct
 decimal rank or `''` for Unranked, followed by Subject UUID. Traversal stays live: after a priority edit, the next page
 uses current ranks against the existing keyset boundary rather than a retained snapshot.
 
+The priority page runs one owner-scoped native selection with a `limit + 1` lookahead, then the existing batched
+session read for emitted rows. At the maximum page size, at most 101 candidate rows leave the SQL statement; filtering
+and ordering still cover the full current owner population. The query joins only current `entry` and
+`entry_personal_fact` rows and does not load annotation history or issue per-entry reads. Growth fixtures exercise
+independent owner populations of 64, 512 and 4096 rows plus same-scale foreign account and route pools. They assert
+ordering and scope, not latency or throughput; the controller owns execution of the native growth gate, so no
+performance ceiling is claimed here.
+
 `GET /v1/libraryShelfSummary?type=` returns `{tabs}`. `tabs` has the keys `all`, `in_progress`, `planned`, `completed`,
 `paused`, `dropped`, `collections`, each `{total, shown}`. `total` ignores the type filter and `shown` applies it; without
 `type` they are equal. `all` is the entry count. `collections` is the account's active Collections and ignores `type`.
