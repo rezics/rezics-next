@@ -1,6 +1,10 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
-import { loadAccountDeletionPage, type AccountDeletionPage, type AccountDeletionPageSource } from '../src/account-deletion-page';
+import {
+  loadAccountDeletionPage,
+  type AccountDeletionPage,
+  type AccountDeletionPageSource,
+} from '../src/account-deletion-page';
 import type { InventoryPage, InventoryView } from '../src/security-inventory';
 import type { InventorySource } from '../src/security-inventory-view';
 import { DeleteAccountContent } from '../src/routes/account.delete';
@@ -35,7 +39,7 @@ test('the native advice reader makes one request and restored Retry stays bounde
   const responses: AccountDeletionPage[] = [review, { kind: 'unavailable' }, review];
   const source: AccountDeletionPageSource = async () => responses[reads++]!;
   const views: InventoryView[] = [];
-  const inventory: InventorySource = <V extends InventoryView,>(view: V) => {
+  const inventory: InventorySource = <V extends InventoryView>(view: V) => {
     views.push(view);
     return Promise.resolve({ kind: 'ready', rows: [], next: null } as InventoryPage<V>);
   };
@@ -68,4 +72,3 @@ test('the native advice reader makes one request and restored Retry stays bounde
   expect(page.host.querySelector('#account-delete-input')).not.toBeNull();
   await page.render(null);
 });
-

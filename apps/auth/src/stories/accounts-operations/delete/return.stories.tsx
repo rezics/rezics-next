@@ -15,14 +15,13 @@ export default {
 };
 
 function example(kind: AccountDeletionReturnKind, theme: 'light' | 'dark' = 'light') {
-  const attempt = kind === 'unknown' ? createAccountDeletionAttempt('private-story-account', '0'.repeat(32), true) : null;
+  const attempt =
+    kind === 'unknown' ? createAccountDeletionAttempt('private-story-account', '0'.repeat(32), true) : null;
   return (
     <main className={`auth-login-form mx-auto w-full max-w-2xl p-6 ${theme === 'dark' ? 'dark' : ''}`}>
       <h1 className="text-2xl font-semibold">{m.auth_account_delete_heading()}</h1>
       <AccountDeletionReturnView history={{ kind, dismissed: false }} onDismiss={() => {}} />
-      {attempt ? (
-        <AccountDeletionRecovery attempt={attempt} visible refreshing={false} onRefresh={() => {}} />
-      ) : null}
+      {attempt ? <AccountDeletionRecovery attempt={attempt} visible refreshing={false} onRefresh={() => {}} /> : null}
       <p className="mt-6">
         <a href="/security" className="underline underline-offset-4">
           {m.auth_account_operation_return()}

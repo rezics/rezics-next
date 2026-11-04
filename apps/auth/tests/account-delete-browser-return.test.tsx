@@ -46,7 +46,10 @@ test('pagehide synchronously blanks confirmation and removes private review befo
 test('leaving during approval keeps a generic unsent history and prevents the late approval from executing', async () => {
   const page = await open(<DeleteAccountContent {...props} initial={review} />, review);
   await flush(() => {
-    fill(page.host.querySelector<HTMLInputElement>('#account-delete-input')!, m.auth_account_delete_confirmation_phrase());
+    fill(
+      page.host.querySelector<HTMLInputElement>('#account-delete-input')!,
+      m.auth_account_delete_confirmation_phrase(),
+    );
     send(page.host);
   });
   const saved = readPendingAccountOperationStepUp()!;
@@ -62,7 +65,10 @@ test('leaving during approval keeps a generic unsent history and prevents the la
 test('unknown execution survives dismissal and a late acknowledgement without changing its exact descriptor', async () => {
   const page = await open(<DeleteAccountContent {...props} initial={review} />, review);
   await flush(() => {
-    fill(page.host.querySelector<HTMLInputElement>('#account-delete-input')!, m.auth_account_delete_confirmation_phrase());
+    fill(
+      page.host.querySelector<HTMLInputElement>('#account-delete-input')!,
+      m.auth_account_delete_confirmation_phrase(),
+    );
     send(page.host);
   });
   await flush(() => page.calls[0]!.resolve(approval()));
@@ -106,7 +112,7 @@ test('retired inventory pages cannot restore private rows after pagehide', async
   const clients = Promise.withResolvers<InventoryPage<'clients'>>();
   const consents = Promise.withResolvers<InventoryPage<'consents'>>();
   const views: InventoryView[] = [];
-  const source: InventorySource = <V extends InventoryView,>(view: V) => {
+  const source: InventorySource = <V extends InventoryView>(view: V) => {
     views.push(view);
     return (view === 'clients' ? clients.promise : consents.promise) as Promise<InventoryPage<V>>;
   };
@@ -147,7 +153,10 @@ test('accepted deletion stays acknowledged through pagehide and persisted pagesh
   };
   const page = await open(<DeleteAccountContent {...props} source={source} initial={review} />, review);
   await flush(() => {
-    fill(page.host.querySelector<HTMLInputElement>('#account-delete-input')!, m.auth_account_delete_confirmation_phrase());
+    fill(
+      page.host.querySelector<HTMLInputElement>('#account-delete-input')!,
+      m.auth_account_delete_confirmation_phrase(),
+    );
     send(page.host);
   });
   await flush(() => page.calls[0]!.resolve(approval()));

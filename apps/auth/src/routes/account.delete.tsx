@@ -45,10 +45,7 @@ import {
   type AccountDeletionAttempt,
 } from '../account-deletion-attempt';
 import { AccountDeletionRecovery } from '../account-deletion-recovery';
-import {
-  AccountDeletionReturnController,
-  type AccountDeletionReturnHistory,
-} from '../account-deletion-return';
+import { AccountDeletionReturnController, type AccountDeletionReturnHistory } from '../account-deletion-return';
 import { AccountDeletionReturnView } from '../account-deletion-return-view';
 
 type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
@@ -148,7 +145,9 @@ export function DeleteAccountContent({
   const [deleted, setDeleted] = useState(false);
   const [identityVisible, setIdentityVisible] = useState(true);
   const [returnController] = useState(() => new AccountDeletionReturnController());
-  const [returnHistory, setReturnHistory] = useState<AccountDeletionReturnHistory | null>(() => returnController.history);
+  const [returnHistory, setReturnHistory] = useState<AccountDeletionReturnHistory | null>(
+    () => returnController.history,
+  );
   const [inventoryLifetime, setInventoryLifetime] = useState<AbortSignal | undefined>();
   const [privateRetired, setPrivateRetired] = useState(false);
   const submitting = useRef(false);
@@ -272,27 +271,18 @@ export function DeleteAccountContent({
   }, [router, shouldWarn]);
 
   function focusAfterRetirement() {
-    const target =
-      returnSummary.current?.isConnected
-        ? returnSummary.current
-        : safeExit.current?.isConnected
-          ? safeExit.current
-          : review.current?.isConnected
-            ? review.current
-            : null;
+    const target = returnSummary.current?.isConnected
+      ? returnSummary.current
+      : safeExit.current?.isConnected
+        ? safeExit.current
+        : review.current?.isConnected
+          ? review.current
+          : null;
     target?.focus({ preventScroll: true });
   }
 
-  function clearAuthority(
-    kind: 'signed-out' | 'denied',
-    nextState?: LoadState,
-    nextMessage?: string,
-  ) {
-    const history = returnController.retire(
-      attemptRef.current,
-      accepted.current,
-      Boolean(activeAccount.current),
-    );
+  function clearAuthority(kind: 'signed-out' | 'denied', nextState?: LoadState, nextMessage?: string) {
+    const history = returnController.retire(attemptRef.current, accepted.current, Boolean(activeAccount.current));
     if (history) setReturnHistory(history);
     activeAccount.current = '';
     submitting.current = false;
