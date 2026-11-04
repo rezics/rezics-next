@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useContributionResultFocus } from './contribution-result-focus';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -66,7 +66,7 @@ function ContributionLifecycleLive({
   const running = useRef(false);
   const session = useRef(address.session);
   const terminal = useRef<'denied' | 'expired' | null>(null);
-  const operation = current ? confirmedContributionOperation(current) : 'delete';
+  const operation = pending.current?.operation ?? (current ? confirmedContributionOperation(current) : null);
   // Captured controls must consult the latest observation, including a retired confirmation.
   const controls = useRef({ operation, confirmation });
   controls.current = { operation, confirmation };
@@ -109,7 +109,11 @@ function ContributionLifecycleLive({
       // A fresh read replaces old action assumptions. Only a confirmed command
       // can report restoration; availability alone says nothing about selection.
       setState(
-        effect === 'restore' ? 'restored' : effect === 'delete' || nextOperation === 'restore' ? 'deleted' : 'active',
+        effect === 'restore'
+          ? 'restored'
+          : next.subject === 'available' && next.candidate === 'deleted'
+            ? 'deleted'
+            : 'active',
       );
     }
   }
@@ -135,12 +139,12 @@ function ContributionLifecycleLive({
         pending.current
       )
         return;
-      command = {
+      command = Object.freeze({
         ...address,
         operation: admission.confirmation.operation,
         key: crypto.randomUUID(),
         ...(session.current ? { session: session.current } : {}),
-      };
+      });
       pending.current = command;
       clearConfirmation(admission.confirmation);
     }
@@ -209,6 +213,10 @@ function ContributionLifecycleLive({
       setBusy(false);
     }
   }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
 
   return (
     <section aria-label={m.contribution_title({}, o)} aria-busy={busy} className="min-w-0">
@@ -310,7 +318,7 @@ function ContributionLifecycleLive({
                 {pending.current ? m.contribution_retry({}, o) : action}
               </Button>
             )}
-            {current && !pending.current && (
+            {!pending.current && (
               <Button
                 type="button"
                 variant="outline"
