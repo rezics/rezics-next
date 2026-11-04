@@ -48,7 +48,9 @@ function json(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function successResult(result: BatchWriteResult['results'][number]): result is Extract<BatchWriteResult['results'][number], { status: 200 | 201 }> {
+function successResult(
+  result: BatchWriteResult['results'][number],
+): result is Extract<BatchWriteResult['results'][number], { status: 200 | 201 }> {
   return result.status === 200 || result.status === 201;
 }
 
@@ -98,13 +100,14 @@ export class ShowcaseJournal {
       return;
     }
     this.#db
-      .query(
-        'INSERT INTO showcase_command(command_key,command_digest,command_json,state) VALUES(?,?,?,\'prepared\')',
-      )
+      .query("INSERT INTO showcase_command(command_key,command_digest,command_json,state) VALUES(?,?,?,'prepared')")
       .run(command.key, commandDigest, json(command));
   }
 
-  acknowledgeCommand(command: BatchCommand, result: Extract<BatchWriteResult['results'][number], { status: 200 | 201 }>): void {
+  acknowledgeCommand(
+    command: BatchCommand,
+    result: Extract<BatchWriteResult['results'][number], { status: 200 | 201 }>,
+  ): void {
     const value = result.value;
     const subjectId = 'id' in value ? value.id : command.op === 'propose' ? command.subject : null;
     const candidateId = 'candidate' in value ? value.candidate : null;
@@ -115,8 +118,10 @@ export class ShowcaseJournal {
       .get(command.key);
     if (!prior || prior.command_digest !== showcaseDigest(command))
       throw new TypeError('Showcase ACK does not match a prepared command');
-    if ((prior.subject_id && subjectId && prior.subject_id !== subjectId) ||
-      (prior.candidate_id && candidateId && prior.candidate_id !== candidateId))
+    if (
+      (prior.subject_id && subjectId && prior.subject_id !== subjectId) ||
+      (prior.candidate_id && candidateId && prior.candidate_id !== candidateId)
+    )
       throw new TypeError('Showcase ACK identity changed for a sealed command');
     this.#db
       .query(
@@ -142,9 +147,15 @@ export class ShowcaseJournal {
   prepareAction(actionKey: string, body: unknown, idempotencyKey: string): unknown {
     const bodyJson = json(body);
     const bodyDigest = showcaseDigest(body);
-    const prior = this.#db.query<JournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?').get(actionKey);
+    const prior = this.#db
+      .query<JournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?')
+      .get(actionKey);
     if (prior) {
-      if (prior.state === 'refused' && prior.error_code?.startsWith('review-http-4') && prior.body_digest !== bodyDigest) {
+      if (
+        prior.state === 'refused' &&
+        prior.error_code?.startsWith('review-http-4') &&
+        prior.body_digest !== bodyDigest
+      ) {
         this.#db
           .query(
             "UPDATE showcase_action SET body_digest=?,body_json=?,idempotency_key=?,state='prepared',error_code=NULL WHERE action_key=?",
@@ -167,7 +178,10 @@ export class ShowcaseJournal {
   }
 
   action(actionKey: string): JournalActionRow | null {
-    return this.#db.query<JournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?').get(actionKey) ?? null;
+    return (
+      this.#db.query<JournalActionRow, [string]>('SELECT * FROM showcase_action WHERE action_key=?').get(actionKey) ??
+      null
+    );
   }
 
   acknowledgeAction(actionKey: string): void {
@@ -175,7 +189,9 @@ export class ShowcaseJournal {
   }
 
   refuseAction(actionKey: string, errorCode: string): void {
-    this.#db.query("UPDATE showcase_action SET state='refused',error_code=? WHERE action_key=?").run(errorCode, actionKey);
+    this.#db
+      .query("UPDATE showcase_action SET state='refused',error_code=? WHERE action_key=?")
+      .run(errorCode, actionKey);
   }
 
   sealIntent(manifest: ShowcaseManifest): void {
@@ -201,7 +217,9 @@ export class ShowcaseJournal {
       })),
     };
     const body = json(intent);
-    const prior = this.#db.query<{ intent_json: string }, [string]>('SELECT intent_json FROM showcase_intent WHERE intent_digest=?').get(manifest.digest);
+    const prior = this.#db
+      .query<{ intent_json: string }, [string]>('SELECT intent_json FROM showcase_intent WHERE intent_digest=?')
+      .get(manifest.digest);
     if (prior) {
       if (prior.intent_json !== body) throw new TypeError('Showcase intent changed under the same source digest');
       return;
@@ -263,14 +281,16 @@ function safeCandidatePage(value: unknown): CandidatePage {
   if (
     !Array.isArray(page.candidates) ||
     page.candidates.length > showcaseLimits.reviewPage ||
-    page.candidates.some((candidate) =>
-      !candidate ||
-      typeof candidate !== 'object' ||
-      !nativeUuid.test(candidate.id) ||
-      !candidate.statement ||
-      typeof candidate.statement !== 'object',
+    page.candidates.some(
+      (candidate) =>
+        !candidate ||
+        typeof candidate !== 'object' ||
+        !nativeUuid.test(candidate.id) ||
+        !candidate.statement ||
+        typeof candidate.statement !== 'object',
     )
-  ) throw new TypeError('Invalid current candidate page');
+  )
+    throw new TypeError('Invalid current candidate page');
   return page as CandidatePage;
 }
 
@@ -284,18 +304,20 @@ function statementOnPublicRead(value: unknown, expected: BatchStatement): boolea
   const property = actual.property;
   const propertyId = typeof property === 'string' ? property : (property as { id?: unknown } | null)?.id;
   if (propertyId !== expected.property.id) return false;
-  return showcaseDigest({
-    property: { id: propertyId },
-    value: actual.value,
-    qualifiers: actual.qualifiers ?? [],
-    references: actual.references ?? [],
-  }) ===
+  return (
+    showcaseDigest({
+      property: { id: propertyId },
+      value: actual.value,
+      qualifiers: actual.qualifiers ?? [],
+      references: actual.references ?? [],
+    }) ===
     showcaseDigest({
       property: expected.property,
       value: expected.value,
       qualifiers: expected.qualifiers ?? [],
       references: expected.references ?? [],
-    });
+    })
+  );
 }
 
 function sourceIdentity(record: ShowcaseRecord): { property: string; value: string } | null {
@@ -336,24 +358,28 @@ function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boo
 }
 
 function proseOrImage(property: string): boolean {
-  return property === 'schema:image' ||
+  return (
+    property === 'schema:image' ||
     property === 'schema:abstract' ||
     property === 'schema:description' ||
     property === 'schema:comment' ||
     property === 'schema:text' ||
-    property === 'schema:articleBody';
+    property === 'schema:articleBody'
+  );
 }
 
 function admittedTextRights(record: ShowcaseRecord, assertion: ShowcaseAssertion): boolean {
   const rights = assertion.rights;
-  return record.provider === 'bangumi' &&
+  return (
+    record.provider === 'bangumi' &&
     assertion.property === 'schema:abstract' &&
     rights?.license === 'CC-BY-SA-3.0' &&
     rights.obligations.includes('cc:Attribution') &&
     rights.obligations.includes('cc:ShareAlike') &&
     !!record.sourceUri &&
     rights.attribution.includes(record.sourceUri) &&
-    assertion.citations.includes(record.sourceUri);
+    assertion.citations.includes(record.sourceUri)
+  );
 }
 
 function publicStatements(read: ReviewedSubjectRead, property: string): readonly unknown[] {
@@ -376,12 +402,16 @@ function publicStatementCites(value: unknown, uri: string): boolean {
   return references.some((reference) => {
     if (!reference || typeof reference !== 'object' || Array.isArray(reference)) return false;
     const parts = (reference as { parts?: unknown }).parts;
-    return Array.isArray(parts) && parts.some((part) => {
-      if (!part || typeof part !== 'object' || Array.isArray(part)) return false;
-      const row = part as { property?: unknown; value?: { content?: unknown } };
-      const property = typeof row.property === 'string' ? row.property : (row.property as { id?: unknown } | null)?.id;
-      return property === 'schema:url' && row.value?.content === uri;
-    });
+    return (
+      Array.isArray(parts) &&
+      parts.some((part) => {
+        if (!part || typeof part !== 'object' || Array.isArray(part)) return false;
+        const row = part as { property?: unknown; value?: { content?: unknown } };
+        const property =
+          typeof row.property === 'string' ? row.property : (row.property as { id?: unknown } | null)?.id;
+        return property === 'schema:url' && row.value?.content === uri;
+      })
+    );
   });
 }
 
@@ -431,7 +461,8 @@ async function candidatePage(
       limit: showcaseLimits.reviewPage,
     }),
   );
-  if (page.candidates.length > showcaseLimits.reviewPage) throw new RangeError('Current candidate page exceeded its bound');
+  if (page.candidates.length > showcaseLimits.reviewPage)
+    throw new RangeError('Current candidate page exceeded its bound');
   if (cache.size >= showcaseLimits.reviewPage) cache.delete(cache.keys().next().value!);
   cache.set(key, page);
   return page;
@@ -443,10 +474,15 @@ async function resolveLegacyCandidates(input: {
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
   review: ShowcaseReviewPort;
   existing: readonly ShowcaseAcknowledgement[];
-}): Promise<{ acknowledgements: ShowcaseAcknowledgement[]; omissions: { provider: 'bangumi' | 'vndb'; sourceKey: string }[] }> {
+}): Promise<{
+  acknowledgements: ShowcaseAcknowledgement[];
+  omissions: { provider: 'bangumi' | 'vndb'; sourceKey: string }[];
+}> {
   const acknowledgements = [...input.existing];
   const known = new Set(acknowledgements.flatMap((ack) => (ack.candidateId ? [ack.command.key] : [])));
-  const readings = new Map(input.result.readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]));
+  const readings = new Map(
+    input.result.readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]),
+  );
   const omissions: { provider: 'bangumi' | 'vndb'; sourceKey: string }[] = [];
   const pageCache = new Map<string, CandidatePage>();
   const rows = [
@@ -553,7 +589,8 @@ export async function publishShowcase(input: {
   if (input.result.creditGaps.length || input.result.characterDiagnostics.length)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-claim-withheld' });
   const typeById = new Map<string, string>();
-  for (const record of manifest.records) if (record.subjectId && record.nativeType) typeById.set(record.subjectId, record.nativeType);
+  for (const record of manifest.records)
+    if (record.subjectId && record.nativeType) typeById.set(record.subjectId, record.nativeType);
   for (const record of manifest.vocabulary) typeById.set(record.subjectId, record.nativeType);
 
   const assertions = [
@@ -576,9 +613,13 @@ export async function publishShowcase(input: {
           assertions: record.assertions,
         },
         assertion,
-      }))),
-  ].sort((left, right) => phase(left.record, left.assertion) - phase(right.record, right.assertion) ||
-    left.assertion.candidateId.localeCompare(right.assertion.candidateId));
+      })),
+    ),
+  ].sort(
+    (left, right) =>
+      phase(left.record, left.assertion) - phase(right.record, right.assertion) ||
+      left.assertion.candidateId.localeCompare(right.assertion.candidateId),
+  );
   const currentSubjectCache = new Map<string, ReviewedSubjectRead | null>();
   const pageCache = new Map<string, CandidatePage>();
   const validated = new Map<string, CandidateRead>();
@@ -622,27 +663,36 @@ export async function publishShowcase(input: {
       currentSubjectCache.set(id, current);
     }
     if (!current || subjectId(current) !== id || subjectType(current) !== typeById.get(id)) {
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'current-source-identity-mismatch' });
+      omissions.push({
+        provider: record.provider,
+        sourceKey: record.sourceKey,
+        code: 'current-source-identity-mismatch',
+      });
       continue;
     }
     if (blockedSubjects.has(id)) continue;
-    if (proseOrImage(assertion.property) &&
-      (assertion.property === 'schema:image' || !admittedTextRights(record, assertion))) {
+    if (
+      proseOrImage(assertion.property) &&
+      (assertion.property === 'schema:image' || !admittedTextRights(record, assertion))
+    ) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'content-rights-not-admitted' });
       continue;
     }
-    if (!assertion.citations.length || assertion.citations.some((uri) => {
-      try {
-        const parsed = new URL(uri);
-        if (parsed.protocol !== 'https:') return true;
-        const host = parsed.hostname.toLowerCase();
-        return record.provider === 'bangumi'
-          ? host !== 'bgm.tv' && host !== 'bangumi.tv' && host !== 'www.bgm.tv' && host !== 'www.bangumi.tv'
-          : host !== 'vndb.org' && !host.endsWith('.vndb.org');
-      } catch {
-        return true;
-      }
-    })) {
+    if (
+      !assertion.citations.length ||
+      assertion.citations.some((uri) => {
+        try {
+          const parsed = new URL(uri);
+          if (parsed.protocol !== 'https:') return true;
+          const host = parsed.hostname.toLowerCase();
+          return record.provider === 'bangumi'
+            ? host !== 'bgm.tv' && host !== 'bangumi.tv' && host !== 'www.bgm.tv' && host !== 'www.bangumi.tv'
+            : host !== 'vndb.org' && !host.endsWith('.vndb.org');
+        } catch {
+          return true;
+        }
+      })
+    ) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'source-uri-not-current' });
       continue;
     }
@@ -659,7 +709,11 @@ export async function publishShowcase(input: {
     try {
       page = await candidatePage({ review: input.review, id, property: assertion.property }, pageCache);
     } catch {
-      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-current-read-unavailable' });
+      omissions.push({
+        provider: record.provider,
+        sourceKey: record.sourceKey,
+        code: 'candidate-current-read-unavailable',
+      });
       continue;
     }
     const candidate = page.candidates.find((entry) => entry.id === assertion.candidateId);
@@ -692,12 +746,7 @@ export async function publishShowcase(input: {
     const sealedBody = input.journal.prepareAction(key, body, idempotencyKey) as typeof body;
     const sealedKey = input.journal.action(key)!.idempotency_key;
     try {
-      await input.review.acceptReviewedCandidate(
-        id,
-        assertion.candidateId,
-        sealedBody,
-        sealedKey,
-      );
+      await input.review.acceptReviewedCandidate(id, assertion.candidateId, sealedBody, sealedKey);
       input.journal.acknowledgeAction(key);
       pageCache.delete(groupKey(id, assertion.property));
     } catch (error) {
@@ -736,27 +785,42 @@ export async function publishShowcase(input: {
     try {
       page = await candidatePage({ review: input.review, id, property: group.property }, pageCache);
     } catch {
-      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: 'adoption-current-read-unavailable' });
+      omissions.push({
+        provider: group.record.provider,
+        sourceKey: group.record.sourceKey,
+        code: 'adoption-current-read-unavailable',
+      });
       stoppedSubjects.add(id);
       continue;
     }
     const previous = page.adoption;
     const priorSelection = Array.isArray(previous?.selection) ? previous.selection : [];
     if (previous && !Array.isArray(previous.selection)) {
-      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: 'adoption-selection-unavailable' });
+      omissions.push({
+        provider: group.record.provider,
+        sourceKey: group.record.sourceKey,
+        code: 'adoption-selection-unavailable',
+      });
       stoppedSubjects.add(id);
       continue;
     }
     const selections = new Map<string, 'normal' | 'preferred'>();
-    for (const item of priorSelection) if (item?.candidate) selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
+    for (const item of priorSelection)
+      if (item?.candidate) selections.set(item.candidate, item.rank === 'preferred' ? 'preferred' : 'normal');
     for (const candidateId of group.ids) selections.set(candidateId, selections.get(candidateId) ?? 'normal');
     if (selections.size > showcaseLimits.reviewPage) {
-      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: 'adoption-selection-bounded' });
+      omissions.push({
+        provider: group.record.provider,
+        sourceKey: group.record.sourceKey,
+        code: 'adoption-selection-bounded',
+      });
       stoppedSubjects.add(id);
       continue;
     }
     const dependencyIds = new Set<string>();
-    for (const assertion of assertions.filter((entry) => entry.record.subjectId === id && entry.assertion.property === group.property)) {
+    for (const assertion of assertions.filter(
+      (entry) => entry.record.subjectId === id && entry.assertion.property === group.property,
+    )) {
       const value = assertion.assertion.statement.value;
       const content = value.type === 'value' ? value.content : undefined;
       if (typeof content === 'string' && vocabularyById.has(content)) dependencyIds.add(content);
@@ -773,7 +837,11 @@ export async function publishShowcase(input: {
         subjectType(sourceRead) !== typeById.get(id) ||
         !publicHasSourceIdentity(sourceRead, group.record)
       ) {
-        omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: 'source-uri-not-current' });
+        omissions.push({
+          provider: group.record.provider,
+          sourceKey: group.record.sourceKey,
+          code: 'source-uri-not-current',
+        });
         stoppedSubjects.add(id);
         continue;
       }
@@ -791,7 +859,11 @@ export async function publishShowcase(input: {
         (dependency.nativeType === 'skos:Concept' &&
           (!dependency.schemeId || !publicHasValue(dependencyRead, 'skos:inScheme', dependency.schemeId)))
       ) {
-        omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: 'vocabulary-binding-not-current' });
+        omissions.push({
+          provider: group.record.provider,
+          sourceKey: group.record.sourceKey,
+          code: 'vocabulary-binding-not-current',
+        });
         dependencyReady = false;
         break;
       }
@@ -805,7 +877,9 @@ export async function publishShowcase(input: {
       property: group.property,
       mode: 'replace' as const,
       expected_head: previous?.head ?? null,
-      selection: [...selections].sort(([left], [right]) => left.localeCompare(right)).map(([candidate, rank]) => ({ candidate, rank })),
+      selection: [...selections]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([candidate, rank]) => ({ candidate, rank })),
     };
     const action = actionKey('adopt', `${id}:${group.property}`, manifest.digest);
     const idempotencyKey = actionIdempotencyKey(body);
@@ -870,8 +944,13 @@ export async function publishShowcase(input: {
       continue;
     }
     const publicIdentity = read.subject as { labels?: Record<string, string> } | undefined;
-    const label = publicIdentity?.labels?.und ?? publicIdentity?.labels?.en ?? publicIdentity?.labels?.ja ??
-      publicIdentity?.labels?.zh ?? Object.values(publicIdentity?.labels ?? {})[0] ?? 'subject';
+    const label =
+      publicIdentity?.labels?.und ??
+      publicIdentity?.labels?.en ??
+      publicIdentity?.labels?.ja ??
+      publicIdentity?.labels?.zh ??
+      Object.values(publicIdentity?.labels ?? {})[0] ??
+      'subject';
     const route = `/subjects/${record.subjectId}/${subjectSlug(label)}`;
     published.push({
       provider: record.provider,
@@ -888,12 +967,14 @@ export async function publishShowcase(input: {
     });
   }
 
-  const uniqueOmissions = [...new Map(omissions.map((item) => [`${item.provider}\0${item.sourceKey}\0${item.code}`, item])).values()]
-    .slice(0, showcaseLimits.omissions);
+  const uniqueOmissions = [
+    ...new Map(omissions.map((item) => [`${item.provider}\0${item.sourceKey}\0${item.code}`, item])).values(),
+  ].slice(0, showcaseLimits.omissions);
   return {
-    status: uniqueOmissions.length || published.length !== manifest.records.length + manifest.vocabulary.length
-      ? 'incomplete'
-      : 'published',
+    status:
+      uniqueOmissions.length || published.length !== manifest.records.length + manifest.vocabulary.length
+        ? 'incomplete'
+        : 'published',
     manifest,
     published,
     omissions: uniqueOmissions,

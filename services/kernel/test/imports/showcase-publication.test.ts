@@ -4,9 +4,18 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchStatement } from '@rezics/definitions/bulk';
-import { seedCrossMedia, planCrossMediaSeed, crossMediaAliases, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
+import {
+  seedCrossMedia,
+  planCrossMediaSeed,
+  crossMediaAliases,
+  type CrossMediaTables,
+} from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
-import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
+import {
+  captureShowcaseCommands,
+  publishShowcase,
+  ShowcaseJournal,
+} from '../../../importer/src/showcase-publication.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
@@ -71,9 +80,15 @@ test('local publication accepts only its acknowledged plan after authorization a
     expect(first.status).toBe('incomplete');
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
-    expect(await runtime.importTransport.reviewedCandidates(workId, {
-      property: 'schema:name', context: globalContext, limit: 100,
-    }).then((page) => page.adoption?.selection?.map((entry) => entry.candidate))).toBeUndefined();
+    expect(
+      await runtime.importTransport
+        .reviewedCandidates(workId, {
+          property: 'schema:name',
+          context: globalContext,
+          limit: 100,
+        })
+        .then((page) => page.adoption?.selection?.map((entry) => entry.candidate)),
+    ).toBeUndefined();
 
     journal.close();
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -84,8 +99,12 @@ test('local publication accepts only its acknowledged plan after authorization a
       valid: '(,)',
     });
     expect(grant.status).toBe(201);
-    expect(journal.acknowledgedCommands().filter((entry) => entry.candidateId).map((entry) => entry.candidateId))
-      .toEqual(acknowledged.map((entry) => entry.candidateId));
+    expect(
+      journal
+        .acknowledgedCommands()
+        .filter((entry) => entry.candidateId)
+        .map((entry) => entry.candidateId),
+    ).toEqual(acknowledged.map((entry) => entry.candidateId));
 
     const published = await publishShowcase({
       plan,
@@ -108,12 +127,17 @@ test('local publication accepts only its acknowledged plan after authorization a
       property,
       value: subject.statements[property]?.map((statement) => statement.value.content),
     }));
-    for (const fact of expected) expect(actual.find((row) => row.property === fact.property)?.value).toContain(fact.value);
+    for (const fact of expected)
+      expect(actual.find((row) => row.property === fact.property)?.value).toContain(fact.value);
     const after = await runtime.importTransport.reviewedCandidates(workId, {
-      property: 'schema:name', context: globalContext, limit: 100,
+      property: 'schema:name',
+      context: globalContext,
+      limit: 100,
     });
     expect(after.adoption?.selection?.some((entry) => entry.candidate === unrelatedId)).toBe(false);
-    expect(runtime.captures.some((capture) => capture.request.url.endsWith(`/candidates/${unrelatedId}:accept`))).toBe(false);
+    expect(runtime.captures.some((capture) => capture.request.url.endsWith(`/candidates/${unrelatedId}:accept`))).toBe(
+      false,
+    );
     expect(published.published.map((record) => record.subjectId)).toEqual([workId]);
   } finally {
     journal.close();

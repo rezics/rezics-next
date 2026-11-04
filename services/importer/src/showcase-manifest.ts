@@ -18,7 +18,14 @@ export const showcaseLimits = Object.freeze({
 });
 const nativeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
-export type ShowcaseKind = 'work' | 'person' | 'character' | 'release' | 'episode' | 'source-vocabulary' | 'organization';
+export type ShowcaseKind =
+  | 'work'
+  | 'person'
+  | 'character'
+  | 'release'
+  | 'episode'
+  | 'source-vocabulary'
+  | 'organization';
 
 export type ShowcaseAcknowledgement = Readonly<{
   command: BatchCommand;
@@ -101,7 +108,12 @@ export function showcaseDigest(value: unknown): string {
 
 export function showcasePlanDigest(plan: CrossMediaPlan): string {
   const records = (rows: readonly SourceRecord[]) =>
-    rows.map((row) => ({ source: row.source, key: row.key, revision: row.revision, digest: sourceDigest(row.payload) }));
+    rows.map((row) => ({
+      source: row.source,
+      key: row.key,
+      revision: row.revision,
+      digest: sourceDigest(row.payload),
+    }));
   return showcaseDigest({
     records: { bangumi: records(plan.records.bangumi), vndb: records(plan.records.vndb) },
     entities: { bangumi: records(plan.entities.bangumi), vndb: records(plan.entities.vndb) },
@@ -138,7 +150,8 @@ function candidateAssertion(entry: ShowcaseAcknowledgement): ShowcaseAssertion |
     !candidateId ||
     !nativeUuid.test(candidateId) ||
     entry.commandDigest !== showcaseDigest(command)
-  ) return null;
+  )
+    return null;
   const property = command.statement.property.id;
   return {
     commandKey: command.key,
@@ -170,7 +183,10 @@ function selectedEnvelopes(
 ): Set<string> {
   const allowed = new Set<string>();
   for (const provider of ['bangumi', 'vndb'] as const) {
-    const registration = createSourceRegistration(provider, { source: aliases[provider], converterRevision: entityRevision });
+    const registration = createSourceRegistration(provider, {
+      source: aliases[provider],
+      converterRevision: entityRevision,
+    });
     for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
       const converted = registration.convert(
         { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
@@ -236,7 +252,11 @@ export function buildShowcaseManifest(input: {
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
   for (const requirement of input.vocabularyRequirements ?? []) {
     if (vocabularyRequirements.length >= showcaseLimits.vocabulary) {
-      omissions.push({ provider: requirement.provider, sourceKey: 'selected-family', code: 'vocabulary-binding-missing' });
+      omissions.push({
+        provider: requirement.provider,
+        sourceKey: 'selected-family',
+        code: 'vocabulary-binding-missing',
+      });
       continue;
     }
     if (
@@ -246,7 +266,11 @@ export function buildShowcaseManifest(input: {
       requirement.source.field_group !== 'facts' ||
       !requirement.sourceUri.startsWith('https://')
     ) {
-      omissions.push({ provider: requirement.provider, sourceKey: 'selected-family', code: 'vocabulary-binding-missing' });
+      omissions.push({
+        provider: requirement.provider,
+        sourceKey: 'selected-family',
+        code: 'vocabulary-binding-missing',
+      });
       continue;
     }
     vocabularyRequirements.push(requirement);
@@ -289,11 +313,12 @@ export function buildShowcaseManifest(input: {
     }
     if (candidateOverflow) omissions.push({ provider, sourceKey: row.key, code: 'candidate-limit' });
     const sourceMetadata = conversion.sourceMetadata as { recordUrl?: unknown } | undefined;
-    const sourceUri = typeof sourceMetadata?.recordUrl === 'string'
-      ? sourceMetadata.recordUrl
-      : provider === 'vndb'
-        ? vndbRecordUrl(row.key, row.revision)
-        : null;
+    const sourceUri =
+      typeof sourceMetadata?.recordUrl === 'string'
+        ? sourceMetadata.recordUrl
+        : provider === 'vndb'
+          ? vndbRecordUrl(row.key, row.revision)
+          : null;
     records.push({
       provider,
       sourceAlias: alias,
@@ -322,7 +347,11 @@ export function buildShowcaseManifest(input: {
         showcaseSourceMatches(ack.command.source, requirement.source),
     );
     if (!create || create.command.op !== 'create' || !create.subjectId) {
-      omissions.push({ provider: requirement.provider, sourceKey: 'selected-family', code: 'vocabulary-binding-missing' });
+      omissions.push({
+        provider: requirement.provider,
+        sourceKey: 'selected-family',
+        code: 'vocabulary-binding-missing',
+      });
       continue;
     }
     const assertions: ShowcaseAssertion[] = [];
@@ -343,7 +372,8 @@ export function buildShowcaseManifest(input: {
       assertions.push(assertion);
       remainingCandidates -= 1;
     }
-    if (candidateOverflow) omissions.push({ provider: requirement.provider, sourceKey: requirement.sourceKey, code: 'candidate-limit' });
+    if (candidateOverflow)
+      omissions.push({ provider: requirement.provider, sourceKey: requirement.sourceKey, code: 'candidate-limit' });
     const schemeValue = assertions.find((assertion) => assertion.property === 'skos:inScheme')?.statement.value;
     const scheme = schemeValue?.type === 'value' ? schemeValue.content : undefined;
     vocabulary.push({
@@ -359,8 +389,10 @@ export function buildShowcaseManifest(input: {
   }
 
   for (const row of records) {
-    if (!row.subjectId) omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'source-read-missing' });
-    if (!row.assertions.length) omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'candidate-ack-missing' });
+    if (!row.subjectId)
+      omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'source-read-missing' });
+    if (!row.assertions.length)
+      omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'candidate-ack-missing' });
   }
   if (omissions.length > showcaseLimits.omissions) omissions.length = showcaseLimits.omissions;
 
@@ -396,7 +428,10 @@ function kindFromType(type: string): ShowcaseKind {
   return 'work';
 }
 
-export function showcaseSourceMatches(actual: BatchCommand['source'] | null, expected: BatchCommand['source']): boolean {
+export function showcaseSourceMatches(
+  actual: BatchCommand['source'] | null,
+  expected: BatchCommand['source'],
+): boolean {
   return !!actual && showcaseDigest(actual) === showcaseDigest(expected);
 }
 

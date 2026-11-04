@@ -13,7 +13,12 @@ import {
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
-import { captureShowcaseCommands, publishShowcase, ShowcaseJournal, type ShowcaseReviewPort } from '../src/showcase-publication.ts';
+import {
+  captureShowcaseCommands,
+  publishShowcase,
+  ShowcaseJournal,
+  type ShowcaseReviewPort,
+} from '../src/showcase-publication.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
@@ -22,7 +27,13 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const directory = await mkdtemp(join(tmpdir(), 'showcase-publication-'));
   const subjects = new Map<
     string,
-    { id: string; type: string; sourceExternalId: string; labels: Record<string, string>; statements: Record<string, unknown[]> }
+    {
+      id: string;
+      type: string;
+      sourceExternalId: string;
+      labels: Record<string, string>;
+      statements: Record<string, unknown[]>;
+    }
   >();
   const bySource = new Map<string, string>();
   const candidates = new Map<

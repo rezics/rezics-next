@@ -1799,7 +1799,9 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     process.stdout.write(
       `Usage: bun scripts/datasets/cross-media-seed.ts ${requiredFlags
         .map((flag) => `${flag} <value>`)
-        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>]\n`,
+        .join(
+          ' ',
+        )} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>]\n`,
     );
     return;
   }
@@ -1923,7 +1925,10 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
         ? `Imported ${result.readings.length} records; publication ${showcase.status}; ${showcase.omissions.length} bounded omissions. Result: ${resultPath}\n`
         : `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
     );
-    ensure(!showcase || showcase.status === 'published', 'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps');
+    ensure(
+      !showcase || showcase.status === 'published',
+      'Showcase publication is incomplete; rerun task seed:dev after resolving the listed gaps',
+    );
   } finally {
     journal?.close();
   }
