@@ -265,6 +265,7 @@ const catalogueGroupTypes = ['rezics:ReleaseGroup', 'wd:Q55327'];
 const catalogueMusicTypes = ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'];
 const catalogueCharacterTypes = ['wd:Q95074'];
 const cataloguePeopleTypes = ['schema:Person', 'schema:Organization'];
+const catalogueReleaseTypes = ['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'];
 
 function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
   if (type === base) return true;
@@ -290,15 +291,17 @@ export function cataloguePageMetadata(
     ...catalogueMusicTypes,
     ...catalogueCharacterTypes,
     ...cataloguePeopleTypes,
+    ...catalogueReleaseTypes,
   ].includes(type);
   const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
   const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
   const music = catalogueMusicTypes.some((base) => release && typeIsA(release, type, base));
   const character = catalogueCharacterTypes.some((base) => release && typeIsA(release, type, base));
   const people = peopleProducerTypeAdmitted(release, type);
-  if (!candidate && !file && !group && !music && !people) return;
+  const catalogueRelease = catalogueReleaseTypes.some((base) => release && typeIsA(release, type, base));
+  if (!candidate && !file && !group && !music && !people && !catalogueRelease) return;
   if (!release || !digest) return { state: 'unavailable', type, directions: [] };
-  if (!release.types[type] || (!file && !group && !music && !character && !people))
+  if (!release.types[type] || (!file && !group && !music && !character && !people && !catalogueRelease))
     return { state: 'unsupported', type, digest, directions: [] };
 
   const propertyIds = new Set(release.types[type]?.properties ?? []);

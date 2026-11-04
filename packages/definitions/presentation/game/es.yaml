@@ -8,6 +8,7 @@ properties:
   wdt:P2899: edad mínima
   wdt:P31: instancia de
   wdt:P155: precedido por
+  rezics:releaseSupersedes: reemplaza
   wdt:P437: distribución
   wdt:P408: motor
   schema:numberOfPlayers: número de jugadores
@@ -18,6 +19,7 @@ inverseProperties:
   wdt:P31: 'Lanzamientos de este tipo'
   wdt:P437: 'Lanzamientos en este formato'
   wdt:P155: 'Secuela'
+  rezics:releaseSupersedes: 'Reemplazado por'
   wdt:P408: 'Juegos que usan este motor'
   wdt:P8646: 'Expansiones'
 typeDescriptions:
@@ -103,6 +105,7 @@ propertyDescriptions:
   wdt:P2899: 'Edad mínima de la clasificación del lanzamiento, como cantidad entera no negativa en años (wd:Q577).'
   wdt:P31: 'Un concepto de tipo de lanzamiento, como completo, parcial o de prueba; no el tipo de catálogo del sujeto.'
   wdt:P155: 'La obra o lanzamiento anterior al que sigue este.'
+  rezics:releaseSupersedes: 'El lanzamiento de software exacto que este lanzamiento reemplaza; independiente del orden cronológico.'
   wdt:P437: 'Un concepto de formato de distribución o soporte físico del lanzamiento, como un disco óptico.'
   wdt:P408: 'Un concepto que nombra el motor de software del juego.'
   schema:numberOfPlayers: 'Máximo de jugadores como entero sin unidad; en un rango declarado se usa el extremo superior y se califica el inferior por separado.'

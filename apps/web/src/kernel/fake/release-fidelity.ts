@@ -13,7 +13,6 @@ export const releaseAlt = '00000000-0000-4000-8000-00000000a103';
 export const releaseSuperseded = '00000000-0000-4000-8000-00000000a104';
 export const releaseCompleteness = '00000000-0000-4000-8000-00000000a115';
 export const basedOnProperty = 'schema:isBasedOn';
-export const replacedByProperty = 'wdt:P1366';
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 
 export type ReleaseFidelityScenario =
@@ -52,12 +51,10 @@ export function withConcreteReleaseDescriptors(source: Release, files = true): R
   const release = structuredClone(source);
   const editionTargets = ['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'];
   release.properties[basedOnProperty] = itemProperty(basedOnProperty, 'based on', editionTargets);
-  release.properties[replacedByProperty] = itemProperty(replacedByProperty, 'replaced by', editionTargets);
   for (const type of editionTargets) {
     const definition = release.types[type];
     if (!definition) continue;
-    for (const id of [basedOnProperty, replacedByProperty])
-      if (!definition.properties.includes(id)) definition.properties.push(id);
+    if (!definition.properties.includes(basedOnProperty)) definition.properties.push(basedOnProperty);
   }
   if (!files) {
     delete release.types['schema:MediaObject'];
@@ -261,7 +258,7 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
       }
       if (url.pathname === `/v1/subjects/${releaseSubject}/relations` && request.method === 'GET') {
         const property = url.searchParams.get('property') ?? '';
-        if (![basedOnProperty, replacedByProperty].includes(property))
+        if (property !== basedOnProperty)
           return json({ relations: [], next: null, count: { value: 0, exact: true } });
         return json(relationPage(property, url.searchParams.get('cursor')));
       }

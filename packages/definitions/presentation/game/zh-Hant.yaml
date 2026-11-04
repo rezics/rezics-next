@@ -8,6 +8,7 @@ properties:
   wdt:P2899: 最低年齡
   wdt:P31: 隸屬於
   wdt:P155: 上一項
+  rezics:releaseSupersedes: 取代
   wdt:P437: 發行格式
   wdt:P408: 引擎
   schema:numberOfPlayers: 遊玩人數
@@ -18,6 +19,7 @@ inverseProperties:
   wdt:P31: '此類型的發行版本'
   wdt:P437: '此媒介的發行版本'
   wdt:P155: '續作'
+  rezics:releaseSupersedes: '被取代'
   wdt:P408: '使用此引擎的遊戲'
   wdt:P8646: '擴充作品'
 typeDescriptions:
@@ -97,6 +99,7 @@ propertyDescriptions:
   wdt:P2899: '此發行版分級所對應的最低年齡，以年（wd:Q577）為單位的非負整數數量記錄。'
   wdt:P31: '完整版、部分版或試用版等發行類型概念，不是對象在目錄中的類型。'
   wdt:P155: '此作品或發行版所接續的前一部作品或前一發行版。'
+  rezics:releaseSupersedes: '此發行版所取代的確切軟體發行版，與時間順序無關。'
   wdt:P437: '此發行版的散布格式或實體媒介概念，例如光碟。'
   wdt:P408: '指明遊戲所用軟體引擎的概念。'
   schema:numberOfPlayers: '支援的最多玩家數，以無單位整數記錄；來源若提供範圍，值為上限，下限另以限定詞保留。'
