@@ -23,7 +23,8 @@ import { WorkbenchView } from './view';
 
 const nativeReportAction: ReportQueueAction = (data) => actionOnReport({ data, headers: csrfHeaders() });
 
-const nativeWorkbenchRead: WorkbenchReader = (search, signal) => loadWorkbench({ data: search, signal });
+const nativeWorkbenchRead: WorkbenchReader = (search, signal) =>
+  loadWorkbench({ data: search, ...(signal ? { signal } : {}) });
 
 export function WorkbenchPage({
   page,
@@ -187,8 +188,8 @@ export function WorkbenchPage({
           original: page,
           page: {
             ...data,
-            state: 'unavailable',
-            directory: undefined,
+            state: data.directory ? 'ready' : 'unavailable',
+            directory: data.directory ? { state: 'unavailable', items: [], next: null } : undefined,
             cases: [],
             reports: [],
             appeals: [],
