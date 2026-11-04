@@ -33,6 +33,7 @@ export async function readAuthorRevisionVotes(
   client: KernelClient,
   revisions: readonly RevisionReferences[],
   viewer: { id: string; authorization: string } | null,
+  signal?: AbortSignal,
 ): Promise<RevisionVotes> {
   if (!viewer) return {};
   const reads = new Map<string, ReturnType<typeof loadCurrentReviewVote>>();
@@ -44,7 +45,7 @@ export async function readAuthorRevisionVotes(
       const key = `${subjectId}:${questionId}`;
       let pending = reads.get(key);
       if (!pending) {
-        pending = loadCurrentReviewVote(client, subjectId, viewer.authorization, questionId);
+        pending = loadCurrentReviewVote(client, subjectId, viewer.authorization, questionId, signal);
         reads.set(key, pending);
       }
       const vote = await pending;

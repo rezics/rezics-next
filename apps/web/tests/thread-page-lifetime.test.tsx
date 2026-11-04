@@ -186,7 +186,8 @@ const pageReads: {
 const slugReads: { data: ReadData; work: ReturnType<typeof deferred<{ id: string; title: string | null }>> }[] = [];
 const readModule = await import('../src/threads/reads');
 const personalReads: {
-  data: { id: string; postIds: string[] };
+  data: { id: string; postIds: string[]; readReactions: boolean };
+  signal?: AbortSignal;
   work: ReturnType<typeof deferred<Awaited<ReturnType<(typeof readModule)['readThreadPersonal']>>>>;
 }[] = [];
 
@@ -200,9 +201,13 @@ const slugReader = spyOn(readModule, 'readThreadSlug').mockImplementation(({ dat
   slugReads.push({ data: { ...data } as ReadData, work });
   return work.promise as never;
 });
-const personalReader = spyOn(readModule, 'readThreadPersonal').mockImplementation(({ data }) => {
+const personalReader = spyOn(readModule, 'readThreadPersonal').mockImplementation(({ data, signal }) => {
   const work = deferred<Awaited<ReturnType<(typeof readModule)['readThreadPersonal']>>>();
-  personalReads.push({ data: { id: data.id, postIds: [...data.postIds] }, work });
+  personalReads.push({
+    data: { id: data.id, postIds: [...data.postIds], readReactions: data.readReactions },
+    signal,
+    work,
+  });
   return work.promise;
 });
 
@@ -343,7 +348,10 @@ async function mountRoute({
 function personalFor(threadId: string, postId: string, currentViewer = viewerId) {
   return {
     viewerId: currentViewer,
-    reactions: { [threadId]: 'like', [postId]: 'love' },
+    reactions: {
+      [threadId]: { state: 'ready', value: 'like' },
+      [postId]: { state: 'ready', value: 'love' },
+    },
     reviewVotes: {},
   } as Awaited<ReturnType<(typeof readModule)['readThreadPersonal']>>;
 }
@@ -593,7 +601,7 @@ test('a ready private page and pending personal result retire on readiness loss,
       expectPrivatePageHidden(page.host);
       await page.settlePersonal(0, personalFor(threadId, id(41)));
       expect(
-        page.client.getQueryCache().find({ queryKey: ['thread-personal', threadId, null, id(41)], exact: true }),
+        page.client.getQueryCache().find({ queryKey: ['thread-personal', threadId, null, false, id(41)], exact: true }),
       ).toBeUndefined();
       expectPrivatePageHidden(page.host);
     } finally {
@@ -609,7 +617,7 @@ test('signed-in page and bounded personal data compose, including a null-CSRF re
     await page.settlePage(0, pageFor(threadId, { privateRead: true }));
     expect(page.host.textContent).toContain('Private page body disclosure');
     expect(personalReads).toHaveLength(1);
-    expect(personalReads[0]!.data).toEqual({ id: threadId, postIds: [id(41)] });
+    expect(personalReads[0]!.data).toEqual({ id: threadId, postIds: [], readReactions: false });
     await page.settlePersonal(0, personalFor(threadId, id(41)));
     expect(page.host.querySelector('input[name="idempotency_key"]')).not.toBeNull();
     expect(page.host.querySelector('[data-slot="document-body"]')).not.toBeNull();
@@ -700,7 +708,7 @@ test('removing and restoring an equal private cache value does not revive its re
 test('a removed personal result with equal values requires a new admitted bounded personal read', async () => {
   const threadId = id(128);
   const page = await mountRoute({ threadId, mode: 'session', session: signedIn() });
-  const queryKey = ['thread-personal', threadId, null, id(41)] as const;
+  const queryKey = ['thread-personal', threadId, null, false, id(41)] as const;
   try {
     await page.settlePage(0, pageFor(threadId, { privateRead: true }));
     await page.settlePersonal(0, personalFor(threadId, id(41)));
@@ -778,7 +786,7 @@ test('cache retirement hides obsolete page disclosure but keeps the dirty reply 
     expect(replyRegion!.hidden).toBe(true);
     expect(replyRegion!.querySelector('.ProseMirror')?.textContent).toContain('A retained reply draft');
     expect(replyRegion!.querySelector<HTMLInputElement>('input[name="idempotency_key"]')?.value).toBe(exactKey);
-    expect(page.client.getQueryData(['thread-personal', threadId, null, id(41)])).toBeUndefined();
+    expect(page.client.getQueryData(['thread-personal', threadId, null, false, id(41)])).toBeUndefined();
 
     const editorAfterRetirement = replyRegion!.querySelector('.ProseMirror');
     const refresh = threadRefreshButton(page.host);
@@ -1709,7 +1717,8 @@ test('cursor and locale changes retire the original mounted route before its old
     await page.settlePage(0, pageFor(threadId, { privateRead: true }));
     expect(page.host.textContent).toContain('Private page body disclosure');
     expect(personalReads).toHaveLength(1);
-    await page.settlePersonal(0, personalFor(threadId, id(41)));
+    const oldPersonalSignal = personalReads[0]!.signal;
+    const oldPersonalKey = ['thread-personal', threadId, 'first-cursor', false, id(41)] as const;
     const nextCursorNavigation = page.router.navigate({ href: `/threads/${threadId}/${slug}?cursor=next-cursor` });
     page.setOperation(nextCursorNavigation);
     await Promise.resolve();
@@ -1722,6 +1731,9 @@ test('cursor and locale changes retire the original mounted route before its old
     expectPrivatePageHidden(page.host);
     await page.settlePage(1, pageFor(threadId, { privateRead: true, body: 'Second page body' }));
     expect(personalReads).toHaveLength(2);
+    expect(oldPersonalSignal?.aborted).toBe(true);
+    await page.settlePersonal(0, personalFor(threadId, id(41)));
+    expect(page.client.getQueryData(oldPersonalKey)).toBeUndefined();
     await page.settlePersonal(1, personalFor(threadId, id(41)));
     expect(page.host.textContent).toContain('Second page body');
     expect(page.host.textContent).not.toContain('Private page body disclosure');
@@ -1898,7 +1910,8 @@ test('mounted composed advice keeps denied actions inert, seeds watch and slow m
   for (const [index, actionState] of (['unavailable', 'denied', 'available'] as const).entries()) {
     const allowed = actionState === 'available';
     const threadId = id(810 + index);
-    const route = await mountRoute({ threadId, mode: 'session', session: signedIn(), strict: false });
+    const cursor = `composed-cursor-${index}`;
+    const route = await mountRoute({ threadId, cursor, mode: 'session', session: signedIn(), strict: false });
     try {
       const page = pageFor(threadId, { privateRead: true });
       const composed = authoredReadingPage({ ...page.thread, viewerReaction: 'like' });
@@ -1943,6 +1956,10 @@ test('mounted composed advice keeps denied actions inert, seeds watch and slow m
         [viewerId]: { id: viewerId, displayName: 'Composed private author', handle: null, avatar: null },
       };
       await route.settlePage(0, page);
+      expect(
+        route.client.getQueryCache().findAll({ queryKey: ['thread-personal', threadId] })[0]?.queryKey,
+      ).toEqual(['thread-personal', threadId, cursor, false, id(41)]);
+      expect(personalReads[0]!.data).toEqual({ id: threadId, postIds: [], readReactions: false });
       await route.settlePersonal(0, personalFor(threadId, id(41)));
       expect(route.host.textContent).toContain('Composed private author');
       expect(route.host.textContent).toContain(m.thread_watch_watching());
@@ -1962,5 +1979,30 @@ test('mounted composed advice keeps denied actions inert, seeds watch and slow m
     } finally {
       await route.dispose();
     }
+  }
+});
+
+test('a personal read cannot replace the composed page account or its denied advice', async () => {
+  const { authoredReadingPage } = await import('../src/kernel/fake/thread-reading-page');
+  const threadId = id(820);
+  const route = await mountRoute({ threadId, mode: 'session', session: signedIn(), strict: false });
+  try {
+    const page = pageFor(threadId, { privateRead: true });
+    const composed = authoredReadingPage({ ...page.thread, viewerReaction: 'like' });
+    composed.viewer = { kind: 'account', id: id(821) };
+    composed.actions = {
+      ...composed.actions,
+      state: 'current',
+      retryable: false,
+      reply: { state: 'available' },
+    };
+    composed.currentness = { ...composed.currentness, actions: 'current' };
+    page.thread = composed.thread;
+    page.composed = composed;
+    await route.settlePage(0, page);
+    expect(personalReads).toHaveLength(0);
+    expect(route.host.querySelector<HTMLButtonElement>('button[data-slot="feed-reply-action"]')?.disabled).toBe(true);
+  } finally {
+    await route.dispose();
   }
 });

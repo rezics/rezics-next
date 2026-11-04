@@ -380,6 +380,7 @@ export class ThreadPageCaller {
   private connection: Connection = { owner: null, connected: false, generation: 0, retired: false };
   private personalSequence = 0;
   private personalAttemptRevision = 0;
+  private currentPageViewerId: string | null | undefined;
   private readonly refreshContinuations = new Set<RefreshContinuationState>();
   private readonly synchronousCacheBoundaries = new Set<RefreshCacheBoundary>();
   private refreshGuard: (() => boolean) | undefined;
@@ -391,6 +392,7 @@ export class ThreadPageCaller {
     source: SessionSource,
     admission: ThreadPageAdmission,
     queryState?: QueryStamp | null,
+    page?: LoadedThreadPage,
   ) {
     this.source = source;
     this.currentAdmission = admission;
@@ -399,6 +401,7 @@ export class ThreadPageCaller {
     this.ownerSession = { ...admission.session };
     this.queryKey = admission.queryKey;
     this.queryState = queryState;
+    this.setCurrentPage(page);
     this.releaseSource = source.subscribe((event) => {
       const refreshEvent = this.observeRefreshQueryEvent(event);
       const ownedResult = this.observeOwnedPageResultEvent(event);
@@ -418,6 +421,18 @@ export class ThreadPageCaller {
 
   get admission() {
     return this.currentAdmission;
+  }
+
+  private setCurrentPage(page: LoadedThreadPage | undefined) {
+    const pageViewerId = page?.composed
+      ? page.composed.viewer.kind === 'account'
+        ? page.composed.viewer.id
+        : null
+      : page?.viewerId;
+    if (this.currentPageViewerId !== pageViewerId) {
+      this.currentPageViewerId = pageViewerId;
+      this.personalAttemptRevision++;
+    }
   }
 
   static capture(
@@ -457,6 +472,7 @@ export class ThreadPageCaller {
     const existing = visits.get(client)?.get(admission.id);
     if (existing && existing.source.id === admission.sourceId) {
       existing.setRouteIdentity(identity);
+      existing.setCurrentPage(page);
       return sameIdentity(admission.identity, identity) && !existing.retired ? existing : undefined;
     }
     if (!sameIdentity(admission.identity, identity)) return undefined;
@@ -471,7 +487,7 @@ export class ThreadPageCaller {
         session: source.readSession(),
       };
       const queryState = source.queryStamp(admission.queryKey);
-      const caller = new ThreadPageCaller(client, source, hydrated, queryState ?? null);
+      const caller = new ThreadPageCaller(client, source, hydrated, queryState ?? null, page);
       return caller;
     }
     return undefined;
@@ -824,7 +840,12 @@ export class ThreadPageCaller {
 
   personalSessionReady() {
     const session = this.source.readSession();
-    return session.state === 'signed-in' && session.subject !== null;
+    return (
+      session.state === 'signed-in' &&
+      session.subject !== null &&
+      this.currentPageViewerId !== null &&
+      (this.currentPageViewerId === undefined || this.currentPageViewerId === session.subject)
+    );
   }
 
   isConnectedCurrent(ticket = this.connection.generation) {
@@ -947,6 +968,7 @@ export class ThreadPageCaller {
     this.ownedPageRead = undefined;
     this.queryKey = queryKey;
     this.queryState = current;
+    this.setCurrentPage(page);
     const publicRead =
       this.currentAdmission.identity.credentialMode === 'anonymous' && (!page || page.viewerId === undefined);
     const nextAdmission: ThreadPageAdmission = {
@@ -1038,15 +1060,22 @@ export class ThreadPageCaller {
   beginPersonalRead(queryKey: QueryKey, target: string) {
     this.check();
     const identity = this.currentAdmission.identity;
-    const targetKey = JSON.stringify([identity.id, identity.cursor ?? null, ...queryKey.slice(3)]);
+    const targetKey = JSON.stringify([identity.id, identity.cursor ?? null, ...queryKey.slice(4)]);
     if (
       queryKey[0] !== 'thread-personal' ||
       queryKey[1] !== identity.id ||
       (queryKey[2] ?? null) !== (identity.cursor ?? null) ||
+      typeof queryKey[3] !== 'boolean' ||
       targetKey !== target
     )
       throw new ThreadPageCallerRetired();
     const session = this.source.readSession();
+    const pageViewerId =
+      this.currentPageViewerId === undefined
+        ? session.state === 'signed-in'
+          ? session.subject
+          : null
+        : this.currentPageViewerId;
     const ticket = this.connection.generation;
     const query = this.source.queryStamp(queryKey);
     const owner: PersonalCacheOwner = {
@@ -1062,6 +1091,7 @@ export class ThreadPageCaller {
     return {
       id: ++this.personalSequence,
       idValue: identity.id,
+      pageViewerId,
       ...(identity.cursor === undefined ? {} : { cursor: identity.cursor }),
       queryKey: [...queryKey],
       target,
@@ -1099,7 +1129,15 @@ export class ThreadPageCaller {
       return undefined;
     const viewerId = 'viewerId' in value && typeof value.viewerId === 'string' ? value.viewerId : null;
     const session = this.source.readSession();
-    if (session.state !== 'signed-in' || !session.subject || viewerId !== session.subject) return undefined;
+    const pageViewerId = this.currentPageViewerId === undefined ? session.subject : this.currentPageViewerId;
+    if (
+      session.state !== 'signed-in' ||
+      !session.subject ||
+      viewerId !== session.subject ||
+      viewerId !== attempt.pageViewerId ||
+      pageViewerId !== attempt.pageViewerId
+    )
+      return undefined;
     return value;
   }
 
@@ -1292,6 +1330,9 @@ export class ThreadPageCaller {
       this.personalSequence === attempt.id &&
       this.currentAdmission.identity.id === attempt.idValue &&
       this.currentAdmission.identity.cursor === attempt.cursor &&
+      this.currentPageViewerId !== null &&
+      (this.currentPageViewerId === undefined ? session.subject : this.currentPageViewerId) === attempt.pageViewerId &&
+      attempt.pageViewerId === session.subject &&
       sessionCanRead('session', session) &&
       sameSession(attempt.session, session) &&
       getLocale() === this.currentAdmission.identity.locale
@@ -1302,6 +1343,7 @@ export class ThreadPageCaller {
 type PersonalReadAttempt = {
   id: number;
   idValue: string;
+  pageViewerId: string | null;
   cursor?: string;
   terminalRevision: number;
   queryKey: QueryKey;

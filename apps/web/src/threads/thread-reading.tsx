@@ -405,6 +405,26 @@ export function ThreadReading({
                   const post = posts.posts[row.index]!;
                   const firstPost = post.id === thread.firstPost.id;
                   const reactionSource = firstPost ? thread : post;
+                  const personalReaction = currentPersonal?.reactions[firstPost ? thread.id : post.id];
+                  const composedReactionAvailable =
+                    page.composed !== undefined &&
+                    observationMatches &&
+                    'viewerReaction' in reactionSource &&
+                    reactionSource.viewerReaction !== undefined;
+                  const reactionViewerAvailable = page.composed
+                    ? composedReactionAvailable
+                    : personalReaction?.state === 'ready';
+                  const reactionValue =
+                    page.composed &&
+                    observationMatches &&
+                    'viewerReaction' in reactionSource &&
+                    reactionSource.viewerReaction !== undefined
+                      ? reactionSource.viewerReaction
+                      : page.composed
+                        ? null
+                        : personalReaction?.state === 'ready'
+                          ? personalReaction.value
+                          : null;
                   return (
                     <Post
                       anchorId={row.anchorId}
@@ -415,9 +435,7 @@ export function ThreadReading({
                       reactionFieldsAvailable={
                         !page.composed || ('reactions' in reactionSource && reactionSource.reactions !== undefined)
                       }
-                      reactionViewerAvailable={
-                        !page.composed || (observationMatches && 'viewerReaction' in reactionSource)
-                      }
+                      reactionViewerAvailable={reactionViewerAvailable}
                       mentions={currentMentions}
                       documentMedia={documentMedia}
                       now={now}
@@ -426,15 +444,7 @@ export function ThreadReading({
                       onChange={updatePost}
                       target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
                       counts={firstPost ? (thread.reactions ?? {}) : 'reactions' in post ? (post.reactions ?? {}) : {}}
-                      value={
-                        reactionKinds.find(
-                          (kind) =>
-                            kind ===
-                            (page.composed && observationMatches && 'viewerReaction' in reactionSource
-                              ? reactionSource.viewerReaction
-                              : currentPersonal?.reactions[firstPost ? thread.id : post.id]),
-                        ) ?? null
-                      }
+                      value={reactionKinds.find((kind) => kind === reactionValue) ?? null}
                       signedIn={commandSession === 'signed-in'}
                       returnTo={returnTo}
                       verification={verification}

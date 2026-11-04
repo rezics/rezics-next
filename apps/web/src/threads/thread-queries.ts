@@ -40,12 +40,17 @@ export function threadPageQuery(
   });
 }
 
-export function threadPersonalQuery(id: string, cursor: string | undefined, postIds: string[]) {
+export function threadPersonalQuery(
+  id: string,
+  cursor: string | undefined,
+  postIds: string[],
+  { readReactions = false }: { readReactions?: boolean } = {},
+) {
   return queryOptions({
     ...personalRead,
-    queryKey: ['thread-personal', id, cursor ?? null, ...postIds],
-    queryFn: async () => ({
-      ...(await readThreadPersonal({ data: { id, postIds } })),
+    queryKey: ['thread-personal', id, cursor ?? null, readReactions, ...postIds],
+    queryFn: async ({ signal }) => ({
+      ...(await readThreadPersonal({ data: { id, postIds: readReactions ? postIds : [], readReactions }, signal })),
       idempotencyKey: crypto.randomUUID(),
     }),
   });

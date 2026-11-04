@@ -19,12 +19,13 @@ export async function loadCurrentReviewVote(
   subjectId: string,
   authorization: string,
   questionId: string = STANDARD_QUESTION_ID,
+  signal?: AbortSignal,
 ): Promise<CurrentReviewVoteReadResult> {
   try {
     const result = await client
       .subjects({ id: subjectId })
       .ratings({ questionId })
-      .vote.get({ headers: { authorization } });
+      .vote.get({ headers: { authorization }, ...(signal ? { fetch: { signal } } : {}) });
     if (result.error) return result.status === 404 ? null : CURRENT_REVIEW_VOTE_UNAVAILABLE;
     if (!result.data) return null;
     return { questionId, units: result.data.units, revision: result.data.revision };

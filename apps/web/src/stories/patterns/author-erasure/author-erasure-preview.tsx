@@ -54,6 +54,7 @@ function EntryThread({ state, onAccepted }: { state: ErasureStoryState; onAccept
       owned.thread.id,
       undefined,
       postIds.length ? postIds : (loaded?.posts.posts.map((p) => p.id) ?? []),
+      { readReactions: !loaded?.composed },
     ),
     enabled: session === 'signed-in' && !!loaded,
   });
