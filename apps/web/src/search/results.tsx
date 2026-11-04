@@ -141,6 +141,12 @@ export function MatchEvidenceView({ evidence, locale }: { evidence: MatchEvidenc
     );
   const reasons = parsed.output.reasons;
   const primary = reasons[0];
+  if (!primary)
+    return (
+      <p data-slot="search-match-status" role="status" className="mt-1 text-sm text-muted-foreground">
+        {m.search_match_unavailable({}, options)}
+      </p>
+    );
   const text = (reason: (typeof reasons)[number]) => {
     const pieces = [];
     let offset = 0;
