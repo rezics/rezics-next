@@ -1,16 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useRouter } from '@tanstack/react-router';
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { documentText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -968,12 +959,7 @@ function MangaCreate({
               ))}
         </div>
         {currentReview && read && (
-          <MangaCreateReviewView
-            review={currentReview}
-            read={read}
-            locale={locale}
-            boundaryRef={reviewBoundary}
-          />
+          <MangaCreateReviewView review={currentReview} read={read} locale={locale} boundaryRef={reviewBoundary} />
         )}
         {failure && (
           <ContentItemFrame

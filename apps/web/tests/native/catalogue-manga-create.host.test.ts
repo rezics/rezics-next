@@ -57,7 +57,11 @@ async function readCreated(id: string) {
       labels: Record<string, string>;
       statements: Record<
         string,
-        { value: { type: string; content: unknown }; qualifiers: { property: { id: string }; value: unknown }[]; references: { parts: { value: { content: unknown } }[] }[] }[]
+        {
+          value: { type: string; content: unknown };
+          qualifiers: { property: { id: string }; value: unknown }[];
+          references: { parts: { value: { content: unknown } }[] }[];
+        }[]
       >;
     };
   };
@@ -178,7 +182,9 @@ test('Manga creation uses current parent authority, exact identity review and na
   await page.getByRole('textbox', { name: m.authored_licence() }).fill('CC-BY-4.0');
   await page.locator('[contenteditable="true"]').last().fill(seriesText);
   await page.getByRole('checkbox', { name: m.authored_original() }).check();
-  await page.getByRole('textbox', { name: m.relation_citation() }).fill('https://example.org/native-original-manga-text');
+  await page
+    .getByRole('textbox', { name: m.relation_citation() })
+    .fill('https://example.org/native-original-manga-text');
   await identity(page, seriesLabel);
   await review(page);
   const seriesReview = page.locator('[data-manga-create-review]');

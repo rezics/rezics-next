@@ -781,7 +781,9 @@ test('complete Manga creation keeps series and volume drafts, independent contro
             ? m.candidate_loading()
             : m.correction_unavailable();
       await until(() => host.textContent!.includes(message));
-      expect((within(host).getByRole('button', { name: m.manga_create_review() }) as HTMLButtonElement).disabled).toBe(true);
+      expect((within(host).getByRole('button', { name: m.manga_create_review() }) as HTMLButtonElement).disabled).toBe(
+        true,
+      );
       expect(posts(fixture)).toHaveLength(0);
     }
     const signedOut = mangaFixture();
@@ -796,7 +798,9 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       />,
     );
     await until(() => host.textContent!.includes(m.catalogue_create_signed_out()));
-    expect((within(host).getByRole('button', { name: m.manga_create_review() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(host).getByRole('button', { name: m.manga_create_review() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     expect(posts(signedOut)).toHaveLength(0);
     let retries = 0;
     const sessionView = (session: string) => (
