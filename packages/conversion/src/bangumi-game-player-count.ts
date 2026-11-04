@@ -42,6 +42,8 @@ export type BangumiGameInfoboxScan = {
   readonly malformed: boolean;
 };
 
+export const bangumiGameInfoboxFieldLimit = fieldLimit;
+
 function infoboxPointer(key: string): string {
   return `/infobox/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
 }
@@ -146,6 +148,22 @@ export function scanBangumiGameInfobox(record: {
   };
 }
 
+/** Share the one bounded Game scan with adapters that consume exact infobox fields. */
+export function parseBangumiGameInfobox(infobox: string): {
+  readonly matched: boolean;
+  readonly fields: readonly BangumiGameInfoboxField[];
+  readonly overflow: boolean;
+  readonly malformed: boolean;
+} {
+  const scan = scanBangumiGameInfobox({ type: 4, infobox });
+  return {
+    matched: scan.handledInfobox,
+    fields: scan.fields,
+    overflow: scan.overflow,
+    malformed: scan.malformed,
+  };
+}
+
 function parseCount(field: BangumiGameInfoboxField): {
   readonly fact?: GamePlayerCountFact;
   readonly code?: string;
@@ -182,6 +200,7 @@ export function bangumiGamePlayerCount(
     readonly infobox?: string;
   },
   scan = scanBangumiGameInfobox(record),
+  options: { readonly handledFields?: readonly string[] } = {},
 ): GamePlayerCountMapping {
   if (!scan.handledInfobox) return { handledInfobox: false, facts: [], diagnostics: [] };
 
@@ -195,6 +214,7 @@ export function bangumiGamePlayerCount(
   if (scan.overflow) omit('/infobox', 'infobox_field_limit');
   if (scan.malformed) omit('/infobox', 'unsupported_infobox_structure');
   const counts: BangumiGameInfoboxField[] = [];
+  const handledFields = new Set(options.handledFields ?? []);
   let examined = 0;
   let bounded = scan.overflow || scan.malformed;
   for (const field of fields) {
@@ -213,7 +233,7 @@ export function bangumiGamePlayerCount(
       counts.push(field);
       continue;
     }
-    if (field.key === '平台' || field.key === '游戏引擎') continue;
+    if (field.key === '平台' || field.key === '游戏引擎' || handledFields.has(field.key)) continue;
     omit(field.pointer, 'unsupported_infobox_mapping');
   }
 

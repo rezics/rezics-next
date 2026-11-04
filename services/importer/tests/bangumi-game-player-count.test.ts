@@ -96,7 +96,7 @@ test('ordinary and selected-family Game callers propose a stated range, withhold
   const api = transport(commands);
   const current = createSourceRegistration('bangumi');
   const previous = withoutPlayerCounts(createSourceRegistration('bangumi', { converterRevision: 'bangumi@8' }));
-  expect(converter_revision).toBe('bangumi@13');
+  expect(converter_revision).toBe('bangumi@14');
   let importer = new Importer({ path, transport: api });
   try {
     expect((await importer.runDump(previous, bytes(dump(modeInfobox)))).status).toBe('committed');
@@ -153,7 +153,7 @@ test('ordinary and selected-family Game callers propose a stated range, withhold
         source: 'bangumi',
         external_id: '91041',
         record_revision: 'unversioned',
-        converter_revision: 'bangumi@13',
+        converter_revision: 'bangumi@14',
       },
     });
     expect(JSON.stringify(proposed[0]!.statement.value)).not.toContain('lowerBound');

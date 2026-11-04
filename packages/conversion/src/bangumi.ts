@@ -14,6 +14,10 @@ import { extractBangumiGameNames } from './bangumi-game-names.ts';
 import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
 import { bangumiGamePublication } from './bangumi-game-publication.ts';
 import { bangumiGamePlayerCount, scanBangumiGameInfobox } from './bangumi-game-player-count.ts';
+import {
+  bangumiGameSourceGenreKey,
+  convertBangumiGameSourceGenres,
+} from './bangumi-game-source-genres.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import { bangumiGameEnvironment } from './bangumi-game-environment.ts';
 import {
@@ -28,12 +32,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@13';
+export const converter_revision = 'bangumi@14';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Thirteen projected top-level fields; at most 95 commands, 24 distinct Game
+// Thirteen projected top-level fields; at most 111 commands, 24 distinct Game
 // names, one cover intent, and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
@@ -359,8 +363,9 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
   }
   const gameInfobox = scanBangumiGameInfobox(record);
-  const playerCount = bangumiGamePlayerCount(record, gameInfobox);
+  const playerCount = bangumiGamePlayerCount(record, gameInfobox, { handledFields: [bangumiGameSourceGenreKey] });
   const gamePublication = bangumiGamePublication(record, gameInfobox);
+  const gameSourceGenres = convertBangumiGameSourceGenres(record, metadata, recordUrl, context, gameInfobox);
   let environment;
   try {
     environment = bangumiGameEnvironment(record, context);
@@ -449,6 +454,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
     for (const item of gamePublication.facts)
       proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
+    proposals.push(...gameSourceGenres.proposals);
     if (document) {
       proposals.push({
         ...propose(fact('schema:abstract', { language: 'und', document }), 'summary', 'summary'),
@@ -516,6 +522,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         ...playerCount.diagnostics,
         ...environment.diagnostics,
         ...gamePublication.diagnostics,
+        ...gameSourceGenres.diagnostics,
       ]),
     ],
     coverAssets,

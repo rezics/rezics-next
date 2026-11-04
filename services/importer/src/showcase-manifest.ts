@@ -419,6 +419,8 @@ export function buildShowcaseManifest(input: {
   reviewedVocabulary?: readonly ShowcaseVocabularyRecord[];
   currentBangumiGenreCandidateIds?: readonly string[];
   bangumiGenreOwnerKeys?: readonly string[];
+  currentBangumiGameGenreCandidateIds?: readonly string[];
+  bangumiGameGenreOwnerKeys?: readonly string[];
   tagWeightObservations?: readonly VndbTagRatingObservation[];
   tagWeightRefreshes?: readonly string[];
 }): ShowcaseManifest {
@@ -436,6 +438,8 @@ export function buildShowcaseManifest(input: {
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
   const currentBangumiGenreCandidateIds = new Set(input.currentBangumiGenreCandidateIds ?? []);
   const bangumiGenreOwnerKeys = new Set(input.bangumiGenreOwnerKeys ?? []);
+  const currentBangumiGameGenreCandidateIds = new Set(input.currentBangumiGameGenreCandidateIds ?? []);
+  const bangumiGameGenreOwnerKeys = new Set(input.bangumiGameGenreOwnerKeys ?? []);
   const tagWeightObservations = input.tagWeightObservations ?? [];
   const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
     /^v[1-9][0-9]{0,9}$/u.test(id),
@@ -509,6 +513,14 @@ export function buildShowcaseManifest(input: {
         ack.command.op === 'propose' &&
         ack.command.statement.property.id === 'schema:keywords' &&
         !currentBangumiGenreCandidateIds.has(ack.candidateId ?? '')
+      )
+        continue;
+      if (
+        provider === 'bangumi' &&
+        bangumiGameGenreOwnerKeys.has(row.key) &&
+        ack.command.op === 'propose' &&
+        ack.command.statement.property.id === 'schema:genre' &&
+        !currentBangumiGameGenreCandidateIds.has(ack.candidateId ?? '')
       )
         continue;
       const assertion = candidateAssertion(ack);

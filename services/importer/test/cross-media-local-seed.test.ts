@@ -60,6 +60,7 @@ test('development seed fetches the shared cache once and passes the local person
         REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
         REZICS_DEV_PERSONA_CLIENT: 'local-cli',
         REZICS_DEV_VNDB_CHARACTER_VOCABULARY: '/shared/vocabulary.json',
+        REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS: '/private/game-genres.json',
         KERNEL_PORT: '4100',
         AUTH_ORIGIN: 'http://localhost:4300',
       },
@@ -89,6 +90,7 @@ test('development seed fetches the shared cache once and passes the local person
     expect(option('--account')).toBe('local-importer');
     expect(option('--client')).toBe('local-cli');
     expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
+    expect(option('--bangumi-game-genre-bindings')).toBe('/private/game-genres.json');
     expect(args).not.toContain('--vndb-credit-bindings');
     expect(args).not.toContain('--vndb-character-profile-bindings');
     expect(developmentShowcaseSelection).toMatchObject({
