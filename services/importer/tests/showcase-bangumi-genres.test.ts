@@ -107,7 +107,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
       }
       return { subject: { ...subject, context, statements } } as never;
     },
-    async reviewedCandidates(id: string, query: { property: string; target?: string }) {
+    async reviewedCandidates(id: string, query: Parameters<ReviewedCataloguePort['reviewedCandidates']>[1]) {
       return page(id, query.property, query.target);
     },
     async acceptReviewedCandidate(id: string, candidate: string, body: { context: string }) {
@@ -145,7 +145,11 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
   let unavailable = false;
   const reviewedPort = {
     ...port,
-    async reviewedCandidates(id: string, query: { property: string; target?: string }, signal?: AbortSignal) {
+    async reviewedCandidates(
+      id: string,
+      query: Parameters<ReviewedCataloguePort['reviewedCandidates']>[1],
+      signal?: AbortSignal,
+    ) {
       if (unavailable) throw new TypeError('Current reviewed candidate read unavailable');
       return port.reviewedCandidates(id, query, signal);
     },
@@ -180,6 +184,7 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
       { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '0', unit: '1' } } },
     ]);
     const firstCandidate = firstKeyword.candidateId;
+    if (!firstCandidate) throw new Error('Exact keyword candidate identity is missing');
     const firstSession = new ImportSession(statePath);
     let titleId: string | undefined;
     try {
@@ -197,6 +202,7 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
       firstSession.close();
     }
     if (!titleId) throw new Error('Independent title candidate identity is missing');
+    const independentTitleId = titleId;
 
     unavailable = true;
     const retry = await seed();
@@ -211,7 +217,7 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
         limit: 100,
       });
       expect(local.map((candidate) => candidate.candidate)).toContain(firstCandidate);
-      expect(local.map((candidate) => candidate.candidate)).toContain(titleId);
+      expect(local.map((candidate) => candidate.candidate)).toContain(independentTitleId);
     } finally {
       reopened.close();
     }
