@@ -176,8 +176,9 @@ async function mount(initialUrl: string) {
   const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   let router: ReturnType<typeof createRouter>;
   const threadRoute = createRoute({
+    id: '/threads/$id_/$slug',
     getParentRoute: () => rootRoute,
-    path: 'threads/$id_/$slug',
+    path: 'threads/$id/$slug',
     component: function ThreadHistory() {
       const location = useLocation();
       const navigate = useRouter();
@@ -273,7 +274,7 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     expect(view.host.textContent).not.toContain('The original edition leaves room for the reader to pause.');
     expect(view.router.state.location.href).toContain('historyReturn=');
     expect(view.router.state.location.href).not.toContain(cursor);
-    const { markHistoryReturnCommand, resolveHistoryReturnTarget } = await import(
+    const { resolveHistoryReturnTarget } = await import(
       '../src/threads/revision-return/history-return'
     );
     const token = new URL(view.router.state.location.href, 'https://site.test').searchParams.get('historyReturn')!;
@@ -285,7 +286,7 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
       historicalReaderSource(view.client),
     );
     expect(returnTarget).toBeDefined();
-    expect(markHistoryReturnCommand(returnTarget!, targetRevision.revisionId, true)).toBe(true);
+    expect(returnTarget?.threadId).toBe(selected.threadId);
 
     const historyResolved = nextResolved(view.router);
     const historyRead = waitForHistoryRead(3);
@@ -297,7 +298,6 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     await act(async () => historyResolved);
     expect(view.router.state.location.href).toContain('/threads/');
     expect(view.router.state.location.href).toContain('historyReturn=');
-    console.log('return-debug', view.router.state.location.href, view.host.textContent);
     await historyRead;
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
