@@ -64,13 +64,13 @@ function canonicalFilter(filter: string | undefined): string | null {
   try {
     value = JSON.parse(filter);
   } catch {
-    throw new ProblemError('invalid_request', { errors: [{ pointer: '/selection/filter', code: 'invalid_json' }] });
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/selection/filter', code: 'invalid_format' }] });
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value))
-    throw new ProblemError('invalid_request', { errors: [{ pointer: '/selection/filter', code: 'invalid_filter' }] });
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/selection/filter', code: 'invalid_type' }] });
   const normalized = canonicalize(value);
   if (typeof normalized !== 'string')
-    throw new ProblemError('invalid_request', { errors: [{ pointer: '/selection/filter', code: 'invalid_json' }] });
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/selection/filter', code: 'invalid_format' }] });
   return normalized;
 }
 
@@ -154,7 +154,7 @@ export async function captureCollectionBulkSource(
     clientId: actor.kind === 'account' ? actor.clientId : null,
     requestedBy: actor.kind === 'account' ? actor.requestedBy : null,
     authnEpoch: actor.kind === 'account' ? actor.authnEpoch : null,
-    scopes: [...actor.scopes].sort(),
+    scopes: actor.kind === 'account' ? [...actor.scopes].sort() : [],
   });
   const source: BulkSelectionSource = {
     id: before.id,

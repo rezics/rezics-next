@@ -804,22 +804,23 @@ export async function readReporterNoticeOutcome(
     !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))
   )
     return null;
-  let threadId = after.value.target_kind === 'thread' ? after.value.target_id : null;
-  if (after.value.target_kind === 'post') {
-    const located = await snapshot(dependencies, after.value.target_id, context.deadline, (client) =>
-      readReportPostThread.run(client, { route: route(after.value.target_id), id: after.value.target_id }),
+  const report = after.value;
+  let threadId = report.target_kind === 'thread' ? report.target_id : null;
+  if (report.target_kind === 'post') {
+    const located = await snapshot(dependencies, report.target_id, context.deadline, (client) =>
+      readReportPostThread.run(client, { route: route(report.target_id), id: report.target_id }),
     );
-    if (located.value && routeOf(located.value.thread_id) === route(after.value.target_id))
+    if (located.value && routeOf(located.value.thread_id) === route(report.target_id))
       threadId = located.value.thread_id;
   }
   return {
     anchor: after.anchor,
     value: {
-      id: after.value.report_id,
-      target: { kind: after.value.target_kind, id: after.value.target_id },
+      id: report.report_id,
+      target: { kind: report.target_kind, id: report.target_id },
       threadId,
-      outcome: after.value.outcome,
-      resolvedAt: after.value.resolved_at,
+      outcome: report.outcome,
+      resolvedAt: report.resolved_at,
       reporterId: after.value.reporter_account_id,
     },
   };
