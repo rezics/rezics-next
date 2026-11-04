@@ -8458,5 +8458,15 @@
   "board_watch_sending": "Watch-Änderung wird gesendet…",
   "showcase_people_names": "Namen und weitere Namen",
   "showcase_people_character": "Figurenprofil",
-  "showcase_people_credits": "Mitwirkung in Werken"
+  "showcase_people_credits": "Mitwirkung in Werken",
+  "realm_question_management_link": "Bewertungsfragen verwalten",
+  "realm_question_management_meaning": "Unveränderliche Bedeutung",
+  "realm_question_management_definition_revision": "Definitionsrevision {revision}",
+  "realm_question_management_caption_revision": "Beschriftungsrevision {revision}",
+  "realm_question_management_lifecycle_revision": "Lebenszyklusrevision {revision}",
+  "realm_question_management_active": "Aktiv",
+  "realm_question_management_retired": "Stillgelegt",
+  "realm_question_management_units": "Gespeicherte Bewertungseinheiten",
+  "realm_question_management_zero": "Null ist eine gültige Bewertung. Ohne Bewertung liegt keine Antwort vor.",
+  "realm_question_management_display_step": "Anzeigeschritt {step}"
 }

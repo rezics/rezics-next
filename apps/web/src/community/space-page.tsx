@@ -635,6 +635,15 @@ function SpaceHome({
             <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
           ) : null}
           {entered && !managementRestricted && page.realm ? (
+            <Link
+              to="/realms/$id_/questions"
+              params={{ id: page.realm.id }}
+              className="inline-flex rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2"
+            >
+              {m.realm_question_management_link()}
+            </Link>
+          ) : null}
+          {entered && !managementRestricted && page.realm ? (
             <RealmMembersEntry realmId={page.realm.id} appearance={admissions.appearance === true} setup={setup} />
           ) : null}
           {viewer && page.realm && (!nativeObservation || (entered && nativeManageAdmitted)) ? (

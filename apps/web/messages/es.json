@@ -8458,5 +8458,15 @@
   "board_watch_sending": "Enviando el cambio de seguimiento…",
   "showcase_people_names": "Nombres y alias",
   "showcase_people_character": "Perfil del personaje",
-  "showcase_people_credits": "Participaciones por obra"
+  "showcase_people_credits": "Participaciones por obra",
+  "realm_question_management_link": "Administrar preguntas de valoración",
+  "realm_question_management_meaning": "Significado inmutable",
+  "realm_question_management_definition_revision": "Revisión de la definición {revision}",
+  "realm_question_management_caption_revision": "Revisión del rótulo {revision}",
+  "realm_question_management_lifecycle_revision": "Revisión del ciclo de vida {revision}",
+  "realm_question_management_active": "Activa",
+  "realm_question_management_retired": "Retirada",
+  "realm_question_management_units": "Unidades de valoración almacenadas",
+  "realm_question_management_zero": "Cero es una puntuación válida. Si no hay puntuación, no hay respuesta.",
+  "realm_question_management_display_step": "Incremento mostrado {step}"
 }

@@ -8458,5 +8458,15 @@
   "board_watch_sending": "正在提交关注变更…",
   "showcase_people_names": "名称与别名",
   "showcase_people_character": "角色介绍",
-  "showcase_people_credits": "跨作品演职记录"
+  "showcase_people_credits": "跨作品演职记录",
+  "realm_question_management_link": "管理评分问题",
+  "realm_question_management_meaning": "不可变的含义",
+  "realm_question_management_definition_revision": "定义修订 {revision}",
+  "realm_question_management_caption_revision": "标题修订 {revision}",
+  "realm_question_management_lifecycle_revision": "生命周期修订 {revision}",
+  "realm_question_management_active": "启用中",
+  "realm_question_management_retired": "已退役",
+  "realm_question_management_units": "储存的评分单位",
+  "realm_question_management_zero": "零是有效分数；没有分数表示没有回应。",
+  "realm_question_management_display_step": "显示刻度 {step}"
 }

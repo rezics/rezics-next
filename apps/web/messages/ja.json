@@ -8458,5 +8458,15 @@
   "board_watch_sending": "ウォッチ変更を送信中…",
   "showcase_people_names": "名前と別名",
   "showcase_people_character": "キャラクター紹介",
-  "showcase_people_credits": "作品ごとのクレジット"
+  "showcase_people_credits": "作品ごとのクレジット",
+  "realm_question_management_link": "評価質問を管理",
+  "realm_question_management_meaning": "変更できない意味",
+  "realm_question_management_definition_revision": "定義の改訂 {revision}",
+  "realm_question_management_caption_revision": "表示名の改訂 {revision}",
+  "realm_question_management_lifecycle_revision": "ライフサイクルの改訂 {revision}",
+  "realm_question_management_active": "有効",
+  "realm_question_management_retired": "終了",
+  "realm_question_management_units": "保存された評価単位",
+  "realm_question_management_zero": "0 は有効なスコアです。スコアがない場合は回答がありません。",
+  "realm_question_management_display_step": "表示刻み {step}"
 }

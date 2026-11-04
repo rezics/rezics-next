@@ -8458,5 +8458,15 @@
   "board_watch_sending": "正在送出追蹤變更…",
   "showcase_people_names": "名稱與別名",
   "showcase_people_character": "角色介紹",
-  "showcase_people_credits": "跨作品演職紀錄"
+  "showcase_people_credits": "跨作品演職紀錄",
+  "realm_question_management_link": "管理評分問題",
+  "realm_question_management_meaning": "不可變的意義",
+  "realm_question_management_definition_revision": "定義修訂 {revision}",
+  "realm_question_management_caption_revision": "標題修訂 {revision}",
+  "realm_question_management_lifecycle_revision": "生命週期修訂 {revision}",
+  "realm_question_management_active": "使用中",
+  "realm_question_management_retired": "已退役",
+  "realm_question_management_units": "儲存的評分單位",
+  "realm_question_management_zero": "零是有效分數；沒有分數代表沒有回覆。",
+  "realm_question_management_display_step": "顯示刻度 {step}"
 }
