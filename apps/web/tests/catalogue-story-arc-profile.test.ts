@@ -1,6 +1,5 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
-import * as start from '../.storybook/react-start';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { CreateResult, CreatedReader, CreateSubjectCommand } from '../src/features/catalogue/create-subject';
 import { releaseDigest } from '@rezics/definitions';
@@ -24,10 +23,6 @@ import { sealFacts, sendFacts, stageFact } from '../src/features/catalogue/subje
 import { collectEditorialEntries, contributionMenu } from '../src/features/catalogue/editorial-entry';
 import { StoryArcProfileEntry, storyArcEntry } from '../src/features/catalogue/story-arc-profile-entry';
 import { contributionHref } from '../src/features/catalogue/catalogue-entry';
-
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
-mock.module('cloudflare:workers', () => ({ env: {} }));
 
 test('Narrative story-arc editor uses current admitted native fields and actual candidate-reader semantics', async () => {
   const fixture = storyArcProfileFixture();
@@ -265,6 +260,7 @@ async function mountStoryArcCreate(options: {
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { act } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
