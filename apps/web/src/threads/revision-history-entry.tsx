@@ -8,6 +8,7 @@ import { Byline, fullDateTime } from './byline';
 import { NativeDocumentImage } from './document-media';
 import { exactRevisionHref } from './exact-revision-href';
 import { revisionDocumentImage } from './exact-revision-media';
+import { ExactRevisionInHistoryButton } from './revision-return/history-return-link';
 import { RevisionProvenance } from './revision-provenance-view';
 import { CopyDiscussionLink } from './copy-discussion-link';
 import { HistoryNativeProvenance } from './post-history-current-context';
@@ -63,6 +64,8 @@ export function RevisionEntry({
         >
           <a
             href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex min-h-11 max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {m.thread_history_version({ number: String(number) })}
@@ -149,6 +152,7 @@ export function RevisionSummaryRow({
   onCollapse,
   onNavigate,
   isCurrent,
+  openExactRevision,
 }: {
   summary: RevisionSummary;
   entry: { revision: Revision; documentMedia: HistoryPage['documentMedia']; native?: HistoryRevisionContext };
@@ -167,6 +171,7 @@ export function RevisionSummaryRow({
   onCollapse: () => void;
   onNavigate: () => void;
   isCurrent: () => boolean;
+  openExactRevision?: ((postId: string, revisionId: string) => void) | undefined;
 }) {
   const locale = getLocale();
   const headingId = `${triggerId}-heading`;
@@ -339,6 +344,12 @@ export function RevisionSummaryRow({
             ) : null}
             <footer className="space-y-2 border-t border-border/60 pt-3">
               <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                {openExactRevision ? (
+                  <ExactRevisionInHistoryButton
+                    onOpen={() => openExactRevision(summary.postId, summary.revisionId)}
+                    className={historyAction}
+                  />
+                ) : null}
                 <a href={href} target="_blank" rel="noopener noreferrer" className={historyAction}>
                   {m.revision_history_open_exact()}
                 </a>

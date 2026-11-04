@@ -66,6 +66,7 @@ function navigation(
     active?: boolean;
     isCurrent?: () => boolean;
     authors?: HistoryPage['authors'];
+    openExactRevision?: (postId: string, revisionId: string) => void;
   } = {},
 ) {
   return (
@@ -82,6 +83,7 @@ function navigation(
       active={options.active ?? true}
       hasMore
       isCurrent={options.isCurrent ?? (() => true)}
+      {...(options.openExactRevision ? { openExactRevision: options.openExactRevision } : {})}
     />
   );
 }
@@ -188,6 +190,36 @@ test('1/10/100 supplied revisions project once per row without touching bodies, 
         'en',
       )[0]?.author,
     ).toBe(author.displayName);
+    expect(calls).toBe(0);
+  } finally {
+    await view.dispose();
+  }
+});
+
+test('same-tab exact action keeps the selected occurrence association beside duplicate attribution labels', async () => {
+  const view = mount();
+  const rows = entries(2);
+  const selectedRevisionId = id(2_202);
+  rows[0] = { ...rows[0]!, revision: { ...rows[0]!.revision, id: selected.id, revisionId: id(2_201) } };
+  rows[1] = {
+    ...rows[1]!,
+    revision: { ...rows[1]!.revision, id: selected.id, revisionId: selectedRevisionId },
+  };
+  const opened: { postId: string; revisionId: string }[] = [];
+  try {
+    await view.render(
+      navigation(rows, {
+        openExactRevision: (postId, revisionId) => opened.push({ postId, revisionId }),
+      }),
+    );
+    await click(button(view.host, m.revision_history_inspect({ number: '2' })));
+    expect(view.host.querySelector('[data-history-inspector]')?.textContent).toContain('Prepared author');
+    const exact = view.host.querySelector<HTMLAnchorElement>('[data-history-inspector] h4 a')!;
+    expect(exact.getAttribute('href')).toBe(`/en/posts/${selected.id}/revisions/${selectedRevisionId}`);
+    expect(exact.target).toBe('_blank');
+    expect(exact.rel).toBe('noopener noreferrer');
+    await click(button(view.host, m.revision_return_open_here()));
+    expect(opened).toEqual([{ postId: selected.id, revisionId: selectedRevisionId }]);
     expect(calls).toBe(0);
   } finally {
     await view.dispose();
