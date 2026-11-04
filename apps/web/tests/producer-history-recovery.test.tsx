@@ -325,7 +325,7 @@ test('uncertain retry retains the original command; failed reader retirement nev
       ...example.relation,
       propose: async (command) => {
         commands.push(structuredClone(command));
-        return commands.length === 1 ? { ok: false, reason: 'unavailable' } : pending.promise;
+        return commands.length === 1 ? { ok: false, reason: 'unavailable', retry: true } : pending.promise;
       },
     }),
   };
