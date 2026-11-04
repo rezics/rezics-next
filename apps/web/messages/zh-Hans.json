@@ -9596,5 +9596,6 @@
   "creator_review_page_more": "可明确请求较旧的页面",
   "creator_review_page_no_cursor": "未提供后续页游标",
   "creator_review_page_cursor_hint": "原生游标不透明。本页筛选不会更改游标，也不会在重新开始时带入隐藏条件。没有游标不代表财务历史完整。",
-  "creator_review_refresh_reselection": "刷新可能替换本页，即使标题或销售引用看似相同。查看与比较都必须再次明确选择。"
+  "creator_review_refresh_reselection": "刷新可能替换本页，即使标题或销售引用看似相同。查看与比较都必须再次明确选择。",
+  "creator_review_reveal_inspected": "在已收到的行中显示查看中的销售"
 }

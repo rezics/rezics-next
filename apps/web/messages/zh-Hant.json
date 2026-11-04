@@ -9599,5 +9599,6 @@
   "creator_review_page_more": "可明確要求較舊的頁面",
   "creator_review_page_no_cursor": "未提供後續頁游標",
   "creator_review_page_cursor_hint": "原生游標不透明。本頁篩選不會更改游標，也不會在重新開始時帶入隱藏條件。沒有游標不代表財務歷史完整。",
-  "creator_review_refresh_reselection": "重新整理可能替換本頁，即使標題或銷售參照看似相同。檢視與比較都必須再次明確選取。"
+  "creator_review_refresh_reselection": "重新整理可能替換本頁，即使標題或銷售參照看似相同。檢視與比較都必須再次明確選取。",
+  "creator_review_reveal_inspected": "在已收到的列中顯示檢視中的銷售"
 }

@@ -9692,5 +9692,6 @@
   "creator_review_page_more": "An older page can be requested explicitly",
   "creator_review_page_no_cursor": "No continuation cursor was supplied",
   "creator_review_page_cursor_hint": "The native cursor is opaque. Local filters do not alter it or carry hidden conditions into a restart. No cursor does not certify complete financial history.",
-  "creator_review_refresh_reselection": "Refreshing can replace this page even if titles or sale references look the same. Inspection and comparison require deliberate reselection."
+  "creator_review_refresh_reselection": "Refreshing can replace this page even if titles or sale references look the same. Inspection and comparison require deliberate reselection.",
+  "creator_review_reveal_inspected": "Show the inspected sale in the received rows"
 }

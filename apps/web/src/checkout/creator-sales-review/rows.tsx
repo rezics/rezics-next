@@ -63,6 +63,7 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
                 disabled={!reading.sourceIsCurrent()}
                 variant="outline"
                 className="min-h-11 whitespace-normal"
+                id={`inspect-sale-${sale.orderId}`}
                 aria-describedby={`sale-title-${sale.orderId}`}
                 aria-expanded={reading.selectedId === sale.orderId}
                 aria-controls={reading.selectedId === sale.orderId ? 'creator-sale-inspection' : undefined}

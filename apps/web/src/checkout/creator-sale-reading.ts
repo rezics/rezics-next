@@ -132,6 +132,7 @@ export function useCreatorSaleReading(
     setSelection(null);
     setReturned(false);
     if (opener.current?.isConnected) opener.current.focus();
+    else document.getElementById('creator-sales-review-heading')?.focus();
     opener.current = null;
   };
   const select = (id: string, element: HTMLElement) => {

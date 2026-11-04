@@ -9599,5 +9599,6 @@
   "creator_review_page_more": "古いページを明示的に読み込めます",
   "creator_review_page_no_cursor": "継続カーソルは提供されていません",
   "creator_review_page_cursor_hint": "ネイティブカーソルは不透明です。ローカル条件で変更したり、再開時に隠れた条件を持ち越したりしません。カーソルがなくても財務履歴全体の完全性は証明しません。",
-  "creator_review_refresh_reselection": "タイトルや売上参照が同じでも更新でページが置き換わる場合があります。詳細や比較には選び直しが必要です。"
+  "creator_review_refresh_reselection": "タイトルや売上参照が同じでも更新でページが置き換わる場合があります。詳細や比較には選び直しが必要です。",
+  "creator_review_reveal_inspected": "確認中の売上を受信した行に表示"
 }

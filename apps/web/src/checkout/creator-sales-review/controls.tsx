@@ -26,7 +26,7 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
   return (
     <section aria-labelledby="creator-sales-review-heading" className="min-w-0 space-y-4 rounded-xl border p-4 sm:p-5">
       <div className="space-y-2">
-        <h2 id="creator-sales-review-heading" className="text-lg font-semibold">
+        <h2 id="creator-sales-review-heading" tabIndex={-1} className="text-lg font-semibold">
           {m.creator_review_heading()}
         </h2>
         <p id="creator-sales-review-scope" className="max-w-prose text-sm text-muted-foreground">
