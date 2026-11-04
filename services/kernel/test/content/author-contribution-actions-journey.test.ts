@@ -109,6 +109,12 @@ test('native reaction retries recover the original receipt once and reauthorize 
     [f.other.accountId, key],
   );
   expect(retained.rows).toEqual([{ count: 1 }]);
+  const effects = await f.admin.query(
+    `SELECT count(*)::int AS count FROM core.outbox
+     WHERE type='com.rezics.content.reaction.changed.v1' AND subject=$1 AND data->>'actorId'=$2`,
+    [thread.id, f.other.accountId],
+  );
+  expect(effects.rows).toEqual([{ count: 1 }]);
   await f.checked('POST', '/v1/grants', {
     bearer: f.governance.bearer,
     body: { resource: { route: routeOf(thread.id), id: thread.id }, subject: { kind: 'account', id: f.other.accountId }, actions: ['reaction:set'], valid: '(,)' },

@@ -24,6 +24,7 @@ export async function createAuthorContributionActionsFixture() {
       // A live review slot belongs to an author/subject pair. Never reuse that slot
       // as incidental setup for another independently selected journey.
       const subjectIds = kind === 'review' ? [await f.subject('Selected contribution review')] : [];
+      await f.setTime((f.dependencies.clock?.() ?? new Date()).getTime() + 1);
       return (await f.checked('POST', '/v1/threads', {
         bearer: f.author.bearer,
         body: {
