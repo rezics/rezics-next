@@ -1,4 +1,28 @@
 types:
   schema:MusicAlbum: 音樂專輯
+  schema:Place: 地點
+  schema:MusicVenue: 音樂場地
+  schema:AdministrativeArea: 行政區
+  schema:Event: 活動
+  schema:MusicEvent: 音樂活動
+  wd:Q34379: 樂器
+properties:
+  schema:containedInPlace: 所在
+  schema:location: 地點
+  wdt:P1303: 樂器
+inverseProperties:
+  schema:containedInPlace: 包含的地點
+  schema:location: 此地的活動
+  wdt:P1303: 使用場合
 typeDescriptions:
   schema:MusicAlbum: '彙集曲目的音樂專輯作品，獨立於特定實體副本或發行版本。'
+  schema:Place: '建築物或地方等實體地點，不是活動、錄音或主辦方。'
+  schema:MusicVenue: '身分為音樂場地的地點，有別於一般地點以及在此舉辦的活動。'
+  schema:AdministrativeArea: '城市、地區或國家等行政區，包含地點，本身不是活動或錄音。'
+  schema:Event: '有自身起迄時間、在某地舉辦的事件，不是該地點、錄音或主辦方。'
+  schema:MusicEvent: '音樂會、獨奏會或音樂節等活動，有別於場地、錄音和專輯。'
+  wd:Q34379: '樂器本身的對象；使用署名屬於活動，不從名稱字串推斷。'
+propertyDescriptions:
+  schema:containedInPlace: '包含此地的地點或行政區；不追溯祖先，也不編造座標。'
+  schema:location: '此活動舉辦的地點。目標是地點或場地，不是另一場活動、錄音或主辦方。'
+  wdt:P1303: '此活動使用的樂器，指向樂器對象；不從演奏者姓名推斷。'

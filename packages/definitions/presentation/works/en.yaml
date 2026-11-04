@@ -1,4 +1,28 @@
 types:
   schema:MusicAlbum: album
+  schema:Place: place
+  schema:MusicVenue: music venue
+  schema:AdministrativeArea: administrative area
+  schema:Event: event
+  schema:MusicEvent: music event
+  wd:Q34379: musical instrument
+properties:
+  schema:containedInPlace: contained in
+  schema:location: location
+  wdt:P1303: instrument
+inverseProperties:
+  schema:containedInPlace: Contains
+  schema:location: Events here
+  wdt:P1303: Used at
 typeDescriptions:
   schema:MusicAlbum: 'A music album work grouping tracks, independent of a particular physical copy or distributed edition.'
+  schema:Place: 'A physical place such as a building or locality; it is not an event, recording or organizer.'
+  schema:MusicVenue: 'A place whose identity is a music venue, distinct from a generic place and from any event held there.'
+  schema:AdministrativeArea: 'A city, region or country; it contains places and is never itself an event or recording.'
+  schema:Event: 'An occurrence with its own start and end times, held at a place; it is not that place, a recording or an organizer.'
+  schema:MusicEvent: 'A concert, recital or festival occurrence, distinct from its venue, a recording and an album.'
+  wd:Q34379: 'A musical instrument as its own identity; credited use belongs on the event, not on a name string.'
+propertyDescriptions:
+  schema:containedInPlace: 'The containing place or administrative area of this place; do not walk ancestry or invent coordinates.'
+  schema:location: 'The place where this event occurs. A city or venue is the target; another event, recording or organizer is not.'
+  wdt:P1303: 'The musical instrument used at this event, targeting the instrument identity; do not infer it from a performer name.'

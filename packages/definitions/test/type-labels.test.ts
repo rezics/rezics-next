@@ -27,6 +27,12 @@ const labels = {
   'wd:Q7725310': ['系列', '系列', 'シリーズ'],
   'wd:Q689445': ['视觉小说', '視覺小說', 'ビジュアルノベル'],
   'schema:MusicAlbum': ['音乐专辑', '音樂專輯', 'アルバム'],
+  'schema:Place': ['地点', '地點', '場所'],
+  'schema:MusicVenue': ['音乐场地', '音樂場地', '音楽会場'],
+  'schema:AdministrativeArea': ['行政区', '行政區', '行政区域'],
+  'schema:Event': ['活动', '活動', 'イベント'],
+  'schema:MusicEvent': ['音乐活动', '音樂活動', '音楽イベント'],
+  'wd:Q34379': ['乐器', '樂器', '楽器'],
 };
 
 const authoredDescriptions = {

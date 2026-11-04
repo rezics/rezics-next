@@ -1,11 +1,13 @@
 id: https://rezics.com/catalogue/works
 name: works
 version: 1.0.0
-description: Launch profiles for music albums.
+description: Launch profiles for music albums, places, events and instruments.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
+  rezics: https://rezics.com/vocab/
 default_range: string
 imports:
   - linkml:types
@@ -33,3 +35,111 @@ classes:
       facets: contributor partOfSeries genre keywords inLanguage
       cover_ratio: 5:7
       schema_org_type: https://schema.org/MusicAlbum
+  Place:
+    is_a: Thing
+    class_uri: schema:Place
+    description: A physical place such as a building or locality, distinct from an event, recording or organizer.
+    exact_mappings:
+      - wd:Q2221906
+    slots:
+      - containedInPlace
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:containedInPlace]
+      facets: containedInPlace
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/Place
+  MusicVenue:
+    is_a: Place
+    class_uri: schema:MusicVenue
+    description: A place whose admitted identity is a music venue, distinct from a generic place or an event.
+    exact_mappings:
+      - wd:Q18674739
+    annotations:
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/MusicVenue
+  AdministrativeArea:
+    is_a: Place
+    class_uri: schema:AdministrativeArea
+    description: An administrative area such as a city, region or country, distinct from a venue, event or recording.
+    exact_mappings:
+      - wd:Q56061
+    annotations:
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/AdministrativeArea
+  Event:
+    is_a: Thing
+    class_uri: schema:Event
+    description: An occurrence with its own timing, distinct from its venue, a recording and an organizer.
+    exact_mappings:
+      - wd:Q1656682
+    slots:
+      - location
+      - startDate
+      - endDate
+      - contributor
+      - instrument
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:startDate, schema:location]
+      facets: location startDate contributor
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/Event
+  MusicEvent:
+    is_a: Event
+    class_uri: schema:MusicEvent
+    description: A music performance or festival occurrence, distinct from its venue, a recording and an album.
+    annotations:
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/MusicEvent
+  MusicalInstrument:
+    is_a: Thing
+    class_uri: wd:Q34379
+    description: A musical instrument identity, distinct from a person, event, recording or credited use.
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/Thing
+slots:
+  containedInPlace:
+    slot_uri: schema:containedInPlace
+    description: The containing place or administrative area of this place.
+    range: Place
+    multivalued: true
+    exact_mappings:
+      - wd:P131
+    annotations:
+      datatype: wikibase-item
+      relation_group: world
+      inverse: rezics:containsPlace
+      relation_order: name
+      acyclic: true
+  location:
+    slot_uri: schema:location
+    description: The place where this event occurs; never another event, recording or organizer.
+    range: Place
+    multivalued: true
+    exact_mappings:
+      - wd:P276
+    annotations:
+      datatype: wikibase-item
+      relation_group: world
+      inverse: rezics:locationOf
+      relation_order: name
+  instrument:
+    slot_uri: wdt:P1303
+    description: A musical instrument used at this event, identified as wd:Q34379 rather than inferred from a name.
+    range: MusicalInstrument
+    multivalued: true
+    exact_mappings:
+      - wd:P1303
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position
+      relation_group: association
+      inverse: rezics:instrumentUsedAt
+      relation_order: name
