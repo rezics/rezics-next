@@ -201,11 +201,12 @@ function privacyInput(field: PrivacyCorrectionDraft): PersonalEntryPrivacyValue 
 function fieldChange<T>(operation: CorrectionOperation, value: T | SourceCorrectionIssue): PersonalEntryFieldChange<T> | SourceCorrectionIssue {
   if (operation === 'preserve') return { op: 'unchanged' };
   if (operation === 'clear') return { op: 'clear' };
-  if (typeof value === 'string') return value;
-  return { op: 'set', value };
+  if (typeof value === 'string') return value as SourceCorrectionIssue;
+  return { op: 'set', value: value as T };
 }
 
-function changed(change: PersonalEntryFieldChange<unknown>) {
+function changed<T>(change: PersonalEntryFieldChange<T> | SourceCorrectionIssue) {
+  if (isIssue(change)) return false;
   return change.op !== 'unchanged';
 }
 
