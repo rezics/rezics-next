@@ -219,12 +219,7 @@ export async function requestOperatorOpeningPage(
     if (response.status === 200) return parseOperatorOpeningPage(body, input);
     if (response.status === 401 && record(body) && fields(body, ['stage']) && body.stage === 'step-up')
       return { kind: 'step-up' };
-    if (
-      [400, 403].includes(response.status) &&
-      record(body) &&
-      fields(body, ['stage']) &&
-      body.stage === 'refused'
-    )
+    if ([400, 403].includes(response.status) && record(body) && fields(body, ['stage']) && body.stage === 'refused')
       return { kind: 'refused' };
     return { kind: 'unavailable' };
   } catch {

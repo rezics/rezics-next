@@ -75,7 +75,10 @@ test('the page request makes one cookie-bound observation with only the selected
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe('https://auth.test/account-management/operators/opening-page');
     expect(calls[0]!.init?.method).toBe('POST');
-    expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({ subjectAccountId: subject, operatorAccountId: operator });
+    expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({
+      subjectAccountId: subject,
+      operatorAccountId: operator,
+    });
     expect((calls[0]!.init?.headers as Record<string, string>).Cookie).toBe('rezics.session=human');
     expect((calls[0]!.init?.headers as Record<string, string>).Origin).toBe('https://auth.test');
 

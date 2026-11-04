@@ -161,14 +161,17 @@ test('a changed installed relation retires the confirmed review before approval'
     await p.confirm();
     p.read.mockResolvedValueOnce({
       kind: 'ready',
-      metadata: { ...metadata.metadata, relation: { reservationId: metadata.metadata.relation.reservationId, version: '8' } },
+      metadata: {
+        ...metadata.metadata,
+        relation: { reservationId: metadata.metadata.relation.reservationId, version: '8' },
+      },
     });
     await p.submit();
     expect(p.host.querySelector('#opening-confirm')).toBeNull();
     expect(p.host.textContent).toContain('Opening refused');
-    expect(p.requests.some((request) => request.path.includes('/approve') || request.path === '/operator-sessions/open')).toBe(
-      false,
-    );
+    expect(
+      p.requests.some((request) => request.path.includes('/approve') || request.path === '/operator-sessions/open'),
+    ).toBe(false);
   } finally {
     await p.close();
   }
