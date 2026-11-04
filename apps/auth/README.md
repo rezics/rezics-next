@@ -197,7 +197,7 @@ Escape to cancel and focus returned to the row or its section. Unsent review hol
 A current-device review explicitly warns of local sign-out; passkey removal explains all-session retirement and
 native last-credential refusal. Readback never repeats a removal. A complete current inventory proves only current
 absence; a truncated missing row cannot prove absence. Only a currently present target permits a newly reviewed
-exact-target command. Recovery descriptions come only from a fresh present row, never historical row metadata.
+exact-target command. Recovery descriptions come only from a fresh present row; retained list rows are marked as previously shown until current readback.
 
 Decision: the browser action wait is twelve seconds: the existing sequential five-second native account check and
 five-second command, plus two seconds for browser/BFF delivery. Expiry, abort, thrown transport or malformed

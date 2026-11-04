@@ -68,7 +68,6 @@ async function mount() {
     calls.push({ path: String(path), body: init?.body ? JSON.parse(String(init.body)) : null });
     return response.promise;
   }) as typeof fetch;
-  window.confirm = () => true;
   await flush(() =>
     root.render(
       <SecurityPage
@@ -97,8 +96,8 @@ test.each([200, 401, 403, 503])('consent review serializes security writes and p
   const reloads = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(
     (item) => item.textContent === m.auth_inventory_reload(),
   );
-  expect(reloads.map((item) => item.disabled)).toEqual([false, true]);
-  await flush(() => reloads[0]!.click());
+  expect(reloads.map((item) => item.disabled)).toEqual([true, false, true]);
+  await flush(() => reloads[1]!.click());
   expect(control(m.auth_inventory_remove()).disabled).toBe(false);
   await flush(() => control(m.auth_inventory_cancel()).click());
   expect(writes().every((item) => !item.disabled)).toBe(true);
@@ -141,7 +140,10 @@ test.each(['password', 'session'])('%s prevents a consent review without blockin
   });
   expect(review.disabled).toBe(true);
   expect(host.querySelector('fieldset')).toBeNull();
-  if (kind === 'session') await flush(() => action.resolve({ kind: 'unknown' }));
+  if (kind === 'session') {
+    await flush(() => control(m.auth_security_confirm_session()).click());
+    await flush(() => action.resolve({ kind: 'unknown' }));
+  }
   expect(review.disabled).toBe(true);
   expect(control(m.auth_inventory_next()).disabled).toBe(false);
   expect(calls.map((call) => call.path)).not.toContain('/consent');

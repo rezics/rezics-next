@@ -491,5 +491,6 @@
   "auth_security_session_present": "Esta sesión está presente actualmente. Revisa las indicaciones actuales antes de otro intento.",
   "auth_security_passkey_present": "Esta clave de acceso está presente actualmente. Revisa las indicaciones actuales antes de otro intento.",
   "auth_security_session_absent": "Esta sesión no aparece en el inventario actual completo. Esto no demuestra qué hizo el comando anterior.",
-  "auth_security_passkey_absent": "Esta clave de acceso no aparece en el inventario actual completo. Esto no demuestra qué hizo el comando anterior."
+  "auth_security_passkey_absent": "Esta clave de acceso no aparece en el inventario actual completo. Esto no demuestra qué hizo el comando anterior.",
+  "auth_security_target_historical": "Datos mostrados anteriormente. Comprueba el estado actual antes de otro intento."
 }

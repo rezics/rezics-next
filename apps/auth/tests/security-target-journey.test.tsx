@@ -138,6 +138,7 @@ test('one dispatch times out honestly; finite read retry preserves exact target 
   expect(ui.commands).toEqual([{ accountId: ready().accountId, kind: 'passkey', id: 'passkey' }]);
   await expire(12_000);
   expect(ui.host.textContent).toContain(m.auth_security_passkey_unknown());
+  expect(ui.host.textContent).toContain(m.auth_security_target_historical());
   await click(ui.host, m.auth_security_check_current());
   expect(ui.host.textContent).toContain(m.auth_security_target_checking());
   await expire(5000);
@@ -155,6 +156,7 @@ test('one dispatch times out honestly; finite read retry preserves exact target 
   expect(button(ui.host, m.auth_security_retry_action())).toBeUndefined();
   await click(ui.host, m.auth_security_check_current());
   expect(ui.host.textContent).toContain(m.auth_security_passkey_present());
+  expect(ui.host.textContent).not.toContain(m.auth_security_target_historical());
   await click(ui.host, m.auth_security_retry_action());
   expect(ui.commands).toHaveLength(1);
   await click(ui.host, m.auth_inventory_cancel());
@@ -232,3 +234,38 @@ test.each(['review', 'write', 'read'] as const)(
     expect(ui.host.textContent).not.toContain('Security key');
   },
 );
+
+test('native last-credential refusal after an allowed review keeps the passkey and releases the boundary', async () => {
+  const ui = await mount(ready(), {
+    act: async () => ({ kind: 'last-credential' }),
+    read: async () => ({ kind: 'unavailable' }),
+  });
+  await review(ui.host);
+  await confirm(ui.host);
+  expect(ui.host.querySelector('[role="alert"]')!.textContent).toContain(m.auth_security_passkey_last_credential());
+  expect(ui.host.textContent).toContain('Security key');
+  expect(button(ui.host, m.auth_security_sign_out())!.disabled).toBe(false);
+});
+
+test('a rejected current-status source releases reading for explicit read retry without another write', async () => {
+  let reads = 0,
+    writes = 0;
+  const ui = await mount(ready(), {
+    act: async () => {
+      writes++;
+      return { kind: 'unknown' };
+    },
+    read: async () => {
+      reads++;
+      throw new Error('unavailable');
+    },
+  });
+  await review(ui.host);
+  await confirm(ui.host);
+  await click(ui.host, m.auth_security_check_current());
+  expect(ui.host.textContent).toContain(m.auth_security_readback_unavailable());
+  expect(button(ui.host, m.auth_security_check_current())!.disabled).toBe(false);
+  await click(ui.host, m.auth_security_check_current());
+  expect(reads).toBe(2);
+  expect(writes).toBe(1);
+});

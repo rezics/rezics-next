@@ -453,9 +453,9 @@ function SecurityPageView({
     });
   }
 
-  function cancelTargetReview() {
+  function cancelTargetReview(expected: Extract<SecurityOperation, { kind: 'review' }>) {
     const held = activeOperation.current;
-    if (held?.kind !== 'review') return;
+    if (held !== expected || held.kind !== 'review') return;
     if (held.retry) updateOperation({ kind: 'recovery', target: held.target, phase: 'present', reading: false });
     else {
       returnTargetFocus.current = held.target.kind;
@@ -463,9 +463,9 @@ function SecurityPageView({
     }
   }
 
-  async function confirmTarget() {
+  async function confirmTarget(expected: Extract<SecurityOperation, { kind: 'review' }>) {
     const held = activeOperation.current;
-    if (held?.kind !== 'review') return;
+    if (held !== expected || held.kind !== 'review') return;
     const { target, generation } = held;
     if (
       generation !== authorityGeneration.current ||
@@ -478,7 +478,7 @@ function SecurityPageView({
     const selected = securityTargetRow(target, sessions, passkeys);
     const advice = targetAdvice(selected);
     if (!selected || !canAct(advice)) {
-      cancelTargetReview();
+      cancelTargetReview(held);
       return;
     }
     if (advice === 'step-up-required') {
@@ -673,6 +673,11 @@ function SecurityPageView({
     );
 
   const locale = typeof document === 'undefined' ? 'en' : document.documentElement.lang || 'en';
+  const historicalTarget = (kind: SecurityTarget['kind'], id: string) =>
+    (operation?.kind === 'target' ||
+      (operation?.kind === 'recovery' && (operation.reading || operation.phase !== 'present'))) &&
+    operation.target.kind === kind &&
+    operation.target.id === id;
   const orderedSessions = [...sessions].sort((left, right) => Number(right.current) - Number(left.current));
 
   return (
@@ -688,7 +693,10 @@ function SecurityPageView({
           />
         }
       >
-        <div className="auth-security-page" aria-busy={loadState === 'loading' || operationBlocked}>
+        <div
+          className="auth-security-page"
+          aria-busy={loadState === 'loading' || (operationBlocked && operation?.kind !== 'review')}
+        >
           {loadState === 'loading' ? (
             <p role="status">{m.auth_inventory_loading()}</p>
           ) : (
@@ -698,8 +706,8 @@ function SecurityPageView({
                   selected={securityTargetRow(targetReview.target, sessions, passkeys)!}
                   locale={locale}
                   retry={targetReview.retry}
-                  confirm={() => void confirmTarget()}
-                  cancel={cancelTargetReview}
+                  confirm={() => void confirmTarget(targetReview)}
+                  cancel={() => cancelTargetReview(targetReview)}
                 />
               ) : null}
               {operation?.kind === 'target' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
@@ -832,6 +840,9 @@ function SecurityPageView({
                                     <h3>{passkey.name.trim() || m.auth_security_passkey_unnamed()}</h3>
                                   </ItemTitle>
                                   <ItemDescription className="line-clamp-none wrap-anywhere">
+                                    {historicalTarget('passkey', passkey.id) ? (
+                                      <span className="block">{m.auth_security_target_historical()}</span>
+                                    ) : null}
                                     {m.auth_security_created_at()}{' '}
                                     <time dateTime={passkey.created_at}>
                                       {formatSecurityDate(passkey.created_at, locale)}
@@ -961,6 +972,9 @@ function SecurityPageView({
                               </h3>
                             </ItemTitle>
                             <ItemDescription className="line-clamp-none wrap-anywhere">
+                              {historicalTarget('session', session.id) ? (
+                                <span className="block">{m.auth_security_target_historical()}</span>
+                              ) : null}
                               <span className={rawClientId ? 'font-mono text-xs' : undefined}>{clientName}</span>
                               {' · '}
                               <span>

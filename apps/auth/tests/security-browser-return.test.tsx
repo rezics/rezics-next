@@ -64,9 +64,10 @@ test.each(['password', 'prompt'])('departure retires %s and reloads private revi
   const { host, calls, reads, inventories } = await mount();
   await flush(() => {
     fill(host.querySelector('#security-new-password')!, 'a secure password');
-    button(host, m.auth_inventory_remove_named({ name: 'Reading companion' }))!.click();
     host.querySelectorAll('form')[kind === 'password' ? 0 : 1]!.requestSubmit();
+    button(host, m.auth_inventory_remove_named({ name: 'Reading companion' }))!.click();
   });
+  expect(calls).toHaveLength(1);
   if (kind === 'prompt')
     await flush(() =>
       calls[0]!.resolve(

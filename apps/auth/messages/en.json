@@ -491,5 +491,6 @@
   "auth_security_session_present": "This session is currently present. Review its current advice before another attempt.",
   "auth_security_passkey_present": "This passkey is currently present. Review its current advice before another attempt.",
   "auth_security_session_absent": "This session is absent from the complete current inventory. This does not establish what the earlier command did.",
-  "auth_security_passkey_absent": "This passkey is absent from the complete current inventory. This does not establish what the earlier command did."
+  "auth_security_passkey_absent": "This passkey is absent from the complete current inventory. This does not establish what the earlier command did.",
+  "auth_security_target_historical": "Previously shown details. Check current status before another attempt."
 }

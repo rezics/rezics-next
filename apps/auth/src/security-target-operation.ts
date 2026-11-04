@@ -7,6 +7,7 @@ export const SECURITY_ACTION_WAIT_MS = 12_000;
 function acknowledgement(value: unknown): SecurityActionResult {
   if (!value || typeof value !== 'object' || !('kind' in value)) return { kind: 'unknown' };
   const result = value as SecurityActionResult;
+  if (Object.keys(result).some((key) => key !== 'kind' && key !== 'sessionEnded')) return { kind: 'unknown' };
   if (!['accepted', 'unknown', 'signed-out', 'denied', 'step-up', 'last-credential', 'failure'].includes(result.kind))
     return { kind: 'unknown' };
   if ('sessionEnded' in result && typeof result.sessionEnded !== 'boolean') return { kind: 'unknown' };

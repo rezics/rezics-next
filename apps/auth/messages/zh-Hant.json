@@ -491,5 +491,6 @@
   "auth_security_session_present": "此工作階段目前仍然存在。再次嘗試前，請檢視目前操作提示。",
   "auth_security_passkey_present": "此通行金鑰目前仍然存在。再次嘗試前，請檢視目前操作提示。",
   "auth_security_session_absent": "目前完整清單中沒有此工作階段。這不能證明先前命令產生了什麼結果。",
-  "auth_security_passkey_absent": "目前完整清單中沒有此通行金鑰。這不能證明先前命令產生了什麼結果。"
+  "auth_security_passkey_absent": "目前完整清單中沒有此通行金鑰。這不能證明先前命令產生了什麼結果。",
+  "auth_security_target_historical": "這是先前顯示的資訊。再次嘗試前，請檢查目前狀態。"
 }

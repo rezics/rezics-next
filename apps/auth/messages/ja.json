@@ -491,5 +491,6 @@
   "auth_security_session_present": "このセッションは現在存在します。再試行の前に現在の操作条件を確認してください。",
   "auth_security_passkey_present": "このパスキーは現在存在します。再試行の前に現在の操作条件を確認してください。",
   "auth_security_session_absent": "現在の完全な一覧にこのセッションはありません。以前のコマンドの結果を証明するものではありません。",
-  "auth_security_passkey_absent": "現在の完全な一覧にこのパスキーはありません。以前のコマンドの結果を証明するものではありません。"
+  "auth_security_passkey_absent": "現在の完全な一覧にこのパスキーはありません。以前のコマンドの結果を証明するものではありません。",
+  "auth_security_target_historical": "以前表示された情報です。再試行の前に現在の状態を確認してください。"
 }

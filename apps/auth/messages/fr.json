@@ -491,5 +491,6 @@
   "auth_security_session_present": "Cette session est actuellement présente. Examinez les indications actuelles avant une nouvelle tentative.",
   "auth_security_passkey_present": "Cette clé d’accès est actuellement présente. Examinez les indications actuelles avant une nouvelle tentative.",
   "auth_security_session_absent": "Cette session est absente de l’inventaire actuel complet. Cela ne prouve pas l’effet de la commande précédente.",
-  "auth_security_passkey_absent": "Cette clé d’accès est absente de l’inventaire actuel complet. Cela ne prouve pas l’effet de la commande précédente."
+  "auth_security_passkey_absent": "Cette clé d’accès est absente de l’inventaire actuel complet. Cela ne prouve pas l’effet de la commande précédente.",
+  "auth_security_target_historical": "Informations affichées précédemment. Vérifiez l’état actuel avant une nouvelle tentative."
 }

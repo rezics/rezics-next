@@ -491,5 +491,6 @@
   "auth_security_session_present": "Diese Sitzung ist derzeit vorhanden. Prüfe vor einem weiteren Versuch die aktuellen Hinweise.",
   "auth_security_passkey_present": "Dieser Passkey ist derzeit vorhanden. Prüfe vor einem weiteren Versuch die aktuellen Hinweise.",
   "auth_security_session_absent": "Diese Sitzung fehlt im vollständigen aktuellen Verzeichnis. Daraus folgt nicht, was der frühere Befehl bewirkt hat.",
-  "auth_security_passkey_absent": "Dieser Passkey fehlt im vollständigen aktuellen Verzeichnis. Daraus folgt nicht, was der frühere Befehl bewirkt hat."
+  "auth_security_passkey_absent": "Dieser Passkey fehlt im vollständigen aktuellen Verzeichnis. Daraus folgt nicht, was der frühere Befehl bewirkt hat.",
+  "auth_security_target_historical": "Zuvor angezeigte Angaben. Prüfe vor einem weiteren Versuch den aktuellen Status."
 }
