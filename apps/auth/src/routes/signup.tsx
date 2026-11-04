@@ -508,6 +508,7 @@ function SignupForm({
     if (!retrying && current.kind !== 'draft') return;
 
     if (!retrying) {
+      if (current.kind !== 'draft') return;
       clearErrors();
       const draft = current.values;
       const invalidHandle =
