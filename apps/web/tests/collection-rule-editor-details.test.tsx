@@ -29,8 +29,8 @@ const choices: RuleChoices = {
     metadata: { types: {}, properties: {} },
     profiles: [
       {
-        id: 'profile:books',
-        entryStateSet: { id: 'states:books:v2', states: [{ id: 'state:reading', labels: stateLabels }] },
+        id: 'profile.books',
+        entryStateSet: { id: 'states.books.v2', states: [{ id: 'state.reading', labels: stateLabels }] },
         progress: { allowed: [] },
         copies: {
           kinds: [
@@ -44,10 +44,14 @@ const choices: RuleChoices = {
       },
     ],
   },
-  labels: { state: 'ready', values: [{ id: 'label:reading', name: 'Weekend reading' }], next: null },
+  labels: {
+    state: 'ready',
+    values: [{ id: '00000000-0000-4000-8000-000000000001', name: 'Weekend reading' }],
+    next: null,
+  },
 };
 const state: FilterDocument = {
-  owner: { state: { profileId: 'profile:books', stateSetId: 'states:books:v2', in: ['state:reading'] } },
+  owner: { state: { profileId: 'profile.books', stateSetId: 'states.books.v2', in: ['state.reading'] } },
 };
 function ready(filter: FilterDocument = state): Ready {
   return {
@@ -170,16 +174,18 @@ test('available choices use supplied localized names, with exact saved and field
   try {
     for (const locale of locales) {
       setLocale(locale, { reload: false });
-      const ui = await mount({ page: ready({ and: [state, { owner: { label: { id: 'label:reading' } } }] }) });
+      const ui = await mount({
+        page: ready({ and: [state, { owner: { label: { id: '00000000-0000-4000-8000-000000000001' } } }] }),
+      });
       try {
         expect(ui.select(m.library_rule_state()).selectedOptions[0]!.textContent).toBe(stateLabels[locale]);
         expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toBe('Weekend reading');
         // The supplied profile has only an ID. Do not invent a profile title.
-        expect(ui.select(m.library_rule_profile()).selectedOptions[0]!.textContent).toBe('profile:books');
+        expect(ui.select(m.library_rule_profile()).selectedOptions[0]!.textContent).toBe('profile.books');
         for (const raw of [
-          'states:books:v2',
-          'state:reading',
-          'label:reading',
+          'states.books.v2',
+          'state.reading',
+          '00000000-0000-4000-8000-000000000001',
           ready().rule.releaseDigest,
           ready().rule.sourceGeneration,
         ]) {
@@ -198,14 +204,16 @@ test('available choices use supplied localized names, with exact saved and field
         const details = [...ui.host.querySelectorAll('details')].find(
           (node) => node.id === select.getAttribute('aria-details'),
         );
-        expect(details?.textContent).toContain('states:books:v2');
+        expect(details?.textContent).toContain('states.books.v2');
         await act(async () => {
           details!.open = true;
         });
         expect(details!.open).toBe(true);
         expect(ui.host.textContent).not.toContain(m.library_rule_state_set_unavailable());
-        const savedDetails = [...ui.host.querySelectorAll('details')].find((node) =>
-          node.textContent?.includes(ready().rule.releaseDigest),
+        const savedDetails = [...ui.host.querySelectorAll('details')].find(
+          (node) =>
+            node.querySelector('summary')?.textContent ===
+            `${m.catalogue_technical_details()} · ${m.library_rule_details()}`,
         )!;
         expect(ui.host.querySelector('button[type="submit"]')!.compareDocumentPosition(savedDetails) & 4).toBe(4);
       } finally {
@@ -225,7 +233,7 @@ test('criteria review preserves nested negative meaning and exact references whe
         not: {
           or: [
             { statement: { property: 'schema:status', in: ['value:retired'] } },
-            { owner: { label: { id: 'label:removed' } } },
+            { owner: { label: { id: '00000000-0000-4000-8000-000000000009' } } },
           ],
         },
       },
@@ -258,7 +266,7 @@ test('criteria review preserves nested negative meaning and exact references whe
     expect(review!.textContent).toContain('Reading status');
     expect(review!.textContent).toContain('schema:Removed');
     expect(review!.textContent).toContain('value:retired');
-    expect(review!.textContent).toContain('label:removed');
+    expect(review!.textContent).toContain('00000000-0000-4000-8000-000000000009');
     expect(review!.textContent).toContain(m.library_rule_review_metadata_unavailable());
     expect(review!.textContent).toContain(m.library_rule_review_no_evaluation());
     expect(review!.textContent).not.toContain('0 results');
@@ -271,9 +279,9 @@ test('a mismatched state set retains distinct unknown states and exact identifie
   const filter: FilterDocument = {
     owner: {
       state: {
-        profileId: 'profile:books',
-        stateSetId: 'states:books:v1',
-        in: ['state:reading', 'state:retired'],
+        profileId: 'profile.books',
+        stateSetId: 'states.books.v1',
+        in: ['state.reading', 'state.retired'],
       },
     },
   };
@@ -287,7 +295,7 @@ test('a mismatched state set retains distinct unknown states and exact identifie
   });
   try {
     const select = ui.select(m.library_rule_state());
-    expect([...select.selectedOptions].map((option) => option.value)).toEqual(['state:reading', 'state:retired']);
+    expect([...select.selectedOptions].map((option) => option.value)).toEqual(['state.reading', 'state.retired']);
     expect(select.options[0]!.textContent).toContain(m.library_rule_unavailable_choice({ number: 1 }));
     expect(select.options[1]!.textContent).toContain(m.library_rule_unavailable_choice({ number: 2 }));
     expect(select.textContent).not.toContain(stateLabels[getLocale()]);
@@ -297,17 +305,17 @@ test('a mismatched state set retains distinct unknown states and exact identifie
     );
     await ui.submit();
     expect(calls[0]).toEqual({ id: 'private-rule', revision: 7, filter, sort: 'id', idempotencyKey: key });
-    await ui.choose(select, ['state:retired']);
+    await ui.choose(select, ['state.retired']);
     expect([...ui.select(m.library_rule_state()).selectedOptions].map((option) => option.value)).toEqual([
-      'state:retired',
+      'state.retired',
     ]);
     await ui.click(`${m.library_subject_clear()} · ${m.library_rule_state()}`);
     expect(ui.select(m.library_rule_state()).selectedOptions).toHaveLength(0);
-    expect(ui.host.textContent).toContain('states:books:v1');
+    expect(ui.host.textContent).toContain('states.books.v1');
     await ui.choose(ui.select(m.library_rule_profile()), ['']);
-    await ui.choose(ui.select(m.library_rule_profile()), ['profile:books']);
+    await ui.choose(ui.select(m.library_rule_profile()), ['profile.books']);
     expect(ui.select(m.library_rule_state()).textContent).toContain(stateLabels[getLocale()]);
-    expect(ui.host.textContent).not.toContain('states:books:v1');
+    expect(ui.host.textContent).not.toContain('states.books.v1');
   } finally {
     await ui.close();
   }
@@ -316,10 +324,10 @@ test('a mismatched state set retains distinct unknown states and exact identifie
 test('retired profile, label, session and holding operands survive save; unavailable labels remain changeable and clearable', async () => {
   const filter: FilterDocument = {
     and: [
-      { not: { owner: { state: { profileId: 'profile:retired', stateSetId: 'states:old', in: ['state:old'] } } } },
-      { owner: { label: { id: 'label:retired' } } },
-      { owner: { session: { profileId: 'profile:retired', lifecycle: 'abandoned' } } },
-      { owner: { holding: { profileId: 'profile:retired', kind: 'copy:old', status: 'copy:missing' } } },
+      { not: { owner: { state: { profileId: 'profile.retired', stateSetId: 'states.old', in: ['state.old'] } } } },
+      { owner: { label: { id: '00000000-0000-4000-8000-000000000009' } } },
+      { owner: { session: { profileId: 'profile.retired', lifecycle: 'abandoned' } } },
+      { owner: { holding: { profileId: 'profile.retired', kind: 'copy.old', status: 'copy.missing' } } },
     ],
   };
   const calls: RuleWrite[] = [];
@@ -333,11 +341,11 @@ test('retired profile, label, session and holding operands survive save; unavail
   try {
     expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toContain(m.library_rule_retained());
     expect(ui.select(m.library_rule_session()).selectedOptions[0]!.textContent).toBe(m.library_rule_abandoned());
-    expect(ui.select(m.library_rule_holding_kind()).value).toBe('copy:old');
-    expect(ui.select(m.library_rule_holding_status()).value).toBe('copy:missing');
+    expect(ui.select(m.library_rule_holding_kind()).value).toBe('copy.old');
+    expect(ui.select(m.library_rule_holding_status()).value).toBe('copy.missing');
     await ui.submit();
     expect(calls[0]!.filter).toEqual(filter);
-    await ui.choose(ui.select(m.library_rule_label()), ['label:reading']);
+    await ui.choose(ui.select(m.library_rule_label()), ['00000000-0000-4000-8000-000000000001']);
     expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toBe('Weekend reading');
     await ui.choose(ui.select(m.library_rule_label()), ['']);
     expect(ui.select(m.library_rule_label()).value).toBe('');
@@ -347,7 +355,7 @@ test('retired profile, label, session and holding operands survive save; unavail
 });
 
 test('an uncertain save keeps its original binding, key and all operands through refresh and an explicit retry', async () => {
-  const original = ready({ and: [state, { owner: { label: { id: 'label:retired' } } }] });
+  const original = ready({ and: [state, { owner: { label: { id: '00000000-0000-4000-8000-000000000009' } } }] });
   const fresh = ready({ owner: { presence: true } });
   fresh.intent = '10000000-0000-4000-8000-000000000002';
   fresh.rule = { ...fresh.rule, revision: 11, releaseDigest: 'sha256:new-release', sourceGeneration: '99' };
@@ -370,7 +378,7 @@ test('an uncertain save keeps its original binding, key and all operands through
     expect(ui.host.querySelector('fieldset')!.disabled).toBe(true);
     expect(ui.host.textContent).toContain(original.rule.releaseDigest);
     expect(ui.host.textContent).not.toContain(fresh.rule.releaseDigest);
-    expect(ui.select(m.library_rule_state()).value).toBe('state:reading');
+    expect(ui.select(m.library_rule_state()).value).toBe('state.reading');
     await ui.submit();
     expect(writes[1]!.value).toEqual(writes[0]!.value);
     expect(writes[1]!.value).toEqual({
