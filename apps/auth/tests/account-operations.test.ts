@@ -312,8 +312,9 @@ test(
         sessionStorage.setItem(key, JSON.stringify(pending));
       });
       await (await confirmDelete(page)).click();
-      await page.getByRole('alert').waitFor();
-      expect(await page.getByRole('alert').innerText()).toContain('could not be completed');
+      const failure = page.getByRole('alert').filter({ hasText: 'The request could not be completed.' });
+      await failure.waitFor();
+      expect(await failure.innerText()).toContain('could not be completed');
       expect(authCalls('/account-operations/approve')).toHaveLength(1);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {
@@ -524,7 +525,7 @@ test(
       expect(await page.getByRole('button', { name: 'Create organization', exact: true }).isEnabled()).toBe(true);
       const firstApproval = postBodies('/account-operations/approve')[0]!;
       await page.getByRole('button', { name: 'Create organization', exact: true }).click();
-      await page.getByText('Your account has been deleted.', { exact: true }).waitFor();
+      await page.getByRole('status').waitFor();
       const approvals = postBodies('/account-operations/approve');
       expect(approvals).toHaveLength(2);
       expect(approvals[1]).toEqual(firstApproval);

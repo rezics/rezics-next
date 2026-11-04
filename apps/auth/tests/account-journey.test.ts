@@ -312,13 +312,18 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         const refusal = page.getByRole('alert').filter({ hasText: copy.auth_account_delete_denied });
         await refusal.waitFor();
         expect(writes.map(({ path }) => path)).toEqual(['/account-operations/approve']);
-        expect(await confirmation.inputValue()).toBe('');
+        expect(await confirmation.count()).toBe(0);
         expect(await deletion.isDisabled()).toBe(true);
+        expect(await page.locator('.auth-account-identity').count()).toBe(0);
+        expect(new URL(page.url()).pathname).toBe('/account/delete');
         expect(await refusal.locator('a').getAttribute('href')).toBe('#account-delete-prerequisites');
         await boundedReview();
 
         // An unknown execution retains the same operation key and needs fresh confirmation.
         state.denyAccountOperation = false;
+        await visit('/account/delete');
+        await confirmation.waitFor();
+        expect(await confirmation.inputValue()).toBe('');
         await page.route('**/account-operations/execute', (route) =>
           route.fulfill({ status: 503, json: { error: 'unavailable' } }),
         );
@@ -335,6 +340,7 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         await exit.focus();
         expect(await exit.evaluate((link) => document.activeElement === link)).toBe(true);
         await exit.click();
+        await page.getByRole('button', { name: copy.auth_organization_departure_leave, exact: true }).click();
         await page.waitForURL(`${origin}/security`);
         expect(writes).toHaveLength(beforeExit);
         expect(await page.evaluate(() => sessionStorage.getItem('rezics.account-operation.pending'))).toBe(deletionKey);

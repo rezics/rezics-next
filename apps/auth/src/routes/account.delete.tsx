@@ -331,7 +331,7 @@ export function DeleteAccountContent({
     const operation: AccountOperation = { kind: 'delete', accountId };
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
-    const operationKey = pendingOperation?.operationKey ?? operationKeyFor(operation, accountId);
+    const operationKey = operationKeyFor(operation, accountId);
     if (
       pendingState.kind === 'invalid' ||
       (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))

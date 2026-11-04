@@ -219,7 +219,11 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
             },
             sessions: {
               kind: 'ready',
-              rows: sessions.slice(0, state.sessionCount).map((row) => ({ ...row, revoke: 'allowed' })),
+              rows: sessions.slice(0, state.sessionCount).map((row) => ({
+                ...row,
+                client_display_name: 'client_display_name' in row ? row.client_display_name : null,
+                revoke: 'allowed',
+              })),
               limit: 64,
               truncated: false,
             },
