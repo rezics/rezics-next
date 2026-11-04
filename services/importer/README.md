@@ -1994,11 +1994,11 @@ receipts, bootstrap/proposal/media journals and acquired objects remain independ
 `seedReviewedCatalogue({path, port, seeds?, signal?})` in
 [`reviewed-catalogue.ts`](src/reviewed-catalogue.ts) is the one trusted operator
 producer. Its finite authored input is the four records in Definitions'
-`reviewed-vocabulary.json`: source scheme, canonical media-genre scheme,
-canonical Q690342 Concept, and source-scoped public `后宫` Concept. Scheme self
-records use the empty literal member; the canonical member is the exact reviewed
-QID. These authored keys identify seed owners, never provider records or derived
-UUIDs. Native create-or-resolve receipts supply every subject/candidate ID.
+`reviewed-vocabulary.json`, including the already-reviewed Bangumi Episode type
+scheme and its seven Concepts. Scheme self records use the empty literal member;
+the canonical member is the exact reviewed QID. These authored keys identify
+seed owners, never provider records or derived UUIDs. Native create-or-resolve
+receipts supply every subject/candidate ID.
 
 Run deliberately with an already authorized ordinary operator account:
 
@@ -2011,9 +2011,12 @@ bun services/importer/src/reviewed-catalogue-cli.ts \
 
 The account needs genuine current Global trusted batch, create/propose and
 editorial acceptance/adoption authority and matching OAuth scopes. The tool
-grants nothing. Ordinary imports never invoke it. Use the same state file for
-subsequent ordinary Bangumi imports; the platform seed namespace stays separate
-from provider namespaces. No SourceRegistration option or parallel registry exists.
+grants nothing. `task seed:dev` invokes this same publisher as an explicit local
+showcase step, using its separate persistent journal and passing returned native
+subject IDs directly to the Episode adapter. Ordinary provider imports never
+invoke it. Use the same state file for subsequent ordinary Bangumi imports; the
+platform seed namespace stays separate from provider namespaces. No
+SourceRegistration option or parallel registry exists.
 
 Before effects, the entire exact inventory passes descriptor-safe preflight and
 the existing RunStore acquisition/seal policy. The unchanged RecordBindings
@@ -2210,6 +2213,37 @@ diagnostics.
   connected API scenario is
   `services/kernel/test/imports/bangumi-character-fidelity.test.ts`; it adds no
   physical-growth claim, and its native execution remains controller-owned.
+
+### Default Bangumi anime episodes
+
+The default local seed discovers Episodes only for selected Bangumi type-2
+anime, keeps each source `episode:<id>` identity, and adds the exact
+`episode.subject_id` parent edge. The Episode kind adapter re-reads the finite
+reviewed type scheme and Concepts through the current public reader before it
+composes with other vocabulary-admission hooks. A retracted, hidden or changed
+binding withholds only the kind statement; the converter still imports the
+Episode identity and independently admitted ordinal, airdate, duration and
+attributed summary. The source ordinal is a direct Episode fact; it is not
+duplicated as a parent-edge qualifier. Ordinary import proposals remain subject
+to separate acceptance and adoption.
+
+Decision: the local showcase imports one `BATCH_LIMIT` Episode window per
+selected franchise and reports every additional selected source key as an
+explicit omission.
+
+- Touches: selected type-2 anime Episodes, exact parent edges, the existing
+  reviewed Episode type scheme/concepts, and current public parent/Episode
+  readback.
+- Bound: at most one `BATCH_LIMIT` Episode window per selected franchise; every
+  overflow diagnostic carries its exact `episode:<id>` key, with a fixed maximum
+  of 4,096 omission diagnostics. The adapter reads only the scheme and seven
+  known Concepts; it performs no label or catalogue scan.
+- Growth check: `tests/showcase-bangumi-episodes.test.ts` covers main/special
+  identity, an unrelated row, withheld bindings, composition and overflow.
+  `../kernel/test/imports/showcase-bangumi-episodes.test.ts` covers independent
+  acceptance/adoption, current public reads, binding retraction and resumable
+  identity. Existing Episode ordinal/date/duration/summary checks remain in
+  `tests/bangumi-episode-fidelity.test.ts`.
 
 ### Bangumi person biographies
 

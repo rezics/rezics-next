@@ -46,11 +46,14 @@ export function episodeTypeConceptCode(uri: string): string | undefined {
   return /^[0-6]$/u.test(code) ? code : undefined;
 }
 
-function adoptedContent(read: unknown, property: string): string | undefined {
-  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
-    .subject?.statements?.[property];
-  const content = statements?.[0]?.value?.content;
-  return typeof content === 'string' ? content : undefined;
+function hasCurrentPublicValue(read: unknown, property: string, expected: string): boolean {
+  const statements = (read as {
+    subject?: { statements?: Record<string, { value?: { type?: string; content?: unknown } }[]> };
+  }).subject?.statements?.[property];
+  return (
+    Array.isArray(statements) &&
+    statements.some((statement) => statement?.value?.type === 'value' && statement.value.content === expected)
+  );
 }
 
 /** Current disclosed/adopted episode-type scheme and concepts. Retracted or hidden identities are withheld. */
@@ -67,7 +70,8 @@ export async function readEpisodeTypeBindings(
   }
   const scheme = schemeRead as { subject?: { id?: string; type?: string } };
   if (scheme.subject?.id !== known.schemeId || scheme.subject.type !== 'skos:ConceptScheme') return empty;
-  if (adoptedContent(schemeRead, 'schema:url') !== episodeTypeSchemeUri) return empty;
+  // readReviewedSubject is the ordinary public reader, so its statement set contains only current disclosed heads.
+  if (!hasCurrentPublicValue(schemeRead, 'schema:url', episodeTypeSchemeUri)) return empty;
   const concepts: SourceVocabularyBindings['concepts'][number][] = [];
   for (const item of known.concepts) {
     let conceptRead;
@@ -78,8 +82,8 @@ export async function readEpisodeTypeBindings(
     }
     const concept = conceptRead as { subject?: { id?: string; type?: string } };
     if (concept.subject?.id !== item.id || concept.subject.type !== 'skos:Concept') continue;
-    if (adoptedContent(conceptRead, 'schema:url') !== episodeTypeConceptUri(item.code)) continue;
-    if (adoptedContent(conceptRead, 'skos:inScheme') !== known.schemeId) continue;
+    if (!hasCurrentPublicValue(conceptRead, 'schema:url', episodeTypeConceptUri(item.code))) continue;
+    if (!hasCurrentPublicValue(conceptRead, 'skos:inScheme', known.schemeId)) continue;
     concepts.push({
       taxonomy: episodeTypeTaxonomy,
       code: item.code,
@@ -195,7 +199,6 @@ export async function planBangumiEpisodeFidelity(input: CrossMediaTables): Promi
       membership: 'referenced',
       record: row,
       fields: fieldsOf('episode', row),
-      ...(row.sort !== undefined ? { qualifiers: [{ property: 'schema:episodeNumber', content: row.sort }] } : {}),
     };
     plan.edges.push(edge);
   }

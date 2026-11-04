@@ -52,6 +52,14 @@ import { createImporter, type ImporterOptions, type ImportRunResult } from './im
 import { createSourceRegistration } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
+import {
+  composeVocabularyAdmissions,
+  discoverShowcaseBangumiEpisodes,
+  readShowcaseEpisodeTypeBindings,
+  showcaseEpisodeAdmissionDiagnostics,
+  showcaseEpisodeVocabularyAdmission,
+  type ShowcaseEpisodeDiagnostic,
+} from './showcase-bangumi-episodes.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -177,6 +185,8 @@ export async function collectSelectedVndbCharacterNameRows(
 }
 export type CrossMediaGap = {
   source: Provider;
+  /** Exact provider key when the source row has a usable identity. */
+  externalId?: string;
   /** Exact dump columns, including qualifications, ordering and original endpoint IDs. */
   fields: string[];
   record: Row;
@@ -463,6 +473,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     }
     plan.records.bangumi.push({ source: 'bangumi', key: String(id), revision: null, payload: row });
   }
+  const selectedAnime = new Map<number, Franchise>();
+  for (const [id, family] of familyIds) if (types.get(id) === 2) selectedAnime.set(id, family);
   for (const [id, family] of referencedWorks) {
     if (familyIds.has(id) || !subjects.has(id)) continue;
     member({ source: 'bangumi', key: String(id), kind: 'work', membership: 'referenced', franchise: family });
@@ -776,30 +788,15 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       plan.entities.bangumi.push({ source: 'bangumi', key: `person:${row.id}`, revision: null, payload: row });
       member({ source: 'bangumi', key: `person:${row.id}`, kind: 'person', membership: 'referenced' });
     }
-  for await (const row of input.rows('bangumi', 'episode'))
-    if (familyWorks.has(number(row, 'subject_id'))) {
-      plan.entities.bangumi.push({ source: 'bangumi', key: `episode:${row.id}`, revision: null, payload: row });
-      member({
-        source: 'bangumi',
-        key: `episode:${row.id}`,
-        kind: 'episode',
-        membership: 'referenced',
-        ...tagged(familyIds.get(number(row, 'subject_id'))),
-      });
-      edge({
-        source: 'bangumi',
-        alias: crossMediaAliases.bangumi,
-        table: 'episode',
-        holder: `episode:${row.id}`,
-        target: String(row.subject_id),
-        property: 'schema:isPartOf',
-        url: bangumiRecordUrl(`episode:${row.id}`),
-        membership: 'referenced',
-        record: row,
-        fields: fieldsOf('episode', row),
-        ...(row.sort !== undefined ? { qualifiers: [{ property: 'schema:episodeNumber', content: row.sort }] } : {}),
-      });
-    }
+  const episodes = await discoverShowcaseBangumiEpisodes({
+    tables: input,
+    selectedAnime,
+    alias: crossMediaAliases.bangumi,
+  });
+  plan.entities.bangumi.push(...episodes.entities);
+  for (const episode of episodes.members) member(episode);
+  plan.edges.push(...episodes.edges);
+  plan.gaps.push(...episodes.gaps);
 
   const vnIds = new Set<string>();
   const vnFamily = new Map<string, Franchise>();
@@ -1670,6 +1667,7 @@ export type CrossMediaSeedResult = {
   vndbCreditDiagnostics: SourceVocabularyGap[];
   vndbCreditVocabularyRequirements: VndbCreditVocabularyRequirement[];
   characterDiagnostics: SourceVocabularyGap[];
+  episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
 };
 
@@ -1693,6 +1691,9 @@ function currentWorkRead(read: ReviewedSubjectRead): CurrentWorkRead | undefined
 
 export type CrossMediaSeedExtras = {
   vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
+  vocabularyAdmissions?: readonly NonNullable<ImporterOptions['vocabularyAdmission']>[];
+  /** Native IDs returned by the common explicit reviewed-catalogue publisher. */
+  episodeCatalogueSubjects?: Readonly<Record<string, string>>;
   entitiesFirst?: boolean;
   recordConcurrency?: ImporterOptions['recordConcurrency'];
   sourceVocabulary?: SourceVocabularyBindings;
@@ -1714,7 +1715,7 @@ export async function seedCrossMedia(
   const vndbCredits = providers.includes('vndb')
     ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences)
     : undefined;
-  const vocabularyAdmission =
+  const existingAdmission =
     extras?.vocabularyAdmission || vndbCredits
       ? {
           request(context: Parameters<NonNullable<NonNullable<ImporterOptions['vocabularyAdmission']>['request']>>[0]) {
@@ -1725,6 +1726,17 @@ export async function seedCrossMedia(
           },
         }
       : undefined;
+  const episodeBindings = extras?.episodeCatalogueSubjects
+    ? await readShowcaseEpisodeTypeBindings(port, extras.episodeCatalogueSubjects)
+    : undefined;
+  const episodeDiagnostics = episodeBindings
+    ? showcaseEpisodeAdmissionDiagnostics(plan.entities.bangumi, episodeBindings)
+    : [];
+  const vocabularyAdmission = composeVocabularyAdmissions(
+    existingAdmission,
+    ...(extras?.vocabularyAdmissions ?? []),
+    ...(episodeBindings ? [showcaseEpisodeVocabularyAdmission(episodeBindings)] : []),
+  );
   const importer = createImporter({
     path,
     ...(destination ? { destination } : {}),
@@ -1901,7 +1913,8 @@ export async function seedCrossMedia(
         credits.gaps.length ||
         credits.fenced.length ||
         (vndbCredits?.diagnostics.length ?? 0) ||
-        (fidelity?.gaps.length ?? 0)
+        (fidelity?.gaps.length ?? 0) ||
+        episodeDiagnostics.length
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
       franchises: plan.franchises,
@@ -1926,6 +1939,7 @@ export async function seedCrossMedia(
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       characterDiagnostics: fidelity?.gaps ?? [],
+      episodeDiagnostics,
       unresolved,
     };
   } finally {
@@ -1933,7 +1947,14 @@ export async function seedCrossMedia(
   }
 }
 
-export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<void> {
+export type CrossMediaSeedCliOptions = {
+  episodeCatalogueSubjects?: Readonly<Record<string, string>>;
+};
+
+export async function runCrossMediaSeedCli(
+  argv: readonly string[],
+  options: CrossMediaSeedCliOptions = {},
+): Promise<void> {
   const optionalFlags = [
     '--bangumi-character-bindings',
     '--vndb-public-tag-bindings',
@@ -2046,7 +2067,10 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
       path: statePath,
       port,
       destination: { origin: api },
-      extras: { ...(vndbCreditReferences ? { vndbCreditReferences } : {}) },
+      extras: {
+        ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
+        ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
+      },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
     const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
@@ -2105,7 +2129,7 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     process.stdout.write(
       showcase
         ? `Imported ${result.readings.length} records; publication ${showcase.status}; ${showcase.omissions.length} bounded omissions. Result: ${resultPath}\n`
-        : `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + result.vndbCreditDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
+        : `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + result.vndbCreditDiagnostics.length + result.episodeDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
     );
     ensure(
       !showcase || showcase.status === 'published',
