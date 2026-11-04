@@ -48,6 +48,22 @@ export type Outcome =
 
 export const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+async function responseProblemCode(value: unknown): Promise<string | undefined> {
+  if (value instanceof Response) {
+    try {
+      return await responseProblemCode(await value.clone().json());
+    } catch {
+      return undefined;
+    }
+  }
+  if (!object(value)) return undefined;
+  if (typeof value.code === 'string') return value.code;
+  for (const nested of [value.value, value.error]) {
+    const code = await responseProblemCode(nested);
+    if (code) return code;
+  }
+  return undefined;
+}
 // Installed route declarations are stricter than the command's historical hyphen allowance.
 export const validGroup = (value: unknown): value is string =>
   typeof value === 'string' &&
@@ -90,8 +106,7 @@ export async function readCurrentExposure(
     if (
       result.status === 400 &&
       query.cursor !== undefined &&
-      object(result.error) &&
-      result.error.code === 'invalid_cursor'
+      (await responseProblemCode(result.error)) === 'invalid_cursor'
     )
       return { status: 'invalid-cursor' };
     const value: unknown = result.data;
