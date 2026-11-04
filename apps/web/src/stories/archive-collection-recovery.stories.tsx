@@ -87,6 +87,8 @@ const status: RecoveryStatus = {
   cancelRequested: false,
   collectionId: '00000000-0000-4000-8000-000000000027',
   confirmation: null,
+  fullRestoration: false,
+  presentation: { state: 'unattempted', kind: null, source: null, releaseDigest: null, reason: null },
   pin: { state: 'unsupported', reason: null },
   sectionReasons: {},
 };
@@ -97,6 +99,7 @@ const nativeReview: RecoveryReview = {
     reviewId: 'story-review',
     digest: 'b'.repeat(64),
     epoch: 1,
+    presentation: { kind: null, releaseDigest: null, source: 'archived' },
     completeOrder: false,
     completeMembership: true,
     selectedOccurrences: 2,
