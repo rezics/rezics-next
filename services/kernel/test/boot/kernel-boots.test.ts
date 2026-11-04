@@ -96,7 +96,7 @@ const OPERATION_ID = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
 
 /** Exercise the actual local Auth composition, including native bindings and client registration. */
 async function startPersonaSeed(databaseUrl: string) {
-  const { assemble, developmentKeys } = await import('../../../auth/scripts/dev-stack.ts');
+  const { assemble, developmentKeys, provisionPersona } = await import('../../../auth/scripts/dev-stack.ts');
   const { createAuthDatabase } = await import('../support/auth-database.ts');
   const authDatabaseUrl = await createAuthDatabase(
     databaseUrl,
@@ -111,6 +111,8 @@ async function startPersonaSeed(databaseUrl: string) {
     keys: await developmentKeys(directory),
   });
   try {
+    const person = await provisionPersona(composition, directory);
+    expect(person.accountId).toBeString();
     const history: string[] = [];
     for (const route of composition.kernel.routes) {
       const detail = route.hooks?.detail as Record<string, unknown> | undefined;

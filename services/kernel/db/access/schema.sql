@@ -6700,7 +6700,7 @@ CREATE CONSTRAINT TRIGGER semantic_resource_role_erasure AFTER INSERT OR UPDATE 
 -- Name: workflow_approval workflow_approval_immutable; Type: TRIGGER; Schema: access; Owner: -
 --
 
-CREATE TRIGGER workflow_approval_immutable BEFORE UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
+CREATE TRIGGER workflow_approval_immutable AFTER UPDATE ON access.workflow_approval FOR EACH ROW EXECUTE FUNCTION access.workflow_approval_immutable();
 
 
 --

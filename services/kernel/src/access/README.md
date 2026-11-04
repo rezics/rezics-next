@@ -2499,6 +2499,10 @@ other accounts automatically, or open public exposure.
 
 ### Workflow approvals
 
+Credential approval consumption validates the complete immutable row in an `AFTER UPDATE` trigger, after PostgreSQL
+computes stored erasure attribution. Only the existing one-time consumption fields may change; a refusal rolls back
+the update. Generated attribution remains protected along with its source operation and principal reference.
+
 Approval creation, reads and consumption use the kernel clock configured on Access (including derived Access adapters). On this T timeline, expiry is `min(T + TTL, carried JWT expiry)`: TTL is 60 seconds for a credential approval and 300 seconds otherwise. Reads and consumption require T strictly before both the approval expiry and carried bearer expiry. The `jwt_expires_at` column stores the bearer expiry carried into kernel time at issuance, equal to the JWT exp when clocks agree apart from the sampling gap. Restored identities retain this kernel-time expiry. The fence-operator suspension uses that same clock. Operator session and credential openings, consumed native opening readers and registration readers also evaluate lifetimes at T. Operator opening TTL remains 60 seconds; binding a credential opening caps it at the bearer expiry carried into kernel time. Request and evidence budgets never use a stored lifetime as a wall-clock deadline. Evidence deadlines remain on the database clock plus the remaining evidence budget and are never compared with T; request deadlines remain on real time.
 
 `test/access/approval-opening-clock.test.ts` checks approval and operator opening expiry at the exact T boundary with an untouched process clock, live lifetimes behind database and process time, and request and evidence deadlines independent of T.
