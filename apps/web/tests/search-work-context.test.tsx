@@ -134,7 +134,7 @@ test('qualified homonyms keep same-statement qualifiers, directed release facts 
     );
     expect(html).toContain('data-context-kind="release"');
     expect(html.match(/data-context-kind="work"/g)).toHaveLength(5);
-    expect(html).toContain('Contributor:');
+    expect(html).toContain('title="schema:contributor">Contributor</span>:');
     expect(html).toContain('data-qualifier-property="wdt:P1932"');
     expect(html).toContain('Mira Chen (original credit)');
     expect(html).toContain('data-qualifier-property="wdt:P3831"');
