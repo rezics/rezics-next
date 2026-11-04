@@ -110,6 +110,8 @@ Own-upload attestation does not verify a Bangumi account. Preview does not mutat
 identity epoch and release; stale means a deliberate new review. Cancellation stops new admission; already admitted
 work may finish. Evidence deletion removes evidence and reviews, not admitted facts.
 
+Decision: retained Bangumi evidence expires seven days after upload; reads, reviews and application never extend that absolute deadline, and expiry never reverses acknowledged native facts.
+
 ## Cost
 
 - Operation: `library.bangumi.preview`, paged owner read, `library.bangumi.review`, `library.bangumi.confirm` apply
