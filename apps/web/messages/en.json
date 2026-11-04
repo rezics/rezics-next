@@ -8883,5 +8883,13 @@
   "producer_history_correction_retired": "Correction reading retired",
   "producer_history_retired_explanation": "This correction no longer has a current reading. A command already sent may still have taken effect; its outcome may be unknown. Nothing will be resent from this retired correction.",
   "producer_history_slice_lost": "The original slice is no longer available here. Read again before deliberately starting another correction.",
-  "producer_history_retired_close": "Dismiss retired correction"
+  "producer_history_retired_close": "Dismiss retired correction",
+  "subject_artwork_view": "View artwork",
+  "subject_artwork_reveal": "Show artwork",
+  "subject_artwork_hide": "Hide artwork",
+  "subject_artwork_withheld": "Choose Show artwork to load and view this image.",
+  "subject_artwork_unsupported": "This media value has no supported image presentation.",
+  "subject_artwork_oversized": "The artwork response is too large. Try again.",
+  "subject_artwork_timeout": "The artwork request timed out. Try again.",
+  "subject_artwork_alt": "{property} — {title}"
 }

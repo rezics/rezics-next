@@ -8791,5 +8791,13 @@
   "producer_history_correction_retired": "Korrekturansicht nicht mehr aktuell",
   "producer_history_retired_explanation": "Diese Korrektur hat keine aktuelle Ansicht mehr. Ein bereits gesendeter Befehl kann wirksam geworden sein; das Ergebnis kann unbekannt sein. Aus dieser Korrektur wird nichts erneut gesendet.",
   "producer_history_slice_lost": "Der ursprüngliche Ausschnitt ist hier nicht mehr verfügbar. Lies den Verlauf erneut, bevor du bewusst eine weitere Korrektur beginnst.",
-  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen"
+  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen",
+  "subject_artwork_view": "Bild ansehen",
+  "subject_artwork_reveal": "Bild anzeigen",
+  "subject_artwork_hide": "Bild ausblenden",
+  "subject_artwork_withheld": "Wähle Bild anzeigen, um dieses Bild zu laden und anzusehen.",
+  "subject_artwork_unsupported": "Für diesen Medienwert ist keine unterstützte Bilddarstellung verfügbar.",
+  "subject_artwork_oversized": "Die Bildantwort ist zu groß. Versuche es erneut.",
+  "subject_artwork_timeout": "Die Bildanfrage hat zu lange gedauert. Versuche es erneut.",
+  "subject_artwork_alt": "{property} — {title}"
 }

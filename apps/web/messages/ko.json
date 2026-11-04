@@ -8791,5 +8791,13 @@
   "producer_history_correction_retired": "정정 읽기 내용 만료",
   "producer_history_retired_explanation": "이 정정에는 더 이상 유효한 읽기 내용이 없습니다. 이미 보낸 명령은 적용되었을 수 있으며 결과를 알 수 없을 수 있습니다. 만료된 정정에서는 아무것도 다시 보내지 않습니다.",
   "producer_history_slice_lost": "원래 범위는 여기에서 더 이상 사용할 수 없습니다. 이력을 다시 읽은 뒤 새 정정을 직접 시작하세요.",
-  "producer_history_retired_close": "만료된 정정 닫기"
+  "producer_history_retired_close": "만료된 정정 닫기",
+  "subject_artwork_view": "이미지 보기",
+  "subject_artwork_reveal": "이미지 표시",
+  "subject_artwork_hide": "이미지 숨기기",
+  "subject_artwork_withheld": "이미지 표시를 선택하면 이 이미지를 불러와 표시합니다.",
+  "subject_artwork_unsupported": "이 미디어 값에는 지원되는 이미지 표시가 없습니다.",
+  "subject_artwork_oversized": "이미지 응답이 너무 큽니다. 다시 시도하세요.",
+  "subject_artwork_timeout": "이미지 요청 시간이 초과되었습니다. 다시 시도하세요.",
+  "subject_artwork_alt": "{title}의 {property}"
 }

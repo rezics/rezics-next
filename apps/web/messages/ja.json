@@ -8791,5 +8791,13 @@
   "producer_history_correction_retired": "訂正の閲覧内容は失効しました",
   "producer_history_retired_explanation": "この訂正には現在有効な閲覧内容がありません。送信済みの操作はすでに反映されている可能性があり、結果が不明な場合があります。この失効した訂正から再送することはありません。",
   "producer_history_slice_lost": "元の範囲はここでは利用できません。履歴を読み直してから、改めて訂正を開始してください。",
-  "producer_history_retired_close": "失効した訂正を閉じる"
+  "producer_history_retired_close": "失効した訂正を閉じる",
+  "subject_artwork_view": "画像を見る",
+  "subject_artwork_reveal": "画像を表示",
+  "subject_artwork_hide": "画像を隠す",
+  "subject_artwork_withheld": "「画像を表示」を選ぶと、この画像を読み込んで表示します。",
+  "subject_artwork_unsupported": "このメディア値には、対応する画像表示がありません。",
+  "subject_artwork_oversized": "画像の応答が大きすぎます。もう一度お試しください。",
+  "subject_artwork_timeout": "画像のリクエストがタイムアウトしました。もう一度お試しください。",
+  "subject_artwork_alt": "{title}の{property}"
 }

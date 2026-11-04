@@ -33,6 +33,7 @@ import * as accounts from './account';
 import { accountOf } from './account-read';
 import * as overview from './overview';
 import { SubjectPageCover } from './subject-page-cover';
+import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
 import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
@@ -62,7 +63,7 @@ import {
   type Sources,
   type Stmt,
 } from './shared';
-import { DocumentValue, LanguageTag, MediaValue, SPOILER_PROPERTY, SpoilerGate, type ValueLabels } from './values';
+import { DocumentValue, LanguageTag, SPOILER_PROPERTY, SpoilerGate, type ValueLabels } from './values';
 
 type CoreMessages = {
   unknown: string;
@@ -461,12 +462,6 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   const { reader } = options;
   const original = originalLanguage(read.subject);
   const headerMedia = read.summary?.cover?.media;
-  const coverFor = coverSubject(
-    read.subject.id,
-    pageText(read.subject.labels, options.locale, original).text || options.messages.unlabelled,
-    read.summary,
-    read.subject.type,
-  );
   const urls = new Set<string>();
   const records = (() => {
     const value: unknown = Reflect.get(read.subject, 'sourceRecords');
@@ -479,15 +474,17 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   const presentable = (statement: Stmt): ReactNode => {
     const { value, property } = statement;
     if (value.type === 'value' && property.data_type === 'media') {
-      // The cover the header draws is not repeated; any other image is a frame of its own.
-      if (typeof value.content !== 'string' || value.content === headerMedia) return null;
+      // Keep the header's selected cover singular; every other assertion owns its actual media.
+      if (value.content === headerMedia) return null;
+      const label = fieldLabel(relatedLabel(property.id), options.locale);
       return (
-        <MediaValue
-          subject={coverFor}
-          cover={null}
+        <SubjectArtwork
+          subject={read.subject.id}
+          statement={statement}
+          title={pageText(read.subject.labels, options.locale, original).text || options.messages.unlabelled}
+          propertyLabel={label.text || options.messages.unlabelled}
           suitability={reader.suitability}
-          labels={options.labels.cover}
-          {...(options.frame.ratio ? { ratio: options.frame.ratio } : {})}
+          locale={options.locale}
         />
       );
     }
@@ -795,6 +792,7 @@ export function PageData({
   directions,
   headerActions,
   readingView,
+  artworkSource,
   children,
 }: {
   locale: string;
@@ -827,6 +825,8 @@ export function PageData({
   headerActions?: ReactNode;
   /** Only Overview bounds fact previews; Details retains every admitted value. */
   readingView?: string;
+  /** The authentic caller source retires non-cover image state even when metadata is identical. */
+  artworkSource?: object;
   children?: ReactNode;
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
@@ -864,6 +864,8 @@ export function PageData({
   const prepared = new Map<string, PreparedRead>();
   let overviewSubjectLabel = subjectLabel;
   let sources: Sources | null = null;
+  let artworkRelease: unknown;
+  let artworkContext: unknown;
   for (const [key, planned] of Object.entries(plan.reads)) {
     const result = Object.hasOwn(reads, key) ? reads[key] : undefined;
     if (result?.status !== 200 || !isRecord(result.body)) continue;
@@ -871,6 +873,8 @@ export function PageData({
       const read = prepareSubject(result.body as SubjectRead, options, shown);
       prepared.set(key, read);
       if (planned.id === subject) {
+        artworkRelease = (result.body as SubjectRead).subject.release;
+        artworkContext = (result.body as SubjectRead).subject.context;
         sources = read.sources ?? null;
         if (overviewSubjectLabel === undefined) {
           const body = result.body as SubjectRead;
@@ -964,30 +968,46 @@ export function PageData({
     ...(ratio ? { frameRatio: ratio } : {}),
   };
   return (
-    <overview.OverviewContext.Provider value={overviewValue}>
-      <TypeListContext.Provider
-        value={{
-          ...(listTarget ? { target: listTarget } : {}),
-          ...(fullList ? { full: fullList } : {}),
-          ...(listCursor !== undefined ? { cursor: listCursor } : {}),
-        }}
-      >
-        <PageContext.Provider
+    <SubjectArtworkBoundary
+      source={artworkSource ?? reads}
+      identity={JSON.stringify([
+        subject,
+        context,
+        artworkContext,
+        continuation,
+        artworkRelease,
+        cacheReader,
+        reader,
+        locale,
+        readingView,
+      ])}
+      label={overviewSubjectLabel || resolved.unlabelled}
+    >
+      <overview.OverviewContext.Provider value={overviewValue}>
+        <TypeListContext.Provider
           value={{
-            locale,
-            messages: resolved,
-            nodes,
-            subject,
-            agentHeader: profile !== undefined,
-            sources,
-            link,
-            ...(zoneRatio ? { ratio: zoneRatio } : {}),
+            ...(listTarget ? { target: listTarget } : {}),
+            ...(fullList ? { full: fullList } : {}),
+            ...(listCursor !== undefined ? { cursor: listCursor } : {}),
           }}
         >
-          {children}
-        </PageContext.Provider>
-      </TypeListContext.Provider>
-    </overview.OverviewContext.Provider>
+          <PageContext.Provider
+            value={{
+              locale,
+              messages: resolved,
+              nodes,
+              subject,
+              agentHeader: profile !== undefined,
+              sources,
+              link,
+              ...(zoneRatio ? { ratio: zoneRatio } : {}),
+            }}
+          >
+            {children}
+          </PageContext.Provider>
+        </TypeListContext.Provider>
+      </overview.OverviewContext.Provider>
+    </SubjectArtworkBoundary>
   );
 }
 

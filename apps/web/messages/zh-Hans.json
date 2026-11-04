@@ -8791,5 +8791,13 @@
   "producer_history_correction_retired": "更正读取已失效",
   "producer_history_retired_explanation": "此更正已没有当前有效的读取。已发送的命令可能已经生效，结果也可能尚不明确。不会从此失效的更正重新发送任何命令。",
   "producer_history_slice_lost": "此处已无法使用原来的片段。请重新读取历史，再主动开始另一项更正。",
-  "producer_history_retired_close": "关闭已失效的更正"
+  "producer_history_retired_close": "关闭已失效的更正",
+  "subject_artwork_view": "查看图片",
+  "subject_artwork_reveal": "显示图片",
+  "subject_artwork_hide": "隐藏图片",
+  "subject_artwork_withheld": "选择「显示图片」后，才会加载并显示这张图片。",
+  "subject_artwork_unsupported": "此媒体值没有支持的图片呈现方式。",
+  "subject_artwork_oversized": "图片响应过大，请重试。",
+  "subject_artwork_timeout": "图片请求超时，请重试。",
+  "subject_artwork_alt": "{title}的{property}"
 }

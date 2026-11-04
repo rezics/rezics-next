@@ -1,3 +1,4 @@
+import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { GameOverview } from '../catalogue/game-reader/entry';
@@ -744,190 +745,203 @@ export function SubjectPage({
   return (
     <>
       <PageHost actions={page.account ? renderedActions : null} afterHeader={header ? afterHeader : null}>
-        <PageData
-          locale={locale}
-          readingView={view}
-          subject={page.subject}
-          listTarget={
-            page.account
-              ? { account: page.account.handle, ...(view ? { view } : {}) }
-              : page.subject
-                ? {
-                    subject: page.subject,
-                    ...(view ? { view } : {}),
-                    ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
-                  }
-                : undefined
-          }
-          pageTarget={
-            page.account
-              ? { account: page.account.handle, ...(view ? { view } : {}) }
-              : page.subject
-                ? {
-                    subject: page.subject,
-                    ...(view ? { view } : {}),
-                    ...(realm ? { realm } : {}),
-                  }
-                : undefined
-          }
-          {...(subjectLabel !== undefined ? { subjectLabel } : {})}
-          {...(read ? { subjectLabel: subjectPageTitle(page, locale) } : {})}
-          {...(page.account ? { account: page.account } : {})}
-          {...(operator ? { operator } : {})}
-          {...(base ? { base } : {})}
-          document={page.document}
-          reads={page.reads}
-          context={page.context}
-          realm={realm}
-          cacheReader={page.requestedReader}
-          continuation={page.continuation}
-          messages={messages}
-          link={ContextLink}
-          {...(reader ? { reader } : {})}
-          {...(typeLabel ? { typeLabel } : {})}
-          {...(ratio ? { ratio } : {})}
-          {...(relations ? { relations } : {})}
-          {...(page.catalogue?.directions !== undefined ? { directions: page.catalogue.directions } : {})}
-          {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
-        >
-          <div className="flex w-full flex-col gap-8">
-            {overview && !page.account && read?.subject.type === 'schema:Book' ? (
-              <LiteraryReaderEntry
-                work={read.subject}
-                source={page}
-                locale={locale}
-                context={page.context?.id ?? null}
-              />
-            ) : null}
-            {!overview && heading && (
-              <header className="min-w-0 space-y-1" data-slot="view-heading">
-                <p className="text-sm break-words">
-                  <a className={`${linkClass} ${linkColor}`} href={contextHref(heading.href, realm)}>
-                    {heading.title}
-                  </a>
-                </p>
-                <h1 className="font-sans text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-                  {heading.label}
-                </h1>
-              </header>
-            )}
-            {!page.account && (
-              <ContextNavigation
-                context={page.context}
-                realm={realm}
-                href={subjectUrlForView(
-                  subjectHref(
-                    { id: page.subject ?? '', label: subjectLabel ?? subjectPageTitle(page, locale) },
-                    locale,
-                  ),
-                  view,
-                )}
-                locale={locale}
-              />
-            )}
-            {overview && read && !page.account && workAddress ? (
-              <WorkNamesEntry
-                subject={read.subject}
-                ancestors={read.summary?.types}
-                source={page}
-                locale={locale}
-                context={page.context?.id ?? null}
-                sourcesHref={contextHref(`${workAddress.href}/sources`, realm)}
-              />
-            ) : null}
-            {overview && read && !page.account && showcaseWork && workReturn ? (
-              <WorkFranchiseOverview
-                subject={read.subject}
-                windows={profileRelationWindows(page)}
-                related={read.related}
-                definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
-                locale={locale}
-                returnTo={workReturn}
-                {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
-                readerSpoiler={reader?.spoilerLevel ?? 0}
-                link={ContextLink}
-              />
-            ) : null}
-            {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
-              <MangaReaderEntry
-                source={page}
-                subject={mangaSubject}
-                label={subjectPageTitle(page, locale)}
-                locale={locale}
-                view={view}
-                context={page.context?.id ?? mangaSubject.context ?? null}
-                realm={realm}
-                continuation={page.continuation}
-                viewer={page.requestedReader ?? null}
-                definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
-                windows={profileRelationWindows(page)}
-                reader={reader ?? defaultReader}
-                link={ContextLink}
-              />
-            ) : null}
-            {visitReturn && !framed ? (
-              <p>
-                <a
-                  className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
-                  href={visitReturn}
-                >
-                  {m.recording_reader_return({}, { locale: locale as never })}
-                </a>
-              </p>
-            ) : null}
-            {overview && read && !page.account && returnSource && returnSource !== read.subject.id ? (
-              <CatalogueFileReturnLink id={returnSource} locale={locale} link={ContextLink} />
-            ) : null}
-            {overview && read && !page.account ? (
-              <CatalogueFileReaderOverview
-                page={page}
-                public={composedSubjectRead(read)}
-                locale={locale}
-                link={ContextLink}
-                returning={returnSource === read.subject.id}
-              />
-            ) : null}
-            {!overview && bar}
-            {overview && !header && afterHeader}
-            {overview &&
-            read &&
-            !page.account &&
-            (read.subject.type === 'wd:Q2620972' ||
-              (read.subject.relationCounts?.['rezics:storyArc'] ?? 0) > 0 ||
-              (read.subject.statements['rezics:storyArc']?.length ?? 0) > 0) ? (
-              <StoryArcOverview
-                source={page}
-                reader={page.requestedReader ?? null}
-                settings={reader}
-                id={read.subject.id}
-                context={page.context?.id ?? read.subject.context}
-                locale={locale}
-                realm={realm}
-              />
-            ) : null}
-            {overview && read && !page.account && gameReaderEntry(read.subject.type, read.summary?.types) ? (
-              <GameOverview
-                source={page}
-                reader={page.requestedReader ?? null}
-                id={read.subject.id}
-                type={read.subject.type}
-                context={page.context?.id ?? read.subject.context}
-                locale={locale}
-                realm={realm}
-                spoiler={reader?.spoilerLevel}
-              />
-            ) : null}
-            {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (
-              <>
-                <MusicAlbumOverview
+        <SubjectArtworkSession locale={locale}>
+          <PageData
+            artworkSource={page}
+            locale={locale}
+            readingView={view}
+            subject={page.subject}
+            listTarget={
+              page.account
+                ? { account: page.account.handle, ...(view ? { view } : {}) }
+                : page.subject
+                  ? {
+                      subject: page.subject,
+                      ...(view ? { view } : {}),
+                      ...(page.context?.population.kind === 'realm' ? { realm: page.context.population.id } : {}),
+                    }
+                  : undefined
+            }
+            pageTarget={
+              page.account
+                ? { account: page.account.handle, ...(view ? { view } : {}) }
+                : page.subject
+                  ? {
+                      subject: page.subject,
+                      ...(view ? { view } : {}),
+                      ...(realm ? { realm } : {}),
+                    }
+                  : undefined
+            }
+            {...(subjectLabel !== undefined ? { subjectLabel } : {})}
+            {...(read ? { subjectLabel: subjectPageTitle(page, locale) } : {})}
+            {...(page.account ? { account: page.account } : {})}
+            {...(operator ? { operator } : {})}
+            {...(base ? { base } : {})}
+            document={page.document}
+            reads={page.reads}
+            context={page.context}
+            realm={realm}
+            cacheReader={page.requestedReader}
+            continuation={page.continuation}
+            messages={messages}
+            link={ContextLink}
+            {...(reader ? { reader } : {})}
+            {...(typeLabel ? { typeLabel } : {})}
+            {...(ratio ? { ratio } : {})}
+            {...(relations ? { relations } : {})}
+            {...(page.catalogue?.directions !== undefined ? { directions: page.catalogue.directions } : {})}
+            {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
+          >
+            <div className="flex w-full flex-col gap-8">
+              {overview && !page.account && read?.subject.type === 'schema:Book' ? (
+                <LiteraryReaderEntry
+                  work={read.subject}
                   source={page}
-                  reader={page.requestedReader ?? null}
                   locale={locale}
-                  public={composedSubjectRead(read)}
-                  bounds={boundedProfileRelations(page)}
+                  context={page.context?.id ?? null}
+                />
+              ) : null}
+              {!overview && heading && (
+                <header className="min-w-0 space-y-1" data-slot="view-heading">
+                  <p className="text-sm break-words">
+                    <a className={`${linkClass} ${linkColor}`} href={contextHref(heading.href, realm)}>
+                      {heading.title}
+                    </a>
+                  </p>
+                  <h1 className="font-sans text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+                    {heading.label}
+                  </h1>
+                </header>
+              )}
+              {!page.account && (
+                <ContextNavigation
+                  context={page.context}
+                  realm={realm}
+                  href={subjectUrlForView(
+                    subjectHref(
+                      { id: page.subject ?? '', label: subjectLabel ?? subjectPageTitle(page, locale) },
+                      locale,
+                    ),
+                    view,
+                  )}
+                  locale={locale}
+                />
+              )}
+              {overview && read && !page.account && workAddress ? (
+                <WorkNamesEntry
+                  subject={read.subject}
+                  ancestors={read.summary?.types}
+                  source={page}
+                  locale={locale}
+                  context={page.context?.id ?? null}
+                  sourcesHref={contextHref(`${workAddress.href}/sources`, realm)}
+                />
+              ) : null}
+              {overview && read && !page.account && showcaseWork && workReturn ? (
+                <WorkFranchiseOverview
+                  subject={read.subject}
+                  windows={profileRelationWindows(page)}
+                  related={read.related}
+                  definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
+                  locale={locale}
+                  returnTo={workReturn}
+                  {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
+                  readerSpoiler={reader?.spoilerLevel ?? 0}
                   link={ContextLink}
                 />
-                <AlbumTrackOverview
+              ) : null}
+              {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
+                <MangaReaderEntry
+                  source={page}
+                  subject={mangaSubject}
+                  label={subjectPageTitle(page, locale)}
+                  locale={locale}
+                  view={view}
+                  context={page.context?.id ?? mangaSubject.context ?? null}
+                  realm={realm}
+                  continuation={page.continuation}
+                  viewer={page.requestedReader ?? null}
+                  definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
+                  windows={profileRelationWindows(page)}
+                  reader={reader ?? defaultReader}
+                  link={ContextLink}
+                />
+              ) : null}
+              {visitReturn && !framed ? (
+                <p>
+                  <a
+                    className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
+                    href={visitReturn}
+                  >
+                    {m.recording_reader_return({}, { locale: locale as never })}
+                  </a>
+                </p>
+              ) : null}
+              {overview && read && !page.account && returnSource && returnSource !== read.subject.id ? (
+                <CatalogueFileReturnLink id={returnSource} locale={locale} link={ContextLink} />
+              ) : null}
+              {overview && read && !page.account ? (
+                <CatalogueFileReaderOverview
+                  page={page}
+                  public={composedSubjectRead(read)}
+                  locale={locale}
+                  link={ContextLink}
+                  returning={returnSource === read.subject.id}
+                />
+              ) : null}
+              {!overview && bar}
+              {overview && !header && afterHeader}
+              {overview &&
+              read &&
+              !page.account &&
+              (read.subject.type === 'wd:Q2620972' ||
+                (read.subject.relationCounts?.['rezics:storyArc'] ?? 0) > 0 ||
+                (read.subject.statements['rezics:storyArc']?.length ?? 0) > 0) ? (
+                <StoryArcOverview
+                  source={page}
+                  reader={page.requestedReader ?? null}
+                  settings={reader}
+                  id={read.subject.id}
+                  context={page.context?.id ?? read.subject.context}
+                  locale={locale}
+                  realm={realm}
+                />
+              ) : null}
+              {overview && read && !page.account && gameReaderEntry(read.subject.type, read.summary?.types) ? (
+                <GameOverview
+                  source={page}
+                  reader={page.requestedReader ?? null}
+                  id={read.subject.id}
+                  type={read.subject.type}
+                  context={page.context?.id ?? read.subject.context}
+                  locale={locale}
+                  realm={realm}
+                  spoiler={reader?.spoilerLevel}
+                />
+              ) : null}
+              {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (
+                <>
+                  <MusicAlbumOverview
+                    source={page}
+                    reader={page.requestedReader ?? null}
+                    locale={locale}
+                    public={composedSubjectRead(read)}
+                    bounds={boundedProfileRelations(page)}
+                    link={ContextLink}
+                  />
+                  <AlbumTrackOverview
+                    source={page}
+                    reader={page.requestedReader ?? null}
+                    id={read.subject.id}
+                    context={page.context?.id ?? read.subject.context}
+                    locale={locale}
+                    realm={realm}
+                  />
+                </>
+              ) : null}
+              {overview && read && !page.account && musicReleaseEntry(read.subject.type, read.summary?.types) ? (
+                <MusicReleaseOverview
                   source={page}
                   reader={page.requestedReader ?? null}
                   id={read.subject.id}
@@ -935,121 +949,111 @@ export function SubjectPage({
                   locale={locale}
                   realm={realm}
                 />
-              </>
-            ) : null}
-            {overview && read && !page.account && musicReleaseEntry(read.subject.type, read.summary?.types) ? (
-              <MusicReleaseOverview
-                source={page}
-                reader={page.requestedReader ?? null}
-                id={read.subject.id}
-                context={page.context?.id ?? read.subject.context}
-                locale={locale}
-                realm={realm}
-              />
-            ) : null}
-            {overview && read && !page.account && read.subject.type === recordingType ? (
-              <RecordingOverview
-                locale={locale}
-                public={composedSubjectRead(read)}
-                bounds={boundedProfileRelations(page)}
-                {...(page.context ? { context: page.context } : {})}
-                {...(visitReturn ? { returnTo: visitReturn } : {})}
-                link={ContextLink}
-              />
-            ) : null}
-            {overview && read && !page.account && musicLocationEntry(read.subject.type, read.summary?.types) ? (
-              <MusicLocationOverview
-                source={page}
-                reader={page.requestedReader ?? null}
-                subject={composedSubjectRead(read)}
-                context={page.context?.id ?? read.subject.context}
-                locale={locale}
-                realm={realm}
-              />
-            ) : null}
-            {overview && read && !page.account && isScreenType(read.subject.type) ? (
-              <ScreenProfileOverview
-                locale={locale}
-                public={composedSubjectRead(read)}
-                bounds={boundedProfileRelations(page)}
-                link={ContextLink}
-                {...(page.context?.id ? { context: page.context.id } : {})}
-                viewerKey={page.requestedReader ?? null}
-                readerSpoilerLevel={reader?.spoilerLevel ?? 0}
-              />
-            ) : null}
-            {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (
-              <OrganizationOverview
-                id={read.subject.id}
-                context={read.subject.context}
-                source={page}
-                locale={locale}
-                reader={page.requestedReader ?? null}
-                realm={realm}
-                link={ContextLink}
-              />
-            ) : null}
-            <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
-              <SubjectCommunityContext.Provider value={page.community}>
-                <SubjectCommunityVerificationContext.Provider value={verification}>
-                  <CompositionRender
-                    document={page.document}
-                    definitions={pageDefinitions}
-                    components={pageComponents(framed)}
-                    root={PageRoot}
-                  />
-                </SubjectCommunityVerificationContext.Provider>
-              </SubjectCommunityContext.Provider>
-            </SubjectCommunityRefreshContext.Provider>
-            {overview && read && !page.account && read.subject.type === 'wd:Q95074' ? (
-              <CharacterOverview
-                source={page}
-                viewer={page.requestedReader ?? null}
-                locale={locale}
-                public={composedSubjectRead(read)}
-                documents={read.documents}
-                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                link={ContextLink}
-                {...(reader ? { reader } : {})}
-              />
-            ) : null}
-            {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
-              <PersonOverview
-                source={page}
-                viewer={page.requestedReader ?? null}
-                locale={locale}
-                public={composedSubjectRead(read)}
-                documents={read.documents}
-                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
-                link={ContextLink}
-                {...(reader ? { reader } : {})}
-              />
-            ) : null}
-            {overview && connections}
-            {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
-            {overview && <SubjectSourcesLink />}
-            {curation}
-            {overview && read && !page.account && (
-              <a
-                className={`${linkClass} ${linkColor}`}
-                href={`${subjectUrlForView(subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale), 'context-review')}?${new URLSearchParams({ context: page.context?.id ?? read.subject.context, ...(realm ? { realm } : {}) })}`}
-              >
-                {m.context_title({}, { locale: locale as never })}
-              </a>
-            )}
-            {overview && read && !page.account && read.subject.context === candidateContext && !realm && (
-              <a
-                className={`${linkClass} ${linkColor}`}
-                href={subjectUrlForView(
-                  subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale),
-                  'relation-edit',
-                )}
-              >
-                {m.relation_title({}, { locale: locale as never })}
-              </a>
-            )}
-          </div>
-        </PageData>
+              ) : null}
+              {overview && read && !page.account && read.subject.type === recordingType ? (
+                <RecordingOverview
+                  locale={locale}
+                  public={composedSubjectRead(read)}
+                  bounds={boundedProfileRelations(page)}
+                  {...(page.context ? { context: page.context } : {})}
+                  {...(visitReturn ? { returnTo: visitReturn } : {})}
+                  link={ContextLink}
+                />
+              ) : null}
+              {overview && read && !page.account && musicLocationEntry(read.subject.type, read.summary?.types) ? (
+                <MusicLocationOverview
+                  source={page}
+                  reader={page.requestedReader ?? null}
+                  subject={composedSubjectRead(read)}
+                  context={page.context?.id ?? read.subject.context}
+                  locale={locale}
+                  realm={realm}
+                />
+              ) : null}
+              {overview && read && !page.account && isScreenType(read.subject.type) ? (
+                <ScreenProfileOverview
+                  locale={locale}
+                  public={composedSubjectRead(read)}
+                  bounds={boundedProfileRelations(page)}
+                  link={ContextLink}
+                  {...(page.context?.id ? { context: page.context.id } : {})}
+                  viewerKey={page.requestedReader ?? null}
+                  readerSpoilerLevel={reader?.spoilerLevel ?? 0}
+                />
+              ) : null}
+              {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (
+                <OrganizationOverview
+                  id={read.subject.id}
+                  context={read.subject.context}
+                  source={page}
+                  locale={locale}
+                  reader={page.requestedReader ?? null}
+                  realm={realm}
+                  link={ContextLink}
+                />
+              ) : null}
+              <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
+                <SubjectCommunityContext.Provider value={page.community}>
+                  <SubjectCommunityVerificationContext.Provider value={verification}>
+                    <CompositionRender
+                      document={page.document}
+                      definitions={pageDefinitions}
+                      components={pageComponents(framed)}
+                      root={PageRoot}
+                    />
+                  </SubjectCommunityVerificationContext.Provider>
+                </SubjectCommunityContext.Provider>
+              </SubjectCommunityRefreshContext.Provider>
+              {overview && read && !page.account && read.subject.type === 'wd:Q95074' ? (
+                <CharacterOverview
+                  source={page}
+                  viewer={page.requestedReader ?? null}
+                  locale={locale}
+                  public={composedSubjectRead(read)}
+                  documents={read.documents}
+                  release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                  link={ContextLink}
+                  {...(reader ? { reader } : {})}
+                />
+              ) : null}
+              {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
+                <PersonOverview
+                  source={page}
+                  viewer={page.requestedReader ?? null}
+                  locale={locale}
+                  public={composedSubjectRead(read)}
+                  documents={read.documents}
+                  release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                  link={ContextLink}
+                  {...(reader ? { reader } : {})}
+                />
+              ) : null}
+              {overview && connections}
+              {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
+              {overview && <SubjectSourcesLink />}
+              {curation}
+              {overview && read && !page.account && (
+                <a
+                  className={`${linkClass} ${linkColor}`}
+                  href={`${subjectUrlForView(subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale), 'context-review')}?${new URLSearchParams({ context: page.context?.id ?? read.subject.context, ...(realm ? { realm } : {}) })}`}
+                >
+                  {m.context_title({}, { locale: locale as never })}
+                </a>
+              )}
+              {overview && read && !page.account && read.subject.context === candidateContext && !realm && (
+                <a
+                  className={`${linkClass} ${linkColor}`}
+                  href={subjectUrlForView(
+                    subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale),
+                    'relation-edit',
+                  )}
+                >
+                  {m.relation_title({}, { locale: locale as never })}
+                </a>
+              )}
+            </div>
+          </PageData>
+        </SubjectArtworkSession>
       </PageHost>
       {renderJsonLd && jsonLd !== undefined && (
         <script type="application/ld+json" nonce={nonce} dangerouslySetInnerHTML={{ __html: jsonLd }} />

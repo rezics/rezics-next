@@ -1387,6 +1387,50 @@ with the designed placeholder when there is no image. On a subject page, the cov
 image and its credit; credits and notices are collected in Sources at the end of the page, never as a caption. See
 [Cover](../packages/ui/README.md#cover).
 
+## Disclosed artwork facts
+
+An ordinary non-cover media fact retains its original statement, role label, qualifiers and Sources/correction
+handoffs. Its media ID is resolved through the original `threads/document-media.ts` reader and displayed through
+`NativeDocumentImage` and `DocumentImageInspector`. Nullable credit and placeholder stay nullable. The selected
+header cover remains on the Cover family and is not repeated as another assertion's image. A canonical media ID
+without an admitted image stays unavailable; other media values have an unsupported state with no guessed URL.
+Omitted metadata cannot distinguish denial, absence or the producer's expired empty envelope. It never proves
+that the subject has no artwork or that a source was uncited. Image credit belongs only to its delivered image;
+statement references remain on the exact original statement through Facts and Sources.
+
+Decision: each visit uses one explicitly selected artwork window, loaded on View/Show artwork; selecting another
+fact replaces its summary and inspector instead of accumulating thumbnails or issuing automatic per-row reads.
+This reversible presentation choice retains one image while using the existing batch operation with one ID.
+Statement spoilers must first be revealed; suitability `blur` separately requires Show artwork without claiming
+that the image is classified sensitive. Neither gate mounts an image or resolves metadata before reveal. `show`
+uses the reader's deliberate setting. Hiding an image unmounts its inspector. A new Subject, Context, release,
+reader/credential observation, source object or original statement retires its state, including A → B → A.
+After a credential observation changes, artwork needs a replacement page source before another metadata read.
+Ordinary dialog close restores its trigger; retirement with an open dialog focuses the current Subject group.
+Failure offers a section-only retry and leaves the remaining facts readable. Media success supplies no correction
+authority; the existing original-candidate/editor handoff remains independent.
+
+### Artwork composition cost
+
+The native page retains `MAX_PAGE_READS = 16`, `MAX_PAGE_COST = 128` and the original admitted decoded Subject
+payload; artwork adds no Subject, history, citation or related-object reads and does not copy a candidate payload.
+For original decoded bytes D, rendering is O(D) and the retained current assertion identity is at most D. The
+artwork window is N = 1 (within `DOCUMENT_MEDIA_LIMIT = 32`), one metadata request per explicit selection or
+failed-section retry, one summary and one inspector. No lookup or retained index depends on unrelated subjects,
+media or obsolete statements. The native producer enumerates N exact `(route, media_id)` keys, at most 12N
+variant rows, and at most 2N derivative verifications, preserving its existing bounded parent/source/final anchors.
+The current producer returns one largest WebP, or AVIF fallback; the renderer uses only returned slots and the
+existing site `/media/<id>/<format>-<width>` transport.
+
+`ARTWORK_RESPONSE_BYTES` derives a 23,272-byte receiving ceiling from the closed `DocumentMediaPageSchema`:
+three 1024-character credit strings at six bytes per JSON-escaped code unit, an 80-character licence, four bounded
+obligations, twelve variant records, the nullable 44-character hash and a 2048-byte allowance for closed keys,
+identities, punctuation and numeric tokens. Oversized wire envelopes are rejected before JSON decoding; injected
+decoded envelopes are checked again without truncation. A supplied transport TimeoutError remains a timeout;
+missing requested metadata remains unavailable. At 64/512/4096 unrelated objects/history this composition still
+adds one request, at most that response ceiling, no citation bytes, and one retained image. Focused composition
+tests exercise the real client/reader boundary; they do not claim native SQL growth or mounted native seed success.
+
 ## Relations, characters and credits on pages
 
 Relations are shown from the reader's side of the fact: on a sequel the original appears under "Prequel", using the

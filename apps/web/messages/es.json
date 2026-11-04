@@ -8791,5 +8791,13 @@
   "producer_history_correction_retired": "Lectura de la corrección retirada",
   "producer_history_retired_explanation": "Esta corrección ya no tiene una lectura vigente. Una orden ya enviada puede haber surtido efecto; su resultado puede ser desconocido. No se reenviará nada desde esta corrección retirada.",
   "producer_history_slice_lost": "El segmento original ya no está disponible aquí. Vuelve a leer antes de iniciar deliberadamente otra corrección.",
-  "producer_history_retired_close": "Cerrar corrección retirada"
+  "producer_history_retired_close": "Cerrar corrección retirada",
+  "subject_artwork_view": "Ver imagen",
+  "subject_artwork_reveal": "Mostrar imagen",
+  "subject_artwork_hide": "Ocultar imagen",
+  "subject_artwork_withheld": "Elige Mostrar imagen para cargar y ver esta imagen.",
+  "subject_artwork_unsupported": "Este valor multimedia no tiene una presentación de imagen compatible.",
+  "subject_artwork_oversized": "La respuesta de la imagen es demasiado grande. Inténtalo de nuevo.",
+  "subject_artwork_timeout": "La solicitud de imagen agotó el tiempo de espera. Inténtalo de nuevo.",
+  "subject_artwork_alt": "{property} — {title}"
 }
