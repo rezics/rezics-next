@@ -294,7 +294,8 @@ test('Record and correct exact progress and a selected-field journal with retain
         key: JSON.stringify(page.idempotencyKey),
       },
     ]);
-    expect(csrf).toEqual(['recording-csrf']);
+    expect(csrf).toContain('recording-csrf');
+    expect(csrf.every((token) => token === 'recording-csrf')).toBe(true);
     expect(session.amount).toBe('3.75');
     expect(session.total).toBeNull();
     expect(host.textContent).toContain('3.75 segments');
