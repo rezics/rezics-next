@@ -2,11 +2,7 @@ import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { PageDocumentReference } from '@rezics/composition';
 import type { DocumentView } from '../../src/content/document-read.ts';
-import {
-  DOCUMENT_TEXT_COST,
-  projectDocumentText,
-  type DocumentTextSelection,
-} from '../../src/search/document-text.ts';
+import { DOCUMENT_TEXT_COST, projectDocumentText, type DocumentTextSelection } from '../../src/search/document-text.ts';
 import { createPublicDocumentTextSource } from '../../src/search/document-text-native.ts';
 
 const subject = '019a0000-0000-8000-8000-000000000001';
@@ -53,7 +49,10 @@ test('the native adapter forwards the pre-materialization byte cap and preserves
   const projected = await projectDocumentText(selection, source);
   expect(limits).toEqual([DOCUMENT_TEXT_COST.sourceBytesPerDocument]);
   expect(currentChecks).toBe(2);
-  expect(projected).toMatchObject({ coverage: 'complete', documents: [{ text: '静かな飛行士の物語', language: 'ja' }] });
+  expect(projected).toMatchObject({
+    coverage: 'complete',
+    documents: [{ text: '静かな飛行士の物語', language: 'ja' }],
+  });
 });
 
 test('a stale native selection discards every assembled document', async () => {
