@@ -56,11 +56,11 @@ Availability requires the versioned installation marker, installed all-time sour
 shelf maintenance and equality of initialized and retained session counters. An owner with no retained sessions is
 zero only with these installation premises. Otherwise the response contains no distribution values:
 
-| State/reason | Meaning |
-| --- | --- |
-| `unavailable/not_installed` | Missing schema, marker or installed source counter; coverage is unknown/null |
-| `unavailable/initializing` | Initialized and retained counters differ; their exact quantities are disclosed |
-| `unavailable/maintenance_unavailable` | Maintenance or source installation is not ready/open |
+| State/reason                          | Meaning                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `unavailable/not_installed`           | Missing schema, marker or installed source counter; coverage is unknown/null   |
+| `unavailable/initializing`            | Initialized and retained counters differ; their exact quantities are disclosed |
+| `unavailable/maintenance_unavailable` | Maintenance or source installation is not ready/open                           |
 
 An explicit finite funded retained-owner installation schedule has not yet been delivered. Operators may use the
 existing authorized `requestRebuild(...kind:'backfill'...)` port; a GET never schedules it or claims that it ran.
