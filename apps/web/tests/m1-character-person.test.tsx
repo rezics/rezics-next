@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createElement as h, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SubjectRead } from '@rezics/client';
 import { characterRelationshipsFixture } from '../src/kernel/fake/character-relationships';
@@ -49,7 +50,14 @@ test('Subject character facts lead to the production appearance reader, disclose
       person.statement('schema:height', { amount: '+170', unit: '1' }, 'quantity'),
     ];
     const client = new QueryClient();
-    const render = (node: ReactNode) => renderToStaticMarkup(h(QueryClientProvider, { client }, node));
+    const render = async (node: ReactNode) => {
+      const router = createRouter({
+        routeTree: createRootRoute({ component: () => node }),
+        history: createMemoryHistory({ initialEntries: ['/'] }),
+      });
+      await router.load();
+      return renderToStaticMarkup(h(QueryClientProvider, { client }, h(RouterProvider, { router })));
+    };
     const draw = (page: SubjectPageData, returnTo?: string) =>
       render(
         h(SubjectPage, {
@@ -60,7 +68,7 @@ test('Subject character facts lead to the production appearance reader, disclose
           ...(returnTo ? { returnTo } : {}),
         }),
       );
-    const html = draw(profile(fixture.character, fixture.release));
+    const html = await draw(profile(fixture.character, fixture.release));
     expect(html).toContain('data-slot="character-reader"');
     expect(html).toContain('旅の人');
     expect(html).toContain('170');
@@ -70,7 +78,7 @@ test('Subject character facts lead to the production appearance reader, disclose
     expect(html).not.toContain('schema:height');
     const initial = await fixture.read();
     if (!initial.ok) throw new Error('Expected supplied appearance page');
-    const appearances = render(
+    const appearances = await render(
       h(CharacterRelationshipsView, {
         id: fixture.id,
         locale,
@@ -91,7 +99,7 @@ test('Subject character facts lead to the production appearance reader, disclose
       Object.entries(work.reads).map(([key, value]) => [key.replaceAll(originalWork, appearance.id), value]),
     );
     const workRead = subjectBody(work)!;
-    const workHtml = draw(work);
+    const workHtml = await draw(work);
     expect(workHtml).toContain('Ada Player');
     expect(workHtml).toContain('A. Player');
     expect(workHtml).toContain('Voice');
@@ -107,7 +115,7 @@ test('Subject character facts lead to the production appearance reader, disclose
     const documents = structuredClone(person.documents);
     for (const record of Object.values(documents))
       if (record && typeof record === 'object') Reflect.set(record, 'subjectId', personId);
-    const personHtml = draw(profile(personRead, person.release, documents), back);
+    const personHtml = await draw(profile(personRead, person.release, documents), back);
     expect(personHtml).toContain('data-slot="person-reader"');
     expect(personHtml).not.toContain('data-slot="character-reader"');
     expect(personHtml).toContain('Mira directs independent films.');
