@@ -129,7 +129,12 @@ test('a failed Board readback retries the exact target and reader without repeat
   await click(m.editorial_retry());
   expect(writes).toHaveLength(1);
   expect(reads[1]!.data).toEqual(writes[0]!.data);
-  await settle(reads[1]!, { ok: true, counts: { like: 4 }, value: 'like', reactionsAsOf: { epoch: 2, position: '13' } });
+  await settle(reads[1]!, {
+    ok: true,
+    counts: { like: 4 },
+    value: 'like',
+    reactionsAsOf: { epoch: 2, position: '13' },
+  });
 });
 
 for (const clear of [false, true])

@@ -34,11 +34,7 @@ import {
 } from './board-feed-data';
 import { captureBoardReadingReturn, disclosedBoardAuthorIds } from './board-reading';
 import type { PageAuthors } from '../identity/read';
-import {
-  boardOpeningReaction,
-  type BoardOpeningReactionOrigin,
-  type ReceivedBoardOpeningPage,
-} from './board-opening';
+import { boardOpeningReaction, type BoardOpeningReactionOrigin, type ReceivedBoardOpeningPage } from './board-opening';
 import { NativeDocumentImage } from './document-media-image';
 
 const consumedContinuationStates = new WeakSet<object>();
@@ -353,8 +349,7 @@ function BoardFeedVisit({
   const origin: BoardOpeningReactionOrigin = {
     key: `${pinVisitKey}:${reactionOrigin?.key ?? 'unbound'}`,
     reader: reactionOrigin?.reader ?? null,
-    isCurrent: () =>
-      visit.observation.snapshot() === visit.revision && (reactionOrigin?.isCurrent() ?? true),
+    isCurrent: () => visit.observation.snapshot() === visit.revision && (reactionOrigin?.isCurrent() ?? true),
   };
   const signedIn = !!pins.sender;
   const returnAddress = captureBoardReadingReturn({

@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { boardOpeningCard, boardOpeningExample, boardOpeningNow } from '../src/threads/board-opening-fixtures';
-import { boardOpeningReaction, receiveBoardOpeningPage, type BoardOpeningReactionOrigin } from '../src/threads/board-opening';
+import {
+  boardOpeningReaction,
+  receiveBoardOpeningPage,
+  type BoardOpeningReactionOrigin,
+} from '../src/threads/board-opening';
 
 function admittedCard() {
   const card = boardOpeningCard(1);
@@ -39,12 +43,20 @@ test('Board reactions need native advice, a current viewer slot and the current 
   current = false;
   expect(boardOpeningReaction(card, true, origin).personalReady).toBe(false);
   expect(boardOpeningReaction(card, true, { ...origin, reader: null }).personalReady).toBe(false);
-  expect(boardOpeningReaction({ ...card, interaction: { ...card.interaction, viewer: { state: 'not-applicable' } } }, true, origin).personalReady).toBe(false);
+  expect(
+    boardOpeningReaction(
+      { ...card, interaction: { ...card.interaction, viewer: { state: 'not-applicable' } } },
+      true,
+      origin,
+    ).personalReady,
+  ).toBe(false);
 
   current = true;
   const signedOut = admittedCard();
   signedOut.actions.react = 'sign-in';
-  expect(boardOpeningReaction(signedOut, false, { key: 'anonymous', reader: null, isCurrent: () => true })).toMatchObject({
+  expect(
+    boardOpeningReaction(signedOut, false, { key: 'anonymous', reader: null, isCurrent: () => true }),
+  ).toMatchObject({
     personalReady: false,
     signInAllowed: true,
     settleWithRead: false,
@@ -83,7 +95,9 @@ test('the initial pin wins overlap and each replacement keeps its selected count
   expect(selected.actions.react).toBe('allowed');
   expect(selected.comments).toEqual(pin.comments);
   expect(selected.interaction.counts).toEqual(pin.interaction.counts);
-  expect(boardOpeningReaction(selected, true, { key: 'page', reader: 'reader-one', isCurrent: () => true }).personalReady).toBe(true);
+  expect(
+    boardOpeningReaction(selected, true, { key: 'page', reader: 'reader-one', isCurrent: () => true }).personalReady,
+  ).toBe(true);
 
   if (pin.interaction.counts.state !== 'as-of' || pin.comments.state !== 'current')
     throw new Error('Expected selected count and activity witnesses');
@@ -95,11 +109,20 @@ test('the initial pin wins overlap and each replacement keeps its selected count
   pin.actions.react = 'denied';
 
   const replacement = receiveBoardOpeningPage(response);
-  expect(first.openingCards[threadId]!.interaction.counts).toMatchObject({ values: { upvote: 0 }, source: { position: '12' } });
+  expect(first.openingCards[threadId]!.interaction.counts).toMatchObject({
+    values: { upvote: 0 },
+    source: { position: '12' },
+  });
   expect(first.openingCards[threadId]!.comments).toMatchObject({ count: { value: 0 }, source: { position: '10' } });
   expect(first.openingCards[threadId]!.actions.react).toBe('allowed');
-  expect(replacement.openingCards[threadId]!.interaction.counts).toMatchObject({ values: { upvote: 5 }, source: { position: '13' } });
-  expect(replacement.openingCards[threadId]!.comments).toMatchObject({ count: { value: 7 }, source: { position: '14' } });
+  expect(replacement.openingCards[threadId]!.interaction.counts).toMatchObject({
+    values: { upvote: 5 },
+    source: { position: '13' },
+  });
+  expect(replacement.openingCards[threadId]!.comments).toMatchObject({
+    count: { value: 7 },
+    source: { position: '14' },
+  });
   expect(replacement.openingCards[threadId]!.actions.react).toBe('denied');
   expect(replacement).not.toBe(first);
 });

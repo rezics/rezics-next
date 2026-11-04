@@ -64,11 +64,7 @@ export function receiveBoardOpeningPage(response: BoardPageResponse, now = new D
 export type ReceivedBoardOpeningPage = ReturnType<typeof receiveBoardOpeningPage>;
 
 /** Advice never opens a signed-in mutation slot without the reaction owner's reconciliation contract. */
-export function boardOpeningReaction(
-  card: BoardOpeningCard,
-  signedIn: boolean,
-  origin: BoardOpeningReactionOrigin,
-) {
+export function boardOpeningReaction(card: BoardOpeningCard, signedIn: boolean, origin: BoardOpeningReactionOrigin) {
   const counts = card.interaction.counts;
   const admitted =
     signedIn &&
