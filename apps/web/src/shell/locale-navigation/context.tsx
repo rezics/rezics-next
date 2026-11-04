@@ -47,7 +47,7 @@ function routeLocation(state: RouterSnapshot): LocaleNavigationLocation {
   return {
     pathname: state.location.pathname,
     searchStr: state.location.searchStr,
-    hash: state.location.hash,
+    hash: state.location.hash && !state.location.hash.startsWith('#') ? `#${state.location.hash}` : state.location.hash,
     locale: readLocale(),
     visitKey: typeof key === 'string' ? key : state.location.href,
     supported: recognized && !notFound,

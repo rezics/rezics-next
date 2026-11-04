@@ -40,7 +40,7 @@ function visit(location: {
   return {
     pathname: location.pathname,
     searchStr: location.searchStr,
-    hash: location.hash,
+    hash: location.hash && !location.hash.startsWith('#') ? `#${location.hash}` : location.hash,
     locale: localeAt(location.pathname),
     visitKey: typeof key === 'string' ? key : location.href,
     supported,

@@ -19,7 +19,7 @@ function visit(
   return {
     pathname: location.pathname,
     searchStr: location.searchStr,
-    hash: location.hash,
+    hash: location.hash && !location.hash.startsWith('#') ? `#${location.hash}` : location.hash,
     locale: (locale ?? 'en') as Locale,
     visitKey: typeof key === 'string' ? key : location.href,
     supported,
@@ -198,7 +198,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     await router.load();
     expect(router.state.location.pathname).toBe('/en/subjects/reader-01');
     expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
-    expect(router.state.location.hash).toBe('#chapter-4');
+    expect(router.state.location.hash).toBe('chapter-4');
     expect(router.state.matches.length).toBeGreaterThan(1);
     expect(deriveLocaleDestinations(visit(router.state.location, true), true).find(({ locale }) => locale === 'ja')).toMatchObject({
       href: '/ja/subjects/reader-01?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88#chapter-4',
