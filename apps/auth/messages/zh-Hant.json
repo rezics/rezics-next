@@ -756,5 +756,8 @@
   "auth_login_return_dismiss": "關閉先前登入通知",
   "auth_login_return_dismiss_help": "關閉只會隱藏此通知，不會確定先前驗證的結果，也不會取消驗證。",
   "auth_login_autofill": "瀏覽器通行密鑰自動填入",
-  "auth_login_prompt_cancelled": "通行密鑰提示已在傳送驗證前取消。準備好後請選擇密碼或按下通行密鑰按鈕。"
+  "auth_login_prompt_cancelled": "通行密鑰提示已在傳送驗證前取消。準備好後請選擇密碼或按下通行密鑰按鈕。",
+  "auth_security_passkey_history_acknowledged": "Auth 之前已確認此通行密鑰註冊。此確認不表示該通行密鑰目前仍處於啟用狀態。",
+  "auth_security_passkey_history_unknown": "Auth 可能已收到此通行密鑰註冊，但結果未知。繼續前請檢查目前的通行密鑰。",
+  "auth_security_passkey_dismiss_history": "關閉通行密鑰狀態提示"
 }

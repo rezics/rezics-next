@@ -15,8 +15,9 @@ export type PasskeyEnrollmentPhase =
   | 'unknown'
   | 'reviewing'
   | 'reviewed'
-  | 'changed-account'
-  | 'authority-unavailable';
+  | 'changed-account';
+
+export type PasskeyEnrollmentHistory = 'acknowledged' | 'unknown';
 
 export type PasskeyEnrollmentSnapshot = {
   attemptId: number | null;
@@ -32,6 +33,19 @@ type CurrentAttempt = PasskeyEnrollmentSnapshot & { callbacksLive: boolean };
 export class PasskeyEnrollmentController {
   private nextAttemptId = 0;
   private current: CurrentAttempt | null = null;
+  private history: PasskeyEnrollmentHistory | null = null;
+
+  historySnapshot(): PasskeyEnrollmentHistory | null {
+    return this.history;
+  }
+
+  dismissHistory(): void {
+    this.history = null;
+  }
+
+  private recordHistory(outcome: PasskeyEnrollmentHistory): void {
+    if (outcome === 'unknown' || this.history !== 'unknown') this.history = outcome;
+  }
 
   snapshot(): PasskeyEnrollmentSnapshot | null {
     if (!this.current) return null;
@@ -72,11 +86,13 @@ export class PasskeyEnrollmentController {
     } else if (observation === 'confirmed') {
       current.phase = 'confirmed';
       current.callbacksLive = false;
+      this.recordHistory('acknowledged');
     } else if (observation === 'unknown') {
       current.phase = 'unknown';
       current.possibleEffect = true;
       current.reviewRequired = true;
       current.callbacksLive = false;
+      this.recordHistory('unknown');
     } else {
       this.current = null;
     }
@@ -92,15 +108,18 @@ export class PasskeyEnrollmentController {
       this.current = null;
       return;
     }
-    if (current.phase !== 'confirmed') current.phase = 'unknown';
+    if (current.phase !== 'confirmed') {
+      current.phase = 'unknown';
+      this.recordHistory('unknown');
+    } else this.recordHistory('acknowledged');
     current.reviewRequired = current.phase !== 'confirmed';
   }
 
   restoreFor(accountId: string): PasskeyEnrollmentSnapshot | null {
     const current = this.current;
     if (!current) return null;
-    if (current.phase === 'authority-unavailable') return this.snapshot();
     if (!current.accountId || current.accountId !== accountId) {
+      if (current.possibleEffect && current.phase !== 'confirmed') this.recordHistory('unknown');
       current.accountId = null;
       current.phase = 'changed-account';
       current.reviewRequired = false;
@@ -146,14 +165,10 @@ export class PasskeyEnrollmentController {
   }
 
   retireAuthority(): void {
-    if (!this.current?.possibleEffect) {
-      this.current = null;
-      return;
-    }
-    this.current.accountId = null;
-    this.current.phase = 'authority-unavailable';
-    this.current.reviewRequired = false;
-    this.current.callbacksLive = false;
+    const current = this.current;
+    if (current?.possibleEffect)
+      this.recordHistory(current.phase === 'confirmed' ? 'acknowledged' : 'unknown');
+    this.current = null;
   }
 
   clearConfirmed(attemptId: number): boolean {

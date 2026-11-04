@@ -38,8 +38,12 @@ import {
   type TargetRecoveryPhase,
 } from '../security-target-review';
 import { addPasskey, passkeysSupported } from '../passkeys';
-import { PasskeyEnrollmentController, type PasskeyEnrollmentSnapshot } from '../passkey-enrollment';
-import { PasskeyEnrollmentView } from '../passkey-enrollment-view';
+import {
+  PasskeyEnrollmentController,
+  type PasskeyEnrollmentHistory,
+  type PasskeyEnrollmentSnapshot,
+} from '../passkey-enrollment';
+import { PasskeyEnrollmentHistoryView, PasskeyEnrollmentView } from '../passkey-enrollment-view';
 import {
   readSecurityTarget,
   performSecurityAction,
@@ -192,6 +196,21 @@ function SecurityPageView({
   const [passkeyError, setPasskeyError] = useState('');
   const [enrollment, setEnrollment] = useState<PasskeyEnrollmentSnapshot | null>(null);
   const enrollmentController = useRef(new PasskeyEnrollmentController());
+  const [enrollmentHistory, setEnrollmentHistory] = useState<PasskeyEnrollmentHistory | null>(
+    enrollmentController.current.historySnapshot(),
+  );
+  const enrollmentHistoryValue = useRef(enrollmentHistory);
+  const enrollmentHistoryStatus = useRef<HTMLDivElement>(null);
+  const focusEnrollmentHistory = useRef(false);
+  function syncEnrollment(forceFocus = false) {
+    const snapshot = enrollmentController.current.snapshot();
+    const history = enrollmentController.current.historySnapshot();
+    if (history && (forceFocus || history !== enrollmentHistoryValue.current))
+      focusEnrollmentHistory.current = true;
+    enrollmentHistoryValue.current = history;
+    setEnrollment(snapshot);
+    setEnrollmentHistory(history);
+  }
   const [operation, setOperation] = useState<SecurityOperation | null>(null);
   // The ref closes the boundary synchronously, including two submissions before React renders.
   const activeOperation = useRef<SecurityOperation | null>(null);
@@ -244,7 +263,7 @@ function SecurityPageView({
     authorityGeneration.current,
     (kind) => {
       enrollmentController.current.retireAuthority();
-      setEnrollment(enrollmentController.current.snapshot());
+      syncEnrollment();
       clearPrivateData(kind === 'signed-out' ? 'signed-out' : 'failure');
     },
     identitySource,
@@ -255,6 +274,13 @@ function SecurityPageView({
     focusConsentHistory.current = false;
     consentHistoryRef.current?.focus();
   }, [consentHistory, loadState]);
+
+  useLayoutEffect(() => {
+    if (!focusEnrollmentHistory.current) return;
+    focusEnrollmentHistory.current = false;
+    if (enrollmentHistory) enrollmentHistoryStatus.current?.focus();
+    else document.querySelector<HTMLElement>('#security-passkeys-heading, [role="status"], h1')?.focus();
+  }, [enrollmentHistory, enrollment, loadState]);
 
   useLayoutEffect(() => {
     const held = activeOperation.current;
@@ -314,7 +340,7 @@ function SecurityPageView({
         if (result.passkeys.kind === 'ready') setPasskeys(result.passkeys.passkeys);
         setPasswordLimits(limits);
         const restoredEnrollment = enrollmentController.current.restoreFor(result.accountId);
-        setEnrollment(restoredEnrollment);
+        syncEnrollment();
         if (unresolved?.target.accountId === result.accountId) {
           updateOperation({
             kind: 'recovery',
@@ -337,21 +363,20 @@ function SecurityPageView({
             truncated: false,
           });
         } else if (restoredEnrollment?.phase === 'confirmed' && restoredEnrollment.accountId === result.accountId) {
-          setPasskeyNotice(m.auth_security_passkey_added());
           if (restoredEnrollment.attemptId !== null)
             enrollmentController.current.clearConfirmed(restoredEnrollment.attemptId);
-          setEnrollment(null);
+          syncEnrollment();
         }
         unresolved = null;
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
         unresolved = null;
         enrollmentController.current.retireAuthority();
-        setEnrollment(enrollmentController.current.snapshot());
+        syncEnrollment();
         setLoadState('signed-out');
       } else {
         setLoadMessage(result.message);
-        setEnrollment(enrollmentController.current.snapshot());
+        syncEnrollment();
         setLoadState('failure');
       }
     }
@@ -369,7 +394,7 @@ function SecurityPageView({
       enrollmentController.current.pagehide();
       // Commit the cleared DOM before the browser freezes this document.
       flushSync(() => {
-        setEnrollment(enrollmentController.current.snapshot());
+        syncEnrollment();
         clearPrivateData('loading');
       });
     }
@@ -475,6 +500,12 @@ function SecurityPageView({
     setTargetReturn(null);
   }
 
+  function dismissEnrollmentHistory() {
+    enrollmentController.current.dismissHistory();
+    focusEnrollmentHistory.current = true;
+    syncEnrollment();
+  }
+
   function captureRetiredPasswordOperation() {
     const held = activeOperation.current;
     if (held?.kind === 'password' && passwordReturnController.current.capture(held)) {
@@ -564,7 +595,7 @@ function SecurityPageView({
     departure.current.protected = false;
     departure.current.allow = true;
     enrollmentController.current.pagehide();
-    setEnrollment(enrollmentController.current.snapshot());
+    syncEnrollment();
     clearPrivateData('loading');
     blocker.proceed();
   }
@@ -886,14 +917,14 @@ function SecurityPageView({
     const owner = activeAccount.current;
     const attemptId = enrollmentController.current.begin(owner);
     if (attemptId === null) return;
-    setEnrollment(enrollmentController.current.snapshot());
+    syncEnrollment();
     updateOperation({ kind: 'passkey-add', attemptId });
     setPasskeyNotice('');
     setPasskeyError('');
     const generation = authorityGeneration.current;
     const result = await addPasskey(passkeyName, lifetime.current.signal, (phase) => {
       if (enrollmentController.current.observe(attemptId, phase))
-        setEnrollment(enrollmentController.current.snapshot());
+        syncEnrollment();
     });
     if (authorityGeneration.current !== generation) return;
     if (activeAccount.current !== owner) return;
@@ -905,16 +936,15 @@ function SecurityPageView({
       setPage(null);
       void refreshRegistrationInventory(owner, generation, attemptId);
       setPasskeyName('');
-      setPasskeyNotice(m.auth_security_passkey_added());
     } else if (result.reason === 'step-up') {
       updateOperation(null);
       enrollmentController.current.clearConfirmed(attemptId);
-      setEnrollment(enrollmentController.current.snapshot());
+      syncEnrollment();
       clearPrivateData('signed-out');
       window.location.assign(STEP_UP_URL);
     } else if (result.reason === 'failure') {
       updateOperation(null);
-      setEnrollment(enrollmentController.current.snapshot());
+      syncEnrollment();
       setPasskeyError(result.message);
     } else if (result.reason === 'unknown') {
       setPage(null);
@@ -930,7 +960,7 @@ function SecurityPageView({
       });
     } else {
       updateOperation(null);
-      setEnrollment(enrollmentController.current.snapshot());
+      syncEnrollment();
       setPasskeyNotice(m.auth_security_passkey_registration_cancelled());
     }
   }
@@ -950,7 +980,7 @@ function SecurityPageView({
     if (result.kind === 'signed-out' || (result.kind === 'ready' && result.accountId !== owner)) {
       if (result.kind === 'signed-out') enrollmentController.current.retireAuthority();
       else enrollmentController.current.restoreFor(result.accountId);
-      setEnrollment(enrollmentController.current.snapshot());
+      syncEnrollment();
       clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure');
       return;
     }
@@ -961,12 +991,16 @@ function SecurityPageView({
       setPasskeys(result.passkeys.kind === 'ready' ? result.passkeys.passkeys : []);
       if (attemptId !== undefined) {
         enrollmentController.current.clearConfirmed(attemptId);
-        setEnrollment(enrollmentController.current.snapshot());
+        syncEnrollment();
       }
     } else {
       setSessions([]);
       setPasskeys([]);
       setPasskeysLoad({ kind: 'failure', message: m.auth_security_passkeys_failed() });
+      if (attemptId !== undefined) {
+        enrollmentController.current.clearConfirmed(attemptId);
+        syncEnrollment();
+      }
     }
   }
 
@@ -974,7 +1008,7 @@ function SecurityPageView({
     const held = activeOperation.current;
     if (held?.kind !== 'registration-review' || held.reading) return;
     if (!enrollmentController.current.beginReview(held.attemptId)) return;
-    setEnrollment(enrollmentController.current.snapshot());
+    syncEnrollment();
     const pending: SecurityOperation = { ...held, phase: 'unknown', reading: true, truncated: false };
     updateOperation(pending);
     setPasskeys([]);
@@ -994,13 +1028,13 @@ function SecurityPageView({
       return;
     if (result.kind === 'signed-out' || result.kind === 'denied') {
       enrollmentController.current.retireAuthority();
-      setEnrollment(enrollmentController.current.snapshot());
+      syncEnrollment();
       clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure', m.auth_security_action_unverified());
       return;
     }
     if (result.kind === 'unavailable') {
       enrollmentController.current.reviewUnavailable(held.attemptId);
-      setEnrollment(enrollmentController.current.snapshot());
+      syncEnrollment();
       updateOperation({ ...held, phase: 'unknown', reading: false, truncated: false });
       setPasskeyError(m.auth_security_readback_unavailable());
       return;
@@ -1011,7 +1045,7 @@ function SecurityPageView({
     setPasskeyError('');
     // Native row IDs are authoritative. Neither a name nor a WebAuthn credential ID identifies a saved row.
     enrollmentController.current.reviewReady(held.attemptId);
-    setEnrollment(enrollmentController.current.snapshot());
+    syncEnrollment();
     updateOperation({ ...held, phase: 'reviewed', reading: false, truncated: result.truncated });
   }
 
@@ -1019,7 +1053,7 @@ function SecurityPageView({
     const held = activeOperation.current;
     if (held?.kind !== 'registration-review' || held.reading || held.phase !== 'reviewed') return;
     if (!enrollmentController.current.finishReview(held.attemptId)) return;
-    setEnrollment(enrollmentController.current.snapshot());
+    syncEnrollment();
     setPasskeyName('');
     setPasskeyNotice(m.auth_security_passkey_registration_review_finished());
     void refreshRegistrationInventory(held.accountId, authorityGeneration.current);
@@ -1084,6 +1118,11 @@ function SecurityPageView({
     return (
       <AuthPage heading={m.auth_security_heading()}>
         <div className="auth-login-form">
+          <PasskeyEnrollmentHistoryView
+            history={enrollmentHistory}
+            statusRef={enrollmentHistoryStatus}
+            dismiss={dismissEnrollmentHistory}
+          />
           {targetReturn ? (
             <SecurityTargetReturnView
               outcome={targetReturn}
@@ -1117,6 +1156,11 @@ function SecurityPageView({
     return (
       <AuthPage heading={m.auth_security_heading()}>
         <div className="auth-login-form">
+          <PasskeyEnrollmentHistoryView
+            history={enrollmentHistory}
+            statusRef={enrollmentHistoryStatus}
+            dismiss={dismissEnrollmentHistory}
+          />
           {targetReturn ? (
             <SecurityTargetReturnView
               outcome={targetReturn}
@@ -1165,6 +1209,11 @@ function SecurityPageView({
           />
         }
       >
+        <PasskeyEnrollmentHistoryView
+          history={enrollmentHistory}
+          statusRef={enrollmentHistoryStatus}
+          dismiss={dismissEnrollmentHistory}
+        />
         {targetReturn ? (
           <SecurityTargetReturnView
             outcome={targetReturn}

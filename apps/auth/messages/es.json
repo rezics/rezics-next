@@ -756,5 +756,8 @@
   "auth_login_return_dismiss": "Ocultar aviso del inicio de sesión anterior",
   "auth_login_return_dismiss_help": "Solo se oculta este aviso. La autenticación anterior no se resuelve ni se cancela.",
   "auth_login_autofill": "Autocompletado de claves de acceso del navegador",
-  "auth_login_prompt_cancelled": "La solicitud de clave de acceso se canceló antes de enviar la autenticación. Elija una contraseña o pulse el botón de clave de acceso."
+  "auth_login_prompt_cancelled": "La solicitud de clave de acceso se canceló antes de enviar la autenticación. Elija una contraseña o pulse el botón de clave de acceso.",
+  "auth_security_passkey_history_acknowledged": "Auth confirmó antes este registro de llave de acceso. Esta confirmación no indica si la llave está activa ahora.",
+  "auth_security_passkey_history_unknown": "Es posible que Auth recibiera este registro de llave de acceso, pero el resultado es desconocido. Comprueba las llaves actuales antes de continuar.",
+  "auth_security_passkey_dismiss_history": "Descartar el estado de la llave de acceso"
 }

@@ -355,6 +355,21 @@ credential, so nothing changed and a localized message says so. Registration and
 
 Decision: registration uses the existing five-second issuer deadline through response-body completion; an uncertain acknowledgement holds the page operation boundary until an account-bound native passkey refresh and explicit review, never infers success from names or WebAuthn IDs, and never replays the ceremony or registration POST.
 
+A separate mounted notice retains only a generic Auth acknowledgement or unknown result. It survives cached return,
+read failure, signout and account replacement; acknowledgement describes the earlier native response and says nothing
+about whether a passkey is active now. Unknown stays unknown across later attempts and inventory reads until dismissed.
+Dismissal changes only the notice. Check current and Finish review remain separate actions, and neither resolves the
+earlier result. Current rows and actions still require current native advice and its bounded inventory. A direct list
+without an explicit completeness flag is potentially truncated at 32 rows; names and WebAuthn credential IDs never
+identify native rows.
+
+Security entry, cached return and page Retry each make one existing bounded native Security read (64 sessions and 32
+passkeys). Deliberate registration uses the admitted advice, one bounded options call, one browser ceremony, one
+bounded register command and, after acknowledgement, one bounded native Security readback before actions return.
+Check current makes one bounded registration review read; Finish review makes one bounded Security read. These paths
+keep the existing native preflight, issuer deadline and readback. Dismissal, Finish review itself, focus, locale changes
+and cached return history make no command; there is no inventory scan, polling, per-row authority loop or replay.
+
 A lost or 503 mutation response retains only the account, operation kind and exact target id in page memory and
 shows an unknown result. It never sends an automatic duplicate. An explicit check reads current native authority
 and the own session/passkey inventory with no-store, using the fixed request cookie, then rechecks authority.

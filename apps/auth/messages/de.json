@@ -756,5 +756,8 @@
   "auth_login_return_dismiss": "Hinweis zur früheren Anmeldung ausblenden",
   "auth_login_return_dismiss_help": "Dies blendet nur den Hinweis aus. Die frühere Authentifizierung wird dadurch weder geklärt noch abgebrochen.",
   "auth_login_autofill": "Passkey-Autovervollständigung im Browser",
-  "auth_login_prompt_cancelled": "Die Passkey-Abfrage wurde vor dem Senden abgebrochen. Wählen Sie ein Passwort oder drücken Sie erneut die Passkey-Schaltfläche."
+  "auth_login_prompt_cancelled": "Die Passkey-Abfrage wurde vor dem Senden abgebrochen. Wählen Sie ein Passwort oder drücken Sie erneut die Passkey-Schaltfläche.",
+  "auth_security_passkey_history_acknowledged": "Auth hat diese Passkey-Registrierung zuvor bestätigt. Diese Bestätigung zeigt nicht, ob der Passkey jetzt aktiv ist.",
+  "auth_security_passkey_history_unknown": "Auth hat diese Passkey-Registrierung möglicherweise erhalten, aber das Ergebnis ist unbekannt. Prüfe die aktuellen Passkeys, bevor du fortfährst.",
+  "auth_security_passkey_dismiss_history": "Passkey-Status ausblenden"
 }

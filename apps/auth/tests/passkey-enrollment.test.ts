@@ -106,3 +106,24 @@ test('pagehide clears a pre-dispatch attempt and retains only dispatched uncerta
   expect(controller.restoreFor('account-two')).toMatchObject({ phase: 'changed-account', accountId: null });
   expect(controller.begin('account-two')).not.toBeNull();
 });
+
+test('generic history survives retirement and later acknowledgements cannot settle unknown', () => {
+  const controller = new PasskeyEnrollmentController();
+  const confirmed = controller.begin('account-one')!;
+  controller.observe(confirmed, 'registration-dispatched');
+  controller.observe(confirmed, 'confirmed');
+  controller.pagehide();
+  controller.retireAuthority();
+  expect(controller.historySnapshot()).toBe('acknowledged');
+
+  const unknown = controller.begin('account-one')!;
+  controller.observe(unknown, 'registration-dispatched');
+  controller.pagehide();
+  controller.retireAuthority();
+  const later = controller.begin('account-two')!;
+  controller.observe(later, 'confirmed');
+  expect(controller.historySnapshot()).toBe('unknown');
+  controller.dismissHistory();
+  expect(controller.historySnapshot()).toBeNull();
+  expect(controller.snapshot()).toMatchObject({ attemptId: later, phase: 'confirmed' });
+});

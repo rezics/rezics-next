@@ -55,6 +55,8 @@ Use [verification](../development/verification.md) for root typecheck, growth an
 
 Decision: A mounted Security target outcome that is unknown stays unknown through later attempts until dismissed; a later acknowledgement or refusal cannot settle the earlier send.
 
+Decision: mounted passkey history keeps one generic acknowledged or unknown outcome separate from current registration review; unresolved unknown takes precedence until locally dismissed, and inventory reads settle neither outcome.
+
 ## External conditions
 
 Production identity, mail and abuse-prevention integrations must be configured through supported interfaces.

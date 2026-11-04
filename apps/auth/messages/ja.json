@@ -756,5 +756,8 @@
   "auth_login_return_dismiss": "以前のログイン通知を閉じる",
   "auth_login_return_dismiss_help": "通知を非表示にするだけです。以前の認証の結果を確定したり、取り消したりすることはできません。",
   "auth_login_autofill": "ブラウザーのパスキー自動入力",
-  "auth_login_prompt_cancelled": "認証の送信前にパスキーの要求がキャンセルされました。パスワードを選ぶか、パスキーボタンを押してください。"
+  "auth_login_prompt_cancelled": "認証の送信前にパスキーの要求がキャンセルされました。パスワードを選ぶか、パスキーボタンを押してください。",
+  "auth_security_passkey_history_acknowledged": "Auth は以前、このパスキー登録を確認しました。この確認は、現在もパスキーが有効であることを示すものではありません。",
+  "auth_security_passkey_history_unknown": "Auth がこのパスキー登録を受け取った可能性がありますが、結果は不明です。続行する前に現在のパスキーを確認してください。",
+  "auth_security_passkey_dismiss_history": "パスキーの状態を閉じる"
 }

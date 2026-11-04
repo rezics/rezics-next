@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from './paraglide/messages.js';
-import type { PasskeyEnrollmentSnapshot } from './passkey-enrollment';
+import type { PasskeyEnrollmentHistory, PasskeyEnrollmentSnapshot } from './passkey-enrollment';
 
 export function PasskeyEnrollmentView({
   state,
@@ -36,9 +36,7 @@ export function PasskeyEnrollmentView({
                 ? m.auth_security_passkey_registration_reviewed()
                 : state.phase === 'changed-account'
                   ? m.auth_security_passkey_account_changed()
-                  : state.phase === 'authority-unavailable'
-                    ? m.auth_security_passkey_authority_retired()
-                    : m.auth_security_passkey_registration_unknown();
+                  : m.auth_security_passkey_registration_unknown();
 
   return (
     <div className="auth-login-form" aria-busy={reading || state.phase === 'saving' || state.phase === 'reviewing'}>
@@ -58,6 +56,30 @@ export function PasskeyEnrollmentView({
           ) : null}
         </>
       ) : null}
+    </div>
+  );
+}
+
+export function PasskeyEnrollmentHistoryView({
+  history,
+  statusRef,
+  dismiss,
+}: {
+  history: PasskeyEnrollmentHistory | null;
+  statusRef: RefObject<HTMLDivElement | null>;
+  dismiss: () => void;
+}) {
+  if (!history) return null;
+  return (
+    <div className="auth-login-form" data-passkey-enrollment-history>
+      <div ref={statusRef} tabIndex={-1} role="status">
+        {history === 'acknowledged'
+          ? m.auth_security_passkey_history_acknowledged()
+          : m.auth_security_passkey_history_unknown()}
+      </div>
+      <Button type="button" variant="outline" onClick={dismiss}>
+        {m.auth_security_passkey_dismiss_history()}
+      </Button>
     </div>
   );
 }

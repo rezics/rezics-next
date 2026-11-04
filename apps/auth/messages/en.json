@@ -756,5 +756,8 @@
   "auth_login_return_dismiss": "Dismiss earlier sign-in notice",
   "auth_login_return_dismiss_help": "Dismissal only hides this notice. It does not resolve or cancel the earlier authentication.",
   "auth_login_autofill": "Browser passkey autofill",
-  "auth_login_prompt_cancelled": "The passkey prompt was cancelled before authentication was sent. Choose password or press the passkey button when ready."
+  "auth_login_prompt_cancelled": "The passkey prompt was cancelled before authentication was sent. Choose password or press the passkey button when ready.",
+  "auth_security_passkey_history_acknowledged": "Auth confirmed this passkey registration earlier. This acknowledgement does not show whether the passkey is active now.",
+  "auth_security_passkey_history_unknown": "Auth may have received this passkey registration, but the result is unknown. Check current passkeys before continuing.",
+  "auth_security_passkey_dismiss_history": "Dismiss passkey status"
 }

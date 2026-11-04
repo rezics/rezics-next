@@ -756,5 +756,8 @@
   "auth_login_return_dismiss": "Masquer l’avis de connexion précédente",
   "auth_login_return_dismiss_help": "Seul cet avis est masqué. Cela ne résout ni n’annule l’authentification précédente.",
   "auth_login_autofill": "Saisie automatique de clé d’accès du navigateur",
-  "auth_login_prompt_cancelled": "La demande de clé d’accès a été annulée avant l’envoi. Choisissez un mot de passe ou appuyez sur le bouton de clé d’accès."
+  "auth_login_prompt_cancelled": "La demande de clé d’accès a été annulée avant l’envoi. Choisissez un mot de passe ou appuyez sur le bouton de clé d’accès.",
+  "auth_security_passkey_history_acknowledged": "Auth a confirmé cet enregistrement de clé d’accès plus tôt. Cette confirmation ne permet pas de savoir si la clé est active maintenant.",
+  "auth_security_passkey_history_unknown": "Auth a peut-être reçu cet enregistrement de clé d’accès, mais le résultat est inconnu. Vérifiez les clés actuelles avant de continuer.",
+  "auth_security_passkey_dismiss_history": "Masquer l’état de la clé d’accès"
 }
