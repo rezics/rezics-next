@@ -73,6 +73,28 @@ function page(): DiscoveryPage {
       },
     },
   ];
+  const otherId = '01a1a000-0000-7000-8000-003000000016';
+  page.hits.push({
+    key: { owner: 'library', kind: 'collection', route: 48, id: otherId },
+    summary: {
+      kind: 'collection',
+      value: {
+        id: otherId,
+        title: 'Other shelf',
+        description: null,
+        card: {
+          ...card,
+          id: otherId,
+          destination: `/collections/${otherId}`,
+          title: 'Other shelf',
+          description: null,
+          memberCount: 0,
+          curator: { state: 'unavailable', reason: 'withheld' },
+          preview: { state: 'empty' },
+        },
+      },
+    },
+  });
   page.next = 'same-continuation';
   delete page.viewerFacts;
   return page;
@@ -230,12 +252,15 @@ test('mounted Search uses one aggregate read, native command results and termina
   try {
     await act(async () => render());
     expect(reads).toBe(1);
+    expect(host.querySelectorAll('[data-slot=collection-follow] button')).toHaveLength(2);
     expect(button().textContent).toContain('Follow');
     await act(async () => button().click());
     expect(button().disabled).toBe(true);
+    expect(host.querySelectorAll<HTMLButtonElement>('[data-slot=collection-follow] button')[1]!.disabled).toBe(false);
     expect(host.textContent).not.toContain('Following');
     await act(async () => write.resolve({ ok: true, following: true }));
     expect(button().textContent).toContain('Unfollow');
+    expect(host.querySelectorAll('[data-slot=collection-follow] button')[1]!.textContent).not.toContain('Unfollow');
     expect(commands).toMatchObject([
       { targetId: collection, following: true, expectedReader: reader, expectedCredential: 'credential' },
     ]);
