@@ -11,6 +11,7 @@ export function useCharacterPersonReader(locale: string, request: string) {
   const address = useReaderAddress(null, undefined, locale);
   const ready = snapshot.state === 'signed-in' || snapshot.state === 'signed-out';
   const identity = JSON.stringify([request, address.key, snapshot]);
+  const mounted = useRef(true);
   const previous = useRef<ReturnType<typeof addressLease> | undefined>(undefined);
   const lease = useMemo(
     () => addressLease(() => ready && observer.getSnapshot() === snapshot && address.isCurrent()),
@@ -18,6 +19,12 @@ export function useCharacterPersonReader(locale: string, request: string) {
   );
   if (previous.current !== lease) previous.current?.retire();
   previous.current = lease;
-  useEffect(() => () => lease.retire(), [lease]);
-  return { identity, current: lease.current, ready };
+  // A development effect replay is still this visit; actual unmounts close dispatch and child reads abort.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, [lease]);
+  return { identity, current: () => mounted.current && lease.current(), ready };
 }
