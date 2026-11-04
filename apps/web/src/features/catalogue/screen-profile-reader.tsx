@@ -105,7 +105,7 @@ export function ScreenProfileReader({
           locale={locale}
           {...(episodeRead ? { read: episodeRead } : {})}
           loading={episodeLoading}
-          retry={onEpisodeRetry}
+          {...(onEpisodeRetry ? { retry: onEpisodeRetry } : {})}
           origin={episodeOrigin ?? { pathname: '', searchStr: '' }}
           link={link}
         />
