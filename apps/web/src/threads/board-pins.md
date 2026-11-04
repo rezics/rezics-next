@@ -36,8 +36,9 @@ CSRF credential, key and operands. Conflict or refusal offers an explicit curren
 Viewer, session, target or reading replacement retires local recovery without claiming to cancel a request already
 sent. Private pin reads and commands are no-store and stay outside public metadata.
 
-A disappearing or concealed thread retires its row actions and returns keyboard focus to a surviving row or the
-feed heading. Board, sort, viewer or reading replacement retires the old cohort and frontier.
+A disappearing or concealed thread retires its row actions and moves keyboard focus to an announced regional recovery
+target without selecting another discussion. Board, sort, viewer or reading replacement retires the old cohort and
+frontier.
 
 Slow mode and watch keep their existing owners. Settings watch and Inbox stay Performance-owned.
 
@@ -54,3 +55,5 @@ management/growth. The publication owner continues the retained lineage through
 declaration-head claim.
 
 Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId`; pin actions stay unavailable until the Board page supplies its observed `pinRevision`.
+
+Decision: Pin/unpin confirmation is an expandable in-row group tied to its toggle; cancel restores toggle focus, while completion focuses the current status or the Board's announced recovery target.
