@@ -1,10 +1,10 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { createHash } from 'node:crypto';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Actor } from '../request/access.ts';
+import { accessCheck, type Actor, type AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
@@ -27,7 +27,7 @@ async function exact<T>(
   pool: Pool,
   id: string,
   deadline: number,
-  read: (client: PoolClient, time: AuthoritativeTime) => Promise<T>,
+  read: (client: AccessClient, time: AuthoritativeTime) => Promise<T>,
 ): Promise<Readonly<{ epoch: number; value: T }> | null> {
   const route = routeOf(id);
   if (route === null) return null;
