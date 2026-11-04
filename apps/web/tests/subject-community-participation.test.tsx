@@ -482,3 +482,50 @@ test('community visits retire on replacement and unmount without reviving a prev
   expect(current.isCurrent()).toBe(true);
   expect(unmounted.isCurrent()).toBe(false);
 });
+
+test('a failed or sparse region preserves its original frontier and expiry offers only deliberate restart', async () => {
+  const { composedCommunityRegion } = await import('../src/features/pages/subject-community');
+  const { communityRegionLinks } = await import('../src/features/pages/subject-community-navigation');
+  const { SubjectCommunityRegion } = await import('../src/features/pages/subject-community-view');
+  const { GLOBAL } = await import('../src/features/pages/subject-ratings');
+  const request = {
+    kind: 'subjectThreads' as const,
+    id: threadId,
+    place: GLOBAL,
+    threadKind: 'discussion' as const,
+    limit: 20,
+    cursor: 'original:/+?=&版%',
+  };
+  const failed = composedCommunityRegion({ status: 503, body: {} }, request);
+  const href = `/en/subjects/${threadId}/work/discussion?realm=exact-realm&returnTo=%2Fen%2Flibrary`;
+  const links = communityRegionLinks({ href, paged: true, node: 'exact region', region: failed });
+  const retry = new URL(links.retry, window.location.origin);
+  expect(retry.searchParams.get('cursor')).toBe(request.cursor);
+  expect(retry.searchParams.get('node')).toBe('exact region');
+  expect(retry.searchParams.get('realm')).toBe('exact-realm');
+  expect(retry.searchParams.get('returnTo')).toBe('/en/library');
+  const expired = composedCommunityRegion({ status: 409, body: { code: 'stale_cursor' } }, request);
+  expect(expired.state).toBe('expired');
+  await act(async () =>
+    root.render(
+      <SubjectCommunityRegion
+        id="recovery"
+        node="exact region"
+        kind="discussion"
+        region={expired}
+        authors={{}}
+        now="2026-11-02T00:00:00Z"
+        subject={{ id: threadId, label: 'Subject' }}
+        locale="en"
+        href={href}
+        paged
+      />,
+    ),
+  );
+  expect(host.querySelector('[data-slot="retry"]')).toBeNull();
+  const restart = new URL(host.querySelector<HTMLAnchorElement>('[data-slot="community-restart"]')!.href);
+  expect(restart.searchParams.has('cursor')).toBe(false);
+  expect(restart.searchParams.has('node')).toBe(false);
+  expect(restart.searchParams.get('realm')).toBe('exact-realm');
+  expect(restart.hash).toBe('#exact%20region');
+});

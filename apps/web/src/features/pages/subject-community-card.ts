@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import type { DocumentImagePresentation } from '../../threads/document-media';
+import type { NativeCommunityThread } from './subject-community';
 import { isRecord } from './shared';
 
 /** Consumer seam, not a claim that ordinary ThreadView or reviewContext supplies historical facts. */
@@ -222,4 +223,53 @@ export function projectCommunityCard(
       return;
   }
   return result;
+}
+
+const reviewTarget = v.variant('state', [
+  v.strictObject({ state: v.picklist(['absent', 'withheld']) }),
+  v.strictObject({
+    state: v.literal('available'),
+    subject: v.strictObject({
+      id,
+      kind: text,
+      label: v.nullable(v.strictObject({ value: text, language: v.pipe(v.string(), v.maxLength(64)) })),
+    }),
+  }),
+]) satisfies v.GenericSchema<NonNullable<NativeCommunityThread['reviewContext']>['target']>;
+
+/** Current target identity is independent of historical question metadata. */
+export function projectCommunityReviewTarget(
+  value: unknown,
+): NonNullable<NativeCommunityThread['reviewContext']>['target'] | undefined {
+  if (!isRecord(value) || !withinCommunityBytes(value.target, COMMUNITY_CARD_BYTES)) return;
+  const parsed = v.safeParse(reviewTarget, value.target);
+  return parsed.success ? parsed.output : undefined;
+}
+
+const parentContext = v.variant('kind', [
+  v.strictObject({ kind: v.literal('opening') }),
+  v.strictObject({
+    kind: v.literal('reply'),
+    parent: v.variant('state', [
+      v.strictObject({ state: v.literal('withheld') }),
+      v.strictObject({ state: v.literal('removed'), id }),
+      v.strictObject({
+        state: v.literal('available'),
+        id,
+        revisionId: id,
+        createdAt: date,
+        author: v.nullable(v.strictObject({ id, displayName: v.nullable(text), handle: v.nullable(text) })),
+        excerpt: v.nullable(text),
+        language: v.nullable(v.pipe(v.string(), v.maxLength(256))),
+        spoiler: v.boolean(),
+      }),
+    ]),
+  }),
+]) satisfies v.GenericSchema<NonNullable<NativeCommunityThread['card']['parentContext']>>;
+
+/** Keep only supplied immediate-parent context; never fetch a reply tree to reconstruct it. */
+export function projectCommunityParentContext(value: unknown): NativeCommunityThread['card']['parentContext'] {
+  if (!isRecord(value) || !withinCommunityBytes(value.parentContext, COMMUNITY_CARD_BYTES)) return;
+  const parsed = v.safeParse(parentContext, value.parentContext);
+  return parsed.success ? parsed.output : undefined;
 }

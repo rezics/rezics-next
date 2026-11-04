@@ -14,6 +14,8 @@ import {
   COMMUNITY_TEXT_LIMIT,
   projectCommunityCard,
   projectNativeCommunityCard,
+  projectCommunityReviewTarget,
+  projectCommunityParentContext,
   withinCommunityBytes,
   type CommunityCard,
   type CommunityNativeCard,
@@ -21,17 +23,27 @@ import {
 import { projectCommunityActionAdvice, type CommunityActionAdvice } from './subject-community-actions';
 
 export type CommunityKind = 'review' | 'discussion';
-type NativePage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['threads']['get']>>['data']>;
-export type NativeCommunityThread = NativePage['threads'][number];
+export type NativeCommunityPage = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['subjects']>['threads']['get']>>['data']
+>;
+export type NativeCommunityThread = NativeCommunityPage['threads'][number];
 export type CommunityVoteCitation = { questionId: string; units: number; revision: number };
 export type CommunityReactionCounts = Partial<Record<ReactionKind, number>>;
 export type CommunityDisplayContext = {
   subjectId: string;
   subjectLabel: string | null;
-  place: { kind: 'global'; id: string } | { kind: 'realm'; id: string; title: string };
+  source?: NativeCommunityPage['context']['subject']['source'];
+  place:
+    | { kind: 'global'; id: string }
+    | { kind: 'realm'; id: string; title: string; spaceId?: string; headRevisionId?: string };
 };
 export type CommunityReactionFreshness = { epoch: number; position: string } | null;
 export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'authorId' | 'boardId' | 'createdAt'> & {
+  /** Local occurrence identity preserves repeated native rows; it grants no authority. */
+  rowKey?: string;
+  position?: number;
+  reviewTarget?: NonNullable<NativeCommunityThread['reviewContext']>['target'];
+  parentContext?: NativeCommunityThread['card']['parentContext'];
   summary: string;
   licence: string;
   postRevisionId?: string;
@@ -42,15 +54,16 @@ export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'auth
   nativeCard?: CommunityNativeCard;
   actions?: CommunityActionAdvice;
 };
-export type CommunityRegion =
-  | { state: 'loading' | 'unavailable' | 'closed' }
+export type CommunityRegion = (
+  | { state: 'loading' | 'unavailable' | 'closed' | 'expired' }
   | {
       state: 'ready';
       threads: CommunityThread[];
       next: string | null;
       context: CommunityDisplayContext;
       reactionsAsOf: CommunityReactionFreshness;
-    };
+    }
+) & { request?: CommunityRequest };
 export type SubjectCommunity = {
   regions: Partial<Record<CommunityKind, CommunityRegion>>;
   nodes?: Record<string, CommunityRegion>;
@@ -82,7 +95,7 @@ export function communityKinds(nodes: readonly unknown[]): CommunityKind[] {
   return [...kinds];
 }
 
-type CommunityRequest = Extract<PageRead, { kind: 'subjectThreads' }>;
+export type CommunityRequest = Extract<PageRead, { kind: 'subjectThreads' }>;
 const nativeId = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 const reactionKinds = new Set<ReactionKind>(['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad']);
@@ -139,10 +152,15 @@ function communityContext(value: unknown, expected: CommunityRequest): Community
   )
     return null;
   const subjectLabel = label === null ? null : (label as { value: string }).value;
+  const observation = {
+    partition: source.partition as number,
+    epoch: source.epoch as number,
+    position: source.position,
+  };
 
   if (expected.place === GLOBAL) {
     return value.place.kind === 'global' && value.place.id === GLOBAL
-      ? { subjectId: expected.id, subjectLabel, place: { kind: 'global', id: GLOBAL } }
+      ? { subjectId: expected.id, subjectLabel, source: observation, place: { kind: 'global', id: GLOBAL } }
       : null;
   }
   if (
@@ -158,7 +176,14 @@ function communityContext(value: unknown, expected: CommunityRequest): Community
   return {
     subjectId: expected.id,
     subjectLabel,
-    place: { kind: 'realm', id: expected.place, title: value.place.title },
+    source: observation,
+    place: {
+      kind: 'realm',
+      id: expected.place,
+      title: value.place.title,
+      spaceId: value.place.spaceId,
+      headRevisionId: value.place.headRevisionId,
+    },
   };
 }
 
@@ -258,7 +283,11 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
   )
     return null;
   // The native DTO has no place field. Board-to-place authority stays with the supplied native read.
+  const reviewTarget = projectCommunityReviewTarget(thread.reviewContext);
+  const parentContext = nativeCard ? projectCommunityParentContext(thread.card) : undefined;
   const projected: CommunityThread = {
+    ...(reviewTarget ? { reviewTarget } : {}),
+    ...(parentContext ? { parentContext } : {}),
     id: thread.id,
     title: thread.title,
     authorId: thread.authorId,
@@ -290,21 +319,28 @@ export async function readSubjectCommunity(
   const limit = paged ? COMMUNITY_PAGE_LIMIT : COMMUNITY_PREVIEW_LIMIT;
   const entries = await Promise.all(
     [...new Set(kinds)].map(async (kind): Promise<[CommunityKind, CommunityRegion]> => {
-      if (cursor !== undefined && (!paged || !validCursor(cursor))) return [kind, { state: 'unavailable' }];
+      const request: CommunityRequest = {
+        kind: 'subjectThreads',
+        id: subjectId,
+        place: requestedPlace,
+        threadKind: kind,
+        limit,
+        ...(cursor !== undefined ? { cursor } : {}),
+      };
+      if (cursor !== undefined && (!paged || !validCursor(cursor))) return [kind, { state: 'unavailable', request }];
       try {
         const result = await client.subjects({ id: subjectId }).threads.get({
           query: { place: requestedPlace, kind, limit, ...(cursor !== undefined ? { cursor } : {}) },
         });
-        if (isPlatformClosedProblem(result.status, result.error?.value)) return [kind, { state: 'closed' }];
-        if (result.status !== 200 || result.error || !result.data) return [kind, { state: 'unavailable' }];
+        if (isPlatformClosedProblem(result.status, result.error?.value)) return [kind, { state: 'closed', request }];
         const region = composedCommunityRegion(
-          { status: result.status, body: result.data },
-          { kind: 'subjectThreads', id: subjectId, place: requestedPlace, threadKind: kind, limit },
+          { status: result.status, body: result.error ? result.error.value : result.data },
+          request,
           typeof requestedReader === 'string',
         );
         return [kind, region];
       } catch (error) {
-        return [kind, { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' }];
+        return [kind, { state: isPlatformClosedError(error) ? 'closed' : 'unavailable', request }];
       }
     }),
   );
@@ -345,13 +381,20 @@ function stripSubjectThreadViewerSlots(
 }
 
 /** Decode only the existing native DTO. A failed/unrequested read cannot become an empty invitation. */
-export function composedCommunityRegion(
+function decodeCommunityRegion(
   read: { status: number; body: unknown } | undefined,
   expected?: CommunityRequest,
   admitViewer = false,
 ): CommunityRegion {
   if (!read) return { state: 'unavailable' };
   if (isPlatformClosedProblem(read.status, read.body)) return { state: 'closed' };
+  if (
+    expected?.cursor &&
+    isRecord(read.body) &&
+    ((read.status === 400 && read.body.code === 'invalid_cursor') ||
+      (read.status === 409 && read.body.code === 'stale_cursor'))
+  )
+    return { state: 'expired' };
   if (
     read.status !== 200 ||
     !expected ||
@@ -372,17 +415,28 @@ export function composedCommunityRegion(
   if (!context || reactionsAsOf === undefined) return { state: 'unavailable' };
   try {
     const threads: CommunityThread[] = [];
-    const seen = new Set<string>();
+    const occurrences = new Map<string, number>();
     for (const row of read.body.threads) {
       const thread = project(row, expected, admitViewer);
-      if (!thread || seen.has(thread.id)) return { state: 'unavailable' };
-      seen.add(thread.id);
-      threads.push(thread);
+      if (!thread) return { state: 'unavailable' };
+      const occurrence = occurrences.get(thread.id) ?? 0;
+      occurrences.set(thread.id, occurrence + 1);
+      threads.push({ ...thread, rowKey: `${thread.id}:${occurrence}`, position: threads.length });
     }
     return { state: 'ready', threads, next: read.body.next, context, reactionsAsOf };
   } catch {
     return { state: 'unavailable' };
   }
+}
+
+// Preserve the original request even on failure; recovery never silently starts a different window.
+export function composedCommunityRegion(
+  read: { status: number; body: unknown } | undefined,
+  expected?: CommunityRequest,
+  admitViewer = false,
+): CommunityRegion {
+  const region = decodeCommunityRegion(read, expected, admitViewer);
+  return expected ? { ...region, request: { ...expected } } : region;
 }
 
 /** Use the guarded composition leaves and their exact cursor, with one shared public identity batch. */

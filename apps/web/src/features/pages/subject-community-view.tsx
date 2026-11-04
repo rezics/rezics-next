@@ -7,6 +7,7 @@ import { threadLocation } from '../../threads/thread-href';
 import type { ThreadReactionsProps } from '../../threads/thread-reactions';
 import type { ThreadWatchProps } from '../../threads/thread-watch';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
+import { communityRegionLinks } from './subject-community-navigation';
 import { SubjectCommunityPreview } from './subject-community-preview';
 import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { linkClass, linkColor } from './shared';
@@ -68,11 +69,14 @@ export function SubjectCommunityRegion({
       paged,
       community?.contextId,
       region.state,
+      region.request,
       region.state === 'ready' ? region.context : null,
       region.state === 'ready' ? region.reactionsAsOf : null,
       region.state === 'ready'
-        ? region.threads.map(({ id, postRevisionId, card, nativeCard, actions }) => [
+        ? region.threads.map(({ id, rowKey, position, postRevisionId, card, nativeCard, actions }) => [
             id,
+            rowKey,
+            position,
             postRevisionId,
             card,
             nativeCard,
@@ -103,23 +107,28 @@ export function SubjectCommunityRegion({
       : `${m.space_realm_heading({}, options)} · ${currentContext.place.title}`
     : undefined;
   const state = empty ? (next ? 'continuation' : 'empty') : region.state === 'ready' ? 'populated' : region.state;
-  const [path, search = ''] = href.split('?');
-  const retryHref = paged ? href : `?${search}`;
-
-  const nextHref = (() => {
-    if (!paged || !next) return href;
-    const query = new URLSearchParams(search);
-    query.set('cursor', next);
-    if (node) query.set('node', node);
-    return `${path}?${query}`;
-  })();
-
+  const links = communityRegionLinks({ href, paged, ...(node ? { node } : {}), region });
+  const retryHref = links.retry;
+  const nextHref = links.next;
+  const occurrences = new Map<string, number>();
+  const rows = threads.map((thread) => {
+    const occurrence = occurrences.get(thread.id) ?? 0;
+    occurrences.set(thread.id, occurrence + 1);
+    return { thread, key: thread.rowKey ?? `${thread.id}:${occurrence}` };
+  });
   return (
     <section
       data-slot={review ? 'review-list' : 'thread-list'}
       data-state={state}
       aria-labelledby={`${id}-title`}
       className="min-w-0 space-y-4"
+      onClickCapture={(event) => {
+        // A queued click must not navigate or reveal retired card content.
+        if (reading.available && !reading.isCurrent()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onFocusCapture={(event) => {
         focused.current = event.target;
       }}
@@ -161,6 +170,16 @@ export function SubjectCommunityRegion({
           {m.platform_closed_message({}, options)}
         </p>
       )}
+      {region.state === 'expired' && (
+        <div className="space-y-3">
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.subject_community_frontier_expired({}, options)}
+          </p>
+          <a data-slot="community-restart" className={actionClass} href={links.restart}>
+            {m.subject_relation_restart({}, options)}
+          </a>
+        </div>
+      )}
       {region.state === 'unavailable' && (
         <div className="space-y-3">
           <p role="status" className="text-sm text-muted-foreground">
@@ -180,16 +199,15 @@ export function SubjectCommunityRegion({
                 ? m.subject_reviews_empty({}, options)
                 : m.subject_threads_empty({}, options)}
           </p>
-          {!next ? <p>{m.subject_community_board_unavailable({}, options)}</p> : null}
         </div>
       )}
       {threads.length > 0 && (
         <ul key={reading.key} className="min-w-0">
-          {threads.map((thread) => {
+          {rows.map(({ thread, key }) => {
             const threadHref = threadLocation(locale, thread);
             const reader = community?.reader ?? null;
             return (
-              <li key={thread.id} className="min-w-0">
+              <li key={key} data-row-key={key} className="min-w-0">
                 <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
                   <ContentItemHeading
                     level={3}
@@ -280,6 +298,17 @@ export function SubjectCommunityRegion({
             );
           })}
         </ul>
+      )}
+      {region.state === 'ready' && (!empty || !next) && (
+        <div
+          data-slot="community-entry-unavailable"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground"
+        >
+          <p role="status">{m.subject_community_board_unavailable({}, options)}</p>
+          <a className={actionClass} href={retryHref}>
+            {m.subject_section_retry({}, options)}
+          </a>
+        </div>
       )}
       {next && (
         <a data-slot="community-next" className={actionClass} href={nextHref}>

@@ -194,8 +194,8 @@ test('Subject discussion and review summaries keep native read destinations and 
           kind === 'review' ? 'review-list' : 'thread-list',
         );
         expect(host.querySelector('section')?.getAttribute('data-state')).toBe('populated');
-        expect(canvas.getAllByRole('list')).toHaveLength(1);
-        expect(canvas.getAllByRole('listitem')).toHaveLength(3);
+        expect(host.querySelectorAll('section > ul')).toHaveLength(1);
+        expect(rows()).toHaveLength(3);
         expect(titleTexts()).toEqual(expectedTitles);
         const currentContext = host.querySelector<HTMLElement>('[data-slot="community-current-context"]')!;
         expect(currentContext.dataset.contextSubjectId).toBe(subject.id);
@@ -228,7 +228,7 @@ test('Subject discussion and review summaries keep native read destinations and 
           expect(title.className).toContain('[overflow-wrap:anywhere]');
           expect(primary.classList.contains('min-h-11')).toBe(true);
           expect(primary.classList.contains('focus-visible:outline-2')).toBe(true);
-          expect(row.querySelector('a a, a button, li, h2, img, button')).toBeNull();
+          expect(row.querySelector('a a, a button, h2, img, button')).toBeNull();
           const board = item.getByRole('link', { name: m.subject_community_board({}, options), exact: true });
           expect(board.getAttribute('href')).toBe(boardHrefs[index]!);
           expect(
@@ -257,10 +257,14 @@ test('Subject discussion and review summaries keep native read destinations and 
         if (kind === 'review') {
           const citation = first.querySelector<HTMLElement>('[data-slot="review-citation"]')!;
           expect(citation.dataset.state).toBe('unavailable');
-          expect(citation.textContent).toContain(m.subject_community_citation_unavailable({}, options));
-          expect(citation.textContent).not.toContain(
-            m.discussion_provenance_details_rating_units({ units: '0' }, options),
+          expect(citation.textContent).toContain(m.search_review_historical_question_unavailable({}, options));
+          expect(citation.textContent).toContain(
+            m.thread_provenance_vote(
+              { units: '0', questionId: threads[0]!.voteCitation!.questionId, revision: '2' },
+              options,
+            ),
           );
+          expect(citation.textContent).toContain(m.discussion_provenance_details_rating_units({ units: '0' }, options));
           expect(citation.textContent).not.toContain(m.thread_provenance_current_vote({}, options));
           const reactions = first.querySelector('[data-slot="community-reaction-summary"]')?.textContent;
           expect(reactions).toContain(m.reaction_upvote());
@@ -298,7 +302,6 @@ test('Subject discussion and review summaries keep native read destinations and 
           primaryHrefs[0]!,
           '/fr/@mira%2F%2B%C3%A9',
           boardHrefs[0]!,
-          `${boardHrefs[0]}/new?subject=${subject.id}&subjectTitle=${encodeURIComponent(subject.label)}`,
         ]);
         links[0]!.focus();
         for (const [index, link] of links.entries()) {
@@ -312,7 +315,8 @@ test('Subject discussion and review summaries keep native read destinations and 
       const originalRows = rows();
       await show(kind, true, { ...ready, threads: threads.toReversed(), next: null });
       expect(titleTexts()).toEqual(expectedTitles.toReversed());
-      expect(rows()[0]).toBe(originalRows[2]!);
+      // A replacement observation mounts fresh cards and never revives controls from the old source.
+      expect(rows()[0]).not.toBe(originalRows[2]!);
       expect(slot('community-next')).toBeNull();
 
       const nativePage = Array.from({ length: 20 }, (_, index) => ({
@@ -385,3 +389,75 @@ test('Subject discussion and review summaries keep native read destinations and 
     await window.happyDOM.close();
   }
 }, 30_000);
+
+test('the production adapter preserves recorded citation, duplicate occurrences and native context for each Subject family', async () => {
+  const { createKernelClient } = await import('@rezics/client');
+  const { planReads, platformRegistry } = await import('@rezics/composition');
+  const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
+  const { communityThread, communityThreadPage, communitySubject } =
+    await import('../src/kernel/fake/subject-community');
+  const { loadSubjectPage, pageContext } = await import('../src/features/pages/subject');
+  const { withComposedCommunity } = await import('../src/features/pages/subject-community');
+  const { SubjectCommunityPreview } = await import('../src/features/pages/subject-community-preview');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { m } = await import('../src/paraglide/messages.js');
+  const client = createKernelClient('https://kernel.invalid', { fetch: createStoryRecordedKernelFetch() });
+  const loaded = await loadSubjectPage(client, communitySubject.id);
+  if (loaded.kind !== 'page') throw new Error('Expected composed Subject page');
+  for (const [index, family] of ['work', 'character', 'person'].entries()) {
+    const subject = {
+      id: `01a1a000-0000-7000-8000-00000000001${index}`,
+      label: `${family} · 星の王子さま與狐狸的漫長旅程`.repeat(4),
+    };
+    const page = { ...loaded.page, subject: subject.id };
+    const plan = planReads(platformRegistry, page.document, pageContext(page));
+    const reads = { ...page.reads };
+    for (const [key, descriptor] of Object.entries(plan.reads)) {
+      if (descriptor.kind !== 'subjectThreads') continue;
+      const row = communityThread(descriptor.threadKind, false, subject);
+      const missing = { ...row };
+      Reflect.deleteProperty(missing, 'reactions');
+      reads[key] = {
+        status: 200,
+        body: communityThreadPage(
+          descriptor.threadKind,
+          subject,
+          [row, row, { ...row, reactions: {} }, missing],
+          'opaque:/+?=&',
+          descriptor.place,
+        ),
+      };
+    }
+    const adapted = await withComposedCommunity(client, { kind: 'page', page: { ...page, reads } });
+    if (adapted.kind !== 'page') throw new Error('Expected adapted page');
+    const region = adapted.page.community!.regions.review!;
+    if (region.state !== 'ready') throw new Error('Expected admitted review region');
+    expect(region.context.source).toEqual({ partition: 1, epoch: 1, position: '1' });
+    expect(region.threads.map((row) => row.rowKey)).toHaveLength(4);
+    expect(new Set(region.threads.map((row) => row.rowKey)).size).toBe(4);
+    expect(region.threads.map((row) => row.position)).toEqual([0, 1, 2, 3]);
+    expect(region.threads[0]!.voteCitation).toEqual({
+      questionId: '01a1a000-0000-7000-8000-000000000085',
+      units: 14,
+      revision: 2,
+    });
+    expect(region.threads[2]!.reactions).toEqual({});
+    expect(region.threads[3]!.reactions).toBeUndefined();
+    for (const locale of ['en', 'zh-Hant', 'ja'] as const) {
+      const html = renderToStaticMarkup(
+        <SubjectCommunityPreview
+          kind="review"
+          thread={region.threads[0]!}
+          subject={subject}
+          locale={locale}
+          reader={null}
+          reactionsAsOf={region.reactionsAsOf}
+        />,
+      );
+      expect(html).toContain(m.search_review_historical_question_unavailable({}, { locale }));
+      expect(html).toContain('data-vote-revision="2"');
+      expect(html).toContain('data-units="14"');
+      expect(html).toContain('MIT');
+    }
+  }
+});
