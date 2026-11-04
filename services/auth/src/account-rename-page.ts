@@ -172,19 +172,10 @@ export function accountRenamePageTransport(
           } catch (error) {
             const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
             if (status !== 401) throw error;
-            // Issuance also checks the native account floor. If that check fails,
-            // distinguish it from a session that disappeared during the read.
-            try {
-              await service.internal.withFreshHuman({ headers: request.headers, fresh: false }, async () => undefined);
-              return { state: 'refused' };
-            } catch (currentError) {
-              const currentStatus =
-                currentError && typeof currentError === 'object' && 'status' in currentError
-                  ? currentError.status
-                  : undefined;
-              if (currentStatus === 401) return { state: 'signed-out' };
-              throw currentError;
-            }
+            // Issuance also checks native authority. Confirm the exact Auth
+            // session still exists without treating a changed native floor as
+            // sign-out.
+            return (await service.internal.isProofSessionCurrent(human)) ? { state: 'refused' } : { state: 'signed-out' };
           }
           if (Date.now() >= deadline) return { state: 'unavailable' };
           return page;

@@ -266,6 +266,9 @@ export interface AuthService {
     /** Trusted server composition only; the exact native human proof is live only
      * during this instance's trusted authorization callbacks. Never persist it or its JWT. */
     accessTokenForProof(proof: SessionProof): Promise<string>;
+    /** Auth-owned point read used only to distinguish a retired proof session
+     * from a still-present session refused by current native authority. */
+    isProofSessionCurrent(proof: SessionProof): Promise<boolean>;
     /** Auth-host transport only. Proves the current human from the Auth session as
      * approveCredentialEffect does and, unless `fresh` is false, requires the
      * session's auth_time within the last 600 seconds (401 step_up_required).
