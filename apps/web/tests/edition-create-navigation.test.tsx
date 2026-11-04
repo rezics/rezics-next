@@ -2,7 +2,6 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
-import { creatorId, editionId, identity, publicationFixture } from '../src/stories/patterns/edition-publication/edition-publication-fixtures';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({
@@ -35,6 +34,8 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
+const { creatorId, identity, publicationFixture } =
+  await import('../src/stories/patterns/edition-publication/edition-publication-fixtures');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const {
   createMemoryHistory,
