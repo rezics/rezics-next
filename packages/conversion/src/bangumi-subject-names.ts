@@ -212,12 +212,7 @@ export function extractBangumiSubjectNames(record: {
     if (active.key !== '中文名' && active.key !== '别名') continue;
     const continuation = cleanHorizontal(line);
     if (continuation.startsWith('*')) {
-      if (
-        active.key !== '别名' ||
-        continuation.startsWith('**') ||
-        continuation === '*' ||
-        active.form === 'scalar'
-      ) {
+      if (active.key !== '别名' || continuation.startsWith('**') || continuation === '*' || active.form === 'scalar') {
         active.unsupported = true;
         continue;
       }
