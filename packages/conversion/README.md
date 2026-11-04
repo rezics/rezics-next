@@ -351,7 +351,7 @@ exact `0` is never a measured zero.
 
 ### VNDB release titles
 
-`cross-media-entities@5` projects admitted `releases_titles` rows onto
+`cross-media-entities@6` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -373,7 +373,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@5` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@6` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -413,6 +413,28 @@ bootstrap label and order remaining distinct names by codepoint.
 
 Focused pure controls live in `tests/vndb-staff-names.test.ts`. Exact credited roles and
 credited-as spelling remain the staff-credit coordinator.
+
+### VNDB release platforms and distribution media
+
+The production release operator carries selected `releases_platforms.platform`
+and `releases_media.medium` codes on that same Release. Inventory-admitted
+platform codes propose `schema:gamePlatform`; the finite medium inventory
+proposes `wdt:P437`. Each requires an independently adopted source Concept in
+the matching current scheme. Several codes remain several values; unknown or
+unbound codes become source-path gaps. Platform and medium lists never combine,
+and `releases_media.qty` is omitted.
+
+- Touches: selected release projection, exact source scheme/Concept bindings,
+  and the Release's existing multi-valued classification properties.
+- Bound: at most 64 selected releases and 4,096 selected child rows across the
+  two tables; per-release vocabulary rows fit the existing 64-row ceiling after
+  its date and work-link rows. Binding reads retain at most 64 schemes and 512
+  concepts, with one cached current read per identity.
+- Growth check: the focused importer test covers shuffled duplicates, multiple
+  values, an unknown code and refresh. The connected native review/adoption test
+  is registered; native execution is deferred to integration.
+
+Decision: source-specific schemes are `https://vndb.org/releases/platforms` and `https://vndb.org/releases/media`, with taxonomies `vndb.releases.platform` and `vndb.releases.media`; these Concepts do not assert canonical equivalence.
 
 ### VNDB native alternate-name contract
 
