@@ -177,7 +177,10 @@ function PublicationEditorLive({
   const read = matchingRead && !refreshRequired && !refreshRequiredRef.current ? matchingRead : undefined;
   const currentProfile = read?.profiles.find((entry) => !draftProfile || entry.id === draftProfile.id);
   const profile = currentProfile ?? draftProfile;
-  const displayRelease = read?.release ?? privateDefinitions.current?.release;
+  const displayRelease =
+    (reviewDefinitions || refreshRequired) && privateDefinitions.current?.release
+      ? privateDefinitions.current.release
+      : (read?.release ?? privateDefinitions.current?.release);
   const [relationChoice, setRelation] = useState('');
   const relation = relationChoice || profile?.relations[0] || '';
   const nextTermId = useRef(1);
