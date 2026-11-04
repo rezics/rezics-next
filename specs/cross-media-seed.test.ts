@@ -69,7 +69,10 @@ test('three anime/VN franchises elect family membership and retain exact unsuppo
   );
   expect(plan.edges.some((edge) => edge.property === 'schema:character' && edge.target === 'character:7')).toBe(true);
   expect(plan.edges.some((edge) => edge.property === 'wdt:P725')).toBe(true);
-  expect(plan.edges.some((edge) => edge.property === 'schema:author' && edge.target === 'person:8')).toBe(true);
+  expect(plan.edges.some((edge) => edge.table === 'subject-persons')).toBe(false);
+  expect(
+    plan.credits.some((credit) => credit.kind === 'staff' && credit.person === 'person:8' && credit.roleCode === 1),
+  ).toBe(true);
   expect(
     plan.gaps.some(
       (gap) => gap.fields.includes('subject-relations.relation_type') && gap.record.relation_type === 1002,
@@ -152,7 +155,7 @@ test('the registered importer reopens idempotently and returns only readings sup
     expect(again.readings.some((row) => row.externalId === 'character:7' && row.route.startsWith('/subjects/'))).toBe(
       true,
     );
-    expect(reads.length).toBe(first.readings.length * 2);
+    expect(reads.length).toBe(first.readings.length * 2 + 4);
     expect(again.status).toBe('imported-with-gaps');
     expect(again.unresolved.some((edge) => edge.target === 'character:7' || edge.holder === '99')).toBe(true);
   } finally {

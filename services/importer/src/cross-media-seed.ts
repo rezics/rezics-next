@@ -13,10 +13,17 @@ import {
   type SourceMapping,
   vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
+import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
+import { bundledDigest } from '@rezics/definitions/bundled';
 import { subjectSlug } from '@rezics/definitions/slug';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { CrossMediaGraph, citedProviderBinding, graphEdgeKey, type GraphEdgeDraft } from './cross-media-bindings.ts';
+import {
+  deliverBangumiCreatorCredits,
+  type BangumiCreatorCreditDraft,
+  type BangumiCreatorCreditGap,
+} from './bangumi-creator-credits.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
@@ -65,6 +72,7 @@ export type CrossMediaPlan = {
   records: Record<Provider, SourceRecord[]>;
   entities: Record<Provider, SourceRecord[]>;
   edges: GraphEdgeDraft[];
+  credits: BangumiCreatorCreditDraft[];
   franchises: Record<Franchise, { bangumi: string[]; vndb: string[] }>;
   members: CrossMediaMember[];
   gaps: CrossMediaGap[];
@@ -117,6 +125,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     records: { bangumi: [], vndb: [] },
     entities: { bangumi: [], vndb: [] },
     edges: [],
+    credits: [],
     franchises: emptyFranchises(),
     members: [],
     gaps: [],
@@ -362,6 +371,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const characters = new Set<number>();
   const persons = new Set<number>();
   const familyWorks = new Set(familyIds.keys());
+  const importedWorks = new Set([...plan.records.bangumi, ...plan.entities.bangumi].map((row) => row.key));
   for await (const row of input.rows('bangumi', 'subject-characters'))
     if (familyWorks.has(number(row, 'subject_id'))) characters.add(number(row, 'character_id'));
   for await (const row of input.rows('bangumi', 'subject-persons')) {
@@ -407,7 +417,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     if (!familyWorks.has(number(row, 'subject_id'))) continue;
     const work = String(number(row, 'subject_id'));
-    const person = `person:${number(row, 'person_id')}`;
+    const personId = number(row, 'person_id');
+    const person = `person:${personId}`;
     const workType = types.get(number(row, 'subject_id'));
     const mapping = mapSourceEnumeration('bangumi', `staff.${workType}`, row.position as number);
     member({
@@ -424,30 +435,25 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
         row,
         mapping?.reason ?? 'No registered native converter for this source relation or entity',
       );
-      continue;
     }
-    const qualifiers: { property: string; content: unknown }[] = [];
-    if (typeof row.appear_eps === 'string' && row.appear_eps)
-      qualifiers.push({ property: 'wdt:P518', content: row.appear_eps });
-    edge({
-      source: 'bangumi',
-      alias: crossMediaAliases.bangumi,
-      table: 'subject-persons',
-      holder: work,
-      target: person,
-      property: mapping.term,
-      url: bangumiRecordUrl(work),
-      membership: 'referenced',
+    if (!importedWorks.has(work)) continue;
+    plan.credits.push({
+      kind: 'staff',
+      work,
+      workType: workType ?? 0,
+      person,
+      roleCode: row.position as number,
+      path: `/subject-persons/${work}/${personId}/position`,
       record: row,
-      fields: fieldsOf('subject-persons', row),
-      ...(qualifiers.length ? { qualifiers } : {}),
     });
   }
   for await (const row of input.rows('bangumi', 'person-characters')) {
     if (!familyWorks.has(number(row, 'subject_id')) && !characters.has(number(row, 'character_id'))) continue;
     const work = String(number(row, 'subject_id'));
-    const person = `person:${number(row, 'person_id')}`;
-    const character = `character:${number(row, 'character_id')}`;
+    const personId = number(row, 'person_id');
+    const characterId = number(row, 'character_id');
+    const person = `person:${personId}`;
+    const character = `character:${characterId}`;
     member({
       source: 'bangumi',
       key: person,
@@ -462,26 +468,23 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       membership: 'referenced',
       ...tagged(familyIds.get(number(row, 'subject_id'))),
     });
-    if (!familyWorks.has(number(row, 'subject_id')) && !familyIds.has(number(row, 'subject_id'))) {
+    if (!importedWorks.has(work)) {
       gap(
         'bangumi',
         'person-characters',
         row,
         'Voice credit work is outside the elected family; appearance retained as a referenced endpoint',
       );
+      continue;
     }
-    edge({
-      source: 'bangumi',
-      alias: crossMediaAliases.bangumi,
-      table: 'person-characters',
-      holder: work,
-      target: person,
-      property: 'wdt:P725',
-      url: bangumiRecordUrl(work),
-      membership: 'referenced',
+    plan.credits.push({
+      kind: 'voice-credit',
+      work,
+      workType: types.get(number(row, 'subject_id')) ?? 0,
+      person,
+      character,
+      path: `/person-characters/${work}/${personId}/${characterId}`,
       record: row,
-      fields: fieldsOf('person-characters', row),
-      qualifiers: [{ property: 'wdt:P453', content: character }],
     });
   }
   const corePersons = new Set(persons),
@@ -1026,6 +1029,7 @@ export type CrossMediaSeedResult = {
   runs: Partial<Record<Provider, ImportRunResult>>;
   readings: CrossMediaReading[];
   gaps: CrossMediaGap[];
+  creditGaps: BangumiCreatorCreditGap[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
 };
 
@@ -1045,6 +1049,7 @@ export async function seedCrossMedia(
   extras?: {
     vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
     recordConcurrency?: ImporterOptions['recordConcurrency'];
+    sourceVocabulary?: SourceVocabularyBindings;
   },
 ) {
   const importer = createImporter({
@@ -1116,6 +1121,33 @@ export async function seedCrossMedia(
         complete: plan.relationSnapshotComplete,
       },
     });
+    const bangumiRegistration = createSourceRegistration('bangumi', {
+      source: crossMediaAliases.bangumi,
+      converterRevision: entityRevision,
+    });
+    const credits = await deliverBangumiCreatorCredits({
+      alias: crossMediaAliases.bangumi,
+      converterRevision: entityRevision,
+      drafts: plan.credits,
+      bindings: extras?.sourceVocabulary ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+      claim: (owner) => importer.session.bindings.claim(owner),
+      batch: (request) => port.batch(request),
+      fence: (tuple) => port.fence(tuple),
+      read: (subjectId) => port.readReviewedSubject(subjectId),
+      metadataFor: (work) => {
+        const record = [...plan.records.bangumi, ...plan.entities.bangumi].find((row) => row.key === work);
+        ensure(record, `Missing selected Bangumi work for credit ${work}`);
+        const conversion = bangumiRegistration.convert(
+          { external_id: record.key, record_revision: record.revision, record: record.payload },
+          { source: crossMediaAliases.bangumi },
+        );
+        return {
+          digest: conversion.digest,
+          recordRevision: record.revision,
+          recordUrl: bangumiRecordUrl(work),
+        };
+      },
+    });
     const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
     for (const record of keys) {
       const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';
@@ -1139,7 +1171,11 @@ export async function seedCrossMedia(
     }));
     return {
       status:
-        plan.gaps.length || delivered.gaps.length || unresolved.length
+        plan.gaps.length ||
+        delivered.gaps.length ||
+        unresolved.length ||
+        credits.gaps.length ||
+        credits.fenced.length
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
       franchises: plan.franchises,
@@ -1159,6 +1195,7 @@ export async function seedCrossMedia(
           ...(gap.requiredProfile === undefined ? {} : { requiredProfile: gap.requiredProfile }),
         })),
       ],
+      creditGaps: credits.gaps,
       unresolved,
     };
   } finally {

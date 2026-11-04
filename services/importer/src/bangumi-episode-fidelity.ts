@@ -142,6 +142,7 @@ export async function planBangumiEpisodeFidelity(input: CrossMediaTables): Promi
     records: { bangumi: [], vndb: [] },
     entities: { bangumi: [], vndb: [] },
     edges: [],
+    credits: [],
     franchises: {
       'steins-gate': { bangumi: [], vndb: [] },
       clannad: { bangumi: [], vndb: [] },
