@@ -68,7 +68,7 @@ function page() {
   result.document = { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'identity' } }] };
   const plan = planReads(platformRegistry, result.document as CompositionDocument, {
     subject: id(1),
-    context: result.context,
+    ...(result.context ? { context: result.context } : {}),
   });
   result.reads = Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: reading }]));
   return result;
