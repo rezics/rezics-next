@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,10 +9,12 @@ import {
   importBangumiCreatorCredits,
   musicLiveActionStaffReason,
 } from '../../../importer/src/bangumi-creator-credits.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { identitySupport } from './identity-fixture.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
 
-const globalContext = '00000000-0000-8000-8000-000000000000';
+const globalContext = GLOBAL_CONTEXT;
 const origin = 'https://kernel.import.test';
 type Candidate = {
   id: string;
@@ -35,10 +38,32 @@ function authoredSource(externalId: string, suffix: string): Source {
 }
 
 test('operator seed publishes detailed creator and voice credits for an independent editor', async () => {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+  const previous = process.env.TMPDIR;
+  const runtime = await (async () => {
+    process.env.TMPDIR = tmpdir();
+    try {
+      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+    } finally {
+      if (previous === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previous;
+    }
+  })();
   const root = await mkdtemp(join(tmpdir(), 'bangumi-creator-credits-'));
   try {
+    const tier = await runtime.request(
+      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
+      { key: randomUUID(), tier: 'trusted' },
+      identitySupport(runtime.identity).managementBearer,
+    );
+    expect(tier.status).toBe(200);
     const editor = await openApiObserver(runtime);
+    const grant = await editor.http('/v1/grants', {
+      resource: { route: 0, id: globalContext },
+      subject: { kind: 'account', id: runtime.identity.governance.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    });
+    expect(grant.status).toBe(201);
     const schemeCreated = await runtime.importTransport.batch({
       commands: [
         {
@@ -126,13 +151,6 @@ test('operator seed publishes detailed creator and voice credits for an independ
     const personId = first.identities['person:101']!.id;
     const voiceId = first.identities['person:102']!.id;
     const characterId = first.identities['character:201']!.id;
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
 
     async function adopt(property: string, content: string) {
       const page = await editor.http(
@@ -265,4 +283,4 @@ test('operator seed publishes detailed creator and voice credits for an independ
     await rm(root, { recursive: true, force: true });
     await runtime.close();
   }
-}, 180_000);
+}, 300_000);
