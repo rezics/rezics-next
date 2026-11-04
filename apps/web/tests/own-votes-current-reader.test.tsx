@@ -170,7 +170,11 @@ async function mounted(initialPath = '/library/ratings') {
   const tree = createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }));
   host.innerHTML = renderToString(tree);
   const root = hydrateRoot(host as unknown as HTMLElement, tree);
-  await act(async () => tick());
+  await act(async () => {
+    await tick();
+    root.render(tree);
+    await tick();
+  });
   return {
     host,
     client,
@@ -216,6 +220,8 @@ test('an admitted current page returns once to the exact inspected original pair
   readWaiters.length = 0;
   const view = await mounted();
   try {
+    if (view.host.querySelectorAll('[data-own-vote-pair]').length !== 1)
+      throw new Error(JSON.stringify({ text: view.host.textContent, reads: reads.length, location: view.router.state.location }));
     expect(view.host.querySelectorAll('[data-own-vote-pair]')).toHaveLength(1);
     expect(reads).toHaveLength(0);
     const inspect = [...view.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Inspect');
