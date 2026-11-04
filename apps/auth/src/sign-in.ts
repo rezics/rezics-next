@@ -44,31 +44,32 @@ export function signInResult(result: AuthPostResult): SignInResult {
   return { ok: false, reason: 'unavailable' };
 }
 
-export function signInTarget(query: string, origin: string): string {
+export function signInTarget(query: string, origin?: string): string {
   const parameters = new URLSearchParams(query);
   const returnTo = parameters.get('return_to');
   for (const name of AUTHORIZATION_DROPPED_PARAMETERS) parameters.delete(name);
   // This is a local Auth-page navigation hint, never an OAuth authorization parameter.
   parameters.delete('account_operation');
+  const localTarget = (path: string) => {
+    const target = new URL(path, origin ?? 'https://auth.invalid');
+    return origin ? target.href : `${target.pathname}${target.search}`;
+  };
   if (parameters.size) {
-    const target = new URL('/authorize', origin);
-    target.search = parameters.toString();
-    return target.href;
+    return localTarget(`/authorize?${parameters.toString()}`);
   }
   // Consent recovery is a fixed local page with exactly its two review inputs.
   // Rebuild the query so URL syntax inside either value cannot change the target.
   if (returnTo?.startsWith('/consent?') && !returnTo.includes('#')) {
     const request = new URLSearchParams(returnTo.slice('/consent?'.length));
     if (request.size === 2 && request.get('client_id') && request.has('scope')) {
-      return new URL(
+      return localTarget(
         `/consent?${new URLSearchParams({
           client_id: request.get('client_id')!,
           scope: request.get('scope')!,
         })}`,
-        origin,
-      ).href;
+      );
     }
   }
   // Only a listed path is honoured, so return_to can never name another origin or an arbitrary page.
-  return new URL(STEP_UP_RETURN_PATHS.find((path) => path === returnTo) ?? DEFAULT_RETURN_PATH, origin).href;
+  return localTarget(STEP_UP_RETURN_PATHS.find((path) => path === returnTo) ?? DEFAULT_RETURN_PATH);
 }

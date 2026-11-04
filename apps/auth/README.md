@@ -99,13 +99,19 @@ private inputs are cleared, and the page signs in once with `POST /signin`, resu
 If sign-in fails, the creation confirmation and sign-in/recovery links retain the original query; retrying sign-in
 uses the existing login page and never repeats creation. `src/sign-in.ts` supplies the shared sign-in result and
 validated destination helpers (there is no separate login-attempt helper in this base).
+The page starts with one no-store Auth registration read containing the current viewer, native field limits and
+available actions. An already signed-in viewer gets Continue through the existing safe `signInTarget` plus a Sign in
+link that replaces the active account; `return_to` remains navigation only. A failed read or missing Turnstile
+configuration shows an unavailable state before the form. This read is advice only; `POST /signup` repeats native
+validation and verification.
+Decision: an already signed-in visitor continues with the current account and can choose Sign in to replace it.
 Decision: nonblank handle/email, any password or a pending creation prompts Stay/Leave; Stay preserves input, validation and the same key, while creation completion releases the warning even during subsequent sign-in.
 Reload/close warns only for that unfinished work; Leave clears in-memory details and retires browser continuations without undoing a dispatched creation.
 Departure or history replacement retires pending browser continuations before the next stage or navigation;
 it cannot undo a server write. A cached-document return starts an empty fresh form without automatically retrying
 creation or sign-in. An uncertain creation is retried only by explicit submission with the existing key and a fresh
-Turnstile token while the same journey remains open. Passwords shorter
-than 8 or longer than 128 characters are refused before a request. 400
+Turnstile token while the same journey remains open. Password bounds come from Auth's native configuration and are
+shown before submission. 400
 `registration_denied` reports bad input or a refused token. 409 `handle_unavailable` is shown on the handle field.
 Any other 409, including an email already in use, shows the same generic message with links to sign in and recovery,
 and does not say whether the address exists. 429 includes a valid `Retry-After` duration. 503 and network failures

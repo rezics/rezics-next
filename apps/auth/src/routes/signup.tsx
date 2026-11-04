@@ -18,7 +18,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
 import { createSignupKey, explainSignIn, normalizeSignupHandle, submitSignup } from '../signup';
 import { signIn, signInTarget } from '../sign-in';
-import { readTurnstileConfig } from '../turnstile.ts';
+import { readRegistrationPage, type RegistrationPage } from '../registration-page';
 import { TurnstileWidget, type TurnstileHandle, type TurnstileStatus } from '../turnstile.tsx';
 import { ErrorAlert } from '../alert';
 
@@ -32,7 +32,7 @@ const turnstileErrorId = 'signup-turnstile-error';
 
 export const Route = createFileRoute('/signup')({
   head: () => ({ meta: [{ title: `${m.auth_signup_heading()} · REZICS` }] }),
-  loader: () => readTurnstileConfig(),
+  loader: () => readRegistrationPage(),
   component: SignupPage,
 });
 
@@ -89,7 +89,10 @@ function SignupDeparture({
 }
 
 function SignupPage() {
-  const { history } = useRouter();
+  const router = useRouter();
+  const { history } = router;
+  const page = Route.useLoaderData();
+  const pageKey = page.kind === 'already-signed-in' ? `account:${page.viewer.account_id}` : page.kind;
   const sequence = useRef(0);
   const [journey, setJourney] = useState<SignupJourney | null>(null);
   useLayoutEffect(() => {
@@ -108,24 +111,79 @@ function SignupPage() {
     };
     const unsubscribe = history.subscribe(replace);
     const restore = (event: PageTransitionEvent) => {
-      if (event.persisted) replace();
+      if (event.persisted) {
+        replace();
+        void router.invalidate();
+      }
     };
+    const refresh = () => void router.invalidate();
     window.addEventListener('pagehide', leave);
     window.addEventListener('pageshow', restore);
+    window.addEventListener('focus', refresh);
     replace();
     return () => {
       if (current) current.active = false;
       unsubscribe();
       window.removeEventListener('pagehide', leave);
       window.removeEventListener('pageshow', restore);
+      window.removeEventListener('focus', refresh);
     };
-  }, [history]);
-  return journey ? <SignupForm key={journey.sequence} journey={journey} /> : null;
+  }, [history, pageKey, router]);
+  return journey ? <SignupPageState key={journey.sequence} journey={journey} page={page} /> : null;
 }
 
-function SignupForm({ journey }: { journey: SignupJourney }) {
+function SignupPageState({ journey, page }: { journey: SignupJourney; page: RegistrationPage }) {
+  const router = useRouter();
+  const { history } = router;
+  function follow(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    history.push(event.currentTarget.getAttribute('href')!);
+  }
+  if (page.kind === 'unavailable') {
+    return (
+      <AuthPage heading={m.auth_signup_heading()}>
+        <ErrorAlert>
+          <p>{page.reason === 'verification' ? m.auth_signup_turnstile_failed() : m.auth_signup_page_unavailable()}</p>
+        </ErrorAlert>
+        <Button type="button" onClick={() => void router.invalidate()}>
+          {m.auth_signup_retry()}
+        </Button>
+        <nav className="auth-login-links" aria-label={m.auth_signup_sign_in()}>
+          <a href={`/login${journey.query}`} onClick={follow}>
+            {m.auth_signup_sign_in()}
+          </a>
+        </nav>
+      </AuthPage>
+    );
+  }
+  if (page.kind === 'already-signed-in') {
+    return (
+      <AuthPage heading={m.auth_signup_heading()}>
+        <div className="auth-login-form">
+          <p role="status">{m.auth_signup_already_signed_in()}</p>
+          <nav className="auth-login-links" aria-label={m.auth_signup_continue()}>
+            <a href={signInTarget(journey.query)}>{m.auth_signup_continue()}</a>
+            <a href={`/login${journey.query}`} onClick={follow}>
+              {m.auth_signup_sign_in()}
+            </a>
+          </nav>
+        </div>
+      </AuthPage>
+    );
+  }
+  return <SignupForm journey={journey} registration={page} />;
+}
+
+function SignupForm({
+  journey,
+  registration,
+}: {
+  journey: SignupJourney;
+  registration: Extract<RegistrationPage, { kind: 'registration' }>;
+}) {
   const { history } = useRouter();
-  const { siteKey, scriptUrl } = Route.useLoaderData();
+  const { siteKey, scriptUrl, requirements } = registration;
   const { query } = journey;
   const key = useRef(createSignupKey());
   const turnstile = useRef<TurnstileHandle>(null);
@@ -211,11 +269,20 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
     clearErrors();
     const invalidHandle = normalizeSignupHandle(handle) === null;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
-    const passwordLength = Array.from(password).length;
-    const invalidPassword = passwordLength < 8 || passwordLength > 128;
+    const invalidPassword =
+      password.length < requirements.password.minLength || password.length > requirements.password.maxLength;
     setHandleError(invalidHandle ? (handle ? m.auth_signup_handle_invalid() : m.auth_form_required()) : '');
     setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
-    setPasswordError(invalidPassword ? (password ? m.auth_signup_password_invalid() : m.auth_form_required()) : '');
+    setPasswordError(
+      invalidPassword
+        ? password
+          ? m.auth_signup_password_invalid({
+              minimum: String(requirements.password.minLength),
+              maximum: String(requirements.password.maxLength),
+            })
+          : m.auth_form_required()
+        : '',
+    );
     if (invalidHandle || invalidEmail || invalidPassword) return;
     const challenge = turnstile.current;
     const token = challenge?.getToken();
@@ -225,13 +292,16 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
     }
     submitting.current = true;
     setPending(true);
-    const submission = await submitSignup({
-      key: key.current,
-      handle,
-      email,
-      password,
-      turnstile_token: token,
-    });
+    const submission = await submitSignup(
+      {
+        key: key.current,
+        handle,
+        email,
+        password,
+        turnstile_token: token,
+      },
+      requirements.password,
+    );
     if (!journey.active) return;
     if (submission.ok) {
       protectedDraft.current = false;
@@ -301,6 +371,8 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
             <Input
               id={handleId}
               name="handle"
+              minLength={requirements.handle.minLength}
+              maxLength={requirements.handle.maxLength}
               value={handle}
               onChange={(event) => {
                 setHandle(event.target.value);
@@ -312,6 +384,12 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
               required
             />
             {handleError ? <FieldError id={handleErrorId}>{handleError}</FieldError> : null}
+            <p className="text-sm text-muted-foreground">
+              {m.auth_signup_handle_requirement({
+                minimum: String(requirements.handle.minLength),
+                maximum: String(requirements.handle.maxLength),
+              })}
+            </p>
           </Field>
           <Field data-invalid={Boolean(emailError)}>
             <FieldLabel htmlFor={emailId}>{m.auth_signup_email()}</FieldLabel>
@@ -321,6 +399,7 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
               name="email"
               type="email"
               autoComplete="email"
+              maxLength={requirements.email.maxLength}
               value={email}
               onChange={(event) => {
                 setEmail(event.target.value);
@@ -332,6 +411,9 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
               required
             />
             {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
+            <p className="text-sm text-muted-foreground">
+              {m.auth_signup_email_requirement({ maximum: String(requirements.email.maxLength) })}
+            </p>
           </Field>
           <Field data-invalid={Boolean(passwordError)}>
             <FieldLabel htmlFor={passwordId}>{m.auth_signup_password()}</FieldLabel>
@@ -341,6 +423,8 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
               required
               readOnly={pending}
               id={passwordId}
+              minLength={requirements.password.minLength}
+              maxLength={requirements.password.maxLength}
               value={password}
               onChange={(event) => {
                 setPassword(event.target.value);
@@ -350,6 +434,12 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
               aria-describedby={passwordError ? passwordErrorId : undefined}
             />
             {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
+            <p className="text-sm text-muted-foreground">
+              {m.auth_signup_password_requirement({
+                minimum: String(requirements.password.minLength),
+                maximum: String(requirements.password.maxLength),
+              })}
+            </p>
           </Field>
           <Field data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
             <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
@@ -364,6 +454,7 @@ function SignupForm({ journey }: { journey: SignupJourney }) {
                 }}
               />
             </div>
+            <p className="text-sm text-muted-foreground">{m.auth_signup_turnstile_required()}</p>
             {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
             {challengeStatus === 'failed' ? (
               <div>

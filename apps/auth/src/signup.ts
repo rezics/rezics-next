@@ -16,15 +16,15 @@ export type SignupFailure =
   | { field: 'form'; message: string; conflict: boolean };
 
 export type SignupSubmission = { ok: true } | { ok: false; failure: SignupFailure };
+export type SignupPasswordLimits = { minLength: number; maxLength: number };
 
 export function createSignupKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export function passwordAccepted(password: string): boolean {
-  const length = Array.from(password).length;
-  return length >= 8 && length <= 128;
+export function passwordAccepted(password: string, limits: SignupPasswordLimits): boolean {
+  return password.length >= limits.minLength && password.length <= limits.maxLength;
 }
 
 // Matches the kernel's handle contract; the server applies the same normalization on signup.
@@ -34,9 +34,21 @@ export function normalizeSignupHandle(handle: string): string | null {
   return /^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$/.exec(normalized)?.[0] === normalized ? normalized : null;
 }
 
-export async function submitSignup(input: SignupBody): Promise<SignupSubmission> {
-  if (!passwordAccepted(input.password)) {
-    return { ok: false, failure: { field: 'password', message: m.auth_signup_password_invalid() } };
+export async function submitSignup(
+  input: SignupBody,
+  limits: SignupPasswordLimits,
+): Promise<SignupSubmission> {
+  if (!passwordAccepted(input.password, limits)) {
+    return {
+      ok: false,
+      failure: {
+        field: 'password',
+        message: m.auth_signup_password_invalid({
+          minimum: String(limits.minLength),
+          maximum: String(limits.maxLength),
+        }),
+      },
+    };
   }
   const result = await authPost<{ accountId: string }>('/signup', input);
   // The shared client treats only HTTP 200 as success. Registration answers 201 and issues no session.
