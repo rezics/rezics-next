@@ -8,7 +8,7 @@ test('fresh submit and exact retry charge native preparations without reapproval
     organizationId: organizationId!,
     memberAccountId: memberAccountId!,
     role: 'owner',
-    reservationId: 'original-reservation',
+    reservationId: '00000000-0000-4000-8000-000000000004',
   });
   const profile = membershipProfile()!;
   const storage = new Map<string, string>();
@@ -33,7 +33,7 @@ test('fresh submit and exact retry charge native preparations without reapproval
       return Response.json({
         organizationId,
         memberAccountId,
-        membership: { role: 'member', reservationId: 'original-reservation' },
+        membership: { role: 'member', reservationId: '00000000-0000-4000-8000-000000000004' },
       });
     if (path.endsWith('/approve'))
       return Response.json({ reference: 'native-reference', expiresAt: new Date(Date.now() + 60000).toISOString() });

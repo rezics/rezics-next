@@ -365,9 +365,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       ? 'acknowledged'
       : command?.unresolved && !observed
         ? 'unresolved'
-        : command || selecting || reauth
-          ? 'unsent'
-          : phase.current;
+        : phase.current === 'refused'
+          ? 'refused'
+          : command || selecting || reauth
+            ? 'unsent'
+            : phase.current;
     // Close every old continuation before synchronously removing private DOM.
     lifetime.current++;
     activity.current = () => false;
