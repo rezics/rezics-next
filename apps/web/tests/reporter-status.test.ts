@@ -11,7 +11,7 @@ const { isSignedInPath } = await import('../src/session/guard');
 import { createKernelClient } from '@rezics/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { getLocale, setLocale } from '../src/paraglide/runtime.js';
+import { getLocale, overwriteGetLocale } from '../src/paraglide/runtime.js';
 import { setStoryRequestContext } from '../.storybook/react-start';
 
 const submission: ReporterStatus = {
@@ -539,14 +539,14 @@ test('all native own target kinds preserve exact identity and disposition with t
 });
 
 test('Subject, Space and Realm status labels are readable in the retained journey locales', () => {
-  const previous = getLocale();
+  const previous = getLocale;
   try {
     for (const [locale, labels] of [
       ['en', ['Subject', 'Space', 'Realm']],
       ['zh-Hant', ['條目', '空間', '領域']],
       ['ja', ['項目', 'スペース', 'レルム']],
     ] as const) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       for (const [index, kind] of ['subject', 'space', 'realm'].entries()) {
         const report = reporterStatusResponse({
           report: { ...submission, target: { kind, id: submission.target.id } },
@@ -555,6 +555,6 @@ test('Subject, Space and Realm status labels are readable in the retained journe
       }
     }
   } finally {
-    setLocale(previous, { reload: false });
+    overwriteGetLocale(previous);
   }
 });
