@@ -8344,5 +8344,9 @@
   "curation_no_active_profile": "Aucun profil de présentation actif n’est disponible.",
   "curation_published_waiting": "Profil immuable publié : {digest}. L’activation est en attente.",
   "curation_retry_activation_help": "Réessayez l’activation avec le profil conservé et la clé de commande d’origine. Aucun nouveau profil ne sera publié.",
-  "curation_retry_activation": "Réessayer l’activation"
+  "curation_retry_activation": "Réessayer l’activation",
+  "own_media_recovery_heading": "Suppression du média d’origine",
+  "own_media_recovery_browsing": "Consulter une autre ligne n’annule pas cette suppression. Réessayer envoie la demande d’origine.",
+  "own_media_recovery_withheld": "La reprise est indisponible car le média d’origine ou l’autorisation ne sont plus disponibles.",
+  "own_media_recovery_return": "Revenir au média d’origine"
 }

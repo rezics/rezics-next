@@ -191,3 +191,24 @@ export const DependencyFailure: Story = {
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () => <StoryRouter inventory={read('unavailable', null)} />,
 };
+
+export const UnresolvedRemoval: Story = {
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  render: () => <StoryRouter inventory={read('ready', page([
+    entry(mediaIds[0]!, 'available'), entry(mediaIds[1]!, 'uploaded'),
+  ]))} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: /post image.*ready/i }));
+    await userEvent.click(canvas.getByRole('button', { name: /remove this media/i }));
+    await userEvent.click(canvas.getByRole('button', { name: /confirm removal/i }));
+    await userEvent.click(canvas.getByRole('button', { name: /post image.*uploaded/i }));
+    await expect(canvas.getByRole('alert')).toHaveTextContent(mediaIds[0]!);
+    await expect(canvas.getByRole('button', { name: /retry original removal/i })).toBeEnabled();
+  },
+};
+
+export const UnresolvedRemovalPhone: Story = {
+  ...UnresolvedRemoval,
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+};
