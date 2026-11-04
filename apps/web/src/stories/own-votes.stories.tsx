@@ -158,13 +158,7 @@ function StoryScreen() {
       ) : null}
       <OwnVotesWorkspace
         state={
-          mode === 'denied'
-            ? 'denied'
-            : failed
-              ? 'unavailable'
-              : mode === 'return-refreshing'
-                ? 'preparing'
-                : 'ready'
+          mode === 'denied' ? 'denied' : failed ? 'unavailable' : mode === 'return-refreshing' ? 'preparing' : 'ready'
         }
         page={mode === 'denied' || failed || mode === 'return-refreshing' ? null : page}
         cursor={null}

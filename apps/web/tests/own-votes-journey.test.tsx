@@ -52,22 +52,21 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('../src/kernel/client', () => ({ configured: () => false }));
 mock.module('../src/ratings/own-votes/actions', () => ({
-  readOwnVotesForViewer: async () => ({ state: 'unavailable', page: null, subject: null, cursor: null, locale: 'en', source: null }),
+  readOwnVotesForViewer: async () => ({
+    state: 'unavailable',
+    page: null,
+    subject: null,
+    cursor: null,
+    locale: 'en',
+    source: null,
+  }),
   executeOwnVoteIntent: async () => ({ kind: 'rejected' }),
   voteReadbackForIntent: async () => ({ kind: 'unavailable' }),
 }));
-const {
-  createMemoryHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-  Outlet,
-  RouterProvider,
-  useRouterState,
-} = await import('@tanstack/react-router');
-const { OwnVotesReturnProvider, useOwnVotesReturn, useOwnVotesReturnReceipt } = await import(
-  '../src/ratings/own-votes/return'
-);
+const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useRouterState } =
+  await import('@tanstack/react-router');
+const { OwnVotesReturnProvider, useOwnVotesReturn, useOwnVotesReturnReceipt } =
+  await import('../src/ratings/own-votes/return');
 const { OwnVotesWorkspace } = await import('../src/ratings/own-votes/page');
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -133,7 +132,13 @@ function RatingsScreen() {
     eligible: () => true,
     canRead: () => true,
     validateResult: (result) => {
-      if (!result || typeof result !== 'object' || !('data' in result) || !('isSuccess' in result) || result.isSuccess !== true)
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        !('data' in result) ||
+        !('isSuccess' in result) ||
+        result.isSuccess !== true
+      )
         return null;
       const read = result.data as OwnVotesRead;
       return read.state === 'ready' && read.subject === viewer && read.cursor === value.cursor ? read : null;
@@ -179,7 +184,13 @@ function RatingsScreen() {
   );
 }
 
-const rootRoute = createRootRoute({ component: () => <OwnVotesReturnProvider><Outlet /></OwnVotesReturnProvider> });
+const rootRoute = createRootRoute({
+  component: () => (
+    <OwnVotesReturnProvider>
+      <Outlet />
+    </OwnVotesReturnProvider>
+  ),
+});
 const ratingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/library/ratings',
@@ -357,7 +368,10 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
     );
     expect(view.calls).toHaveLength(1);
     await click(view, button(view, m.library_my_ratings_inspect()));
-    await click(view, [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!);
+    await click(
+      view,
+      [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!,
+    );
     await back(view);
     expect(view.refreshCount.value).toBe(2);
     expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
@@ -382,7 +396,10 @@ test('failed return stays unavailable until the user retries the same page', asy
   });
   try {
     await click(view, button(view, m.library_my_ratings_inspect()));
-    await click(view, [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!);
+    await click(
+      view,
+      [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!,
+    );
     await back(view);
     await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
     expect(view.refreshCount.value).toBe(1);
@@ -412,18 +429,30 @@ test('a missing original pair is reported on the admitted sparse page without sc
   });
   try {
     await click(view, button(view, m.library_my_ratings_inspect()));
-    await click(view, [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!);
+    await click(
+      view,
+      [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!,
+    );
     await back(view);
     view.outside.focus();
     pending.resolve({
       isSuccess: true,
-      data: { state: 'ready', page: sparse, subject: viewer, cursor: null, locale: 'en', source: 'rating.own_votes_page/v1' },
+      data: {
+        state: 'ready',
+        page: sparse,
+        subject: viewer,
+        cursor: null,
+        locale: 'en',
+        source: 'rating.own_votes_page/v1',
+      },
     });
     await act(async () => pending.promise);
     await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
     expect(view.host.textContent).toContain(m.library_my_ratings_return_missing());
     expect(view.host.textContent).toContain(m.library_my_ratings_sparse());
-    expect(view.host.querySelector('a[href*="cursor"]')?.getAttribute('href')).toContain(encodeURIComponent(sparse.next!));
+    expect(view.host.querySelector('a[href*="cursor"]')?.getAttribute('href')).toContain(
+      encodeURIComponent(sparse.next!),
+    );
     expect(view.refreshCount.value).toBe(1);
     expect(view.window.document.activeElement).toBe(view.outside);
   } finally {

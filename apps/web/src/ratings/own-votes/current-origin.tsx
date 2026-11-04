@@ -126,7 +126,11 @@ export function useOwnVotesCurrentOrigin(
         !!origin.subject &&
         origin.allowed[0] === true &&
         address.isCurrent(),
-      ...(origin.seed && !invalidAddress && !suspendInitial && origin.subject && matches(initial, origin.subject, cursor, locale)
+      ...(origin.seed &&
+      !invalidAddress &&
+      !suspendInitial &&
+      origin.subject &&
+      matches(initial, origin.subject, cursor, locale)
         ? { initialData: initial, initialDataUpdatedAt: Date.now() }
         : {}),
     },
@@ -190,85 +194,82 @@ export function useOwnVotesCurrentOrigin(
       OWN_VOTES_SOURCE,
       client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0,
     ]);
-  const captureReturnOwner = useCallback((previousResponseVersion = -1): OwnVotesReturnOwner => {
-    const responseCount = client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
-    const requestNumber = responseReads.current.started;
-    const responseSubject = origin.subject;
-    const departureAdmission = store.read();
-    const admissionCurrent = () => {
-      const currentAdmission = store.read();
-      return !!responseSubject &&
-        getLocale() === locale &&
-        currentAdmission.subject === responseSubject &&
-        currentAdmission.viewer === departureAdmission.viewer &&
-        currentAdmission.dispatch[0] === departureAdmission.dispatch[0] &&
-        currentAdmission.allowed[0] === true;
-    };
-    const canRead = () =>
-      !invalidAddress && getLocale() === locale && address.isCurrent() && origin.current(0, false);
-    return {
-      visitKey: viewKey,
-      responseVersion,
-      subject: responseSubject,
-      cursor,
-      locale,
-      source: OWN_VOTES_SOURCE,
-      admissionCurrent,
-      eligible: () => {
-        if (!admissionCurrent()) return false;
-        const state = client.getQueryState(options.queryKey);
-        // Keep custody through its own exact refresh response, but retire it for any other replacement.
-        if (!state || state.dataUpdateCount === responseCount) return true;
-        const exactRefreshResponse =
-          responseReads.current.started === requestNumber + 1 &&
-          responseReads.current.completed === requestNumber + 1 &&
-          responseReads.current.data === state.data &&
-          state.dataUpdateCount === responseCount + 1 &&
-          isOwnVotesRead(state.data) &&
-          matches(state.data, responseSubject, cursor, locale);
-        return exactRefreshResponse;
-      },
-      canRead,
-      validateResult: (result) => {
-        if (!canRead() || !result || typeof result !== 'object') return null;
-        const candidate = result as { data?: unknown; isSuccess?: boolean; responseVersion?: number };
-        const state = client.getQueryState(options.queryKey);
-        const exactQueryRead =
-          responseReads.current.started === requestNumber + 1 &&
-          responseReads.current.completed === requestNumber + 1 &&
-          responseReads.current.data === candidate.data;
-        const exactRouteRead =
-          candidate.responseVersion === responseVersion &&
-          responseVersion > previousResponseVersion &&
-          responseReads.current.started === requestNumber;
-        if (
-          candidate.isSuccess !== true ||
-          state?.status !== 'success' ||
-          state.dataUpdateCount !== responseCount + 1 ||
-          (!exactQueryRead && !exactRouteRead) ||
-          state.data !== candidate.data ||
-          !isOwnVotesRead(candidate.data) ||
-          !matches(candidate.data, responseSubject, cursor, locale)
-        )
-          return null;
-        return candidate.data;
-      },
-    };
-  }, [client, options.queryKey, origin, invalidAddress, address, locale, cursor, viewKey, store, responseVersion]);
+  const captureReturnOwner = useCallback(
+    (previousResponseVersion = -1): OwnVotesReturnOwner => {
+      const responseCount = client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
+      const requestNumber = responseReads.current.started;
+      const responseSubject = origin.subject;
+      const departureAdmission = store.read();
+      const admissionCurrent = () => {
+        const currentAdmission = store.read();
+        return (
+          !!responseSubject &&
+          getLocale() === locale &&
+          currentAdmission.subject === responseSubject &&
+          currentAdmission.viewer === departureAdmission.viewer &&
+          currentAdmission.dispatch[0] === departureAdmission.dispatch[0] &&
+          currentAdmission.allowed[0] === true
+        );
+      };
+      const canRead = () =>
+        !invalidAddress && getLocale() === locale && address.isCurrent() && origin.current(0, false);
+      return {
+        visitKey: viewKey,
+        responseVersion,
+        subject: responseSubject,
+        cursor,
+        locale,
+        source: OWN_VOTES_SOURCE,
+        admissionCurrent,
+        eligible: () => {
+          if (!admissionCurrent()) return false;
+          const state = client.getQueryState(options.queryKey);
+          // Keep custody through its own exact refresh response, but retire it for any other replacement.
+          if (!state || state.dataUpdateCount === responseCount) return true;
+          const exactRefreshResponse =
+            responseReads.current.started === requestNumber + 1 &&
+            responseReads.current.completed === requestNumber + 1 &&
+            responseReads.current.data === state.data &&
+            state.dataUpdateCount === responseCount + 1 &&
+            isOwnVotesRead(state.data) &&
+            matches(state.data, responseSubject, cursor, locale);
+          return exactRefreshResponse;
+        },
+        canRead,
+        validateResult: (result) => {
+          if (!canRead() || !result || typeof result !== 'object') return null;
+          const candidate = result as { data?: unknown; isSuccess?: boolean; responseVersion?: number };
+          const state = client.getQueryState(options.queryKey);
+          const exactQueryRead =
+            responseReads.current.started === requestNumber + 1 &&
+            responseReads.current.completed === requestNumber + 1 &&
+            responseReads.current.data === candidate.data;
+          const exactRouteRead =
+            candidate.responseVersion === responseVersion &&
+            responseVersion > previousResponseVersion &&
+            responseReads.current.started === requestNumber;
+          if (
+            candidate.isSuccess !== true ||
+            state?.status !== 'success' ||
+            state.dataUpdateCount !== responseCount + 1 ||
+            (!exactQueryRead && !exactRouteRead) ||
+            state.data !== candidate.data ||
+            !isOwnVotesRead(candidate.data) ||
+            !matches(candidate.data, responseSubject, cursor, locale)
+          )
+            return null;
+          return candidate.data;
+        },
+      };
+    },
+    [client, options.queryKey, origin, invalidAddress, address, locale, cursor, viewKey, store, responseVersion],
+  );
 
   const admitRouteResponse = useCallback(
     (read: OwnVotesRead, previousResponseVersion: number): Promise<unknown> | null => {
-      if (
-        responseVersion <= previousResponseVersion ||
-        consumedRouteResponse.current === responseVersion
-      )
-        return null;
+      if (responseVersion <= previousResponseVersion || consumedRouteResponse.current === responseVersion) return null;
       consumedRouteResponse.current = responseVersion;
-      if (
-        current() &&
-        isOwnVotesRead(read) &&
-        matches(read, origin.subject, cursor, locale)
-      )
+      if (current() && isOwnVotesRead(read) && matches(read, origin.subject, cursor, locale))
         client.setQueryData(options.queryKey, read);
       return Promise.resolve({ isSuccess: true, data: read, responseVersion });
     },

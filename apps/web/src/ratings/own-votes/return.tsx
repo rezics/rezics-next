@@ -34,7 +34,10 @@ export type OwnVotesReturnReceipt = {
 
 type ReturnState = {
   receipt: OwnVotesReturnReceipt | null;
-  depart: (input: Omit<OwnVotesReturnReceipt, 'id' | 'phase' | 'focusVersion'>, phase?: OwnVotesReturnReceipt['phase']) => OwnVotesReturnReceipt;
+  depart: (
+    input: Omit<OwnVotesReturnReceipt, 'id' | 'phase' | 'focusVersion'>,
+    phase?: OwnVotesReturnReceipt['phase'],
+  ) => OwnVotesReturnReceipt;
   begin: (id: string) => boolean;
   owns: (id: string, owner: OwnVotesReturnOwner, phase: OwnVotesReturnReceipt['phase']) => boolean;
   fail: (id: string) => void;
@@ -92,37 +95,54 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
     receiptRef.current = next;
     setReceipt(next);
   }, []);
-  const clear = useCallback((id?: string) => {
-    if (id === undefined || receiptRef.current?.id === id) publish(null);
-  }, [publish]);
-  const depart = useCallback<ReturnState['depart']>((input, phase = 'departed') => {
-    const next: OwnVotesReturnReceipt = { ...input, id: crypto.randomUUID(), phase, focusVersion: focusVersion.current };
-    publish(next);
-    return next;
-  }, [publish]);
-  const begin = useCallback((id: string) => {
-    const current = receiptRef.current;
-    if (!current || current.id !== id || (current.phase !== 'arrived' && current.phase !== 'failed')) return false;
-    publish({ ...current, phase: 'refreshing' });
-    return true;
-  }, [publish]);
-  const owns = useCallback(
-    (id: string, owner: OwnVotesReturnOwner, phase: OwnVotesReturnReceipt['phase']) => {
-      const current = receiptRef.current;
-      return current?.id === id && current.owner === owner && current.phase === phase;
+  const clear = useCallback(
+    (id?: string) => {
+      if (id === undefined || receiptRef.current?.id === id) publish(null);
     },
-    [],
+    [publish],
   );
-  const fail = useCallback((id: string) => {
+  const depart = useCallback<ReturnState['depart']>(
+    (input, phase = 'departed') => {
+      const next: OwnVotesReturnReceipt = {
+        ...input,
+        id: crypto.randomUUID(),
+        phase,
+        focusVersion: focusVersion.current,
+      };
+      publish(next);
+      return next;
+    },
+    [publish],
+  );
+  const begin = useCallback(
+    (id: string) => {
+      const current = receiptRef.current;
+      if (!current || current.id !== id || (current.phase !== 'arrived' && current.phase !== 'failed')) return false;
+      publish({ ...current, phase: 'refreshing' });
+      return true;
+    },
+    [publish],
+  );
+  const owns = useCallback((id: string, owner: OwnVotesReturnOwner, phase: OwnVotesReturnReceipt['phase']) => {
     const current = receiptRef.current;
-    if (current?.id === id && current.phase === 'refreshing') publish({ ...current, phase: 'failed' });
-  }, [publish]);
-  const resolve = useCallback((id: string) => {
-    const current = receiptRef.current;
-    if (current?.id !== id || current.phase !== 'refreshing') return null;
-    publish({ ...current, phase: 'resolved' });
-    return current.focusVersion;
-  }, [publish]);
+    return current?.id === id && current.owner === owner && current.phase === phase;
+  }, []);
+  const fail = useCallback(
+    (id: string) => {
+      const current = receiptRef.current;
+      if (current?.id === id && current.phase === 'refreshing') publish({ ...current, phase: 'failed' });
+    },
+    [publish],
+  );
+  const resolve = useCallback(
+    (id: string) => {
+      const current = receiptRef.current;
+      if (current?.id !== id || current.phase !== 'refreshing') return null;
+      publish({ ...current, phase: 'resolved' });
+      return current.focusVersion;
+    },
+    [publish],
+  );
   const focusUnchanged = useCallback((version: number) => focusVersion.current === version, []);
 
   useEffect(() => {
@@ -259,13 +279,11 @@ export function useOwnVotesReturn({
         return;
       }
       const selected = pair.current.visitKey === visitKey ? pair.current.value : null;
-      state.depart(
-        {
-          historyKey,
-          pair: selected,
-          owner: activeOwner,
-        },
-      );
+      state.depart({
+        historyKey,
+        pair: selected,
+        owner: activeOwner,
+      });
     });
     const hide = (event: PageTransitionEvent) => {
       if (!event.persisted || !isCurrent()) return;

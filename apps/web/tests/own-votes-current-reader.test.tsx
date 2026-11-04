@@ -93,7 +93,13 @@ function row(): OwnVoteEntry {
       cover: null,
     },
     subjectHref: `/v1/subjects/${terminal}`,
-    question: { id: question, revision: 3, label: 'How much does it stay with you?', grain: 'work', scale: { min: 0, max: 20, displayStep: 2 } },
+    question: {
+      id: question,
+      revision: 3,
+      label: 'How much does it stay with you?',
+      grain: 'work',
+      scale: { min: 0, max: 20, displayStep: 2 },
+    },
     own: { units: 0, revision: 4, at: '2026-10-01T00:00:00.000Z' },
     actions: { state: 'editable', put: path, clear: path, readback: path },
   };
@@ -171,7 +177,10 @@ async function mounted(initialPath = '/library/ratings') {
   });
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [initialPath] }) });
   await router.load();
-  const perform = (work: () => void | Promise<unknown>) => act(async () => { await work(); });
+  const perform = (work: () => void | Promise<unknown>) =>
+    act(async () => {
+      await work();
+    });
   function expose(subject: string, csrfToken: string) {
     activeSubject = subject;
     return perform(() => {
@@ -199,7 +208,9 @@ async function mounted(initialPath = '/library/ratings') {
     perform,
     expose,
     click: (node: Element) =>
-      act(async () => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))),
+      act(async () =>
+        node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
+      ),
     close: async () => {
       await act(async () => root.unmount());
       stopObservation();
@@ -238,7 +249,9 @@ test('an admitted current page returns once to the exact inspected original pair
   const view = await mounted();
   try {
     if (view.host.querySelectorAll('[data-own-vote-pair]').length !== 1)
-      throw new Error(JSON.stringify({ text: view.host.textContent, reads: reads.length, location: view.router.state.location }));
+      throw new Error(
+        JSON.stringify({ text: view.host.textContent, reads: reads.length, location: view.router.state.location }),
+      );
     expect(view.host.querySelectorAll('[data-own-vote-pair]')).toHaveLength(1);
     expect(reads).toHaveLength(0);
     const inspect = [...view.host.querySelectorAll('button')].find(
@@ -257,8 +270,11 @@ test('an admitted current page returns once to the exact inspected original pair
     await act(async () => call.promise);
     await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
     expect(view.host.textContent).toContain('The same original question and Subject pair');
-    expect(view.host.querySelector('[data-own-vote-target="' + target + '"][data-own-vote-question="' + question + '"] button'))
-      .toBe(window.document.activeElement);
+    expect(
+      view.host.querySelector(
+        '[data-own-vote-target="' + target + '"][data-own-vote-question="' + question + '"] button',
+      ),
+    ).toBe(window.document.activeElement);
     expect(view.host.querySelector('button[aria-label*="Edit"]')).toBeNull();
   } finally {
     await view.close();
@@ -321,7 +337,10 @@ test('cursor and equal-response replacement reject the old refresh completion', 
     await view.click(inspect);
     await visitSubject(view);
     const old = await back(view);
-    const key = view.client.getQueryCache().findAll({ queryKey: ['own-votes'] }).at(-1)?.queryKey;
+    const key = view.client
+      .getQueryCache()
+      .findAll({ queryKey: ['own-votes'] })
+      .at(-1)?.queryKey;
     expect(key).toBeDefined();
     view.client.setQueryData(key!, nativeRead());
     ready(old);

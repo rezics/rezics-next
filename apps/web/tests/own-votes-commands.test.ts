@@ -57,7 +57,9 @@ test('frozen replay intent retains the original pair, exact route, body and idem
 
 test('retired questions admit only native clear; merged rows have no mutation intent', () => {
   const retired = row({ state: 'retired', reason: 'question_retired', clear: path, readback: path });
-  expect(createOwnVoteIntent(viewer, retired, 'DELETE', undefined, '22222222-2222-4222-8222-222222222222')).toMatchObject({
+  expect(
+    createOwnVoteIntent(viewer, retired, 'DELETE', undefined, '22222222-2222-4222-8222-222222222222'),
+  ).toMatchObject({
     targetId,
     questionId,
     pair: `${questionId}\u0000${targetId}`,
@@ -92,8 +94,20 @@ test('a fresh exact inventory read cannot acknowledge or replace an uncertain or
     at: '2026-11-01T00:00:00.000Z',
   });
   expect(commandOutcome(503, undefined)).toBe('uncertain');
-  expect(parseOwnVoteIntent(intent)).toMatchObject({ key: intent.key, method: 'PUT', targetId, questionId, body: { units: 0 } });
-  expect(parseOwnVoteIntent({ ...intent, targetId: terminalId, path: `/v1/subjects/${terminalId}/ratings/${questionId}/vote` })).toBeNull();
+  expect(parseOwnVoteIntent(intent)).toMatchObject({
+    key: intent.key,
+    method: 'PUT',
+    targetId,
+    questionId,
+    body: { units: 0 },
+  });
+  expect(
+    parseOwnVoteIntent({
+      ...intent,
+      targetId: terminalId,
+      path: `/v1/subjects/${terminalId}/ratings/${questionId}/vote`,
+    }),
+  ).toBeNull();
 });
 
 test('exact original readback treats DELETE 404 as cleared and PUT 404 as missing', async () => {

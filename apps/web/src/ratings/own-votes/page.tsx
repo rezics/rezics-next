@@ -13,11 +13,7 @@ import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey, type VotePai
 import { createOwnVoteIntent, isAdmittedVoteAction, type OwnVoteIntent } from './intent';
 import type { OwnVoteReadback } from './readback';
 import { OwnVotesInspection } from './inspection';
-import {
-  useOwnVotesReturn,
-  useOwnVotesReturnReceipt,
-  type OwnVotesReturnOutcome,
-} from './return';
+import { useOwnVotesReturn, useOwnVotesReturnReceipt, type OwnVotesReturnOutcome } from './return';
 
 type Execute = (input: { data: OwnVoteIntent }) => Promise<Awaited<ReturnType<typeof executeOwnVoteIntent>>>;
 type Review = (input: { data: { intent: OwnVoteIntent; after: 'REVIEW' } }) => Promise<OwnVoteReadback>;
