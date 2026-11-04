@@ -56,7 +56,12 @@ function resolverAdapter(
         const data = JSON.parse(options.prompt.split('\nDATA:\n')[1]!);
         expect(data.sourceContract).toContain('goal: fixture');
         expect(data.conflict.conflictFiles).toContain(file);
-        expect(data.files[0]).toMatchObject({ path: file, base, target: targets[Math.min(calls - 1, targets.length - 1)], source: worker });
+        expect(data.files[0]).toMatchObject({
+          path: file,
+          base,
+          target: targets[Math.min(calls - 1, targets.length - 1)],
+          source: worker,
+        });
         started?.();
         const wait = marker
           ? `const fs=require('node:fs');const until=Date.now()+30000;while(!fs.existsSync(${JSON.stringify(marker)})){if(Date.now()>until)process.exit(2);Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}`
@@ -139,7 +144,7 @@ test('a failed resolver returns the conflict to the same worker attempt session'
     const task = await startConflict(h);
     const adapter = {
       ...agentAdapter('codex'),
-      start() {
+      start(): [string, string[]] {
         return [process.execPath, ['-e', 'process.exit(1)']];
       },
     };

@@ -2897,7 +2897,10 @@ export class MergeTrain {
       (o.policy ?? defaultPolicy).controlPlane.pollMs,
     );
     try {
-      const outcome = await this.integrate(entry, custody);
+      const integrated = await this.integrate(entry, custody);
+      if (isDevResolutionHandoff(integrated))
+        throw new Error('Control-plane proof cannot be handed off to the dev resolver');
+      const outcome = integrated;
       attempt.status = 'finished';
       attempt.outcome = outcome;
       save();
@@ -2963,11 +2966,12 @@ export class MergeTrain {
     const canonical = canonicalConflictPaths(paths);
     outcome.stage = 'rebase';
     outcome.conflictedFiles = canonical;
-    outcome.rebaseConflict = makeRebaseConflictContext(
+    const conflict = makeRebaseConflictContext(
       targetHead,
       entry.request.workerCommit ?? this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
       canonical,
     );
+    if (conflict) outcome.rebaseConflict = conflict;
     outcome.firstFailure ??= firstFailure(`Rebase conflicts with dev: ${canonical.join(', ')}`, this.options.policy?.merge);
     appendFileSync(
       outcome.logPath,
@@ -3126,11 +3130,12 @@ export class MergeTrain {
     outcome.stage = 'rebase';
     outcome.passed = false;
     outcome.conflictedFiles = paths;
-    outcome.rebaseConflict = makeRebaseConflictContext(
+    const conflict = makeRebaseConflictContext(
       lastTarget,
       request.workerCommit ?? sourceCommit,
       paths,
     );
+    if (conflict) outcome.rebaseConflict = conflict;
     outcome.conflictResolution = { method: 'worker', tokens, attempts };
     outcome.firstFailure = firstFailure(
       `${outcome.firstFailure?.assertion ?? `Rebase conflicts with dev: ${paths.join(', ')}`}; train resolver returned the conflict to the worker: ${failure}`,
@@ -3594,8 +3599,8 @@ export class MergeTrain {
             if (integratesIntoDev && !stabilize && !controlPlane) {
               result.conflictResolution = {
                 method: 'worker',
-                tokens: request.devResolution?.tokens ?? emptyTokens(),
-                attempts: request.devResolution?.attempts ?? 0,
+                tokens: emptyTokens(),
+                attempts: 0,
               };
               appendFileSync(
                 logPath,
