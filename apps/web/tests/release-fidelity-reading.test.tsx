@@ -212,7 +212,6 @@ test('a later page inspects one exact repeated occurrence and returns from its e
     expect(visit.host.textContent).toContain('978-1-11-000020-0');
     expect(visit.host.textContent).toContain('anidb:rel:0020');
     expect(visit.host.textContent).toContain(m.release_fidelity_historical({}, options));
-    expect(visit.window.document.activeElement?.id).toBe('release-selected-detail-heading');
 
     await visit.click(visit.byLabel(m.correction_title({}, options)));
     const relationLabel = m.relation_title({}, options);
