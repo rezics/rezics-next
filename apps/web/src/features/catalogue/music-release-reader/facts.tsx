@@ -158,3 +158,242 @@ export function MusicReleaseFacts({
     </div>
   );
 }
+
+/** Listing labels describe an occurrence; they never become an invented medium or target identity. */
+export function MusicReleaseSlot({ row, page, locale }: { row: Ready['rows'][number]; page: Ready; locale: string }) {
+  const o = { locale: locale as never };
+  const slotKey = page.stream?.slotKey;
+  const slots = row.statement?.qualifiers.filter((snak) => snak.property.id === slotKey) ?? [];
+  if (!slots.length) return null;
+  return (
+    <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-sm [overflow-wrap:anywhere]">
+      {slots.map((snak, index) => (
+        <div key={index}>
+          <dt className="text-muted-foreground" lang={page.labels[snak.property.id]?.lang ?? undefined}>
+            {page.labels[snak.property.id]?.text || m.music_release_slot({}, o)}
+          </dt>
+          <dd>
+            <CandidateValue snak={snak} related={row.related} locale={locale} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Inspect one holder/assertion pair from the accepted window, without reading the target. */
+export function MusicReleaseOccurrenceFacts({
+  row,
+  page,
+  locale,
+  realm,
+  onNavigate,
+}: {
+  row: Ready['rows'][number];
+  page: Ready;
+  locale: string;
+  realm?: string | undefined;
+  onNavigate: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  const o = { locale: locale as never };
+  const stream = page.stream;
+  if (!stream) return null;
+  const summary = row.summary;
+  const type = summary ? page.types[summary.type] : undefined;
+  const statement = row.statement;
+  const targetHref = summary
+    ? contextHref(subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href, realm)
+    : undefined;
+  // The inverse stream holder is the supplied source, never the edition or another row's recording.
+  const holderHref = contextHref(
+    subjectHref(
+      {
+        id: row.holder,
+        label: row.holder === page.identity.id ? page.identity.label.text : (summary?.label?.value ?? ''),
+      },
+      locale,
+    ).href,
+    realm,
+  );
+  const correction = contextHref(`${holderHref.split('?')[0]}/relation-edit`, realm);
+  const Link = (props: ComponentProps<'a'>) => (
+    <a {...props} className={action} target="_blank" rel="noopener" onClick={onNavigate} />
+  );
+  return (
+    <div className="min-w-0 space-y-5" data-occurrence={`${row.holder}:${row.statementId}`}>
+      <p className="text-sm text-muted-foreground">{m.music_release_occurrence_scope({}, o)}</p>
+      <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <div>
+          <dt className="text-sm text-muted-foreground">{m.work_parts_relation({}, o)}</dt>
+          <dd>
+            <span lang={stream.label.lang ?? undefined}>{stream.label.text || stream.property}</span>
+            <span className="block text-sm">{stream.property}</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">{m.music_release_direction({}, o)}</dt>
+          <dd>{stream.direction === 'forward' ? m.music_release_forward({}, o) : m.music_release_inverse({}, o)}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">{m.work_parts_holder({}, o)}</dt>
+          <dd>
+            {row.holder === page.identity.id ? (
+              <span lang={page.identity.label.lang ?? undefined}>{page.identity.label.text || row.holder}</span>
+            ) : summary?.id === row.holder ? (
+              <span lang={summary.label?.language}>{summary.label?.value || row.holder}</span>
+            ) : (
+              row.holder
+            )}
+            <span className="block text-sm text-muted-foreground">{row.holder}</span>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-sm text-muted-foreground">{m.album_tracks_membership({}, o)}</dt>
+          <dd>{row.statementId}</dd>
+        </div>
+        {summary ? (
+          <div>
+            <dt className="text-sm text-muted-foreground">{m.album_tracks_kind({}, o)}</dt>
+            <dd lang={type?.lang ?? undefined}>{type?.text || summary.type}</dd>
+          </div>
+        ) : null}
+      </dl>
+      {targetHref ? (
+        <Link href={targetHref}>{m.album_tracks_open({}, o)}</Link>
+      ) : (
+        <p role="status">{m.music_release_target_withheld({}, o)}</p>
+      )}
+      {statement ? (
+        <>
+          <section className="min-w-0 space-y-3" aria-label={m.music_release_assertion({}, o)}>
+            <h4 className="font-semibold">{m.music_release_assertion({}, o)}</h4>
+            <p className="text-sm text-muted-foreground">{m.music_release_assertion_scope({}, o)}</p>
+            <CandidateValue
+              snak={statement}
+              // A withheld summary must not be recreated from a related label or its raw item value.
+              related={statement.value.type === 'value' ? {} : row.related}
+              locale={locale}
+            />
+            <h5 className="font-medium">{m.music_release_qualifiers({}, o)}</h5>
+            {!statement.qualifiers.length ? (
+              <p>{m.music_release_qualifiers_absent({}, o)}</p>
+            ) : (
+              <dl className="space-y-3">
+                {statement.qualifiers.map((snak, index) => (
+                  <div key={index}>
+                    <dt
+                      className="text-sm text-muted-foreground"
+                      lang={page.labels[snak.property.id]?.lang ?? undefined}
+                    >
+                      {page.labels[snak.property.id]?.text || snak.property.id}
+                    </dt>
+                    <dd>
+                      <CandidateValue snak={snak} related={row.related} locale={locale} link={Link} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+          <section className="min-w-0 space-y-3" aria-label={m.sources_citations({}, o)}>
+            <h4 className="font-semibold">{m.sources_citations({}, o)}</h4>
+            <p className="text-sm text-muted-foreground">{m.music_release_references_scope({}, o)}</p>
+            {!statement.references.length ? (
+              <p>{m.music_reader_source_unavailable({}, o)}</p>
+            ) : (
+              <ol className="min-w-0 space-y-3">
+                {statement.references.map((reference, index) => (
+                  <li
+                    key={index}
+                    className="min-w-0 rounded-lg border border-border p-3"
+                    data-slot="music-release-reference"
+                  >
+                    <h5 className="font-medium">{m.music_release_reference_group({ number: index + 1 }, o)}</h5>
+                    <dl className="mt-3 space-y-3">
+                      {reference.parts.map((snak, part) => (
+                        <div key={part}>
+                          <dt
+                            className="text-sm text-muted-foreground"
+                            lang={page.labels[snak.property.id]?.lang ?? undefined}
+                          >
+                            {page.labels[snak.property.id]?.text || snak.property.id}
+                          </dt>
+                          <dd>
+                            <CandidateValue snak={snak} related={row.related} locale={locale} link={Link} />
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+          <section className="min-w-0 space-y-3" aria-label={m.music_release_accepting_meaning({}, o)}>
+            <h4 className="font-semibold">{m.music_release_accepting_meaning({}, o)}</h4>
+            <p className="text-sm text-muted-foreground">{m.music_release_accepting_scope({}, o)}</p>
+            {historicalStatement(statement, page.digest) ? (
+              <p role="status">{m.release_fidelity_historical({}, o)}</p>
+            ) : null}
+            <dl className="space-y-2 text-sm">
+              <div>
+                <dt className="text-muted-foreground">{m.music_release_pinned_release({}, o)}</dt>
+                <dd>{statement.rezics.release}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{m.music_release_current_release({}, o)}</dt>
+                <dd>{page.digest}</dd>
+              </div>
+            </dl>
+          </section>
+        </>
+      ) : (
+        <p role="status">{m.work_parts_assertion_unavailable({}, o)}</p>
+      )}
+      <details className="min-w-0 rounded-lg border border-border p-3">
+        <summary className={`${action} cursor-pointer`}>{m.catalogue_technical_details({}, o)}</summary>
+        <dl className="mt-3 space-y-3 text-sm">
+          <div>
+            <dt className="text-muted-foreground">{m.music_release_edition({}, o)}</dt>
+            <dd>{page.identity.id}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">{m.music_release_context({}, o)}</dt>
+            <dd>{page.public.subject.context}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">{m.work_parts_holder({}, o)}</dt>
+            <dd>{row.holder}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">{m.album_tracks_membership({}, o)}</dt>
+            <dd>{row.statementId}</dd>
+          </div>
+          {summary ? (
+            <div>
+              <dt className="text-muted-foreground">{m.album_tracks_target({}, o)}</dt>
+              <dd>{summary.id}</dd>
+            </div>
+          ) : null}
+          <div>
+            <dt className="text-muted-foreground">{m.work_parts_relation({}, o)}</dt>
+            <dd>{stream.key}</dd>
+          </div>
+          {statement ? (
+            <>
+              <div>
+                <dt className="text-muted-foreground">{m.music_release_rank({}, o)}</dt>
+                <dd>{statement.rank}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{m.music_release_revision({}, o)}</dt>
+                <dd>{statement.rezics.revision}</dd>
+              </div>
+            </>
+          ) : null}
+        </dl>
+      </details>
+      <Link href={correction}>{m.album_tracks_correction({}, o)}</Link>
+    </div>
+  );
+}

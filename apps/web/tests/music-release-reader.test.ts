@@ -9,6 +9,14 @@ import {
   releaseId,
 } from '../src/features/catalogue/music-release-reader/examples';
 import {
+  acceptMusicReleaseAddress,
+  musicReleaseFirstAddress,
+  musicReleaseMatchesAddress,
+  musicReleaseNavigation,
+  musicReleaseNextAddress,
+  musicReleaseOccurrenceKey,
+  requestMusicReleaseAddress,
+  validMusicReleaseAddress,
   isMusicRelease,
   musicReleaseDate,
   musicReleaseEntry,
@@ -257,4 +265,56 @@ test('album inverse release window binds ordered editions from recorded descript
     'en',
   );
   expect(denied).toEqual({ ok: false, reason: 'withheld' });
+});
+
+test('bounded previous addresses reread their native direction, stream and opaque cursor without retaining bodies', async () => {
+  const fixture = musicReleaseExample();
+  const first = await fixture.read();
+  if (!first.ok || !first.stream) throw new Error('Expected stream');
+  let navigation = musicReleaseNavigation(musicAddress, first);
+  expect(new Set(first.rows.map(musicReleaseOccurrenceKey)).size).toBe(3);
+  const previousAddresses = [];
+  for (let index = 0; index < 12; index++) {
+    const cursor = `opaque:${index}/?+曲`;
+    const page = { ...first, next: cursor };
+    const address = musicReleaseNextAddress(navigation, page)!;
+    previousAddresses.push(navigation.accepted);
+    expect(address).toEqual({ ...musicAddress, stream: first.stream.key, cursor });
+    navigation = requestMusicReleaseAddress(navigation, address, 'next');
+    const read = await fixture.read(address);
+    expect(read.ok).toBe(true);
+    expect(fixture.calls.at(-1)?.searchParams.get('cursor')).toBe(cursor);
+    expect(fixture.calls.at(-1)?.searchParams.get('property')).toBe(first.stream.property);
+    expect(fixture.calls.at(-1)?.pathname).toEndWith('/relations');
+    navigation = acceptMusicReleaseAddress(navigation, first.stream.key);
+  }
+  expect(navigation.previous).toEqual(previousAddresses.slice(-8));
+  expect(Object.keys(navigation).sort()).toEqual(['accepted', 'previous']);
+  while (navigation.previous.length) {
+    const address = navigation.previous.at(-1)!;
+    navigation = requestMusicReleaseAddress(navigation, address, 'previous');
+    const retained = JSON.stringify(navigation);
+    fixture.fail(503);
+    expect(await fixture.read(address)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(JSON.stringify(navigation)).toBe(retained);
+    fixture.fail(0);
+    expect((await fixture.read(navigation.pending!.address)).ok).toBe(true);
+    expect(fixture.calls.at(-1)?.searchParams.get('cursor')).toBe(address.cursor ?? null);
+    navigation = acceptMusicReleaseAddress(navigation, first.stream.key);
+    expect(navigation.accepted).toEqual(address);
+  }
+  const start = musicReleaseFirstAddress(musicAddress, 'inverse:wdt:P361');
+  navigation = requestMusicReleaseAddress(navigation, start, 'start');
+  const inverse = await fixture.read(start);
+  if (!inverse.ok) throw new Error('Expected inverse stream');
+  navigation = acceptMusicReleaseAddress(navigation, inverse.stream?.key);
+  expect(navigation).toEqual({ accepted: start, previous: [] });
+  expect(fixture.calls.at(-1)?.pathname).toEndWith('/links');
+  expect(fixture.calls.at(-1)?.searchParams.has('cursor')).toBe(false);
+  expect(musicReleaseMatchesAddress(inverse, { ...start, context: albumId })).toBe(false);
+  expect(musicReleaseMatchesAddress(inverse, { ...start, stream: first.stream.key })).toBe(false);
+  expect(musicReleaseNextAddress(navigation, first)).toBeUndefined();
+  expect(validMusicReleaseAddress({ ...start, cursor: 'x'.repeat(4096) })).toBe(true);
+  expect(validMusicReleaseAddress({ ...start, cursor: 'x'.repeat(4097) })).toBe(false);
+  expect(await fixture.read({ ...start, stream: 'forward:missing' })).toEqual({ ok: false, reason: 'invalid' });
 });

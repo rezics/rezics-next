@@ -56,6 +56,121 @@ export function validMusicReleaseAddress(input: MusicReleaseAddress): boolean {
   );
 }
 
+/** A listing assertion, not its target, identifies one occurrence in a native window. */
+export function musicReleaseOccurrenceKey(row: Pick<PartRow, 'holder' | 'statementId'>): string {
+  return `${row.holder}:${row.statementId}`;
+}
+
+export const musicReleasePreviousLimit = 8;
+export type MusicReleaseWindowIntent = 'start' | 'next' | 'previous';
+export type MusicReleasePending = {
+  address: MusicReleaseAddress;
+  intent: MusicReleaseWindowIntent;
+};
+
+/** Addresses only: no prior response, target set, inferred offset or stream frontier cache. */
+export type MusicReleaseNavigation = {
+  accepted?: MusicReleaseAddress;
+  previous: MusicReleaseAddress[];
+  pending?: MusicReleasePending;
+};
+
+export function musicReleaseFirstAddress(
+  address: Pick<MusicReleaseAddress, 'id' | 'context'>,
+  stream?: string,
+): MusicReleaseAddress {
+  return { id: address.id, context: address.context, ...(stream ? { stream } : {}) };
+}
+
+export function sameMusicReleaseAddress(left: MusicReleaseAddress, right: MusicReleaseAddress): boolean {
+  return (
+    left.id === right.id &&
+    left.context === right.context &&
+    left.stream === right.stream &&
+    left.cursor === right.cursor
+  );
+}
+
+export function musicReleaseNavigation(
+  address: MusicReleaseAddress,
+  page?: Extract<MusicReleaseRead, { ok: true }>,
+): MusicReleaseNavigation {
+  return {
+    ...(page ? { accepted: musicReleaseFirstAddress(address, page.stream?.key) } : {}),
+    previous: [],
+  };
+}
+
+/** Next always pairs the frontier with the stream of the one accepted response. */
+export function musicReleaseNextAddress(
+  navigation: MusicReleaseNavigation,
+  page: Extract<MusicReleaseRead, { ok: true }>,
+): MusicReleaseAddress | undefined {
+  const accepted = navigation.accepted;
+  if (!accepted || !page.stream || !page.next || accepted.stream !== page.stream.key) return undefined;
+  return { ...accepted, cursor: page.next };
+}
+
+/** Preserve the exact failed operation, including whether a successful retry consumes Previous. */
+export function requestMusicReleaseAddress(
+  navigation: MusicReleaseNavigation,
+  address: MusicReleaseAddress,
+  intent: MusicReleaseWindowIntent,
+): MusicReleaseNavigation {
+  return {
+    ...navigation,
+    pending: {
+      address: {
+        id: address.id,
+        context: address.context,
+        ...(address.stream ? { stream: address.stream } : {}),
+        ...(address.cursor ? { cursor: address.cursor } : {}),
+      },
+      intent,
+    },
+  };
+}
+
+/** Commit only after a successful native read; unavailable attempts do not consume history. */
+export function acceptMusicReleaseAddress(navigation: MusicReleaseNavigation, stream?: string): MusicReleaseNavigation {
+  const pending = navigation.pending;
+  if (!pending) return navigation;
+  const address: MusicReleaseAddress = {
+    ...pending.address,
+    ...(stream ? { stream } : {}),
+  };
+  const accepted = navigation.accepted;
+  const paired =
+    accepted &&
+    accepted.id === address.id &&
+    accepted.context === address.context &&
+    accepted.stream === address.stream;
+  let previous: MusicReleaseAddress[] = [];
+  if (pending.intent === 'previous' && paired) {
+    const last = navigation.previous.at(-1);
+    // Previous consumes only the address that was deliberately reread, never an inferred offset.
+    previous = last && sameMusicReleaseAddress(last, address) ? navigation.previous.slice(0, -1) : [];
+  } else if (pending.intent === 'next' && paired) {
+    previous = sameMusicReleaseAddress(accepted, address)
+      ? navigation.previous
+      : [...navigation.previous, accepted].slice(-musicReleasePreviousLimit);
+  }
+  return { accepted: address, previous };
+}
+
+/** A response cannot attach a different occurrence window to the pending native address. */
+export function musicReleaseMatchesAddress(
+  page: Extract<MusicReleaseRead, { ok: true }>,
+  address: MusicReleaseAddress,
+): boolean {
+  return (
+    page.identity.id === address.id &&
+    page.public.subject.id === address.id &&
+    page.public.subject.context === address.context &&
+    (!address.stream || page.stream?.key === address.stream)
+  );
+}
+
 /** Exact admitted music identities, never a generic release label or provider code. */
 export function musicReleaseStreams(release: Definitions, type: string, locale: string): PartStream[] {
   if (!isMusicRelease(release, type)) return [];
