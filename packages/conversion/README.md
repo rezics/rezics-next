@@ -969,6 +969,7 @@ rights follow their current paths.
   deferred to integration.
 
 Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
+
 ## Bangumi Book-template subject names
 
 `bangumi@9` extracts Book titles only when the selected converter profile is

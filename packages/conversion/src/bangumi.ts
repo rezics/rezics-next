@@ -348,15 +348,15 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     for (const [index, statement] of facts.entries()) {
       const property = statement.property.id;
       const content = statement.value.type === 'value' ? statement.value.content : undefined;
-      const field = nameFields.get(statement) ?? (
-        (property === 'schema:name' || property === 'schema:alternateName') &&
+      const field =
+        nameFields.get(statement) ??
+        ((property === 'schema:name' || property === 'schema:alternateName') &&
         content &&
         typeof content === 'object' &&
         'language' in content &&
         'text' in content
           ? `name:${property}:${String(content.language)}:${String(content.text)}`
-          : `fact:${index}`
-      );
+          : `fact:${index}`);
       proposals.push(propose(statement, 'facts', field));
     }
     if (record.type === 3 || record.type === 6) {

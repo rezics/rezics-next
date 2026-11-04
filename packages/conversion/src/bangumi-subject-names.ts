@@ -1,7 +1,4 @@
-import {
-  isBangumiBookTemplateHead,
-  isBangumiTVAnimeTemplateHead,
-} from './bangumi-subject-profile.ts';
+import { isBangumiBookTemplateHead, isBangumiTVAnimeTemplateHead } from './bangumi-subject-profile.ts';
 import { bangumiTelevisionRunKeys } from './bangumi-television-run.ts';
 
 export type BangumiSubjectName = Readonly<{
@@ -61,15 +58,7 @@ function plainName(value: string): string | undefined {
 function compareNames(left: BangumiSubjectName, right: BangumiSubjectName): number {
   const a = `${left.property}\u0000${left.language}\u0000${left.text}`;
   const b = `${right.property}\u0000${right.language}\u0000${right.text}`;
-  return a < b
-    ? -1
-    : a > b
-      ? 1
-      : left.pointer < right.pointer
-        ? -1
-        : left.pointer > right.pointer
-          ? 1
-          : 0;
+  return a < b ? -1 : a > b ? 1 : left.pointer < right.pointer ? -1 : left.pointer > right.pointer ? 1 : 0;
 }
 
 /**
@@ -127,10 +116,7 @@ export function extractBangumiSubjectNames(
     }
     candidate = iterator.next();
   }
-  if (
-    !header ||
-    (book ? !isBangumiBookTemplateHead(header.line) : !isBangumiTVAnimeTemplateHead(header.line))
-  ) {
+  if (!header || (book ? !isBangumiBookTemplateHead(header.line) : !isBangumiTVAnimeTemplateHead(header.line))) {
     omit('/infobox', 'unsupported_infobox_template');
     return { names: names.sort(compareNames), diagnostics };
   }

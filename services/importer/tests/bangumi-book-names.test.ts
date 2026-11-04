@@ -129,12 +129,14 @@ test('selected Book names stay source-bound through ordinary and default imports
       )?.pointer,
     ).toBe('/infobox/fields/0');
     const standaloneNames = names(standalone.proposals, String(bookId));
-    expect(standaloneNames.map(nameText).sort()).toEqual([
-      'Top-level Chinese title',
-      'Selected Novel',
-      'Source Chinese title',
-    ].sort());
-    expect(standalone.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:abstract')).toBe(true);
+    expect(standaloneNames.map(nameText).sort()).toEqual(
+      ['Top-level Chinese title', 'Selected Novel', 'Source Chinese title'].sort(),
+    );
+    expect(
+      standalone.proposals.some(
+        (command) => command.op === 'propose' && command.statement.property.id === 'schema:abstract',
+      ),
+    ).toBe(true);
     expect(standalone.diagnostics).toContainEqual({
       pointer: '/infobox/fields/1',
       code: 'unsupported_infobox_name_form',
@@ -143,11 +145,9 @@ test('selected Book names stay source-bound through ordinary and default imports
     const first = await run(selectedBook());
     expect(first.runs.bangumi?.status).toBe('committed');
     const firstNames = names(sent, String(bookId));
-    expect(firstNames.map(nameText).sort()).toEqual([
-      'Top-level Chinese title',
-      'Selected Novel',
-      'Source Chinese title',
-    ].sort());
+    expect(firstNames.map(nameText).sort()).toEqual(
+      ['Top-level Chinese title', 'Selected Novel', 'Source Chinese title'].sort(),
+    );
     expect(firstNames.every((command) => command.statement.property.id === 'schema:name')).toBe(true);
     expect(firstNames.every((command) => command.source.source === crossMediaAliases.bangumi)).toBe(true);
     expect(firstNames.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
@@ -159,14 +159,21 @@ test('selected Book names stay source-bound through ordinary and default imports
         return citation?.type === 'value' && citation.content === `https://bgm.tv/subject/${bookId}`;
       }),
     ).toBe(true);
-    expect(names(sent, String(bookId)).some((command) => ['Scalar title', 'Must not leak'].includes(nameText(command) ?? ''))).toBe(false);
-    expect(sent.find((command) => command.op === 'create' && command.source.external_id === String(bookId))).toMatchObject({
+    expect(
+      names(sent, String(bookId)).some((command) =>
+        ['Scalar title', 'Must not leak'].includes(nameText(command) ?? ''),
+      ),
+    ).toBe(false);
+    expect(
+      sent.find((command) => command.op === 'create' && command.source.external_id === String(bookId)),
+    ).toMatchObject({
       op: 'create',
       subject: { type: 'schema:Book' },
     });
     expect(names(sent, String(sameTitleId)).map(nameText)).toEqual(['Selected Novel']);
     const selectedUuid = first.readings.find((reading) => reading.externalId === String(bookId))!.subject.subject!.id!;
-    const sameTitleUuid = first.readings.find((reading) => reading.externalId === String(sameTitleId))!.subject.subject!.id!;
+    const sameTitleUuid = first.readings.find((reading) => reading.externalId === String(sameTitleId))!.subject.subject!
+      .id!;
     expect(selectedUuid).not.toBe(sameTitleUuid);
     expect(created.sort()).toEqual([String(bookId), String(sameTitleId)]);
 
@@ -179,7 +186,9 @@ test('selected Book names stay source-bound through ordinary and default imports
     expect(refreshed.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
     expect(refreshed.every((command) => command.source.digest !== firstNames[0]!.source.digest)).toBe(true);
     expect(created.sort()).toEqual([String(bookId), String(sameTitleId)]);
-    expect(changed.readings.find((reading) => reading.externalId === String(bookId))!.subject.subject!.id).toBe(selectedUuid);
+    expect(changed.readings.find((reading) => reading.externalId === String(bookId))!.subject.subject!.id).toBe(
+      selectedUuid,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

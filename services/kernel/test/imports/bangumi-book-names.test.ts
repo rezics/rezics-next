@@ -3,11 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchStatement } from '@rezics/definitions/bulk';
-import {
-  crossMediaAliases,
-  emptyCrossMediaPlan,
-  seedCrossMedia,
-} from '../../../importer/src/cross-media-seed.ts';
+import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   captureShowcaseCommands,
@@ -38,21 +34,19 @@ async function planFor(source: ReturnType<typeof record>) {
 }
 
 function titleValues(statements: readonly BatchStatement[] | undefined) {
-  return (statements ?? []).flatMap((statement) =>
-    statement.value.type === 'value' &&
-    statement.value.content &&
-    typeof statement.value.content === 'object' &&
-    'text' in statement.value.content
-      ? [statement.value.content as { language: string; text: string }]
-      : [],
-  ).sort((left, right) => `${left.language}\u0000${left.text}`.localeCompare(`${right.language}\u0000${right.text}`));
+  return (statements ?? [])
+    .flatMap((statement) =>
+      statement.value.type === 'value' &&
+      statement.value.content &&
+      typeof statement.value.content === 'object' &&
+      'text' in statement.value.content
+        ? [statement.value.content as { language: string; text: string }]
+        : [],
+    )
+    .sort((left, right) => `${left.language}\u0000${left.text}`.localeCompare(`${right.language}\u0000${right.text}`));
 }
 
-function hasTitleCandidate(
-  candidates: readonly { statement: BatchStatement }[],
-  language: string,
-  text: string,
-) {
+function hasTitleCandidate(candidates: readonly { statement: BatchStatement }[], language: string, text: string) {
   return candidates.some(
     (candidate) =>
       candidate.statement.value.type === 'value' &&
@@ -100,7 +94,11 @@ test('Book names move through explicit publication and same-UUID refresh without
       language: 'zh',
       text: 'Source Chinese title',
     });
-    expect(firstPage.candidates.some((candidate) => JSON.stringify(candidate.statement.value.content).includes('Must not leak'))).toBe(false);
+    expect(
+      firstPage.candidates.some((candidate) =>
+        JSON.stringify(candidate.statement.value.content).includes('Must not leak'),
+      ),
+    ).toBe(false);
     expect(
       await runtime.importTransport
         .reviewedCandidates(id, { property: 'schema:alternateName', context: GLOBAL_CONTEXT, limit: 100 })
@@ -155,9 +153,9 @@ test('Book names move through explicit publication and same-UUID refresh without
       limit: 100,
     });
     expect(hasTitleCandidate(correctedCandidates.candidates, 'und', 'New alias')).toBe(true);
-    expect(titleValues((await publicClient.readSubject(id)).subject?.statements?.['schema:name'] as BatchStatement[])).toEqual(
-      titleValues(publicSubject.statements['schema:name']),
-    );
+    expect(
+      titleValues((await publicClient.readSubject(id)).subject?.statements?.['schema:name'] as BatchStatement[]),
+    ).toEqual(titleValues(publicSubject.statements['schema:name']));
 
     const fence = await editor.http('/v1/sourceFences:takedown', {
       source: crossMediaAliases.bangumi,
@@ -173,10 +171,14 @@ test('Book names move through explicit publication and same-UUID refresh without
       context: GLOBAL_CONTEXT,
       limit: 100,
     });
-    expect(afterFence.candidates.some((candidate) => JSON.stringify(candidate.statement.value.content).includes('Fenced alias'))).toBe(false);
-    expect(titleValues((await publicClient.readSubject(id)).subject?.statements?.['schema:name'] as BatchStatement[])).toEqual(
-      titleValues(publicSubject.statements['schema:name']),
-    );
+    expect(
+      afterFence.candidates.some((candidate) =>
+        JSON.stringify(candidate.statement.value.content).includes('Fenced alias'),
+      ),
+    ).toBe(false);
+    expect(
+      titleValues((await publicClient.readSubject(id)).subject?.statements?.['schema:name'] as BatchStatement[]),
+    ).toEqual(titleValues(publicSubject.statements['schema:name']));
   } finally {
     journal.close();
     await runtime.close();

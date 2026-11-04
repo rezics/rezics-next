@@ -1423,6 +1423,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   and common-publication scenario is
   `services/kernel/test/imports/bangumi-character-names.test.ts`; broader native
   acceptance remains controller-owned.
+
 ## Bangumi Book-template subject names
 
 Title extraction requires the selected `schema:Book` profile and the exact

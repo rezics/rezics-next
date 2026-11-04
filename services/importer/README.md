@@ -2529,6 +2529,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
   default selected payload through same-state importer refresh, common
   publication and an anonymous public read.
+
 ### Bangumi Book-template subject names
 
 Ordinary Bangumi registration and the selected-family importer share one pure
