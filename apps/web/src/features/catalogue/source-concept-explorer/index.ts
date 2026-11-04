@@ -82,9 +82,28 @@ function relatedLabel(related: SubjectRead['related'], id: string, locale: strin
   return summary ? pickText(summary.labels ?? {}, locale) : undefined;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isViewerAction(value: unknown): value is { action: string; operations: string[] } {
+  return (
+    isRecord(value) &&
+    typeof value.action === 'string' &&
+    Array.isArray(value.operations) &&
+    value.operations.every((operation) => typeof operation === 'string')
+  );
+}
+
 function actionState(current: SubjectRead): ConceptViewerActions {
+  if (!('viewerActions' in current) || !isRecord(current.viewerActions)) return { state: 'unavailable' };
   const state = current.viewerActions;
-  if (!state || state.state !== 'available') return { state: 'unavailable' };
+  if (
+    state.state !== 'available' ||
+    !Array.isArray(state.actions) ||
+    !state.actions.every(isViewerAction)
+  )
+    return { state: 'unavailable' };
   return { state: 'available', account: current.account, actions: state.actions };
 }
 
@@ -108,7 +127,8 @@ export async function readSourceConcept(
 ): Promise<ConceptRead> {
   try {
     const headers = headersOf(authorization, input.session);
-    const current = await client.subjects({ id }).get({ query: { includeViewerActions: true }, headers });
+    const query = { includeViewerActions: true };
+    const current = await client.subjects({ id }).get({ query, headers });
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
     if (current.data.subject.id !== id) return candidateFailure(400);
     const admitted = conceptTypeAdmitted(release, current.data.subject.type);
@@ -150,7 +170,7 @@ export async function readSourceConcept(
         label: label?.text ?? '',
         lang: label?.lang ?? null,
         readable: !!summary,
-        conceptPage: !!summary && conceptTypeAdmitted(release, summary.type),
+        conceptPage: !!summary?.type && conceptTypeAdmitted(release, summary.type),
       });
     }
 
@@ -190,9 +210,9 @@ export async function readSourceConcept(
         id: target,
         label: label.text,
         lang: label.lang,
-        type: summary.type,
+        type: summary.type ?? 'unknown',
         direction: 'broader',
-        conceptPage: conceptTypeAdmitted(release, summary.type),
+        conceptPage: !!summary.type && conceptTypeAdmitted(release, summary.type),
       });
     }
 

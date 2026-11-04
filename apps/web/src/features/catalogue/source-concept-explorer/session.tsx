@@ -29,7 +29,7 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
       locale={locale}
       role={role}
       returnTo={returnTo}
-      pinUnsupported={pinUnsupported}
+      {...(pinUnsupported === undefined ? {} : { pinUnsupported })}
       transport={{
         read: (next) =>
           readSubjectConcept({
