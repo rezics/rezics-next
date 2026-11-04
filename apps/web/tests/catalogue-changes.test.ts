@@ -100,7 +100,7 @@ test('current correction handoffs use only the exact Subject and safe current fi
     state: 'available',
     operations: ['subject.propose', 'subject.terms'],
   };
-  const renderExplanation = (props: Parameters<typeof ChangeExplanation>[0]) => {
+  const renderExplanation = async (props: Parameters<typeof ChangeExplanation>[0]) => {
     const root = createRootRoute();
     const view = createRoute({
       getParentRoute: () => root,
@@ -111,9 +111,10 @@ test('current correction handoffs use only the exact Subject and safe current fi
       routeTree: root.addChildren([view]),
       history: createMemoryHistory({ initialEntries: [`${base}/changes`] }),
     });
+    await router.load();
     return renderToStaticMarkup(createElement(RouterProvider, { router }));
   };
-  const terms = renderExplanation({
+  const terms = await renderExplanation({
       detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] } },
       revision: 2,
       locale: 'en',
@@ -125,7 +126,7 @@ test('current correction handoffs use only the exact Subject and safe current fi
   expect(terms).toContain(`${base}/terms?returnTo=changes`);
   expect(terms).not.toContain('revision=2');
 
-  const fact = renderExplanation({
+  const fact = await renderExplanation({
       detail: {
         id: fixture.id,
         revision: 5,
@@ -153,7 +154,7 @@ test('current correction handoffs use only the exact Subject and safe current fi
     [{ state: 'preparing' }, m.changes_correction_preparing()],
   ];
   for (const [operations, expected] of actionStates) {
-    const html = renderExplanation({
+    const html = await renderExplanation({
         detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [] } },
         revision: 2,
         locale: 'en',
@@ -215,6 +216,8 @@ test('failed detail reads keep list and selection but discard prior detail; curr
 import { mock } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import type { NativeRevisionDetail } from '../src/features/catalogue/subject-changes';
 import { readValueExplanation } from '../src/features/catalogue/value-explanation';
 import release from '../src/kernel/recorded/definitions-release.json';
@@ -222,6 +225,11 @@ import { m } from '../src/paraglide/messages.js';
 import { languageName } from '../src/subject/language';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const staticQueryClient = new QueryClient();
+function renderStatic(node: ReactNode) {
+  return renderToStaticMarkup(createElement(QueryClientProvider, { client: staticQueryClient }, node));
+}
 
 function nativeDetailFixture() {
   let body: unknown;
@@ -286,7 +294,7 @@ test('actual native safe revision detail is rendered through the existing browse
     }),
     { type: 'detail', result: detail },
   );
-  const browser = renderToStaticMarkup(createElement(SubjectChangesPage, { state, locale: 'en' }));
+  const browser = renderStatic(createElement(SubjectChangesPage, { state, locale: 'en' }));
   expect(browser).toContain(m.changes_proposal_detail());
   expect(browser).toContain(m.context_selected());
   expect(browser).toContain(m.candidate_rank_preferred());
@@ -306,7 +314,7 @@ test('actual native safe revision detail is rendered through the existing browse
 
   const value = await fixture.value();
   expect(value.kind === 'ready' && value.page.change).toMatchObject({ kind: 'ready' });
-  const view = renderToStaticMarkup(createElement(ValueExplanationPage, { result: value, locale: 'en' }));
+  const view = renderStatic(createElement(ValueExplanationPage, { result: value, locale: 'en' }));
   expect(view).toContain('9780156012195');
   expect(view).toContain(m.changes_proposal_detail());
   expect(view).toContain(m.context_selected());
@@ -320,12 +328,12 @@ test('actual native safe revision detail is rendered through the existing browse
   });
   expect(failed.page).toBe(state.page);
   expect(failed.selected).toBe(5);
-  const hidden = renderToStaticMarkup(createElement(SubjectChangesPage, { state: failed, locale: 'en' }));
+  const hidden = renderStatic(createElement(SubjectChangesPage, { state: failed, locale: 'en' }));
   expect(hidden).toContain(m.changes_missing());
   expect(hidden).not.toContain(m.changes_proposal_detail());
   expect(hidden).not.toContain('CONCEALED DETAIL');
   const hiddenValue = await fixture.value();
-  const hiddenView = renderToStaticMarkup(createElement(ValueExplanationPage, { result: hiddenValue, locale: 'en' }));
+  const hiddenView = renderStatic(createElement(ValueExplanationPage, { result: hiddenValue, locale: 'en' }));
   expect(hiddenView).toContain('9780156012195');
   expect(hiddenView).toContain(m.value_change_unavailable());
   expect(hiddenView).not.toContain(m.context_selected());
@@ -464,7 +472,7 @@ test('The actual native terms revision explains each field and its own languages
       }),
       { type: 'detail', result },
     );
-    expect(renderToStaticMarkup(createElement(SubjectChangesPage, { state, locale: 'en' }))).toContain(html);
+    expect(renderStatic(createElement(SubjectChangesPage, { state, locale: 'en' }))).toContain(html);
     expect(html).not.toContain(m.changes_current());
     for (const privateText of [
       fixture.dto.revision.release,
