@@ -200,6 +200,10 @@ export type BangumiCharacterAppearance = {
   roleCode: number | string;
   order?: number | string | null;
 };
+export type CrossMediaReleaseFacts = {
+  works: Map<string, { devstatus: number | undefined }>;
+  releases: Map<string, { released: unknown; links: { vid: string; completeness: string }[] }>;
+};
 export type CrossMediaPlan = {
   records: Record<Provider, SourceRecord[]>;
   entities: Record<Provider, SourceRecord[]>;
@@ -213,6 +217,8 @@ export type CrossMediaPlan = {
   relationScope: string[];
   relationSnapshotDigest: string;
   relationSnapshotComplete: boolean;
+  /** Selected-family VNDB release dates/states for the common showcase publisher. */
+  releaseFacts?: CrossMediaReleaseFacts;
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
   producers_relations: 'id\tpid\trelation',
@@ -1693,6 +1699,7 @@ export type CrossMediaSeedExtras = {
   vndbCreditReferences?: VndbCreditVocabularyReferences;
   providers?: readonly Provider[];
   mediaDeadlineMs?: ImporterOptions['mediaDeadlineMs'];
+  onConversionOutput?: ImporterOptions['onConversionOutput'];
 };
 
 export async function seedCrossMedia(
@@ -1728,6 +1735,7 @@ export async function seedCrossMedia(
         ? {}
         : { recordConcurrency: extras.recordConcurrency }),
     ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
+    ...(extras?.onConversionOutput === undefined ? {} : { onConversionOutput: extras.onConversionOutput }),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -1974,6 +1982,7 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
   const plan = await planCrossMediaSeed(input);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
+  const { seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -2031,14 +2040,15 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   try {
-    const result = await seedCrossMedia(
+    const result = await seedShowcaseVndbReleases({
+      tables: input,
       plan,
-      statePath,
+      path: statePath,
       port,
-      { origin: api },
-      { ...(vndbCreditReferences ? { vndbCreditReferences } : {}) },
-      characterBindings,
-    );
+      destination: { origin: api },
+      extras: { ...(vndbCreditReferences ? { vndbCreditReferences } : {}) },
+      ...(characterBindings === undefined ? {} : { characterBindings }),
+    });
     const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
     let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
     if (tagBindingsPath) {
@@ -2073,6 +2083,10 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
       `${JSON.stringify(
         {
           ...result,
+          facts: {
+            works: Object.fromEntries(result.facts.works),
+            releases: Object.fromEntries(result.facts.releases),
+          },
           ...(showcase ? { showcase } : {}),
           publicTags: {
             admitted: publicTags.admitted,

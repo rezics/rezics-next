@@ -648,6 +648,17 @@ not additional check requests.
   keeps 0/00000000 as unknown, 99999999 as TBA and 00/99 components omitted; completeness stays a `wdt:P31` qualifier
   gap; `schema:exampleOfWork` is the release-to-work fact; supersession stays unproposed until the Release profile
   admits `wdt:P155`.
+- `The ordinary local selected-family seed publishes actual VN release dates with their source precision and currently bound source release/development states, preserving distinct release/work identities and truthful unsupported-completeness gaps through independent native acceptance/adoption, public read and refresh`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/showcase-vndb-releases.test.ts`.
+  Frozen scenario names:
+  `selected-family seed publishes actual release dates and states and keeps completeness as a gap`;
+  `ordinary selected-family seed publishes current VNDB release dates and states through accept, public read and refresh`.
+  Importer production-caller tests are local evidence. The kernel native file is registered and not executed in this
+  attempt; no native pass is claimed. Fixtures are marked authored. Decision: selected-family `schema:exampleOfWork`
+  stays on the existing graph edge; the mapper records the completeness gap without a second association.
+  TBA/unknown stay mapper `property_not_admitted` on `schema:keywords` because the current Release profile omits that
+  property; a newly available development-status binding publishes work keywords. Decision: do not remap TBA/unknown
+  onto `schema:creativeWorkStatus`.
 - `production operator imports authored VNDB release titles through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-names.test.ts`.
   Frozen scenario names:

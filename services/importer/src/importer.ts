@@ -2071,6 +2071,7 @@ export class Importer {
         throw new Error('Converter did not produce bound proposals');
       commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
     }
+    const reported = conversion ?? observedConversion;
     if (!commands.length && !omissions.length && !deferredCover) {
       const kind = store.classify(run, row.recordKey, { commands: [] });
       if (conversion && 'outcome' in conversion && conversion.outcome === 'ignored')
@@ -2090,7 +2091,7 @@ export class Importer {
         // Binding availability was re-read; the justified proposals are unchanged.
       } else throw new Error('Conversion has no justified final plan');
       this.acknowledged(row.recordKey);
-      return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
+      return { kind, deferredCover: false, ...(reported ? { conversion: reported } : {}) };
     }
     return {
       kind: store.prepare(run, row.recordKey, {
@@ -2100,7 +2101,7 @@ export class Importer {
         ...(conversion?.sourceVocabulary === undefined ? {} : { sourceVocabulary: conversion.sourceVocabulary }),
       }),
       deferredCover,
-      ...(observedConversion ? { conversion: observedConversion } : {}),
+      ...(reported ? { conversion: reported } : {}),
     };
   }
 
