@@ -851,7 +851,7 @@ export function createSearchService({
       const hits = keys.map((key) => ({ ...key, matched: [] as string[] }));
       const checked = await sourceRequest(() =>
         checkHits(source, hits, new Map(), {
-          filter: admitted === undefined ? undefined : catalogueFilter(admitted),
+          ...(admitted === undefined ? {} : { filter: catalogueFilter(admitted) }),
           relationProperties,
           spoilerThreshold: spoilerThreshold ?? 0,
           observeRelationRelease: relationRelease,
