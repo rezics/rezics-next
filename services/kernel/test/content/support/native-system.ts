@@ -151,6 +151,12 @@ async function createNativeContentSystemWithOptions(
           return { pool: authPool, close: () => authPool.end() };
         })();
     const authPool = authPoolOwner.pool;
+    // AuthHost owns this pool after handoff, including failed construction.
+    // The fixture still releases its owner on partial setup and final cleanup.
+    // Both paths must share the same physical close, preserving the setup error.
+    const endAuthPool = authPool.end.bind(authPool);
+    let poolEnding: Promise<void> | undefined;
+    authPool.end = () => (poolEnding ??= endAuthPool());
     let authEnding: Promise<void> | undefined;
     closeAuthPool = () => (authEnding ??= authPoolOwner.close());
 

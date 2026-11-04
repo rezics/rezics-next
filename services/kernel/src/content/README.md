@@ -108,6 +108,13 @@ publisher installs the real method/DTO. It must consume this route, without impo
   reaction, watch and authority growth, examined rows/blocks, all runners and retained/serialized byte measurement
   remain controller acceptance; no measured physical-growth pass is claimed by this implementation.
 
+The native action journey uses independently created review subjects so each fixture respects the existing
+author/subject live-review slot. AuthHost and fixture cleanup share one physical Auth pool close, including
+construction failure; setup errors are reported before any journey outcome is counted. The prepared journey
+covers Posts/Discussion/Reviews, anonymous and signed advice, unavailable aggregates, original-key reaction
+recovery, thread watch, exact-source replacement, concealed ancestry and publication withdrawal. Execution and
+the remaining complete native command/effect and physical-growth outcomes retain controller ownership.
+
 `author_posts.list` adds `parentContext` and `conversationActivity`; `author_threads.list` adds
 `conversationActivity`. These additive public fields use the existing Web contribution renderers. They never
 contain viewer reactions, watches or action advice. The current anonymous parent producer is

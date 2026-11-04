@@ -191,7 +191,11 @@ export async function createReviewLifecycleFixture(): Promise<ReviewLifecycleFix
       close,
     };
   } catch (error) {
-    await close();
+    try {
+      await close();
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Native review fixture setup failed', { cause: error });
+    }
     throw error;
   }
 }
