@@ -30,14 +30,8 @@ const PublishedCitationSchema = t.Union([
 
 export const ReadingPageReviewContextSchema = t.Object(
   {
-    source: t.Object(
-      { threadId: uuid, postId: uuid, revisionId: t.Union([uuid, t.Null()]) },
-      closed,
-    ),
-    target: t.Union([
-      FeedReviewTargetSchema,
-      t.Object({ state: t.Literal('unavailable') }, closed),
-    ]),
+    source: t.Object({ threadId: uuid, postId: uuid, revisionId: t.Union([uuid, t.Null()]) }, closed),
+    target: t.Union([FeedReviewTargetSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
     citations: t.Object(
       {
         state: t.Literal('current'),
