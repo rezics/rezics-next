@@ -68,6 +68,7 @@ test('Reduce selected existing app permissions through the native consent barrie
   consent.client_id = 'changed-target';
   consent.granted.length = 0;
   retained.push('account:manage');
+  await Promise.resolve();
   finishRead(native());
   expect(await result).toEqual({ kind: 'accepted' });
   expect(calls.map(({ path, body }) => ({ path, body }))).toEqual([
@@ -272,7 +273,11 @@ test('Approval and removal explain exact native capabilities without changing re
       { path: '/consent/third-party', body: null },
       {
         path: '/consent',
-        body: { client_id: 'third-party', scope: ['openid', 'subject:read', otherUnknown, 'account:read'] },
+        body: {
+          client_id: 'third-party',
+          scope: ['openid', 'subject:read', otherUnknown, 'account:read'],
+          reviewed_scopes: approved,
+        },
       },
     ]);
     expect(await reduceConsent(consent, [...retained, 'account:update'])).toEqual({ kind: 'denied' });
