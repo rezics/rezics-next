@@ -140,9 +140,10 @@ test('production graph journals immutable relation commands and retries without 
   const firstCommand = JSON.parse(firstRow.command_payload).commands[0];
   expect(first.proposed).toHaveLength(1);
   expect(firstCommand).toMatchObject({
-    source: { record_revision: 'unversioned', converter_revision: /^bangumi-vocabulary@2:relation-2@2:12:6$/, digest: /^[a-f0-9]{64}$/ },
+    source: { record_revision: 'unversioned', converter_revision: 'bangumi-vocabulary@2:relation-2@2:12:6' },
     statement: { property: { id: 'rezics:sideStoryOf' } },
   });
+  expect(firstCommand.source.digest).toMatch(/^[a-f0-9]{64}$/);
   expect(firstRow.status).toBe('proposed');
 
   database.close();
