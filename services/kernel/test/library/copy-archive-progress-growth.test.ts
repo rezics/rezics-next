@@ -90,7 +90,7 @@ test('progressResult readback is measured apart from apply and stays bounded at 
 }, 600_000);
 
 test('native rejection records stale after rollback at Native64/512/4096', async () => {
-  await f.f.activate(f.staleDigest);
+  await f.activate(f.staleDigest);
   const reviews = [...f.rejectOwner.reviews];
   try {
     const report = await f.measure('archive progress native rejection', f.rejectOwner, 'aa000004', async (actor) => {
@@ -102,7 +102,7 @@ test('native rejection records stale after rollback at Native64/512/4096', async
     });
     expectNoGrownScans(report);
   } finally {
-    await f.f.activate(f.goodDigest);
+    await f.activate(f.goodDigest);
   }
 }, 600_000);
 
