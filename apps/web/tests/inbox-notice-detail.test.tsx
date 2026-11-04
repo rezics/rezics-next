@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import * as start from '../.storybook/react-start';
 import type { InboxNoticeDetailWire, InboxNoticePage } from '../src/inbox/inbox-read';
@@ -11,7 +12,7 @@ mock.module('@tanstack/react-start/server', () => ({
 }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const { Window } = await import('happy-dom');
+const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
 const window = new Window({ url: 'https://site.test/en/inbox/notice?noticeId=notice-1' });
 const globals = {
   window,
