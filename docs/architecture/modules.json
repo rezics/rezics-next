@@ -530,7 +530,7 @@
         "apps/web/src/moderation/**",
         "apps/web/src/media/**"
       ],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/media/cover-src.ts"],
       "allowedDependencies": [
         "client",
         "composition",
