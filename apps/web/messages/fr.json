@@ -3329,7 +3329,7 @@
   "contribution_invalid": "La demande n’a pas été acceptée. Vérifiez-la avant de confirmer à nouveau.",
   "contribution_conflict": "La contribution a changé. Consultez son état actuel avant de confirmer à nouveau.",
   "contribution_unavailable": "Le service de contributions est indisponible ou le résultat est incertain. Réessayez la même demande pour le vérifier.",
-  "contribution_confirm_delete": "Retirer uniquement cette contribution ? Elle ne sera plus disponible. Le sujet et les autres contributions sont conservés.",
+  "contribution_confirm_delete": "Retirer uniquement cette contribution ? Elle ne sera plus disponible. Le sujet et les autres contributions sont conservés. Les révisions acceptées et les décisions éditoriales propres à chaque Contexte ne sont pas effacées.",
   "contribution_confirm_restore": "Restaurer cette contribution selon les droits et règles actuels ? Cela ne rétablit pas une ancienne sélection.",
   "contribution_retry": "Réessayer la même demande",
   "contribution_confirm": "Confirmer",
