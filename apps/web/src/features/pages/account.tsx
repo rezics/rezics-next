@@ -16,6 +16,7 @@ import { isRecord, linkClass, linkColor, webUrl } from './shared';
 import { ContributionRow } from '../../accounts/public-profile/contributions/row';
 import {
   ContributionActionsHost,
+  contributionPublicationSource,
   useContributionActionsPageScope,
 } from '../../accounts/public-profile/contribution-actions/host';
 import { subjectHref } from '../../subject/subject-href';
@@ -308,11 +309,15 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
   );
   const actionView = spec.view === 'posts' || spec.view === 'reviews' || spec.view === 'discussion' ? spec.view : undefined;
   const actionProfile = value.profile;
+  const actionPublication =
+    actionPage && actionProfile ? contributionPublicationSource(actionPage.page, actionProfile.id) : null;
   const actionList =
     paged &&
     actionView &&
     actionProfile &&
-    actionPage?.view === actionView &&
+    actionPublication &&
+    actionPage &&
+    actionPage.view === actionView &&
     actionPage.page.account?.id === actionProfile.id &&
     value.account?.id === actionProfile.id ? (
       <ContributionActionsHost
@@ -324,7 +329,7 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
         read={section.read}
         source={section.body}
         selection={section.body.actionSelection}
-        publication={actionProfile}
+        publication={actionPublication}
         postsPublished={actionProfile.publicViews.posts}
         reviewsPublished={actionProfile.publicViews.reviews}
         rows={items}

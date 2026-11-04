@@ -83,7 +83,10 @@ test('successful session replacement is observed even when the account and crede
 
 test('an admitted posts page mounts one bounded host and never derives a selection from its rendered rows', async () => {
   const client = new QueryClient();
-  const page = { account: { id, handle: 'reader' } } as never;
+  const page = {
+    account: { id, handle: 'reader' },
+    reads: { account: { status: 200, body: { accounts: [{ id, state: 'active' }] } } },
+  } as never;
   const profile = {
     id,
     kind: 'actor',
