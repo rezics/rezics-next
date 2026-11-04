@@ -57,12 +57,14 @@ test('a current reviewer selects one exact native destination and sparse pages r
       state: 'choices',
       viewer: { state: 'current' },
       context: { subject: { id: subjectId }, realm: { id: world.realm.realmId } },
-      items: [{
-        id: boardId,
-        purpose: 'reviews',
-        actions: { createReview: 'allowed' },
-        native: { kind: 'review', boardId, subjectIds: [subjectId] },
-      }],
+      items: [
+        {
+          id: boardId,
+          purpose: 'reviews',
+          actions: { createReview: 'allowed' },
+          native: { kind: 'review', boardId, subjectIds: [subjectId] },
+        },
+      ],
       next: null,
     });
 
@@ -134,13 +136,9 @@ test('a current reviewer selects one exact native destination and sparse pages r
       role: 'community.realm.member',
       valid: '(,)',
     });
-    await world.checked(
-      'PUT',
-      `/v1/realms/${sparseRealm.realmId}/boardScheme`,
-      { schemeId: world.schemeId },
-      200,
-      { headers: { 'if-match': JSON.stringify(sparseRealm.headRevisionId) } },
-    );
+    await world.checked('PUT', `/v1/realms/${sparseRealm.realmId}/boardScheme`, { schemeId: world.schemeId }, 200, {
+      headers: { 'if-match': JSON.stringify(sparseRealm.headRevisionId) },
+    });
     let hiddenBoardId = '';
     for (let index = 0; index < 21; index++) {
       const conceptId = await world.subject('skos:Concept', world.schemeId);
@@ -196,12 +194,9 @@ test('a current reviewer selects one exact native destination and sparse pages r
         contextId: GLOBAL_CONTEXT,
       })
     ).realm;
-    const concealed = await world.call(
-      'GET',
-      endpoint(protectedRealm.realmId, subjectId),
-      undefined,
-      { bearer: reviewer.bearer },
-    );
+    const concealed = await world.call('GET', endpoint(protectedRealm.realmId, subjectId), undefined, {
+      bearer: reviewer.bearer,
+    });
     expect(concealed.response.status).toBe(404);
   } finally {
     await world.close();
