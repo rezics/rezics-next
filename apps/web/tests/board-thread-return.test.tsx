@@ -85,7 +85,7 @@ const reading: ThreadReadingPage = {
   },
   composed: authoredReadingPage(duplicate.thread),
   authors: boardPage.authors,
-  mentions: {},
+  mentions: null,
   subjects: [],
   provenanceSubjects: [],
   verification: { sitekey: '', scriptUrl: '' },

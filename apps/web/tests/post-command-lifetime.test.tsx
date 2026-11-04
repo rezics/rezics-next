@@ -196,7 +196,7 @@ test('Actual ThreadReadingPost edit delete restore Undo commands retain original
       authors: {},
       subjects: [],
       provenanceSubjects: [],
-      mentions: {},
+      mentions: null,
       verification: { sitekey: '', scriptUrl: '' },
       now: '2026-02-01T00:00:00.000Z',
       viewerId: account,
