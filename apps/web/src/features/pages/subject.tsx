@@ -1,4 +1,6 @@
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
+import { GameOverview } from '../catalogue/game-reader/entry';
+import { gameReaderEntry } from '../catalogue/game-reader/model';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
@@ -755,6 +757,18 @@ export function SubjectPage({
                 documents={read.documents}
                 link={ContextLink}
                 {...(reader ? { reader } : {})}
+              />
+            ) : null}
+            {overview && read && !page.account && gameReaderEntry(read.subject.type, read.summary?.types) ? (
+              <GameOverview
+                source={page}
+                reader={page.requestedReader ?? null}
+                id={read.subject.id}
+                type={read.subject.type}
+                context={page.context?.id ?? read.subject.context}
+                locale={locale}
+                realm={realm}
+                spoiler={reader?.spoilerLevel}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (

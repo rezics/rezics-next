@@ -18,13 +18,13 @@ export type GameGroup = 'credits' | 'classification' | 'relations' | 'facts';
 const terms = new Set(['schema:name', 'schema:alternateName', 'schema:description']);
 
 /** Only actual released work identities and the two explicitly admitted separate grains. */
-export function gameType(release: Release, type: string): boolean {
+export function gameType(release: Pick<Release, 'types' | 'properties'>, type: string): boolean {
   return (
     !!release.types[type] &&
     (gameTypes.includes(type as (typeof gameTypes)[number]) || release.types[type]!.bases.includes('schema:VideoGame'))
   );
 }
-export function gameFields(release: Release, type: string): string[] {
+export function gameFields(release: Pick<Release, 'types' | 'properties'>, type: string): string[] {
   if (!gameType(release, type)) return [];
   return release.types[type]!.properties.filter((id) => {
     const property = release.properties[id];
@@ -35,7 +35,7 @@ export function gameFields(release: Release, type: string): string[] {
     );
   });
 }
-export function gameGroups(release: Release, type: string): Record<GameGroup, string[]> {
+export function gameGroups(release: Pick<Release, 'types' | 'properties'>, type: string): Record<GameGroup, string[]> {
   const groups: Record<GameGroup, string[]> = { credits: [], classification: [], relations: [], facts: [] };
   for (const id of gameFields(release, type)) {
     const relation = release.properties[id]!.relation;

@@ -51,6 +51,28 @@ retry never creates. A contributor list previews the credits view.
 
 Admitted public containment is independently readable through the [album contents owner](../apps/web/src/features/catalogue/album-track-reader/README.md).
 
+## Read a game work and its editions
+
+The ordinary Game and Visual Novel overview mounts the [Game reader](../apps/web/src/features/catalogue/game-reader/README.md).
+It groups admitted work facts, classifications, qualified credits and relations using the active immutable Release.
+Work, software release and independently referable add-on remain separate identities. Missing platform, engine,
+language or status configuration stays unsupported, with existing generic Details and Edit facts paths. Unknown
+source codes remain provenance; no platform/language product creates releases and no public fact establishes
+ownership, private progress or provider authentication. Existing Game correction, personal import and scoring stay
+with their current owners.
+
+Only the current disclosed, bounded inverse work-link window offers actual software-release destinations. Its exact
+holder, assertion, work target and summary must agree; no per-target hydration occurs. Qualifiers, references,
+accepting meaning and partial/TBA/unknown dates remain intact. Existing ordinary release reading and the `/release`
+companion own edition details and correction.
+
+Decision: Game destinations open in a new tab to preserve the source window, with keyboard return to its surviving
+opener or reader heading; replaced authority or source retires old results, cursors, reveal and focus intent.
+
+**Cost:** At most four native reads per explicit window (Subject, active pointer, immutable Release, one 20-row links
+page), no target hydration or writes. The [reader Cost](../apps/web/src/features/catalogue/game-reader/README.md#cost)
+bounds bytes, cursors and retained windows. Shared Subject wiring adds no View enum or route ownership.
+
 ## Read a music edition
 
 The ordinary Subject overview offers the [music release reader](../apps/web/src/features/catalogue/music-release-reader/README.md)
