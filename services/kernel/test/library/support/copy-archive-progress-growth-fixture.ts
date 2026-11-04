@@ -244,19 +244,28 @@ export async function createCopyArchiveProgressGrowthFixture() {
     clock,
   });
   const subjectId = created.subject.id;
-  const started = await sessions.startSession(applyOwner.actor, {
-    subjectId,
-    mode: 'scalar_amount',
-    unit: 'chapter',
-    total: '999999999999.999999',
-    additionalMeasures: additionalUnits.map((unit) => ({ unit, total: '5.000001' })),
-  }, entryKey());
+  const started = await sessions.startSession(
+    applyOwner.actor,
+    {
+      subjectId,
+      mode: 'scalar_amount',
+      unit: 'chapter',
+      total: '999999999999.999999',
+      additionalMeasures: additionalUnits.map((unit) => ({ unit, total: '5.000001' })),
+    },
+    entryKey(),
+  );
   const sessionId = started.value.id;
   let revision = started.value.revision;
   await sessions.recordProgress(applyOwner.actor, sessionId, { revision, amount: '0' }, entryKey());
   revision += 1;
   for (const unit of additionalUnits) {
-    await sessions.recordProgress(applyOwner.actor, sessionId, { revision, measureId: unit, amount: '4.125000' }, entryKey());
+    await sessions.recordProgress(
+      applyOwner.actor,
+      sessionId,
+      { revision, measureId: unit, amount: '4.125000' },
+      entryKey(),
+    );
     revision += 1;
   }
   await sessions.completeSession(applyOwner.actor, sessionId, { revision }, entryKey());
@@ -294,11 +303,7 @@ export async function createCopyArchiveProgressGrowthFixture() {
   }
 
   async function renew(person: GrowthPerson) {
-    person.actor = await authenticateAccount(
-      access,
-      { pool: db.pool, deadline: deadlineFor(300_000) },
-      person.actor,
-    );
+    person.actor = await authenticateAccount(access, { pool: db.pool, deadline: deadlineFor(300_000) }, person.actor);
     return person.actor;
   }
 
