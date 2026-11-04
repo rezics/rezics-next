@@ -196,7 +196,8 @@ export function extendLoanRecord(current: Loan, input: LoanExtend): Loan {
 /** Record the actual return day, including early return. A receipt replay must return its stored original result. */
 export function returnLoanRecord(current: Loan, input: LoanReturn, boundary: LoanDueBoundary): Loan {
   writable(current, input.revision);
-  if (input.returnedOn < current.startedOn || input.returnedOn > boundary.today) throw new LoanInvalidError('returnedOn');
+  if (input.returnedOn < current.startedOn || input.returnedOn > boundary.today)
+    throw new LoanInvalidError('returnedOn');
   return immutable({ ...current, returnedOn: input.returnedOn, revision: current.revision + 1 });
 }
 

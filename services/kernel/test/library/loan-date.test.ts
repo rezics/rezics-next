@@ -4,8 +4,21 @@ import { loanDate, loanDueBoundary, loanIsOverdue, LoanInvalidError } from '../.
 test('complete Gregorian dates preserve exact calendar text, including early and leap years', () => {
   for (const day of ['0001-01-01', '0099-12-31', '1600-02-29', '2000-02-29', '2024-02-29', '9999-12-31'])
     expect(loanDate(day, 'startedOn')).toBe(day);
-  for (const day of ['0000-01-01', '1900-02-29', '2025-02-29', '2026-04-31', '2026-13-01', '2026-00-01',
-    '2026-01-00', '2026-1-01', '2026-01-01\n', '2026-01-01T00:00:00Z', '', null, 20260101]) {
+  for (const day of [
+    '0000-01-01',
+    '1900-02-29',
+    '2025-02-29',
+    '2026-04-31',
+    '2026-13-01',
+    '2026-00-01',
+    '2026-01-00',
+    '2026-1-01',
+    '2026-01-01\n',
+    '2026-01-01T00:00:00Z',
+    '',
+    null,
+    20260101,
+  ]) {
     try {
       loanDate(day, 'startedOn');
       throw new Error('Accepted an invalid date');
