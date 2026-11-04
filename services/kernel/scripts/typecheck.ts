@@ -70,6 +70,10 @@ async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
   return await child.exited;
 }
 
+async function compilerCommand(phase: string, args: string[], env: NodeJS.ProcessEnv): Promise<number> {
+  return withCommandPhase(phase, () => command(args, env), env);
+}
+
 async function typecheck(
   env: NodeJS.ProcessEnv,
   emitClient: boolean,
@@ -82,15 +86,15 @@ async function typecheck(
       // Client-dependent tests must see declarations from the source being checked.
       // The generator checks all source modules; the full workspace checks still run before publication.
       if (emitClient) {
-        const emitted = await command(['bun', 'scripts/client.ts'], env);
+        const emitted = await compilerCommand('client-emit', ['bun', 'scripts/client.ts'], env);
         if (emitted !== 0) return emitted;
       }
-      const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+      const tsc = await compilerCommand('tsc', ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
       if (tsc !== 0) return tsc;
-      const constructed = await command(['bun', 'run', 'construct'], env);
+      const constructed = await compilerCommand('construct', ['bun', 'run', 'construct'], env);
       if (constructed !== 0) return constructed;
       if (emitOpenApi) {
-        const contract = await command(['bun', 'scripts/openapi.ts'], env);
+        const contract = await compilerCommand('openapi', ['bun', 'scripts/openapi.ts'], env);
         if (contract !== 0) return contract;
       }
       return 0;
