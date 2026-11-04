@@ -85,9 +85,9 @@ test('sourced release status, directed release targets and episode kinds keep th
   expect(definition.properties['schema:exampleOfWork']!.qualifiers).toContain('wdt:P31');
   for (const locale of locales) {
     expect(definition.properties['schema:creativeWorkStatus']!.labels[locale]?.trim().length).toBeGreaterThan(0);
-    expect(definition.properties['schema:creativeWorkStatus']!.relation!.inverseLabels![locale]?.trim().length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      definition.properties['schema:creativeWorkStatus']!.relation!.inverseLabels![locale]?.trim().length,
+    ).toBeGreaterThan(0);
   }
 
   const development = await scheme('https://vndb.org/development-status', 'VNDB development status');
@@ -147,16 +147,18 @@ test('sourced release status, directed release targets and episode kinds keep th
 
   const currentRead = subject(await fixture.read(current));
   expect(facts(currentRead, 'wdt:P155').map((row) => row.value.content)).toEqual([prior.id]);
-  expect(facts(currentRead, 'wdt:P155')[0]!.qualifiers.some((part) => part.value.content === 'vndb:rtype:unreviewed-99')).toBe(
-    true,
-  );
-  expect(facts(currentRead, 'schema:exampleOfWork')[0]!.qualifiers.map((part) => part.value.content)).toEqual([trial.id]);
-  expect(facts(subject(await fixture.read(prior)), 'schema:exampleOfWork')[0]!.qualifiers.map((part) => part.value.content)).toEqual(
-    [complete.id],
-  );
-  expect(facts(subject(await fixture.read(work)), 'schema:creativeWorkStatus').map((row) => row.value.content)).toEqual([
-    finished.id,
+  expect(
+    facts(currentRead, 'wdt:P155')[0]!.qualifiers.some((part) => part.value.content === 'vndb:rtype:unreviewed-99'),
+  ).toBe(true);
+  expect(facts(currentRead, 'schema:exampleOfWork')[0]!.qualifiers.map((part) => part.value.content)).toEqual([
+    trial.id,
   ]);
+  expect(
+    facts(subject(await fixture.read(prior)), 'schema:exampleOfWork')[0]!.qualifiers.map((part) => part.value.content),
+  ).toEqual([complete.id]);
+  expect(facts(subject(await fixture.read(work)), 'schema:creativeWorkStatus').map((row) => row.value.content)).toEqual(
+    [finished.id],
+  );
   expect((facts(subject(await fixture.read(prior)), 'schema:datePublished')[0]!.value as { type: string }).type).toBe(
     'somevalue',
   );
@@ -195,16 +197,25 @@ test('sourced release status, directed release targets and episode kinds keep th
   );
   expect(rejectedQualifier.status, JSON.stringify(rejectedQualifier.body)).toBeGreaterThanOrEqual(400);
 
-  await fixture.catchUp([work, prior, current, yearOnly, episode, development, finished, completeness, complete, trial]);
+  await fixture.catchUp([
+    work,
+    prior,
+    current,
+    yearOnly,
+    episode,
+    development,
+    finished,
+    completeness,
+    complete,
+    trial,
+  ]);
   const relations = ok(
     await fixture.request('anonymous', 'GET', `/v1/subjects/${current.id}/relations?property=wdt%3AP155&limit=20`),
   );
   expect((relations.relations as { target: string }[]).map((row) => row.target)).toEqual([prior.id]);
   expect(relations.next).toBeNull();
 
-  const editorPage = ok(
-    await fixture.request('alice', 'POST', '/v1/pages:read', { target: { subject: current.id } }),
-  );
+  const editorPage = ok(await fixture.request('alice', 'POST', '/v1/pages:read', { target: { subject: current.id } }));
   expect(editorPage.subject).toBe(current.id);
   expect(editorPage.viewer).toEqual({ kind: 'account', account: fixture.personas.alice.accountId });
   expect((editorPage.actions as { propose?: string } | undefined)?.propose).toBe('allowed');
