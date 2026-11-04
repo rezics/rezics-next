@@ -2,6 +2,57 @@
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+## Public author contribution context
+
+`author_posts.list` adds `parentContext` and `conversationActivity`; `author_threads.list` adds
+`conversationActivity`. These additive public fields use the existing Web contribution renderers. They never
+contain viewer reactions, watches or action advice. The current anonymous parent producer is
+`prepareAuthorItemContext`; it is a local native composition seam, not an installed client declaration.
+The author index still selects at most `4 * limit` candidates and returns at most twenty rows. Context
+reads do not refill a sparse page or change its encrypted continuation frontier.
+
+Decision: parent context uses anonymous native disclosure and omits optional author labels; concealed,
+erased or changed parents return the closed withheld state without an inferred identity.
+
+A reply with no native parent returns `{kind: 'opening'}`. An admitted immediate parent contains its exact
+post/revision IDs, creation time, language, spoiler flag and at most 160 characters/640 UTF-8 bytes of visible
+text. Ruby annotations, opaque payloads, media attributes and mention identities do not enter that excerpt.
+No recursive presentation or Media fetch occurs. Native `readPost` still owns ancestor and place disclosure.
+A changed or unavailable parent never receives a current-head replacement excerpt.
+
+Activity selects the distinct selected thread homes before parent enrichment and confirms the native public
+cohort afterward. Missing or incomplete activity is withheld; a stale witness fails the unchanged page.
+Its count retains exact/lower-bound meaning, and its timestamp is the native contribution clock.
+After context assembly the list reobserves each original authored row and thread, then repeats the native
+Accounts publicViews read and current editor authority. A changed selected source or revoked publication
+fails the page with `dependency_unavailable`, without refilling or returning a new cursor. Initially private,
+unknown or erased account pages retain their empty result. Self and authorized account editors retain their
+existing private-list access, without extending that authority to parent context.
+
+Historical review target/citation enrichment is still unavailable in this seam. The shared feed context
+reader uses a currently visible question; it must not be used as a historical-label fallback here. Adding
+historical question states and selected Semantic facts requires the remaining review producer and receiving
+contract work. Existing shared reading-card, feed and exact-reader contracts do not change.
+
+### Cost: selected public author context
+
+- Touches: the existing author-index frontier and initial native source disclosure; activity select/confirm
+  on at most twenty selected thread homes; two native observations per distinct immediate parent; final
+  native thread and authored-post observations; and two publicViews account probes. Native reads include
+  Auth, ancestry, Board/Realm/Access preparation and evaluation, transaction controls and participating pools.
+  They retain their existing finite document and ancestry limits, including raw retained bodies and copies.
+- Bound: `L<=20`, `C<=4L`, selected homes `H<=L`, distinct parents `P<=L`; no parent history or language
+  enumeration. Context traverses at most 4,096 nodes at depth at most 64 per admitted parent and withholds
+  larger trees. Parent excerpts retain at most 640 bytes; serialized context, including exact keys, is capped
+  at 32 KiB. This output guard does not establish an upstream physical-work bound. Full native source and
+  parent bodies, retained observations, JSON comparison copies and response serialization retain the native
+  2 MiB-per-body limit and must be charged separately from excerpt bytes. Activity retains its owner batch
+  and indexed witness bounds. No images, optional account labels or private action producers are loaded.
+- Growth check: focused parent/publication tests cover native creation, exact revision identity, bounded
+  spoiler/language context, erasure and asynchronous publication revocation. Independent 256/1024/4096
+  growth measurements across authored items, history, Semantic facts, labels, media and Access remain
+  controller acceptance, including both complete observations, every pool/runner and examined rows/blocks.
+
 ## Native post history selection
 
 `listPostRevisions(dependencies, threadId, postId, context, cursor?, limit?)` retains its existing

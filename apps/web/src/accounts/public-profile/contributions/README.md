@@ -15,11 +15,18 @@ locale, view, cursor and query bytes and restores the exact surviving link witho
 
 ## Native context seam
 
-Content owns `author_posts.list` / `author_threads.list`. Their installed schemas currently omit a bounded parent
-card and public conversation activity; the thread schema permits `reviewContext`, but the author-page producer
-does not assemble it. The receiver can present admitted shared review/parent context when supplied by the owner.
+Content owns `author_posts.list` / `author_threads.list`. Their source response schemas now add bounded
+`parentContext` to posts and `conversationActivity` to both lists. Parent states reuse `FeedParentContext`:
+no parent is `opening`, admitted parents carry exact revision/language/spoiler/excerpt with a null optional
+author, and undisclosed or changed parents are `reply`/`withheld`. Activity reuses the public exact/lower-bound
+count and last-contribution clock. The thread schema permits `reviewContext`, but this author-page producer
+does not yet assemble historical review context. The receiver can present admitted shared context when supplied.
 Missing context has a named unavailable seam (`AUTHOR_CONTRIBUTION_CONTEXT_OWNER`) and retains the original
 contribution destination. It never resolves parents recursively or fetches a reviewed Subject per row.
+
+The existing `ContributionRow`, `PublicReplyParent` and `feedConversationActivity` readers accept this additive
+source shape through their existing public record seam. Installed declarations remain the shared complete-input
+publisher's responsibility; source integration does not assert that a new declaration head is installed.
 
 Content must supply the smallest bounded author-page projection: current admitted reviewed Subject, historical
 question/vote revisions, immediate parent with its own spoiler/language and exact revision, and public conversation
