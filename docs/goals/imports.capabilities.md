@@ -1196,7 +1196,7 @@ This delivery does not claim that native command passed.
 
 ## Bangumi character kinds and qualified appearances
 
-Decision: The default character vocabulary and appearance adapter follows Bangumi type-2 anime work rows only.
+Decision: The anime character vocabulary branch remains restricted to Bangumi type-2 work rows; the selected-family Game branch below is separate and does not expand the existing anime outcome.
 
 The local showcase journey derives only source-specific character-kind and
 appearance-role codes present in selected anime evidence. The common publisher
@@ -1224,6 +1224,18 @@ selected mappings; no catalogue scan or label lookup occurs. Growth check:
 focused importer and Kernel acceptance only. The Kernel command, broader M1
 walkthrough and public page checks remain controller-owned; import delivery
 does not claim Web or Semantic page/index acceptance.
+
+## Bangumi Game character appearances and voice performers
+
+Decision: selected type-4 Games use their actual `subject-characters` rows as the only appearance source. A malformed optional `order` keeps the valid role-qualified association, records a diagnostic, and emits `schema:position` only when the current `schema:VideoGame` profile admits it.
+
+The ordinary selected-family caller composes the unchanged type-2 anime path with a distinct type-4 Game path. It retains no Game appearance from title, franchise, anime membership, shared performer, or `chars.main` evidence. A voice association must match the selected Game, an admitted appearance Character, and the source performer key. Character and Person identities remain provider-specific. The existing acknowledged source identities, common bounded publication journal, current vocabulary reads, and public Game/Character/Person reads carry the results; ordinary import remains proposal-only and local review accepts and adopts exact candidates separately.
+
+Current definitions admit `schema:character` on `schema:VideoGame` with `wdt:P3831`, and `wdt:P725` with required `wdt:P453` and supported `wdt:P1932`. The Bangumi source inventory still declares the `subject-characters` and `person-characters` endpoints on `schema:TVSeries` only. That missing multi-host producer contract must add Game applicability while retaining the anime declarations. The native receiver remains responsible for current Game and qualifier admission. Web and Semantic retain their existing ownership of public pages and inverse projections; this importer journey makes no page or index acceptance claim.
+
+- Touches: at most 64 actual appearances and the stricter existing 64 voice associations per selected Game, exact Character/Person source identities, role and performer qualifiers, citations, and the common source/journal/current-read flow. At most two schemes and the selected role/kind Concepts are requested from disclosed source evidence.
+- Bound: appearance evidence shares the existing 16 KiB row and 4 MiB family byte caps; the existing 64-per-work credit cap and common batch, tuple-home, journal, and 64 KiB command limits remain in force. Overflow stays incomplete and cannot retire prior facts.
+- Growth check: `services/importer/tests/showcase-bangumi-game-characters.test.ts` covers actual selected Game rows, malformed order, current role mapping, exact voice qualification, citations, and unrelated-work exclusion. `services/kernel/test/imports/showcase-bangumi-game-characters.test.ts` covers separate native review/adoption, retracted binding withholding, current Game/Character/Person reads, corrected identity reuse, and journal reopen. The wider native and public-page acceptance remains controller-owned.
 
 ## VNDB character traits and selected work appearances
 

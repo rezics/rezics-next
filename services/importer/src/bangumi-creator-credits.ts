@@ -172,7 +172,7 @@ export function buildBangumiCreatorCreditRows(input: {
       });
       continue;
     }
-    if (draft.workType !== 2) {
+    if (draft.workType !== 2 && draft.workType !== 4) {
       gaps.push({
         provider: 'bangumi',
         path: draft.path,

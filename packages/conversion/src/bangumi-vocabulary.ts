@@ -356,7 +356,7 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         target: performer,
         sourceEndpoint: row.performerCode,
         qualifiers,
-        mappingRevision: 'voice-credit@1',
+        mappingRevision: 'voice-credit@2',
       });
       return;
     }

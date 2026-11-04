@@ -2284,6 +2284,14 @@ candidate review, adoption and current-read flow. No additional seed publisher o
 identity lookup is involved. The importer keeps the exact Bangumi subject alias
 and key, unversioned record state where no provider revision exists, normalized
 digest and acknowledged native UUID.
+Ordinary Bangumi registration and selected-family type 2 rows already reach
+`convertBangumi`; the selected-family registration supplies its combined
+`cross-media-entities@10` revision while the ordinary caller uses `bangumi@9`.
+Both use one pure TVAnime name extractor and the existing journal, source
+metadata admission, citations, candidate acceptance and adoption flow. No
+additional seed publisher or identity lookup is involved. The importer keeps the
+exact Bangumi subject alias and key, unversioned record state where no provider
+revision exists, the normalized digest and the acknowledged native UUID.
 
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
@@ -2563,6 +2571,14 @@ candidate review, adoption and current-read flow. No additional seed publisher o
 identity lookup is involved. The importer keeps the exact Bangumi subject alias
 and key, unversioned record state where no provider revision exists, normalized
 digest and acknowledged native UUID.
+Ordinary Bangumi registration and selected-family type 2 rows already reach
+`convertBangumi`; the selected-family registration supplies its combined
+`cross-media-entities@10` revision while the ordinary caller uses `bangumi@9`.
+Both use one pure TVAnime name extractor and the existing journal, source
+metadata admission, citations, candidate acceptance and adoption flow. No
+additional seed publisher or identity lookup is involved. The importer keeps the
+exact Bangumi subject alias and key, unversioned record state where no provider
+revision exists, the normalized digest and the acknowledged native UUID.
 
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
@@ -2615,6 +2631,7 @@ source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
 uses its existing `cross-media-entities@10+bangumi@10` registration, record bindings,
+uses its existing `cross-media-entities@10` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -2640,3 +2657,35 @@ Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` a
 - Touches: ordinary `bangumi@10` and selected-family `cross-media-entities@10+bangumi@10` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
 - Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
 - Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
+
+### Bangumi Game characters and voice performers
+
+The selected-family seed keeps the existing type-2 anime appearance branch and
+adds a separate type-4 Game branch. Only an actual `subject-characters` row on a
+selected, acknowledged Game can create an appearance. A `person-characters` row
+must match that Game and its admitted Character; the Person remains a separate
+Bangumi identity. Existing vocabulary preparation reads only the selected role
+and Character-kind Concepts, then the ordinary source registration emits cited
+`schema:character` and Character-qualified `wdt:P725` candidates. The common
+showcase journal, exact accept/adopt operations and public reads remain in use.
+
+Decision: malformed optional appearance order retains the independently valid
+role-qualified association, records a source diagnostic, and emits
+`schema:position` only when the current `schema:VideoGame` definition admits it.
+
+The bundled native release admits Game `schema:character` with `wdt:P3831` and
+Game `wdt:P725` with required `wdt:P453` and supported `wdt:P1932`. The Bangumi
+source inventory still declares `subject-characters` and `person-characters`
+on `schema:TVSeries` only; its producer contract needs Game applicability while
+retaining the anime path. Web and Semantic own public page and inverse
+projections, so this delivery claims no page/index acceptance.
+
+- Touches: at most 64 selected appearances and the existing stricter 64 voice
+  associations per Game, within the 16 KiB row, shared 4 MiB appearance
+  evidence, common batch and journal bounds, and the actual 64 KiB command
+  envelope.
+- Growth check: `tests/showcase-bangumi-game-characters.test.ts` pins selected
+  source rows, role binding, malformed order, exact performer qualification,
+  citations and unrelated-work exclusion. The native lifecycle and current-read
+  scenario is `test/imports/showcase-bangumi-game-characters.test.ts`; broader
+  native and public-page acceptance is controller-owned.

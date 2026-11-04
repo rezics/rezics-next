@@ -43,6 +43,7 @@ type CharacterVocabularyNeed = {
   concepts: MappingEvidence[];
   diagnostics: SourceVocabularyGap[];
 };
+type SupportedWorkType = 2 | 4;
 export type ShowcaseBangumiCharacterVocabulary = {
   requirements: ShowcaseVocabularyRequirement[];
   bindings: SourceVocabularyBindings;
@@ -74,17 +75,27 @@ function mappingEvidence(taxonomyId: Taxonomy, code: unknown, ownerKey: string):
   };
 }
 
-function selectedNeed(plan: CrossMediaPlan): CharacterVocabularyNeed {
+function selectedNeed(plan: CrossMediaPlan, workTypes: readonly SupportedWorkType[] = [2]): CharacterVocabularyNeed {
   const diagnostics: SourceVocabularyGap[] = [];
   const concepts = new Map<string, MappingEvidence>();
-  const appearances = plan.characterAppearances ?? [];
-  const animeWorks = new Set(
+  const selectedTypes = new Set(workTypes);
+  const selectedWorks = new Set(
     [...plan.records.bangumi, ...plan.entities.bangumi]
-      .filter((record) => record.payload && typeof record.payload === 'object' && record.payload.type === 2)
+      .filter(
+        (record) =>
+          record.payload &&
+          typeof record.payload === 'object' &&
+          (record.payload.type === 2 || record.payload.type === 4) &&
+          selectedTypes.has(record.payload.type),
+      )
       .map((record) => record.key),
   );
+  const appearances = [
+    ...(selectedTypes.has(2) ? (plan.characterAppearances ?? []) : []),
+    ...(selectedTypes.has(4) ? (plan.gameCharacterAppearances ?? []) : []),
+  ];
   const animeCharacters = new Set(
-    appearances.filter((row) => animeWorks.has(row.subjectId)).map((row) => `character:${row.characterId}`),
+    appearances.filter((row) => selectedWorks.has(row.subjectId)).map((row) => `character:${row.characterId}`),
   );
   const characterRecords = [...plan.records.bangumi, ...plan.entities.bangumi]
     .filter((record) => animeCharacters.has(record.key))
@@ -95,7 +106,7 @@ function selectedNeed(plan: CrossMediaPlan): CharacterVocabularyNeed {
     if (evidence) concepts.set(`${evidence.taxonomy}\0${evidence.code}`, evidence);
   }
   const orderedAppearances = appearances
-    .filter((row) => animeWorks.has(row.subjectId))
+    .filter((row) => selectedWorks.has(row.subjectId))
     .slice()
     .sort((left, right) => left.subjectId.localeCompare(right.subjectId) || left.sourceIndex - right.sourceIndex);
   for (const appearance of orderedAppearances) {
@@ -292,8 +303,9 @@ export async function prepareShowcaseBangumiCharacterVocabulary(input: {
   port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'>;
   journal: ShowcaseJournal;
   stage: 'schemes' | 'concepts';
+  workTypes?: readonly SupportedWorkType[];
 }): Promise<ShowcaseBangumiCharacterVocabulary> {
-  const need = selectedNeed(input.plan);
+  const need = selectedNeed(input.plan, input.workTypes);
   const schemeEntries = [...need.schemes.keys()]
     .sort()
     .map((id) => schemeEvidence(need, id))
@@ -362,7 +374,8 @@ export async function readShowcaseBangumiCharacterVocabulary(input: {
   plan: CrossMediaPlan;
   port: Pick<CrossMediaPort, 'readReviewedSubject'>;
   journal: ShowcaseJournal;
+  workTypes?: readonly SupportedWorkType[];
 }): Promise<SourceVocabularyBindings> {
-  const need = selectedNeed(input.plan);
+  const need = selectedNeed(input.plan, input.workTypes);
   return currentBangumiCharacterVocabularyBindings(identityBindings(need, input.journal), input.port);
 }

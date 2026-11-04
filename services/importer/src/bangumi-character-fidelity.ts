@@ -117,13 +117,13 @@ async function nativeIdentity(
   sourceAlias: string,
   externalId: string,
   sourceId: string,
+  expectedType: string,
 ): Promise<NativeIdentity | undefined> {
   const claim = importer.session.bindings.claim({ source: sourceAlias, external_id: externalId });
   if (claim?.state !== 'bound') return undefined;
   const subject = await publicSubject(port, claim.subject);
   if (!subject) return undefined;
   const character = externalId.startsWith('character:');
-  const expectedType = character ? 'wd:Q95074' : subject.type;
   const identifier = character ? 'wdt:P6296' : 'wdt:P5732';
   if (subject.type !== expectedType || !hasCurrentValue(subject, identifier, sourceId) || !uuid.test(subject.id))
     return undefined;
@@ -251,13 +251,24 @@ export async function runBangumiCharacterFidelity(input: {
     if (appearanceByWork.has(record.key)) relevant.add(record.key);
   }
   const identities = new Map<string, NativeIdentity>();
+  const recordsByKey = new Map(input.records.map((record) => [record.key, record]));
+  const expectedType = (key: string): string | undefined => {
+    if (key.startsWith('character:')) return 'wd:Q95074';
+    const payload = recordsByKey.get(key)?.payload;
+    if (payload === null || typeof payload !== 'object') return undefined;
+    if ((payload as Record<string, unknown>).type === 2) return 'schema:TVSeries';
+    if ((payload as Record<string, unknown>).type === 4) return 'schema:VideoGame';
+    return undefined;
+  };
   const jobs = [...relevant];
   for (let offset = 0; offset < jobs.length; offset += 16) {
     const page = await Promise.all(
       jobs.slice(offset, offset + 16).map(async (key) => {
         const isCharacter = key.startsWith('character:');
         const id = isCharacter ? key.slice('character:'.length) : key;
-        const identity = await nativeIdentity(input.importer, input.port, input.sourceAlias, key, id);
+        const nativeType = expectedType(key);
+        if (!nativeType) return null;
+        const identity = await nativeIdentity(input.importer, input.port, input.sourceAlias, key, id, nativeType);
         return identity ? ([key, identity] as const) : null;
       }),
     );

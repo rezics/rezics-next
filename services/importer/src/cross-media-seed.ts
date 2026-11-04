@@ -66,9 +66,9 @@ import {
   type ShowcasePublicationResult,
 } from './showcase-publication.ts';
 import {
-  prepareShowcaseBangumiCharacterVocabulary,
-  readShowcaseBangumiCharacterVocabulary,
-} from './showcase-bangumi-characters.ts';
+  prepareShowcaseBangumiSelectedCharacterVocabulary,
+  readShowcaseBangumiSelectedCharacterVocabulary,
+} from './showcase-bangumi-game-characters.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
@@ -262,7 +262,10 @@ export type CrossMediaPlan = {
   credits: BangumiCreatorCreditDraft[];
   franchises: Record<Franchise, { bangumi: string[]; vndb: string[] }>;
   members: CrossMediaMember[];
+  /** Actual selected type-2 anime appearances. */
   characterAppearances?: BangumiCharacterAppearance[];
+  /** Actual selected type-4 Game appearances, kept separate from anime. */
+  gameCharacterAppearances?: BangumiCharacterAppearance[];
   gaps: CrossMediaGap[];
   relationScope: string[];
   relationSnapshotDigest: string;
@@ -381,6 +384,7 @@ export function emptyCrossMediaPlan(): CrossMediaPlan {
     franchises: emptyFranchises(),
     members: [],
     characterAppearances: [],
+    gameCharacterAppearances: [],
     gaps: [],
     relationScope: [],
     relationSnapshotDigest: sourceDigest([]),
@@ -675,8 +679,22 @@ export async function planCrossMediaSeed(
       .filter((record) => record.payload && typeof record.payload === 'object' && record.payload.type === 2)
       .map((record) => record.key),
   );
+  const selectedGameWorks = new Set(
+    [...plan.records.bangumi, ...plan.entities.bangumi]
+      .filter(
+        (record) =>
+          record.payload &&
+          typeof record.payload === 'object' &&
+          record.payload.type === 4 &&
+          familyIds.has(Number(record.key)),
+      )
+      .map((record) => record.key),
+  );
   const admittedAppearanceIndices = new Set<number>();
   const appearanceCounts = new Map<number, number>();
+  const admittedGameAppearanceIndices = new Set<number>();
+  const gameAppearanceCounts = new Map<number, number>();
+  const gameAppearancePairs = new Set<string>();
   const admittedStaffIndices = new Set<number>();
   const admittedVoiceIndices = new Set<number>();
   const staffCounts = new Map<number, number>();
@@ -684,44 +702,81 @@ export async function planCrossMediaSeed(
   const staffOverflow = new Set<number>();
   const voiceOverflow = new Set<number>();
   const appearanceOverflow = new Set<number>();
+  const gameAppearanceOverflow = new Set<number>();
   let appearanceEvidenceBytes = 0;
   let selectionIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-characters')) {
     const sourceIndex = selectionIndex++;
     const subjectId = number(row, 'subject_id');
     const characterId = number(row, 'character_id');
-    if (familyWorks.has(subjectId) && !selectedAnimeWorks.has(String(subjectId))) characters.add(characterId);
-    if (!selectedAnimeWorks.has(String(subjectId))) continue;
-    const count = (appearanceCounts.get(subjectId) ?? 0) + 1;
-    appearanceCounts.set(subjectId, count);
+    const work = String(subjectId);
+    if (familyWorks.has(subjectId) && !selectedAnimeWorks.has(work) && !selectedGameWorks.has(work))
+      characters.add(characterId);
+    if (selectedAnimeWorks.has(work)) {
+      const count = (appearanceCounts.get(subjectId) ?? 0) + 1;
+      appearanceCounts.set(subjectId, count);
+      if (count > 64) {
+        if (!appearanceOverflow.has(subjectId)) {
+          gap(
+            'bangumi',
+            'subject-characters',
+            { subject_id: subjectId, character_id: characterId },
+            'Per-work character appearance mapping limit exceeded',
+          );
+          appearanceOverflow.add(subjectId);
+        }
+        continue;
+      }
+      const rowBytes = Buffer.byteLength(JSON.stringify(row));
+      if (rowBytes > APPEARANCE_ROW_BYTES || appearanceEvidenceBytes + rowBytes > APPEARANCE_EVIDENCE_BYTES) {
+        if (!appearanceOverflow.has(subjectId)) {
+          gap(
+            'bangumi',
+            'subject-characters',
+            { subject_id: subjectId, character_id: characterId },
+            'Selected character appearance evidence exceeds its bounded byte limit',
+          );
+          appearanceOverflow.add(subjectId);
+        }
+        continue;
+      }
+      appearanceEvidenceBytes += rowBytes;
+      characters.add(characterId);
+      admittedAppearanceIndices.add(sourceIndex);
+      continue;
+    }
+    if (!selectedGameWorks.has(work)) continue;
+    const count = (gameAppearanceCounts.get(subjectId) ?? 0) + 1;
+    gameAppearanceCounts.set(subjectId, count);
     if (count > 64) {
-      if (!appearanceOverflow.has(subjectId)) {
+      if (!gameAppearanceOverflow.has(subjectId)) {
         gap(
           'bangumi',
           'subject-characters',
           { subject_id: subjectId, character_id: characterId },
-          'Per-work character appearance mapping limit exceeded',
+          'Per-game character appearance mapping limit exceeded',
         );
-        appearanceOverflow.add(subjectId);
+        gameAppearanceOverflow.add(subjectId);
       }
       continue;
     }
     const rowBytes = Buffer.byteLength(JSON.stringify(row));
     if (rowBytes > APPEARANCE_ROW_BYTES || appearanceEvidenceBytes + rowBytes > APPEARANCE_EVIDENCE_BYTES) {
-      if (!appearanceOverflow.has(subjectId)) {
+      if (!gameAppearanceOverflow.has(subjectId)) {
         gap(
           'bangumi',
           'subject-characters',
           { subject_id: subjectId, character_id: characterId },
-          'Selected character appearance evidence exceeds its bounded byte limit',
+          'Selected Game character appearance evidence exceeds its bounded byte limit',
         );
-        appearanceOverflow.add(subjectId);
+        gameAppearanceOverflow.add(subjectId);
       }
       continue;
     }
     appearanceEvidenceBytes += rowBytes;
     characters.add(characterId);
-    admittedAppearanceIndices.add(sourceIndex);
+    admittedGameAppearanceIndices.add(sourceIndex);
+    gameAppearancePairs.add(`${subjectId}\0${characterId}`);
   }
   let staffIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-persons')) {
@@ -742,15 +797,21 @@ export async function planCrossMediaSeed(
     const sourceIndex = voiceIndex++;
     const subjectId = number(row, 'subject_id');
     if (!familyWorks.has(subjectId)) continue;
+    const characterId = number(row, 'character_id');
     const count = (voiceCounts.get(subjectId) ?? 0) + 1;
     voiceCounts.set(subjectId, count);
     if (count > CREDIT_ASSOCIATIONS_PER_WORK || admittedVoiceIndices.size >= CREDIT_ASSOCIATIONS) {
       voiceOverflow.add(subjectId);
       continue;
     }
+    if (
+      selectedGameWorks.has(String(subjectId)) &&
+      (gameAppearanceOverflow.has(subjectId) || !gameAppearancePairs.has(`${subjectId}\0${characterId}`))
+    )
+      continue;
     admittedVoiceIndices.add(sourceIndex);
     persons.add(number(row, 'person_id'));
-    characters.add(number(row, 'character_id'));
+    characters.add(characterId);
   }
   for (const subjectId of staffOverflow)
     plan.gaps.push({
@@ -773,9 +834,40 @@ export async function planCrossMediaSeed(
     const sourceIndex = appearanceIndex++;
     const subjectId = number(row, 'subject_id');
     const characterId = number(row, 'character_id');
+    const work = String(subjectId);
+    if (selectedGameWorks.has(work)) {
+      if (
+        !admittedGameAppearanceIndices.has(sourceIndex) ||
+        gameAppearanceOverflow.has(subjectId) ||
+        !characters.has(characterId)
+      )
+        continue;
+      const character = `character:${characterId}`;
+      member({
+        source: 'bangumi',
+        key: character,
+        kind: 'character',
+        membership: 'family',
+        ...tagged(familyIds.get(subjectId)),
+      });
+      (plan.gameCharacterAppearances ??= []).push({
+        subjectId: work,
+        characterId,
+        sourceIndex,
+        roleCode: row.type,
+        sourceRow: Object.freeze({ ...row }),
+        ...(row.order === undefined
+          ? {}
+          : {
+              order:
+                typeof row.order === 'number' || typeof row.order === 'string' || row.order === null ? row.order : -1,
+            }),
+      });
+      continue;
+    }
     if (
       !admittedAppearanceIndices.has(sourceIndex) ||
-      !selectedAnimeWorks.has(String(subjectId)) ||
+      !selectedAnimeWorks.has(work) ||
       !characters.has(characterId)
     )
       continue;
@@ -844,10 +936,16 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'person-characters')) {
     const sourceIndex = currentVoiceIndex++;
     if (!admittedVoiceIndices.has(sourceIndex)) continue;
-    if (!familyWorks.has(number(row, 'subject_id'))) continue;
-    const work = String(number(row, 'subject_id'));
+    const subjectId = number(row, 'subject_id');
+    if (!familyWorks.has(subjectId)) continue;
+    const work = String(subjectId);
     const personId = number(row, 'person_id');
     const characterId = number(row, 'character_id');
+    if (
+      selectedGameWorks.has(work) &&
+      (gameAppearanceOverflow.has(subjectId) || !gameAppearancePairs.has(`${subjectId}\0${characterId}`))
+    )
+      continue;
     const person = `person:${personId}`;
     const character = `character:${characterId}`;
     member({
@@ -2153,8 +2251,12 @@ export async function seedCrossMedia(
       runs[provider] = run;
     }
     const bangumiFidelityRecords = [...plan.records.bangumi, ...plan.entities.bangumi];
+    const bangumiCharacterAppearances = [
+      ...(plan.characterAppearances ?? []),
+      ...(plan.gameCharacterAppearances ?? []),
+    ];
     const hasBangumiFidelityInput =
-      (plan.characterAppearances?.length ?? 0) > 0 ||
+      bangumiCharacterAppearances.length > 0 ||
       bangumiFidelityRecords.some((record) => record.key.startsWith('character:'));
     const fidelity =
       providers.includes('bangumi') && hasBangumiFidelityInput
@@ -2163,7 +2265,7 @@ export async function seedCrossMedia(
             port,
             sourceAlias: crossMediaAliases.bangumi,
             records: bangumiFidelityRecords,
-            appearances: plan.characterAppearances ?? [],
+            appearances: bangumiCharacterAppearances,
             ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
           })
         : undefined;
@@ -2795,10 +2897,10 @@ export async function runCrossMediaSeedCli(
     });
     let showcase: ShowcasePublicationResult | undefined;
     let bangumiVocabularyRequirements:
-      | Awaited<ReturnType<typeof prepareShowcaseBangumiCharacterVocabulary>>['requirements']
+      | Awaited<ReturnType<typeof prepareShowcaseBangumiSelectedCharacterVocabulary>>['requirements']
       | undefined;
     if (journal && publicClient && !characterBindingsPath) {
-      const schemes = await prepareShowcaseBangumiCharacterVocabulary({
+      const schemes = await prepareShowcaseBangumiSelectedCharacterVocabulary({
         plan: publicationPlan,
         port,
         journal,
@@ -2817,7 +2919,7 @@ export async function runCrossMediaSeedCli(
           ...schemes.requirements,
         ],
       });
-      const concepts = await prepareShowcaseBangumiCharacterVocabulary({
+      const concepts = await prepareShowcaseBangumiSelectedCharacterVocabulary({
         plan: publicationPlan,
         port,
         journal,
@@ -2837,7 +2939,7 @@ export async function runCrossMediaSeedCli(
         ],
       });
       bangumiVocabularyRequirements = concepts.requirements;
-      const currentCharacterBindings = await readShowcaseBangumiCharacterVocabulary({
+      const currentCharacterBindings = await readShowcaseBangumiSelectedCharacterVocabulary({
         plan: publicationPlan,
         port,
         journal,
