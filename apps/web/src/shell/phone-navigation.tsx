@@ -188,7 +188,9 @@ export function PhoneNavigationView({
         {m.shell_you()}
       </a>
       <noscript>
-        <style nonce={nonce}>{'[data-phone-you-js]{display:none!important}[data-phone-you-fallback]{display:flex!important}'}</style>
+        <style nonce={nonce}>
+          {'[data-phone-you-js]{display:none!important}[data-phone-you-fallback]{display:flex!important}'}
+        </style>
       </noscript>
     </nav>
   );

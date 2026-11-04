@@ -5,7 +5,10 @@ import * as React from 'react';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => new Request('https://site.test/en') }));
+mock.module('@tanstack/react-start/server', () => ({
+  ...start,
+  getRequest: () => new Request('https://site.test/en'),
+}));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const require = createRequire(import.meta.url);
