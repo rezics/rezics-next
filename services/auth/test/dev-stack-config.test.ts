@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import {
   developmentKeys,
   developmentBindings,
+  developmentRegistrationPassword,
   issuerRequest,
   localDatabase,
   openLocalShowcase,
@@ -166,4 +167,17 @@ test('parallel local startup has a configured connection allowance while the ord
   expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
   );
+});
+
+test('an authorized password rotation retains the original registration input', async () => {
+  const directory = await mkdtemp(resolve(import.meta.dir, '../../../.temp/rotated-registration-'));
+  try {
+    const keys = await developmentKeys(directory);
+    expect(
+      developmentRegistrationPassword({ ...keys, password: 'current-fixture', bootstrapPassword: 'original-fixture' }),
+    ).toBe('original-fixture');
+    expect(developmentRegistrationPassword({ ...keys, password: 'current-fixture' })).toBe('current-fixture');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

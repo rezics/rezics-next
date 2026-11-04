@@ -71,6 +71,9 @@ keys across restarts, and supplies the local Auth issuer, audience and JWKS URL 
 Generated bindings use literal dotenv quoting so the website JWK remains valid JSON.
 Local setup also supplies a 10-second pool connection allowance for parallel cold startup on busy hosts, preserving
 explicit overrides. Native request deadlines and authorization remain unchanged.
+An authorized persona password rotation may retain its original registration input as `bootstrapPassword` in the
+private key file; sign-in uses the current password. Database reset drops that obsolete bootstrap input before
+registering the current password on the fresh database.
 Local setup owns `apps/web/.dev.vars`; keep deployment secrets in deployment configuration. Production entrypoints
 never import the development host or create these grants.
 

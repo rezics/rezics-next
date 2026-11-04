@@ -57,7 +57,13 @@ export type DevelopmentKeys = {
   website: JWK;
   importer: JWK;
   password: string;
+  /** Original immutable registration input after an authorized local password rotation. */
+  bootstrapPassword?: string;
 };
+
+export function developmentRegistrationPassword(keys: DevelopmentKeys): string {
+  return keys.bootstrapPassword ?? keys.password;
+}
 
 async function privateKey(): Promise<JWK> {
   const pair = await generateKeyPair('ES256', { extractable: true });
@@ -340,7 +346,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
     key: 'local-developer',
     handle: 'developer',
     email: 'developer@rezics.test',
-    password: keys.password,
+    password: developmentRegistrationPassword(keys),
   });
   await bootstrapGovernance(kernelPool, person.accountId);
   const signIn = () =>
@@ -565,6 +571,11 @@ if (import.meta.main) {
     if (action === 'setup') await setup();
     else if (action === 'reset') {
       await retireDevelopmentSeedState();
+      const keys = await developmentKeys();
+      if (keys.bootstrapPassword) {
+        delete keys.bootstrapPassword;
+        await privateFile(resolve(state, 'keys.json'), JSON.stringify(keys));
+      }
       await setup();
     } else if (action === 'host') await serveHost();
     else if (action === 'persona') {
