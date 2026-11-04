@@ -69,7 +69,10 @@ test('permission filtering, review, and confirmation preserve exact native actio
     await act(async () =>
       fireEvent.change(canvas.getByLabelText(m.access_ends()), { target: { value: '2027-01-01T12:30' } }),
     );
-    const proposedInterval = interval('2027-01-01T12:30', '')!;
+    const proposedInterval = interval(
+      (canvas.getByLabelText(m.access_starts()) as HTMLInputElement).value,
+      '2027-01-01T12:30',
+    )!;
     await click(m.access_review_title());
     let review = canvas.getByRole('region', { name: m.access_review_title() });
     expect(within(review).getByText(m.access_permission_context_accept())).toBeTruthy();
