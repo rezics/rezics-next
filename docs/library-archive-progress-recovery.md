@@ -91,16 +91,16 @@ archive/review/application evidence does not undo a native Session already accep
 
 ## Limits and caller cost
 
-| Symbol            | Bound                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| U                 | 32 MiB raw upload                                                                    |
-| N                 | 100,000 export records; JSON depth 16; 66,000 encoded bytes per record               |
-| retained evidence | 32 MiB per upload; at most 4,096 holdings                                            |
-| P                 | 10 review-page rows; each page derives at most P+1 indexed rows                      |
-| A                 | 8 total measures including the primary, hence at most 7 additional                   |
-| I                 | 20 selected episode IDs, limited by the delivered direct-membership cap              |
-| review retention  | 4,096 review rows and 32 MiB evidence per upload; each review at most 32 KiB         |
-| command retention | 8 KiB canonical JSON operands per application; at most 4,096 applications per upload |
+| Symbol            | Bound                                                                                                                                                                                                                             |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U                 | 32 MiB raw upload                                                                                                                                                                                                                 |
+| N                 | 100,000 export records; JSON depth 16; 66,000 encoded bytes per record                                                                                                                                                            |
+| retained evidence | 32 MiB per upload; at most 4,096 holdings                                                                                                                                                                                         |
+| P                 | 10 review-page rows; each page derives at most P+1 indexed rows                                                                                                                                                                   |
+| A                 | 8 total measures including the primary, hence at most 7 additional                                                                                                                                                                |
+| I                 | 20 selected episode IDs, limited by the delivered direct-membership cap                                                                                                                                                           |
+| review retention  | 4,096 review rows and 32 MiB evidence per upload; each review at most 32 KiB                                                                                                                                                      |
+| command retention | 8 KiB canonical JSON operands per application; at most 4,096 applications per upload                                                                                                                                              |
 | lifetime/cleanup  | 7-day expiry is eligibility, not timed physical deletion; each removal or terminal-erasure call deletes at most 100 indexed child rows, then a separate empty-root delete; the helper's returned `removed` count is children only |
 
 Parsing is O(U+N) under the byte/depth/record limits. Review uses one selected-occurrence lookup, at most I selected
