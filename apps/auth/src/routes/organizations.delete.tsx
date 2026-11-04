@@ -63,20 +63,30 @@ function OrganizationDeleteDeparture({
   unknown: boolean;
 }) {
   const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
+  const staying = useRef(false);
   useLayoutEffect(() => {
     if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
   });
   const stay = () => {
-    if (blocker.status === 'blocked') blocker.reset();
+    if (blocker.status === 'blocked') {
+      staying.current = true;
+      blocker.reset();
+    }
   };
   return (
     <OrganizationDeletionDeparturePrompt
       open={blocker.status === 'blocked'}
       unknown={unknown}
       stay={stay}
-      focus={focus}
+      focus={() => {
+        // Automatic release on replacement/completion must not focus a newer view.
+        if (!staying.current) return;
+        staying.current = false;
+        focus();
+      }}
       leave={() => {
         if (blocker.status !== 'blocked') return;
+        staying.current = false;
         leave();
         blocker.proceed();
       }}

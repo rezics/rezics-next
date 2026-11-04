@@ -130,6 +130,7 @@ test('changed target releases the old review prompt immediately', async () => {
   expect(page.router.history.location.pathname).toBe('/away');
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
   expect(page.unload()).toBe(false);
+  expect(document.activeElement).not.toBe(page.host.querySelector('input'));
 });
 
 test('lost authority releases an open prompt without sending a native command', async () => {
