@@ -10,7 +10,7 @@ import { CreditInspection } from './view';
 import type { CreditAssertion, CreditVisit } from './model';
 
 export const CreditInspectionSession = candidateSession(function CreditInspectionSession({
-  credit, visit, locale, title, propertyLabel, onClose,
+  credit, visit, locale, title, propertyLabel, onClose, returnFocus,
 }: {
   id: string;
   address: string;
@@ -20,6 +20,7 @@ export const CreditInspectionSession = candidateSession(function CreditInspectio
   title: string;
   propertyLabel: string;
   onClose: () => void;
+  returnFocus?: (() => HTMLElement | null) | undefined;
 }) {
   const work = useCatalogueLifetime('credit-inspection');
   const observed = useSession();
@@ -32,7 +33,7 @@ export const CreditInspectionSession = candidateSession(function CreditInspectio
       confirmSubjectRelation({ data: editorRequest(data, work), headers: csrfHeaders() }),
   }), [credit.holder, work]);
   return <CreditInspection credit={credit} visit={visit} locale={locale} title={title} propertyLabel={propertyLabel}
-    onClose={onClose} transport={transport} signedIn={observed.state === 'signed-in'}
+    onClose={onClose} returnFocus={returnFocus} transport={transport} signedIn={observed.state === 'signed-in'}
     isCurrent={work.active} search={(text, signal) => relationTargetSearch(text, signal, locale)}
     metadata={() => {
       if (!work.active()) return Promise.resolve({ kind: 'unavailable' as const });
