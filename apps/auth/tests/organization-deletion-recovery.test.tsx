@@ -86,8 +86,15 @@ test('single readback survives storage loss; late advice cannot affect replaceme
   expect(page.host.textContent).not.toContain('The deletion result is unknown');
   expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
   expect(readOrganizationDeleteUnknown(first)).toEqual(original);
+  // The replacement's own continuation still warns; the old attempt must not.
+  expect(unload()).toBe(true);
+  window.sessionStorage.removeItem('rezics.organization-delete.step-up');
   expect(unload()).toBe(false);
   expect(page.calls).toHaveLength(2);
+  storeOrganizationDeleteStepUp({ ...replacement, organizationId: first });
+  await page.render(content(second, async () => ready(second)));
+  expect(unload()).toBe(false);
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: { organizationId: first } });
   await page.render(content(first, read));
   expect(page.host.querySelector('form')).toBeNull();
   expect(unload()).toBe(true);

@@ -138,7 +138,14 @@ export function OrganizationDeleteContent({
       Boolean(state.confirmation.trim()) ||
       state.pending ||
       submitting.current !== null ||
-      continuation.kind === 'pending';
+      (continuation.kind === 'pending' &&
+        Boolean(current?.humanAccountId && current.selected && current.operationKey) &&
+        organizationDeletePendingMatches(
+          continuation.value,
+          current!.humanAccountId!,
+          current!.selected!,
+          current!.operationKey!,
+        ));
     return Boolean(
       !bypassDeparture.current &&
       current?.source === state.organizationId &&
