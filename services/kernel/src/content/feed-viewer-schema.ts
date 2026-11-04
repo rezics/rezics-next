@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import type { ViewerPersonalActionsPage } from '../library/viewer-personal-actions.ts';
-import { viewerFactsResponseSchema } from '../library/viewer-facts.ts';
+import { viewerFactsResponseSchema } from '../library/viewer-facts-schema.ts';
 
 const closed = { additionalProperties: false } as const;
 const native = viewerFactsResponseSchema.anyOf[0];
