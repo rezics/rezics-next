@@ -308,7 +308,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       gap('bangumi', 'subject-characters', row, 'Appearance role code is not a supported scalar');
       continue;
     }
-    plan.characterAppearances.push({
+    (plan.characterAppearances ??= []).push({
       subjectId: work,
       characterId,
       sourceIndex,
