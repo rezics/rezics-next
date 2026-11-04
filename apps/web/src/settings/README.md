@@ -106,6 +106,16 @@ detail response-wait recovery is owned by this existing reader and is outside th
 
 The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.
 
+The directory captures Retry-After once at response observation as an absolute endpoint deadline. The longest
+outstanding deadline guards both feeds, first-page recovery and whole refresh, including captured callbacks. An
+already admitted sibling may settle under its current reader generation without shortening the wait. Blocked
+actions preserve the exact failed request, page and feedback; expiry only enables deliberate actions. One
+presentation timer serves all directory controls, and reattachment never restarts the delay. Retirement clears
+the observation with the private pages; detail, Auth and independent Settings endpoints remain independent.
+
+**Decision:** Directory Refresh is a separate deliberate cursor-free action; Retry preserves the failed feed request,
+and both obey the longest response deadline. Refresh clears old pages only when dispatch is eligible.
+
 Directory identities, membership roles and responsibility holds supply no detail admission. Until Content's serial successor to `d9c5a408-5c67-4d33-bf97-76a9918a21b5` installs the complete native viewer/navigation envelope and callable/root, identity rows have no detail links and show explicit unavailable feedback; the strict transport decoder continues to reject incompatible responses. This consumer does not publish declarations or infer missing authority.
 
 The Account card reads the current identity from the managed session and keeps rename advice in its separate native profile and viewer-actions read. Security, rename and deletion handoffs use only fixed Auth-owned paths from trusted issuer configuration; they do not grant a destructive command. An unavailable or denied read stays visible until deliberate reload, and native sign-out keeps ordinary POST/redirect behavior with explicit reload recovery and no automatic replay.

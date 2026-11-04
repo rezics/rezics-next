@@ -146,6 +146,7 @@ export type ManagedAccountsSnapshot = {
   account: ManagedIdentity | null;
   loading: boolean;
   failure: ManagedAccountsFailure | null;
+  /** Longest response-time deadline for the directory endpoint, shared by both feeds and refresh. */
   retryAt?: number;
   organizations: Feed<ManagedAccountsPage['organizations']['items'][number]> & { state: 'ready' | 'preparing' };
   responsibilities: Feed<ManagedAccountsPage['responsibilities']['items'][number]>;
@@ -221,7 +222,11 @@ export class ManagedAccountsInventory {
   }
   private deny(failure: ManagedAccountsFailure) {
     this.epoch++;
-    this.publish({ ...empty(), failure, retryAt: preferenceRetryDeadline(failure.retryAfter, this.now()) });
+    this.publish({ ...empty(), failure, retryAt: this.responseDeadline(failure) });
+  }
+  private responseDeadline(failure: ManagedAccountsFailure) {
+    // Observe each response once. An already admitted sibling cannot shorten an outstanding wait.
+    return Math.max(this.value.retryAt ?? 0, preferenceRetryDeadline(failure.retryAfter, this.now()));
   }
   async load() {
     if (!this.live()) return;
@@ -229,7 +234,7 @@ export class ManagedAccountsInventory {
     if (this.value.loading && this.loadingEpoch === this.epoch) return;
     const epoch = ++this.epoch;
     this.loadingEpoch = epoch;
-    this.publish({ ...empty(), loading: true });
+    this.publish({ ...empty(), loading: true, retryAt: this.value.retryAt ?? 0 });
     const result = await this.request({});
     if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
@@ -241,6 +246,7 @@ export class ManagedAccountsInventory {
       account: page.account,
       loading: false,
       failure: null,
+      retryAt: this.value.retryAt ?? 0,
       organizations: {
         ...page.organizations,
         items:
@@ -270,7 +276,7 @@ export class ManagedAccountsInventory {
     if (!this.live()) return;
     const before = this.value;
     if (!before.account || before.loading || before[feed].busy) return;
-    if (this.now() < (before[feed].retryAt ?? 0)) return;
+    if (this.now() < (before.retryAt ?? 0)) return;
     const preparing = feed === 'organizations' && before.organizations.state === 'preparing';
     const cursor = before[feed].next;
     if (cursor === null && !preparing) return;
@@ -290,20 +296,23 @@ export class ManagedAccountsInventory {
     if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
       if (result.kind === 'denied') this.deny(result);
-      else
+      else {
+        const retryAt = this.responseDeadline(result);
         this.publish({
           ...this.value,
+          retryAt,
           [feed]: {
             ...this.value[feed],
             busy: false,
             failure: result,
             failedRequest: cursors,
-            retryAt: preferenceRetryDeadline(result.retryAfter, this.now()),
+            retryAt,
             restartable:
               before[feed].restartable ||
               (!preparing && cursor !== null && (result.status === 400 || result.status === 409)),
           },
         });
+      }
       return;
     }
     const current = this.value;

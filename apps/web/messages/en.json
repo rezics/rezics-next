@@ -604,6 +604,7 @@
   "settings_managed_responsibilities_retry_wait": "The server has asked you to wait before trying this responsibility page again.",
   "settings_managed_load_more": "Next page",
   "settings_managed_restart_list": "Start at first page",
+  "settings_managed_page_failed": "This page could not be loaded. Retry sends the same page request; Refresh starts both lists again.",
   "settings_managed_authority_text": "A responsibility hold does not confirm a completed operation or permission to manage the account.",
   "settings_managed_identity_unavailable": "Public account identity is unavailable.",
   "settings_managed_no_responsibilities_page": "No responsibility holds on this page. More entries remain to be checked.",

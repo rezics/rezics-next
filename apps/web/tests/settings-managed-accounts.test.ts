@@ -301,7 +301,7 @@ test('inventory retry metadata uses the shared seconds and HTTP-date deadlines w
   }
 });
 
-test('independent delayed feed failures keep exact cursors, retained rows and reconciliation while explicit recovery advances only its feed', async () => {
+test('delayed feed failures share the longest endpoint wait while exact recovery advances only its feed', async () => {
   let now = Date.parse('Sat, 31 Oct 2026 12:00:00 GMT');
   const calls: ManagedAccountsCursors[] = [];
   const failed = new Set<string>();
@@ -342,9 +342,12 @@ test('independent delayed feed failures keep exact cursors, retained rows and re
   expect(calls).toHaveLength(3);
   now += 2_000;
   await inventory.more('organizations');
-  expect(inventory.snapshot().organizations.next).toBeNull();
+  expect(calls).toHaveLength(3);
+  expect(inventory.snapshot().organizations).toBe(bothFailed.organizations);
   expect(inventory.snapshot().responsibilities).toBe(bothFailed.responsibilities);
   now += 18_000;
+  await inventory.more('organizations');
+  expect(inventory.snapshot().organizations.next).toBeNull();
   await inventory.more('responsibilities');
   expect(inventory.snapshot().organizations.next).toBeNull();
   expect(inventory.snapshot().responsibilities.next).toBeNull();
@@ -356,6 +359,69 @@ test('independent delayed feed failures keep exact cursors, retained rows and re
     { organizationsCursor: 'signed organization +/=' },
     { operatorsCursor: 'signed operator +/=' },
   ]);
+});
+
+test('directory response waits fence refresh and sibling controls, survive admitted responses and retire with the reader', async () => {
+  for (const siblingFails of [false, true]) {
+    let now = 1_000;
+    let current = true;
+    let finish: (result: ManagedAccountsResult) => void = () => {};
+    const calls: ManagedAccountsCursors[] = [];
+    const failure = managedAccountsFailure(400, { code: 'invalid_cursor' }, { 'Retry-After': '20' });
+    const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
+      calls.push(cursors);
+      if (calls.length === 1 || calls.length === 4) return ready(page());
+      if (cursors.organizationsCursor) return failure;
+      return new Promise((resolve) => { finish = resolve; });
+    }, () => current, () => now);
+    const refresh = () => inventory.load();
+    const next = () => inventory.more('organizations');
+    await inventory.load();
+    const sibling = inventory.more('responsibilities');
+    await next();
+    const failed = inventory.snapshot();
+    expect(failed.retryAt).toBe(21_000);
+    expect(failed.organizations.failedRequest).toEqual({ organizationsCursor: page().organizations.next! });
+    await inventory.load();
+    await refresh();
+    await inventory.more('responsibilities');
+    await inventory.firstPage('organizations');
+    expect(calls).toHaveLength(3);
+    expect(inventory.snapshot()).toBe(failed);
+    now += 5_000;
+    finish(siblingFails ? managedAccountsFailure(503, undefined, { 'Retry-After': '2' }) : ready(page()));
+    await sibling;
+    expect(inventory.snapshot().retryAt).toBe(21_000);
+    expect(inventory.snapshot().organizations).toBe(failed.organizations);
+    expect(inventory.snapshot().responsibilities.items).toEqual(page().responsibilities.items);
+    now = 20_999;
+    await refresh();
+    await next();
+    expect(calls).toHaveLength(3);
+    now++;
+    await Promise.resolve();
+    expect(calls).toHaveLength(3);
+    await Promise.all([next(), next()]);
+    expect(calls).toHaveLength(4);
+    expect(calls[3]).toEqual(failed.organizations.failedRequest!);
+    expect(inventory.snapshot().organizations.failure).toBeNull();
+    const retiring = inventory.more('responsibilities');
+    current = false;
+    expect(inventory.snapshot().account).toBeNull();
+    current = true;
+    await refresh();
+    await next();
+    finish(managedAccountsFailure(503, undefined, { 'Retry-After': '99' }));
+    await retiring;
+    expect(calls).toHaveLength(5);
+    expect(inventory.snapshot().retryAt).toBeUndefined();
+    expect(inventory.snapshot().organizations.failedRequest).toBeUndefined();
+    expect(inventory.snapshot().account).toBeNull();
+    const replacement = new ManagedAccountsInventory(viewer, async () => ready(page()), undefined, () => now);
+    await replacement.load();
+    expect(replacement.snapshot().account?.id).toBe(viewer);
+    expect(replacement.snapshot().retryAt).toBe(0);
+  }
 });
 
 test('busy initial and selected-feed actions coalesce and disposal permanently retires the lifecycle', async () => {
