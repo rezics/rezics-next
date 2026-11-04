@@ -9,12 +9,6 @@ mock.module('../src/session/query', () => ({
   exposureQuery: { queryKey: ['exposure'] },
   useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
 }));
-mock.module('../src/settings/actions', () => ({
-  readOwnedCollection: async () => ({ ok: false, reason: 'unavailable' }),
-  readOwnedCollectionsPage: async () => ({ ok: false, reason: 'unavailable' }),
-  saveCollectionVisibility: async () => ({ ok: false, reason: 'unavailable' }),
-}));
-
 const { CollectionRow } = await import('../src/settings/collection-privacy');
 
 const privateCurated: OwnedCollection = {
@@ -45,13 +39,13 @@ function markup(collection: OwnedCollection) {
 
 test('visibility options follow native advice and logical built-ins remain read-only', () => {
   const curated = markup(privateCurated);
-  expect(curated).toContain('<option value="private" selected="">');
-  expect(curated).toContain('<option value="unlisted">');
-  expect(curated).not.toContain('<option value="public">');
+  expect(curated).toMatch(/<option[^>]*value="private" selected="">/);
+  expect(curated).toMatch(/<option[^>]*value="unlisted">/);
+  expect(curated).not.toMatch(/<option[^>]*value="public">/);
 
   const logical = markup(builtin);
   expect(logical).toContain('disabled=""');
-  expect(logical).toContain('<option value="private" selected="">');
-  expect(logical).not.toContain('<option value="unlisted">');
-  expect(logical).not.toContain('<option value="public">');
+  expect(logical).toMatch(/<option[^>]*value="private" selected="">/);
+  expect(logical).not.toMatch(/<option[^>]*value="unlisted">/);
+  expect(logical).not.toMatch(/<option[^>]*value="public">/);
 });

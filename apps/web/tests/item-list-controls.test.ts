@@ -9,19 +9,6 @@ mock.module('../src/session/query', () => ({
   exposureQuery: { queryKey: ['exposure'] },
   useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
 }));
-mock.module('../src/settings/actions', () => ({
-  readOwnedCollection: async () => ({
-    id: 'collection-1',
-    title: 'Reading list',
-    kind: 'curated',
-    membershipKind: 'curated',
-    visibility: 'private',
-    revision: 7,
-    allowedVisibilityActions: ['unlisted', 'public'],
-  }),
-  readOwnedCollectionsPage: async () => ({ collections: [], next: null }),
-  saveCollectionVisibility: async () => ({ ok: true }),
-}));
 mock.module('../src/library/labels-actions', () => ({ manageLabel: async () => ({ ok: true }) }));
 mock.module('../src/library/labels-read-route', () => ({ readLabelsPage: async () => ({}) }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'X-CSRF-Token': 'test-token' }) }));
@@ -50,7 +37,7 @@ test('a collection row keeps its navigation target while the visibility control 
   expect(row).toContain('sr-only">Reading list</span>');
   expect(row).toContain('data-slot="list-row-control"');
   expect(control).toContain('<select');
-  expect(control).not.toContain('disabled');
+  expect(control).not.toMatch(/\sdisabled(?:=|\s|>)/);
   expect(control).toContain('relative z-10');
 });
 
