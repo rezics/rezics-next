@@ -445,6 +445,8 @@ function SignupForm({
   const { siteKey, scriptUrl, requirements } = registration;
   const { query, attempt: controller } = journey;
   const turnstile = useRef<TurnstileHandle>(null);
+  // Keep this journey's challenge/token generation when shell presentation changes.
+  const challengeLanguage = useRef(getLocale()).current;
   const alert = useRef<HTMLDivElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -632,7 +634,7 @@ function SignupForm({
               ref={turnstile}
               siteKey={siteKey}
               scriptUrl={scriptUrl}
-              language={getLocale()}
+              language={challengeLanguage}
               onStatus={setChallengeStatus}
               onToken={(value) => {
                 if (value) setTurnstileError('');

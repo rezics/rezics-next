@@ -56,6 +56,13 @@ async function setup() {
     history: createMemoryHistory({ initialEntries: [`/signup${query}`] }),
   });
   await router.load();
+  const append = document.head.appendChild.bind(document.head);
+  spies.push(
+    spyOn(document.head, 'appendChild').mockImplementation(<T extends Node>(node: T): T => {
+      if (node instanceof dom.HTMLScriptElement) (node as unknown as HTMLScriptElement).type = 'application/x-test';
+      return append(node);
+    }),
+  );
   const p = await open(<RouterProvider router={router} />, {});
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   spies.push(assign);
@@ -94,7 +101,7 @@ async function setup() {
       fill(input('handle'), 'Reader_1');
       fill(input('email'), 'reader@example.test');
       fill(input('password'), 'private-password');
-      fill(input('confirmation'), 'private-password');
+      fill(input('confirm'), 'private-password');
       token('fixture-token');
     });
   return {

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { AuthPage, AuthShell } from './frame';
-import { LocaleChoice } from './locale-choice-view';
 import { initializeDocumentLocale, observeLocaleComponent } from './locale-observation';
 import { m } from './paraglide/messages.js';
 import { reviewParameters } from './stories/accounts-operations/story';
@@ -18,7 +17,7 @@ export default {
 };
 
 const Shell = observeLocaleComponent(function Shell() {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState('reader@example.test');
   return (
     <AuthShell>
       <AuthPage heading={m.auth_login_heading()}>
@@ -37,4 +36,11 @@ const Shell = observeLocaleComponent(function Shell() {
 export const CurrentLanguage = { render: () => <Shell /> };
 // Select any autonym to review Apply/Cancel; Apply retains the entered draft.
 export const MountedDraft = { render: () => <Shell /> };
-export const LanguageControl = { render: () => <LocaleChoice /> };
+export const PendingSelection = {
+  render: () => <Shell />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const select = canvasElement.querySelector('select')!;
+    select.value = select.value === 'ja' ? 'de' : 'ja';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  },
+};

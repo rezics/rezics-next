@@ -468,6 +468,8 @@ router invalidation; route component types and keys stay stable, preserving each
 No account preference, native read, command or authorization URL participates. Paraglide writes only its existing
 interface cookie, with its existing scope and lifetime. Restored documents may read a newer supported cookie
 without republishing their former choice. Pending local selections are discarded on departure/restoration.
+The mounted registration form keeps its challenge language so changing shell presentation does not retire a
+Turnstile generation or its token. A new form uses the current interface language.
 
 When AUTH_ORIGIN is set during development, every path outside the six pages and /auth-assets/ is sent to that
 origin with its method, path, query, headers and streamed body. Redirects are returned without following them; Auth's
