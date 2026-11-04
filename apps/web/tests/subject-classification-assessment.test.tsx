@@ -181,6 +181,10 @@ test('support, independent lie flag, oppose change, withdrawal, exact retry and 
   const session = {};
   const own = await readClassificationOwnBallot(transport, request(), session, identity, undefined);
   expect(own.outcome.kind).toBe('absent');
+  expect((await readClassificationAggregate(transport, identity)).outcome).toEqual({
+    kind: 'ready',
+    value: store.aggregate,
+  });
   const support = await writeClassificationBallot(
     transport,
     identity,
@@ -194,6 +198,10 @@ test('support, independent lie flag, oppose change, withdrawal, exact retry and 
   );
   expect(support).toMatchObject({ kind: 'accepted', result: { delivery: 'enqueued' } });
   expect(store.own).toMatchObject({ assessment: 'support', falsePositive: true, pending: true });
+  expect((await readClassificationOwnBallot(transport, request(), session, identity)).outcome).toEqual({
+    kind: 'pending',
+    value: store.own,
+  });
   const oppose = await writeClassificationBallot(
     transport,
     identity,
@@ -249,6 +257,14 @@ test('support, independent lie flag, oppose change, withdrawal, exact retry and 
   store.failNext = 404;
   const hidden = await readClassificationOwnBallot(transport, request(), session, identity);
   expect(hidden.outcome.kind).toBe('concealed');
+  store.failNext = 404;
+  expect((await readClassificationAggregate(transport, identity)).outcome).toEqual({ kind: 'concealed' });
+  store.failNext = 503;
+  expect((await readClassificationAggregate(transport, identity)).outcome).toEqual({ kind: 'unavailable' });
+  expect((await readClassificationAggregate(transport, identity)).outcome).toEqual({
+    kind: 'ready',
+    value: store.aggregate,
+  });
   const html = renderToStaticMarkup(
     createElement(ClassificationAssessmentView, {
       snapshot: {
@@ -359,6 +375,8 @@ test('suppressed aggregate leaks no counts; published keeps lie flags separate f
     writes: [],
     calls: 0,
   };
+  const aggregateRead = await readClassificationAggregate(client(store), identity);
+  expect(aggregateRead.outcome).toEqual({ kind: 'ready', value: published });
   const html = renderToStaticMarkup(
     createElement(ClassificationAssessmentView, {
       snapshot: {
