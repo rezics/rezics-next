@@ -7,6 +7,10 @@ import {
   createReadingInsightsAssessmentReads,
   type ReadingInsightsAssessments,
 } from './reading-insights-assessments.ts';
+import {
+  createReadingInsightsCurrentProgressReads,
+  type ReadingInsightsCurrentProgress,
+} from './reading-insights-current-progress.ts';
 import { createReadingInsightsProfileReads, type ReadingInsightsProfiles } from './reading-insights-profiles.ts';
 
 export const MAX_READING_INSIGHTS_OVERVIEW_BYTES = 65_536;
@@ -32,11 +36,7 @@ export type ReadingInsightsOverview = Readonly<{
     allTime: ReadingInsightsPanel<ConsumptionSummary>;
     reportedYear: ReadingInsightsPanel<ReportedYearSummary>;
     profiles: ReadingInsightsPanel<ReadingInsightsProfiles>;
-    currentProgress: Readonly<{
-      status: 'unavailable';
-      reason: 'not_installed';
-      coverage: Readonly<{ initializedSessions: null; retainedSessions: null }>;
-    }>;
+    currentProgress: ReadingInsightsPanel<ReadingInsightsCurrentProgress>;
     assessments: ReadingInsightsPanel<ReadingInsightsAssessments>;
   }>;
   actions: Readonly<{
@@ -76,6 +76,7 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }) {
   const allTimeReads = createConsumptionStatisticsReads(deps);
   const yearReads = createReportedYearSummaryReads(deps);
   const profileReads = createReadingInsightsProfileReads(deps);
+  const currentProgressReads = createReadingInsightsCurrentProgressReads(deps);
   const assessmentReads = createReadingInsightsAssessmentReads(deps);
 
   return {
@@ -91,6 +92,7 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }) {
         readPanel(() => allTimeReads.summary(actor, deadline, signal)),
         readPanel(() => yearReads.summary(actor, year, deadline, signal)),
         readPanel(() => profileReads.profiles(actor, year, deadline, signal)),
+        readPanel(() => currentProgressReads.currentProgress(actor, deadline, signal)),
         readPanel(() => assessmentReads.assessments(actor, deadline, signal)),
       ] as const);
       const unwrap = <T>(result: PromiseSettledResult<T>): T => {
@@ -100,7 +102,8 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }) {
       const allTime = unwrap(settled[0]);
       const reportedYear = unwrap(settled[1]);
       const profiles = unwrap(settled[2]);
-      const assessments = unwrap(settled[3]);
+      const currentProgress = unwrap(settled[3]);
+      const assessments = unwrap(settled[4]);
       if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       const value: ReadingInsightsOverview = {
         scope: 'private_reading_insights',
@@ -109,11 +112,7 @@ export function createReadingInsightsOverviewReads(deps: { pool: Pool }) {
           allTime,
           reportedYear,
           profiles,
-          currentProgress: {
-            status: 'unavailable',
-            reason: 'not_installed',
-            coverage: { initializedSessions: null, retainedSessions: null },
-          },
+          currentProgress,
           assessments,
         },
         actions: {

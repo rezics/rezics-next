@@ -10,6 +10,7 @@ import {
   createReadingInsightsAssessmentReads,
   type ReadingInsightsAssessments,
 } from './reading-insights-assessments.ts';
+import type { ReadingInsightsCurrentProgress } from './reading-insights-current-progress.ts';
 import { createReadingInsightsProfileReads, type ReadingInsightsProfiles } from './reading-insights-profiles.ts';
 import { createReadingInsightsOverviewReads, type ReadingInsightsOverview } from './reading-insights-overview.ts';
 
@@ -75,6 +76,103 @@ const assessmentCounts = {
   value: count,
   historicalUnknown: count,
 };
+
+const readingInsightsCurrentProgressGroupSchema = t.Object(
+  {
+    meaning: t.Object(
+      {
+        profilePin: profile,
+        unitId: t.String({ minLength: 1, maxLength: 128 }),
+        meaningRevision: t.Integer({ minimum: 1, maximum: 16 }),
+        mode: t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]),
+        unit: t.String({ minLength: 1, maxLength: 128 }),
+        dimension: t.Union([t.String({ maxLength: 128 }), t.Null()]),
+        precision: t.Union([t.Integer({ minimum: 0, maximum: 6 }), t.Null()]),
+        minimum: t.Union([t.String(), t.Null()]),
+        maximum: t.Union([t.String(), t.Null()]),
+        totalPolicy: t.Union([t.Literal('optional'), t.Literal('required'), t.Literal('forbidden'), t.Null()]),
+        identityKind: t.Union([t.Literal('none'), t.Literal('session_local')]),
+        structureKind: t.Literal('none'),
+        locator: t.Union([t.String({ maxLength: 256 }), t.Null()]),
+      },
+      closed,
+    ),
+    occurrences: count,
+    currentValue: t.Union([t.String(), t.Null()]),
+    currentValueCount: count,
+    missingCurrentValueCount: count,
+    totalValue: t.Union([t.String(), t.Null()]),
+    totalValueCount: count,
+    missingTotalValueCount: count,
+  },
+  closed,
+);
+const readingInsightsCurrentProgressScopeSchema = t.Object(
+  {
+    sessionCount: count,
+    coveredSessions: count,
+    groups: t.Array(readingInsightsCurrentProgressGroupSchema, { maxItems: 8 }),
+    remainder: t.Object(
+      {
+        groupCount: count,
+        occurrences: count,
+        currentValueCount: count,
+        missingCurrentValueCount: count,
+        totalValueCount: count,
+        missingTotalValueCount: count,
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+export const readingInsightsCurrentProgressSchema = t.Unsafe<ReadingInsightsCurrentProgress>(
+  t.Union([
+    t.Object(
+      {
+        state: t.Literal('unavailable'),
+        reason: t.Union([
+          t.Literal('not_installed'),
+          t.Literal('initializing'),
+          t.Literal('maintenance_unavailable'),
+        ]),
+        coverage: t.Object({ initializedSessions: t.Union([count, t.Null()]), retainedSessions: t.Union([count, t.Null()]) }, closed),
+      },
+      closed,
+    ),
+    t.Object(
+      {
+        state: t.Literal('available'),
+        scope: t.Literal('active_and_backlog_sessions'),
+        coverage: t.Object(
+          {
+            initializedSessions: count,
+            retainedSessions: count,
+            currentSessions: count,
+            activeSessions: count,
+            backlogSessions: count,
+            coveredSessions: count,
+            unsupportedSessions: count,
+          },
+          closed,
+        ),
+        currentness: t.Object(
+          {
+            state: t.Literal('snapshot'),
+            source: t.Literal('reading_insights_current_progress_v1'),
+            revision: t.String({ maxLength: 36 }),
+            retainedSourceRevision: t.String({ maxLength: 36 }),
+          },
+          closed,
+        ),
+        active: readingInsightsCurrentProgressScopeSchema,
+        backlog: readingInsightsCurrentProgressScopeSchema,
+        limit: t.Literal(8),
+      },
+      closed,
+    ),
+  ]),
+);
 export const readingInsightsAssessmentsSchema = t.Unsafe<ReadingInsightsAssessments>(
   t.Union([
     t.Object(
@@ -206,14 +304,7 @@ export const readingInsightsOverviewSchema = t.Unsafe<ReadingInsightsOverview>(
           allTime: panel(allTimeSummary),
           reportedYear: panel(reportedYearSummary),
           profiles: panel(readingInsightsProfilesSchema),
-          currentProgress: t.Object(
-            {
-              status: t.Literal('unavailable'),
-              reason: t.Literal('not_installed'),
-              coverage: t.Object({ initializedSessions: t.Null(), retainedSessions: t.Null() }, closed),
-            },
-            closed,
-          ),
+          currentProgress: panel(readingInsightsCurrentProgressSchema),
           assessments: panel(readingInsightsAssessmentsSchema),
         },
         closed,

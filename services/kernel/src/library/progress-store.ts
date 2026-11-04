@@ -271,6 +271,7 @@ export async function insertSession(
          total_policy text, identity_kind text, structure_kind text)`,
       [route, session.id, JSON.stringify(acceptedPin), JSON.stringify(meanings)],
     );
+    await client.query('SELECT library.reading_insights_current_progress_refresh($1,$2)', [route, session.id]);
   }
   return asSession(row);
 }
