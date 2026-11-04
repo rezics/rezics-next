@@ -24,6 +24,7 @@ export type CollectionPrivacyIO = {
   read: (id: string) => Promise<CollectionPrivacyRead<OwnedCollection>>;
 };
 type VisibilityReceipt = { id: string; revision: number; visibility: CollectionVisibility };
+type LocalVisibilityIntent = { visibility: CollectionVisibility; version: number };
 type EditorState = {
   current: OwnedCollection | null;
   desired: CollectionVisibility;
@@ -75,7 +76,10 @@ class Observable<State> {
 
 /** An unresolved command never becomes the next draft's command. */
 export class CollectionPrivacyEditor extends Observable<EditorState> {
-  private edits = 0;
+  private readonly collectionId: string;
+  private intentVersion = 0;
+  private intent: LocalVisibilityIntent | null = null;
+  private attemptIntentVersion: number | null = null;
   private commandRetryAt = 0;
   private currentReadRetryAt = 0;
   constructor(
@@ -97,7 +101,9 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       },
       isCurrent,
     );
+    this.collectionId = current.id;
   }
+  hasDiscardableDraft = () => this.intent !== null && this.intent.version !== this.attemptIntentVersion;
   hasCurrentUpdateAdvice = () => !!this.state.current?.allowedVisibilityActions.length;
   commandRetryDeadline = () => this.commandRetryAt;
   currentReadRetryDeadline = () => this.currentReadRetryAt;
@@ -115,6 +121,8 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   override dispose = () => {
     this.commandRetryAt = 0;
     this.currentReadRetryAt = 0;
+    this.intent = null;
+    this.attemptIntentVersion = null;
     this.state = {
       current: null,
       desired: 'private',
@@ -133,6 +141,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const current = this.state.current;
     return (
       this.state.attempt !== null ||
+      this.intent !== null ||
       (this.state.phase !== 'abandoned' && current !== null && this.state.desired !== current.visibility) ||
       this.state.phase === 'saving' ||
       this.state.phase === 'reloading'
@@ -168,9 +177,27 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     )
       return;
     if (this.state.readRefusal) return;
-    this.edits++;
-    this.update({ desired });
+    const reset = desired === current.visibility && !this.state.attempt;
+    this.intentVersion++;
+    this.intent = reset ? null : { visibility: desired, version: this.intentVersion };
+    this.update({
+      desired,
+      ...(reset && ['review', 'conflict', 'refused'].includes(this.state.phase)
+        ? { phase: 'idle' as const, failure: undefined, nativeFailure: undefined }
+        : {}),
+    });
     if (this.state.phase === 'idle' || this.state.phase === 'saved') await this.submit();
+  }
+  discardDraft() {
+    if (!this.live() || !this.hasDiscardableDraft()) return;
+    this.intent = null;
+    const current = this.state.current;
+    this.update({
+      ...(current ? { desired: current.visibility } : {}),
+      ...(!this.state.attempt && ['review', 'conflict', 'refused'].includes(this.state.phase)
+        ? { phase: 'idle' as const, failure: undefined, nativeFailure: undefined }
+        : {}),
+    });
   }
   async submit() {
     if (!this.live() || !this.canWrite() || this.commandWaiting()) return;
@@ -195,6 +222,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       visibility: this.state.desired,
       idempotencyKey: crypto.randomUUID(),
     });
+    this.attemptIntentVersion = this.intent?.version ?? null;
     this.update({ attempt });
     await this.send(false);
   }
@@ -206,6 +234,8 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     if (!this.live() || !this.state.attempt || !['uncertain', 'readback'].includes(this.state.phase)) return;
     this.commandRetryAt = 0;
     this.currentReadRetryAt = 0;
+    this.intent = null;
+    this.attemptIntentVersion = null;
     this.update({
       attempt: null,
       receipt: null,
@@ -214,6 +244,15 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       failure: undefined,
       nativeFailure: undefined,
     });
+  }
+  private consumeAcknowledgedIntent() {
+    if (this.intent?.version === this.attemptIntentVersion) this.intent = null;
+    this.attemptIntentVersion = null;
+  }
+  private desiredFor(current: OwnedCollection) {
+    if (this.intent && this.intent.visibility !== current.visibility) return this.intent.visibility;
+    this.intent = null;
+    return current.visibility;
   }
   private async send(recovering: boolean) {
     if (!this.live() || !this.canWrite() || this.commandWaiting() || (recovering && !this.hasCurrentUpdateAdvice()))
@@ -235,8 +274,10 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
           });
           return;
         }
+        const uncertain = answer.reason === 'unavailable' || (recovering && answer.reason !== 'conflict');
+        if (!uncertain) this.attemptIntentVersion = null;
         this.update(
-          answer.reason === 'unavailable' || (recovering && answer.reason !== 'conflict')
+          uncertain
             ? // A refused replay cannot establish whether the earlier transport-ambiguous command committed.
               { phase: 'uncertain', failure: answer.reason, nativeFailure: answer.failure, outcomeUnknown: true }
             : {
@@ -262,20 +303,25 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       }
       if (!recovering) {
         this.commandRetryAt = 0;
+        this.consumeAcknowledgedIntent();
+        const desired = this.desiredFor(receipt);
         this.update({
           current: receipt,
+          desired,
           attempt: null,
           receipt: null,
           outcomeUnknown: false,
-          phase: this.state.desired === receipt.visibility ? 'saved' : 'review',
+          phase: desired === receipt.visibility ? 'saved' : 'review',
         });
         return;
       }
       // A replay receipt is historical. Read current native state without replacing a later draft.
       const originalReceipt = { id: receipt.id, revision: receipt.revision, visibility: receipt.visibility };
       this.commandRetryAt = 0;
+      this.consumeAcknowledgedIntent();
       const readWaiting = this.currentReadWaiting();
       this.update({
+        desired: this.intent?.visibility ?? this.state.current?.visibility ?? this.state.desired,
         phase: readWaiting ? 'readback' : 'reloading',
         receipt: originalReceipt,
         outcomeUnknown: false,
@@ -308,12 +354,14 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         this.update({ phase: 'readback', failure: 'unavailable' });
         return;
       }
+      const desired = this.desiredFor(current);
       this.update({
         current,
+        desired,
         attempt: null,
         receipt: null,
         outcomeUnknown: false,
-        phase: this.state.desired === current.visibility ? 'saved' : 'review',
+        phase: desired === current.visibility ? 'idle' : 'review',
         readRefusal: null,
       });
     } catch (error) {
@@ -334,7 +382,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     if (!this.live() || this.currentReadWaiting()) return;
     const current = this.state.current;
     const attempt = this.state.attempt;
-    const collectionId = current?.id ?? attempt?.collectionId;
+    const collectionId = current?.id ?? attempt?.collectionId ?? this.collectionId;
     if (
       !collectionId ||
       this.state.phase === 'saving' ||
@@ -343,7 +391,6 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     )
       return;
     const generation = this.generation;
-    const edits = this.edits;
     const previous = this.state.phase;
     const receipt = this.state.receipt;
     this.update({ phase: 'reloading', nativeFailure: undefined });
@@ -355,7 +402,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         const readRefusal = isCollectionPrivacyReadRefusal(read.reason) ? read.reason : null;
         const refused = readRefusal !== null;
         this.update({
-          ...(refused ? { current: null, ...(attempt ? {} : { desired: 'private' as const }) } : {}),
+          ...(refused ? { current: null } : {}),
           phase: refused ? (attempt ? (receipt ? 'readback' : 'uncertain') : 'refused') : previous,
           failure: read.reason,
           nativeFailure: read.failure,
@@ -380,8 +427,10 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         throw new Error('Stale Collection read');
       if (attempt && !receipt) {
         // Current state is useful advice, but cannot prove the original command applied or did not apply.
+        const desired = this.desiredFor(read.value);
         this.update({
           current: read.value,
+          desired,
           readRefusal: null,
           phase: 'uncertain',
           outcomeUnknown: true,
@@ -390,7 +439,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         });
         return;
       }
-      const desired = attempt ? this.state.desired : edits === this.edits ? read.value.visibility : this.state.desired;
+      const desired = this.desiredFor(read.value);
       this.update({
         current: read.value,
         desired,

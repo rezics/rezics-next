@@ -80,6 +80,18 @@ function label(value: CollectionVisibility) {
       ? m.settings_privacy_unlisted()
       : m.settings_privacy_public();
 }
+function optionLabel(value: CollectionVisibility, unsupported: boolean) {
+  return unsupported ? m.settings_privacy_unsupported_choice({ visibility: label(value) }) : label(value);
+}
+export function CollectionPrivacyVisibilityOption({
+  value,
+  unsupported = false,
+}: {
+  value: CollectionVisibility;
+  unsupported?: boolean;
+}) {
+  return <NativeSelectOption value={value}>{optionLabel(value, unsupported)}</NativeSelectOption>;
+}
 function explanation(value: CollectionVisibility) {
   return value === 'private'
     ? m.settings_privacy_private_text()
@@ -176,6 +188,17 @@ function CollectionRowView({
         {m.settings_privacy_stop_tracking()}
       </Button>
     ) : null;
+  const discardAction = editor.hasDiscardableDraft() ? (
+    <Button
+      className={preferenceActionClassName}
+      type="button"
+      variant="outline"
+      disabled={busy || readWaiting}
+      onClick={() => editor.discardDraft()}
+    >
+      {m.settings_privacy_discard_choice()}
+    </Button>
+  ) : null;
   const abandonmentDialog = state.attempt ? (
     <AlertDialog open={confirmAbandon} onOpenChange={setConfirmAbandon}>
       <AlertDialogContent className="min-w-0 w-[calc(100vw-2rem)] max-w-sm">
@@ -224,20 +247,16 @@ function CollectionRowView({
               )}
               {waiting ? <p role="status">{m.settings_privacy_row_retry_wait()}</p> : null}
               {busy ? <p role="status">{m.settings_privacy_reading()}</p> : null}
+              {discardAction}
               {abandonAction}
               <Button
                 className={preferenceActionClassName}
                 type="button"
                 variant="outline"
                 disabled={!canRead || busy || readWaiting || !!pageState?.restarting}
-                onClick={() => {
-                  if (!pageState?.restarting) {
-                    if (state.attempt) void editor.reload();
-                    else void pager?.restart();
-                  }
-                }}
+                onClick={() => void editor.reload()}
               >
-                {state.attempt ? m.settings_privacy_reload_row() : m.settings_privacy_refresh_list()}
+                {m.settings_privacy_reload_row()}
               </Button>
             </AlertDescription>
           </Alert>
@@ -249,6 +268,7 @@ function CollectionRowView({
   if (!current) return null;
   const options = [...new Set([...visibilityOptions(current), ...(desired !== current.visibility ? [desired] : [])])];
   const canChangeVisibility = current.revision !== null && current.allowedVisibilityActions.length > 0;
+  const unsupportedChoice = desired !== current.visibility && !current.allowedVisibilityActions.includes(desired);
   const href = `/${getLocale()}/collections/${encodeURIComponent(current.id)}`;
   return (
     <ListRow className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,20rem)] sm:items-center">
@@ -291,9 +311,11 @@ function CollectionRowView({
             }}
           >
             {options.map((value) => (
-              <NativeSelectOption key={value} value={value}>
-                {label(value)}
-              </NativeSelectOption>
+              <CollectionPrivacyVisibilityOption
+                key={value}
+                value={value}
+                unsupported={value === desired && unsupportedChoice}
+              />
             ))}
           </NativeSelect>
         </Field>
@@ -377,6 +399,7 @@ function CollectionRowView({
                     </Button>
                   ) : null}
                   {abandonAction}
+                  {discardAction}
                   <Button
                     className={preferenceActionClassName}
                     type="button"
@@ -390,7 +413,7 @@ function CollectionRowView({
                   </Button>
                 </div>
                 <p>
-                  {state.attempt ? m.settings_privacy_reload_keeps_original() : m.settings_privacy_reload_discards()}
+                  {state.attempt ? m.settings_privacy_reload_keeps_original() : m.settings_privacy_reload_review()}
                 </p>
               </AlertDescription>
             </Alert>

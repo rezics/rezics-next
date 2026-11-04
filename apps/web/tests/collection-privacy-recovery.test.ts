@@ -324,6 +324,23 @@ test('clean reload adopts current visibility without sending a write', async () 
   expect(writes).toEqual([]);
 });
 
+test('a retained visibility outside refreshed advice stays review-only and is never submitted', async () => {
+  const writes: VisibilityAttempt[] = [];
+  const current = { ...row('unlisted', 12), allowedVisibilityActions: ['private'] as const };
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async (input) => {
+      writes.push(input);
+      return { ok: false, reason: 'conflict' };
+    },
+    read: async () => ({ ok: true, value: current }),
+  });
+  await editor.edit('public');
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current, desired: 'public', phase: 'review' });
+  await editor.submit();
+  expect(writes).toHaveLength(1);
+});
+
 test('a deliberate edit made during reload wins over the pre-read draft and waits for explicit save', async () => {
   const read = deferred<CollectionPrivacyRead<OwnedCollection>>();
   const writes: VisibilityAttempt[] = [];
@@ -404,17 +421,22 @@ test('choosing the freshly read visibility explicitly discards the local choice 
 
 test('a denied current read removes native advice but preserves the local choice', async () => {
   const writes: VisibilityAttempt[] = [];
+  let reads = 0;
+  const current = row('unlisted', 12);
   const editor = new CollectionPrivacyEditor(initial, {
     save: async (input) => {
       writes.push(input);
       return { ok: false, reason: 'conflict' };
     },
-    read: async () => ({ ok: false, reason: 'forbidden' }),
+    read: async () => (++reads === 1 ? { ok: false, reason: 'forbidden' } : { ok: true, value: current }),
   });
   await editor.edit('public');
   await editor.reload();
   expect(editor.snapshot()).toMatchObject({ current: null, desired: 'public', phase: 'refused' });
   expect(editor.hasCurrentUpdateAdvice()).toBe(false);
+  expect(writes).toHaveLength(1);
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current, desired: 'public', phase: 'review' });
   expect(writes).toHaveLength(1);
 });
 

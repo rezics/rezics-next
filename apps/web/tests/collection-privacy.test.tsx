@@ -13,7 +13,7 @@ mock.module('../src/session/query', () => ({
   sessionCsrfToken: () => 'test-token',
   useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
 }));
-const { CollectionRow } = await import('../src/settings/collection-privacy');
+const { CollectionRow, CollectionPrivacyVisibilityOption } = await import('../src/settings/collection-privacy');
 const { SettingsSessionOwner } = await import('../src/settings/settings-session-owner');
 
 const privateCurated: OwnedCollection = {
@@ -56,6 +56,13 @@ test('visibility options follow native advice and logical built-ins remain read-
   expect(logical).toMatch(/<option[^>]*value="private" selected="">/);
   expect(logical).not.toMatch(/<option[^>]*value="unlisted">/);
   expect(logical).not.toMatch(/<option[^>]*value="public">/);
+});
+
+test('a retained choice outside refreshed advice is labelled as unavailable', () => {
+  const option = renderToStaticMarkup(
+    createElement(CollectionPrivacyVisibilityOption, { value: 'public', unsupported: true }),
+  );
+  expect(option).toContain('Public (previous choice; unavailable under current settings)');
 });
 
 test('current owner advice remains usable when the retry target already matches', () => {
