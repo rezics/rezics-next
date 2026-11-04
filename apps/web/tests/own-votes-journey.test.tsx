@@ -359,6 +359,8 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
     if (view.refreshCount.value !== 1)
       throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, location: view.router.state.location }));
     expect(view.refreshCount.value).toBe(1);
+    if (!view.host.querySelector('[data-own-vote-return-status]'))
+      throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, text: view.host.textContent }));
     expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
     expect(view.window.document.activeElement).toBe(
       view.host.querySelector(`[data-own-vote-target="${target}"][data-own-vote-question="${question}"] button`),
