@@ -1,6 +1,5 @@
 WITH input AS NOT MATERIALIZED (
-  SELECT :partition_no::integer AS partition_no,
-         :subject_limit::integer AS subject_limit
+  SELECT :partition_no::integer AS partition_no
 ),
 requested AS MATERIALIZED (
   SELECT ids.route, ids.subject_id
@@ -36,7 +35,7 @@ JOIN LATERAL (
     AND s.active
     AND NOT s.relation
   ORDER BY s.property, s.slot_id, s.candidate_id
-  LIMIT input.subject_limit
+  LIMIT :subject_limit::integer
 ) selected ON true
 WHERE requested.route >= input.partition_no * 16
   AND requested.route < (input.partition_no + 1) * 16;
