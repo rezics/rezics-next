@@ -1,4 +1,13 @@
 {
+  "library_yearly_goal_title": "Objetivo anual de finalizaciones",
+  "library_yearly_goal_metric": "Se cuentan las ocasiones de consumo completadas en el año gregoriano indicado. Las finalizaciones repetidas se cuentan por separado.",
+  "library_yearly_goal_unavailable": "Los objetivos anuales y el progreso no están disponibles actualmente. No se ha leído ningún resultado.",
+  "library_yearly_goal_coverage": "Las finalizaciones sin un año indicado compatible no pueden contarse en un año. La cobertura de otros historiales no está disponible. Un resumen no disponible no significa cero.",
+  "library_yearly_goal_invalid_year": "Introduce un año gregoriano del 1 al 9999.",
+  "library_yearly_goal_previous": "Año anterior",
+  "library_yearly_goal_next": "Año siguiente",
+  "library_yearly_goal_signed_out": "Inicia sesión para ver tu objetivo anual de finalizaciones.",
+  "library_yearly_goal_checking_session": "Comprobando tu cuenta actual…",
   "catalogue_context_unavailable": "Contexto no disponible",
   "catalogue_context_unknown": "Se desconoce el contexto identificativo",
   "catalogue_context_withheld": "El contexto identificativo no se divulga",

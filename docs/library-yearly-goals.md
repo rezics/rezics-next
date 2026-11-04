@@ -93,9 +93,21 @@ Library command plumbing.
 ## Current delivery
 
 The native table, owner commands, mounted Kernel GET/PUT routes, erasure integration and focused native cases are
-delivered. The /library/goals page, navigation, localized messages, stories and browser cases remain in
-`.temp/continuation/yearly-goal-page.md`. Web must use the matching generated KernelClient route types from Content's
-shared publication flow; no local client declaration or raw-fetch substitute is part of this contract.
+delivered. `/library/goals` has a localized unavailable page, Library navigation, a bounded year selector and year/history
+links. It explains the occurrence metric and unknown coverage in all eight locales, observes the shared current session,
+and never displays a guessed target or zero progress. The installed `packages/client/src/kernel/http/kernel.d.ts` does
+not yet include the yearly-goal route declarations, although the native `services/kernel/src/http/kernel.ts` mounts
+`yearlyCompletionGoalRoutes` and includes it in its source composition. The root client derives its callable surface
+from the emitted composition; source mounting alone does not supply an installed callable.
+
+Decision: keep year/history navigation available while targets and progress are explicitly unavailable until the matching
+generated client is published.
+
+The API-driven set/edit/clear journey, exact progress/revision presentation, retained uncertain commands, conflict
+review, dialog focus restoration and remaining non-happy stories/page cases remain in
+`.temp/continuation/yearly-goal-client-page.md`. Web must use Content's matching generated KernelClient route types;
+no local client declaration or raw-fetch substitute is part of this contract. The unavailable shell is not successful
+delivery of the API-driven page. Focused shell tests and authored stories do not prove mounted calls or rendered review.
 
 ## Checks run
 

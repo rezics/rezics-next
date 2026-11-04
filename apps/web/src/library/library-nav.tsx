@@ -14,6 +14,7 @@ export type LibraryDestination =
   | 'collections'
   | 'follow-counts'
   | 'logs'
+  | 'goals'
   | { collectionId: string };
 export type LibraryNavigationEntry = {
   id: string;
@@ -94,6 +95,12 @@ export function libraryNavigationEntries(
       label: m.library_nav_all_collections(),
       href: `/${locale}/library/collections`,
       current: current === 'collections',
+    },
+    {
+      id: 'goals',
+      label: m.library_yearly_goal_title(),
+      href: `/${locale}/library/goals`,
+      current: current === 'goals',
     },
   );
   for (const collection of collections) {
