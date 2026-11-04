@@ -175,7 +175,7 @@ test('imported Game platform and engine Concepts are independently adopted, curr
     async function* dump() {
       yield new TextEncoder().encode(`${JSON.stringify(authoredGame())}\n`);
     }
-    expect(converter_revision).toBe('bangumi@11');
+    expect(converter_revision).toBe('bangumi@13');
     expect((await importer.runDump(createSourceRegistration('bangumi'), dump())).status).toBe('committed');
     const claim = importer.session.bindings.claim({ source: 'bangumi', external_id: externalId });
     expect(claim?.state).toBe('bound');
