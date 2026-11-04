@@ -263,14 +263,19 @@ function PrivateEntryReview({
     setReview(null);
     setAnnotationCommand(null);
     setAnnotationNotice(null);
-    setRetirementKind(enabled ? null : 'exposure');
-    setPrivateAuthorityRetired(!enabled);
+    setRetirementKind('exposure');
+    setPrivateAuthorityRetired(true);
     if (!enabled) {
       retired.current = true;
       queryClient.removeQueries({ queryKey });
     } else {
       retired.current = false;
-      void queryClient.invalidateQueries({ queryKey });
+      void query.refetch().then((fresh) => {
+        if (currentResult() && !fresh.isError && fresh.data?.kind === 'ready') {
+          setPrivateAuthorityRetired(false);
+          setRetirementKind(null);
+        }
+      });
     }
   }, [enabled, queryClient, queryKey]);
 
@@ -603,13 +608,17 @@ function PrivateEntryReview({
   const displayedSource = entry?.sourceObservations.find(
     (observation) => sourceEditor === observation.provider + '\u0000' + observation.recordId,
   );
+  const sourceFactsReady =
+    !!entryGuard && !sourceOwnerChanged && !(privateAuthorityRetired && retirementKind === 'entry');
 
-  if (privateAuthorityRetired || sourceOwnerChanged || readExposureChanged || writeExposureChanged) {
+  if (
+    (privateAuthorityRetired && retirementKind !== 'entry') ||
+    readExposureChanged ||
+    writeExposureChanged
+  ) {
     return (
       <p role="status" className="mt-4 text-sm text-muted-foreground">
-        {retirementKind === 'entry' || sourceOwnerChanged
-          ? m.library_rich_entry_source_retired()
-          : retirementKind === 'exposure' || readExposureChanged || writeExposureChanged
+        {retirementKind === 'exposure' || readExposureChanged || writeExposureChanged
             ? m.library_rich_entry_source_unavailable()
             : m.library_rich_entry_signed_out()}
       </p>
@@ -816,7 +825,9 @@ function PrivateEntryReview({
           <p className="text-sm text-muted-foreground">{m.library_rich_entry_sources_help()}</p>
           <p className="text-sm text-muted-foreground">{m.library_rich_entry_timestamp_is_source_evidence()}</p>
         </div>
-        {entry.sourceObservations.length === 0 ? (
+        {!sourceFactsReady ? (
+          <p role="status">{m.library_rich_entry_source_retired()}</p>
+        ) : entry.sourceObservations.length === 0 ? (
           <p>{m.library_rich_entry_no_sources()}</p>
         ) : (
           <ul className="grid gap-3">
@@ -886,7 +897,7 @@ function PrivateEntryReview({
             })}
           </ul>
         )}
-        {sourceEditor && sourceBaseObservation && !displayedSource ? (
+        {sourceFactsReady && sourceEditor && sourceBaseObservation && !displayedSource ? (
           <SourceCorrectionEditor
             key={`${subject.id}:${viewer}:${origin.lifetime}:${sourceBaseObservation.provider}:${sourceBaseObservation.recordId}`}
             baseline={sourceBaseObservation}
