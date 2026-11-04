@@ -148,6 +148,16 @@ export function OrganizationReader({
     reader,
     source,
   );
+  if (typeof window !== 'undefined' && organizationHistoryVisitReturn(window.location.hash))
+    console.log('organization-episode-return-debug', {
+      key: episode.key,
+      available,
+      retired: episode.retired,
+      active: episode.active,
+      context: read.public.subject.context,
+      locale,
+      realm,
+    });
   const [selected, setSelected] = useState<Selection>();
   const [changed, setChanged] = useState(false);
   if (selected && (selected.episode !== episode.key || !available)) {
