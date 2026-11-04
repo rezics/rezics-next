@@ -81,11 +81,10 @@ function ReturnJourney({ lostReceipt = false }: { lostReceipt?: boolean }) {
   const router = useMemo(() => {
     const root = createRootRouteWithContext<RouterContext>()({ component: Outlet });
     const thread = createRoute({
-      id: '/threads/$id_/$slug',
       getParentRoute: () => root,
       path: 'threads/$id/$slug',
       component: ThreadHistoryRoute,
-    });
+    }).update({ id: '/threads/$id_/$slug' } as never);
     const exact = createRoute({
       getParentRoute: () => root,
       path: 'posts/$id/revisions/$revisionId',
