@@ -194,9 +194,9 @@ export const DependencyFailure: Story = {
 
 export const UnresolvedRemoval: Story = {
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
-  render: () => <StoryRouter inventory={read('ready', page([
-    entry(mediaIds[0]!, 'available'), entry(mediaIds[1]!, 'uploaded'),
-  ]))} />,
+  render: () => (
+    <StoryRouter inventory={read('ready', page([entry(mediaIds[0]!, 'available'), entry(mediaIds[1]!, 'uploaded')]))} />
+  ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: /post image.*ready/i }));

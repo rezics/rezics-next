@@ -251,14 +251,21 @@ export function OwnMediaInventoryWorkspace({
   // Selection is transient; the original command and its sender belong to this visit.
   const episodeRow = episode ? rows.get(episode.intent.mediaId) : null;
   const episodeAuthority = Boolean(
-    episode && !episode.retired && episode.viewKey === viewKey && episode.intent.viewer === subject &&
-    episode.current() && isCurrent() && state === 'ready',
+    episode &&
+    !episode.retired &&
+    episode.viewKey === viewKey &&
+    episode.intent.viewer === subject &&
+    episode.current() &&
+    isCurrent() &&
+    state === 'ready',
   );
   useEffect(() => {
     if (episode && !episodeAuthority) episode.retired = true;
   }, [episode, episodeAuthority]);
   const retryAdmitted = Boolean(
-    episodeAuthority && episodeRow && episode &&
+    episodeAuthority &&
+    episodeRow &&
+    episode &&
     mediaIdentity(episodeRow) === episode.identity &&
     eraseIntentFor(episodeRow, episode.intent.viewer, episode.intent.source, episode.intent.idempotencyKey),
   );
@@ -267,12 +274,19 @@ export function OwnMediaInventoryWorkspace({
     const next = original.intent;
     const row = rows.get(next.mediaId);
     if (
-      episodeRef.current !== original || original.retired || !original.current() || !isCurrent() ||
-      original.viewKey !== viewKey || next.viewer !== subject || state !== 'ready' ||
-      !row || mediaIdentity(row) !== original.identity ||
+      episodeRef.current !== original ||
+      original.retired ||
+      !original.current() ||
+      !isCurrent() ||
+      original.viewKey !== viewKey ||
+      next.viewer !== subject ||
+      state !== 'ready' ||
+      !row ||
+      mediaIdentity(row) !== original.identity ||
       !eraseIntentFor(row, next.viewer, next.source, next.idempotencyKey) ||
       pendingCommands.current.has(next.mediaId)
-    ) return;
+    )
+      return;
     pendingCommands.current.add(next.mediaId);
     setBusy(true);
     let result: OwnMediaEraseResult;
@@ -298,7 +312,11 @@ export function OwnMediaInventoryWorkspace({
     const next = eraseIntentFor(entry, subject, OWN_MEDIA_SOURCE, crypto.randomUUID());
     if (!next) return;
     const original: RemovalEpisode = {
-      intent: next, identity: mediaIdentity(entry), viewKey, current: isCurrent, send: onErase,
+      intent: next,
+      identity: mediaIdentity(entry),
+      viewKey,
+      current: isCurrent,
+      send: onErase,
     };
     episodeRef.current = original;
     setEpisode(original);
@@ -333,18 +351,30 @@ export function OwnMediaInventoryWorkspace({
             </p>
           ) : null}
           <p className="text-sm text-muted-foreground">
-            {!episodeAuthority ? m.own_media_recovery_withheld() : busy ? m.own_media_removing() : m.own_media_removal_uncertain()}
+            {busy && episodeAuthority ? m.own_media_removing() : m.own_media_removal_uncertain()}
           </p>
           <p className="text-sm text-muted-foreground">{m.own_media_recovery_browsing()}</p>
+          {!busy && retryAdmitted ? <p className="text-sm">{m.own_media_removal_uncertain_detail()}</p> : null}
           {!retryAdmitted ? <p>{m.own_media_recovery_withheld()}</p> : null}
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" disabled={!episodeAuthority || !episodeRow} onClick={() => {
-              if (!episodeRow || !episodeAuthority || !isCurrent()) return;
-              setSelection({ id: episodeRow.id, identity: mediaIdentity(episodeRow), viewKey });
-              rowButtons.current.get(episodeRow.id)?.focus();
-            }}>{m.own_media_recovery_return()}</Button>
-            <Button variant="outline" onClick={retryErase}
-              disabled={busy || !retryAdmitted || feedback?.kind !== 'uncertain'}>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              disabled={!episodeAuthority || !episodeRow}
+              onClick={() => {
+                if (!episodeRow || !episodeAuthority || !isCurrent()) return;
+                setSelection({ id: episodeRow.id, identity: mediaIdentity(episodeRow), viewKey });
+                rowButtons.current.get(episodeRow.id)?.focus();
+              }}
+            >
+              {m.own_media_recovery_return()}
+            </Button>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={retryErase}
+              disabled={busy || !retryAdmitted || feedback?.kind !== 'uncertain'}
+            >
               {m.own_media_retry_removal()}
             </Button>
           </div>
