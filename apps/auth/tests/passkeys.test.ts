@@ -1,4 +1,5 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { readRegistrationPage } from '../../../services/auth/src/registration-page';
 import { securityEnvelope, currentSecuritySession, signInPage } from './security-page-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -77,6 +78,12 @@ const fake = Bun.serve({
         { headers },
       );
     const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
+    if (url.pathname === '/registration-page' && request.method === 'GET')
+      return json(await readRegistrationPage({
+        readSession: async () => Response.json({ account_id: sessionAccountId }),
+        passwordLimits: async () => ({ minLength: 8, maxLength: 128 }),
+        verificationConfigured: true,
+      }));
     const stepUp = () => json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
     const issueSession = (profile: { client_id?: unknown; scope?: unknown }) => {
       const scopes = profile.scope;
@@ -712,9 +719,10 @@ test(
     const { page, origin } = await open('/security');
     try {
       await page.getByLabel('New password', { exact: true }).fill('another secure password');
+      await page.getByLabel('Confirm password', { exact: true }).fill('another secure password');
       await Promise.all([
         page.waitForURL((url) => url.pathname === '/step-up'),
-        page.getByRole('button', { name: 'Update password', exact: true }).click(),
+        page.getByRole('button', { name: 'Review password change', exact: true }).click(),
       ]);
       expect(new URL(page.url()).searchParams.get('return_to')).toBe('/security');
       await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
@@ -728,6 +736,10 @@ test(
       expect(new URL(page.url()).search).toBe('');
       expect(authCalls('/authorize')).toHaveLength(0);
       await page.getByLabel('New password', { exact: true }).waitFor();
+      expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
+      expect(authCalls('/credential-effects/stage')).toHaveLength(0);
+      expect(authCalls('/credential-effects/approve')).toHaveLength(0);
+      expect(authCalls('/credential-effects/apply')).toHaveLength(0);
       expect(fresh).toBe(true);
     } finally {
       await page.context().close();
