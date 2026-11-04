@@ -6,6 +6,10 @@ import {
   type AccountProfileAccess,
 } from '../../../services/auth/src/account-profile-read-transport.ts';
 import {
+  accountRenamePageTransport,
+  type AccountRenamePageAccess,
+} from '../../../services/auth/src/account-rename-page.ts';
+import {
   clearRenameContinuation,
   createRenameAttempt,
   nativeRenameSource,
@@ -35,6 +39,7 @@ afterEach(() => {
 function fixture() {
   const state = { proof: human, handle: null as string | null, available: true, revalidate: true, selected: accountId };
   const reads: unknown[] = [],
+    pageReads: unknown[] = [],
     commands: { path: string; body: { operationKey: string; operation: RenameOperation; reference?: string } }[] = [],
     navigations: string[] = [];
   const stored = new Map<string, string>();
@@ -72,11 +77,43 @@ function fixture() {
       >;
     },
   };
-  const handler = accountProfileReadTransport(service, async () => new Response(null, { status: 404 }), access);
+  const pageAccess: AccountRenamePageAccess = {
+    readRenameAccountPage: async (input) => {
+      pageReads.push(input);
+      if (!state.available) throw new Error('native page unavailable');
+      return {
+        viewer: { accountId: state.selected, kind: 'actor' },
+        profile: { id: state.selected, kind: 'actor', handle: state.handle },
+        authActions: {
+          state: 'ready',
+          operations: [
+            {
+              operationId: 'auth.account.rename',
+              action: 'account:update',
+              resource: { route: 1, id: state.selected },
+            },
+          ],
+        },
+      };
+    },
+  };
+  const profileHandler = accountProfileReadTransport(
+    service,
+    async () => new Response(null, { status: 404 }),
+    access,
+  );
+  const handler = accountRenamePageTransport(service, profileHandler, pageAccess);
   globalThis.fetch = (async (path, init) => {
     expect(init?.credentials).toBe('same-origin');
     expect(init?.redirect).toBe('error');
     if (path === '/session') return Response.json(state.proof);
+    if (path === '/account-management/rename-page')
+      return handler(
+        new Request(`${issuer}${path}`, {
+          ...init,
+          headers: { ...init?.headers, origin: issuer },
+        }),
+      );
     if (path === '/account-management/profile')
       return handler(
         new Request(`${issuer}${path}`, {
@@ -91,10 +128,17 @@ function fixture() {
     state.handle = body.operation.handle;
     return new Response(null, { status: 503 }); // The native mutation committed; its response was lost.
   }) as typeof fetch;
-  return { state, reads, commands, navigations, stored, handler, service };
+  return { state, reads, pageReads, commands, navigations, stored, handler, service };
 }
 function request(body: unknown = { accountId }, headers = {}, query = '') {
   return new Request(`${issuer}/account-management/profile${query}`, {
+    method: 'POST',
+    headers: { origin: issuer, 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+}
+function pageRequest(body: unknown = {}, headers = {}, query = '') {
+  return new Request(`${issuer}/account-management/rename-page${query}`, {
     method: 'POST',
     headers: { origin: issuer, 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
@@ -107,7 +151,7 @@ test('the default source reads a handleless human and reconciles a lost rename r
     kind: 'ready',
     target: { accountId, handle: null, clientId: human.client_id, scopes: human.scope },
   });
-  expect(f.reads[0]).toMatchObject({ human, accountId });
+  expect(f.pageReads[0]).toMatchObject({ human, accountId });
   expect(f.commands).toHaveLength(0);
   const response = await f.handler(request());
   expect(response.headers.get('cache-control')).toBe('private, no-store');
@@ -168,6 +212,7 @@ test('the issuer rejects browser authority, other accounts and widened profiles 
     expect((await f.handler(request())).status).toBe(403);
   }
   expect(f.reads).toHaveLength(0);
+  expect(f.pageReads).toHaveLength(0);
   const missing = accountProfileReadTransport(f.service, async () => new Response(), undefined);
   expect((await missing(request())).status).toBe(503);
 });

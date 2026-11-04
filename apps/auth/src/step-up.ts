@@ -5,10 +5,17 @@ import { accountOperationSessionMatches, selectAccountOperationStepUp } from './
 import { passkeySignInFailure, signInWithPasskey } from './passkeys';
 import { signIn, signInForAccountOperation, signInTarget, signInResult, type SignInResult } from './sign-in';
 import { m } from './paraglide/messages.js';
-import { loadManagementSession, managementOperationProfile, managementSessionMatches } from './management-operations';
+import {
+  loadManagementSession,
+  managementOperationProfile,
+  managementProfileSessionMatches,
+  managementSessionMatches,
+} from './management-operations';
 import {
   markManagementOperationReturned,
+  markRenameReviewReturned,
   selectManagementOperationStepUp,
+  type PendingRenameReviewStepUp,
   type PendingManagementOperationStepUp,
 } from './management-operation-step-up';
 
@@ -23,6 +30,22 @@ async function managementReturn(
     session.kind !== 'ready' ||
     !managementSessionMatches(session, pending) ||
     !markManagementOperationReturned(pending)
+  )
+    return { ok: false, message: m.auth_account_operation_failure() };
+  return { ok: true, target: new URL(pending.returnTo, origin).href };
+}
+
+async function renameReviewReturn(
+  pending: PendingRenameReviewStepUp,
+  origin: string,
+  isCurrent: () => boolean,
+): Promise<StepUpOutcome> {
+  const session = await loadManagementSession();
+  if (
+    !isCurrent() ||
+    session.kind !== 'ready' ||
+    !managementProfileSessionMatches(session, 'rename', pending.accountId) ||
+    !markRenameReviewReturned(pending)
   )
     return { ok: false, message: m.auth_account_operation_failure() };
   return { ok: true, target: new URL(pending.returnTo, origin).href };
@@ -59,6 +82,14 @@ export async function confirmStepUp(
     if (!isCurrent()) return { ok: false, message: null };
     if (!result.ok) return { ok: false, message: stepUpFailure(result) };
     return managementReturn(management.pending, origin, isCurrent);
+  }
+  if (management.kind === 'review') {
+    const result = signInResult(
+      await authPost('/signin', { email, password, ...managementOperationProfile('rename') }),
+    );
+    if (!isCurrent()) return { ok: false, message: null };
+    if (!result.ok) return { ok: false, message: stepUpFailure(result) };
+    return renameReviewReturn(management.pending, origin, isCurrent);
   }
   const selection = selectStepUp(query);
   if (selection.kind === 'invalid') return { ok: false, message: m.auth_account_operation_failure() };
@@ -98,6 +129,12 @@ export async function confirmStepUpWithPasskey(
     const result = await signInWithPasskey({ management: management.pending.kind, isCurrent });
     if (!isCurrent()) return { ok: false, message: null };
     if (result.ok) return managementReturn(management.pending, origin, isCurrent);
+    return { ok: false, message: result.reason === 'cancelled' ? null : passkeySignInFailure(result) };
+  }
+  if (management.kind === 'review') {
+    const result = await signInWithPasskey({ management: 'rename', isCurrent });
+    if (!isCurrent()) return { ok: false, message: null };
+    if (result.ok) return renameReviewReturn(management.pending, origin, isCurrent);
     return { ok: false, message: result.reason === 'cancelled' ? null : passkeySignInFailure(result) };
   }
   const selection = selectStepUp(query);

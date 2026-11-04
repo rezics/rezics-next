@@ -36,6 +36,10 @@ import {
   type RenameSource,
   type RenameTarget,
 } from '../account-rename';
+import {
+  pendingManagementOperationMatches,
+  pendingManagementOperationStepUpState,
+} from '../management-operation-step-up';
 
 export const Route = createFileRoute('/account/rename')({
   head: () => ({ meta: [{ title: `${m.auth_rename_heading()} · REZICS` }] }),
@@ -98,7 +102,11 @@ function sameRenameSession(left: RenameTarget, right: RenameTarget) {
     left.accountId === right.accountId &&
     left.clientId === right.clientId &&
     leftScopes.length === rightScopes.length &&
-    leftScopes.every((scope, index) => scope === rightScopes[index])
+    leftScopes.every((scope, index) => scope === rightScopes[index]) &&
+    left.authnEpoch === right.authnEpoch &&
+    left.authTime === right.authTime &&
+    (left.amr ?? []).length === (right.amr ?? []).length &&
+    (left.amr ?? []).every((method, index) => method === right.amr?.[index])
   );
 }
 
@@ -117,6 +125,7 @@ function RenameReview({
   const [handle, setHandle] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [returned, setReturned] = useState(false);
+  const [managementReturned, setManagementReturned] = useState(false);
   const [pending, setPending] = useState(false);
   const [locked, setLocked] = useState(false);
   const [message, setMessage] = useState('');
@@ -137,12 +146,15 @@ function RenameReview({
     const isCurrent = () => active;
     owner.current = isCurrent;
     busy.current = false;
+    const saved = readRenameContinuation();
+    if (saved?.submitted) attempt.current = saved;
     const retireReview = () => {
       active = false;
     };
     const pagehide = () => {
       retireReview();
-      if (!attempt.current?.submitted && !departure?.current.allow) clearRenameContinuation();
+      if (!attempt.current?.submitted && !readRenameContinuation()?.submitted && !departure?.current.allow)
+        clearRenameContinuation();
     };
     retire.current = retireReview;
     window.addEventListener('pagehide', pagehide);
@@ -156,24 +168,51 @@ function RenameReview({
   const receiveCurrent = useCallback(
     (result: RenameRead) => {
       const previous = currentTarget.current;
+      const saved = readRenameContinuation();
+      const pendingStepUp = pendingManagementOperationStepUpState();
       const changedSession =
         previous !== null && result.kind === 'ready' && !sameRenameSession(previous, result.target);
-      const authorityLost = result.kind === 'signed-out' || result.kind === 'denied';
+      const returnedCommand =
+        result.kind === 'ready' &&
+        saved !== null &&
+        saved.accountId === result.target.accountId &&
+        pendingStepUp.kind === 'pending' &&
+        pendingStepUp.value.phase === 'returned' &&
+        pendingManagementOperationMatches(pendingStepUp.value, saved);
+      const knownAccountId =
+        result.kind === 'ready'
+          ? result.target.accountId
+          : result.kind === 'management-auth-required'
+            ? result.accountId
+            : result.kind === 'refused'
+              ? result.target?.accountId
+              : undefined;
+      const preserveSubmitted =
+        saved?.submitted === true && (knownAccountId === undefined || knownAccountId === saved.accountId);
+      const retireChangedSession = changedSession && !returnedCommand && !preserveSubmitted;
+      const authorityLost =
+        result.kind === 'signed-out' || result.kind === 'management-auth-required' || result.kind === 'refused';
       if (result.kind === 'ready') currentTarget.current = result.target;
       else if (authorityLost) currentTarget.current = null;
-      if (changedSession || authorityLost) {
-        clearRenameContinuation();
-        attempt.current = null;
+      if (retireChangedSession || authorityLost) {
+        if (!preserveSubmitted) clearRenameContinuation();
+        attempt.current = preserveSubmitted ? saved : null;
         setLocked(false);
         setHandle('');
         setConfirmed(false);
         setReturned(false);
+        setManagementReturned(false);
         setInputError('');
         setMessage('');
         revoke?.();
       }
-      const saved = readRenameContinuation();
-      if (!changedSession && !authorityLost && saved && result.kind === 'ready') {
+      setManagementReturned(result.kind === 'ready' && result.target.managementReviewReturned === true);
+      if (
+        (!retireChangedSession || returnedCommand || preserveSubmitted) &&
+        !authorityLost &&
+        saved &&
+        result.kind === 'ready'
+      ) {
         if (saved.accountId !== result.target.accountId) {
           clearRenameContinuation();
           attempt.current = null;
@@ -224,7 +263,7 @@ function RenameReview({
   }, [reload]);
   useLayoutEffect(() => {
     if (inputError) input.current?.focus();
-    else if (message || current?.kind === 'unavailable' || current?.kind === 'denied') alert.current?.focus();
+    else if (message || current?.kind === 'unavailable' || current?.kind === 'refused') alert.current?.focus();
   }, [inputError, message, current?.kind]);
   useLayoutEffect(() => {
     if (blocker?.status === 'blocked')
@@ -280,7 +319,7 @@ function RenameReview({
         setConfirmed(false);
         setReturned(false);
         setInputError('');
-        setCurrent({ kind: 'denied' });
+        setCurrent({ kind: 'refused' });
         revoke?.();
         setMessage(m.auth_rename_denied());
       } else {
@@ -300,13 +339,39 @@ function RenameReview({
     }
   }
 
+  async function continueWithManagementAuthentication() {
+    if (current?.kind !== 'management-auth-required' || !source.stepUpForReview || pending) return;
+    const isCurrent = owner.current!;
+    setPending(true);
+    setMessage('');
+    if (departure) departure.current.allow = true;
+    try {
+      const handedOff = await source.stepUpForReview(current.accountId, isCurrent);
+      if (isCurrent() && !handedOff) {
+        if (departure) departure.current.allow = false;
+        setMessage(m.auth_rename_unavailable());
+      }
+    } catch {
+      if (isCurrent()) {
+        if (departure) departure.current.allow = false;
+        setMessage(m.auth_rename_unavailable());
+      }
+    } finally {
+      if (isCurrent()) setPending(false);
+    }
+  }
+
   const candidate = normalizeSignupHandle(handle);
   const hasChangedInput =
     handle.trim().length > 0 &&
     (candidate === null || candidate !== (current?.kind === 'ready' ? current.target.handle : null));
   if (departure)
     departure.current.protected =
-      !renamed && (hasChangedInput || Boolean(attempt.current?.submitted) || (pending && attempt.current !== null));
+      !renamed &&
+      (hasChangedInput ||
+        Boolean(attempt.current?.submitted) ||
+        Boolean(readRenameContinuation()?.submitted) ||
+        (pending && attempt.current !== null));
 
   function stay() {
     focusAfterStay.current = true;
@@ -315,7 +380,7 @@ function RenameReview({
 
   function leave() {
     departure && (departure.current.allow = true);
-    if (!attempt.current?.submitted) {
+    if (!attempt.current?.submitted && !readRenameContinuation()?.submitted) {
       attempt.current = null;
       clearRenameContinuation();
     }
@@ -347,8 +412,37 @@ function RenameReview({
               {m.auth_security_sign_in()}
             </a>
           </p>
-        ) : current.kind !== 'ready' ? (
+        ) : current.kind === 'management-auth-required' ? (
           <>
+            <p>{m.auth_rename_management_auth_required()}</p>
+            {message ? <ErrorAlert ref={alert} tabIndex={-1}>{message}</ErrorAlert> : null}
+            <Button
+              type="button"
+              disabled={pending}
+              aria-busy={pending}
+              onClick={() => void continueWithManagementAuthentication()}
+            >
+              {m.auth_rename_management_authenticate()}
+            </Button>
+          </>
+        ) : current.kind === 'refused' ? (
+          <>
+            {current.target ? (
+              <>
+                <p>{m.auth_rename_actor({ accountId: current.target.accountId })}</p>
+                <p>{m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}</p>
+              </>
+            ) : null}
+            <ErrorAlert ref={alert} tabIndex={-1}>{m.auth_rename_denied()}</ErrorAlert>
+          </>
+        ) : current.kind === 'unavailable' ? (
+          <>
+            {current.target ? (
+              <>
+                <p>{m.auth_rename_actor({ accountId: current.target.accountId })}</p>
+                <p>{m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}</p>
+              </>
+            ) : null}
             <ErrorAlert ref={alert} tabIndex={-1}>
               {m.auth_rename_unavailable()}
             </ErrorAlert>
@@ -365,6 +459,12 @@ function RenameReview({
             onSubmit={submit}
           >
             <p>{m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}</p>
+            <p>{m.auth_rename_actor({ accountId: current.target.accountId })}</p>
+            {managementReturned ? (
+              <Alert role="status">
+                <AlertDescription>{m.auth_rename_management_returned()}</AlertDescription>
+              </Alert>
+            ) : null}
             {returned ? (
               <Alert role="status">
                 <AlertDescription>{m.auth_rename_reconfirm()}</AlertDescription>

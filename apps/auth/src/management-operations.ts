@@ -76,15 +76,22 @@ export async function loadManagementSession(signal?: AbortSignal): Promise<Manag
   }
 }
 
-export function managementSessionMatches(session: ManagementSession, input: ManagementOperationInput): boolean {
-  const profile = managementOperationProfile(input.operation.kind);
+export function managementProfileSessionMatches(
+  session: ManagementSession,
+  kind: ManagementOperationInput['operation']['kind'],
+  accountId: string,
+): boolean {
+  const profile = managementOperationProfile(kind);
   return (
-    session.accountId === input.accountId &&
+    session.accountId === accountId &&
     session.clientId === profile.client_id &&
     session.scopes.length === profile.scope.length &&
     session.scopes.every((scope, index) => scope === profile.scope[index]) &&
     Date.now() / 1000 - session.authTime <= 600
   );
+}
+export function managementSessionMatches(session: ManagementSession, input: ManagementOperationInput): boolean {
+  return managementProfileSessionMatches(session, input.operation.kind, input.accountId);
 }
 
 function failure(
