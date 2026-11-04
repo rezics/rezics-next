@@ -8,6 +8,7 @@ SET journal_revision = journal_revision + 1,
     journal_finish_day = :finish_day::nullable(smallint),
     journal_reflection = :reflection::nullable(text),
     journal_assessment_units = :assessment_units::nullable(smallint),
+    journal_assessment_presence = COALESCE(:assessment_presence::nullable(text),journal_assessment_presence),
     journal_assessment_meaning_revision = :assessment_meaning_revision::smallint
 WHERE state <> 'retired' AND route = :route AND account_id = :account_id AND session_id = :session_id AND journal_revision = :revision
 RETURNING session_id AS "sessionId", journal_revision AS revision,

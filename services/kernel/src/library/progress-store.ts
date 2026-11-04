@@ -68,6 +68,7 @@ type JournalColumns = Pick<
   | 'finishMonth'
   | 'finishDay'
   | 'reflection'
+  | 'assessmentPresence'
   | 'assessmentUnits'
   | 'assessmentMeaningRevision'
 >;
@@ -311,13 +312,13 @@ export async function lockSessionJournal(
   route: number,
   accountId: string,
   sessionId: string,
-): Promise<ProgressSessionJournal | null> {
+): Promise<(ProgressSessionJournal & { assessmentPresence: string | null }) | null> {
   const row = await sessionJournalLock.run(queryClient(client), {
     route,
     account_id: accountId,
     session_id: sessionId,
   });
-  return row ? asJournal(row) : null;
+  return row ? { ...asJournal(row), assessmentPresence: row.assessmentPresence } : null;
 }
 
 export async function updateSessionJournal(
@@ -327,6 +328,7 @@ export async function updateSessionJournal(
   sessionId: string,
   expectedRevision: number,
   journal: ProgressSessionJournal,
+  assessmentPresence?: 'explicit_null' | 'value',
 ): Promise<ProgressSessionJournal | null> {
   const row = await sessionJournalUpdate.run(queryClient(client), {
     route,
@@ -341,6 +343,7 @@ export async function updateSessionJournal(
     finish_day: journal.finishDate?.day ?? null,
     reflection: journal.reflection,
     assessment_units: journal.assessment.units,
+    assessment_presence: assessmentPresence ?? null,
     assessment_meaning_revision: journal.assessment.meaningRevision,
   });
   return row ? asJournal(row) : null;
