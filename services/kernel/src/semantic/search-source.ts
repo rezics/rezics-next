@@ -1,5 +1,5 @@
 import type { ConceptStatementReader } from '../search/concept-browse-statements.ts';
-import { indexedStatement, selectedCandidate, selectedRank } from './scope-leaf-selection.ts';
+import { indexedStatement, selectedRank } from './scope-leaf-selection.ts';
 export { indexedStatement } from './scope-leaf-selection.ts';
 import {
   readSubjectKeyPage,
@@ -17,8 +17,9 @@ import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { IndexedStatement, IndexedSubject, SubjectSnapshot, SubjectSource } from '../search/source.ts';
 import count from './search-source-count.sql';
-import readAdoptions from './search-source-adoptions.sql';
+import readCurrentStatements from './search-source-current-statements.sql';
 import readFacts from './search-source-facts.sql';
+import rebuildSelection from './search-selected-rebuild.sql';
 import readReleases from './search-source-releases.sql';
 import readPosition from './search-source-position.sql';
 import readStatements from './search-source-statements.sql';
@@ -67,13 +68,7 @@ type FactRow = {
   candidate_id: string | null;
   body: unknown;
   release: string | null;
-};
-type AdoptionRow = {
-  route: number;
-  subject_id: string;
-  slot_id: string;
-  mode: 'inherit' | 'replace' | 'suppress' | null;
-  selection: unknown;
+  rank?: 'normal' | 'preferred' | null;
 };
 type StatementEntry = {
   source: 'compact' | 'expanded';
@@ -95,6 +90,14 @@ type StatementRow = {
   release: string;
   ordinal: number;
 };
+
+/** Existing `read` id cap; a larger batch is refused before SQL. */
+export const SEARCH_SOURCE_SUBJECT_BATCH = 256;
+/** `current_facts` current-slot budget per Subject. */
+export const SEARCH_SOURCE_CURRENT_SLOT_BUDGET = 512;
+/** Global adoption selection cap per expanded slot. */
+export const SEARCH_SOURCE_CURRENT_CANDIDATE_BUDGET = 32;
+const CURRENT_STATEMENT_LIMIT = SEARCH_SOURCE_CURRENT_SLOT_BUDGET * SEARCH_SOURCE_CURRENT_CANDIDATE_BUDGET + 1;
 
 /** Current name/fact/visibility publication fence used by complete Search traversals. */
 export async function readSearchCanonicalGeneration(pool: Pool | PoolClient): Promise<string> {
@@ -168,7 +171,8 @@ export function subjectSource(
     canonicalNames: createSubjectCanonicalNames(pool),
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
-      if (ids.length > 256) throw new TypeError('A subject snapshot accepts at most 256 ids');
+      if (ids.length > SEARCH_SOURCE_SUBJECT_BATCH)
+        throw new TypeError('A subject snapshot accepts at most 256 ids');
       const requested = new Map<string, number>();
       for (const id of ids) {
         const route = routeOf(id);
@@ -194,26 +198,29 @@ export function subjectSource(
         if (rows.length === 0) return { partition, position, subjects: [] };
 
         const found = new Map(rows.map((row) => [row.id, row]));
+        const pending = rows.find((row) => !row.selection_ready);
+        if (pending) return { partition, position, subjects: [] as IndexedSubject[], pending };
         const present = rows.map(({ id, route }) => ({ id, route }));
         const factRows = (await readFacts.run(client, {
           partition_no: partition,
           routes: present.map(({ route }) => route),
           subject_ids: present.map(({ id }) => id),
         })) as FactRow[];
-        const expanded = factRows.filter((row) => row.entry_kind === 'expanded');
-        const adoptions = expanded.length
-          ? ((await readAdoptions.run(client, {
-              partition_no: partition,
-              routes: expanded.map(({ route }) => route),
-              subject_ids: expanded.map(({ id }) => id),
-              slot_ids: expanded.map(({ slot_id }) => slot_id),
-            })) as AdoptionRow[])
-          : [];
+        const currentRows = (await readCurrentStatements.run(client, {
+          partition_no: partition,
+          routes: present.map(({ route }) => route),
+          subject_ids: present.map(({ id }) => id),
+          subject_limit: CURRENT_STATEMENT_LIMIT,
+        })) as FactRow[];
+        const currentCounts = new Map<string, number>();
+        for (const row of currentRows) currentCounts.set(row.id, (currentCounts.get(row.id) ?? 0) + 1);
+        const overflow = present.find(({ id }) => (currentCounts.get(id) ?? 0) >= CURRENT_STATEMENT_LIMIT);
+        if (overflow) return { partition, position, subjects: [] as IndexedSubject[], pending: overflow };
 
-        const entries: StatementEntry[] = factRows.flatMap((row) => {
-          if (row.entry_kind !== 'compact' || !row.candidate_id || !row.property || !row.release) return [];
+        const entries: StatementEntry[] = currentRows.flatMap((row) => {
+          if (!row.candidate_id || !row.property || !row.release) return [];
           const body = object(row.body) ? row.body : {};
-          const rank = selectedRank(body.rank);
+          const rank = selectedRank(body.rank) ?? selectedRank(row.rank);
           if (rank === null) return [];
           return [
             {
@@ -230,27 +237,6 @@ export function subjectSource(
             },
           ];
         });
-        for (const adoption of adoptions) {
-          if (adoption.mode !== 'replace' || !Array.isArray(adoption.selection)) continue;
-          const slot = expanded.find(
-            (row) => row.route === adoption.route && row.id === adoption.subject_id && row.slot_id === adoption.slot_id,
-          );
-          if (!slot || !slot.property) continue;
-          for (const [index, selected] of adoption.selection.entries()) {
-            const selection = selectedCandidate(selected);
-            if (!selection) continue;
-            entries.push({
-              source: 'expanded',
-              route: adoption.route,
-              subject_id: adoption.subject_id,
-              slot_id: adoption.slot_id,
-              property: slot.property,
-              candidate_id: selection.candidate,
-              rank: selection.rank,
-              ordinal: index + 1,
-            });
-          }
-        }
 
         const visible = routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
         const statements = visible.length
@@ -328,6 +314,13 @@ export function subjectSource(
         }
         return { partition, position, subjects, relation };
       });
+      if ('pending' in snapshot && snapshot.pending) {
+        await rebuildSelection.run(pool, {
+          route: snapshot.pending.route,
+          subject_id: snapshot.pending.id,
+        });
+        throw new CommandUnavailableError('contention', partition);
+      }
       // Release the source owner before independently anchoring foreign identities or tuples.
       const relation = 'relation' in snapshot ? await relations.finish(snapshot.relation) : new Map();
       for (const subject of snapshot.subjects) {

@@ -53,11 +53,11 @@ not hydrated in two separate calls when equal. Duplicate contributors across val
 next public page are reread; there is no cross-value or cross-page deduplication.
 
 The Source accepts at most 256 keys per call, but this path does not use the separate 256-key/eight-home label
-chunker in `discloseFacetValues`. Source itself reads current subject, redirect/revision heads, terms, compact
-statement history, expanded adoption/statement and disclosure dependencies. Its point-key limit is not a finite
-row cap for all those payloads. In particular `search-source-facts.sql` enumerates nonrelation statement history
-under `(route,subject_id)` before selecting compact heads. Keep native Source work `H(id)` explicit; a fixed
-number of UUID probes alone does not establish fixed rows as anchor history grows.
+chunker in `discloseFacetValues`. Source itself reads current subject, redirect/revision heads, current terms,
+current nonrelation `search_selected` heads and disclosure dependencies. Its point-key limit is not a finite
+row cap for all those payloads. `H(id)` is the [Search current-head derivation](../semantic/search-source-cost.md):
+active `search_selected_page` seeks with admitted `B/S/C`, not a `semantic.fact` history fold. A fixed number of
+UUID probes still does not make composed facet refill constant; do not raise this file's caps.
 
 `pageFacets` brackets siblings with at most `2O` population reduction observations and, only with an installed
 authenticated scope source, at most `2S` scope observations. In the delivered implementation both population
