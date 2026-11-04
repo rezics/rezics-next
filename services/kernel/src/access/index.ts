@@ -1117,6 +1117,7 @@ export {
   notificationAllowed,
   projectPreferencePage,
   projectReadingAdvice,
+  projectShelfAdvice,
   withPreferencePage,
   withReadingPreferencePage,
   DEFAULT_ACCOUNT_PREFERENCES,
@@ -1127,4 +1128,6 @@ export {
   type PreferencePageKind,
   type PreferenceActionAdvice,
   type PreferenceReadingAdvice,
+  type PreferenceShelfAdvice,
+  type PreferencePageObservation,
 } from './preferences.ts';

@@ -25,6 +25,8 @@ export function ShelfTypeDefaults({
   subject,
   isCurrent,
   onChange,
+  maxLayouts = 32,
+  scopeMaxLength = 256,
   readTypes = nativeRead,
 }: {
   layouts: NonNullable<ShelfPreferences['layouts']>;
@@ -34,6 +36,8 @@ export function ShelfTypeDefaults({
   subject: string | null;
   isCurrent: () => boolean;
   onChange: (scope: string, layout: ShelfLayout | undefined) => void;
+  maxLayouts?: number;
+  scopeMaxLength?: number;
   readTypes?: (cursor?: string) => Promise<ShelfTypesCurrentRead>;
 }) {
   const locale = getLocale();
@@ -90,9 +94,9 @@ export function ShelfTypeDefaults({
   ].filter((scope) => scope !== 'all');
   const choice = choices.find((choice) => choice.type === selected);
   const override = layouts[selected];
-  const canSet = !!choice && selected.length <= 256;
+  const canSet = !!choice && selected.length <= scopeMaxLength;
   // The submitted map includes the global scope only if it was stored or deliberately changed.
-  const atLimit = Object.keys(layouts).length >= 32 && !override;
+  const atLimit = Object.keys(layouts).length >= maxLayouts && !override;
   const knownScope = scopes.includes(selected);
   const saved = savedLayouts[selected];
   const pending = override !== saved;
