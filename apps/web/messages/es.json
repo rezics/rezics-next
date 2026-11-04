@@ -7973,5 +7973,13 @@
   "prq_actions_current": "Operaciones permitidas actualmente:",
   "prq_actions_unavailable": "No se pudieron leer las operaciones permitidas. Actualiza esta página para reintentar.",
   "prq_selection_separate": "La selección requiere la revisión independiente del candidato.",
-  "prq_selection_not_allowed": "La selección no está permitida actualmente en este contexto."
+  "prq_selection_not_allowed": "La selección no está permitida actualmente en este contexto.",
+  "discovery_collection_curator": "Selección de",
+  "discovery_collection_curator_unavailable": "Responsable no disponible",
+  "discovery_collection_preview": "Vista previa del contenido",
+  "discovery_collection_partial": "Algunos elementos no se pueden mostrar.",
+  "discovery_collection_truncated": "Vista previa de esta colección. Ábrela para ver más.",
+  "discovery_collection_empty": "Esta colección está vacía.",
+  "discovery_collection_withheld": "No se pueden mostrar elementos.",
+  "discovery_collection_preview_unavailable": "Vista previa no disponible."
 }

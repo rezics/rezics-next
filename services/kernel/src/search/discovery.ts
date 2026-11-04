@@ -162,6 +162,7 @@ export type DiscoveryKindMetadata = {
   count?: KindCountEvidence;
 };
 export type DiscoveryPage = {
+  collectionFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
   hits: DiscoveryUnionHit[];
   kinds: { values: DiscoveryKindMetadata[]; next: string | null };
   next: string | null;

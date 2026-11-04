@@ -7973,5 +7973,13 @@
   "prq_actions_current": "Aktuell erlaubte Aktionen:",
   "prq_actions_unavailable": "Erlaubte Aktionen konnten nicht gelesen werden. Aktualisiere diese Seite, um es erneut zu versuchen.",
   "prq_selection_separate": "Die Auswahl erfordert die separate Kandidatenprüfung.",
-  "prq_selection_not_allowed": "Die Auswahl ist in diesem Kontext derzeit nicht erlaubt."
+  "prq_selection_not_allowed": "Die Auswahl ist in diesem Kontext derzeit nicht erlaubt.",
+  "discovery_collection_curator": "Zusammengestellt von",
+  "discovery_collection_curator_unavailable": "Kuration nicht verfügbar",
+  "discovery_collection_preview": "Inhaltsvorschau",
+  "discovery_collection_partial": "Einige Einträge können nicht angezeigt werden.",
+  "discovery_collection_truncated": "Eine Vorschau dieser Sammlung. Für mehr öffnen.",
+  "discovery_collection_empty": "Diese Sammlung ist leer.",
+  "discovery_collection_withheld": "Keine Einträge können angezeigt werden.",
+  "discovery_collection_preview_unavailable": "Inhaltsvorschau nicht verfügbar."
 }

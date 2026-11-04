@@ -252,6 +252,8 @@ export function DiscoveryResults({
                 kind={kind}
                 locale={locale}
                 subjectHrefFor={subjectHrefFor}
+                actions={hit.summary.kind === 'collection' ? renderPersonal?.(hit, hit.summary.value.title) : undefined}
+                memberKindLabel={(type) => localizedLabel(kinds[type] ?? {}, locale).text || type}
               />
             );
           const summary = hit.summary.value;

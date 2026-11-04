@@ -7973,5 +7973,13 @@
   "prq_actions_current": "現在許可されている操作：",
   "prq_actions_unavailable": "許可されている操作を取得できませんでした。ページを更新して再試行してください。",
   "prq_selection_separate": "選択には候補の個別レビュー画面での操作が必要です。",
-  "prq_selection_not_allowed": "このコンテキストでは現在、選択は許可されていません。"
+  "prq_selection_not_allowed": "このコンテキストでは現在、選択は許可されていません。",
+  "discovery_collection_curator": "選者",
+  "discovery_collection_curator_unavailable": "選者の情報は利用できません",
+  "discovery_collection_preview": "内容のプレビュー",
+  "discovery_collection_partial": "表示できない項目があります。",
+  "discovery_collection_truncated": "このコレクションの一部です。開くと続きを確認できます。",
+  "discovery_collection_empty": "このコレクションは空です。",
+  "discovery_collection_withheld": "表示できる項目はありません。",
+  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。"
 }

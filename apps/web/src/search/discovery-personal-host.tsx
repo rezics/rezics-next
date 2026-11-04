@@ -4,6 +4,10 @@ import { AnonymousSessionContext, sessionQuery } from '../session/query';
 import { personalRead } from '../kernel/query';
 import { normalizeSessionObservation, subscribeBrowserSession, sessionStateSnapshot } from '../session/browser-state';
 import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-exposure';
+import { operationIsAdmitted } from '../kernel/exposure';
+import { CollectionFollowControl } from './collection-context/follow';
+import { writeCollectionFollow } from './collection-context/actions';
+import { collectionFollowSource } from './collection-context/schema';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { changeQuestionBoundRating } from '../features/pages/rating-actions';
@@ -11,6 +15,7 @@ import { discoveryKey, type DiscoveryHit, type DiscoveryRequest, type DiscoveryS
 import type { SubjectLibraryMutation, SubjectLibraryMutationResponse } from '../library/subject-slot';
 import type { QuestionBoundRatingInput } from '../features/pages/rating-actions';
 import type { ExpectedReader } from '../session/expected-reader';
+import type { FollowWriteInput, FollowWriteResult } from '../library/follow-records';
 import { QUESTION } from '../features/pages/subject-ratings';
 import {
   readDiscoveryPersonalPage,
@@ -54,6 +59,10 @@ export function useDiscoveryPersonalResults(input: {
   returnTo: string;
   enabled: boolean;
   read?: (options: { data: DiscoveryBoundRequest; signal: AbortSignal }) => Promise<DiscoveryBoundPage>;
+  writeFollow?: (options: {
+    data: FollowWriteInput & ExpectedReader;
+    headers: Record<string, string>;
+  }) => Promise<FollowWriteResult>;
   writeEntry?: (command: SubjectLibraryMutation & ExpectedReader) => Promise<SubjectLibraryMutationResponse>;
   writeVote?: (command: QuestionBoundRatingInput) => Promise<'successful' | 'rejected' | 'uncertain'>;
 }) {
@@ -215,7 +224,14 @@ export function useDiscoveryPersonalResults(input: {
       const accepted = result.capabilities?.exposure === discoveryExposureKey(admitted!.admitted);
       const state = structuredClone(
         !accepted && result.state.status === 'ready'
-          ? { ...result.state, page: { ...result.state.page, viewerFacts: null } }
+          ? {
+              ...result.state,
+              page: {
+                ...result.state.page,
+                viewerFacts: null,
+                collectionFollows: { state: 'unavailable', reason: 'identity' },
+              },
+            }
           : result.state,
       );
       const viewer =
@@ -266,6 +282,7 @@ export function useDiscoveryPersonalResults(input: {
           state.page = {
             ...state.page,
             viewerFacts: { state: 'unavailable', reason: 'response_limit', retryable: false },
+            collectionFollows: { state: 'unavailable', reason: 'native' },
           };
       }
       const page = createDiscoveryPersonalPage({
@@ -319,10 +336,68 @@ export function useDiscoveryPersonalResults(input: {
   const source = value?.state ?? input.source;
   const display: DiscoveryState | undefined =
     source?.status === 'ready' && (!value || value.suppressed)
-      ? { ...source, page: { ...source.page, viewerFacts: null } }
+      ? {
+          ...source,
+          page: { ...source.page, viewerFacts: null, collectionFollows: { state: 'unavailable', reason: 'identity' } },
+        }
       : source;
   const renderPersonal = (hit: DiscoveryHit, title: string) => {
     const options = { locale: locales.find((locale) => locale === input.locale) ?? 'en' };
+    if (hit.summary.kind === 'collection') {
+      const card = hit.summary.value.card;
+      const follows = value?.state.status === 'ready' ? value.state.page.collectionFollows : undefined;
+      const row =
+        follows?.state === 'current' && follows.accountId === value?.observation.scope.viewer
+          ? follows.rows.find(
+              (row) =>
+                row.targetId === hit.key.id &&
+                row.targetType === 'collection' &&
+                row.source === collectionFollowSource(card),
+            )
+          : undefined;
+      if (
+        value &&
+        !value.suppressed &&
+        value.capabilities &&
+        operationIsAdmitted('follow.get', admitted?.admitted) &&
+        row
+      )
+        return (
+          <CollectionFollowControl
+            key={`${value.observation.scope.page}:${discoveryKey(hit)}:${row.source}`}
+            row={{
+              ...row,
+              actions: {
+                follow: row.actions.follow && operationIsAdmitted('follow.put', admitted?.admitted),
+                unfollow: row.actions.unfollow && operationIsAdmitted('follow.delete', admitted?.admitted),
+              },
+            }}
+            binding={{
+              expectedReader: value.observation.scope.viewer,
+              expectedCredential: value.observation.scope.credential,
+            }}
+            lifetime={value.observation.scope.page}
+            current={() => value.page.current() && !value.suppressed}
+            locale={input.locale}
+            write={(data) =>
+              (input.writeFollow ?? writeCollectionFollow)({
+                data,
+                headers: { 'X-CSRF-Token': data.expectedCredential },
+              })
+            }
+          />
+        );
+      return session.state === 'signed-out' ? (
+        <a
+          className="inline-flex min-h-11 items-center text-primary underline"
+          href={`/auth/sign-in?return_to=${encodeURIComponent(input.returnTo)}`}
+        >
+          {m.account_sign_in({}, options)}
+        </a>
+      ) : (
+        <p role="status">{m.library_follow_unavailable({}, options)}</p>
+      );
+    }
     const target = value?.observation.targets.find((target) => target.rowKey === discoveryKey(hit));
     if (!value || !target) {
       const state =

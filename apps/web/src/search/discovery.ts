@@ -1,4 +1,10 @@
 import * as v from 'valibot';
+import {
+  collectionCurator,
+  collectionPreview,
+  collectionFollows,
+  collectionFollowSource,
+} from './collection-context/schema';
 import { isCalendarDate } from '@rezics/filter';
 import type { KernelClient } from '@rezics/client';
 import { GLOBAL, PUBLIC_RATING_SCALE, QUESTION } from '../features/pages/subject-ratings';
@@ -136,10 +142,13 @@ const publicCollectionCard = v.variant('membershipKind', [
     description: v.nullable(v.string()),
     visibility: v.literal('public'),
     revision: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    sourceGeneration: v.pipe(v.string(), v.regex(/^[0-9]{1,20}$/)),
     presentationKind: v.nullable(v.string()),
     presentationKindSource: v.picklist(['mixed', 'owner']),
     cover: v.nullable(cover),
     coverSource: v.picklist(['owner', 'member', 'none', 'pending']),
+    curator: collectionCurator,
+    preview: collectionPreview,
     membershipKind: v.literal('curated'),
     memberCount: v.pipe(v.number(), v.integer(), v.minValue(0)),
     orderEpoch: v.pipe(v.number(), v.integer(), v.minValue(0)),
@@ -154,10 +163,13 @@ const publicCollectionCard = v.variant('membershipKind', [
     description: v.nullable(v.string()),
     visibility: v.literal('public'),
     revision: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    sourceGeneration: v.pipe(v.string(), v.regex(/^[0-9]{1,20}$/)),
     presentationKind: v.nullable(v.string()),
     presentationKindSource: v.picklist(['mixed', 'owner']),
     cover: v.nullable(cover),
     coverSource: v.picklist(['owner', 'member', 'none', 'pending']),
+    curator: collectionCurator,
+    preview: collectionPreview,
     membershipKind: v.literal('dynamic'),
     outputGeneration: v.pipe(v.string(), v.minLength(1)),
   }),
@@ -300,6 +312,7 @@ const page = v.object({
   next: v.nullable(v.string()),
   as_of: v.string(),
   viewerFacts: v.exactOptional(viewerFacts),
+  collectionFollows: v.exactOptional(collectionFollows),
 });
 
 export type DiscoveryPage = v.InferOutput<typeof page>;
@@ -367,7 +380,16 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
           hit.key.kind !== 'collection' ||
           hit.summary.value.card.id !== hit.key.id ||
           hit.summary.value.card.title !== hit.summary.value.title ||
-          hit.summary.value.card.description !== hit.summary.value.description
+          hit.summary.value.card.description !== hit.summary.value.description ||
+          new TextEncoder().encode(
+            JSON.stringify({ curator: hit.summary.value.card.curator, preview: hit.summary.value.card.preview }),
+          ).byteLength > 4096 ||
+          (hit.summary.value.card.curator.state === 'available' &&
+            hit.summary.value.card.curator.destination !== null &&
+            !/^\/@[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(hit.summary.value.card.curator.destination)) ||
+          (hit.summary.value.card.preview.state === 'available' &&
+            new Set(hit.summary.value.card.preview.members.map((member) => member.id)).size !==
+              hit.summary.value.card.preview.members.length)
         )
           return;
         break;
@@ -378,6 +400,25 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
         if (hit.key.owner !== 'community' || hit.key.kind !== 'space') return;
         break;
     }
+  }
+  if (result.collectionFollows?.state === 'current') {
+    const rows = result.collectionFollows.rows;
+    const collections = result.hits.flatMap((hit) =>
+      hit.summary.kind === 'collection' ? [hit.summary.value.card] : [],
+    );
+    const accountRoute = Number.parseInt(result.collectionFollows.accountId.slice(24, 28), 16);
+    if (
+      !Number.isFinite(accountRoute) ||
+      accountRoute >>> 4 !== result.collectionFollows.partition ||
+      rows.length !== collections.length ||
+      rows.some((row, index) => {
+        const card = collections[index]!;
+        return (
+          row.targetType !== 'collection' || row.targetId !== card.id || row.source !== collectionFollowSource(card)
+        );
+      })
+    )
+      return;
   }
   if (result.viewerFacts && result.viewerFacts !== null && result.viewerFacts.state === 'current') {
     const subjects = result.hits.filter((hit) => hit.summary.kind === 'subject');

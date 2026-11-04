@@ -7973,5 +7973,13 @@
   "prq_actions_current": "当前允许的操作：",
   "prq_actions_unavailable": "无法读取允许的操作。请刷新此页面重试。",
   "prq_selection_separate": "选择需要前往独立的候选审核页面。",
-  "prq_selection_not_allowed": "当前语境不允许选择。"
+  "prq_selection_not_allowed": "当前语境不允许选择。",
+  "discovery_collection_curator": "策展者",
+  "discovery_collection_curator_unavailable": "策展者信息不可用",
+  "discovery_collection_preview": "内容预览",
+  "discovery_collection_partial": "部分成员无法显示。",
+  "discovery_collection_truncated": "这是合集的一部分，打开合集查看更多。",
+  "discovery_collection_empty": "此合集为空。",
+  "discovery_collection_withheld": "没有可显示的成员。",
+  "discovery_collection_preview_unavailable": "内容预览不可用。"
 }
