@@ -35,7 +35,7 @@ export function ThreadReplyComposer({
       {...composer}
       canSubmit={canSubmit}
       replyTargetId={parentId}
-      slowModeScopeKey={JSON.stringify([boardId, containerId, parentId, getLocale(), credentialMode])}
+      slowModeScopeKey={JSON.stringify([composer.boardId, composer.containerId, parentId, getLocale(), credentialMode])}
       slowModeCredentialMode={credentialMode}
       replyContext={
         parentId === null || !canSubmit ? null : (
