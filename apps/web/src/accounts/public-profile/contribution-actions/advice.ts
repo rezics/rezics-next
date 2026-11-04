@@ -51,6 +51,7 @@ export function originalContributionReference(
       row.thread.boardId !== reference.placeId ||
       !record(row.thread.firstPost) ||
       !visible(row.thread.firstPost) ||
+      row.thread.firstPost.threadId !== reference.threadId ||
       row.thread.firstPost.revisionId !== reference.threadRevisionId
     )
       return;
