@@ -75,7 +75,7 @@ test('arc journey gates whole narrative/appearance rows, opens current targets, 
   const mounted = await ui();
   try {
     const fixture = arcExample('continuation-unavailable');
-    const initial = await fixture.read();
+    const initial = await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' });
     const addresses: ArcAddress[] = [];
     const transport: ArcTransport = (address) => {
       addresses.push(address);
@@ -132,7 +132,7 @@ test('replacement exposure retires accepted controls and an in-flight continuati
   const mounted = await ui();
   try {
     const fixture = arcExample();
-    const initial = await fixture.read();
+    const initial = await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' });
     let resolve!: (read: ArcRead) => void;
     const props = {
       ...arcAddress,

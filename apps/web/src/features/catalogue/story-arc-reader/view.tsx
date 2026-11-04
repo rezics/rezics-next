@@ -281,6 +281,7 @@ function ArcWindow({
             {page.streams.map((stream) => (
               <button
                 key={stream.key}
+                data-stream={stream.key}
                 type="button"
                 className={button}
                 aria-pressed={stream.key === page.stream?.key}
