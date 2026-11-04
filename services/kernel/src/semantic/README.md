@@ -957,6 +957,53 @@ owned mutation and digest binding; cross-pool cache rejection and eviction; curr
 replay denial; unrelated-request progress; deadline and late work with no commit; and
 active-plus-retired resource bounds. These are not delivered tests or runtime claims.
 
+## Copy and release work disclosure
+
+`readCopyWorkDisclosure(deps, {identities, languages?})` is the native batch for
+Commerce and the ordinary Subject page. It is exported with
+`CopyWorkDisclosureRequest`, `CopyWorkDisclosureObservation`,
+`CopyWorkDisclosureState` and `CopyWorkReference` from `semantic/index.ts`.
+The released binding is `schema:exampleOfWork` on Types that currently admit
+that derivation (`bf:Instance`, `rezics:AnimeRelease`, `wd:Q20631656` in the
+bundled catalogue, and any later released Type that includes the same
+property). Same UUID, digest, provider identifier, acquisition record, label
+similarity or chronology is never membership. A multi-work edition stays
+multiple work identities.
+
+Raw input is at most 100 identities, counting duplicates before
+deduplication. Selected language tags reuse the existing 1–8 UTF-8 language
+bound. Each original is `available` with at most three canonical `{id, labels}`
+works (complete-empty is `available` with `works: []`), or
+`scope` / `withheld` / `missing` / `unsupported` / `unavailable` / `denied`.
+Hidden members and unprovable partial sets do not leak undisclosed IDs,
+counts or serialized keys. Four current-head locators are lookahead: a full
+window is `unsupported`, never a pretended three-row complete set. Labels
+come from `readSubjectSummaries` in batches of at most 256 targets. The
+returned `current()` re-observes source and target partition cuts and Access;
+it is not a boolean that claims a later commit is safe.
+
+Decision: the bundled `schema:exampleOfWork` slot is single-valued, so native
+writes admit one work per edition. The producer still proves a three-plus-
+lookahead window so a later multi-valued release does not guess a primary
+work. Identity mapping `absent` uses the requested id as the current
+terminal; `pending` and `unavailable` refuse the item.
+
+### Copy and release work disclosure Cost
+
+- Touches: at most 100 raw inputs (U distinct sources), identity mappings in
+  chunks of 100, one current-head locator window of 4 Global present
+  `schema:exampleOfWork` rows per source, current relation facts for those
+  locators, and at most 3U summary targets in 256-id batches. Partition
+  metadata, link checkpoints and Access run per addressed home. No
+  source-history enumeration, all-home scan, cross-partition SQL join or
+  per-row HTTP hydration.
+- Bound: N ≤ 100, U ≤ N, locators ≤ 4U, targets ≤ 3U. SQL/control/Access/
+  identity/summary/byte terms follow those caps and the existing
+  per-partition release rule. Rejected, duplicate, concealed and lookahead
+  work are charged. Output bytes are the typed results plus selected labels.
+- Growth check: `test/semantic/growth-copy-work-disclosure.test.ts` at
+  64/512/4096 unrelated subjects and growing old relation history.
+
 `readSubjectSummaries` is the shared display projection. Callers provide the trusted server `routeKey`
 and native pool, plus either the actual Access/Actor/deadline or a pinned release and prepared resource
 checks. `summaryAuthorization` preserves a callable related-read check while letting the batch prepare
