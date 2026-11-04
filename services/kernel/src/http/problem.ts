@@ -25,25 +25,24 @@ import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError 
 import { AuthenticationError } from '../request/access.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 
-const fieldErrorCodes = [
-  'required',
-  'unknown_field',
-  'invalid_type',
-  'invalid_format',
-  'out_of_range',
-  'unsupported',
-] as const satisfies readonly FieldErrorCode[];
-const pointerPattern = /^(?:\/(?:[^~/]|~[01])*)*$/;
+function fieldErrorCodes(): readonly FieldErrorCode[] {
+  return ['required', 'unknown_field', 'invalid_type', 'invalid_format', 'out_of_range', 'unsupported'];
+}
+
+function isSafePointer(pointer: string): boolean {
+  return /^(?:\/(?:[^~/]|~[01])*)*$/.test(pointer);
+}
 
 function schemaUnion(schemas: TSchema[]): TSchema {
   return schemas.length === 1 ? schemas[0]! : t.Union(schemas as [TSchema, ...TSchema[]]);
 }
 
 function fieldErrorSchema() {
+  const codes = fieldErrorCodes();
   return t.Object(
     {
-      pointer: t.String({ pattern: pointerPattern.source }),
-      code: t.Union(fieldErrorCodes.map((fieldCode) => t.Literal(fieldCode))),
+      pointer: t.String({ pattern: '^(?:\\/(?:[^~/]|~[01])*)*$' }),
+      code: t.Union(codes.map((fieldCode) => t.Literal(fieldCode))),
     },
     { additionalProperties: false },
   );
@@ -152,7 +151,7 @@ function safeFieldErrors(errors: readonly FieldError[] | undefined): FieldError[
   const result: FieldError[] = [];
   const seen = new Set<string>();
   for (const error of errors) {
-    if (!pointerPattern.test(error.pointer) || !fieldErrorCodes.includes(error.code) || seen.has(error.pointer))
+    if (!isSafePointer(error.pointer) || !fieldErrorCodes().includes(error.code) || seen.has(error.pointer))
       continue;
     seen.add(error.pointer);
     result.push({ pointer: error.pointer, code: error.code });
