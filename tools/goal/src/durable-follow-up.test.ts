@@ -148,7 +148,9 @@ test("a retried attempt's continuation is dropped once an earlier attempt queued
       `attempt ${earlier.attempt} of this task already queued its continuation`,
     ]);
     expect(readdirSync(source)).toEqual([]);
-    expect(readdirSync(join(h.settings.stateDirectory, 'backlog', 'fixture'))).toHaveLength(1);
+    const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    expect(readdirSync(backlog).filter((name) => name.endsWith('.md'))).toHaveLength(1);
+    expect(readdirSync(join(backlog, 'failed')).filter((name) => name.endsWith('.md'))).toHaveLength(2);
   } finally {
     h.dispose();
   }
@@ -180,6 +182,7 @@ test('an invalid Markdown continuation is kept with its reason and reported to i
 
 test('acceptance placement without a command is removed and the continuation is admitted', () => {
   const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const attempt = beginAttempt(h, task);
