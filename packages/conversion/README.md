@@ -931,7 +931,8 @@ language and exact-text tuples deduplicate; other spellings remain separate.
 Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
 omissions, with no source prose copied into diagnostics. Parsing scans at most 64
 field occurrences, retains at most 24 distinct name values, and shares a 16-item
-diagnostic cap with retained source-field and TVAnime run omissions. Each field
+diagnostic cap with retained source-field, TVAnime run and Game player-count
+omissions. Each field
 occurrence is staged until its complete scalar or bullet-list form is known;
 malformed or mixed occurrences contribute no names.
 
