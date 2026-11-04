@@ -7855,7 +7855,7 @@
   "library_vndb_action_skip": "Skip this row",
   "library_vndb_action_state": "Choose a Library state",
   "library_vndb_admission_error": "Native admission returned {code}. Invalid XML or XML over 2 MiB is rejected with HTTP 400.",
-  "library_vndb_apply_progress": "{applied} rows applied; {total} selected rows have receipts.",
+  "library_vndb_apply_progress": "{applied} rows applied; {total} rows in this selection.",
   "library_vndb_apply_selection": "Apply {count} reviewed rows",
   "library_vndb_applying": "{applied} of {total} rows applied; applying {applying} now.",
   "library_vndb_bounds": "Native admission checks the XML independently: UTF-8 XML is limited to 2 MiB; invalid XML and XML overflow return HTTP 400. Escaped JSON has a separate 12 MiB + 64 bytes wire bound and returns HTTP 413. Browser file size is not wire size; only native admission decides whether the request fits.",

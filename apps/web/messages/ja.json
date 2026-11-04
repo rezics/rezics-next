@@ -7785,7 +7785,7 @@
   "library_vndb_action_skip": "この行をスキップ",
   "library_vndb_action_state": "ライブラリ状態を選択",
   "library_vndb_admission_error": "ネイティブ受付が {code} を返しました。不正な XML または 2 MiB を超える XML は HTTP 400 で拒否されます。",
-  "library_vndb_apply_progress": "{applied} 行を適用済み。選択した {total} 行の受付結果があります。",
+  "library_vndb_apply_progress": "{applied} 行を適用しました。今回の選択は {total} 行です。",
   "library_vndb_apply_selection": "確認済みの {count} 行を適用",
   "library_vndb_applying": "{total} 行中 {applied} 行を適用済み。現在 {applying} 行を処理中。",
   "library_vndb_bounds": "ネイティブ受付は XML を個別に検査します。UTF-8 XML は 2 MiB までで、不正または超過した XML は HTTP 400 になります。エスケープ後の JSON には別途 12 MiB + 64 バイトの通信上限があり、超過時は HTTP 413 です。ブラウザーのファイルサイズは通信サイズではありません。受付可否はネイティブ側だけが判定します。",

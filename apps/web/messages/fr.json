@@ -7785,7 +7785,7 @@
   "library_vndb_action_skip": "Ignorer cette ligne",
   "library_vndb_action_state": "Choisir un état de bibliothèque",
   "library_vndb_admission_error": "L’admission native a renvoyé {code}. Un XML invalide ou supérieur à 2 Mio est rejeté avec HTTP 400.",
-  "library_vndb_apply_progress": "{applied} lignes appliquées ; {total} lignes sélectionnées ont un reçu.",
+  "library_vndb_apply_progress": "{applied} lignes appliquées ; {total} lignes dans cette sélection.",
   "library_vndb_apply_selection": "Appliquer {count} lignes vérifiées",
   "library_vndb_applying": "{applied} lignes sur {total} appliquées ; {applying} en cours.",
   "library_vndb_bounds": "L’admission native vérifie séparément le XML : le XML UTF-8 est limité à 2 Mio ; un XML invalide ou trop volumineux renvoie HTTP 400. Le JSON échappé a une limite de transmission distincte de 12 Mio + 64 octets et renvoie HTTP 413. La taille du fichier dans le navigateur n’est pas la taille transmise ; seule l’admission native décide si la requête convient.",

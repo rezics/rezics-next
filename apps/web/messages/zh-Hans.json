@@ -7785,7 +7785,7 @@
   "library_vndb_action_skip": "跳过此行",
   "library_vndb_action_state": "选择一个资料库状态",
   "library_vndb_admission_error": "原生接纳返回 {code}。无效 XML 或超过 2 MiB 的 XML 会被 HTTP 400 拒绝。",
-  "library_vndb_apply_progress": "已应用 {applied} 行；所选 {total} 行已有回执。",
+  "library_vndb_apply_progress": "已应用 {applied} 行；本次选择共 {total} 行。",
   "library_vndb_apply_selection": "应用已审核的 {count} 行",
   "library_vndb_applying": "已应用 {total} 行中的 {applied} 行；正在处理 {applying} 行。",
   "library_vndb_bounds": "原生接纳会单独检查 XML：UTF-8 XML 上限为 2 MiB；无效或超限的 XML 返回 HTTP 400。转义后的 JSON 另有 12 MiB + 64 字节的线路上限，超限返回 HTTP 413。浏览器文件大小不等于线路大小，只有原生接纳能判断请求是否符合限制。",
