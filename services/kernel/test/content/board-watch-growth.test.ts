@@ -261,18 +261,24 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
           const grantRoute = routeOf(f.boardId)!;
           const authorityTransactions = Array.from({ length: count }, () => newId(grantRoute));
           const unrelatedAuthorityTransactions = Array.from({ length: count }, () => newId(grantRoute));
+          const rebaseCurrentAuthority = `
+            UPDATE access.resource_grant SET valid=tstzrange(clock_timestamp() - interval '1 day',NULL,'[)')
+            WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='board:read' AND valid @> clock_timestamp()`;
+          await db.admin.query(rebaseCurrentAuthority, [grantRoute, f.boardId, owner]);
+          await db.admin.query(rebaseCurrentAuthority, [grantRoute, f.boardId, f.accounts.recipient]);
           const insertExpiredAuthority = `
             INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
             SELECT $1,$2,$3,'board:read',
-                   tstzrange('2000-01-01T00:00:00Z'::timestamptz + ordinal*interval '2 hours',
-                             '2000-01-01T01:00:00Z'::timestamptz + ordinal*interval '2 hours','[)'),transaction_id
+                   tstzrange('2000-01-01T00:00:00Z'::timestamptz - ($5 + ordinal)*interval '2 hours',
+                             '2000-01-01T01:00:00Z'::timestamptz - ($5 + ordinal)*interval '2 hours','[)'),transaction_id
             FROM unnest($4::uuid[]) WITH ORDINALITY history(transaction_id,ordinal)`;
-          await db.admin.query(insertExpiredAuthority, [grantRoute, f.boardId, owner, authorityTransactions]);
+          await db.admin.query(insertExpiredAuthority, [grantRoute, f.boardId, owner, authorityTransactions, previous]);
           await db.admin.query(insertExpiredAuthority, [
             grantRoute,
             f.boardId,
             f.accounts.recipient,
             unrelatedAuthorityTransactions,
+            previous,
           ]);
         },
         prepare,

@@ -251,6 +251,7 @@ test('board stop and restart rotate the private episode identity and reject stal
   expect((await f.call(reader, 'GET', management(reader, 'board'))).value.items).toMatchObject([
     { id: second, state: 'available', resourceId: f.boardId, revision: 3 },
   ]);
+  await f.db.admin.query('DELETE FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
 });
 
 test('empty inventory is terminal and a full sparse raw page returns no refill before same-cursor continuation', async () => {
@@ -357,26 +358,36 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   const spaceRevision = newId(route);
   const realmRevision = newId(route);
   const context = newId(route);
-  await f.db.admin.query(
-    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
-     VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
-    [route, space, spaceRevision, f.accounts.recipient],
-  );
-  await f.db.admin.query(
-    `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
-     VALUES($1,$2,$3,'Watch space','',clock_timestamp(),$4)`,
-    [route, space, spaceRevision, f.accounts.recipient],
-  );
-  await f.db.admin.query(
-    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
-     VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
-    [route, realm, space, context, realmRevision, f.accounts.recipient],
-  );
-  await f.db.admin.query(
-    `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
-     VALUES($1,$2,$3,'Watch realm','','public',$4,clock_timestamp(),$5)`,
-    [route, realm, realmRevision, context, f.accounts.recipient],
-  );
+  const community = await f.db.admin.connect();
+  try {
+    await community.query('BEGIN');
+    await community.query(
+      `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+       VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
+      [route, space, spaceRevision, f.accounts.recipient],
+    );
+    await community.query(
+      `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
+       VALUES($1,$2,$3,'Watch space','',clock_timestamp(),$4)`,
+      [route, space, spaceRevision, f.accounts.recipient],
+    );
+    await community.query(
+      `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+       VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
+      [route, realm, space, context, realmRevision, f.accounts.recipient],
+    );
+    await community.query(
+      `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
+       VALUES($1,$2,$3,'Watch realm','','public',$4,clock_timestamp(),$5)`,
+      [route, realm, realmRevision, context, f.accounts.recipient],
+    );
+    await community.query('COMMIT');
+  } catch (error) {
+    await community.query('ROLLBACK');
+    throw error;
+  } finally {
+    community.release();
+  }
   await f.db.admin.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,realm_id,visibility,security_revision,recorded_transaction_id)
      VALUES($1,$2,$3,'Realm watch board',$4,'published',1,$5)`,
@@ -486,6 +497,10 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   expect((await f.call(reader, 'DELETE', removePath, { expectedRevision: 1 }, removalKey)).status).toBe(200);
   expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value.items).not.toContainEqual(
     expect.objectContaining({ id: removalWatch }),
+  );
+  await f.db.admin.query(
+    'DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2 AND thread_id=ANY($3::uuid[])',
+    [route, reader, [realmThread.id, later.id, revokedThread.id, removalThread.id]],
   );
 });
 
