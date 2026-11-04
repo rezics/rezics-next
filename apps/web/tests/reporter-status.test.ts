@@ -319,6 +319,9 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
     );
   mock.module('../src/moderation/reporter-status-read', () => ({ ...reader, readReporterStatus: transport }));
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // The site shell keeps the shared browser observation mounted across replacing route visits.
+  const { browserObservation } = await import('../src/session/observation');
+  const stopShell = browserObservation(cache).subscribeCache(() => {});
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
@@ -490,6 +493,7 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
   } finally {
     release?.();
     await act(async () => root.unmount());
+    stopShell();
     cache.clear();
     mock.module('../src/moderation/reporter-status-read', () => ({ ...reader, readReporterStatus: originalRead }));
     for (const [key, descriptor] of saved) {

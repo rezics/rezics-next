@@ -1,8 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { operationGroups } from '../src/kernel/exposure';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+const { operationGroups } = await import('../src/kernel/exposure');
 import { reporterHistoryReturnHref, reporterHistoryStatusHref } from '../src/moderation/reporter-history/navigation';
 import { prepareReporterHistoryVisit, type ReporterHistoryReader } from '../src/moderation/reporter-history/journey';
 import type {
@@ -11,8 +14,8 @@ import type {
   ReporterHistoryQuery,
 } from '../src/moderation/reporter-history/model';
 import { privateReaderFingerprint } from '../src/moderation/private-reader-origin';
-import { ReporterStatusPage } from '../src/moderation/reporter-status-view';
-import { libraryNavigation } from '../src/library/navigation';
+const { ReporterStatusPage } = await import('../src/moderation/reporter-status-view');
+const { libraryNavigation } = await import('../src/library/navigation');
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, localizeHref, locales, setLocale } from '../src/paraglide/runtime.js';
 

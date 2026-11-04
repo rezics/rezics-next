@@ -140,8 +140,18 @@ test('served operands, exact own status and recovery form one fresh private rout
   const { Route: StatusRoute } = await import('../src/routes/moderation/reports.$id');
   const parent = createRootRouteWithContext<{ queryClient: typeof cache }>()({ component: Outlet });
   // Mount the actual route options, loader preparation, consumed search and components.
-  Route.update({ path: '/moderation/reports', getParentRoute: () => parent, head: () => ({}) } as never);
-  StatusRoute.update({ path: '/moderation/reports/$id', getParentRoute: () => parent, head: () => ({}) } as never);
+  Route.update({
+    id: '/moderation/reports',
+    path: '/moderation/reports',
+    getParentRoute: () => parent,
+    head: () => ({}),
+  } as never);
+  StatusRoute.update({
+    id: '/moderation/reports/$id',
+    path: '/moderation/reports/$id',
+    getParentRoute: () => parent,
+    head: () => ({}),
+  } as never);
   const history = createMemoryHistory({ initialEntries: ['/moderation/reports'] });
   const router = createRouter({
     routeTree: parent.addChildren([Route, StatusRoute]),
