@@ -248,9 +248,11 @@ test('native session creation retains its accepting unit meaning and session del
   expect(meaning.rows[0].structure_kind).toBe('none');
   await native.pool.query('DELETE FROM library.progress_session WHERE route=$1 AND session_id=$2', [route, id]);
   expect(
-    (await native.pool.query(
-      'SELECT 1 FROM library.reading_insights_progress_meaning WHERE route=$1 AND session_id=$2',
-      [route, id],
-    )).rows,
+    (
+      await native.pool.query(
+        'SELECT 1 FROM library.reading_insights_progress_meaning WHERE route=$1 AND session_id=$2',
+        [route, id],
+      )
+    ).rows,
   ).toEqual([]);
 }, 120_000);
