@@ -6,27 +6,66 @@ import type { TransferAttempt } from '../src/operator-transfer';
 
 creationFixture();
 const { OperatorTransferPage } = await import('../src/routes/operators.transfer');
-const { storeTransferAttempt, restoreTransferAttempt, OPERATOR_MANAGEMENT_PROFILE } = await import('../src/operator-transfer');
+const { storeTransferAttempt, restoreTransferAttempt, OPERATOR_MANAGEMENT_PROFILE } =
+  await import('../src/operator-transfer');
 const { m } = await import('../src/paraglide/messages.js');
-const owner: AccountSessionResult = { kind: 'ready', accountId: 'private-human', clientId: OPERATOR_MANAGEMENT_PROFILE.client_id, scopes: ['account:manage'] };
-const saved: TransferAttempt = {
-  accountId: owner.accountId, side: 'source', phase: 'readback', acceptance: 'private-acceptance', reference: 'private-reference',
-  request: { version: 1, previous: { subjectAccountId: 'private-subject', operatorAccountId: 'private-source', reservationId: 'private-slot' }, expectedVersion: '12', operatorAccountId: 'private-destination', sourceOperationKey: 'private-operation' },
+const owner: AccountSessionResult = {
+  kind: 'ready',
+  accountId: 'private-human',
+  clientId: OPERATOR_MANAGEMENT_PROFILE.client_id,
+  scopes: ['account:manage'],
 };
-const relation = { previous: { ...saved.request.previous, operatorAccountId: saved.request.operatorAccountId, reservationId: 'next-slot' }, expectedVersion: '13' };
+const saved: TransferAttempt = {
+  accountId: owner.accountId,
+  side: 'source',
+  phase: 'readback',
+  acceptance: 'private-acceptance',
+  reference: 'private-reference',
+  request: {
+    version: 1,
+    previous: {
+      subjectAccountId: 'private-subject',
+      operatorAccountId: 'private-source',
+      reservationId: 'private-slot',
+    },
+    expectedVersion: '12',
+    operatorAccountId: 'private-destination',
+    sourceOperationKey: 'private-operation',
+  },
+};
+const relation = {
+  previous: {
+    ...saved.request.previous,
+    operatorAccountId: saved.request.operatorAccountId,
+    reservationId: 'next-slot',
+  },
+  expectedVersion: '13',
+};
 const reply = (review: object, viewer = 'ready') => Response.json({ viewer: { kind: viewer }, review });
-async function settle(action: () => void = () => {}) { await act(async () => { action(); for (let i = 0; i < 20; i++) await Promise.resolve(); }); }
+async function settle(action: () => void = () => {}) {
+  await act(async () => {
+    action();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  });
+}
 async function mount(attempt: TransferAttempt | null = saved) {
   if (attempt) storeTransferAttempt(structuredClone(attempt));
-  const page = await open(<OperatorTransferPage initial={owner} />, { account_id: owner.accountId, client_id: owner.clientId, scope: owner.scopes });
+  const page = await open(<OperatorTransferPage initial={owner} />, {
+    account_id: owner.accountId,
+    client_id: owner.clientId,
+    scope: owner.scopes,
+  });
   await settle(() => page.calls[0]!.resolve(reply({ kind: 'readiness' })));
   const choose = (label: string) => settle(() => button(page.host, label).click());
   const resolve = (index: number, response: Response) => settle(() => page.calls[index]!.resolve(response));
   return { ...page, choose, resolve };
 }
-function hide() { window.dispatchEvent(new dom.Event('pagehide') as unknown as Event); }
+function hide() {
+  window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
+}
 function show() {
-  const event = new dom.Event('pageshow'); Object.defineProperty(event, 'persisted', { value: true });
+  const event = new dom.Event('pageshow');
+  Object.defineProperty(event, 'persisted', { value: true });
   window.dispatchEvent(event as unknown as Event);
 }
 function privateHidden(host: HTMLElement) {
@@ -43,7 +82,11 @@ test('matching acknowledgement survives synchronous retirement, failed return re
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_acknowledged());
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_observed());
   expect(page.host.querySelector('#transfer-acknowledgment')).not.toBeNull();
-  await settle(() => { hide(); privateHidden(page.host); expect(page.host.innerHTML).not.toContain(owner.accountId); }); // Assert before React's next scheduled turn.
+  await settle(() => {
+    hide();
+    privateHidden(page.host);
+    expect(page.host.innerHTML).not.toContain(owner.accountId);
+  }); // Assert before React's next scheduled turn.
   expect(document.activeElement).toBe(page.host.querySelector('#transfer-return-heading'));
   await page.choose(m.auth_transfer_recovery_review());
   await page.resolve(2, reply({ kind: 'readiness' }));
@@ -85,7 +128,11 @@ test('late relation completion cannot cross a return generation or overwrite rep
   await settle(hide);
   await settle(show);
   await page.resolve(2, reply({ kind: 'readiness' }));
-  const replacement = { ...saved, accountId: 'replacement-human', request: { ...saved.request, sourceOperationKey: 'replacement-key' } };
+  const replacement = {
+    ...saved,
+    accountId: 'replacement-human',
+    request: { ...saved.request, sourceOperationKey: 'replacement-key' },
+  };
   storeTransferAttempt(replacement);
   await page.resolve(3, matching());
   await page.resolve(1, matching());
@@ -117,9 +164,15 @@ test('retirement invalidates an imported file before caching and a missing unkno
   const pending = Promise.withResolvers<ArrayBuffer>();
   const field = page.host.querySelector<HTMLInputElement>('#transfer-request-file')!;
   const bytes = new TextEncoder().encode(JSON.stringify(saved.request));
-  Object.defineProperty(field, 'files', { configurable: true, value: [{ size: bytes.length, arrayBuffer: () => pending.promise }] });
+  Object.defineProperty(field, 'files', {
+    configurable: true,
+    value: [{ size: bytes.length, arrayBuffer: () => pending.promise }],
+  });
   await settle(() => field.dispatchEvent(new dom.Event('change', { bubbles: true }) as unknown as Event));
-  await settle(() => { hide(); privateHidden(page.host); });
+  await settle(() => {
+    hide();
+    privateHidden(page.host);
+  });
   await settle(() => pending.resolve(bytes.buffer));
   expect(restoreTransferAttempt()).toBeNull();
   privateHidden(page.host);

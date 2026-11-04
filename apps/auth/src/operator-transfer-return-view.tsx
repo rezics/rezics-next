@@ -12,18 +12,33 @@ const descriptions: Record<TransferReturnEntry, () => string> = {
   unreadable: () => m.auth_transfer_recovery_unreadable(),
 };
 
-export function OperatorTransferReturnView({ entries, focusRef, onDismiss }: {
+export function OperatorTransferReturnView({
+  entries,
+  focusRef,
+  onDismiss,
+}: {
   entries: TransferReturnEntry[];
   focusRef?: RefObject<HTMLHeadingElement | null>;
   onDismiss: () => void;
 }) {
   if (!entries.length) return null;
-  return <section aria-labelledby="transfer-return-heading" className="space-y-3 rounded-lg border p-4">
-    <h2 id="transfer-return-heading" ref={focusRef} tabIndex={-1} className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4">
-      {m.auth_transfer_return_heading()}
-    </h2>
-    {entries.map((entry) => <p key={entry}>{descriptions[entry]()}</p>)}
-    <p>{m.auth_transfer_return_separate()}</p>
-    <Button type="button" variant="outline" onClick={onDismiss}>{m.auth_transfer_return_dismiss()}</Button>
-  </section>;
+  return (
+    <section aria-labelledby="transfer-return-heading" className="space-y-3 rounded-lg border p-4">
+      <h2
+        id="transfer-return-heading"
+        ref={focusRef}
+        tabIndex={-1}
+        className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4"
+      >
+        {m.auth_transfer_return_heading()}
+      </h2>
+      {entries.map((entry) => (
+        <p key={entry}>{descriptions[entry]()}</p>
+      ))}
+      <p>{m.auth_transfer_return_separate()}</p>
+      <Button type="button" variant="outline" onClick={onDismiss}>
+        {m.auth_transfer_return_dismiss()}
+      </Button>
+    </section>
+  );
 }

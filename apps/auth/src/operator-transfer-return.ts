@@ -17,5 +17,7 @@ export function rememberTransferReturn(
   if (entries.at(-1) === next) return entries;
   const unknown = entries.includes('source-unknown');
   const result: TransferReturnEntry[] = unknown && next !== 'source-unknown' ? ['source-unknown', next] : [next];
-  return result.length === entries.length && result.every((value, index) => entries[index] === value) ? entries : result;
+  return result.length === entries.length && result.every((value, index) => entries[index] === value)
+    ? entries
+    : result;
 }
