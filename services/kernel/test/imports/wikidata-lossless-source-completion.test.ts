@@ -21,7 +21,7 @@ function complete(run: Run) {
 }
 
 test('ordinary Wikidata acquisition retains complete values through independent native review, refresh and replay fences', async () => {
-  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 128 * 1024 });
+  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   try {
     const editor = await openApiObserver(runtime);
     const record = losslessRecord();
