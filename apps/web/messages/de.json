@@ -3007,6 +3007,7 @@
   "realm_shelf_denied": "Diese Liste ist nicht mehr lesbar.",
   "realm_shelf_stale": "Diese Fortsetzung ist abgelaufen oder wurde geändert. Lade die Liste erneut.",
   "realm_shelf_unavailable": "Dieser Teil der Liste ist nicht verfügbar. Versuche es erneut.",
+  "realm_reading_return": "Zur ausgewählten Realm-Lesestelle zurückkehren",
   "realm_shelf_restart": "Liste neu laden",
   "realm_shelf_retry": "Erneut versuchen",
   "realm_shelf_loading": "Wird geladen…",

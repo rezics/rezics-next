@@ -3007,6 +3007,7 @@
   "realm_shelf_denied": "已无法读取此列表。",
   "realm_shelf_stale": "此分页已过期或更改，请重新加载列表以继续。",
   "realm_shelf_unavailable": "此部分列表暂不可用，请重试。",
+  "realm_reading_return": "返回所选 Realm 阅读位置",
   "realm_shelf_restart": "重新加载列表",
   "realm_shelf_retry": "重试",
   "realm_shelf_loading": "正在加载…",

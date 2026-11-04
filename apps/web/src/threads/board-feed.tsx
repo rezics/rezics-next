@@ -1,3 +1,4 @@
+import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
 import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ContentItem } from '@rezics/ui/content-item';
@@ -395,6 +396,9 @@ function BoardFeedVisit({
     boardId,
     sort,
     locale,
+    ...(subjectCommunityVisitReturn(location.search.returnTo, locale)
+      ? { returnTo: subjectCommunityVisitReturn(location.search.returnTo, locale)! }
+      : {}),
     ...(cursor === undefined ? {} : { cursor }),
   });
   useLayoutEffect(() => {

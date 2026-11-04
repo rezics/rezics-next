@@ -18,6 +18,7 @@ export type BoardReadingReturn = {
   locale: string;
   cursor?: string;
   focusThreadId?: string;
+  returnTo?: string;
 };
 
 export class BoardPageCursorError extends Error {
@@ -66,12 +67,24 @@ export function isMalformedBoardQuery(status: number, body: unknown): boolean {
   return code !== 'invalid_cursor' && code !== 'stale_cursor';
 }
 
+/** Opaque navigation input; the receiving Board route still applies its existing return validator. */
+function boardReturnCandidate(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 32768 &&
+    value.startsWith('/') &&
+    !value.startsWith('//') &&
+    !/[\\\u0000-\u001f\u007f]/u.test(value)
+  );
+}
+
 export function captureBoardReadingReturn(input: {
   boardId: string;
   sort: BoardSort;
   locale: string;
   cursor?: string;
   focusThreadId?: string;
+  returnTo?: string;
 }): BoardReadingReturn | null {
   if (!validBoardPinId(input.boardId) || !input.locale || input.locale.length > 64) return null;
   if (input.sort !== 'active' && input.sort !== 'hot' && input.sort !== 'new') return null;
@@ -85,6 +98,7 @@ export function captureBoardReadingReturn(input: {
     sort: input.sort,
     locale: input.locale,
     ...(cursor === undefined ? {} : { cursor }),
+    ...(boardReturnCandidate(input.returnTo) ? { returnTo: input.returnTo! } : {}),
     ...(validBoardPinId(input.focusThreadId) ? { focusThreadId: input.focusThreadId } : {}),
   };
 }
@@ -104,6 +118,7 @@ export function parseBoardReadingReturn(value: unknown): BoardReadingReturn | nu
     sort: value.sort,
     locale: value.locale,
     ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
+    ...(typeof value.returnTo === 'string' ? { returnTo: value.returnTo } : {}),
     ...(typeof value.focusThreadId === 'string' ? { focusThreadId: value.focusThreadId } : {}),
   });
 }
@@ -113,6 +128,8 @@ export function boardReadingHref(reading: BoardReadingReturn): string {
   const params = new URLSearchParams();
   if (reading.sort !== 'active') params.set('sort', reading.sort);
   if (reading.cursor !== undefined) params.set('cursor', reading.cursor);
+  const returnTo = boardReturnCandidate(reading.returnTo) ? reading.returnTo : undefined;
+  if (returnTo) params.set('returnTo', returnTo);
   const search = params.toString();
   const href = search ? `${path}?${search}` : path;
   return reading.focusThreadId ? `${href}#board-thread-${reading.focusThreadId}` : href;

@@ -1,3 +1,4 @@
+import { realmReadingReturn } from '../../community/realm-reading-return';
 import { useSession } from '../../session/query';
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
@@ -87,34 +88,44 @@ function BoardPage() {
       }}
     >
       {(currentPage, reactionOrigin) => (
-        <BoardCommunity
-          page={currentPage}
-          sort={sort ?? 'active'}
-          reactionOrigin={reactionOrigin}
-          navigation={{ href: returnTo }}
-          {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
-          participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
-          watch={<BoardWatchControl boardId={id} returnTo={returnTo} session={session} authority={reactionOrigin} />}
-          start={(page) => (
-            <BoardStartThread
-              board={page.board}
-              advice={page.actions.createThread}
-              returnTo={returnTo}
-              {...(search.returnTo ? { preparedReturnTo: search.returnTo } : {})}
-            />
-          )}
-          overflow={<BoardCommunityMenu boardId={id} signedIn={session.state === 'signed-in'} />}
-          postingInterval={
-            session.state === 'signed-in' ? (
-              <SlowModeSetting
-                boardId={id}
-                scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
-                credentialMode={router.options.context.credentialMode}
-                onApplied={() => void router.invalidate()}
+        <>
+          {search.returnTo ? (
+            <a
+              href={search.returnTo}
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              {realmReadingReturn(search.returnTo) ? m.realm_reading_return() : m.subject_connections_return()}
+            </a>
+          ) : null}
+          <BoardCommunity
+            page={currentPage}
+            sort={sort ?? 'active'}
+            reactionOrigin={reactionOrigin}
+            navigation={{ href: returnTo }}
+            {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
+            participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
+            watch={<BoardWatchControl boardId={id} returnTo={returnTo} session={session} authority={reactionOrigin} />}
+            start={(page) => (
+              <BoardStartThread
+                board={page.board}
+                advice={page.actions.createThread}
+                returnTo={returnTo}
+                {...(search.returnTo ? { preparedReturnTo: search.returnTo } : {})}
               />
-            ) : null
-          }
-        />
+            )}
+            overflow={<BoardCommunityMenu boardId={id} signedIn={session.state === 'signed-in'} />}
+            postingInterval={
+              session.state === 'signed-in' ? (
+                <SlowModeSetting
+                  boardId={id}
+                  scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
+                  credentialMode={router.options.context.credentialMode}
+                  onApplied={() => void router.invalidate()}
+                />
+              ) : null
+            }
+          />
+        </>
       )}
     </BoardPageCallerHost>
   );

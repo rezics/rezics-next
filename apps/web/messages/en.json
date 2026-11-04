@@ -3068,6 +3068,7 @@
   "realm_shelf_denied": "This list is no longer readable.",
   "realm_shelf_stale": "This continuation has expired or changed. Reload the list to continue.",
   "realm_shelf_unavailable": "This part of the list is unavailable. Try again.",
+  "realm_reading_return": "Return to selected Realm reading",
   "realm_shelf_restart": "Reload list",
   "realm_shelf_retry": "Retry",
   "realm_shelf_loading": "Loading…",

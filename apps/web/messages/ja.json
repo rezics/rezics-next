@@ -3007,6 +3007,7 @@
   "realm_shelf_denied": "この一覧は読み取れなくなりました。",
   "realm_shelf_stale": "続きの情報が期限切れか変更されています。一覧を再読み込みしてください。",
   "realm_shelf_unavailable": "一覧のこの部分は利用できません。再試行してください。",
+  "realm_reading_return": "選択した Realm の閲覧位置に戻る",
   "realm_shelf_restart": "一覧を再読み込み",
   "realm_shelf_retry": "再試行",
   "realm_shelf_loading": "読み込み中…",

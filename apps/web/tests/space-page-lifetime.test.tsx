@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, type ReactNode } from 'react';
+import { act, StrictMode, useState, type ReactNode } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import type { Root } from 'react-dom/client';
 import * as start from '../.storybook/react-start';
@@ -12,6 +12,10 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/spaces/atlas-member' });
+const canonical = window.document.createElement('link');
+canonical.rel = 'canonical';
+canonical.href = window.location.href;
+window.document.head.append(canonical);
 const globals = {
   window,
   document: window.document,
@@ -30,6 +34,7 @@ const globals = {
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previousGlobals = new Map(
@@ -174,6 +179,11 @@ mock.module('../src/community/space-actions', () => ({
   },
   changeRealmPublication: async () => ({ kind: 'unavailable' }),
   readSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  changeSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  resolveSpaceSetupChoice: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  searchSpaceSetupContexts: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  readSpaceSetupBoardChoices: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
 }));
 mock.module('../src/accounts/resource-access/link', () => ({ ResourceAccessLink: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
@@ -347,8 +357,14 @@ async function loadSessionSpace(queryClient: QueryClient, routeAddress = address
   return { page: result.page, admission: result.admission };
 }
 
+let replaceView: ((node: ReactNode) => void) | undefined;
+function PageTestView() {
+  const [rendered, setRendered] = useState(() => view);
+  replaceView = (node) => setRendered(() => node);
+  return rendered;
+}
 function makeRouter(queryClient: QueryClient) {
-  const rootRoute = createRootRoute({ component: () => view });
+  const rootRoute = createRootRoute({ component: PageTestView });
   const nextRouter = createRouter({
     routeTree: rootRoute,
     history: createMemoryHistory({ initialEntries: ['/'] }),
@@ -407,6 +423,7 @@ async function repaint(node: ReactNode) {
     <RouterProvider router={router!} />
   );
   await act(async () => {
+    replaceView?.(node);
     root!.render(<QueryClientProvider client={client!}>{contents}</QueryClientProvider>);
     await tick();
   });
@@ -423,6 +440,7 @@ async function close(clearClient = true) {
   if (clearClient) client?.clear();
   client = undefined;
   router = undefined;
+  replaceView = undefined;
   strictMode = false;
   host.textContent = '';
   latestShelfProbe = undefined;
@@ -559,6 +577,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     };
 
     await mountFileRoute(fileRouteTree(spaceRoute, '/spaces/$address'), `/spaces/${address}`, nextClient);
+    await settle();
     expect(host.textContent).toContain('Original private route page');
     expect(calls.pages).toEqual([
       { address, credentialMode: 'anonymous' },
@@ -871,12 +890,12 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
       pageReader = async (input) => pageFor(input.address, false, input.credentialMode);
       return { client: nextClient, result: await loadSessionSpace(nextClient) };
     })();
-    await mount(<PageFrame page={loaded.result.page} admission={loaded.result.admission} />, {
+    await mount(<PageFrame page={loaded.result.page} admission={loaded.result.admission} credentialMode="session" />, {
       queryClient: loaded.client,
     });
     expect(host.textContent).toContain(title);
     const before = calls.pages.length;
-    await repaint(<PageFrame page={loaded.result.page} admission={loaded.result.admission} />);
+    await repaint(<PageFrame page={loaded.result.page} admission={loaded.result.admission} credentialMode="session" />);
     expect(host.textContent).toContain(title);
     expect(calls.pages).toHaveLength(before);
   });
@@ -1182,16 +1201,16 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     nextClient.setQueryData(sessionQuery.queryKey, signedOut());
     pageReader = async (input) => pageFor(input.address, true, input.credentialMode);
     const loaded = await loadSpaceRoute(nextClient);
+    await mount(<PageFrame page={loaded.page} admission={loaded.admission} />, {
+      queryClient: nextClient,
+      strict: true,
+    });
     boardReader = async () => ({ kind: 'page', items: [board(id(70), 'Current board')], next: null, unavailable: 0 });
     publicationReader = async () => ({
       kind: 'page',
       items: [publication(id(71), 'Current publication')],
       next: null,
       unavailable: 0,
-    });
-    await mount(<PageFrame page={loaded.page} admission={loaded.admission} />, {
-      queryClient: nextClient,
-      strict: true,
     });
     click(m.realm_boards_more());
     click(m.realm_publications_more());
@@ -1201,4 +1220,68 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     expect(calls.boards).toHaveLength(1);
     expect(calls.publications).toHaveLength(1);
   });
+});
+
+test('the mounted Realm return reads only its selected native window and keeps publication continuation independent', async () => {
+  setLocale('en', { reload: false });
+  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  nextClient.setQueryData(sessionQuery.queryKey, signedOut());
+  const selectedId = id(71);
+  realmReader = async () => ({ kind: 'page', page: pageFor(address) });
+  boardReader = async () => ({
+    kind: 'page',
+    items: [board(selectedId, 'Selected board window')],
+    next: 'next-board',
+    unavailable: 0,
+  });
+  publicationReader = async () => ({
+    kind: 'page',
+    items: [publication(id(72), 'Independent publication window')],
+    next: null,
+    unavailable: 0,
+  });
+  await mountFileRoute(
+    fileRouteTree(realmRoute, '/realms/$id'),
+    `/realms/${realmId}?node=boards&cursor=original%2Fwindow#realm-board-${selectedId}`,
+    nextClient,
+  );
+  await settle();
+  expect(calls.boards).toEqual([{ realmId, cursor: 'original/window', credentialMode: 'anonymous' }]);
+  expect(calls.publications).toEqual([]);
+  expect(host.textContent).toContain('Selected board window');
+  expect(host.textContent).not.toContain('Original board');
+  expect(window.document.activeElement?.id).toBe(`realm-board-${selectedId}`);
+  const link = host.querySelector<HTMLAnchorElement>(`#realm-board-${selectedId} a`)!;
+  expect(new URL(link.href).searchParams.get('returnTo')).toBe(
+    `/en/realms/${realmId}?node=boards&cursor=original%2Fwindow#realm-board-${selectedId}`,
+  );
+  await act(async () => click(m.realm_publications_more()));
+  await settle();
+  expect(calls.publications).toEqual([{ realmId, cursor: 'publication-cursor-one', credentialMode: 'anonymous' }]);
+  expect(calls.boards).toHaveLength(1);
+  expect(host.textContent).toContain('Selected board window');
+  expect(host.textContent).toContain('Independent publication window');
+  expect(
+    new URL(host.querySelector<HTMLAnchorElement>(`#realm-publication-${id(72)} a`)!.href).searchParams.get('via'),
+  ).toBe(`/en/realms/${realmId}?node=publications&cursor=publication-cursor-one#realm-publication-${id(72)}`);
+});
+
+test('replacement and removed carriers retire pending shelf return and detached links', async () => {
+  const original = pageFor(address);
+  await mount(<SpacePage page={original} />, { session: signedOut() });
+  const pending = deferred<ShelfPage<RealmBoard>>();
+  boardReader = async () => pending.promise;
+  const detached = host.querySelector<HTMLAnchorElement>(`#realm-board-${boardId} a`)!;
+  await act(async () => click(m.realm_boards_more()));
+  await repaint(<SpacePage page={pageFor(address, false)} />);
+  expect(detached.isConnected).toBe(false);
+  expect(host.querySelector(`a[href*="${boardId}"]`)).toBeNull();
+  await act(async () =>
+    pending.resolve({ kind: 'page', items: [board(id(73), 'Retired return')], next: null, unavailable: 0 }),
+  );
+  expect(host.textContent).not.toContain('Retired return');
+  expect(host.querySelector('#realm-boards-heading')).toBeNull();
+  await repaint(<SpacePage page={pageFor(address)} />);
+  expect(host.textContent).toContain('Original board');
+  expect(host.textContent).not.toContain('Retired return');
 });
