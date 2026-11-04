@@ -2400,7 +2400,7 @@ export async function seedCrossMedia(
       const run = await importer.runRecords(registration, records());
       ensure(
         run.status === 'committed' || onlyPendingBangumiCovers(provider, run),
-        `Cross-media ${provider} import failed: ${run.status}`,
+        `Cross-media ${provider} import failed: ${run.status}${run.diagnostic ? ` (${run.diagnostic})` : ''}`,
       );
       runs[provider] = run;
     }
