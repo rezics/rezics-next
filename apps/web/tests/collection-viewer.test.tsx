@@ -1,10 +1,12 @@
 import { expect, mock, test } from 'bun:test';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { CollectionViewerFacts, CollectionMember } from '../src/library/reads';
-import { loadEditableCollectionPage } from '../src/library/collection-load';
-import {
+const {
   collectionMemberReturnAddress,
   collectionViewerActionHref,
   collectionViewerActionsState,
@@ -12,11 +14,12 @@ import {
   collectionViewerFactForMember,
   collectionViewerProjection,
   collectionViewerVoteCurrent,
-} from '../src/library/collection-viewer/model';
-import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+} = await import('../src/library/collection-viewer/model');
+const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
 import type { SessionEnv } from '../src/session/client';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
+const { loadEditableCollectionPage } = await import('../src/library/collection-load');
 const { CollectionReadMembers } = await import('../src/library/collection-page');
 
 const collectionId = '00000000-0000-4000-8000-000000000101';
