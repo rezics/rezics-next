@@ -2,6 +2,8 @@ import { createServerFn } from '@tanstack/react-start';
 import { authPost } from './api';
 import { readConsent } from './consent';
 import { privateAuthRead } from './private-auth-read';
+import type { SecurityPageEnvelope, SecurityAdvice } from '../../../services/auth/src/security-page';
+export type { SecurityPageEnvelope, SecurityAdvice } from '../../../services/auth/src/security-page';
 
 // Closed public DTOs from Auth's security inventory. Never keep native metadata.
 export type OwnedClient = { client_id: string; display_name: string | null; disabled: boolean; scopes: string[] };
@@ -142,6 +144,130 @@ export async function loadInventory<V extends InventoryView>(
         })) as InventoryPage<V>,
       signal,
     );
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+// One current native composition, independent of browser WebAuthn support.
+export function parseSecurityPage(body: unknown): SecurityPageEnvelope | null {
+  const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+  const date = (value: unknown): value is string => text(value) && Number.isFinite(Date.parse(value));
+  const advice = (value: unknown): value is SecurityAdvice =>
+    ['allowed', 'step-up-required', 'last-credential', 'capacity', 'unavailable'].includes(String(value));
+  if (
+    !record(body) ||
+    !record(body.viewer) ||
+    !text(body.viewer.account_id) ||
+    !text(body.viewer.session_id) ||
+    !text(body.viewer.client_id) ||
+    !record(body.actions) ||
+    !advice(body.actions.change_password) ||
+    !advice(body.actions.register_passkey)
+  )
+    return null;
+  const viewer = {
+    account_id: body.viewer.account_id,
+    session_id: body.viewer.session_id,
+    client_id: body.viewer.client_id,
+  };
+  function inventory(value: unknown, kind: 'sessions' | 'passkeys', limit: number) {
+    if (!record(value)) return false;
+    if (value.kind === 'unavailable') return true;
+    if (
+      value.kind !== 'ready' ||
+      value.limit !== limit ||
+      typeof value.truncated !== 'boolean' ||
+      !Array.isArray(value.rows) ||
+      value.rows.length > limit
+    )
+      return false;
+    const seen = new Set<string>();
+    for (const row of value.rows) {
+      if (!record(row) || !text(row.id) || seen.has(row.id) || !date(row.created_at)) return false;
+      seen.add(row.id);
+      if (kind === 'sessions') {
+        if (
+          !text(row.client_id) ||
+          !date(row.expires_at) ||
+          typeof row.current !== 'boolean' ||
+          row.current !== (row.id === viewer.session_id) ||
+          !advice(row.revoke) ||
+          (row.client_display_name !== null && typeof row.client_display_name !== 'string') ||
+          (row.user_agent !== null && typeof row.user_agent !== 'string')
+        )
+          return false;
+      } else if (
+        typeof row.name !== 'string' ||
+        !advice(row.remove) ||
+        (row.last_used_at !== null && !date(row.last_used_at))
+      )
+        return false;
+    }
+    return kind !== 'sessions' || seen.has(viewer.session_id);
+  }
+  if (!inventory(body.sessions, 'sessions', 64) || !inventory(body.passkeys, 'passkeys', 32)) return null;
+  // Copy only declared public fields; arbitrary native metadata never enters page state.
+  const source = body as SecurityPageEnvelope;
+  return {
+    viewer,
+    actions: { change_password: source.actions.change_password, register_passkey: source.actions.register_passkey },
+    sessions:
+      source.sessions.kind === 'unavailable'
+        ? { kind: 'unavailable' }
+        : {
+            kind: 'ready',
+            limit: 64,
+            truncated: source.sessions.truncated,
+            rows: source.sessions.rows.map(
+              ({ id, client_id, client_display_name, created_at, expires_at, user_agent, current, revoke }) => ({
+                id,
+                client_id,
+                client_display_name,
+                created_at,
+                expires_at,
+                user_agent,
+                current,
+                revoke,
+              }),
+            ),
+          },
+    passkeys:
+      source.passkeys.kind === 'unavailable'
+        ? { kind: 'unavailable' }
+        : {
+            kind: 'ready',
+            limit: 32,
+            truncated: source.passkeys.truncated,
+            rows: source.passkeys.rows.map(({ id, name, created_at, last_used_at, remove }) => ({
+              id,
+              name,
+              created_at,
+              last_used_at,
+              remove,
+            })),
+          },
+  };
+}
+export type NativeSecurityPage =
+  | { kind: 'ready'; page: SecurityPageEnvelope }
+  | { kind: 'signed-out' | 'denied' | 'unavailable' };
+export async function readNativeSecurityPage(): Promise<NativeSecurityPage> {
+  try {
+    const response = await issuerSecurityRequest('/security-page');
+    if (response.status === 401) return { kind: 'signed-out' };
+    if (response.status === 403) return { kind: 'denied' };
+    if (response.status !== 200) return { kind: 'unavailable' };
+    const page = parseSecurityPage(await response.json());
+    return page ? { kind: 'ready', page } : { kind: 'unavailable' };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+const readPage = createServerFn({ method: 'POST' }).handler(readNativeSecurityPage);
+export async function loadSecurityPage(signal?: AbortSignal): Promise<NativeSecurityPage> {
+  try {
+    return await privateAuthRead((readSignal) => readPage({ signal: readSignal }), signal);
   } catch {
     return { kind: 'unavailable' };
   }

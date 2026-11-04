@@ -451,6 +451,11 @@ These are in-process methods, with no internal HTTP authorization endpoint.
 
 ### Security and deletion preflight inventory
 
+`GET /security-page` composes the current human viewer, bounded session/passkey inventories and observational
+per-target action advice. Its closed DTO is in [security-page.ts](src/security-page.ts); page behavior, static
+composition limits and reconciliation are documented in the [Security page contract](../../apps/auth/README.md#security).
+Native mutation routes below remain authoritative.
+
 The configured issuer's same Auth handler serves `GET /clients` and `GET /consents`.
 Both require the current native human session cookie, exact issuer `Origin` and
 no cross-site fetch. Account, session, epoch, consent and issuance fences are

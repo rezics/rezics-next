@@ -1,9 +1,9 @@
+import { securityEnvelope, currentSecuritySession } from './security-page-fixture';
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import * as fixture from './creation-page-fixture';
 import { loadAccountSession } from '../src/account-operations';
 import { loadManagementSession } from '../src/management-operations';
-import { loadSecurity } from '../src/security';
 import { createConsentReview, readConsent, type ConsentReview } from '../src/consent';
 import * as inventory from '../src/security-inventory';
 import * as passkeyBrowser from '../src/passkeys';
@@ -32,8 +32,6 @@ afterEach(() => {
 });
 afterAll(() => clock.mockRestore());
 const readers = [
-  ['security', (signal?: AbortSignal) => loadSecurity(false, signal), 'failure', '/session'],
-  ['security sessions', (signal?: AbortSignal) => loadSecurity(false, signal), 'failure', '/sessions'],
   ['account', loadAccountSession, 'failure', '/session'],
   ['management', loadManagementSession, 'unavailable', '/session'],
 ] as const;
@@ -98,30 +96,33 @@ for (const [status, phase] of [
   });
 test('failed passkeys keep sessions usable and offer a read-only reload of the current review', async () => {
   const supported = spyOn(passkeyBrowser, 'passkeysSupported').mockReturnValue(true);
-  const passkeys = spyOn(inventory, 'loadPasskeyInventory').mockResolvedValue({ ok: false });
+  const page = securityEnvelope(session.account_id, [currentSecuritySession()], []);
+  page.passkeys = { kind: 'unavailable' };
+  const passkeys = spyOn(inventory, 'loadSecurityPage').mockResolvedValue({ kind: 'ready', page });
   try {
-    const page = await fixture.open(
+    const view = await fixture.open(
       createElement(SecurityPage, {
         initial: {
           kind: 'ready',
           accountId: session.account_id,
-          sessions: [],
+          page,
+          sessions: page.sessions.kind === 'ready' ? page.sessions.rows : [],
           passkeys: { kind: 'failure', message: 'Unavailable' },
         },
         identitySource: async () => ({ kind: 'unavailable' }),
       }),
       session,
     );
-    expect(page.host.querySelector('#security-sessions-heading')).not.toBeNull();
+    expect(view.host.querySelector('#security-sessions-heading')).not.toBeNull();
     globalThis.fetch = (async (path, init) => {
       expect(init?.method ?? 'GET').toBe('GET');
       return Response.json(String(path) === '/sessions' ? { sessions: [] } : session);
     }) as typeof fetch;
-    await fixture.flush(() => fixture.button(page.host, m.auth_inventory_reload())!.click());
+    await fixture.flush(() => fixture.button(view.host, m.auth_inventory_reload())!.click());
     expect(passkeys).toHaveBeenCalledTimes(1);
-    expect(page.calls).toHaveLength(0);
-    expect(page.host.textContent).toContain(m.auth_security_passkeys_failed());
-    expect(page.host.querySelector('#security-sessions-heading')).not.toBeNull();
+    expect(view.calls).toHaveLength(0);
+    expect(view.host.textContent).toContain(m.auth_security_passkeys_failed());
+    expect(view.host.querySelector('#security-sessions-heading')).not.toBeNull();
   } finally {
     passkeys.mockRestore();
     supported.mockRestore();

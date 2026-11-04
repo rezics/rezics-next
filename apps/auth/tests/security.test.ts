@@ -1,3 +1,4 @@
+import { securityEnvelope } from './security-page-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -21,6 +22,7 @@ type Session = {
 };
 type Call = { method: string; url: string; headers: Record<string, string>; body: string };
 const calls: Call[] = [];
+const revoked = new Set<string>();
 const sessions: Session[] = [
   {
     id: 'older-session',
@@ -59,6 +61,20 @@ const fake = Bun.serve({
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
 
+    if (url.pathname === '/security-page' && request.method === 'GET') {
+      await beforeSessions?.();
+      if (signedOut) return Response.json({}, { status: 401, headers });
+      if (inventoryUnavailable) return Response.json({}, { status: 503, headers });
+      return Response.json(
+        securityEnvelope(
+          accountId,
+          sessions.filter((row) => !revoked.has(row.id)),
+          [],
+          !stepUpRequired,
+        ),
+        { headers },
+      );
+    }
     if (url.pathname === '/session' && request.method === 'GET') {
       if (signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
       return Response.json({ account_id: accountId }, { headers });
@@ -95,6 +111,7 @@ const fake = Bun.serve({
 
     if (url.pathname === '/sessions/revoke' && request.method === 'POST') {
       const body = JSON.parse(call.body) as { session_id: string };
+      revoked.add(body.session_id);
       if (body.session_id === 'current-session')
         headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
       return Response.json({}, { headers });
@@ -252,6 +269,7 @@ test(
     signedOut = false;
     stepUpRequired = false;
     calls.length = 0;
+    revoked.clear();
     const { page, urls } = await open('/security', { timezoneId: 'America/Los_Angeles' }, true, true);
     try {
       const form = await passwordForm(page);
@@ -290,10 +308,10 @@ test(
       }
       expect(
         calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url, fake.url).pathname),
-      ).toContain('/session');
+      ).toContain('/security-page');
       expect(
         calls.filter((call) => call.method === 'GET').map((call) => new URL(call.url, fake.url).pathname),
-      ).toContain('/sessions');
+      ).not.toContain('/sessions');
     } finally {
       await page.context().close();
     }
@@ -307,6 +325,7 @@ test(
     signedOut = false;
     stepUpRequired = true;
     calls.length = 0;
+    revoked.clear();
     const { page, origin } = await open();
     try {
       const form = await passwordForm(page);
@@ -334,6 +353,7 @@ test(
     signedOut = false;
     stepUpRequired = false;
     calls.length = 0;
+    revoked.clear();
     const { page } = await open('/security', { locale: 'en', timezoneId: 'America/Los_Angeles' });
     try {
       const list = page.getByRole('list', { name: 'Sessions' });
@@ -380,6 +400,7 @@ test(
     signedOut = false;
     stepUpRequired = false;
     calls.length = 0;
+    revoked.clear();
     const { page, origin } = await open();
     try {
       const current = page.getByRole('listitem').filter({ hasText: 'This device' });
@@ -408,12 +429,13 @@ test(
     signedOut = true;
     stepUpRequired = false;
     calls.length = 0;
+    revoked.clear();
     const { page } = await open('/security', {}, false);
     try {
       const signIn = page.getByRole('link', { name: 'Sign in', exact: true });
       await signIn.waitFor({ state: 'visible' });
       expect(await signIn.getAttribute('href')).toBe('/login');
-      expect(authCalls('/session')).toHaveLength(1);
+      expect(authCalls('/security-page')).toHaveLength(1);
       expect(authCalls('/sessions')).toHaveLength(0);
     } finally {
       await page.context().close();
@@ -429,6 +451,7 @@ test(
     stepUpRequired = false;
     inventoryUnavailable = true;
     calls.length = 0;
+    revoked.clear();
     const { page } = await open();
     try {
       await page.getByRole('alert').waitFor();
@@ -438,8 +461,8 @@ test(
       expect(await page.getByRole('list', { name: 'Sessions', exact: true }).count()).toBe(0);
       expect(await page.getByText('No active sessions were returned.', { exact: true }).count()).toBe(0);
       expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
-      expect(authCalls('/session')).toHaveLength(1);
-      expect(authCalls('/sessions')).toHaveLength(1);
+      expect(authCalls('/security-page')).toHaveLength(1);
+      expect(authCalls('/sessions')).toHaveLength(0);
 
       inventoryUnavailable = false;
       await reload.click();
@@ -447,8 +470,8 @@ test(
       await list.waitFor();
       expect(await list.getByRole('listitem').count()).toBe(2);
       expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
-      expect(authCalls('/session')).toHaveLength(2);
-      expect(authCalls('/sessions')).toHaveLength(2);
+      expect(authCalls('/security-page')).toHaveLength(2);
+      expect(authCalls('/sessions')).toHaveLength(0);
       expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
     } finally {
       inventoryUnavailable = false;
@@ -464,6 +487,7 @@ test(
     signedOut = false;
     inventoryUnavailable = true;
     calls.length = 0;
+    revoked.clear();
     const { page } = await open();
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
@@ -483,15 +507,15 @@ test(
       expect(await page.locator('.auth-security-page').getAttribute('aria-busy')).toBe('true');
       expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
       expect(await page.getByRole('list', { name: 'Sessions', exact: true }).count()).toBe(0);
-      expect(authCalls('/session')).toHaveLength(2);
-      expect(authCalls('/sessions')).toHaveLength(2);
+      expect(authCalls('/security-page')).toHaveLength(2);
+      expect(authCalls('/sessions')).toHaveLength(0);
 
       release.resolve();
       await reload.waitFor();
       expect(await page.getByRole('alert').count()).toBe(1);
       expect(await reload.count()).toBe(1);
       expect(await page.getByText('No active sessions were returned.', { exact: true }).count()).toBe(0);
-      expect(authCalls('/sessions')).toHaveLength(2);
+      expect(authCalls('/sessions')).toHaveLength(0);
       expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
     } finally {
       release.resolve();
@@ -509,6 +533,7 @@ test(
     signedOut = false;
     inventoryUnavailable = true;
     calls.length = 0;
+    revoked.clear();
     const { page } = await open();
     try {
       const reload = page.getByRole('button', { name: 'Reload list', exact: true });
@@ -522,8 +547,8 @@ test(
       expect(await page.getByLabel('New password', { exact: true }).count()).toBe(0);
       expect(await page.getByRole('heading', { name: /^(Sessions|Passkeys)$/ }).count()).toBe(0);
       expect(await page.getByRole('button', { name: 'Check current security settings', exact: true }).count()).toBe(0);
-      expect(authCalls('/session')).toHaveLength(2);
-      expect(authCalls('/sessions')).toHaveLength(1);
+      expect(authCalls('/security-page')).toHaveLength(2);
+      expect(authCalls('/sessions')).toHaveLength(0);
       expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
     } finally {
       inventoryUnavailable = false;

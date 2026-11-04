@@ -268,7 +268,7 @@
   "auth_security_passkey_registration_reviewed": "Las llaves de acceso actuales se muestran abajo. El registro anterior sigue sin confirmarse. Revisa la lista antes de continuar.",
   "auth_security_passkey_registration_unknown": "La respuesta al registro se perdió o no pudo confirmarse. Puede que tu llave de acceso ya esté instalada. Comprueba las llaves actuales antes de continuar.",
   "auth_security_passkey_remove": "Eliminar",
-  "auth_security_passkey_remove_confirmation": "¿Quieres eliminar esta llave de acceso? Ya no podrás iniciar sesión con ella.",
+  "auth_security_passkey_remove_confirmation": "¿Eliminar esta clave de acceso? Ya no podrás usarla para iniciar sesión y se cerrarán todas tus sesiones.",
   "auth_security_passkey_remove_failed": "No se ha podido eliminar la llave de acceso. Vuelve a intentarlo más tarde.",
   "auth_security_passkey_remove_named": "Eliminar la llave de acceso {name}",
   "auth_security_passkey_removed": "Llave de acceso eliminada.",
@@ -449,5 +449,10 @@
   "auth_automated_leave": "Salir",
   "auth_automated_stay": "Quedarme",
   "auth_transfer_departure_heading": "¿Salir de la transferencia de operador?",
-  "auth_transfer_departure_description": "Se descartarán la preparación y la revisión de la transferencia que no hayas enviado."
+  "auth_transfer_departure_description": "Se descartarán la preparación y la revisión de la transferencia que no hayas enviado.",
+  "auth_security_passkey_unnamed": "Clave de acceso sin nombre",
+  "auth_security_passkeys_browser_unavailable": "Este navegador no puede crear claves de acceso. Puedes consultar y eliminar las claves guardadas.",
+  "auth_security_inventory_truncated": "Solo se muestra la primera parte de la lista. Puede haber más elementos. Actualiza después de hacer cambios.",
+  "auth_security_step_up_advice": "Confirma de nuevo tu identidad para continuar.",
+  "auth_security_passkey_capacity": "Has alcanzado el límite de 32 claves de acceso. Elimina una antes de añadir otra."
 }

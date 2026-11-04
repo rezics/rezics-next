@@ -29,13 +29,42 @@ export const initial: SecurityLoadResult = {
       expires_at: '2026-11-06T09:00:00Z',
       user_agent: null,
       current: true,
+      revoke: 'allowed',
     },
   ],
   passkeys: {
     kind: 'ready',
-    passkeys: [{ id: 'passkey', name: 'Security key', created_at: '2026-10-29T09:00:00Z', last_used_at: null }],
+    passkeys: [
+      {
+        id: 'passkey',
+        name: 'Security key',
+        created_at: '2026-10-29T09:00:00Z',
+        last_used_at: null,
+        remove: 'allowed',
+      },
+    ],
   },
 };
+if (initial.kind === 'ready')
+  initial.page = {
+    viewer: { account_id: storyAccount, session_id: 'current', client_id: 'login' },
+    actions: { change_password: 'allowed', register_passkey: 'allowed' },
+    sessions: {
+      kind: 'ready',
+      rows: initial.sessions.map((row) => ({ ...row, client_display_name: null, revoke: 'allowed' })),
+      limit: 64,
+      truncated: false,
+    },
+    passkeys: {
+      kind: 'ready',
+      rows:
+        initial.passkeys.kind === 'ready'
+          ? initial.passkeys.passkeys.map((row) => ({ ...row, remove: 'allowed' }))
+          : [],
+      limit: 32,
+      truncated: false,
+    },
+  };
 // Presentation of the closed native email projection; no verification claim.
 const identitySource: AccountIdentitySource = async () => ({
   kind: 'ready',

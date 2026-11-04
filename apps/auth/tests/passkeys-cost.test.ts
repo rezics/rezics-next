@@ -1,3 +1,4 @@
+import { securityEnvelope, currentSecuritySession } from './security-page-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
@@ -9,7 +10,7 @@ const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const accountId = 'acct-cost';
 const session = 'cost-session-token';
-const scales = [1, 10, 100];
+const scales = [1, 8, 31];
 
 type Call = { method: string; path: string; body: string };
 type Passkey = { id: string; name: string; created_at: string; last_used_at: string | null };
@@ -45,6 +46,8 @@ const fake = Bun.serve({
     };
 
     if (url.pathname === '/authorize') return new Response('resumed', { headers });
+    if (url.pathname === '/security-page')
+      return json(securityEnvelope(accountId, [currentSecuritySession()], passkeys));
     if (url.pathname === '/session') return json({ account_id: accountId });
     if (url.pathname === '/sessions') return json({ sessions: [] });
     if (url.pathname === '/passkeys' && request.method === 'GET') return json({ passkeys });
@@ -270,7 +273,7 @@ test(
         expect(await page.getByRole('list', { name: 'Passkeys', exact: true }).getByRole('listitem').count()).toBe(
           count,
         );
-        expect(authRequests().sort(), `${count} passkeys`).toEqual(['GET /passkeys', 'GET /session', 'GET /sessions']);
+        expect(authRequests().sort(), `${count} passkeys`).toEqual(['GET /security-page']);
       } finally {
         await page.context().close();
       }
@@ -300,6 +303,7 @@ test(
         expect(authRequests(before), `${count} passkeys`).toEqual([
           'POST /passkeys/register/options',
           'POST /passkeys/register',
+          'GET /security-page',
         ]);
       } finally {
         await page.context().close();

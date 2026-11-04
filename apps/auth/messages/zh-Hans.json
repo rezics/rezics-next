@@ -268,7 +268,7 @@
   "auth_security_passkey_registration_reviewed": "当前通行密钥显示在下方。之前的注册结果仍未确认。请查看列表后再继续。",
   "auth_security_passkey_registration_unknown": "注册响应丢失或无法确认。你的通行密钥可能已安装。请先检查当前通行密钥，再继续操作。",
   "auth_security_passkey_remove": "删除",
-  "auth_security_passkey_remove_confirmation": "要删除此通行密钥吗？删除后将无法再用它登录。",
+  "auth_security_passkey_remove_confirmation": "要移除此通行密钥吗？你将无法再用它登录，且所有会话都会退出。",
   "auth_security_passkey_remove_failed": "无法删除通行密钥，请稍后重试。",
   "auth_security_passkey_remove_named": "删除通行密钥 {name}",
   "auth_security_passkey_removed": "已删除通行密钥。",
@@ -449,5 +449,10 @@
   "auth_automated_leave": "离开",
   "auth_automated_stay": "留下",
   "auth_transfer_departure_heading": "离开操作员转移？",
-  "auth_transfer_departure_description": "尚未提交的转移准备和审核内容将被丢弃。"
+  "auth_transfer_departure_description": "尚未提交的转移准备和审核内容将被丢弃。",
+  "auth_security_passkey_unnamed": "未命名的通行密钥",
+  "auth_security_passkeys_browser_unavailable": "此浏览器无法创建通行密钥。你仍可查看及移除已保存的通行密钥。",
+  "auth_security_inventory_truncated": "当前仅显示第一批项目，可能还有其他项目。更改后请刷新。",
+  "auth_security_step_up_advice": "请再次验证身份以继续。",
+  "auth_security_passkey_capacity": "通行密钥已达 32 组上限。请先移除一组再添加。"
 }

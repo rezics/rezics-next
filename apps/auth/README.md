@@ -177,8 +177,7 @@ inventories keep their own availability, and existing page generations retire ol
 The security page has Password, Passkeys, Sessions and Organizations sections, followed by Delete account, in a
 content column up to 42rem wide. Organizations links to `/organizations/new`; Delete account explains the result and
 links to `/account/delete` with a destructive outline control. It reads the
-signed-in account from `GET /session`, its sessions from one `GET /sessions`, with at most 64 session rows, and its
-passkeys from one `GET /passkeys`. The view makes no kernel reads. A password change uses three Auth calls. Session revocation and passkey removal first check the current native account using the same BFF request cookie, then dispatch the existing exact-key command once. A signed-out response
+current viewer, validated session/passkey inventories and per-target action advice from one native `GET /security-page`, through the existing private BFF. The view makes no kernel reads. A password change uses three Auth calls. Session revocation and passkey removal first check the current native account using the same BFF request cookie, then dispatch the existing exact-key command once. A signed-out response
 offers a link to `/login`.
 
 Password changes, passkey prompts/removal and session revocation share one operation boundary: all other credential
@@ -214,21 +213,35 @@ Passkeys have their own section with an `h2`. Each passkey is an outlined item w
 date (or "Never used"), formatted for the page locale and time zone, and a Remove button whose accessible name contains
 the passkey's name. The add form has an optional name that defaults to the browser and system. Adding sends
 `POST /passkeys/register/options` with `{}`, runs the browser ceremony, then sends `POST /passkeys/register` with
-`{ response, name? }`; the 201 body `{ id, name, created_at }` becomes the new row without a second list read. Removing
+`{ response, name? }`; the 201 body `{ id, name, created_at }` acknowledges creation, then the native page is refreshed before target actions resume. Removing
 asks for confirmation and sends the existing `POST /passkeys/remove` with `{ id }` after the current-account check. Native success revokes all sessions: the page clears private data and requires sign-in. A 409 means it was the person's last interactive
 credential, so nothing changed and a localized message says so. Registration and removal are credential changes: a 401
-`step_up_required` sends the person to `/step-up?return_to=%2Fsecurity`. A dismissed browser prompt is silent. Where the
-browser has no WebAuthn the section is absent and `GET /passkeys` is not requested; a failed list shows an alert in that
-section only.
+`step_up_required` sends the person to `/step-up?return_to=%2Fsecurity`. A dismissed browser prompt is silent. Where the browser has no WebAuthn, saved passkeys and their native removal advice remain visible; only creation is unavailable. A failed inventory shows an alert in its section, never an empty-list claim.
 
 Decision: registration uses the existing five-second issuer deadline through response-body completion; an uncertain acknowledgement holds the page operation boundary until an account-bound native passkey refresh and explicit review, never infers success from names or WebAuthn IDs, and never replays the ceremony or registration POST.
 
 A lost or 503 mutation response retains only the account, operation kind and exact target id in page memory and
 shows an unknown result. It never sends an automatic duplicate. An explicit check reads current native authority
 and the own session/passkey inventory with no-store, using the fixed request cookie, then rechecks authority.
-Malformed inventories and saturated native list windows cannot prove a target absent. A present target enables an
+Malformed inventories and explicitly truncated native windows cannot prove a target absent. Reconciliation reads the native page and replaces target advice; a complete window at capacity can prove absence. A present target enables an
 explicit retry with a new confirmation and normal native checks. A denied or ended session clears private rows;
 sign-in is the remedy and does not establish that the action succeeded. No operation target is persisted.
+
+Decision: the native Security page exposes bounded first windows (64 sessions, 32 passkeys) with explicit truncation, rather than adding cursor navigation; WebAuthn support gates creation only.
+
+Native `GET /security-page` accepts no account selector or query. The existing human proof and issuance boundary
+revalidate account, exact session, epoch, client and scopes around composition. Each ready section supplies `rows`,
+`limit` and `truncated`; a dependency or malformed native row makes that section `unavailable`. Session rows include
+`revoke` advice, passkey rows `remove`, and page actions describe password change and passkey registration. Advice
+observes the existing freshness, own-human, capacity and last-interactive-credential guards. Commands recheck all
+native authorization at submission; advice is never a grant or prepared command. Registration retains its existing
+before/after session checks. Accepted other-session revocation refreshes advice automatically; uncertain responses
+still require explicit reconciliation. Current-session revocation uses the existing native cookie clearing and `/login` remedy.
+
+The two owner/id index seeks read at most 65 session rows and 33 passkey rows (one sentinel each), plus one password
+presence row: at most 99 composition rows and 64 bounded client-label lookups plus the sentinel lookup. Existing
+fixed human-proof/issuance revalidation runs around this finite composition; there is no request loop or runtime
+price dispatch. Expired sessions within the bounded window are omitted; a missing current row is unavailable.
 
 The page heading has the same space below it as the sections have between them.
 

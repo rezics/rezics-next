@@ -268,7 +268,7 @@
   "auth_security_passkey_registration_reviewed": "目前的密碼金鑰顯示於下方。先前的註冊結果仍未確認。請檢視清單後再繼續。",
   "auth_security_passkey_registration_unknown": "註冊回應遺失或無法確認。你的密碼金鑰可能已安裝。請先檢查目前的密碼金鑰，再繼續操作。",
   "auth_security_passkey_remove": "移除",
-  "auth_security_passkey_remove_confirmation": "要移除這個密碼金鑰嗎？移除後就無法再用它登入。",
+  "auth_security_passkey_remove_confirmation": "要移除此通行金鑰嗎？你將無法再用它登入，且所有工作階段都會登出。",
   "auth_security_passkey_remove_failed": "無法移除密碼金鑰，請稍後再試。",
   "auth_security_passkey_remove_named": "移除密碼金鑰 {name}",
   "auth_security_passkey_removed": "已移除密碼金鑰。",
@@ -449,5 +449,10 @@
   "auth_automated_leave": "離開",
   "auth_automated_stay": "留下",
   "auth_transfer_departure_heading": "離開操作員移轉？",
-  "auth_transfer_departure_description": "尚未提交的移轉準備與審閱內容將被捨棄。"
+  "auth_transfer_departure_description": "尚未提交的移轉準備與審閱內容將被捨棄。",
+  "auth_security_passkey_unnamed": "未命名的通行金鑰",
+  "auth_security_passkeys_browser_unavailable": "此瀏覽器無法建立通行金鑰。你仍可查看及移除已儲存的通行金鑰。",
+  "auth_security_inventory_truncated": "目前僅顯示第一批項目，可能還有其他項目。變更後請重新整理。",
+  "auth_security_step_up_advice": "請再次驗證身分以繼續。",
+  "auth_security_passkey_capacity": "通行金鑰已達 32 組上限。請先移除一組再新增。"
 }
