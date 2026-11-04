@@ -1,7 +1,16 @@
 import type { SubjectRead } from '@rezics/client';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { pickText } from '@rezics/composition';
-import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { languageName } from '../../../subject/language';
 import { subjectHref } from '../../../subject/subject-href';

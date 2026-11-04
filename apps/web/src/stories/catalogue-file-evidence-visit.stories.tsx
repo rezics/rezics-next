@@ -72,7 +72,6 @@ function EvidenceVisit({
       {...props}
       href={next}
       onClick={(event) => {
-        props.onClick?.(event);
         if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey) {
           event.preventDefault();
           setVisit(undefined);

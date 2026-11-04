@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } from '@tanstack/react-router';
 import { planReads, platformRegistry } from '@rezics/composition';
 import { act, createElement, type ReactNode } from 'react';
 import { createRequire } from 'node:module';
@@ -129,17 +130,25 @@ function renderSubject(
     actions: { statementPropose },
   };
   const client = new QueryClient();
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: [`/en/subjects/${read.subject.id}/file`] }),
+  });
   return renderToStaticMarkup(
     createElement(
       QueryClientProvider,
       { client },
-      createElement(SubjectPage, {
-        page,
-        locale: 'en',
-        messages: subjectPageMessages(),
-        fileSource,
-        renderJsonLd: false,
-      }),
+      createElement(
+        RouterContextProvider,
+        { router },
+        createElement(SubjectPage, {
+          page,
+          locale: 'en',
+          messages: subjectPageMessages(),
+          fileSource,
+          renderJsonLd: false,
+        }),
+      ),
     ),
   );
 }
