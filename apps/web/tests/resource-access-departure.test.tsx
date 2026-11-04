@@ -20,6 +20,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -49,6 +50,7 @@ const blocked = () => {
 const decision = () => within(document.body).getByRole('alertdialog');
 const stay = () => click(button(m.thread_authoring_stay(), decision()));
 const leave = () => click(button(m.thread_authoring_leave(), decision()));
+const discard = () => click(button(m.thread_authoring_discard(), decision()));
 beforeEach(() => {
   setLocale('en', { reload: false });
   host = document.createElement('div');
@@ -142,7 +144,7 @@ test('changed grant draft survives Stay; paging and deliberate Leave retire it t
   await stay();
   expect(io.read).toHaveBeenCalledTimes(0);
   await click(button(m.access_next_page()));
-  await leave();
+  await discard();
   expect(io.read).toHaveBeenCalledWith('next-grants', expect.any(AbortSignal));
   expect(host.querySelector('#access-handle')).toBeNull();
   expect(blocked()).toBe(false);
@@ -167,7 +169,8 @@ test('Stay retains the exact unresolved command; Leave never cancels or replays 
   await click(button(m.access_add_grant()));
   await type(within(host).getByLabelText(m.access_handle()), 'aki');
   await click(button(m.access_find_account()));
-  await click(button(m.access_save()));
+  await click(button(m.access_review_title()));
+  await click(button(m.access_review_confirm()));
   expect(blocked()).toBe(true);
   const link = within(host).getByRole('link', { name: 'Destination' });
   await click(link);
@@ -206,7 +209,7 @@ test('owner transfer confirmation survives Stay, then completes and leaves norma
   await click(button(m.access_find_account()));
   await click(button(m.access_transfer_owner(), host));
   const confirmation = decision().textContent;
-  const routerLink = within(host).getByRole('link', { name: 'Destination' });
+  const routerLink = within(host).getByRole('link', { name: 'Destination', hidden: true });
   // Programmatic navigation also works while the confirmation owns modal focus.
   await act(async () => {
     routerLink.click();

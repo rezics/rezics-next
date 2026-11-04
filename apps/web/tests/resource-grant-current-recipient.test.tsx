@@ -58,11 +58,17 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       else if (boundary === 'kind')
         await act(async () => user.selectOptions(canvas.getByLabelText(m.access_recipient()), 'organization'));
       else {
-        if (boundary === 'cancel') await click(m.access_cancel());
+        if (boundary === 'cancel') {
+          await click(m.access_cancel());
+          const prompt = within(window.document.body as unknown as HTMLElement).getByRole('alertdialog');
+          await act(async () => user.click(within(prompt).getAllByRole('button')[1]!));
+        }
         else {
           if (boundary === 'resource') page.resource.id = '0192f3a0-6c1e-7b2a-a001-000100000099';
           else page.authority.accountId = page.identities[1]!.id;
           await click(m.access_reload());
+          const prompt = within(window.document.body as unknown as HTMLElement).getByRole('alertdialog');
+          await act(async () => user.click(within(prompt).getAllByRole('button')[1]!));
         }
         await click(m.access_add_grant());
       }
@@ -79,7 +85,7 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       expect((canvas.getByLabelText(m.access_ends()) as HTMLInputElement).value).toBe('2027-01-01T12:30');
       await click(m.access_find_account());
       if (boundary !== 'handle') await act(async () => old.reject(new Error('Stale failure')));
-      expect((canvas.getByRole('button', { name: m.access_save() }) as HTMLButtonElement).disabled).toBe(true);
+      expect((canvas.getByRole('button', { name: m.access_review_title() }) as HTMLButtonElement).disabled).toBe(true);
       const current = {
         ...snapshot.identities[1]!,
         kind: boundary === 'kind' ? ('organization' as const) : ('actor' as const),
