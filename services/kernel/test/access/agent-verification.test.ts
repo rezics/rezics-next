@@ -32,6 +32,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { loadAccountIdentitySource } from '../../src/access/agent-verification-identity.ts';
 import { ORIGINAL_IDENTITY_SOURCE_REQUIRED } from '../../src/access/agent-verification-identity-recovery.ts';
 import { nativeMinimization, nativeStoreBlocker } from '../../src/access/erasure-native-stores.ts';
+import { AccessUnavailableError } from '../../src/access/index.ts';
 
 const sourceUrl = process.env.DATABASE_URL;
 if (!sourceUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -68,6 +69,53 @@ let organizationCatalogue: string;
 
 function key(): string {
   return randomUUID();
+}
+
+function tracedPool(
+  source: Pool,
+  observe: (connection: number, text: string, args: string, run: (query?: unknown, values?: unknown[]) => Promise<unknown>) => unknown,
+): Pool {
+  let nextConnection = 0;
+  return new Proxy(source, {
+    get(target, property) {
+      if (property === 'connect')
+        return async () => {
+          const connection = nextConnection++;
+          const client = await target.connect();
+          return new Proxy(client, {
+            get(current, key) {
+              if (key === 'query')
+                return (query: unknown, values?: unknown[]) => {
+                  const text =
+                    typeof query === 'string'
+                      ? query
+                      : typeof query === 'object' && query !== null && 'text' in query && typeof query.text === 'string'
+                        ? query.text
+                        : '';
+                  const run = (replacement = query, replacementValues = values) =>
+                    Reflect.apply(
+                      current.query,
+                      current,
+                      replacementValues === undefined ? [replacement] : [replacement, replacementValues],
+                    ) as Promise<unknown>;
+                  return observe(connection, text, JSON.stringify([query, values]) ?? '', run);
+                };
+              const value = Reflect.get(current, key, current);
+              return typeof value === 'function' ? value.bind(current) : value;
+            },
+          });
+        };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as Pool;
+}
+
+function transactionCommands(queries: readonly string[]): string[] {
+  return queries.flatMap((query) => {
+    const command = query.trim().match(/^(BEGIN|COMMIT|ROLLBACK)\b/i)?.[1];
+    return command ? [command.toUpperCase()] : [];
+  });
 }
 
 function expectOpaqueCursor(token: string, after: readonly string[]) {
@@ -636,6 +684,82 @@ test('private verification status projects request and withdraw advice across un
   expect(readOnly.response.status).toBe(200);
   expect(readOnly.body.verificationRequest.id).toBe(pending.body.verificationRequest.id);
   expect(readOnly.body.viewerActions).toEqual([]);
+
+  const statusActor = await authenticateAccount(
+    access,
+    { pool, deadline: Date.now() + 10_000 },
+    {
+      accountId: applicant.id,
+      clientId: 'agent-verification-test',
+      scopes: [...actionCatalogue(kernel).keys(), 'account:manage', 'gate:any'],
+    },
+  );
+  const statusContext = { pool, actor: statusActor, deadline: Date.now() + 10_000 };
+  const unavailableQueries: string[] = [];
+  let adviceUnavailable = false;
+  const fallbackStatus = await readAgentVerificationStatus(
+    tracedPool(pool, (_connection, text, args, run) => {
+      unavailableQueries.push(text);
+      if (!adviceUnavailable && args.includes('account:update')) {
+        adviceUnavailable = true;
+        throw new AccessUnavailableError('overloaded');
+      }
+      return run();
+    }),
+    access,
+    statusContext,
+    applicant.id,
+  );
+  expect(adviceUnavailable).toBe(true);
+  expect(fallbackStatus.verificationRequest).toMatchObject({
+    id: pending.body.verificationRequest.id,
+    state: 'pending',
+  });
+  expect(fallbackStatus.viewerActions).toEqual([]);
+  expect(transactionCommands(unavailableQueries).slice(0, 2)).toEqual(['BEGIN', 'ROLLBACK']);
+
+  for (const failureKind of ['binding', 'statement'] as const) {
+    const failureQueries: string[] = [];
+    let injected = false;
+    const bindingFailure = new RangeError('Invalid read decision binding');
+    let failure: unknown;
+    try {
+      await readAgentVerificationStatus(
+        tracedPool(pool, (_connection, text, args, run) => {
+          failureQueries.push(text);
+          if (!injected && args.includes('account:update')) {
+            injected = true;
+            if (failureKind === 'binding') throw bindingFailure;
+            return run('SELECT 1 / 0', []);
+          }
+          return run();
+        }),
+        access,
+        { ...statusContext, deadline: Date.now() + 10_000 },
+        applicant.id,
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(injected).toBe(true);
+    if (failureKind === 'binding') expect(failure).toBe(bindingFailure);
+    else expect(failure).toMatchObject({ code: '22012' });
+    expect(transactionCommands(failureQueries)).toEqual(['BEGIN', 'ROLLBACK']);
+  }
+
+  const expiredQueries: string[] = [];
+  await expect(
+    readAgentVerificationStatus(
+      tracedPool(pool, (_connection, text, _args, run) => {
+        expiredQueries.push(text);
+        return run();
+      }),
+      access,
+      { ...statusContext, deadline: Date.now() - 1 },
+      applicant.id,
+    ),
+  ).rejects.toBeInstanceOf(AccessUnavailableError);
+  expect(expiredQueries).toEqual([]);
 
   const managerBearer = await bearer(orgManager);
   const orgCreated = await request(org, orgSubject, managerBearer);
