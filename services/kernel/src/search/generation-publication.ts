@@ -25,7 +25,12 @@ import type {
   PublicFilterConsumerUnavailable,
 } from './public-filter-consumer-contract.ts';
 import type { SearchWriterPublicationFence, SearchWriterPublicationGuard } from './writer-guard.ts';
-import type { DiscoveryConsumerCaptureInput, DiscoveryRegistry, DiscoveryUnionKey } from './discovery.ts';
+import type {
+  DiscoveryConsumerCaptureInput,
+  DiscoveryKey,
+  DiscoveryRegistry,
+  DiscoveryUnionKey,
+} from './discovery.ts';
 import { createDiscoveryProjection, validateAccountPage } from './account-discovery.ts';
 import { parseDiscoveryHitIdentity, discoveryDocumentId, validateDiscoveryDocument } from './discovery-documents.ts';
 import {
