@@ -63,7 +63,7 @@ export function EditionInspection({
       >
         {m.game_reader_inspection({}, o)}
       </h4>
-      <p>{m.game_reader_association_meaning({}, o)}</p>
+      <p>{statement ? m.game_reader_association_meaning({}, o) : m.game_reader_assertion_unavailable({}, o)}</p>
       {row.summary?.label?.value ? (
         <p lang={row.summary.label.language}>{row.summary.label.value}</p>
       ) : (
@@ -106,7 +106,11 @@ export function EditionInspection({
         <div>
           <dt className="font-medium">{m.relation_target({}, o)}</dt>
           <dd>
-            <code>{page.public.subject.id}</code>
+            {statement?.value.type === 'value' && typeof statement.value.content === 'string' ? (
+              <code>{statement.value.content}</code>
+            ) : (
+              m.game_reader_assertion_unavailable({}, o)
+            )}
           </dd>
         </div>
         <div>

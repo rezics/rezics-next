@@ -181,7 +181,9 @@ test('equal-success replacement drops selection and reveal consent; tab return a
     };
     await mounted.render(props);
     await mounted.click(m.game_reader_inspect());
-    expect(mounted.host.querySelector('[data-slot="game-edition-inspection"] h4')).toBe(document.activeElement);
+    expect(mounted.host.querySelector('[data-slot="game-edition-inspection"] h4') === document.activeElement).toBe(
+      true,
+    );
     const link = mounted.host.querySelector<HTMLAnchorElement>('[data-slot="game-edition-inspection"] a')!;
     expect(link.target).toBe('_blank');
     expect(link.href).toContain('realm=games');
@@ -196,7 +198,7 @@ test('equal-success replacement drops selection and reveal consent; tab return a
       other.focus();
       window.dispatchEvent(new Event('focus'));
     });
-    expect(document.activeElement).toBe(other);
+    expect(document.activeElement === other).toBe(true);
     await mounted.click(m.game_reader_close_inspection());
     expect(document.activeElement?.textContent).toBe(m.game_reader_inspect());
     await mounted.click(m.game_reader_inspect());
@@ -256,6 +258,31 @@ test('retired observation needs explicit fresh current-Subject recovery; old pen
       deliver({ ok: false, reason: 'withheld' });
     });
     expect(mounted.host.querySelector('[data-slot="game-edition-inspection"]')).not.toBeNull();
+    expect(mounted.host.textContent).toContain('Harbour trial');
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('invalid admission offers distinct deliberate Start and safe Details without an implicit read', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = gameExample();
+    await mounted.render({
+      ...fixture.address,
+      locale: 'en',
+      source: fixture,
+      reader: null,
+      transport: fixture.read,
+      initial: { ok: false, reason: 'invalid' },
+    });
+    expect(fixture.calls.length).toBe(0);
+    expect(mounted.host.textContent).toContain(m.game_reader_invalid());
+    expect(mounted.host.textContent).not.toContain(m.game_reader_unavailable());
+    expect(mounted.host.querySelector('a[href*="/details"]')).not.toBeNull();
+    expect(mounted.host.querySelector('a[href*="/edit"]')).toBeNull();
+    await mounted.click(m.game_reader_start());
+    expect(fixture.calls.length).toBe(2);
     expect(mounted.host.textContent).toContain('Harbour trial');
   } finally {
     await mounted.close();
