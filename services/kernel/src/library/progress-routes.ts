@@ -757,7 +757,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
                       ]),
                     ),
                   ),
-                  presentation: presentations.get(session.id)?.presentation,
+                  ...(presentations.has(session.id)
+                    ? { presentation: presentations.get(session.id)!.presentation }
+                    : {}),
                   subject: subjects.summaries.get(session.subjectId) ?? null,
                   versionSubject: session.versionSubjectId
                     ? (subjects.summaries.get(session.versionSubjectId) ?? null)
