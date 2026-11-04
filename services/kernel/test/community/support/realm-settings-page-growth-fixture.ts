@@ -228,9 +228,7 @@ export async function settingsPageGrowthFixture() {
             head = newId(route);
           return {
             'community.space': [{ ...space, space_id: spaceId, head_revision_id: head }],
-            'community.space_revision': [
-              { ...spaceRevision, space_id: spaceId, revision_id: head, predecessor: null },
-            ],
+            'community.space_revision': [{ ...spaceRevision, space_id: spaceId, revision_id: head, predecessor: null }],
             'community.realm': [{ ...realm, realm_id: realmId, space_id: spaceId, head_revision_id: revisionId }],
             'community.realm_revision': [
               { ...revision, realm_id: realmId, revision_id: revisionId, predecessor: null, presentation: empty },
@@ -244,9 +242,7 @@ export async function settingsPageGrowthFixture() {
 
   async function snapshot(s: Selected) {
     const current = await f.snapshot(s);
-    const ids = [s.presentation.avatarMediaId, s.presentation.bannerMediaId].filter(
-      (id): id is string => id !== null,
-    );
+    const ids = [s.presentation.avatarMediaId, s.presentation.bannerMediaId].filter((id): id is string => id !== null);
     const result = await f.db.admin.query(
       `SELECT
         (SELECT count(*)::int FROM content.media WHERE route=$1 AND media_id=ANY($2::uuid[])) AS media_rows,

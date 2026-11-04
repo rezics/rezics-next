@@ -2085,18 +2085,18 @@ writer, asset picker or upload/lifecycle engine here.
   document contract, and `split("\n")` has at most 65,537 entries for a
   65,536-byte text. The symbolic peak is
   `C_locator + 2*C_source_round + 2*C_source_signature + C_media_peak
-  + 4*C_rules_signature + 4*65,536
-  + 2*(C_parsed_document + C_canonical + C_documentText + C_split_payload
-  + C_joined_text + C_hash_input) + J_settings`. `C_rules_signature` is one
-  complete maximum signature: 33 post rows plus the selected thread, board,
-  Realm, pin/revision and their discarded signature fields. `C_media_peak`
-  includes all 12 exact acquisitions, their complete scalar projections,
-  36,720 raw variant-JSON bytes, parsed variant values, first/final media
-  signatures and the two transformed descriptors. Every term is bounded from
-  the source schema/producer maxima above, not measured samples. The sum
-  deliberately charges simultaneous initial/final copies rather than assuming
-  early reclamation; it bounds application byte copies and source rows, not
-  runtime allocator metadata.
+  - 4*C_rules_signature + 4*65,536
+  - 2*(C_parsed_document + C_canonical + C_documentText + C_split_payload
+  - C_joined_text + C_hash_input) + J_settings`. `C_rules_signature`is one
+    complete maximum signature: 33 post rows plus the selected thread, board,
+    Realm, pin/revision and their discarded signature fields.`C_media_peak`
+    includes all 12 exact acquisitions, their complete scalar projections,
+    36,720 raw variant-JSON bytes, parsed variant values, first/final media
+    signatures and the two transformed descriptors. Every term is bounded from
+    the source schema/producer maxima above, not measured samples. The sum
+    deliberately charges simultaneous initial/final copies rather than assuming
+    early reclamation; it bounds application byte copies and source rows, not
+    runtime allocator metadata.
 
   The response contains one selected rules document, no more than two image
   descriptors, finite operation/UUID/vote fields, and Realm plus host titles

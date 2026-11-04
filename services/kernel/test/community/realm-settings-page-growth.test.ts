@@ -119,7 +119,8 @@ for (const { axis, branch } of cases)
           (relation) =>
             !['content.revision', 'content.media', 'content.media_variant', 'access.resource_grant'].includes(
               relation,
-            ) || (withImages && branch !== 'unavailable'),
+            ) ||
+            (withImages && branch !== 'unavailable'),
         );
         if (checked.length) assertGrowthAccessPaths(`Mounted settings ${branch} ${axis}`, report.samples, checked);
       }
