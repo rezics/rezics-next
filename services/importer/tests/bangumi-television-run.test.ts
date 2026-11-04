@@ -116,22 +116,14 @@ test('operator imports TVAnime original-run fields, keeps unknown totals and sch
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
         command.op === 'propose' && runProperties.has(command.statement.property.id),
     );
-    expect(
-      run.map((command) => [command.source.external_id, command.statement.property.id, content(command)]),
-    ).toEqual([
+    expect(run.map((command) => [command.source.external_id, command.statement.property.id, content(command)])).toEqual(
       [
-        '91001',
-        'schema:datePublished',
-        { time: '+2024-04-07T00:00:00Z', precision: 11, calendarmodel: gregorian },
+        ['91001', 'schema:datePublished', { time: '+2024-04-07T00:00:00Z', precision: 11, calendarmodel: gregorian }],
+        ['91001', 'schema:endDate', { time: '+2024-06-23T00:00:00Z', precision: 11, calendarmodel: gregorian }],
+        ['91001', 'schema:numberOfEpisodes', { amount: '+12', unit: '1' }],
+        ['91002', 'schema:datePublished', { time: '+2024-04-00T00:00:00Z', precision: 10, calendarmodel: gregorian }],
       ],
-      ['91001', 'schema:endDate', { time: '+2024-06-23T00:00:00Z', precision: 11, calendarmodel: gregorian }],
-      ['91001', 'schema:numberOfEpisodes', { amount: '+12', unit: '1' }],
-      [
-        '91002',
-        'schema:datePublished',
-        { time: '+2024-04-00T00:00:00Z', precision: 10, calendarmodel: gregorian },
-      ],
-    ]);
+    );
     expect(run.every((command) => command.source.converter_revision === 'bangumi@6')).toBe(true);
     expect(run.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
     expect(run.every((command) => command.subject === api.subjects.get(command.source.external_id))).toBe(true);
@@ -150,9 +142,9 @@ test('operator imports TVAnime original-run fields, keeps unknown totals and sch
         { pointer: '/infobox/自制字段', code: 'unsupported_infobox_mapping' },
       ]),
     );
-    expect(bound.diagnostics.some((item) => item.pointer === '/infobox' && item.code === 'unsupported_infobox_mapping')).toBe(
-      false,
-    );
+    expect(
+      bound.diagnostics.some((item) => item.pointer === '/infobox' && item.code === 'unsupported_infobox_mapping'),
+    ).toBe(false);
 
     const afterUpgrade = commands.length;
     expect((await importer.runDump(current, bytes(dump()))).status).toBe('committed');

@@ -115,8 +115,12 @@ test('imported TVAnime original run and episode count are independently adopted,
       ['schema:numberOfEpisodes', count, countPage.body],
     ] as const) {
       expect(
-        (await editor.http(`/v1/subjects/${workId}/candidates/${candidate.id}:accept`, { context, expected_head: candidate.head }))
-          .status,
+        (
+          await editor.http(`/v1/subjects/${workId}/candidates/${candidate.id}:accept`, {
+            context,
+            expected_head: candidate.head,
+          })
+        ).status,
       ).toBe(200);
       expect(
         (
@@ -136,7 +140,9 @@ test('imported TVAnime original run and episode count are independently adopted,
       return response.body as { subject: { statements: Record<string, { value: { content: unknown } }[]> } };
     };
     const current = await read();
-    expect(current.subject.statements['schema:datePublished']?.[0]?.value.content).toEqual(start.statement.value.content);
+    expect(current.subject.statements['schema:datePublished']?.[0]?.value.content).toEqual(
+      start.statement.value.content,
+    );
     expect(current.subject.statements['schema:endDate']?.[0]?.value.content).toEqual(end.statement.value.content);
     expect(current.subject.statements['schema:numberOfEpisodes']?.[0]?.value.content).toEqual(
       count.statement.value.content,
