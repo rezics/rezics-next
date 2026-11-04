@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import {
   emptyInboxPagination,
   inboxPaginationFor,
@@ -10,6 +10,12 @@ import {
   selectInboxPage,
 } from '../src/inbox/inbox-pagination';
 import { readyInboxPage, type InboxPage, type ResolvedInboxPage } from '../src/inbox/inbox-read';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start/server', () => ({
+  getRequest: () => new Request('https://site.test/en/inbox'),
+  setResponseHeader: () => {},
+}));
 
 const secondCursor = 'opaque.signed+second/cursor==';
 const thirdCursor = 'opaque.signed+third/cursor==';

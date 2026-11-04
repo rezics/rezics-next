@@ -1,5 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start/server', () => ({
+  getRequest: () => new Request('https://site.test/en/inbox'),
+  setResponseHeader: () => {},
+}));
 import {
   decodeInboxPage,
   inboxPageActions,
