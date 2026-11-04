@@ -1302,9 +1302,10 @@ the whole occurrence.
 Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
 unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
 
-`bangumi@9` converts pinned Game `游玩人数` through the ordinary Bangumi
-registration used by JSON-lines dumps and the selected family, preserving
-`bangumi@8` original-run mapping. Native read is on the acknowledged VideoGame.
+The current `bangumi@10` converter retains pinned Game `游玩人数` through the
+ordinary Bangumi registration and selected family, preserving the `bangumi@9`
+player-count and `bangumi@8` original-run mappings. Native read is the
+acknowledged VideoGame.
 DoujinGame templates, quantity uncertainty bounds and inferred minimums stay
 outside this mapping.
 

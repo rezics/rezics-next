@@ -256,9 +256,9 @@ refreshes under this revision. Unknown or invalid types still fail with
 and retry keys. Platform and community tools use this same pure module;
 importer skipped-count accounting is separate.
 
-Bangumi revision `bangumi@8` converts the pinned TVAnime infobox fields
+The current Bangumi revision `bangumi@10` retains pinned TVAnime infobox fields
 `放送开始`, `播放结束` and `话数` on type 2 through the same bound proposal
-path, preserving `bangumi@7` TVAnime name extraction. Start and end keep
+path, preserving `bangumi@8` original-run and `bangumi@7` name behavior. Start and end keep
 Gregorian year/month/day precision, including explicit `年月日` spellings;
 weekday, relative, range and other schedule text stay field omissions. An
 exact episode total becomes the released nonnegative unitless integer
@@ -275,8 +275,8 @@ access authority.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-Bangumi revision `bangumi@9` converts pinned Game infobox `游玩人数` on type 4
-through the same bound proposal path, preserving `bangumi@8` TVAnime original-run
+Current Bangumi revision `bangumi@10` retains the Game infobox `游玩人数`
+mapping introduced in `bangumi@9`, preserving the `bangumi@8` TVAnime original-run
 mapping. A single stated maximum emits only `schema:numberOfPlayers`. An
 inclusive lower/upper range emits the upper endpoint as the exact unit-1 amount
 and the lower endpoint as `schema:minValue`. Quantity uncertainty bounds are not

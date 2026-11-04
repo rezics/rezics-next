@@ -8,6 +8,7 @@ import {
   seedCrossMedia,
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
+import { bangumiCrossMediaSeedRevision } from '../../../importer/src/source-registry.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   captureShowcaseCommands,
@@ -128,7 +129,7 @@ test('selected Game player-count range is independently adopted and current, and
     expect(candidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
       external_id: gameId,
-      converter_revision: 'cross-media-entities@8',
+      converter_revision: bangumiCrossMediaSeedRevision,
     });
     expect(candidate.statement.value).toEqual({ type: 'value', content: { amount: '+4', unit: '1' } });
     expect(candidate.statement.qualifiers).toEqual([
