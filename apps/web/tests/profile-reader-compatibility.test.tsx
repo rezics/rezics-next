@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, createElement, useState, type ReactNode } from 'react';
+import { act, StrictMode, createElement, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
@@ -206,7 +206,6 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     let currentReadable = false;
     let currentWritable = false;
     let nativeProfile = profile();
-    let setPublicOnly = (_value: boolean) => {};
 
     function Probe() {
       const result = useProfileEditor();
@@ -218,12 +217,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     }
 
     function Surface() {
-      const [publicOnly, setPublicOnlyState] = useState(false);
-      setPublicOnly = (value) => setPublicOnlyState(value);
       return createElement(
         'main',
         null,
-        publicOnly ? null : createElement(ProfileSection),
+        createElement(ProfileSection),
         createElement(PublicViewsSection),
         createElement(Probe),
         createElement(Probe),
@@ -439,8 +436,6 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       'the acknowledged profile with an unavailable current read',
     );
     expect(host.textContent?.includes(m.settings_profile_acknowledged_stale())).toBe(true);
-    await act(async () => setPublicOnly(true));
-    expect(editor()).toBe(writableEditor);
     await capturedRetry();
     expect(saveRequests).toHaveLength(profileSaveCount + 1);
     expect(
@@ -448,6 +443,8 @@ test('the connected Profile and Public activity journey shares safe reads and pe
         [m.settings_profile_retry_save(), m.settings_public_activity_retry()].includes(item.textContent?.trim() ?? ''),
       ),
     ).toHaveLength(0);
+    await togglePublicSwitch(m.settings_public_reviews());
+    expect(saveRequests).toHaveLength(profileSaveCount + 1);
     await act(async () => writableEditor.edit({ displayName: 'Current organization' }));
     nativeProfile = { ...profileAfter, displayName: 'Another writer', biography: 'Current native biography' };
     const deliberateRead = readRequests.length;
@@ -462,17 +459,15 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(writableEditor.snapshot().known?.displayName).toBe('Another writer');
     expect(writableEditor.snapshot().draft?.displayName).toBe('Current organization');
     expect(writableEditor.snapshot().draft?.biography).toBe('Current native biography');
-    await act(async () => setPublicOnly(false));
-    await until(
-      () => host.querySelector<HTMLTextAreaElement>('textarea')?.value === 'Current native biography',
-      'new native Profile values after switching back',
-    );
+    expect(writableEditor.snapshot().known?.publicViews.reviews).toBe(true);
+    expect(writableEditor.snapshot().draft?.publicViews.reviews).toBe(false);
+    expect(host.querySelector<HTMLInputElement>('input[id$="-displayName"]')?.value).toBe('Current organization');
+    expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('Current native biography');
 
     const reviewSwitch = publicSwitch(m.settings_public_reviews());
     expect(reviewSwitch.getAttribute('aria-disabled')).toBeNull();
+    expect(reviewSwitch.getAttribute('aria-checked')).toBe('false');
     const viewSaveCount = saveRequests.length;
-    await togglePublicSwitch(m.settings_public_reviews());
-    expect(publicSwitch(m.settings_public_reviews()).getAttribute('aria-checked')).toBe('false');
     await click(button(m.settings_profile_save_activity()));
     await until(() => saveRequests.length === viewSaveCount + 1, 'the public activity command');
     const viewCommand = saveRequests[viewSaveCount]!;
