@@ -937,7 +937,9 @@ export function CopyRow({
 }) {
   const pageLocale = locale();
   const localizedTitle = copy.subject ? displayLibraryTitle(copy.subject.label, pageLocale) : null;
-  const subjectLink = copy.subject ? subjectHref({ id: copy.subject.id, label: localizedTitle!.text }, pageLocale) : null;
+  const subjectLink = copy.subject
+    ? subjectHref({ id: copy.subject.id, label: localizedTitle!.text }, pageLocale)
+    : null;
   const href = subjectLink ? withSubjectVisitReturn(subjectLink.href, returnTo ?? '', pageLocale) : null;
   const title = localizedTitle?.text ?? m.library_subject_unavailable();
   const kind =

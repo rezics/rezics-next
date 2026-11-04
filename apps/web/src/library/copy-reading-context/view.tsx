@@ -19,7 +19,11 @@ export function CopyReadingContextView({
 }) {
   const hasDetails = !!context && (context.work.length > 0 || !!context.edition || context.facts.length > 0);
   if (!context || !hasDetails)
-    return <p data-slot="copy-reading-context" className="mt-2 text-sm text-muted-foreground">{m.library_copy_reading_context_unavailable()}</p>;
+    return (
+      <p data-slot="copy-reading-context" className="mt-2 text-sm text-muted-foreground">
+        {m.library_copy_reading_context_unavailable()}
+      </p>
+    );
 
   return (
     <div data-slot="copy-reading-context" className="mt-2 space-y-1 text-sm">
@@ -31,7 +35,11 @@ export function CopyReadingContextView({
               {context.work.map((work, index) => (
                 <span key={work.id}>
                   {index ? ', ' : null}
-                  <a href={destination(work, returnTo, locale)} lang={work.labelLanguage} className="text-primary underline underline-offset-4">
+                  <a
+                    href={destination(work, returnTo, locale)}
+                    lang={work.labelLanguage}
+                    className="text-primary underline underline-offset-4"
+                  >
                     {work.label}
                   </a>
                 </span>
@@ -43,21 +51,34 @@ export function CopyReadingContextView({
           <div className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
             <dt className="text-muted-foreground">{m.library_copy_edition()}</dt>
             <dd className="min-w-0 break-words">
-              <a href={destination(context.edition, returnTo, locale)} lang={context.edition.labelLanguage} className="text-primary underline underline-offset-4">
+              <a
+                href={destination(context.edition, returnTo, locale)}
+                lang={context.edition.labelLanguage}
+                className="text-primary underline underline-offset-4"
+              >
                 {context.edition.label}
               </a>
             </dd>
           </div>
         ) : null}
         {context.facts.map((fact, index) => (
-          <div key={`${fact.label}:${fact.subject?.id ?? fact.value ?? index}`} className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
+          <div
+            key={`${fact.label}:${fact.subject?.id ?? fact.value ?? index}`}
+            className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]"
+          >
             <dt className="text-muted-foreground">{fact.label}</dt>
             <dd className="min-w-0 break-words">
               {fact.subject ? (
-                <a href={destination(fact.subject, returnTo, locale)} lang={fact.subject.labelLanguage} className="text-primary underline underline-offset-4">
+                <a
+                  href={destination(fact.subject, returnTo, locale)}
+                  lang={fact.subject.labelLanguage}
+                  className="text-primary underline underline-offset-4"
+                >
                   {fact.subject.label}
                 </a>
-              ) : fact.value}
+              ) : (
+                fact.value
+              )}
             </dd>
           </div>
         ))}

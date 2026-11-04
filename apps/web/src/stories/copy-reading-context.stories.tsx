@@ -80,13 +80,10 @@ export const RepeatedCopiesAndSameTitleReleases: Story = {
   render: () => (
     <StoryPage>
       <CopiesPage
-        page={page(
-          [copy(1, releaseOne), copy(2, releaseOne), copy(3, releaseTwo)],
-          {
-            [releaseOne.id]: releaseContext(releaseOne.id, '2022'),
-            [releaseTwo.id]: releaseContext(releaseTwo.id, '2025'),
-          },
-        )}
+        page={page([copy(1, releaseOne), copy(2, releaseOne), copy(3, releaseTwo)], {
+          [releaseOne.id]: releaseContext(releaseOne.id, '2022'),
+          [releaseTwo.id]: releaseContext(releaseTwo.id, '2025'),
+        })}
       />
     </StoryPage>
   ),
@@ -115,10 +112,9 @@ export const MissingOrWithheldAssociation: Story = {
     return (
       <StoryPage>
         <CopiesPage
-          page={page(
-            [copy(4, visibleSubject), copy(5, null)],
-            { [visibleSubject.id]: { association: 'unavailable', work: [], facts: [] } },
-          )}
+          page={page([copy(4, visibleSubject), copy(5, null)], {
+            [visibleSubject.id]: { association: 'unavailable', work: [], facts: [] },
+          })}
         />
       </StoryPage>
     );
@@ -133,9 +129,10 @@ function ReaderReplacementPage() {
   const [reader, setReader] = useState<'Alice' | 'Bob'>('Alice');
   const aliceCopy = copy(6, releaseOne, { note: 'Alice private note' });
   const bobCopy = copy(7, null, { note: 'Bob private note' });
-  const visiblePage = reader === 'Alice'
-    ? page([aliceCopy], { [releaseOne.id]: releaseContext(releaseOne.id, '2022') })
-    : page([bobCopy]);
+  const visiblePage =
+    reader === 'Alice'
+      ? page([aliceCopy], { [releaseOne.id]: releaseContext(releaseOne.id, '2022') })
+      : page([bobCopy]);
   return (
     <StoryPage>
       <div className="mb-4 flex flex-wrap items-center gap-3">

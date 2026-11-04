@@ -59,11 +59,15 @@ function stringValues(read: SubjectRead, property: string, datatype: string): st
 }
 
 function relatedIds(read: SubjectRead, property: string, limit: number): string[] {
-  return [...new Set(activeStatements(read, property).flatMap((statement) => {
-    if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return [];
-    const id = copiesSubjectId(statement.value.content);
-    return id ? [id] : [];
-  }))].slice(0, limit);
+  return [
+    ...new Set(
+      activeStatements(read, property).flatMap((statement) => {
+        if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return [];
+        const id = copiesSubjectId(statement.value.content);
+        return id ? [id] : [];
+      }),
+    ),
+  ].slice(0, limit);
 }
 
 async function readSubject(
@@ -92,10 +96,15 @@ async function readBounded<T, R>(items: readonly T[], read: (item: T) => Promise
   return result;
 }
 
-function labelsFor(release: Pick<Release, 'properties'>, properties: Iterable<string>, locale: string): Record<string, string> {
+function labelsFor(
+  release: Pick<Release, 'properties'>,
+  properties: Iterable<string>,
+  locale: string,
+): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(relationDefinitions(release, properties, locale))
-      .flatMap(([id, definition]) => definition.label ? [[id, definition.label] as const] : []),
+    Object.entries(relationDefinitions(release, properties, locale)).flatMap(([id, definition]) =>
+      definition.label ? [[id, definition.label] as const] : [],
+    ),
   );
 }
 
@@ -111,7 +120,11 @@ export async function readCopyReadingContexts(
   release: Pick<Release, 'properties'>,
   locale: string,
 ): Promise<CopyReadingContexts> {
-  const uniqueSubjects = [...new Map(subjects.filter((subject) => copiesSubjectId(subject.id)).map((subject) => [subject.id, subject])).values()];
+  const uniqueSubjects = [
+    ...new Map(
+      subjects.filter((subject) => copiesSubjectId(subject.id)).map((subject) => [subject.id, subject]),
+    ).values(),
+  ];
   if (!authorization || uniqueSubjects.length === 0) return {};
 
   const subjectReads = await readBounded(uniqueSubjects, (subject) =>
@@ -119,8 +132,8 @@ export async function readCopyReadingContexts(
   );
   const bySubject = new Map(uniqueSubjects.map((subject, index) => [subject.id, subjectReads[index] ?? null]));
   const workDefinition = release.properties[workProperty];
-  const workIsAdmitted = workDefinition?.datatype === 'wikibase-item' &&
-    workDefinition.relation?.group === 'derivation';
+  const workIsAdmitted =
+    workDefinition?.datatype === 'wikibase-item' && workDefinition.relation?.group === 'derivation';
   const creatorIds = creatorProperties.filter((property) => {
     const definition = release.properties[property];
     return definition?.datatype === 'wikibase-item' && definition.relation?.group === 'credit';
@@ -162,7 +175,8 @@ export async function readCopyReadingContexts(
       }
     }
 
-    const hasEveryWorkLabel = workIdsWithOverflow.length > 0 &&
+    const hasEveryWorkLabel =
+      workIdsWithOverflow.length > 0 &&
       workIdsWithOverflow.length <= workTargetLimit &&
       work.length === workIdsWithOverflow.length;
     result[selected.id] = {
