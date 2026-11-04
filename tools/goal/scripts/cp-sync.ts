@@ -893,7 +893,7 @@ export type ResidentHealth = {
 };
 export type ResidentControl = {
   observe(checkout: string): Promise<ResidentHealth>;
-  restart(checkout: string): Promise<void>;
+  restart(checkout: string, options?: { install: boolean }): Promise<void>;
 };
 
 /** A complete ten-minute window on each side of publication; sample worker width once per minute. */
@@ -978,7 +978,11 @@ export const residentCommand: ResidentCommand = async (argv, checkout) => {
 };
 
 /** Run only after publication: the newly published main supplies the installer. */
-export async function restartResident(checkout: string, run: ResidentCommand = residentCommand): Promise<void> {
+export async function restartResident(
+  checkout: string,
+  run: ResidentCommand = residentCommand,
+  install = false,
+): Promise<void> {
   const host = 'rezics-goal-host.service';
   const checked = async (argv: string[]) => {
     const result = await run(argv, checkout);
@@ -996,6 +1000,7 @@ export async function restartResident(checkout: string, run: ResidentCommand = r
     'rezics-goal-supervisor.service',
   ]);
   if (
+    install ||
     !existsSync(join(checkout, '.temp/goal/goal.env')) ||
     load === 'not-found' ||
     legacy === 'loaded' ||
@@ -1014,7 +1019,10 @@ export function residentRegression(_before: ResidentHealth, after: ResidentHealt
     (after.workReady === true && after.liveWorkers === 0) || (after.landingsRequested === true && after.landings === 0)
   );
 }
-const residentControl: ResidentControl = { observe: observeResident, restart: restartResident };
+const residentControl: ResidentControl = {
+  observe: observeResident,
+  restart: (checkout, options) => restartResident(checkout, residentCommand, options?.install),
+};
 
 export type Options = {
   policy?: ControlPolicy;
@@ -1380,6 +1388,7 @@ export async function rollback(options: Options = {}): Promise<number> {
       const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
       const resident = options.resident ?? residentControl;
       let moved = false;
+      let rollbackHead: string | undefined;
       let interrupted = false;
       const interrupt = (signal: NodeJS.Signals) => {
         interrupted = true;
@@ -1406,6 +1415,7 @@ export async function rollback(options: Options = {}): Promise<number> {
         }
         const published = publish(checkout, 'rollback', current, commit, paths, undefined, print);
         moved = true;
+        rollbackHead = commit;
         appendHistory(historyFile, {
           time: now.toISOString(),
           action: 'rollback',
@@ -1430,18 +1440,23 @@ export async function rollback(options: Options = {}): Promise<number> {
         // restarting it; never exit with a new host executing against a rolled-back working tree.
         print(`cp-sync: rollback host failed (${String(error)}); restoring published code and host.`);
         const failed = head(checkout, MAIN)!;
+        if (failed !== rollbackHead) {
+          await resident.restart(checkout);
+          print('cp-sync: main advanced during rollback; host restarted on its current code.');
+          return 1;
+        }
         const restored = commitTree(
           checkout, replacePaths(checkout, failed, current, paths), [failed],
           `control-plane: restore running host code ${short(current)}`,
         );
         publish(checkout, 'rollback', failed, restored, paths, undefined, print);
         const logs = join(state, 'cp-sync', `${stamp(now)}-recovery`);
-        mkdirSync(logs, { recursive: true });
         try {
+          mkdirSync(logs, { recursive: true });
           await reinstall(checkout, failed, restored, paths, logs, print);
         } finally {
-          // Even a failed reinstall must attempt host activation on the matching code.
-          await resident.restart(checkout);
+          // An older installer may also have replaced the unit files. Restore them with the matching code.
+          await resident.restart(checkout, { install: true });
         }
         appendHistory(historyFile, {
           time: now.toISOString(), action: 'sync', paths,

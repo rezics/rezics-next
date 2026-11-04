@@ -541,10 +541,11 @@ test('a failed rollback restores published code and a matching host after legacy
         async observe() {
           return { liveWorkers: observations++ ? 0 : 1, passedGates: 1, landings: 1, workReady: true };
         },
-        async restart(checkout) {
+        async restart(checkout, options) {
           if (++restarts === 1 && migrationFails) throw new Error('Installer failed after stopping legacy supervisor');
           if (readFileSync(join(checkout, 'tools/goal/src/a.ts'), 'utf8').includes('a = x'))
             throw new Error('Legacy CLI cannot install systemd services');
+          if (restarts === 3) expect(options?.install).toBe(true);
           runningHead = git(checkout, 'rev-parse', 'main');
         },
       },
