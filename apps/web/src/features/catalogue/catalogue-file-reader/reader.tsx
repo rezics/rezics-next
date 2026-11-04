@@ -1110,7 +1110,7 @@ export function CatalogueFileReaderOverview({
 }) {
   const candidate = catalogueFileReaderCandidate(publicRead);
   if (!candidate) {
-    if (!returning) return null;
+    if (!returning && fileEvidenceAt(currentHref, locale)?.source !== publicRead.subject.id) return null;
     const visit = catalogueFileReaderVisit({
       locale,
       public: publicRead,
