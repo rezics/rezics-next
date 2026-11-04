@@ -8710,5 +8710,22 @@
   "shell_client_unavailable": "Les commandes interactives n’ont pas pu être chargées. La réponse du serveur reste disponible ci-dessous. Rechargez cette page pour réessayer.",
   "shell_client_reload": "Recharger cette page",
   "work_relation_citations_undisclosed": "Aucune citation n’est divulguée dans cette lecture.",
-  "work_relations_unsupported": "Aucun flux de relations entre œuvres n’est configuré pour ce type publié."
+  "work_relations_unsupported": "Aucun flux de relations entre œuvres n’est configuré pour ce type publié.",
+  "producer_history_back": "Retour au producteur",
+  "producer_history_inspect": "Examiner la relation",
+  "producer_history_unavailable": "Cette page d’historique n’a pas pu être chargée. Réessayez la même page ou repartez volontairement de la première.",
+  "producer_history_reader_stale": "Cette lecture n’est plus à jour. Recommencez pour demander une nouvelle première page. La tranche précédente ne peut pas être restaurée.",
+  "producer_history_loading_page": "Chargement de la page native suivante. La page précédente n’est plus à jour.",
+  "producer_history_retry": "Réessayer cette page",
+  "producer_history_restart": "Repartir de la première page",
+  "producer_history_later_page": "Page de continuation actuelle",
+  "producer_history_first_page": "Première page actuelle",
+  "producer_history_correction_context": "Contexte de la correction",
+  "producer_history_holder": "Porteur de la déclaration :",
+  "producer_history_inverse": "L’organisation liée porte la déclaration concernant ce producteur.",
+  "producer_history_forward": "Ce producteur porte la déclaration concernant l’organisation liée.",
+  "producer_history_correction_retired": "Lecture de la correction retirée",
+  "producer_history_retired_explanation": "Cette correction n’a plus de lecture à jour. Une commande déjà envoyée peut avoir pris effet ; son résultat peut être inconnu. Rien ne sera renvoyé depuis cette correction retirée.",
+  "producer_history_slice_lost": "La tranche d’origine n’est plus disponible ici. Relisez l’historique avant de commencer volontairement une autre correction.",
+  "producer_history_retired_close": "Fermer la correction retirée"
 }

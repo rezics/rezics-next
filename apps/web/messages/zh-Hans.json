@@ -8710,5 +8710,22 @@
   "shell_client_unavailable": "交互控件加载失败。下方仍可查看服务器响应；请重新加载此页重试。",
   "shell_client_reload": "重新加载此页",
   "work_relation_citations_undisclosed": "本次阅读未公开引文。",
-  "work_relations_unsupported": "此已发布类型未配置作品关系流。"
+  "work_relations_unsupported": "此已发布类型未配置作品关系流。",
+  "producer_history_back": "返回制作组织",
+  "producer_history_inspect": "查看关系",
+  "producer_history_unavailable": "无法加载此历史页面。请重试同一页，或主动从第一页重新开始。",
+  "producer_history_reader_stale": "此次读取已失效。请重新开始以请求新的第一页。无法恢复原来的片段。",
+  "producer_history_loading_page": "正在加载原生分页的下一页。上一页已不再是当前内容。",
+  "producer_history_retry": "重试此页",
+  "producer_history_restart": "从第一页重新开始",
+  "producer_history_later_page": "当前后续页",
+  "producer_history_first_page": "当前第一页",
+  "producer_history_correction_context": "更正对象",
+  "producer_history_holder": "陈述持有者：",
+  "producer_history_inverse": "相关组织持有关于此制作组织的陈述。",
+  "producer_history_forward": "此制作组织持有关于相关组织的陈述。",
+  "producer_history_correction_retired": "更正读取已失效",
+  "producer_history_retired_explanation": "此更正已没有当前有效的读取。已发送的命令可能已经生效，结果也可能尚不明确。不会从此失效的更正重新发送任何命令。",
+  "producer_history_slice_lost": "此处已无法使用原来的片段。请重新读取历史，再主动开始另一项更正。",
+  "producer_history_retired_close": "关闭已失效的更正"
 }
