@@ -21,3 +21,15 @@ export function reporterHistoryReturnHref(search: unknown, routeReportId: string
   params.set('reportId', reportId);
   return `/moderation/reports?${params}`;
 }
+
+/** Closed consumed search on the status route. Invalid context recovers to the local inventory. */
+export function reporterHistoryStatusSearch(search: unknown): { historyReportId?: string; historyCursor?: string } {
+  if (!search || typeof search !== 'object' || Array.isArray(search)) return {};
+  const values = search as Record<string, unknown>;
+  if (typeof values.historyReportId !== 'string' || !uuid.test(values.historyReportId)) return {};
+  if (values.historyCursor !== undefined && typeof values.historyCursor !== 'string') return {};
+  return {
+    historyReportId: values.historyReportId,
+    ...(values.historyCursor === undefined ? {} : { historyCursor: values.historyCursor }),
+  };
+}

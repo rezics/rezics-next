@@ -1,5 +1,7 @@
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo } from 'react';
+import { browserObservation } from '../../session/observation';
+import { createReporterHistoryFocus, type ReporterHistoryFocus } from '../../moderation/reporter-history/focus';
 import { prepareExposure } from '../../kernel/exposure';
 import { ReporterHistoryCurrent, ReporterHistoryPage } from '../../moderation/reporter-history/view';
 import { reporterHistoryQuery } from '../../moderation/reporter-history/model';
@@ -34,24 +36,44 @@ export const Route = createFileRoute('/moderation/reports/')({
   pendingMs: 0,
   pendingMinMs: 0,
   staleTime: 0,
+  shouldReload: true,
   gcTime: 0,
-  pendingComponent: () => <ReporterHistoryPage result={{ state: 'loading' }} query={{}} />,
+  pendingComponent: () => <ReporterHistoryRecovery state="loading" />,
   head: ({ match }) =>
     pageHead({ title: m.reporter_history_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ReporterHistoryRoute,
-  errorComponent: () => <ReporterHistoryPage result={{ state: 'unavailable' }} query={{}} />,
+  errorComponent: () => <ReporterHistoryRecovery state="unavailable" />,
 });
 
 function ReporterHistoryRoute() {
   const initial = Route.useLoaderData();
   const router = useRouter();
   const location = useLocation();
+  const focus = historyFocus(router);
   const navigationKey = location.state.__TSR_key ?? location.href;
   const navigation = useMemo(
     () => ({
+      request: async (query: Parameters<typeof reporterHistoryQuery>[0]) => {
+        const operands = reporterHistoryQuery(query);
+        focus.request(operands);
+        if (operands.cursor === initial.query.cursor && operands.reportId === initial.query.reportId) {
+          await router.invalidate({ sync: true });
+        } else {
+          await router.navigate({ to: '/moderation/reports', search: operands, resetScroll: false });
+        }
+      },
       isCurrent: () => (router.state.location.state.__TSR_key ?? router.state.location.href) === initial.navigationKey,
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+          try {
+            focus.navigating(
+              toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
+                ? reporterHistoryQuery(toLocation.search)
+                : null,
+            );
+          } catch {
+            focus.cancel();
+          }
           if ((toLocation.state.__TSR_key ?? toLocation.href) !== initial.navigationKey) retire();
         });
         const reload = router.subscribe('onBeforeLoad', retire);
@@ -61,9 +83,51 @@ function ReporterHistoryRoute() {
         };
       },
     }),
-    [router, initial.navigationKey, initial.generation],
+    [router, initial.navigationKey, initial.generation, focus],
   );
   return (
-    <ReporterHistoryCurrent key={`${initial.generation}:${navigationKey}`} initial={initial} navigation={navigation} />
+    <ReporterHistoryCurrent
+      key={`${initial.generation}:${navigationKey}`}
+      initial={initial}
+      navigation={navigation}
+      focus={focus}
+    />
   );
+}
+
+// Focus follows one local route activation, never a cache of private visits.
+const routeFocus = new WeakMap<object, ReporterHistoryFocus>();
+function historyFocus(router: object) {
+  let focus = routeFocus.get(router);
+  if (!focus) {
+    focus = createReporterHistoryFocus();
+    routeFocus.set(router, focus);
+  }
+  return focus;
+}
+
+function ReporterHistoryRecovery({ state }: { state: 'loading' | 'unavailable' }) {
+  const query = Route.useSearch();
+  const router = useRouter();
+  const { queryClient } = Route.useRouteContext();
+  const focus = historyFocus(router);
+  useLayoutEffect(() => {
+    // A native back/forward or explicit return has no surviving inventory control.
+    // Start watching here so a Tab or focus movement during preparation cancels recovery.
+    if (focus.pending() || document.activeElement !== document.body) return;
+    const locale = getLocale();
+    const browser = browserObservation(queryClient);
+    const original = browser.getSnapshot();
+    focus.activate(document.body, () => {
+      const next = browser.getSnapshot();
+      return (
+        locale === getLocale() &&
+        original.state === 'signed-in' &&
+        next.state === 'signed-in' &&
+        original.observation === next.observation
+      );
+    });
+    focus.request(query);
+  }, [focus, queryClient, query]);
+  return <ReporterHistoryPage result={{ state }} query={query} onRetry={() => router.invalidate({ sync: true })} />;
 }

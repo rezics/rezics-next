@@ -1,3 +1,5 @@
+import { browserObservation, type BrowserReader } from '../session/observation';
+import { getLocale } from '../paraglide/runtime.js';
 import type { QueryClient } from '@tanstack/react-query';
 import type { ReporterStatus } from './reporter-status-model';
 import type { PrivateReaderOrigin } from './private-reader-origin';
@@ -10,13 +12,17 @@ import {
 
 export type ReporterStatusViewer = PrivateReaderOrigin;
 export type ReporterStatusResult =
-  | { state: 'loaded'; report: ReporterStatus }
+  | { state: 'loaded'; report: ReporterStatus; nativeSourceFingerprint?: string }
   | { state: 'loading' | 'unavailable' | 'concealed' | 'closed' };
 export type ReporterStatusRead = PrivateReaderRead & {
   id: string;
+  locale?: string;
+  browserReader?: BrowserReader;
   generation: string;
   viewer: ReporterStatusViewer | null;
-  result: { state: 'loaded'; report: ReporterStatus } | { state: 'unavailable' | 'concealed' | 'closed' };
+  result:
+    | { state: 'loaded'; report: ReporterStatus; nativeSourceFingerprint?: string }
+    | { state: 'unavailable' | 'concealed' | 'closed' };
 };
 export type ReporterStatusReader = (input: { id: string; generation: string }) => Promise<ReporterStatusRead>;
 export type ReporterStatusNavigation = PrivateReaderNavigation;
@@ -31,6 +37,8 @@ export async function prepareReporterStatusRead(
   read: ReporterStatusReader,
   signal?: AbortSignal,
 ): Promise<ReporterStatusRead> {
+  const browser = browserObservation(cache).getSnapshot();
+  const locale = getLocale();
   const generation = crypto.randomUUID();
   const response = await preparePrivateReaderRead(
     cache,
@@ -47,11 +55,16 @@ export async function prepareReporterStatusRead(
     },
     signal,
   );
+  const prepared = {
+    ...response,
+    locale,
+    ...(typeof window !== 'undefined' && browser.state === 'signed-in' ? { browserReader: browser.observation } : {}),
+  };
   return response.readerBinding.retired
-    ? { ...response, viewer: null, result: concealed }
+    ? { ...prepared, viewer: null, result: concealed }
     : !response.readerOrigin && response.result.state === 'loaded'
-      ? { ...response, viewer: null, result: unavailable }
-      : response;
+      ? { ...prepared, viewer: null, result: unavailable }
+      : prepared;
 }
 
 /** One mounted journey; no page mutation, successor cleanup, expected-viewer stamping or automatic read. */
@@ -64,6 +77,22 @@ export function createReporterStatusJourney(
   const owner = createPrivateReaderLifetime(cache, initial, reporterStatusReadKey(initial.id), navigation);
   let result: ReporterStatusResult = initial.result;
   let resultOrigin = initial.readerOrigin;
+  let source = initial.result.state === 'loaded' ? initial.result.nativeSourceFingerprint : undefined;
+  const locale = initial.locale ?? getLocale();
+  const browser = browserObservation(cache);
+  let reader = initial.browserReader;
+  const healthy = () => {
+    const next = browser.getSnapshot();
+    if (
+      getLocale() !== locale ||
+      (reader &&
+        (next.state !== 'signed-in' ||
+          next.observation.id !== reader.id ||
+          next.observation.subject !== reader.subject))
+    )
+      owner.retire();
+    return owner.healthy();
+  };
   let generation = 0;
   let busy = false;
   const listeners = new Set<() => void>();
@@ -75,7 +104,7 @@ export function createReporterStatusJourney(
     next.result.state !== 'loaded' ||
     (next.result.report.id === initial.id && next.result.report.reporterId === next.readerOrigin?.subject);
   const snapshot = (): ReporterStatusResult => {
-    if (!owner.healthy()) return concealed;
+    if (!healthy()) return concealed;
     if (result.state === 'loaded' && !owner.available()) return unavailable;
     if (
       result.state === 'loaded' &&
@@ -87,7 +116,7 @@ export function createReporterStatusJourney(
   if (initial.readerOrigin && !own(initial)) owner.retire();
   // Both explicit actions keep the initial scope and observation; loading replaces private fields immediately.
   async function reread(from: 'loaded' | 'unavailable') {
-    if (!owner.isCurrent() || busy || snapshot().state !== from) return;
+    if (!healthy() || !owner.isCurrent() || busy || snapshot().state !== from) return;
     busy = true;
     const attempt = ++generation;
     const ticket = owner.ticket();
@@ -95,11 +124,15 @@ export function createReporterStatusJourney(
     publish({ state: 'loading' });
     try {
       const next = await read({ id: initial.id, generation: requestGeneration });
-      if (!owner.owns(ticket) || attempt !== generation) return;
+      if (!healthy() || !owner.owns(ticket) || attempt !== generation) return;
       if (next.id !== initial.id || next.generation !== requestGeneration || !own(next)) return owner.retire();
       if (!next.readerOrigin && next.result.state === 'unavailable') publish(unavailable);
       else if (await owner.accepts(next)) {
         if (owner.owns(ticket) && attempt === generation) {
+          if (next.result.state === 'loaded') {
+            if (source !== undefined && source !== next.result.nativeSourceFingerprint) return owner.retire();
+            source = next.result.nativeSourceFingerprint;
+          }
           resultOrigin = next.readerOrigin;
           publish(next.result);
         }
@@ -117,6 +150,11 @@ export function createReporterStatusJourney(
     serverSnapshot: () => (initial.viewer && own(initial) ? initial.result : concealed),
     subscribe(listener: () => void) {
       listeners.add(listener);
+      const stopBrowser = browser.subscribeCache(() => {
+        healthy();
+      });
+      const observed = browser.getSnapshot();
+      if (!reader && observed.state === 'signed-in') reader = observed.observation;
       const stop = owner.subscribe(() => {
         for (const listener of listeners) listener();
       });
@@ -124,10 +162,11 @@ export function createReporterStatusJourney(
         listeners.delete(listener);
         generation++;
         stop();
+        stopBrowser();
       };
     },
-    isConnected: owner.isCurrent,
-    isCurrent: () => owner.isCurrent() && owner.available() && snapshot().state === 'loaded',
+    isConnected: () => healthy() && owner.isCurrent(),
+    isCurrent: () => healthy() && owner.isCurrent() && owner.available() && snapshot().state === 'loaded',
     retry: () => reread('unavailable'),
     refresh: () => reread('loaded'),
   };

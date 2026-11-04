@@ -253,6 +253,13 @@ test('localized page states distinguish preparation, completion, denial, continu
     expect(render({ state: 'loaded', nativeSourceFingerprint: 'source', page: page([], undefined) })).toContain(
       'You have not submitted any reports',
     );
+    const sparse = render({
+      state: 'loaded',
+      nativeSourceFingerprint: 'source',
+      page: page([], undefined, null, 'next'),
+    });
+    expect(sparse).toContain('continue to the next page');
+    expect(sparse).not.toContain('You have not submitted any reports');
     expect(render({ state: 'denied' })).toContain('not available for this session');
     expect(render({ state: 'unavailable' }, { cursor: 'same-frontier' })).toContain('next page could not be loaded');
     expect(
@@ -269,6 +276,13 @@ test('localized page states distinguish preparation, completion, denial, continu
 
     for (const locale of locales) {
       setLocale(locale, { reload: false });
+      const sparse = render({
+        state: 'loaded',
+        nativeSourceFingerprint: 'source',
+        page: page([], undefined, null, 'next'),
+      });
+      expect(sparse).toContain('continue to the next page');
+      expect(sparse).not.toContain('You have not submitted any reports');
       expect(render({ state: 'denied' })).toContain(m.reporter_history_denied());
     }
   } finally {

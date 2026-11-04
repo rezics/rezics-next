@@ -1,3 +1,4 @@
+import { SESSION_HEADER } from '@rezics/client';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
@@ -22,7 +23,9 @@ export async function loadReporterStatus(
     if (result.status === 404) return null;
     throw new Error('Report status unavailable');
   }
-  return reporterStatusResponse(result.data);
+  const report = reporterStatusResponse(result.data);
+  if (report.id !== id) throw new Error('Report status unavailable');
+  return report;
 }
 
 /** Additive private result wrapper; the public loader above retains its 404/null and failure contract. */
@@ -46,12 +49,15 @@ export async function loadPrivateReporterStatus(
         return { ...base, result: { state: 'concealed' } };
       return { ...base, result: { state: 'unavailable' } };
     }
+    const nativeSession = result.response.headers.get(SESSION_HEADER);
+    if (!nativeSession) return { ...base, result: { state: 'unavailable' } };
+    const nativeSourceFingerprint = await privateReaderFingerprint(`reporter-status-source:${nativeSession}`);
     const report = reporterStatusResponse(result.data);
     return {
       ...base,
       result:
         report.id === id && report.reporterId === readerOrigin.subject
-          ? { state: 'loaded', report }
+          ? { state: 'loaded', report, nativeSourceFingerprint }
           : { state: 'concealed' },
     };
   } catch (error) {

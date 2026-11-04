@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { readReporterStatus } from '../../moderation/reporter-status-read';
 import { prepareReporterStatusRead } from '../../moderation/reporter-status-read-model';
-import { reporterHistoryReturnHref } from '../../moderation/reporter-history/navigation';
+import { reporterHistoryReturnHref, reporterHistoryStatusSearch } from '../../moderation/reporter-history/navigation';
 import { ReporterStatusCurrent, ReporterStatusPage } from '../../moderation/reporter-status-view';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
@@ -12,6 +12,8 @@ import { pageHeadContext } from '../../shell/head-context';
 
 export const Route = createFileRoute('/moderation/reports/$id')({
   beforeLoad: requireSignedIn,
+  validateSearch: reporterHistoryStatusSearch,
+  shouldReload: true,
   loader: async ({ params, context, abortController, location }) => {
     const read = await prepareReporterStatusRead(
       context.queryClient,
@@ -25,11 +27,11 @@ export const Route = createFileRoute('/moderation/reports/$id')({
   pendingMinMs: 0,
   staleTime: 0,
   gcTime: 0,
-  pendingComponent: () => <ReporterStatusPage state="loading" />,
+  pendingComponent: () => <ReporterStatusRecovery state="loading" />,
   head: ({ match }) =>
     pageHead({ title: m.reporter_status_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ReporterStatusRoute,
-  errorComponent: () => <ReporterStatusPage state="concealed" />,
+  errorComponent: () => <ReporterStatusRecovery state="concealed" />,
 });
 
 function ReporterStatusRoute() {
@@ -53,7 +55,7 @@ function ReporterStatusRoute() {
     }),
     [router, initial.navigationKey, initial.generation],
   );
-  const returnPath = reporterHistoryReturnHref(search, initial.id);
+  const returnPath = reporterHistoryReturnHref(search, initial.id) ?? '/moderation/reports';
   return (
     <ReporterStatusCurrent
       key={initial.generation}
@@ -62,4 +64,11 @@ function ReporterStatusRoute() {
       {...(returnPath ? { returnHref: localizeHref(returnPath) } : {})}
     />
   );
+}
+
+function ReporterStatusRecovery({ state }: { state: 'loading' | 'concealed' }) {
+  const search = Route.useSearch();
+  const { id } = Route.useParams();
+  const returnPath = reporterHistoryReturnHref(search, id) ?? '/moderation/reports';
+  return <ReporterStatusPage state={state} returnHref={localizeHref(returnPath)} />;
 }
