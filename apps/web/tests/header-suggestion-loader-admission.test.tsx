@@ -53,6 +53,17 @@ test('every installed header suggestion loader is admitted before truncation', a
       page(Array.from({ length: 9 }, (_, index) => (index === 8 ? { ...row(index), id: 'not-a-uuid' } : row(index)))),
     ),
   ).rejects.toMatchObject(refusal);
+  await expect(
+    read(
+      page(
+        Array.from({ length: 9 }, (_, index) =>
+          index === 8
+            ? { ...row(index), workContext: { subjectId: id(7), status: 'withheld' } }
+            : row(index),
+        ),
+      ),
+    ),
+  ).rejects.toMatchObject(refusal);
   await expect(read(page([row(0, { id: first, summary: summary(second) })]))).rejects.toMatchObject(refusal);
   await expect(
     read(page([row(0, { id: first, type: 'person', summary: summary(first, 'organization') })])),

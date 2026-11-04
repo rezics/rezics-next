@@ -1313,6 +1313,10 @@ Decision: a confirmed-empty first page may offer at most three current public ne
 The request-only Realm and Collection prefix path uses the same operation and retained native prefix producer; its
 predicate, readiness, caller and finite refill bounds are specified in [scoped suggestions](./scoped-suggestion.md).
 
+Decision: `:suggest` consumes the existing `readListPresentationFacts(..., {workContext: true})` projection through one optional batch adapter over at most ten admitted Subject IDs. The adapter maps only its disclosed creator, same-statement qualifiers, labels, target identities, partial dates and boolean overflow; overflow has no destination because the producer publishes none.
+
+Search calls that adapter once for the accepted page, then re-read the same bounded projection after ordinary summary completion and compare source identity, disclosure, release and projected context before returning. The producer retains its full-key seeks and bounded fan-out; Search adds no per-hit detail read. Global and already admitted scoped paths use the request's existing Access, actor, route key and deadline. Absent, not-applicable, empty, withheld and unavailable producer states remain explicit, and no concealed identity or cardinality reaches the shell. The page context envelope remains capped at 16 KiB serialized bytes.
+
 - Touches: GET validates 1–64 code points (<= 128 UTF-16 units), limit 1–10 (default 8); `subjects-suggest-v1`
   queries `names.typeahead` and its 2/3-gram fields in one pinned physical-generation template request. Reads <= 20 hits, then the same
   partition-grouped disclosure, projection, generation and freshness paths. Grow N/P with limit, text and selected

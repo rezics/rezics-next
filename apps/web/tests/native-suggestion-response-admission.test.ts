@@ -39,6 +39,23 @@ const row = (id: string, extra: Record<string, unknown> = {}) => ({
   summary: null,
   ...extra,
 });
+const workContext = (subjectId: string) => ({
+  subjectId,
+  status: 'available',
+  creator: {
+    id: second,
+    label: { value: 'Ursula K. Le Guin', language: 'en' },
+    property: 'schema:author',
+    role: { value: 'Author', language: 'en' },
+  },
+  relation: {
+    kind: 'work',
+    id: second,
+    label: { value: 'Earthsea', language: 'en' },
+    date: { state: 'value', property: 'schema:datePublished', value: '1968-06', precision: 'month' },
+  },
+  overflow: true,
+});
 const page = (subjects: unknown[], extra: Record<string, unknown> = {}) => ({ subjects, as_of: stamp, ...extra });
 
 async function admit(limit = 2) {
@@ -70,6 +87,17 @@ test('malformed native suggestion pages stay unavailable and never receive type 
     page([row(first), row(first.toUpperCase())]),
     page([row(first, { summary: { ...matching, id: second } })]),
     page([row(first, { summary: { ...matching, type: 'schema:Person' } })]),
+    page([
+      row(first, {
+        workContext: {
+          ...workContext(first),
+          relation: {
+            ...workContext(first).relation,
+            date: { state: 'value', property: 'schema:datePublished', value: '1968-02-30', precision: 'day' },
+          },
+        },
+      }),
+    ]),
     page([row(first), { id: second, type: 'schema:Book' }]),
   ])
     await unavailable(value);
@@ -83,6 +111,22 @@ test('a trailing malformed native row is refused before truncation or type-label
   expect(response.status).toBe(502);
   expect(body).toMatchObject({ code: 'dependency_unavailable' });
   expect(JSON.stringify(body)).not.toContain(sentinel);
+});
+
+test('qualified context preserves partial dates and disclosed overflow, while mismatched trailing context is refused', async () => {
+  release = { types: { 'schema:Book': { en: sentinel } } };
+  native = page([row(first, { workContext: workContext(first) })]);
+  const admitted = await (await admit(1)).json();
+  expect(admitted.subjects[0].workContext).toEqual(workContext(first));
+  expect(JSON.stringify(admitted.subjects[0].workContext)).not.toContain('count');
+
+  native = page([
+    row(first),
+    row(second, { workContext: workContext(first) }),
+  ]);
+  const response = await admit(1);
+  expect(response.status).toBe(502);
+  expect(JSON.stringify(await response.json())).not.toContain(sentinel);
 });
 
 test('valid empty, optional metadata and a missing definitions release stay ready without manufactured labels', async () => {
