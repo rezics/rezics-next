@@ -15,7 +15,7 @@ import {
   ThreadDocumentMentionLease,
   type ThreadDocumentMentionPage,
 } from './thread-document-mentions';
-import { ThreadDocumentMentionsNotice } from './thread-document-mentions';
+import { ThreadDocumentMentionsNotice } from './thread-document-mentions-notice';
 import './post-reading.css';
 
 type ReadingProps = ComponentProps<typeof DocumentBody> & {

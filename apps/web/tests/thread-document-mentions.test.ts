@@ -6,7 +6,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { sessionQueryKey } from '../src/session/browser-state';
-import { ThreadDocumentMentionsNotice } from '../src/threads/thread-document-mentions';
+import { ThreadDocumentMentionsNotice } from '../src/threads/thread-document-mentions-notice';
 import {
   isReadingPageMentionProjection,
   projectThreadDocumentMentions,
