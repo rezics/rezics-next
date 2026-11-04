@@ -1587,11 +1587,12 @@ export class MergeTrain {
         timeout,
         attempts: policy.integration.typecheckAttempts,
       })}`;
-      let baseline = this.options.queue.baseline(base, key);
-      if (baseline) {
-        appendFileSync(logPath, `Boot check baseline for dev ${base} reused (${baseline.passed ? 'passed' : 'failed'})\n`);
-        return baseline;
+      const cached = this.options.queue.baseline(base, key);
+      if (cached) {
+        appendFileSync(logPath, `Boot check baseline for dev ${base} reused (${cached.passed ? 'passed' : 'failed'})\n`);
+        return cached;
       }
+      let baseline: GateResult = { passed: false, output: 'Boot check baseline did not run', timedOut: false };
       const baselineTree = resolve(this.options.worktreeRoot, `boot-baseline-${randomUUID()}`);
       mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
       this.git(this.options.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
