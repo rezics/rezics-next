@@ -91,7 +91,7 @@ export function useOwnVotesCurrentOrigin(
   const admission = useWorkspaceAdmission(operations).value;
   const reading = origin.readLease(0);
   const current = () => address.isCurrent() && reading.current();
-  const options = ownVotesQuery(origin.subject ?? '', cursor, locale, origin.lifetime(0), current);
+  const options = ownVotesQuery(origin.subject ?? '', cursor, locale, origin.readKey(0), current);
   const query = useQuery(
     {
       ...options,

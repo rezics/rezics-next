@@ -755,6 +755,7 @@ test('catalogue, History and My ratings share retirement while read admission su
   const commands: Array<() => Promise<string>> = [];
   const reads: Array<() => boolean> = [];
   const ratings: Array<() => boolean> = [];
+  const credentials: Array<string | null> = [];
   const pending = deferred<string>();
   const Editor = catalogueEditor(function Editor({ transport }: { transport: () => Promise<string> }) {
     const lifetime = useEditorLifetime();
@@ -771,7 +772,7 @@ test('catalogue, History and My ratings share retirement while read admission su
   function HistoryLease() {
     const origin = useHistoryCurrentOrigin('copy-address', operations, 'A');
     reads.push(origin.readLease(0).current);
-    expect(origin.credential(0)).toBeNull();
+    credentials.push(origin.credential(0));
     return null;
   }
   function Ratings() {
@@ -793,6 +794,7 @@ test('catalogue, History and My ratings share retirement while read admission su
     </>);
     expect(cacheSubscription.mock.calls.length).toBe(1);
     expect(reads.at(-1)!()).toBe(true);
+    expect(credentials.at(-1)).toBeNull();
     expect(ratings.at(-1)!()).toBe(true);
     const oldWork = work.at(-1)!;
     const oldRead = reads.at(-1)!;

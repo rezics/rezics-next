@@ -57,7 +57,7 @@ export function MyLogsCurrentViewer({
     true,
     address.cursor,
     locale,
-    origin.lifetime(0),
+    origin.readKey(0),
   ] as const;
   const query = useQuery(
     {
