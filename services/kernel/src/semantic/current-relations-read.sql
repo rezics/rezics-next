@@ -42,6 +42,7 @@ JOIN LATERAL (
  SELECT compact.body, r.release, r.revision FROM (
    SELECT body, operation, recorded_transaction_id FROM semantic.fact
    WHERE route=wanted.route AND subject_id=wanted.id AND slot_id=locator.slot_id AND statement_id=wanted.candidate
+       AND statement_id IS NOT NULL AND kind='statement'
      AND head.operation<>'expand' AND route>=input.home*16 AND route<(input.home+1)*16
    ORDER BY log_seq DESC LIMIT 1
  ) compact

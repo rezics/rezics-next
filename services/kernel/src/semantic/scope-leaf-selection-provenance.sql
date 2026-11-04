@@ -4,8 +4,8 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :max_bytes::integer AS max_bytes
 ), entries AS MATERIALIZED (
-  SELECT * FROM unnest(:routes::integer[], :subjects::uuid[], :candidates::uuid[])
-    AS e(route, subject_id, candidate_id)
+  SELECT * FROM unnest(:routes::integer[], :subjects::uuid[], :candidates::uuid[], :slots::uuid[])
+    AS e(route, subject_id, candidate_id, slot_id)
 ), provenance AS MATERIALIZED (
   SELECT e.subject_id::text AS subject_id, e.candidate_id::text AS id,
          COALESCE(proposed.source, recorded.source) AS source,
@@ -20,10 +20,19 @@ WITH input AS NOT MATERIALIZED (
   ) proposed ON true
   LEFT JOIN LATERAL (
     SELECT r.source, r.revision FROM (
-      SELECT route, subject_id, recorded_transaction_id FROM semantic.fact
-      WHERE proposed.source IS NULL AND route = e.route AND subject_id = e.subject_id
-        AND statement_id = e.candidate_id AND kind = 'statement' AND operation = 'assert'
-      ORDER BY log_seq DESC LIMIT 1
+      (SELECT route, subject_id, recorded_transaction_id FROM semantic.fact
+       WHERE proposed.source IS NULL AND e.slot_id IS NOT NULL
+         AND route = e.route AND subject_id = e.subject_id AND slot_id = e.slot_id
+         AND statement_id = e.candidate_id AND statement_id IS NOT NULL
+         AND kind = 'statement' AND operation = 'assert'
+       ORDER BY log_seq DESC LIMIT 1)
+      UNION ALL
+      (SELECT route, subject_id, recorded_transaction_id FROM semantic.fact
+       WHERE proposed.source IS NULL AND e.slot_id IS NULL
+         AND route = e.route AND subject_id = e.subject_id
+         AND statement_id = e.candidate_id AND statement_id IS NOT NULL
+         AND kind = 'statement' AND operation = 'assert'
+       ORDER BY log_seq DESC LIMIT 1)
     ) f
     JOIN LATERAL (
       SELECT source, revision FROM semantic.revision

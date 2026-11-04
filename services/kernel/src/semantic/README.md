@@ -2,6 +2,19 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Bounded current relation visits
+
+`currentRelationFacts` is the native authority used by forward and inverse relation pages. It resolves only supplied
+candidate keys, then the mounted page reader rechecks current statement, revision, disclosure and target state before
+returning the page. Compact facts use exact slot and statement keys; expanded candidates retain the bounded native
+selection reader. The route-leading fact index is installed in the normal semantic schema and the forward migration.
+
+Decision: compact relation facts use route, Subject, slot and statement key seeks; inverse keys without a slot use the existing route/Subject/statement index, and the core schema dump remains core-only.
+
+The derived read budget, SQL controls, byte inputs, partition checkouts and plan-evidence case are documented in
+[current-relations-cost.md](current-relations-cost.md). This source-level declaration does not claim native plan
+acceptance; the controller runs that acceptance after integration.
+
 The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
 the shared worker and exact queue-association minimization for its asynchronous discovery index.
 Provider queue pages retain `context:read` and `context:accept` admission. Their private BFF includes an independent current
