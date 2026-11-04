@@ -72,7 +72,12 @@ test('a readable-but-not-editable reload keeps an unresolved original', async ()
     save: async () => ({ ok: false as const, reason: 'unavailable' as const, failure: { status: null } }),
     read: async () => ({
       signedIn: true as const,
-      preferences: { spoilerLevel: 2 as const, suitability: 'show' as const, version: 4, advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }, false) },
+      preferences: {
+        spoilerLevel: 2 as const,
+        suitability: 'show' as const,
+        version: 4,
+        advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }, false),
+      },
       securityHref: null,
     }),
   };
@@ -96,14 +101,21 @@ test('a readable-but-not-editable reload keeps an unresolved original', async ()
 });
 
 test('read denial and platform closure retire update advice and retained callbacks', async () => {
-  const failures: SettingsPage[] = [{ signedIn: false }, { signedIn: true, state: 'closed', failure: { status: null, code: 'platform_closed' }, securityHref: null }];
+  const failures: SettingsPage[] = [
+    { signedIn: false },
+    { signedIn: true, state: 'closed', failure: { status: null, code: 'platform_closed' }, securityHref: null },
+  ];
   for (const page of failures) {
     let saves = 0;
     const editor = createEditor({
       save: async () => (saves++, { ok: false as const, reason: 'unavailable' as const }),
       read: async () => page,
     });
-    const callbacks = [() => editor.edit({ spoilerLevel: 0 }), () => editor.submit(), () => editor.resetToNativeDefaults()];
+    const callbacks = [
+      () => editor.edit({ spoilerLevel: 0 }),
+      () => editor.submit(),
+      () => editor.resetToNativeDefaults(),
+    ];
     await editor.reload();
     expect(editor.snapshot()).toMatchObject({ advice: undefined, known: { advice: undefined } });
     for (const callback of callbacks) await callback();
@@ -117,10 +129,21 @@ test('late read completion after viewer retirement cannot install its values or 
   let finish!: (page: SettingsPage) => void;
   const late: SettingsPage = {
     signedIn: true,
-    preferences: { spoilerLevel: 2, suitability: 'show', version: 4, advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }) },
+    preferences: {
+      spoilerLevel: 2,
+      suitability: 'show',
+      version: 4,
+      advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }),
+    },
     securityHref: null,
   };
-  const editor = createEditor({ save: async () => ({ ok: false, reason: 'unavailable' }), read: () => new Promise((resolve) => (finish = resolve)) }, () => active);
+  const editor = createEditor(
+    {
+      save: async () => ({ ok: false, reason: 'unavailable' }),
+      read: () => new Promise((resolve) => (finish = resolve)),
+    },
+    () => active,
+  );
   const pending = editor.reload();
   active = false;
   finish(late);
@@ -133,10 +156,19 @@ test('late read completion after viewer retirement cannot install its values or 
 test('temporary read failure keeps the original until fresh advice is reviewed and retried', async () => {
   const current: SettingsPage = {
     signedIn: true,
-    preferences: { spoilerLevel: 0, suitability: 'blur', version: 4, advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }) },
+    preferences: {
+      spoilerLevel: 0,
+      suitability: 'blur',
+      version: 4,
+      advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }),
+    },
     securityHref: null,
   };
-  const pages: SettingsPage[] = [{ signedIn: true, state: 'unavailable', failure: { status: 503 }, securityHref: null }, { signedIn: false }, current];
+  const pages: SettingsPage[] = [
+    { signedIn: true, state: 'unavailable', failure: { status: 503 }, securityHref: null },
+    { signedIn: false },
+    current,
+  ];
   const calls: unknown[] = [];
   const editor = createEditor({
     save: async (input) => (calls.push(input), { ok: false as const, reason: 'unavailable' as const }),
@@ -154,7 +186,11 @@ test('temporary read failure keeps the original until fresh advice is reviewed a
   await editor.retry();
   expect(calls).toHaveLength(1);
   await editor.reload();
-  expect(editor.snapshot()).toMatchObject({ pending: original, known: { version: 4, spoilerLevel: 0, suitability: 'blur' }, draft: { spoilerLevel: 2, suitability: 'blur' } });
+  expect(editor.snapshot()).toMatchObject({
+    pending: original,
+    known: { version: 4, spoilerLevel: 0, suitability: 'blur' },
+    draft: { spoilerLevel: 2, suitability: 'blur' },
+  });
   await editor.retry();
   expect(calls[1]).toBe(original);
 });

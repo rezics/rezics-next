@@ -375,10 +375,7 @@ export function ReadingCard({
           read: () => latest.current.transport.read(),
         },
         {
-          canWrite: () =>
-            mounted() &&
-            latest.current.credentialed &&
-            latest.current.isCurrent(),
+          canWrite: () => mounted() && latest.current.credentialed && latest.current.isCurrent(),
           canRead: () => mounted() && latest.current.readCurrent(),
           version: () => sharedVersion.current,
           onVersionChange: (next) => latest.current.onVersionChange(next),
@@ -512,7 +509,8 @@ export function ReadingCard({
                 {m.settings_reading_effective({
                   ...readingLabel(state.advice!.reading.effective),
                   defaultSpoilers: levels[defaults.spoilerLevel]!.title(),
-                  defaultImages: defaults.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
+                  defaultImages:
+                    defaults.suitability === 'blur' ? m.settings_reading_blur() : m.settings_reading_show(),
                 })}
               </p>
             ) : null}
@@ -572,19 +570,19 @@ export function ReadingCard({
                     ? readText
                     : writeDenied
                       ? m.settings_reading_read_only_text()
-                    : uncertain
-                      ? m.settings_reading_uncertain_text()
-                      : state.phase === 'review'
-                        ? m.settings_reading_review_text()
-                        : state.reason === 'closed'
-                          ? m.settings_closed_text()
-                          : state.reason === 'preparing'
-                            ? m.settings_preparing_text()
-                            : state.reason === 'unavailable'
-                              ? m.settings_unavailable_text()
-                              : state.phase === 'failed'
-                                ? m.settings_failed_text()
-                                : m.settings_conflict_text()}
+                      : uncertain
+                        ? m.settings_reading_uncertain_text()
+                        : state.phase === 'review'
+                          ? m.settings_reading_review_text()
+                          : state.reason === 'closed'
+                            ? m.settings_closed_text()
+                            : state.reason === 'preparing'
+                              ? m.settings_preparing_text()
+                              : state.reason === 'unavailable'
+                                ? m.settings_unavailable_text()
+                                : state.phase === 'failed'
+                                  ? m.settings_failed_text()
+                                  : m.settings_conflict_text()}
               </p>
               {uncertain && (readLoading || readFailed) ? <p>{m.settings_reading_uncertain_text()}</p> : null}
               {uncertain && !readFailed && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
