@@ -23,7 +23,12 @@ export async function loadReporterHistory(
   if (query.reportId !== undefined) url.searchParams.set('reportId', query.reportId);
   try {
     signal?.throwIfAborted();
-    const response = await send(url, { method: 'GET', headers: { authorization }, cache: 'no-store', signal });
+    const response = await send(url, {
+      method: 'GET',
+      headers: { authorization },
+      cache: 'no-store',
+      ...(signal ? { signal } : {}),
+    });
     if ([401, 403, 404].includes(response.status)) {
       await response.body?.cancel();
       return { state: 'denied' };
