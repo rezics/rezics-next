@@ -35,6 +35,7 @@ const { prepareModerationReportRead, reportReadKey } = await import('../src/mode
 const { workbenchCaseInput } = await import('../src/moderation/workbench-case/read-model');
 const { workbenchQueueHref, workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 const { m } = await import('../src/paraglide/messages.js');
+const { deLocalizeUrl } = await import('../src/paraglide/runtime.js');
 afterAll(async () => {
   await browser.happyDOM.close();
   for (const [key, descriptor] of saved)
@@ -165,7 +166,7 @@ test('served discovery selects a direct Board or independent Global queue, inspe
   const root = createRoot(host);
   const button = (label: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === label)!;
   const follow = async (link: HTMLAnchorElement) => {
-    const url = new URL(link.href);
+    const url = deLocalizeUrl(new URL(link.href));
     await act(() => router.navigate({ href: url.pathname + url.search }));
   };
   try {
