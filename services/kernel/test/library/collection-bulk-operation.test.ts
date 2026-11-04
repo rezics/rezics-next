@@ -316,11 +316,20 @@ test('current authority loss prevents another effect and result disclosure', asy
 test('filtered review pages never narrow the captured set; exact start replay keeps mixed outcomes', async () => {
   await f.setLibraryOpen(false);
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
-  const owner = await f.identity([...f.owner.actor.scopes, 'collection:create', 'collection:read', 'collection:update']);
+  const owner = await f.identity([
+    ...f.owner.actor.scopes,
+    'collection:create',
+    'collection:read',
+    'collection:update',
+  ]);
   await f.grantLibraryGate(owner.actor.accountId);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
   const source = (
-    await collections.createCollection(owner.actor, { title: 'Filtered operation review', visibility: 'private' }, key())
+    await collections.createCollection(
+      owner.actor,
+      { title: 'Filtered operation review', visibility: 'private' },
+      key(),
+    )
   ).value;
   const captured: Awaited<ReturnType<typeof entry>>[] = [];
   for (let n = 0; n < 25; n++) {
@@ -506,10 +515,10 @@ test('remote add receipt is recovered after cancellation, then results stay priv
   const expiry = { pool: f.pool, clock: expired };
   await expireCollectionBulkPage(expiry, sourceRoute);
   await expireCollectionBulkPage(expiry, sourceRoute);
-  const root = await f.pool.query(
-    'SELECT 1 FROM library.bulk_operation WHERE route=$1 AND operation_id=$2',
-    [sourceRoute, operationId],
-  );
+  const root = await f.pool.query('SELECT 1 FROM library.bulk_operation WHERE route=$1 AND operation_id=$2', [
+    sourceRoute,
+    operationId,
+  ]);
   expect(root.rowCount).toBe(0);
   expect(member.rows[0]?.count).toBe(1);
 });
