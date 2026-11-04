@@ -8676,5 +8676,13 @@
   "search_population_retry": "Reintentar esta búsqueda de Realm",
   "search_population_restart": "Reiniciar la misma búsqueda",
   "shell_client_unavailable": "No se pudieron cargar los controles interactivos. La respuesta del servidor sigue disponible abajo. Recarga esta página para reintentarlo.",
-  "shell_client_reload": "Recargar esta página"
+  "shell_client_reload": "Recargar esta página",
+  "library_copy_filter_any": "Cualquiera",
+  "library_copy_filter_apply": "Aplicar filtros de ejemplares",
+  "library_copy_filter_available": "Significado histórico disponible",
+  "library_copy_filter_unsupported": "Significado histórico no admitido",
+  "library_copy_filter_unavailable": "Significado histórico no disponible",
+  "library_copy_filter_history": "Las opciones describen tus ejemplares guardados, incluidos los valores históricos.",
+  "library_copy_filter_none": "No hay opciones guardadas para este filtro.",
+  "library_copy_filter_options_unavailable": "Las opciones de filtro no están disponibles temporalmente. Se conservan los ID seleccionados."
 }

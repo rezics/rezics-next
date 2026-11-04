@@ -8676,5 +8676,13 @@
   "search_population_retry": "重試此 Realm 搜尋",
   "search_population_restart": "重新開始相同搜尋",
   "shell_client_unavailable": "互動控制項載入失敗。下方仍可查看伺服器回應；請重新載入此頁再試一次。",
-  "shell_client_reload": "重新載入此頁"
+  "shell_client_reload": "重新載入此頁",
+  "library_copy_filter_any": "全部",
+  "library_copy_filter_apply": "套用副本篩選",
+  "library_copy_filter_available": "歷史含義可用",
+  "library_copy_filter_unsupported": "歷史含義不受支援",
+  "library_copy_filter_unavailable": "歷史含義無法取得",
+  "library_copy_filter_history": "選項來自已儲存的館藏，包括歷史值。",
+  "library_copy_filter_none": "此篩選沒有已儲存的選項。",
+  "library_copy_filter_options_unavailable": "暫時無法取得篩選選項。已選取的 ID 會保留。"
 }

@@ -35,6 +35,7 @@ import { UndoNotice } from './copies-undo';
 import type { CopyRemoved } from './copies-read';
 import { undoCopy } from './copies-actions';
 import { copyFieldInputIsTooLong } from './copy-field-input';
+import { CopyInventoryFilters } from './copy-inventory-filters';
 export { CopiesFallback } from './copies-fallback';
 const inputClass =
   'min-h-11 min-w-0 max-w-full w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -1225,6 +1226,15 @@ function LoadedCopiesPage({
       <noscript>
         <CopiesFallback page={page} csrfToken={page.csrfToken} />
       </noscript>
+      <Exposure operation="copy.list">
+        <CopyInventoryFilters
+          subjectId={page.subjectId}
+          kind={page.kind ?? null}
+          status={page.status ?? null}
+          filterOptions={page.filterOptions}
+          current={() => currentPage('copy.list')}
+        />
+      </Exposure>
       {page.subjectId ? (
         <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span>{m.library_copy_filtered_heading({ title: filteredTitle ?? m.library_copy_this_edition() })}</span>
@@ -1281,10 +1291,10 @@ function LoadedCopiesPage({
       ) : (
         <p role="status" className="text-muted-foreground">
           {firstPageEmpty
-            ? page.subjectId
-              ? m.library_copy_filtered_empty()
-              : predicateFilters.length
-                ? m.library_copy_matching_empty()
+            ? predicateFilters.length
+              ? m.library_copy_matching_empty()
+              : page.subjectId
+                ? m.library_copy_filtered_empty()
                 : m.library_copy_empty()
             : m.library_copy_page_empty()}
         </p>

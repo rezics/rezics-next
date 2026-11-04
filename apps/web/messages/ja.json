@@ -8676,5 +8676,13 @@
   "search_population_retry": "この Realm 検索を再試行",
   "search_population_restart": "同じ条件で検索をやり直す",
   "shell_client_unavailable": "操作に必要な機能を読み込めませんでした。下にサーバーの応答を表示しています。このページを再読み込みしてお試しください。",
-  "shell_client_reload": "このページを再読み込み"
+  "shell_client_reload": "このページを再読み込み",
+  "library_copy_filter_any": "すべて",
+  "library_copy_filter_apply": "所蔵コピーの絞り込みを適用",
+  "library_copy_filter_available": "過去の意味を確認できます",
+  "library_copy_filter_unsupported": "過去の意味は非対応です",
+  "library_copy_filter_unavailable": "過去の意味を確認できません",
+  "library_copy_filter_history": "保存された所蔵コピーの値です。過去の値も含まれます。",
+  "library_copy_filter_none": "この絞り込みには保存された選択肢がありません。",
+  "library_copy_filter_options_unavailable": "絞り込みの選択肢は一時的に利用できません。選択中の ID は保持されます。"
 }

@@ -8768,5 +8768,13 @@
   "search_population_retry": "Retry this Realm search",
   "search_population_restart": "Restart the same search",
   "shell_client_unavailable": "Interactive controls could not load. The server response below is still available. Reload this page to try again.",
-  "shell_client_reload": "Reload this page"
+  "shell_client_reload": "Reload this page",
+  "library_copy_filter_any": "Any",
+  "library_copy_filter_apply": "Apply copy filters",
+  "library_copy_filter_available": "Historical meaning available",
+  "library_copy_filter_unsupported": "Historical meaning unsupported",
+  "library_copy_filter_unavailable": "Historical meaning unavailable",
+  "library_copy_filter_history": "Choices describe your stored holdings, including historical values.",
+  "library_copy_filter_none": "There are no stored choices for this filter.",
+  "library_copy_filter_options_unavailable": "Filter choices are temporarily unavailable. Selected IDs are retained."
 }

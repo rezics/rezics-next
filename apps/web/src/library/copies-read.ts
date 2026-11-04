@@ -8,7 +8,13 @@ import type { CopyReadingContext, NativeCopyListContext, NativeCopyListRow } fro
 import { copyListContextFromNativeRow } from './copy-reading-context/read';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
-import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy, type NativeCopyList, type NativeCopyListQuery } from './copies-server';
+import {
+  nativeCopyPresentation,
+  nativeCopyPresentationQuery,
+  type NativeCopy,
+  type NativeCopyList,
+  type NativeCopyListQuery,
+} from './copies-server';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
