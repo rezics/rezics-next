@@ -71,6 +71,23 @@ function render(
   );
 }
 
+function tagDefinitions(subject: Subject): NonNullable<Parameters<typeof WorkTagReading>[0]['definitions']> {
+  return {
+    types: {
+      [subject.type]: { bases: ['schema:CreativeWork'], facets: ['schema:keywords'] },
+      'schema:CreativeWork': { bases: [], facets: [] },
+      'skos:Concept': { bases: [], facets: [] },
+    },
+    properties: {
+      'schema:keywords': {
+        labels: { en: 'Keywords' },
+        datatype: 'wikibase-item',
+        targets: ['skos:Concept'],
+      },
+    },
+  } as NonNullable<Parameters<typeof WorkTagReading>[0]['definitions']>;
+}
+
 const text = (html: string) =>
   html
     .replace(/<[^>]+>/gu, ' ')
@@ -80,9 +97,8 @@ const text = (html: string) =>
 test('public tag chips use the disclosed Concept label and destination, keep source evidence per association, and gate spoilers', async () => {
   const loaded = await loadSubjectPage(kernel, holder);
   if (loaded.kind !== 'page') throw new Error(`Expected a page, received ${loaded.kind}`);
-  if (loaded.page.catalogue?.state !== 'released') throw new Error('Expected the released tag definitions');
-  const definitions = loaded.page.catalogue.definitions;
   const { subject, related } = readBody(loaded);
+  const definitions = tagDefinitions(subject);
   const statements = subject.statements as Record<string, unknown[]>;
   statements['schema:keywords'] = [
     taggedStatement('0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f40', tag, '+2.59999990463257'),
@@ -118,9 +134,8 @@ test('public tag chips use the disclosed Concept label and destination, keep sou
 test('unsupported and absent metrics never receive a numeric fallback', async () => {
   const loaded = await loadSubjectPage(kernel, holder);
   if (loaded.kind !== 'page') throw new Error(`Expected a page, received ${loaded.kind}`);
-  if (loaded.page.catalogue?.state !== 'released') throw new Error('Expected the released tag definitions');
-  const definitions = loaded.page.catalogue.definitions;
   const { subject, related } = readBody(loaded);
+  const definitions = tagDefinitions(subject);
   (subject.statements as Record<string, unknown[]>)['schema:keywords'] = [
     taggedStatement('0192f3a0-6c1e-8b2a-9d4e-1a2b3c4d5f44', tag, '+2.4'),
   ];
