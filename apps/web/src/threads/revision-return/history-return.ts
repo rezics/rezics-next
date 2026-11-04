@@ -332,6 +332,18 @@ export function consumeHistoryReturnCommand(input: {
     new URLSearchParams(input.search).get('post') !== receipt.postId ||
     !current(receipt, input.source, input.locale, input.credentialMode)
   ) {
+    console.error('History return command was rejected', {
+      receiptToken: receipt?.token,
+      intent: input.intent,
+      command,
+      origin,
+      pathname: input.pathname,
+      search: input.search,
+      sourceMatches: receipt?.source === input.source,
+      sourceCurrent: receipt
+        ? current(receipt, input.source, input.locale, input.credentialMode)
+        : false,
+    });
     pendingCommand = undefined;
     if (receipt?.token === input.intent.token) retire(input.intent.token);
     return undefined;
