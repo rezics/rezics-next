@@ -1,7 +1,11 @@
-import { TextSyntaxError } from '../../../../packages/search-text/src/index.ts';
-import { ProblemError } from '../http/problem-error.ts';
 import type { TextNode } from '../../../../packages/search-text/src/index.ts';
-export { TEXT_LIMITS, TextSyntaxError, parseText, positiveText } from '../../../../packages/search-text/src/index.ts';
+export {
+  TEXT_LIMITS,
+  TextSyntaxError,
+  parseText,
+  positiveText,
+  textSyntaxProblem,
+} from '../../../../packages/search-text/src/index.ts';
 export type { TextNode } from '../../../../packages/search-text/src/index.ts';
 
 type TextQuery =
@@ -43,12 +47,4 @@ export function compileText(
     }
   }
   return { query: compile(node, false), leaves };
-}
-
-/** Public syntax advice contains only a closed parser diagnostic, never request contents. */
-export function rejectTextSyntax(error: TextSyntaxError): never {
-  throw new ProblemError('unsupported_query', {
-    errors: [{ pointer: '/text', code: error.code }],
-    extensions: { textDiagnostic: error.diagnostic },
-  });
 }

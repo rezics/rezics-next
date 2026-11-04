@@ -249,3 +249,11 @@ export function readTextDiagnostic(value: unknown): TextDiagnostic | undefined {
     byteOffset,
   };
 }
+
+/** Safe operation problem fields; HTTP adapters retain their existing problem identity. */
+export function textSyntaxProblem(error: TextSyntaxError) {
+  return {
+    errors: [{ pointer: '/text', code: error.code }],
+    extensions: { textDiagnostic: error.diagnostic },
+  };
+}

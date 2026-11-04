@@ -12,7 +12,7 @@ import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { DiscoveryOwnerRegistry, DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { admitProperties, validateHitOptions, validateSearchLimit } from './hits.ts';
-import { parseText, positiveText, rejectTextSyntax, TextSyntaxError } from './text.ts';
+import { parseText, positiveText, textSyntaxProblem, TextSyntaxError } from './text.ts';
 
 export type MixedDiscoveryRequest = DiscoveryRequest & {
   kindPage?: { limit: number; cursor?: string };
@@ -100,7 +100,7 @@ export function admitDiscoveryRequest(
         new Set(discoveryKindDirectory(registry).map((entry) => entry.kind)),
       );
   } catch (error) {
-    if (error instanceof TextSyntaxError) rejectTextSyntax(error);
+    if (error instanceof TextSyntaxError) throw new ProblemError('unsupported_query', textSyntaxProblem(error));
     if (error instanceof FilterError)
       throw new ProblemError(error.problem, {
         errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
@@ -171,7 +171,7 @@ export function requiresAdvancedDiscoverySearch(request: MixedDiscoveryRequest):
       request.sort === 'collections'
     );
   } catch (error) {
-    if (error instanceof TextSyntaxError) rejectTextSyntax(error);
+    if (error instanceof TextSyntaxError) throw new ProblemError('unsupported_query', textSyntaxProblem(error));
     if (error instanceof FilterError)
       throw new ProblemError(error.problem, {
         errors: error.errors.map(({ pointer, code }) => ({ pointer: `/filter${pointer}`, code })),
