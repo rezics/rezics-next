@@ -1013,7 +1013,7 @@ function AdmittedPresentationViewEditor({
 
   function published(confirmation: PublicationConfirmation) {
     if (!isCurrent() || confirmation.intent.reader !== reader) return;
-    const saved = { ok: true as const, reader, profile: confirmation.intent.profile, ...confirmation.result };
+    const saved = { reader, profile: confirmation.intent.profile, ...confirmation.result };
     setOwned(setCurrent, saved);
     setOwned(setDraft, (value) => value && confirmPresentationDraft(value, confirmation));
     setOwned(setCorrection, null);
@@ -1194,7 +1194,7 @@ function AdmittedPresentationViewEditor({
             // reconcile('keep') returns the draft on the reviewed head. The dirty baseline is the actual read.
             const active = publicationState.active;
             if (!active) return;
-            const reviewed = { ok: true as const, ...active };
+            const reviewed = { ...active };
             setOwned(setCurrent, reviewed);
             setOwned(setDraft, (value) => value && reviewPresentationDraft(value, reviewed, choice));
             if (choice === 'discard') setOwned(setGeneration, (value) => value + 1);
