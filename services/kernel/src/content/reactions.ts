@@ -8,6 +8,7 @@ import { resourceAuthorization } from '../access/resource-authorization.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
+  noEffect,
   runCommand,
   type AuthoritativeTime,
 } from '../command/command.ts';
@@ -40,7 +41,6 @@ export type ReactionDependencies = Readonly<{
 }>;
 export type ReactionTarget = Readonly<{ targetKind: 'thread' | 'post' | 'subject'; targetId: string }>;
 export type SetReactionInput = ReactionTarget & Readonly<{ kind: ReactionKind }>;
-class Unchanged extends Error {}
 function route(id: string): number {
   const value = routeOf(id);
   if (value === null) throw new GrantDeniedError();
@@ -243,61 +243,58 @@ async function mutate(
   };
   const identity = principalCommandIdentity(actor);
   const commandKind = kind === null ? 'content.reaction.clear' : 'content.reaction.set';
-  try {
-    return await runCommand(
-      deps.pool,
-      {
-        ...identity,
-        partition,
-        clock: deps.clock,
-        deadline: context.deadline,
-        authorization,
-        receipt: {
-          kind: commandKind,
-          key: context.idempotencyKey,
-          digest: createHash('sha256')
-            .update(canonicalize([identity, commandKind, body])!)
-            .digest(),
-        },
+  return runCommand(
+    deps.pool,
+    {
+      ...identity,
+      partition,
+      clock: deps.clock,
+      deadline: context.deadline,
+      authorization,
+      receipt: {
+        kind: commandKind,
+        key: context.idempotencyKey,
+        digest: createHash('sha256')
+          .update(canonicalize([identity, commandKind, body])!)
+          .digest(),
       },
-      async (tx, command) => {
-        const rows = await slotStatement.run(tx, {
-          route: home,
-          actor_id: actor.accountId,
-          target_kind: body.targetKind,
-          target_route: targetRoute,
-          target_id: targetId,
-          kind,
-          at: authoritativeTimeValue(command.time),
-        });
-        // The executor requires an event for a committed command. Roll back the
-        // unchanged slot, receipt and position together instead of emitting noise.
-        const changed = rows[0];
-        if (!changed) throw new Unchanged();
-        return {
-          value: body,
-          events: [
-            {
-              type: 'com.rezics.content.reaction.changed.v1',
-              subject: targetId,
-              data: {
-                actorId: actor.accountId,
-                targetKind: body.targetKind,
-                targetId,
-                previousKind: changed.previous_kind,
-                kind: changed.kind,
-              },
+    },
+    async (tx, command) => {
+      const rows = await slotStatement.run(tx, {
+        route: home,
+        actor_id: actor.accountId,
+        target_kind: body.targetKind,
+        target_route: targetRoute,
+        target_id: targetId,
+        kind,
+        at: authoritativeTimeValue(command.time),
+      });
+      // An already-satisfied command still needs its own durable acknowledgement.
+      // Otherwise a retry after a later change could overwrite that newer choice.
+      // The native no-effect fence keeps the receipt without a domain event or
+      // advancing the aggregate watermark. Authorization still precedes replay.
+      const changed = rows[0];
+      if (!changed) return noEffect(body);
+      return {
+        value: body,
+        events: [
+          {
+            type: 'com.rezics.content.reaction.changed.v1',
+            subject: targetId,
+            data: {
+              actorId: actor.accountId,
+              targetKind: body.targetKind,
+              targetId,
+              previousKind: changed.previous_kind,
+              kind: changed.kind,
             },
-          ],
-        };
-      },
-    );
-  } catch (error) {
-    if (error instanceof Unchanged) return null;
-    throw error;
-  }
+          },
+        ],
+      };
+    },
+  );
 }
-/** A changed slot returns its command outcome; an unchanged slot returns null. */
+/** Every accepted set or clear retains its original command receipt, including an unchanged slot. */
 export function setReaction(
   deps: ReactionDependencies,
   actor: Actor,

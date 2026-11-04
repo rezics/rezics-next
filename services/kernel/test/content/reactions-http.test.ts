@@ -314,7 +314,7 @@ test.serial(
     });
     expect(repeat.response.status).toBe(200);
     expect(repeat.value).toEqual({ kind: 'love' });
-    expect(await effects(published.thread)).toEqual(changed);
+    expect(await effects(published.thread)).toEqual({ ...changed, receipts: changed.receipts + 1 });
 
     const postBefore = await effects(published.posts[0]!);
     const postLiked = await call('PUT', postPath, {
@@ -399,6 +399,39 @@ test.serial(
     expect(afterPosts.map((post) => post.viewerReaction)).toEqual([null, null, null, null]);
     const authorStill = await call('GET', `/v1/threads/${published.thread}`, { bearer: author.bearer });
     expect((authorStill.value?.thread as { viewerReaction: string }).viewerReaction).toBe('upvote');
+  },
+);
+
+test.serial(
+  'post reaction retries retain already-satisfied set and clear acknowledgements after a later choice',
+  async () => {
+    const path = `/v1/posts/${published.posts[2]}/reaction`;
+    for (const method of ['PUT', 'DELETE']) {
+      const command = {
+        bearer: member.bearer,
+        key: crypto.randomUUID(),
+        ...(method === 'PUT' ? { body: { kind: 'like' } } : {}),
+      };
+      expect((await call(method, path, { ...command, key: crypto.randomUUID() })).response.status).toBe(
+        method === 'PUT' ? 200 : 204,
+      );
+      const before = await effects(published.posts[2]!);
+      expect((await call(method, path, command)).response.status).toBe(method === 'PUT' ? 200 : 204);
+      expect(await effects(published.posts[2]!)).toEqual({ ...before, receipts: before.receipts + 1 });
+      expect(
+        (await call('PUT', path, { bearer: member.bearer, key: crypto.randomUUID(), body: { kind: 'love' } })).response
+          .status,
+      ).toBe(200);
+      const later = await effects(published.posts[2]!);
+      expect((await call(method, path, command)).response.status).toBe(method === 'PUT' ? 200 : 204);
+      expect(await effects(published.posts[2]!)).toEqual(later);
+      const read = await call('GET', `/v1/posts/${published.posts[2]}`, { bearer: member.bearer });
+      expect(read.response.status).toBe(200);
+      expect(read.value?.post).toHaveProperty('viewerReaction', 'love');
+      if (method === 'PUT')
+        expect((await call(method, path, { ...command, body: { kind: 'sad' } })).response.status).toBe(409);
+    }
+    expect((await call('DELETE', path, { bearer: member.bearer, key: crypto.randomUUID() })).response.status).toBe(204);
   },
 );
 

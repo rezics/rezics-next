@@ -291,7 +291,7 @@ if (Bun.main === import.meta.path) {
         const unchanged = await f.effects();
         if (kind === null) await commands.clearReaction(deps(), actor, { targetKind, targetId }, request());
         else await commands.setReaction(deps(), actor, { targetKind, targetId, kind }, request());
-        expect(await f.effects()).toEqual(unchanged);
+        expect(await f.effects()).toEqual({ ...unchanged, receipts: unchanged.receipts + 1 });
         previousKind = kind;
       }
     }
