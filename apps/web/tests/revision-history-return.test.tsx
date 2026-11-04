@@ -176,7 +176,6 @@ async function mount(initialUrl: string) {
   const { deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
   let router: ReturnType<typeof createRouter>;
   const threadRoute = createRoute({
-    id: '/threads/$id_/$slug',
     getParentRoute: () => rootRoute,
     path: 'threads/$id/$slug',
     component: function ThreadHistory() {
@@ -197,7 +196,7 @@ async function mount(initialUrl: string) {
       );
     },
     validateSearch: (search: Record<string, unknown>) => search,
-  });
+  }).update({ id: '/threads/$id_/$slug' } as never);
   ExactRoute.update({
     id: '/posts/$id/revisions/$revisionId',
     path: 'posts/$id/revisions/$revisionId',
