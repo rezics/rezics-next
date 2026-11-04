@@ -261,7 +261,8 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       throw new AuthHostConfigurationError('private-consent');
     }
   }
-  const transferPageAccess = options.trustedAccess as typeof options.trustedAccess & Partial<OperatorTransferPageAccess>;
+  const transferPageAccess = options.trustedAccess as typeof options.trustedAccess &
+    Partial<OperatorTransferPageAccess>;
   // Point-read only. registerClient takes the client advisory lock on its own
   // connection, so holding that lock here would deadlock. An existing login
   // client is left unchanged, including one registered with scopes.
@@ -300,67 +301,67 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       service,
       accountOperationTransport(
         service,
-      workflows,
-      operatorSessionTransport(
-        service,
         workflows,
-        accountManagementReadTransport(
+        operatorSessionTransport(
           service,
-          organizationMembershipPageTransport(
+          workflows,
+          accountManagementReadTransport(
             service,
-            accountManagementMembershipTransport(
+            organizationMembershipPageTransport(
               service,
-              automatedOperatorTransport(
+              accountManagementMembershipTransport(
                 service,
-                organizationDeletionReadTransport(
+                automatedOperatorTransport(
                   service,
-                  accountProfileReadTransport(
+                  organizationDeletionReadTransport(
                     service,
-                    operatorOpeningPageTransport(
+                    accountProfileReadTransport(
                       service,
-                      accountDeletionPageTransport(
+                      operatorOpeningPageTransport(
                         service,
-                        credentialEffectTransport(service, workflows.handler, options),
-                        options.database,
-                        (options.trustedAccess as typeof options.trustedAccess & Partial<AccountDeletionPageAccess>)
-                          .readAccountDeletionAdvice
-                          ? (options.trustedAccess as typeof options.trustedAccess & AccountDeletionPageAccess)
+                        accountDeletionPageTransport(
+                          service,
+                          credentialEffectTransport(service, workflows.handler, options),
+                          options.database,
+                          (options.trustedAccess as typeof options.trustedAccess & Partial<AccountDeletionPageAccess>)
+                            .readAccountDeletionAdvice
+                            ? (options.trustedAccess as typeof options.trustedAccess & AccountDeletionPageAccess)
+                            : undefined,
+                        ),
+                        (options.trustedAccess as typeof options.trustedAccess & Partial<OperatorOpeningPageAccess>)
+                          .readOperatorOpeningPage
+                          ? (options.trustedAccess as typeof options.trustedAccess & OperatorOpeningPageAccess)
                           : undefined,
                       ),
-                      (options.trustedAccess as typeof options.trustedAccess & Partial<OperatorOpeningPageAccess>)
-                        .readOperatorOpeningPage
-                        ? (options.trustedAccess as typeof options.trustedAccess & OperatorOpeningPageAccess)
+                      (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
+                        .readRenameAccountProfile
+                        ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
                         : undefined,
                     ),
-                    (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
-                      .readRenameAccountProfile
-                      ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)
+                    (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionPageAccess>)
+                      .readOrganizationDeletionPage
+                      ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionPageAccess)
                       : undefined,
                   ),
-                  (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationDeletionPageAccess>)
-                    .readOrganizationDeletionPage
-                    ? (options.trustedAccess as typeof options.trustedAccess & OrganizationDeletionPageAccess)
+                  (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
+                    .readAutomatedCreationPage
+                    ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
                     : undefined,
                 ),
-                (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
-                  .readAutomatedCreationPage
-                  ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
+                (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
+                  .readOrganizationMembershipCommandState
+                  ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
                   : undefined,
               ),
-              (options.trustedAccess as typeof options.trustedAccess & Partial<ManagementMembershipAccess>)
-                .readOrganizationMembershipCommandState
-                ? (options.trustedAccess as typeof options.trustedAccess & ManagementMembershipAccess)
+              (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationMembershipPageAccess>)
+                .readOrganizationMembershipPage
+                ? (options.trustedAccess as typeof options.trustedAccess & OrganizationMembershipPageAccess)
                 : undefined,
             ),
-            (options.trustedAccess as typeof options.trustedAccess & Partial<OrganizationMembershipPageAccess>)
-              .readOrganizationMembershipPage
-              ? (options.trustedAccess as typeof options.trustedAccess & OrganizationMembershipPageAccess)
-              : undefined,
+            options.accountManagementReads ?? options.accountOperations,
           ),
-          options.accountManagementReads ?? options.accountOperations,
+          options.accountOperations,
         ),
-        options.accountOperations,
-      ),
         options.accountOperations,
       ),
       transferPageAccess.readOperatorTransferPage

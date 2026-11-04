@@ -56,7 +56,10 @@ test('unknown response fields fail closed and authentication continuation stays 
   expect(await readOperatorTransferPage({ kind: 'readiness' })).toEqual({ kind: 'failure', reason: 'unavailable' });
 
   globalThis.fetch = (async () =>
-    Response.json({ viewer: { kind: 'authentication-required', continuation: 'operator-transfer' }, review: { kind: 'unavailable' } })) as typeof fetch;
+    Response.json({
+      viewer: { kind: 'authentication-required', continuation: 'operator-transfer' },
+      review: { kind: 'unavailable' },
+    })) as typeof fetch;
   expect(await readOperatorTransferPage({ kind: 'readiness' })).toMatchObject({
     viewer: { kind: 'authentication-required', continuation: 'operator-transfer' },
   });
