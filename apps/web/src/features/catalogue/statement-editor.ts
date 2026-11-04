@@ -2,7 +2,14 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { PropertyDefinition, Release } from '@rezics/definitions';
 import type { BatchStatement } from '@rezics/definitions/bulk';
 import { checkStatementInput, type Violation } from '@rezics/definitions/validate';
-import { candidateFailure, type CandidateFailure } from '../../subject/candidates';
+import {
+  candidateContext,
+  candidateFailure,
+  type CandidateFailure,
+  type CandidateViewerActions,
+  type ViewerActionComponent,
+  nativeOperationAvailability,
+} from '../../subject/candidates';
 
 type Statement = SubjectRead['subject']['statements'][string][number];
 export type SnakInput = Pick<BatchStatement, 'property' | 'value'>;
@@ -18,6 +25,8 @@ export type EditorRead =
       public: SubjectRead;
       release: Release;
       source: Statement | null;
+      /** Missing action data is never treated as a confirmed empty permission set. */
+      actions?: CandidateViewerActions;
     };
 export type ProposalCommand = { id: string; key: string; statement: StatementInput };
 
@@ -51,6 +60,71 @@ export type EditorTransport = {
   read: () => Promise<EditorRead>;
   propose: (command: ProposalCommand) => Promise<ProposalResult>;
 };
+
+const notRequested = { state: 'not-requested' } as const;
+const unavailableActions = (reason: 'not-found' | 'unavailable' = 'unavailable'): ViewerActionComponent => ({
+  state: 'unavailable',
+  reason,
+});
+
+/** Read the exact subject and Global Context operations in one bounded native batch. */
+export async function readCorrectionActions(
+  client: KernelClient,
+  authorization: string | undefined,
+  id: string,
+): Promise<CandidateViewerActions> {
+  if (!authorization) return { subject: notRequested, context: notRequested };
+  try {
+    const refs = [
+      { type: 'semantic.subject', id },
+      { type: 'semantic.context', id: candidateContext },
+    ];
+    const result = await client.viewerActions.post(
+      { resources: refs },
+      { headers: { authorization }, fetch: { cache: 'no-store' } },
+    );
+    if (result.status !== 200 || !result.data || result.data.resources.length !== refs.length) {
+      return { subject: unavailableActions(), context: unavailableActions() };
+    }
+    const component = (type: string, resourceId: string): ViewerActionComponent => {
+      const matches = result.data!.resources.filter((resource) => resource.type === type && resource.id === resourceId);
+      if (matches.length !== 1) return unavailableActions();
+      const resource = matches[0]!;
+      if (!('viewerActions' in resource)) return unavailableActions('not-found');
+      if (
+        !Array.isArray(resource.viewerActions) ||
+        resource.viewerActions.some(
+          (entry) =>
+            !entry ||
+            typeof entry.action !== 'string' ||
+            !Array.isArray(entry.operations) ||
+            entry.operations.some((operation) => typeof operation !== 'string'),
+        )
+      )
+        return unavailableActions();
+      return {
+        state: 'available',
+        actions: resource.viewerActions.map((entry) => ({ action: entry.action, operations: [...entry.operations] })),
+      };
+    };
+    return {
+      subject: component('semantic.subject', id),
+      context: component('semantic.context', candidateContext),
+    };
+  } catch {
+    return { subject: unavailableActions(), context: unavailableActions() };
+  }
+}
+
+export function correctionProposalAvailability(actions?: CandidateViewerActions) {
+  const subject = actions?.subject;
+  if (!subject || subject.state !== 'available') return 'unavailable' as const;
+  return nativeOperationAvailability(actions.context, 'statement:propose', 'subject.propose');
+}
+
+export function correctionInspectionAvailability(actions?: CandidateViewerActions) {
+  return nativeOperationAvailability(actions?.subject, 'subject:read', 'subject.list_candidates');
+}
 
 const scalarTypes = new Set(['string', 'external-id', 'url', 'monolingualtext', 'time', 'quantity']);
 const terms = new Set(['schema:name', 'schema:description', 'schema:alternateName']);
@@ -126,12 +200,17 @@ export function creationStatement(statement: StatementInput, _release?: Pick<Rel
   };
 }
 
-export async function readStatementEditor(client: KernelClient, address: EditorAddress): Promise<EditorRead> {
+export async function readStatementEditor(
+  client: KernelClient,
+  address: EditorAddress,
+  authorization?: string,
+): Promise<EditorRead> {
   try {
     // Independent public reads begin together; no privileged fallback or per-field requests.
-    const [subject, active] = await Promise.all([
+    const [subject, active, actions] = await Promise.all([
       client.subjects({ id: address.id }).get(),
       client.definitions.active.get(),
+      readCorrectionActions(client, authorization, address.id),
     ]);
     if (subject.status !== 200 || !subject.data) return candidateFailure(subject.status);
     if (subject.data.subject.id !== address.id) return { ok: false, reason: 'stale' };
@@ -148,7 +227,7 @@ export async function readStatementEditor(client: KernelClient, address: EditorA
         ? subject.data.subject.statements[address.property]?.find((item) => item.id === address.statement)
         : undefined;
     if (address.statement && !source) return { ok: false, reason: 'stale' };
-    return { ok: true, public: subject.data, release, source: source ?? null };
+    return { ok: true, public: subject.data, release, source: source ?? null, actions };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }

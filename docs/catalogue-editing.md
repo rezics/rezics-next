@@ -501,6 +501,14 @@ Generic Edit facts and every profile that renders SubjectFacts add a changed-set
 
 Reuse copies one complete grouped reference, in part order, onto up to sixteen currently editable drafts in the same subject visit. Each target gets an independent structured clone and new local holder identities; existing groups stay intact. The copy is a new evidence claim, not a transfer of support, prose or cover rights, provider identity, or acceptance authority. Over-limit, retired, locked or definition-incompatible targets stay unchanged with an explicit reason. Applying reuse makes no native request. A source or target that changes while the panel is open must be reviewed again. Session replacement retires the local snapshot.
 
+Facts correction binds current proposal authority to the active Global Context and candidate inspection to the exact disclosed Subject. Candidate decision (`context:accept`) and selection (`context:adopt`) remain separate operations. Decision: Facts correction reads one batched action projection for the disclosed `semantic.subject` and fixed Global Context; proposal, candidate inspection, editorial decision, and selection use their mounted operations independently, and an unavailable component disables dependent fresh commands.
+
+### Bound action projection for cited fact correction
+
+- Touches: one disclosed Subject, its active released scalar definitions, at most twelve changed rows with complete qualifiers and references, the existing candidate comparison, and deduplicated native Subject and Global Context action references.
+- Bound: one shared viewer-action batch and the existing bounded candidate page; action hydration is independent of rendered fields, qualifiers and references. The twelve-row, serialized command and aggregate changed-set byte limits remain in force.
+- Growth check: hold the Subject, twelve rows and citation bytes fixed while unrelated Subjects, candidates and authority history grow; account for the action preparation and candidate readback alongside each native proposal command.
+
 ## Narrative story arcs
 
 The Contribute menu opens `/catalogue/story-arc`; an existing `wd:Q2620972` Subject also offers its

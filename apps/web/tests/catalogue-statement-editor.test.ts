@@ -1,13 +1,74 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { statementFixture } from '../src/kernel/fake/catalogue-statements';
-import { candidateIsPublic } from '../src/subject/candidates';
+import { candidateContext, candidateIsPublic } from '../src/subject/candidates';
 import {
+  correctionInspectionAvailability,
+  correctionProposalAvailability,
+  readCorrectionActions,
   statementInput,
   validateStatement,
   correctionProperty,
   readStatementEditor,
 } from '../src/features/catalogue/statement-editor';
+
+test('Read correction operations once for the exact Subject and Global Context and keep unavailable separate from denied', async () => {
+  const id = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10';
+  const requests: { path: string; body: unknown; authorization: string | null }[] = [];
+  let hiddenContext = false;
+  const client = createKernelClient('https://actions.test', {
+    fetch: (async (input, init) => {
+      const request = input instanceof Request ? input.clone() : new Request(String(input), init);
+      const body = await request.json();
+      requests.push({
+        path: new URL(request.url).pathname,
+        body,
+        authorization: request.headers.get('authorization'),
+      });
+      return new Response(
+        JSON.stringify({
+          resources: [
+            {
+              type: 'semantic.subject',
+              id,
+              viewerActions: [{ action: 'subject:read', operations: ['subject.list_candidates'] }],
+            },
+            hiddenContext
+              ? { type: 'semantic.context', id: candidateContext, error: 'not_found' }
+              : { type: 'semantic.context', id: candidateContext, viewerActions: [] },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof fetch,
+  });
+
+  const denied = await readCorrectionActions(client, 'Bearer fixture', id);
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toEqual({
+    path: '/v1/viewerActions',
+    body: {
+      resources: [
+        { type: 'semantic.subject', id },
+        { type: 'semantic.context', id: candidateContext },
+      ],
+    },
+    authorization: 'Bearer fixture',
+  });
+  expect(correctionInspectionAvailability(denied)).toBe('allowed');
+  expect(correctionProposalAvailability(denied)).toBe('denied');
+
+  hiddenContext = true;
+  const unavailable = await readCorrectionActions(client, 'Bearer fixture', id);
+  expect(requests).toHaveLength(2);
+  expect(correctionInspectionAvailability(unavailable)).toBe('allowed');
+  expect(correctionProposalAvailability(unavailable)).toBe('unavailable');
+  expect(await readCorrectionActions(client, undefined, id)).toEqual({
+    subject: { state: 'not-requested' },
+    context: { state: 'not-requested' },
+  });
+  expect(requests).toHaveLength(2);
+});
 
 // The integration command exercises this same typed transport; these focused cases need no database.
 test('Propose a cited correction from the real subject page through the existing API and reader with honest failure states', async () => {

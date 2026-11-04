@@ -2,7 +2,7 @@ import { createKernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { candidateFixture, candidateProperty } from './subject-candidates';
 import definitions from '../recorded/definitions-release.json';
-import { readCandidates, selectCandidate, type CandidateRead } from '../../subject/candidates';
+import { readCandidates, selectCandidate, type CandidateRead, type CandidateViewerActions } from '../../subject/candidates';
 import {
   readStatementEditor,
   proposeStatement,
@@ -110,8 +110,25 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
     return base.fetcher(request);
   }) as typeof fetch;
   const client = createKernelClient('https://statements.test', { fetch: fetcher });
+  const actions: CandidateViewerActions = {
+    subject: {
+      state: 'available',
+      actions: [{ action: 'subject:read', operations: ['subject.list_candidates'] }],
+    },
+    context: {
+      state: 'available',
+      actions: [
+        { action: 'statement:propose', operations: ['subject.propose'] },
+        { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+        { action: 'context:adopt', operations: ['subject.adopt'] },
+      ],
+    },
+  };
   const editor = {
-    read: () => readStatementEditor(client, address),
+    read: async () => {
+      const result = await readStatementEditor(client, address);
+      return result.ok ? { ...result, actions } : result;
+    },
     propose: (command: Parameters<typeof proposeStatement>[2]) => proposeStatement(client, 'Bearer fixture', command),
   };
   const review: CandidateTransport = {
@@ -131,6 +148,7 @@ export function statementFixture(scenario: StatementScenario = 'ready', locale =
             names: Object.fromEntries(
               Object.entries(release.properties).map(([id, definition]) => [id, definition.labels]),
             ),
+            actions,
           }
         : result;
     },

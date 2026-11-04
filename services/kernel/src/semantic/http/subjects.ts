@@ -2190,6 +2190,7 @@ function subjectRoutes(
           operationId: 'subject.list_candidates',
           'x-exposure': 'public',
           'x-action': 'subject:read',
+          'x-resource-types': ['semantic.subject'],
           security: [{ bearerAuth: [] }, {}],
         },
       },

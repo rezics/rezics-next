@@ -15,6 +15,12 @@ The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ord
 minimal current-disclosure revision explanations. `correctTerms` is the native command; the mounted PATCH exports
 `TermsPatchSchema`/`TermsResultSchema` from `http/subjects.ts`. Native acceptance remains post-integration proof.
 
+The mounted facts correction reader uses the same generated `viewerActions` endpoint for the exact visible
+`semantic.subject` and the fixed Global Context. The generic Subject resolver applies current disclosure before
+projecting `subject.list_candidates`; the proposal operation is anchored to Global Context. Proposal, inspection,
+editorial decision (`context:accept`) and selection (`context:adopt`) remain distinct, and command execution performs
+its normal native authorization again.
+
 ## Public exposure boundary
 
 Existing active/released definitions, common editor/profile data, subject creation, proposal, acceptance,

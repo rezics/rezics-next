@@ -43,7 +43,7 @@ export const readCorrection = createServerFn({ method: 'POST', strict: false })
   .handler(async ({ data }): Promise<EditorRead> => {
     const authorization = await candidateAuthorization(data.expectedReader);
     if (!authorization) return { ok: false, reason: 'denied' };
-    return readStatementEditor(kernelClient(), data);
+    return readStatementEditor(kernelClient(), data, authorization);
   });
 
 export const submitCorrection = createServerFn({ method: 'POST', strict: false })
@@ -80,7 +80,7 @@ export const readCorrectionReview = createServerFn({ method: 'POST', strict: fal
     const client = kernelClient();
     const [result, form] = await Promise.all([
       readCandidates(client, authorization, data.id, data.property, data.cursor, undefined, data.session),
-      readStatementEditor(kernelClient(), { id: data.id, property: data.property }),
+      readStatementEditor(kernelClient(), { id: data.id, property: data.property }, authorization),
     ]);
     if (!result.ok) return result;
     if (!form.ok) return form;
@@ -89,6 +89,7 @@ export const readCorrectionReview = createServerFn({ method: 'POST', strict: fal
     const locale = requestLocale() ?? 'en';
     return {
       ...result,
+      ...(form.actions ? { actions: form.actions } : {}),
       fields: [
         {
           id: data.property,
