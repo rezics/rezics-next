@@ -1,20 +1,8 @@
-import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 
-export type ModuleKind =
-  | "contract"
-  | "core"
-  | "application"
-  | "adapter"
-  | "composition root"
-  | "UI/transport library";
+export type ModuleKind = 'contract' | 'core' | 'application' | 'adapter' | 'composition root' | 'UI/transport library';
 
 export interface SourceRoot {
   path: string;
@@ -42,7 +30,7 @@ export interface ArchitectureManifest {
 
 export interface ImportEdge {
   specifier: string;
-  kind: "value" | "type";
+  kind: 'value' | 'type';
   ordinal: number;
   line: number;
   column: number;
@@ -81,45 +69,45 @@ export interface AuditResult {
   violations: BoundaryViolation[];
 }
 
-const MANIFEST_PATH = "docs/architecture/modules.json";
-const BASELINE_PATH = "docs/architecture/boundary-baseline.json";
-const CACHE_PATH = ".temp/architecture/graph.json";
+const MANIFEST_PATH = 'docs/architecture/modules.json';
+const BASELINE_PATH = 'docs/architecture/boundary-baseline.json';
+const CACHE_PATH = '.temp/architecture/graph.json';
 const KINDS = new Set<ModuleKind>([
-  "contract",
-  "core",
-  "application",
-  "adapter",
-  "composition root",
-  "UI/transport library",
+  'contract',
+  'core',
+  'application',
+  'adapter',
+  'composition root',
+  'UI/transport library',
 ]);
-const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]);
+const CODE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs']);
 const EMITTED_SOURCE_EXTENSIONS: Record<string, string[]> = {
-  ".js": [".ts", ".tsx", ".d.ts", ".js"],
-  ".jsx": [".tsx", ".ts", ".d.ts", ".jsx"],
-  ".mjs": [".mts", ".d.ts", ".mjs"],
-  ".cjs": [".cts", ".d.ts", ".cjs"],
+  '.js': ['.ts', '.tsx', '.d.ts', '.js'],
+  '.jsx': ['.tsx', '.ts', '.d.ts', '.jsx'],
+  '.mjs': ['.mts', '.d.ts', '.mjs'],
+  '.cjs': ['.cts', '.d.ts', '.cjs'],
 };
-const FORBIDDEN_PACKAGES = new Set(["elysia", "pg", "react", "react-dom"]);
+const FORBIDDEN_PACKAGES = new Set(['elysia', 'pg', 'react', 'react-dom']);
 const NODE_BUILTINS = new Set([
-  "assert",
-  "buffer",
-  "child_process",
-  "crypto",
-  "events",
-  "fs",
-  "http",
-  "https",
-  "module",
-  "net",
-  "os",
-  "path",
-  "perf_hooks",
-  "process",
-  "stream",
-  "timers",
-  "url",
-  "util",
-  "worker_threads",
+  'assert',
+  'buffer',
+  'child_process',
+  'crypto',
+  'events',
+  'fs',
+  'http',
+  'https',
+  'module',
+  'net',
+  'os',
+  'path',
+  'perf_hooks',
+  'process',
+  'stream',
+  'timers',
+  'url',
+  'util',
+  'worker_threads',
 ]);
 
 const pathMappingsCache = new Map<string, { baseUrl: string; paths: Record<string, string[]> }>();
@@ -128,11 +116,11 @@ const jsonCache = new Map<string, Record<string, unknown> | undefined>();
 const globCache = new Map<string, RegExp>();
 
 function slash(path: string): string {
-  return path.split(sep).join("/");
+  return path.split(sep).join('/');
 }
 
 function sha256(value: string | Uint8Array): string {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function canonical(value: unknown): string {
@@ -142,22 +130,22 @@ function canonical(value: unknown): string {
 function globRegex(pattern: string): RegExp {
   const cached = globCache.get(pattern);
   if (cached) return cached;
-  let source = "^";
+  let source = '^';
   for (let index = 0; index < pattern.length; index += 1) {
     const character = pattern[index]!;
-    if (character === "*") {
-      if (pattern[index + 1] === "*") {
+    if (character === '*') {
+      if (pattern[index + 1] === '*') {
         index += 1;
-        if (pattern[index + 1] === "/") {
+        if (pattern[index + 1] === '/') {
           index += 1;
-          source += "(?:.*/)?";
+          source += '(?:.*/)?';
         } else {
-          source += ".*";
+          source += '.*';
         }
       } else {
-        source += "[^/]*";
+        source += '[^/]*';
       }
-    } else if ("\\.+?^${}()|[]".includes(character)) {
+    } else if ('\\.+?^${}()|[]'.includes(character)) {
       source += `\\${character}`;
     } else {
       source += character;
@@ -173,8 +161,8 @@ function matchesAny(path: string, patterns: string[] | undefined): boolean {
 }
 
 function workspaceForPath(path: string): string | undefined {
-  const segments = path.split("/");
-  if (["apps", "services", "packages"].includes(segments[0] ?? "") && segments.length >= 2) {
+  const segments = path.split('/');
+  if (['apps', 'services', 'packages'].includes(segments[0] ?? '') && segments.length >= 2) {
     return `${segments[0]}/${segments[1]}`;
   }
   return undefined;
@@ -189,7 +177,7 @@ function readJson(path: string): Record<string, unknown> | undefined {
   const absolute = resolve(path);
   if (jsonCache.has(absolute)) return jsonCache.get(absolute);
   try {
-    const result = JSON.parse(readFileSync(absolute, "utf8")) as Record<string, unknown>;
+    const result = JSON.parse(readFileSync(absolute, 'utf8')) as Record<string, unknown>;
     jsonCache.set(absolute, result);
     return result;
   } catch {
@@ -206,20 +194,20 @@ function packageRoots(root: string, manifest: ArchitectureManifest): Map<string,
   }
   const packages = new Map<string, string>();
   for (const workspace of workspaces) {
-    const packagePath = join(root, workspace, "package.json");
+    const packagePath = join(root, workspace, 'package.json');
     const value = readJson(packagePath);
-    if (typeof value?.name === "string") packages.set(value.name, join(root, workspace));
+    if (typeof value?.name === 'string') packages.set(value.name, join(root, workspace));
   }
   return packages;
 }
 
 function packageName(specifier: string): string | undefined {
-  if (!specifier || specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("#")) {
+  if (!specifier || specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('#')) {
     return undefined;
   }
   const clean = specifier.split(/[?#]/, 1)[0]!;
-  const parts = clean.split("/");
-  return clean.startsWith("@") ? (parts.length > 1 ? `${parts[0]}/${parts[1]}` : parts[0]) : parts[0];
+  const parts = clean.split('/');
+  return clean.startsWith('@') ? (parts.length > 1 ? `${parts[0]}/${parts[1]}` : parts[0]) : parts[0];
 }
 
 function sourceExtensions(root: SourceRoot): string[] {
@@ -247,7 +235,7 @@ function enumerateProductionFiles(root: string, manifest: ArchitectureManifest):
       for (const entry of readdirSync(directory, { withFileTypes: true })) {
         const absolutePath = join(directory, entry.name);
         if (entry.isDirectory()) {
-          if (!entry.name.startsWith(".") && entry.name !== "node_modules") visit(absolutePath);
+          if (!entry.name.startsWith('.') && entry.name !== 'node_modules') visit(absolutePath);
         } else if (entry.isFile()) {
           const path = slash(relative(root, absolutePath));
           if (isIncludedByRoot(path, sourceRoot)) files.push(path);
@@ -268,26 +256,47 @@ function resolveCandidate(root: string, candidate: string, knownFiles: Set<strin
     for (const extension of EMITTED_SOURCE_EXTENSIONS[emittedExtension]!) candidates.push(`${base}${extension}`);
   }
   if (!extname(normalized)) {
-    for (const extension of [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".d.ts", ".json", ".sql", ".css", ".yaml", ".yml", ".svg"]) {
+    for (const extension of [
+      '.ts',
+      '.tsx',
+      '.js',
+      '.jsx',
+      '.mts',
+      '.cts',
+      '.mjs',
+      '.cjs',
+      '.d.ts',
+      '.json',
+      '.sql',
+      '.css',
+      '.yaml',
+      '.yml',
+      '.svg',
+    ]) {
       candidates.push(`${normalized}${extension}`);
     }
-    for (const extension of [".ts", ".tsx", ".js", ".jsx", ".json"]) candidates.push(`${normalized}/index${extension}`);
+    for (const extension of ['.ts', '.tsx', '.js', '.jsx', '.json']) candidates.push(`${normalized}/index${extension}`);
   }
   return candidates.filter((path) => knownFiles.has(path));
 }
 
 function exportKeys(exportsValue: unknown): Array<[string, unknown]> {
-  if (typeof exportsValue === "string" || Array.isArray(exportsValue) || exportsValue === null || typeof exportsValue !== "object") {
-    return [[".", exportsValue]];
+  if (
+    typeof exportsValue === 'string' ||
+    Array.isArray(exportsValue) ||
+    exportsValue === null ||
+    typeof exportsValue !== 'object'
+  ) {
+    return [['.', exportsValue]];
   }
   const entries = Object.entries(exportsValue as Record<string, unknown>);
-  return entries.some(([key]) => key.startsWith(".")) ? entries : [[".", exportsValue]];
+  return entries.some(([key]) => key.startsWith('.')) ? entries : [['.', exportsValue]];
 }
 
 function exportKeyMatches(exportKey: string, subpath: string): { matched: boolean; wildcard?: string } {
   if (exportKey === subpath) return { matched: true };
-  const star = exportKey.indexOf("*");
-  if (star < 0 || exportKey.indexOf("*", star + 1) >= 0) return { matched: false };
+  const star = exportKey.indexOf('*');
+  if (star < 0 || exportKey.indexOf('*', star + 1) >= 0) return { matched: false };
   const prefix = exportKey.slice(0, star);
   const suffix = exportKey.slice(star + 1);
   if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix) || subpath.length < prefix.length + suffix.length) {
@@ -297,14 +306,14 @@ function exportKeyMatches(exportKey: string, subpath: string): { matched: boolea
 }
 
 function exportTargets(value: unknown): string[] {
-  if (typeof value === "string") return [value];
-  if (!value || typeof value !== "object") return [];
+  if (typeof value === 'string') return [value];
+  if (!value || typeof value !== 'object') return [];
   if (Array.isArray(value)) return value.flatMap(exportTargets);
   return Object.values(value as Record<string, unknown>).flatMap(exportTargets);
 }
 
 function parseJsonc(source: string): string {
-  let output = "";
+  let output = '';
   let quote = false;
   let escaped = false;
   for (let index = 0; index < source.length; index += 1) {
@@ -313,37 +322,37 @@ function parseJsonc(source: string): string {
     if (quote) {
       output += character;
       if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
+      else if (character === '\\') escaped = true;
       else if (character === '"') quote = false;
     } else if (character === '"') {
       quote = true;
       output += character;
-    } else if (character === "/" && next === "/") {
-      while (index < source.length && source[index] !== "\n") {
-        output += " ";
+    } else if (character === '/' && next === '/') {
+      while (index < source.length && source[index] !== '\n') {
+        output += ' ';
         index += 1;
       }
-      if (index < source.length) output += "\n";
-    } else if (character === "/" && next === "*") {
-      output += "  ";
+      if (index < source.length) output += '\n';
+    } else if (character === '/' && next === '*') {
+      output += '  ';
       index += 2;
-      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) {
-        output += source[index] === "\n" ? "\n" : " ";
+      while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
+        output += source[index] === '\n' ? '\n' : ' ';
         index += 1;
       }
       if (index < source.length) {
-        output += "  ";
+        output += '  ';
         index += 1;
       }
     } else {
       output += character;
     }
   }
-  return output.replace(/,\s*([}\]])/g, "$1");
+  return output.replace(/,\s*([}\]])/g, '$1');
 }
 
 function readPathMappings(root: string, sourcePath: string): { baseUrl: string; paths: Record<string, string[]> } {
-  const configPath = join(workspaceRootForFile(root, sourcePath), "tsconfig.json");
+  const configPath = join(workspaceRootForFile(root, sourcePath), 'tsconfig.json');
   const cached = pathMappingsCache.get(configPath);
   if (cached) return cached;
   const visiting = new Set<string>();
@@ -353,7 +362,7 @@ function readPathMappings(root: string, sourcePath: string): { baseUrl: string; 
     visiting.add(absolute);
     let config: Record<string, unknown> = {};
     try {
-      config = JSON.parse(parseJsonc(readFileSync(absolute, "utf8"))) as Record<string, unknown>;
+      config = JSON.parse(parseJsonc(readFileSync(absolute, 'utf8'))) as Record<string, unknown>;
     } catch {
       visiting.delete(absolute);
       return { baseUrl: dirname(absolute), paths: {} };
@@ -361,24 +370,31 @@ function readPathMappings(root: string, sourcePath: string): { baseUrl: string; 
     const parentRefs = Array.isArray(config.extends) ? config.extends : config.extends ? [config.extends] : [];
     let parent = { baseUrl: dirname(absolute), paths: {} as Record<string, string[]> };
     for (const reference of parentRefs) {
-      if (typeof reference !== "string" || reference.startsWith("@")) continue;
+      if (typeof reference !== 'string' || reference.startsWith('@')) continue;
       let target = resolve(dirname(absolute), reference);
-      if (!extname(target)) target += ".json";
+      if (!extname(target)) target += '.json';
       parent = readConfig(target);
     }
-    const options = config.compilerOptions && typeof config.compilerOptions === "object"
-      ? config.compilerOptions as Record<string, unknown>
-      : {};
-    const baseUrl = typeof options.baseUrl === "string"
-      ? resolve(dirname(absolute), options.baseUrl)
-      : options.paths
-        ? dirname(absolute)
-        : parent.baseUrl;
-    const paths = options.paths && typeof options.paths === "object" && !Array.isArray(options.paths)
-      ? Object.fromEntries(Object.entries(options.paths as Record<string, unknown>).flatMap(([key, values]) =>
-          Array.isArray(values) ? [[key, values.filter((value): value is string => typeof value === "string")]] : [],
-        ))
-      : parent.paths;
+    const options =
+      config.compilerOptions && typeof config.compilerOptions === 'object'
+        ? (config.compilerOptions as Record<string, unknown>)
+        : {};
+    const baseUrl =
+      typeof options.baseUrl === 'string'
+        ? resolve(dirname(absolute), options.baseUrl)
+        : options.paths
+          ? dirname(absolute)
+          : parent.baseUrl;
+    const paths =
+      options.paths && typeof options.paths === 'object' && !Array.isArray(options.paths)
+        ? Object.fromEntries(
+            Object.entries(options.paths as Record<string, unknown>).flatMap(([key, values]) =>
+              Array.isArray(values)
+                ? [[key, values.filter((value): value is string => typeof value === 'string')]]
+                : [],
+            ),
+          )
+        : parent.paths;
     visiting.delete(absolute);
     return { baseUrl, paths };
   };
@@ -391,10 +407,10 @@ function aliasTargets(root: string, fromPath: string, specifier: string, knownFi
   const { baseUrl, paths } = readPathMappings(root, fromPath);
   const targets = new Set<string>();
   for (const [pattern, replacements] of Object.entries(paths)) {
-    const star = pattern.indexOf("*");
+    const star = pattern.indexOf('*');
     let wildcard: string | undefined;
     if (star < 0) {
-      if (pattern === specifier) wildcard = "";
+      if (pattern === specifier) wildcard = '';
     } else {
       const prefix = pattern.slice(0, star);
       const suffix = pattern.slice(star + 1);
@@ -404,8 +420,9 @@ function aliasTargets(root: string, fromPath: string, specifier: string, knownFi
     }
     if (wildcard === undefined) continue;
     for (const replacement of replacements) {
-      const substituted = replacement.replace("*", wildcard);
-      for (const target of resolveCandidate(root, join(relative(root, baseUrl), substituted), knownFiles)) targets.add(target);
+      const substituted = replacement.replace('*', wildcard);
+      for (const target of resolveCandidate(root, join(relative(root, baseUrl), substituted), knownFiles))
+        targets.add(target);
     }
   }
   return [...targets].sort();
@@ -420,24 +437,26 @@ function workspaceExportTargets(
   const name = packageName(specifier);
   const workspacePath = name ? packages.get(name) : undefined;
   if (!name || !workspacePath) return [];
-  const metadata = readJson(join(workspacePath, "package.json"));
+  const metadata = readJson(join(workspacePath, 'package.json'));
   if (!metadata) return [];
   const suffix = specifier.slice(name.length);
-  const requestedSubpath = suffix ? `.${suffix}` : ".";
+  const requestedSubpath = suffix ? `.${suffix}` : '.';
   const exportsValue = metadata.exports;
   const results = new Set<string>();
   for (const [key, value] of exportKeys(exportsValue)) {
     const match = exportKeyMatches(key, requestedSubpath);
     if (!match.matched) continue;
     for (const target of exportTargets(value)) {
-      if (!target.startsWith("./")) continue;
-      const substituted = match.wildcard === undefined ? target : target.replaceAll("*", match.wildcard);
-      for (const path of resolveCandidate(root, join(relative(root, workspacePath), substituted), knownFiles)) results.add(path);
+      if (!target.startsWith('./')) continue;
+      const substituted = match.wildcard === undefined ? target : target.replaceAll('*', match.wildcard);
+      for (const path of resolveCandidate(root, join(relative(root, workspacePath), substituted), knownFiles))
+        results.add(path);
     }
   }
   // Resolve deep workspace paths as well so the boundary check can reject export bypasses.
-  if (!results.size && suffix.startsWith("/")) {
-    for (const path of resolveCandidate(root, join(relative(root, workspacePath), suffix.slice(1)), knownFiles)) results.add(path);
+  if (!results.size && suffix.startsWith('/')) {
+    for (const path of resolveCandidate(root, join(relative(root, workspacePath), suffix.slice(1)), knownFiles))
+      results.add(path);
   }
   return [...results].sort();
 }
@@ -452,16 +471,17 @@ function resolveSpecifier(
   const exportedTargets = workspaceExportTargets(root, specifier, packages, knownFiles);
   if (exportedTargets.length) return exportedTargets;
   const targets = new Set<string>();
-  if (specifier.startsWith(".") || specifier.startsWith("/")) {
+  if (specifier.startsWith('.') || specifier.startsWith('/')) {
     for (const path of resolveCandidate(root, join(dirname(fromPath), specifier), knownFiles)) targets.add(path);
   } else {
     for (const path of aliasTargets(root, fromPath, specifier, knownFiles)) targets.add(path);
     const name = packageName(specifier);
     const workspacePath = name ? packages.get(name) : undefined;
     if (workspacePath) {
-      const suffix = specifier.slice(name!.length).replace(/^\//, "");
+      const suffix = specifier.slice(name!.length).replace(/^\//, '');
       if (suffix) {
-        for (const path of resolveCandidate(root, join(relative(root, workspacePath), suffix), knownFiles)) targets.add(path);
+        for (const path of resolveCandidate(root, join(relative(root, workspacePath), suffix), knownFiles))
+          targets.add(path);
       }
     }
   }
@@ -471,7 +491,12 @@ function resolveSpecifier(
 function collectImports(source: string, file: string): { imports: ImportEdge[]; errors: string[] } {
   const extension = extname(file);
   if (!CODE_EXTENSIONS.has(extension)) return { imports: [], errors: [] };
-  const loader = extension === ".tsx" || extension === ".jsx" ? "tsx" : extension === ".js" || extension === ".mjs" || extension === ".cjs" ? "js" : "ts";
+  const loader =
+    extension === '.tsx' || extension === '.jsx'
+      ? 'tsx'
+      : extension === '.js' || extension === '.mjs' || extension === '.cjs'
+        ? 'js'
+        : 'ts';
   let transpiler = transpilerCache.get(loader);
   if (!transpiler) {
     transpiler = new Bun.Transpiler({ loader });
@@ -487,7 +512,7 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     scannerAvailable = false;
-    if (!message.includes("Falling back to classic runtime")) errors.push(`${file}: parser: ${message}`);
+    if (!message.includes('Falling back to classic runtime')) errors.push(`${file}: parser: ${message}`);
   }
 
   const code = codeCharacterMap(source);
@@ -509,15 +534,15 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
       if (!specifier) continue;
       const explicitType = /^\s*(?:import|export)\s+type\b/.test(match[0]);
       const remaining = valueImports.get(specifier) ?? 0;
-      const kind = explicitType ? "type" : scannerAvailable ? (remaining === 0 ? "type" : "value") : "value";
+      const kind = explicitType ? 'type' : scannerAvailable ? (remaining === 0 ? 'type' : 'value') : 'value';
       if (!explicitType && remaining > 0) valueImports.set(specifier, remaining - 1);
       const position = start + match[0].lastIndexOf(specifier);
       const before = source.slice(0, position);
       imports.push({
         specifier,
         kind,
-        line: before.split("\n").length,
-        column: position - before.lastIndexOf("\n"),
+        line: before.split('\n').length,
+        column: position - before.lastIndexOf('\n'),
         ordinal: 0,
         targets: [],
       });
@@ -527,7 +552,14 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
     for (let index = 0; index < remaining; index += 1) {
       const position = source.indexOf(specifier);
       const before = source.slice(0, Math.max(position, 0));
-      imports.push({ specifier, kind: "value", line: before.split("\n").length, column: Math.max(position, 0) - before.lastIndexOf("\n"), ordinal: 0, targets: [] });
+      imports.push({
+        specifier,
+        kind: 'value',
+        line: before.split('\n').length,
+        column: Math.max(position, 0) - before.lastIndexOf('\n'),
+        ordinal: 0,
+        targets: [],
+      });
     }
   }
   const occurrences = new Map<string, number>();
@@ -541,65 +573,80 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
 
 function codeCharacterMap(source: string): Uint8Array {
   const code = new Uint8Array(source.length);
-  const regexPrefixWords = new Set(["await", "case", "delete", "do", "else", "in", "instanceof", "new", "of", "return", "throw", "typeof", "void", "yield"]);
-  let state: "code" | "single" | "double" | "template" | "line-comment" | "block-comment" | "regex" = "code";
+  const regexPrefixWords = new Set([
+    'await',
+    'case',
+    'delete',
+    'do',
+    'else',
+    'in',
+    'instanceof',
+    'new',
+    'of',
+    'return',
+    'throw',
+    'typeof',
+    'void',
+    'yield',
+  ]);
+  let state: 'code' | 'single' | 'double' | 'template' | 'line-comment' | 'block-comment' | 'regex' = 'code';
   let escaped = false;
   let inRegexClass = false;
   let canStartRegex = true;
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index];
     const next = source[index + 1];
-    if (state === "code") {
-      if (character === "/" && next === "/") {
-        state = "line-comment";
+    if (state === 'code') {
+      if (character === '/' && next === '/') {
+        state = 'line-comment';
         index += 1;
-      } else if (character === "/" && next === "*") {
-        state = "block-comment";
+      } else if (character === '/' && next === '*') {
+        state = 'block-comment';
         index += 1;
-      } else if (character === "'" || character === '"' || character === "`") {
-        state = character === "'" ? "single" : character === '"' ? "double" : "template";
+      } else if (character === "'" || character === '"' || character === '`') {
+        state = character === "'" ? 'single' : character === '"' ? 'double' : 'template';
         escaped = false;
         canStartRegex = false;
-      } else if (character === "/" && canStartRegex) {
-        state = "regex";
+      } else if (character === '/' && canStartRegex) {
+        state = 'regex';
         escaped = false;
         inRegexClass = false;
-      } else if (/[A-Za-z_$]/.test(character ?? "")) {
+      } else if (/[A-Za-z_$]/.test(character ?? '')) {
         const start = index;
         while (index + 1 < source.length && /[\w$]/.test(source[index + 1]!)) index += 1;
         code.fill(1, start, index + 1);
         canStartRegex = regexPrefixWords.has(source.slice(start, index + 1));
-      } else if (/[0-9]/.test(character ?? "")) {
+      } else if (/[0-9]/.test(character ?? '')) {
         const start = index;
         while (index + 1 < source.length && /[\w.]/.test(source[index + 1]!)) index += 1;
         code.fill(1, start, index + 1);
         canStartRegex = false;
       } else {
         code[index] = 1;
-        if (!/\s/.test(character ?? "")) canStartRegex = ![")", "]", "}", "."].includes(character ?? "");
+        if (!/\s/.test(character ?? '')) canStartRegex = ![')', ']', '}', '.'].includes(character ?? '');
       }
-    } else if (state === "line-comment") {
-      if (character === "\n") state = "code";
-    } else if (state === "block-comment") {
-      if (character === "*" && next === "/") {
-        state = "code";
+    } else if (state === 'line-comment') {
+      if (character === '\n') state = 'code';
+    } else if (state === 'block-comment') {
+      if (character === '*' && next === '/') {
+        state = 'code';
         index += 1;
       }
-    } else if (state === "single" || state === "double" || state === "template") {
-      const delimiter = state === "single" ? "'" : state === "double" ? '"' : "`";
+    } else if (state === 'single' || state === 'double' || state === 'template') {
+      const delimiter = state === 'single' ? "'" : state === 'double' ? '"' : '`';
       if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
+      else if (character === '\\') escaped = true;
       else if (character === delimiter) {
-        state = "code";
+        state = 'code';
         canStartRegex = false;
       }
-    } else if (state === "regex") {
+    } else if (state === 'regex') {
       if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === "[") inRegexClass = true;
-      else if (character === "]") inRegexClass = false;
-      else if (character === "/" && !inRegexClass) {
-        state = "code";
+      else if (character === '\\') escaped = true;
+      else if (character === '[') inRegexClass = true;
+      else if (character === ']') inRegexClass = false;
+      else if (character === '/' && !inRegexClass) {
+        state = 'code';
         canStartRegex = false;
         while (index + 1 < source.length && /[A-Za-z]/.test(source[index + 1]!)) index += 1;
       }
@@ -609,7 +656,7 @@ function codeCharacterMap(source: string): Uint8Array {
 }
 
 function environmentHash(root: string, manifest: ArchitectureManifest): string {
-  const paths = new Set<string>(["tsconfig.base.json"]);
+  const paths = new Set<string>(['tsconfig.base.json']);
   for (const sourceRoot of manifest.sourceRoots) {
     const workspace = workspaceForPath(sourceRoot.path);
     if (!workspace) continue;
@@ -620,7 +667,7 @@ function environmentHash(root: string, manifest: ArchitectureManifest): string {
     try {
       return [path, sha256(readFileSync(join(root, path)))];
     } catch {
-      return [path, "missing"];
+      return [path, 'missing'];
     }
   });
   return sha256(canonical(values));
@@ -639,7 +686,7 @@ export function buildGraph(rootInput: string, manifest: ArchitectureManifest): A
   for (const file of files) {
     const source = readFileSync(join(root, file));
     hashes[file] = sha256(source);
-    const parsed = collectImports(source.toString("utf8"), file);
+    const parsed = collectImports(source.toString('utf8'), file);
     parseErrors.push(...parsed.errors);
     imports[file] = parsed.imports.map((edge) => ({
       ...edge,
@@ -669,7 +716,7 @@ export function writeGraphCache(rootInput: string, graph: ArchitectureGraph): vo
 
 function readGraphCache(root: string): ArchitectureGraph | undefined {
   try {
-    return JSON.parse(readFileSync(cachePath(root), "utf8")) as ArchitectureGraph;
+    return JSON.parse(readFileSync(cachePath(root), 'utf8')) as ArchitectureGraph;
   } catch {
     return undefined;
   }
@@ -682,11 +729,11 @@ export function changedGraph(
 ): ArchitectureGraph {
   const root = resolve(rootInput);
   const cached = readGraphCache(root);
-  if (!cached) throw new Error("No complete architecture graph cache; run bun scripts/architecture.ts first.");
+  if (!cached) throw new Error('No complete architecture graph cache; run bun scripts/architecture.ts first.');
   const expectedManifestHash = sha256(canonical(manifest));
   const expectedEnvironmentHash = environmentHash(root, manifest);
   if (cached.manifestHash !== expectedManifestHash || cached.environmentHash !== expectedEnvironmentHash) {
-    throw new Error("Architecture manifest or workspace resolution changed; run bun scripts/architecture.ts first.");
+    throw new Error('Architecture manifest or workspace resolution changed; run bun scripts/architecture.ts first.');
   }
 
   const files = enumerateProductionFiles(root, manifest);
@@ -706,10 +753,11 @@ export function changedGraph(
   }
   const omissions = [...actualChanged].filter((file) => !normalizedChanged.has(file));
   if (omissions.length) {
-    throw new Error(`--changed omitted modified source files: ${omissions.sort().join(", ")}`);
+    throw new Error(`--changed omitted modified source files: ${omissions.sort().join(', ')}`);
   }
 
-  const structureChanged = Object.keys(cached.hashes).some((file) => !fileSet.has(file)) || files.some((file) => !(file in cached.hashes));
+  const structureChanged =
+    Object.keys(cached.hashes).some((file) => !fileSet.has(file)) || files.some((file) => !(file in cached.hashes));
   const packages = packageRoots(root, manifest);
   const knownFiles = new Set(files);
   const imports: Record<string, ImportEdge[]> = {};
@@ -725,7 +773,7 @@ export function changedGraph(
         : previous;
       continue;
     }
-    const parsed = collectImports(readFileSync(join(root, file), "utf8"), file);
+    const parsed = collectImports(readFileSync(join(root, file), 'utf8'), file);
     parseErrors.push(...parsed.errors);
     imports[file] = parsed.imports.map((edge) => ({
       ...edge,
@@ -757,16 +805,16 @@ export function moduleIdForFile(path: string, manifest: ArchitectureManifest): s
 
 function moduleRank(kind: ModuleKind): number {
   switch (kind) {
-    case "contract":
+    case 'contract':
       return 0;
-    case "core":
+    case 'core':
       return 1;
-    case "application":
+    case 'application':
       return 2;
-    case "adapter":
-    case "UI/transport library":
+    case 'adapter':
+    case 'UI/transport library':
       return 3;
-    case "composition root":
+    case 'composition root':
       return 4;
   }
 }
@@ -774,33 +822,42 @@ function moduleRank(kind: ModuleKind): number {
 export function validateManifest(manifest: ArchitectureManifest): string[] {
   const errors: string[] = [];
   if (manifest.version !== 1) errors.push(`manifest version must be 1 (received ${manifest.version})`);
-  if (!Array.isArray(manifest.sourceRoots) || !Array.isArray(manifest.modules)) return [...errors, "manifest sourceRoots and modules must be arrays"];
+  if (!Array.isArray(manifest.sourceRoots) || !Array.isArray(manifest.modules))
+    return [...errors, 'manifest sourceRoots and modules must be arrays'];
   const ids = new Set<string>();
   const capabilities = new Map<string, string>();
   for (const module of manifest.modules) {
-    if (!module.id || ids.has(module.id)) errors.push(`duplicate or empty module id: ${module.id || "<empty>"}`);
+    if (!module.id || ids.has(module.id)) errors.push(`duplicate or empty module id: ${module.id || '<empty>'}`);
     ids.add(module.id);
     if (!KINDS.has(module.kind)) errors.push(`${module.id}: unsupported kind ${String(module.kind)}`);
     if (!module.owner?.trim()) errors.push(`${module.id}: owner Goal is required`);
-    if (!Array.isArray(module.paths) || module.paths.length === 0) errors.push(`${module.id}: at least one path is required`);
-    if (!Array.isArray(module.publicEntries) || !Array.isArray(module.allowedDependencies) || !Array.isArray(module.capabilities)) {
+    if (!Array.isArray(module.paths) || module.paths.length === 0)
+      errors.push(`${module.id}: at least one path is required`);
+    if (
+      !Array.isArray(module.publicEntries) ||
+      !Array.isArray(module.allowedDependencies) ||
+      !Array.isArray(module.capabilities)
+    ) {
       errors.push(`${module.id}: publicEntries, allowedDependencies, and capabilities must be arrays`);
     }
     for (const capability of module.capabilities ?? []) {
       const owner = capabilities.get(capability);
-      if (owner && owner !== module.owner) errors.push(`${module.id}: capability ${capability} is also owned by ${owner}`);
+      if (owner && owner !== module.owner)
+        errors.push(`${module.id}: capability ${capability} is also owned by ${owner}`);
       capabilities.set(capability, module.owner);
     }
   }
   for (const module of manifest.modules) {
     for (const dependency of module.allowedDependencies ?? []) {
-      if (dependency !== "*" && !ids.has(dependency)) errors.push(`${module.id}: unknown allowed dependency ${dependency}`);
+      if (dependency !== '*' && !ids.has(dependency))
+        errors.push(`${module.id}: unknown allowed dependency ${dependency}`);
     }
-    if ((module.allowedDependencies ?? []).includes(module.id)) errors.push(`${module.id}: a module cannot allow itself as a dependency`);
+    if ((module.allowedDependencies ?? []).includes(module.id))
+      errors.push(`${module.id}: a module cannot allow itself as a dependency`);
   }
   for (const sourceRoot of manifest.sourceRoots) {
     if (!sourceRoot.path || !Array.isArray(sourceRoot.extensions) || sourceRoot.extensions.length === 0) {
-      errors.push(`source root ${sourceRoot.path || "<empty>"}: path and extensions are required`);
+      errors.push(`source root ${sourceRoot.path || '<empty>'}: path and extensions are required`);
     }
   }
   return errors;
@@ -813,17 +870,17 @@ function baselineKey(violation: BoundaryViolation): string {
 export function validateBaseline(baseline: BoundaryBaseline): string[] {
   const errors: string[] = [];
   if (baseline.version !== 1) errors.push(`baseline version must be 1 (received ${baseline.version})`);
-  if (!baseline.modules || typeof baseline.modules !== "object" || Array.isArray(baseline.modules)) {
-    return [...errors, "baseline modules must be grouped by module"];
+  if (!baseline.modules || typeof baseline.modules !== 'object' || Array.isArray(baseline.modules)) {
+    return [...errors, 'baseline modules must be grouped by module'];
   }
   const seen = new Set<string>();
   for (const [moduleId, group] of Object.entries(baseline.modules)) {
-    if (!group || typeof group !== "object") {
+    if (!group || typeof group !== 'object') {
       errors.push(`rule 8: baseline module ${moduleId} must have an owner, reason, and violations`);
       continue;
     }
     for (const violation of group.violations ?? []) {
-      const detail = `${violation.file || "<missing file>"}: ${violation.edge || "<missing edge>"}`;
+      const detail = `${violation.file || '<missing file>'}: ${violation.edge || '<missing edge>'}`;
       if (!group.owner?.trim() || !group.reason?.trim()) {
         errors.push(`rule 8: ${detail}: baseline module ${moduleId} requires an owner and reason`);
       }
@@ -847,14 +904,14 @@ function packageExportTargetMap(root: string, manifest: ArchitectureManifest): M
   for (const sourceRoot of manifest.sourceRoots) {
     const workspace = workspaceForPath(sourceRoot.path);
     if (!workspace) continue;
-    const metadata = readJson(join(root, workspace, "package.json"));
-    if (!metadata || typeof metadata.name !== "string") continue;
+    const metadata = readJson(join(root, workspace, 'package.json'));
+    if (!metadata || typeof metadata.name !== 'string') continue;
     for (const [key, value] of exportKeys(metadata.exports)) {
-      const publicEntry = key === "." ? metadata.name : `${metadata.name}${key.slice(1)}`;
+      const publicEntry = key === '.' ? metadata.name : `${metadata.name}${key.slice(1)}`;
       for (const target of exportTargets(value)) {
-        if (!target.startsWith("./")) continue;
-        const wildcard = key.indexOf("*");
-        const starTarget = target.indexOf("*");
+        if (!target.startsWith('./')) continue;
+        const wildcard = key.indexOf('*');
+        const starTarget = target.indexOf('*');
         if (wildcard >= 0 && starTarget >= 0) continue;
         const path = slash(relative(root, resolve(root, workspace, target)));
         const entries = targets.get(path) ?? new Set<string>();
@@ -884,23 +941,23 @@ function isPublicTarget(
 
 function forbiddenRuntimeImport(specifier: string): boolean {
   const name = packageName(specifier);
-  const normalized = (name ?? specifier).replace(/^node:/, "");
+  const normalized = (name ?? specifier).replace(/^node:/, '');
   return (
-    specifier === "bun" ||
-    specifier.startsWith("bun:") ||
-    specifier.startsWith("node:") ||
+    specifier === 'bun' ||
+    specifier.startsWith('bun:') ||
+    specifier.startsWith('node:') ||
     NODE_BUILTINS.has(normalized) ||
-    NODE_BUILTINS.has(normalized.replace(/^node:/, ""))
+    NODE_BUILTINS.has(normalized.replace(/^node:/, ''))
   );
 }
 
 function forbiddenEffectImport(specifier: string, target: string | undefined): boolean {
   const name = packageName(specifier);
   return (
-    (name !== undefined && (FORBIDDEN_PACKAGES.has(name) || name.toLowerCase().includes("dbos"))) ||
+    (name !== undefined && (FORBIDDEN_PACKAGES.has(name) || name.toLowerCase().includes('dbos'))) ||
     forbiddenRuntimeImport(specifier) ||
-    specifier.endsWith(".sql") ||
-    Boolean(target?.endsWith(".sql"))
+    specifier.endsWith('.sql') ||
+    Boolean(target?.endsWith('.sql'))
   );
 }
 
@@ -970,14 +1027,17 @@ export function createBoundaryBaseline(
     const unique = new Map(violations.map((violation) => [baselineKey(violation), violation]));
     result.modules[moduleId] = {
       owner: module.owner,
-      reason: "pre-boundary code",
+      reason: 'pre-boundary code',
       violations: [...unique.values()].sort((left, right) => baselineKey(left).localeCompare(baselineKey(right))),
     };
   }
   return result;
 }
 
-export function dependenciesFromGraph(manifest: ArchitectureManifest, graph: ArchitectureGraph): Record<string, string[]> {
+export function dependenciesFromGraph(
+  manifest: ArchitectureManifest,
+  graph: ArchitectureGraph,
+): Record<string, string[]> {
   const dependencies = new Map(manifest.modules.map((module) => [module.id, new Set<string>()]));
   for (const [source, imports] of Object.entries(graph.imports)) {
     const sourceModule = moduleForFile(source, manifest)[0];
@@ -985,7 +1045,8 @@ export function dependenciesFromGraph(manifest: ArchitectureManifest, graph: Arc
     for (const edge of imports) {
       for (const target of edge.targets) {
         const targetModule = moduleForFile(target, manifest)[0];
-        if (targetModule && targetModule.id !== sourceModule.id) dependencies.get(sourceModule.id)?.add(targetModule.id);
+        if (targetModule && targetModule.id !== sourceModule.id)
+          dependencies.get(sourceModule.id)?.add(targetModule.id);
       }
     }
   }
@@ -1017,7 +1078,9 @@ export function auditArchitecture(
     if (owners.length === 0) {
       errors.push(`rule 1: ${file}: production file belongs to no declared module`);
     } else if (owners.length > 1) {
-      errors.push(`rule 1: ${file}: production file belongs to multiple modules: ${owners.map((module) => module.id).join(", ")}`);
+      errors.push(
+        `rule 1: ${file}: production file belongs to multiple modules: ${owners.map((module) => module.id).join(', ')}`,
+      );
     } else {
       ownerByFile.set(file, owners[0]!);
     }
@@ -1026,11 +1089,15 @@ export function auditArchitecture(
   errors.push(...validateBaseline(baseline));
   const modules = new Map(manifest.modules.map((module) => [module.id, module]));
   for (const [moduleId, group] of Object.entries(baseline.modules)) {
-    if (!group || typeof group !== "object") continue;
+    if (!group || typeof group !== 'object') continue;
     const module = modules.get(moduleId);
     if (!module) errors.push(`rule 8: baseline module ${moduleId} has no manifest owner`);
-    if (module && group.owner !== module.owner) errors.push(`rule 8: baseline module ${moduleId} owner ${group.owner} does not match manifest owner ${module.owner}`);
-    if (group.reason !== "pre-boundary code") errors.push(`rule 8: baseline module ${moduleId} must use reason pre-boundary code`);
+    if (module && group.owner !== module.owner)
+      errors.push(
+        `rule 8: baseline module ${moduleId} owner ${group.owner} does not match manifest owner ${module.owner}`,
+      );
+    if (group.reason !== 'pre-boundary code')
+      errors.push(`rule 8: baseline module ${moduleId} must use reason pre-boundary code`);
   }
   const packages = packageRoots(root, manifest);
   const exportTargets = packageExportTargetMap(root, manifest);
@@ -1039,10 +1106,13 @@ export function auditArchitecture(
   for (const [source, imports] of Object.entries(graph.imports)) {
     const sourceModule = ownerByFile.get(source);
     if (!sourceModule) continue;
-    const sourceIsPackage = source.startsWith("packages/");
+    const sourceIsPackage = source.startsWith('packages/');
     for (const edge of imports) {
-      if ((sourceModule.kind === "core" || sourceModule.kind === "contract") && forbiddenEffectImport(edge.specifier, edge.targets[0])) {
-        add(sourceModule.id, "rule 4", source, stableEdge(edge, edge.targets[0] ?? "external"));
+      if (
+        (sourceModule.kind === 'core' || sourceModule.kind === 'contract') &&
+        forbiddenEffectImport(edge.specifier, edge.targets[0])
+      ) {
+        add(sourceModule.id, 'rule 4', source, stableEdge(edge, edge.targets[0] ?? 'external'));
       }
       const targetPackage = packageName(edge.specifier);
       const targetWorkspace = targetPackage ? packages.get(targetPackage) : undefined;
@@ -1052,43 +1122,62 @@ export function auditArchitecture(
         targetWorkspace &&
         /^(apps|services)\//.test(slash(relative(root, targetWorkspace)))
       ) {
-        add(sourceModule.id, "rule 7", source, stableEdge(edge, edge.targets[0] ?? targetWorkspace));
+        add(sourceModule.id, 'rule 7', source, stableEdge(edge, edge.targets[0] ?? targetWorkspace));
       }
 
       for (const target of edge.targets) {
         const targetModule = ownerByFile.get(target);
         if (sourceIsPackage && /^(apps|services)\//.test(target)) {
-          add(sourceModule.id, "rule 7", source, stableEdge(edge, target));
+          add(sourceModule.id, 'rule 7', source, stableEdge(edge, target));
         }
         if (!targetModule) continue;
         locatedEdges.push({ source, sourceModule, edge, target, targetModule });
         if (sourceModule.id === targetModule.id) continue;
         const publicTarget = isPublicTarget(edge.specifier, target, targetModule, exportTargets);
-        if (!publicTarget) add(sourceModule.id, "rule 2", source, stableEdge(edge, target));
-        if (!(sourceModule.allowedDependencies.includes("*") || sourceModule.allowedDependencies.includes(targetModule.id))) {
-          add(sourceModule.id, "rule 3", source, stableEdge(edge, `${target} (${targetModule.id} is not an allowed dependency)`));
+        if (!publicTarget) add(sourceModule.id, 'rule 2', source, stableEdge(edge, target));
+        if (
+          !(
+            sourceModule.allowedDependencies.includes('*') || sourceModule.allowedDependencies.includes(targetModule.id)
+          )
+        ) {
+          add(
+            sourceModule.id,
+            'rule 3',
+            source,
+            stableEdge(edge, `${target} (${targetModule.id} is not an allowed dependency)`),
+          );
         }
         if (moduleRank(sourceModule.kind) < moduleRank(targetModule.kind)) {
-          add(sourceModule.id, "rule 3", source, stableEdge(edge, `${target} (${sourceModule.kind} cannot depend on ${targetModule.kind})`));
+          add(
+            sourceModule.id,
+            'rule 3',
+            source,
+            stableEdge(edge, `${target} (${sourceModule.kind} cannot depend on ${targetModule.kind})`),
+          );
         }
         if (
-          (sourceModule.kind === "application" && ["adapter", "composition root"].includes(targetModule.kind)) ||
-          (sourceModule.kind === "adapter" && targetModule.kind === "composition root")
+          (sourceModule.kind === 'application' && ['adapter', 'composition root'].includes(targetModule.kind)) ||
+          (sourceModule.kind === 'adapter' && targetModule.kind === 'composition root')
         ) {
-          add(sourceModule.id, "rule 5", source, stableEdge(edge, `${target} (${sourceModule.kind} cannot select or import ${targetModule.kind})`));
+          add(
+            sourceModule.id,
+            'rule 5',
+            source,
+            stableEdge(edge, `${target} (${sourceModule.kind} cannot select or import ${targetModule.kind})`),
+          );
         }
         if (
-          sourceModule.kind === "adapter" &&
-          targetModule.kind === "adapter" &&
+          sourceModule.kind === 'adapter' &&
+          targetModule.kind === 'adapter' &&
           !sourceModule.allowedDependencies.includes(targetModule.id)
         ) {
-          add(sourceModule.id, "rule 5", source, stableEdge(edge, `${target} (unrelated adapter ${targetModule.id})`));
+          add(sourceModule.id, 'rule 5', source, stableEdge(edge, `${target} (unrelated adapter ${targetModule.id})`));
         }
       }
 
-      if (edge.specifier.endsWith(".sql") || edge.targets.some((target) => target.endsWith(".sql"))) {
-        const postgresImport = sourceModule.kind === "adapter" && matchesAny(source, sourceModule.postgresPaths);
-        if (!postgresImport) add(sourceModule.id, "rule 5", source, stableEdge(edge, edge.targets[0] ?? "SQL module"));
+      if (edge.specifier.endsWith('.sql') || edge.targets.some((target) => target.endsWith('.sql'))) {
+        const postgresImport = sourceModule.kind === 'adapter' && matchesAny(source, sourceModule.postgresPaths);
+        if (!postgresImport) add(sourceModule.id, 'rule 5', source, stableEdge(edge, edge.targets[0] ?? 'SQL module'));
       }
     }
   }
@@ -1096,16 +1185,22 @@ export function auditArchitecture(
   const sourceFiles = files.filter((file) => CODE_EXTENSIONS.has(extname(file)));
   const valueFileEdges: Array<[string, string]> = [];
   for (const located of locatedEdges) {
-    if (located.edge.kind === "value") valueFileEdges.push([located.source, located.target]);
+    if (located.edge.kind === 'value') valueFileEdges.push([located.source, located.target]);
   }
   const fileComponents = stronglyConnectedComponents(sourceFiles, valueFileEdges);
   for (const component of fileComponents) {
     const members = new Set(component);
-    const cyclic = component.length > 1 || valueFileEdges.some(([source, target]) => source === target && members.has(source));
+    const cyclic =
+      component.length > 1 || valueFileEdges.some(([source, target]) => source === target && members.has(source));
     if (!cyclic) continue;
     for (const located of locatedEdges) {
-      if (located.edge.kind === "value" && members.has(located.source) && members.has(located.target)) {
-        add(located.sourceModule.id, "rule 3", located.source, stableEdge(located.edge, `${located.target} (value-import cycle)`));
+      if (located.edge.kind === 'value' && members.has(located.source) && members.has(located.target)) {
+        add(
+          located.sourceModule.id,
+          'rule 3',
+          located.source,
+          stableEdge(located.edge, `${located.target} (value-import cycle)`),
+        );
       }
     }
   }
@@ -1116,17 +1211,22 @@ export function auditArchitecture(
   const moduleComponents = stronglyConnectedComponents([...modules.keys()], moduleEdges);
   for (const component of moduleComponents) {
     const members = new Set(component);
-    const cyclic = component.length > 1 || moduleEdges.some(([source, target]) => source === target && members.has(source));
+    const cyclic =
+      component.length > 1 || moduleEdges.some(([source, target]) => source === target && members.has(source));
     if (!cyclic) continue;
     const reportedPairs = new Set<string>();
     for (const located of locatedEdges) {
-      if (members.has(located.sourceModule.id) && members.has(located.targetModule.id) && located.sourceModule.id !== located.targetModule.id) {
+      if (
+        members.has(located.sourceModule.id) &&
+        members.has(located.targetModule.id) &&
+        located.sourceModule.id !== located.targetModule.id
+      ) {
         const pair = `${located.sourceModule.id}\n${located.targetModule.id}`;
         if (reportedPairs.has(pair)) continue;
         reportedPairs.add(pair);
         add(
           located.sourceModule.id,
-          "rule 3",
+          'rule 3',
           `<module:${located.sourceModule.id}>`,
           `${located.sourceModule.id} => ${located.targetModule.id} (module dependency cycle)`,
         );
@@ -1153,21 +1253,21 @@ export function auditArchitecture(
       if (!currentKeys.has(key)) removed += 1;
     }
   }
-  if (removed) warnings.push(`Boundary baseline can shrink by ${removed} entr${removed === 1 ? "y" : "ies"}.`);
+  if (removed) warnings.push(`Boundary baseline can shrink by ${removed} entr${removed === 1 ? 'y' : 'ies'}.`);
   return { errors: [...new Set(errors)].sort(), warnings, violations };
 }
 
 function moduleEntryLabel(module: ArchitectureModule): string {
   const entries = module.publicEntries;
-  if (!entries.length) return "-";
+  if (!entries.length) return '-';
   const byPackage = new Map<string, string[]>();
   const other: string[] = [];
   for (const entry of entries) {
-    if (entry.startsWith("@")) {
-      const slashAt = entry.indexOf("/");
-      const secondSlash = entry.indexOf("/", slashAt + 1);
+    if (entry.startsWith('@')) {
+      const slashAt = entry.indexOf('/');
+      const secondSlash = entry.indexOf('/', slashAt + 1);
       const prefix = secondSlash < 0 ? entry : entry.slice(0, secondSlash);
-      const suffix = secondSlash < 0 ? "." : entry.slice(secondSlash + 1);
+      const suffix = secondSlash < 0 ? '.' : entry.slice(secondSlash + 1);
       const values = byPackage.get(prefix) ?? [];
       values.push(suffix);
       byPackage.set(prefix, values);
@@ -1175,8 +1275,8 @@ function moduleEntryLabel(module: ArchitectureModule): string {
       other.push(entry);
     }
   }
-  const compact = [...byPackage.entries()].map(([prefix, values]) => `${prefix}:{${values.sort().join(",")}}`);
-  return [...compact, ...other.sort()].join(",");
+  const compact = [...byPackage.entries()].map(([prefix, values]) => `${prefix}:{${values.sort().join(',')}}`);
+  return [...compact, ...other.sort()].join(',');
 }
 
 export function formatModuleMap(manifest: ArchitectureManifest): string {
@@ -1184,17 +1284,17 @@ export function formatModuleMap(manifest: ArchitectureManifest): string {
     .slice()
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((module) => `${module.id}|${module.kind}|${module.owner}|${moduleEntryLabel(module)}`)
-    .join("\n");
+    .join('\n');
   if (result.length > 2_000) throw new Error(`Generated module map is ${result.length} characters; maximum is 2000.`);
   return result;
 }
 
 export function loadManifest(rootInput: string): ArchitectureManifest {
-  return JSON.parse(readFileSync(join(resolve(rootInput), MANIFEST_PATH), "utf8")) as ArchitectureManifest;
+  return JSON.parse(readFileSync(join(resolve(rootInput), MANIFEST_PATH), 'utf8')) as ArchitectureManifest;
 }
 
 export function loadBaseline(rootInput: string): BoundaryBaseline {
-  return JSON.parse(readFileSync(join(resolve(rootInput), BASELINE_PATH), "utf8")) as BoundaryBaseline;
+  return JSON.parse(readFileSync(join(resolve(rootInput), BASELINE_PATH), 'utf8')) as BoundaryBaseline;
 }
 
 function parseArguments(args: string[]): { changed: string[]; map: boolean } {
@@ -1202,16 +1302,16 @@ function parseArguments(args: string[]): { changed: string[]; map: boolean } {
   let map = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
-    if (argument === "--map") {
+    if (argument === '--map') {
       map = true;
-    } else if (argument === "--changed") {
-      while (args[index + 1] && !args[index + 1]!.startsWith("--")) changed.push(args[++index]!);
-      if (!changed.length) throw new Error("--changed requires one or more file paths.");
+    } else if (argument === '--changed') {
+      while (args[index + 1] && !args[index + 1]!.startsWith('--')) changed.push(args[++index]!);
+      if (!changed.length) throw new Error('--changed requires one or more file paths.');
     } else {
       throw new Error(`Unknown option: ${argument}`);
     }
   }
-  if (map && changed.length) throw new Error("--map and --changed are separate modes.");
+  if (map && changed.length) throw new Error('--map and --changed are separate modes.');
   return { changed, map };
 }
 

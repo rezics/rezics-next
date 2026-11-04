@@ -14,4 +14,4 @@ export {
   type BoundaryViolation,
   type ModuleKind,
   type SourceRoot,
-} from "./architecture";
+} from './architecture';

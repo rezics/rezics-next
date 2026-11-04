@@ -14,10 +14,10 @@ The full graph is cached under `.temp/architecture/graph.json`. `--changed <file
 
 ## Commands and exit codes
 
-| Command | Purpose |
-| --- | --- |
-| `bun scripts/architecture.ts` | Validate the manifest, current graph, and baseline; refresh the graph cache. |
-| `bun scripts/architecture.ts --changed <files...>` | Recheck changed source edges against the cached complete graph. |
-| `bun scripts/architecture.ts --map` | Print the compact worker module map (maximum 2,000 characters). |
+| Command                                            | Purpose                                                                      |
+| -------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `bun scripts/architecture.ts`                      | Validate the manifest, current graph, and baseline; refresh the graph cache. |
+| `bun scripts/architecture.ts --changed <files...>` | Recheck changed source edges against the cached complete graph.              |
+| `bun scripts/architecture.ts --map`                | Print the compact worker module map (maximum 2,000 characters).              |
 
 Exit code `0` means the check passed, `1` means an architecture or manifest violation, and `2` means invalid CLI input, unavailable cache, or a tool/configuration failure. The full graph build and initial ratchet seeding took 14.7 seconds for 6,876 production files on this worktree. The full check is budgeted at under 30 seconds; cached changed checks at under 5 seconds. Landing acceptance will record command timings.
