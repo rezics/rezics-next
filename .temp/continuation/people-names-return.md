@@ -1,29 +1,32 @@
 ---
 {
-  "goal": "semantic",
-  "manager": "semantic",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/features/catalogue/people-names/**",
-    "apps/web/tests/people-names*.test.ts",
-    "apps/web/tests/people-names*.test.tsx",
-    "apps/web/src/stories/people-names*.stories.tsx",
-    "apps/web/messages/*.json",
-    "docs/subject-pages.md"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "tests": [
-      "A visitor follows existing Terms or Sources from a Person or Character names group and returns with the exact same-locale Subject, supplied Context/Realm, filter, local window and safe focus target through the shared names-return handoff.",
-      "Modified clicks retain normal link behavior. An unsafe or retired deep return offers an honest return to the exact names section. Subject, Context, locale, release, reader and source-incarnation replacement permanently retire old return callbacks, including A-B-A; private Terms drafts and exact command recovery remain independent.",
-      "Mounted exact-return and retirement cases, plus shared bounded composition acceptance at 64/512/4096 unrelated Subjects/history; preserve current work-title outcomes and distinguish fixture composition from native acceptance."
+  'goal': 'semantic',
+  'manager': 'semantic',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/features/catalogue/people-names/**',
+      'apps/web/tests/people-names*.test.ts',
+      'apps/web/tests/people-names*.test.tsx',
+      'apps/web/src/stories/people-names*.stories.tsx',
+      'apps/web/messages/*.json',
+      'docs/subject-pages.md',
     ],
-    "failing": true
-  },
-  "estimate": { "lines": 650, "files": 6 }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'tests':
+        [
+          'A visitor follows existing Terms or Sources from a Person or Character names group and returns with the exact same-locale Subject, supplied Context/Realm, filter, local window and safe focus target through the shared names-return handoff.',
+          'Modified clicks retain normal link behavior. An unsafe or retired deep return offers an honest return to the exact names section. Subject, Context, locale, release, reader and source-incarnation replacement permanently retire old return callbacks, including A-B-A; private Terms drafts and exact command recovery remain independent.',
+          'Mounted exact-return and retirement cases, plus shared bounded composition acceptance at 64/512/4096 unrelated Subjects/history; preserve current work-title outcomes and distinguish fixture composition from native acceptance.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 650, 'files': 6 },
 }
 ---
 
