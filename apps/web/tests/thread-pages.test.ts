@@ -100,7 +100,7 @@ test('the actual board feed uses heading-style titles and the available opening 
   expect(html).toMatch(/<h1\b[^>]*>Stories of the little prince<\/h1>/);
   expect(html).toMatch(/<h3\b[^>]*>The first words of this discussion\.<\/h3>/);
   expect(html).toMatch(/<h3\b(?=[^>]*data-content-item-slot="title")(?=[^>]*data-slot="board-feed-card")[^>]*>/u);
-  expect(html).toContain(`href="/en/threads/${row.id}/thread"`);
+  expect(html).toContain(`href="/en/threads/${row.id}/thread?boardReturn=`);
   expect(html).not.toContain('Letters from B-612');
   expect(paths).toEqual([`/v1/boards/${boardRecording.board.id}/page`]);
 });
@@ -134,14 +134,17 @@ test('each route has one initial page source; an explicit thread refresh preserv
   expect(refresh).toContain('threadPageQuery(id, cursor, mode, undefined, post)');
   expect(refresh).toContain('staleTime: 0');
   expect(refresh).toContain('onPageRefresh={refreshThreadPage}');
-  expect(reading).toContain('threadLocation(getLocale(), { id: thread.id, title: displayTitle }, posts.next)');
+  expect(reading).toMatch(
+    /threadLocation\(\s*getLocale\(\),\s*\{ id: thread\.id, title: displayTitle \},\s*posts\.next,\s*undefined,\s*undefined,\s*boardReturn,?\s*\)/,
+  );
   expect(reading).not.toMatch(/\b(?:useQuery|fetchQuery|readThreadPage)\(/);
 });
 
 test('the Board feed keeps its continuation route-owned and performs no per-card HTTP', () => {
   expect(board).toContain('<BoardCommunity');
   expect(community).toContain('<BoardFeed');
-  expect(feed).toContain('search={{ cursor: ordinary.next,');
+  expect(feed).toContain('search={boardContinuationSearch(');
+  expect(feed).toContain('ordinary.next,');
   expect(feed).not.toMatch(/\b(?:fetch|useQuery|useInfiniteQuery|kernelClient)\(/);
   expect(feed).not.toMatch(/divide-y|border-y/);
 });
