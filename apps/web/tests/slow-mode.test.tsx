@@ -275,7 +275,9 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     };
     await act(async () => delayedReads.forEach((resolve) => resolve(latePolicy)));
     expect(host.textContent).not.toContain(m.slow_mode_interval_seconds({ seconds: 86400 }));
-    client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
+    });
     for (let attempt = 0; attempt < 25 && host.textContent?.includes(m.slow_mode_saved()); attempt++)
       await act(async () => {
         await Promise.resolve();
