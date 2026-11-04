@@ -278,12 +278,16 @@ test('explicit local abandonment releases the row without claiming the original 
   expect(editor.snapshot().desired).toBe('private');
 });
 
-test('definite conflict and refusal retain the choice until Reload deliberately adopts the current native row', async () => {
+test('definite conflict and refusal retain the deliberate choice through reads until it is saved or explicitly discarded', async () => {
   for (const reason of ['conflict', 'forbidden', 'closed', 'invalid'] as const) {
     let readFails = true;
+    const writes: VisibilityAttempt[] = [];
     const current = row('unlisted', 12);
     const editor = new CollectionPrivacyEditor(initial, {
-      save: async () => ({ ok: false, reason }),
+      save: async (input) => {
+        writes.push(input);
+        return writes.length === 1 ? { ok: false, reason } : { ok: true, collection: row('public', 13) };
+      },
       read: async () => (readFails ? { ok: false, reason: 'unavailable' } : { ok: true, value: current }),
     });
     await editor.edit('public');
@@ -297,8 +301,121 @@ test('definite conflict and refusal retain the choice until Reload deliberately 
     expect(editor.snapshot().desired).toBe('public');
     readFails = false;
     await editor.reload();
-    expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted', attempt: null, phase: 'idle' });
+    expect(editor.snapshot()).toMatchObject({ current, desired: 'public', attempt: null, phase: 'review' });
+    await editor.submit();
+    expect(writes).toHaveLength(2);
+    expect(writes[0]).toMatchObject({ revision: 7, visibility: 'public' });
+    expect(writes[1]).toMatchObject({ revision: 12, visibility: 'public' });
   }
+});
+
+test('clean reload adopts current visibility without sending a write', async () => {
+  const current = row('unlisted', 12);
+  const writes: VisibilityAttempt[] = [];
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async (input) => {
+      writes.push(input);
+      return { ok: true, collection: current };
+    },
+    read: async () => ({ ok: true, value: current }),
+  });
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted', phase: 'idle' });
+  expect(writes).toEqual([]);
+});
+
+test('a deliberate edit made during reload wins over the pre-read draft and waits for explicit save', async () => {
+  const read = deferred<CollectionPrivacyRead<OwnedCollection>>();
+  const writes: VisibilityAttempt[] = [];
+  const current = row('public', 12);
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async (input) => {
+      writes.push(input);
+      return writes.length === 1 ? { ok: false, reason: 'conflict' } : { ok: true, collection: row('unlisted', 13) };
+    },
+    read: async () => read.promise,
+  });
+  await editor.edit('public');
+  const loading = editor.reload();
+  await editor.edit('unlisted');
+  read.resolve({ ok: true, value: current });
+  await loading;
+  expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted', phase: 'review' });
+  expect(writes).toHaveLength(1);
+  await editor.submit();
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toMatchObject({ revision: 12, visibility: 'unlisted' });
+});
+
+test('a replay receipt consumes the original choice before a newer current read, preserving only a later draft', async () => {
+  for (const laterDraft of [false, true]) {
+    const writes: VisibilityAttempt[] = [];
+    const current = row(laterDraft ? 'private' : 'unlisted', 9);
+    const editor = new CollectionPrivacyEditor(initial, {
+      save: async (input) => {
+        writes.push(input);
+        return writes.length === 1
+          ? { ok: false, reason: 'unavailable' }
+          : { ok: true, collection: receipt };
+      },
+      read: async () => ({ ok: true, value: current }),
+    });
+    await editor.edit('public');
+    const original = editor.snapshot().attempt!;
+    if (laterDraft) await editor.edit('unlisted');
+    await editor.retry();
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toBe(original);
+    expect(editor.snapshot()).toMatchObject({
+      current,
+      desired: 'unlisted',
+      phase: laterDraft ? 'review' : 'idle',
+      attempt: null,
+    });
+    if (laterDraft) {
+      await editor.submit();
+      expect(writes).toHaveLength(3);
+      expect(writes[2]).toMatchObject({ revision: 9, visibility: 'unlisted' });
+    } else {
+      await editor.submit();
+      expect(writes).toHaveLength(2);
+    }
+  }
+});
+
+test('choosing the freshly read visibility explicitly discards the local choice without a write', async () => {
+  const writes: VisibilityAttempt[] = [];
+  const current = row('unlisted', 12);
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async (input) => {
+      writes.push(input);
+      return { ok: false, reason: 'conflict' };
+    },
+    read: async () => ({ ok: true, value: current }),
+  });
+  await editor.edit('public');
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current, desired: 'public', phase: 'review' });
+  await editor.edit('unlisted');
+  await editor.submit();
+  expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted' });
+  expect(writes).toHaveLength(1);
+});
+
+test('a denied current read removes native advice but preserves the local choice', async () => {
+  const writes: VisibilityAttempt[] = [];
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async (input) => {
+      writes.push(input);
+      return { ok: false, reason: 'conflict' };
+    },
+    read: async () => ({ ok: false, reason: 'forbidden' }),
+  });
+  await editor.edit('public');
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current: null, desired: 'public', phase: 'refused' });
+  expect(editor.hasCurrentUpdateAdvice()).toBe(false);
+  expect(writes).toHaveLength(1);
 });
 
 test('pending drafting and unavailable or stale recovery reads never claim saved or lose the original command', async () => {
