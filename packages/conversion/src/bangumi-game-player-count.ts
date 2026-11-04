@@ -161,6 +161,7 @@ export function bangumiGamePlayerCount(record: {
       counts.push(field);
       continue;
     }
+    if (field.key === '平台' || field.key === '游戏引擎') continue;
     omit(field.pointer, 'unsupported_infobox_mapping');
   }
 

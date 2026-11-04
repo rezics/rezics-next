@@ -69,7 +69,12 @@ import {
   prepareShowcaseBangumiCharacterVocabulary,
   readShowcaseBangumiCharacterVocabulary,
 } from './showcase-bangumi-characters.ts';
-import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
+import {
+  createImporter,
+  type ImporterOptions,
+  type ImportIdentifierResolution,
+  type ImportRunResult,
+} from './importer.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
@@ -86,6 +91,11 @@ import {
 } from './showcase-bangumi-episodes.ts';
 import { createShowcaseBangumiGenreLookup, prepareShowcaseBangumiGenres } from './showcase-bangumi-genres.ts';
 import type { BangumiGenrePublication } from './showcase-bangumi-genres.ts';
+import {
+  createShowcaseBangumiGameEnvironmentLookup,
+  mergeIdentifierResolutions,
+  type BangumiGameEnvironmentBinding,
+} from './showcase-bangumi-game-environment.ts';
 import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 import {
   combineBangumiCreditBindings,
@@ -1834,6 +1844,8 @@ export type CrossMediaSeedExtras = {
   onConversionOutput?: ImporterOptions['onConversionOutput'];
   /** The ordinary CLI supplies its existing authenticated read port. */
   bangumiGenrePort?: ReviewedCataloguePort;
+  /** Reviewed Game platform/engine Concepts; UUID/label values are lookup hints only. */
+  bangumiGameEnvironment?: { readonly bindings: readonly BangumiGameEnvironmentBinding[] };
   readPublicSubject?: (subjectId: string) => Promise<ReviewedSubjectRead>;
   prepareBangumiCreatorCreditBindings?: (input: {
     plan: CrossMediaPlan;
@@ -1896,18 +1908,38 @@ export async function seedCrossMedia(
   );
   let importer!: ReturnType<typeof createImporter>;
   let genreAdapter: ReturnType<typeof createShowcaseBangumiGenreLookup> | undefined;
-  const identifierLookup = extras?.bangumiGenrePort
-    ? {
-        async resolve(input: Parameters<NonNullable<ImporterOptions['identifierLookup']>['resolve']>[0]) {
-          genreAdapter ??= createShowcaseBangumiGenreLookup(
-            crossMediaAliases.bangumi,
-            importer.session.bindings,
-            extras.bangumiGenrePort!,
-          );
-          return genreAdapter.lookup.resolve(input);
-        },
-      }
-    : undefined;
+  let gameEnvironmentAdapter: ReturnType<typeof createShowcaseBangumiGameEnvironmentLookup> | undefined;
+  const identifierLookup =
+    extras?.bangumiGenrePort || extras?.bangumiGameEnvironment
+      ? {
+          async resolve(input: Parameters<NonNullable<ImporterOptions['identifierLookup']>['resolve']>[0]) {
+            const parts: ImportIdentifierResolution[] = [];
+            if (extras?.bangumiGenrePort) {
+              genreAdapter ??= createShowcaseBangumiGenreLookup(
+                crossMediaAliases.bangumi,
+                importer.session.bindings,
+                extras.bangumiGenrePort,
+              );
+              parts.push(await genreAdapter.lookup.resolve(input));
+            }
+            if (extras?.bangumiGameEnvironment) {
+              gameEnvironmentAdapter ??= createShowcaseBangumiGameEnvironmentLookup({
+                sourceAlias: crossMediaAliases.bangumi,
+                bindings: extras.bangumiGameEnvironment.bindings,
+                read: async (id) => {
+                  try {
+                    return await port.readReviewedSubject(id);
+                  } catch {
+                    return null;
+                  }
+                },
+              });
+              parts.push(await gameEnvironmentAdapter.resolve(input));
+            }
+            return mergeIdentifierResolutions(parts);
+          },
+        }
+      : undefined;
   const importerOptions: ImporterOptions = {
     path,
     ...(destination ? { destination } : {}),

@@ -96,7 +96,7 @@ test('operator imports TVAnime original-run fields, keeps unknown totals and sch
   const api = transport(commands);
   const current = createSourceRegistration('bangumi');
   const previous = withoutRunFacts(createSourceRegistration('bangumi', { converterRevision: 'bangumi@7' }));
-  expect(converter_revision).toBe('bangumi@9');
+  expect(converter_revision).toBe('bangumi@10');
   let importer = new Importer({ path, transport: api });
   try {
     expect((await importer.runDump(previous, bytes(dump()))).status).toBe('committed');
@@ -124,7 +124,7 @@ test('operator imports TVAnime original-run fields, keeps unknown totals and sch
         ['91002', 'schema:datePublished', { time: '+2024-04-00T00:00:00Z', precision: 10, calendarmodel: gregorian }],
       ],
     );
-    expect(run.every((command) => command.source.converter_revision === 'bangumi@9')).toBe(true);
+    expect(run.every((command) => command.source.converter_revision === 'bangumi@10')).toBe(true);
     expect(run.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
     expect(run.every((command) => command.subject === api.subjects.get(command.source.external_id))).toBe(true);
 
