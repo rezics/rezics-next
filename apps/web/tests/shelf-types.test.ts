@@ -59,6 +59,7 @@ test('a reader chooses an indexed Type absent from loaded entries, retains the n
   }));
   mock.module('cloudflare:workers', () => ({ env: sessionEnv }));
   const reads: { path: string; query: Record<string, string>; authorization: string | null }[] = [];
+  let savedLayouts: Record<string, 'grid' | 'list' | 'table'> | undefined;
   let typesFailure = false;
   let stale = false;
   const raw = (n: number, type: string) => ({
@@ -76,6 +77,8 @@ test('a reader chooses an indexed Type absent from loaded entries, retains the n
   globalThis.fetch = (async (input, init) => {
     const req = new Request(input, init);
     const url = new URL(req.url);
+    if (savedLayouts && url.pathname === `/v1/accounts/${id(700)}/preferences`)
+      return Response.json({ version: 1, spoilerLevel: 0, suitability: 'blur', shelf: { layouts: savedLayouts } });
     if (url.pathname.startsWith('/v1/definitionTypes/')) {
       const typeId = decodeURIComponent(url.pathname.slice('/v1/definitionTypes/'.length));
       const definition = definitions.release.types[typeId as keyof typeof definitions.release.types];
@@ -277,6 +280,37 @@ test('a reader chooses an indexed Type absent from loaded entries, retains the n
     expect(reads.every((r) => r.authorization === 'Bearer owner-token')).toBe(true);
     expect(cacheHeaders.length).toBeGreaterThan(0);
     expect(cacheHeaders.every((value) => value === 'private, no-store')).toBe(true);
+    // Real navigation and return re-resolve each type default. URL layouts retain their precedence.
+    savedLayouts = { all: 'list', 'schema:Book': 'grid', 'schema:Movie': 'table' };
+    await go('/en/library');
+    expect(host.textContent).toContain(m.library_layout_source_all());
+    await click(m.library_type_action({ type: m.library_types_all() }));
+    const bookHref = link('Book').getAttribute('href')!;
+    expect(new URL(bookHref, 'https://site.test').searchParams.has('layout')).toBe(false);
+    await go(bookHref);
+    expect(host.textContent).toContain(m.library_layout_source_type());
+    expect(host.querySelector('table')).toBeNull();
+    await click(m.library_type_action({ type: 'Book' }));
+    await click(m.library_types_next());
+    const movieHref = link('Film').getAttribute('href')!;
+    expect(new URL(movieHref, 'https://site.test').searchParams.has('layout')).toBe(false);
+    await go(movieHref);
+    expect(host.textContent).toContain(m.library_layout_source_type());
+    expect(host.querySelector('table')).not.toBeNull();
+    await go(bookHref);
+    expect(host.textContent).toContain(m.library_layout_source_type());
+    expect(host.querySelector('table')).toBeNull();
+    await go('/en/library?type=schema%3AMovie&layout=list&size=s&columns=title,status&cursor=explicit-cursor');
+    expect(host.textContent).toContain(m.library_layout_source_url());
+    await click(m.library_type_action({ type: 'Film' }));
+    const retained = new URL(link('Book').getAttribute('href')!, 'https://site.test');
+    expect(retained.searchParams.get('layout')).toBe('list');
+    expect(retained.searchParams.get('columns')).toBe('title,status');
+    expect(retained.searchParams.get('size')).toBe('s');
+    expect(retained.searchParams.has('cursor')).toBe(false);
+    await go(retained.href);
+    expect(host.textContent).toContain(m.library_layout_source_url());
+    expect(latest().cursor).toBeUndefined();
     // The server boundary also drops malformed/oversized Type values before native reads.
     for (const type of ['schema:Book\n', 'Book', 'schema:' + 'a'.repeat(2049)]) {
       await readPersonalLibrary({ data: { type, orderBy: 'lastActivity' } });

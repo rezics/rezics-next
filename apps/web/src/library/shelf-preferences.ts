@@ -128,6 +128,14 @@ export function resolveShelfPresentation(
       size,
       ...(columns !== undefined ? { columns } : {}),
       layoutExplicit: search.layout !== undefined,
+      layoutSource:
+        search.layout !== undefined
+          ? 'url'
+          : scope && saved.layouts?.[scope]
+            ? 'type'
+            : saved.layouts?.all
+              ? 'all'
+              : 'application',
       sizeExplicit: search.size !== undefined,
       columnsExplicit: search.columns !== undefined,
     },

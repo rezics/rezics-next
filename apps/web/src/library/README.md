@@ -2,7 +2,7 @@
 
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
-otherwise use `all`; Settings edits only `all`. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`
+otherwise use `all`. Settings edits `all` and individual admitted types. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`
 controls. `last_activity`, `added` and `finished` map to the currently admitted native Library date orders.
 Saved `rating` maps losslessly to the `personalScore` address and direction for each state, including `all`.
 This preserves intent only: the existing whole-shelf capability fence still reports score ordering unavailable,
@@ -22,7 +22,7 @@ value, preserving its unit and mode; no row reads or local page sorting are adde
 
 Decision: saved rating is a score address intent, while native availability independently controls execution and offered choices.
 
-Decision: Settings edits the reversible `all` layout scope; the resolver uses an exact type scope only for absolute-IRI addresses and otherwise falls back to `all`.
+Decision: type selection only inspects a local draft; Settings uses replacement pages from the private Library type index, keeps absent saved types removable, and clears a single override with a nullable map entry. Type navigation carries explicit URL layouts while implicit layouts resolve again for the destination type.
 
 ## Cost bounds
 

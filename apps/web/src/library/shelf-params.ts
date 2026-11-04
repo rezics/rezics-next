@@ -44,6 +44,7 @@ export type ShelfDisplay = {
   size: ShelfSize;
   columns?: string;
   layoutExplicit?: boolean;
+  layoutSource?: 'url' | 'type' | 'all' | 'application';
   sizeExplicit?: boolean;
   columnsExplicit?: boolean;
 };

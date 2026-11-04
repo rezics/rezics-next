@@ -98,7 +98,13 @@ export function PersonalLibraryPage({
     ...(page.type ? { type: page.type } : {}),
     search: saveQuerySearch,
   });
-  const clearTypeHref = shelfHref(locale, { ...(page.state ? { state: page.state } : {}), ...sort, ...display });
+  const { layout, ...otherDisplay } = display;
+  const clearTypeHref = shelfHref(locale, {
+    ...(page.state ? { state: page.state } : {}),
+    ...sort,
+    ...otherDisplay,
+    ...(display.layoutExplicit !== false ? { layout } : {}),
+  });
   const typeLabel = page.typeLabel ?? m.library_type_unnamed();
   const heading = page.state
     ? m.library_tracked_entries_state({ status: page.stateLabel ?? m.library_other() })
@@ -167,6 +173,18 @@ export function PersonalLibraryPage({
             />
           </Exposure>
         </div>
+        <p className="text-sm text-muted-foreground">
+          {display.layoutSource === 'url' || display.layoutExplicit
+            ? m.library_layout_source_url()
+            : display.layoutSource === 'type'
+              ? m.library_layout_source_type()
+              : display.layoutSource === 'all'
+                ? m.library_layout_source_all()
+                : m.library_layout_source_application()}{' '}
+          <a className="underline underline-offset-4" href={`/${locale}/settings#display`}>
+            {m.settings_shelf_heading()}
+          </a>
+        </p>
         <SortControls
           key={`${page.type ?? ''}:${page.state ?? ''}:${sort.orderBy}:${sort.direction}`}
           locale={locale}

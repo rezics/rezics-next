@@ -32,3 +32,17 @@ result confirms removal or refusal. Leaving Settings uses the shared unsaved-wor
 The illustrative Page stories cover populated, inaccessible-target, failed and uncertain-unwatch states at phone
 and desktop sizes. They exercise the consumer seam, not a delivered native wire; final screenshot approval belongs
 to Root.
+
+## Layout defaults by type
+
+The existing shelf editor adds exact type-URI layouts to its versioned dirty-field draft. A bounded Library owner-index
+page supplies released type choices and batch-localized names; unavailable discovery never means an empty library.
+Stored scopes absent from that page remain inspectable and removable, with their original URI and no invented name.
+Keys longer than the native preference limit cannot create an override. The merged layout map remains within 32 entries.
+Single-type removal sends `{ layouts: { [type]: null } }`; the existing global reset still sends `shelf: null`.
+Conflict reload refreshes clean fields and preserves dirty ones for review. Unknown outcomes keep the original payload
+and command key until replay and current readback resolve them. Installed account/credential ownership retires private
+choices, drafts and late completions on replacement. The Library resolver and score currentness fence remain shared.
+
+Decision: selecting a type is a view operation; a missing saved type offers removal, while setting a new override
+requires that type in the current admitted choices. Open Library links omit layout overrides to show the saved result.

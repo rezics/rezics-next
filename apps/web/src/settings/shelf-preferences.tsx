@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezi
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { shelfColumnLabel } from '../library/shelf-columns';
 import { shelfColumnIds, type PersonalShelfColumnId } from '../library/shelf-params';
 import {
@@ -26,7 +27,9 @@ import {
   type ShelfPreferenceTab,
   type ShelfPreferences,
 } from './preferences';
-import { useSettingsCurrent, useSettingsReadCurrent } from './settings-session-owner';
+import { useSettingsCurrent, useSettingsReadCurrent, useSettingsSessionOwner } from './settings-session-owner';
+import { ShelfTypeDefaults } from './shelf-type-defaults/editor';
+import type { ShelfTypesCurrentRead } from '../library/shelf-types-read';
 
 const personalColumn = {
   cover: 'cover',
@@ -50,6 +53,7 @@ const uuid = () => crypto.randomUUID();
 
 type ShelfDraft = {
   layout: 'grid' | 'list' | 'table';
+  layouts: NonNullable<ShelfPreferences['layouts']>;
   gridSize: 'small' | 'medium' | 'large';
   columns: PersonalShelfColumnId[];
   sorts: Record<ShelfPreferenceTab, string>;
@@ -104,10 +108,27 @@ function draftFrom(shelf: ShelfPreferences): ShelfDraft {
   ) as Record<ShelfPreferenceTab, string>;
   return {
     layout: shelf.layouts?.all ?? 'grid',
+    layouts: { ...shelf.layouts },
     gridSize: shelf.gridSize ?? 'medium',
     columns: appColumns.filter((column) => selected.has(column)),
     sorts,
   };
+}
+
+/** Refresh clean fields while preserving only the person's explicit edits. */
+function rebaseDraft(shelf: ShelfPreferences, draft: ShelfDraft, dirty: Set<string>): ShelfDraft {
+  const next = draftFrom(shelf);
+  if (dirty.has('layout')) next.layout = draft.layout;
+  if (dirty.has('gridSize')) next.gridSize = draft.gridSize;
+  if (dirty.has('columns')) next.columns = draft.columns;
+  for (const tab of tabs) if (dirty.has(`sort:${tab}`)) next.sorts[tab] = draft.sorts[tab];
+  for (const key of dirty) {
+    if (!key.startsWith('layout:')) continue;
+    const scope = key.slice(7);
+    delete next.layouts[scope];
+    if (draft.layouts[scope]) next.layouts[scope] = draft.layouts[scope];
+  }
+  return next;
 }
 
 function nativeColumnList(
@@ -130,7 +151,14 @@ function nativeColumnList(
 
 function patchFor(shelf: ShelfPreferences, draft: ShelfDraft, dirty: Set<string>): ShelfPreferencePatch {
   const patch: ShelfPreferencePatch = {};
-  if (dirty.has('layout') && shelf.layouts?.all !== draft.layout) patch.layouts = { all: draft.layout };
+  const layouts: NonNullable<ShelfPreferencePatch['layouts']> = {};
+  if (dirty.has('layout') && shelf.layouts?.all !== draft.layout) layouts.all = draft.layout;
+  for (const key of dirty) {
+    if (!key.startsWith('layout:')) continue;
+    const scope = key.slice(7);
+    if (shelf.layouts?.[scope] !== draft.layouts[scope]) layouts[scope] = draft.layouts[scope] ?? null;
+  }
+  if (Object.keys(layouts).length) patch.layouts = layouts;
   if (dirty.has('gridSize') && shelf.gridSize !== draft.gridSize) patch.gridSize = draft.gridSize;
   if (dirty.has('columns')) {
     const columns = nativeColumnList(shelf, draft.columns);
@@ -213,6 +241,15 @@ export class ShelfPreferenceDraftRecovery {
     });
   }
 
+  editTypeLayout(scope: string, layout: ShelfDraft['layout'] | undefined) {
+    if (!this.owner.canWrite() || scope === 'all' || scope.length > 256 || !/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(scope))
+      return;
+    const layouts = { ...this.state.draft.layouts };
+    delete layouts[scope];
+    if (layout) layouts[scope] = layout;
+    this.edit({ layouts }, `layout:${scope}`);
+  }
+
   private async send(recovering: boolean) {
     const pending = this.state.pending;
     if (!pending || !this.owner.canWrite()) return;
@@ -247,7 +284,11 @@ export class ShelfPreferenceDraftRecovery {
       if (!this.owner.canRead()) return;
       try {
         const refreshed = pagePreferences(await this.io.read());
-        if (!this.owner.canRead() || !refreshed || refreshed.version < receipt.version) {
+        if (
+          !this.owner.canRead() ||
+          !refreshed ||
+          refreshed.version < Math.max(receipt.version, this.owner.version())
+        ) {
           this.update({ phase: 'uncertain', reason: 'unavailable', pending });
           return;
         }
@@ -264,11 +305,13 @@ export class ShelfPreferenceDraftRecovery {
     if (!this.owner.canWrite()) return;
     const shelf = current.shelf ?? {};
     const changedWhileSaving = !same(this.state.draft, pending.draft);
-    const resetDraft = pending.reset && !pending.dirty.size ? draftFrom({}) : this.state.draft;
+    const remainingDirty =
+      changedWhileSaving || (pending.reset && pending.dirty.size > 0) ? this.state.dirty : new Set<string>();
+    const resetDraft = rebaseDraft(shelf, this.state.draft, remainingDirty);
     this.update({
       known: { shelf, version: current.version },
       draft: resetDraft,
-      dirty: changedWhileSaving || (pending.reset && pending.dirty.size > 0) ? this.state.dirty : new Set(),
+      dirty: remainingDirty,
       pending: null,
       phase: changedWhileSaving || (pending.reset && pending.dirty.size > 0) ? 'review' : 'saved',
       reason: undefined,
@@ -284,6 +327,16 @@ export class ShelfPreferenceDraftRecovery {
       return;
     }
     const shelf = reset ? null : patchFor(this.state.known.shelf, this.state.draft, this.state.dirty);
+    if (shelf?.layouts) {
+      const merged = { ...this.state.known.shelf.layouts, ...shelf.layouts };
+      if (
+        Object.keys(shelf.layouts).length > 32 ||
+        Object.values(merged).filter((value) => value !== null).length > 32
+      ) {
+        this.update({ phase: 'failed', reason: 'invalid' });
+        return;
+      }
+    }
     if (!reset && shelf && !Object.keys(shelf).length) {
       this.update({ phase: 'saved' });
       return;
@@ -309,12 +362,13 @@ export class ShelfPreferenceDraftRecovery {
     try {
       const current = pagePreferences(await this.io.read());
       if (!this.owner.canRead()) return;
-      if (!current) {
+      if (!current || current.version < Math.max(this.state.known.version, this.owner.version())) {
         this.update({ phase: this.state.pending ? 'uncertain' : 'failed', reason: 'unavailable' });
         return;
       }
       this.update({
         known: { shelf: current.shelf ?? {}, version: current.version },
+        draft: rebaseDraft(current.shelf ?? {}, this.state.draft, this.state.dirty),
         phase: this.state.pending ? 'uncertain' : 'review',
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
@@ -381,22 +435,27 @@ export function ShelfPreferencesCard({
   csrfToken,
   io,
   onVersionChange,
+  readTypes,
 }: {
   initial: ShelfPreferences;
   version: number;
   csrfToken: string | null;
   io: ReadingIO;
   onVersionChange: (version: number) => void;
+  readTypes?: (cursor?: string) => Promise<ShelfTypesCurrentRead>;
 }) {
-  const canWrite = useSettingsCurrent(csrfToken, !!io)();
-  const canRead = useSettingsReadCurrent(csrfToken, !!io)();
-  const ownerRef = useRef({ version, canWrite, canRead, onVersionChange });
-  ownerRef.current = { version, canWrite, canRead, onVersionChange };
+  const writeCurrent = useSettingsCurrent(csrfToken, !!io);
+  const readCurrent = useSettingsReadCurrent(csrfToken, !!io);
+  const sessionOwner = useSettingsSessionOwner(csrfToken);
+  const canWrite = writeCurrent();
+  const canRead = readCurrent();
+  const ownerRef = useRef({ version, writeCurrent, readCurrent, onVersionChange });
+  ownerRef.current = { version, writeCurrent, readCurrent, onVersionChange };
   const [controller] = useState(
     () =>
       new ShelfPreferenceDraftRecovery({ spoilerLevel: 0, suitability: 'blur', version, shelf: initial }, io, {
-        canRead: () => ownerRef.current.canRead,
-        canWrite: () => ownerRef.current.canWrite,
+        canRead: () => ownerRef.current.readCurrent(),
+        canWrite: () => ownerRef.current.writeCurrent(),
         version: () => ownerRef.current.version,
         onVersionChange: (next) => ownerRef.current.onVersionChange(next),
       }),
@@ -408,6 +467,8 @@ export function ShelfPreferencesCard({
   const inputId = 'shelf-default-columns';
   const showFailure = ['failed', 'conflict', 'uncertain', 'review'].includes(state.phase);
   const waiting = state.phase === 'saving' || state.phase === 'reloading';
+
+  if (!canRead) return null;
 
   return (
     <Card>
@@ -520,6 +581,17 @@ export function ShelfPreferencesCard({
             );
           })}
         </fieldset>
+        <ShelfTypeDefaults
+          key={JSON.stringify([sessionOwner?.subject, csrfToken, getLocale()])}
+          layouts={{ ...state.draft.layouts, ...(state.dirty.has('layout') ? { all: state.draft.layout } : {}) }}
+          globalLayout={state.draft.layout}
+          savedLayouts={state.known.shelf.layouts ?? {}}
+          disabled={disabled}
+          subject={sessionOwner?.subject ?? null}
+          isCurrent={readCurrent}
+          onChange={(scope, layout) => controller.editTypeLayout(scope, layout)}
+          {...(readTypes ? { readTypes } : {})}
+        />
         {showFailure ? (
           <Alert variant={state.phase === 'failed' ? 'destructive' : 'default'}>
             <AlertTitle>{failureText(state.phase)}</AlertTitle>

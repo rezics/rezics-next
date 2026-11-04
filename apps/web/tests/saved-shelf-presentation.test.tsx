@@ -195,6 +195,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
   };
   let conflictNext = true;
   let unknownNext = true;
+  let holdSave = false;
+  let resolveSave: (() => void) | undefined;
   const receipts = new Map<string, Record<string, unknown>>();
   const patches: Array<{ body: Record<string, unknown>; key: string | null }> = [];
   const merge = (target: unknown, patchValue: unknown): unknown => {
@@ -264,6 +266,10 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       unknownNext = false;
       return problem(503, 'dependency_unavailable');
     }
+    if (holdSave)
+      await new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      });
     return Response.json(receipt, { headers: { 'cache-control': 'private, no-store' } });
   }) as typeof fetch;
 
@@ -319,6 +325,36 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     const initialPreferences = initial.signedIn && 'preferences' in initial ? initial.preferences : undefined;
     if (!initialPreferences) throw new Error('Native preference fixture did not load');
     const io = preferences.shelf;
+    const book = 'https://schema.org/Book';
+    const movie = 'https://schema.org/Movie';
+    const absent = 'https://types.example/retired';
+    let typesMode: 'unavailable' | 'loaded' | 'empty' | 'late' = 'unavailable';
+    let resolveTypes: ((value: import('../src/library/shelf-types-read').ShelfTypesCurrentRead) => void) | undefined;
+    const typeResult = () => ({
+      sessionSubject: accountId,
+      authorizationAgrees: true,
+      requested: { cursor: null, limit: 20 as const, locale: 'en' },
+      page:
+        typesMode === 'unavailable'
+          ? { state: 'unavailable' as const }
+          : {
+              state: 'loaded' as const,
+              types:
+                typesMode === 'empty'
+                  ? []
+                  : [
+                      { type: book, label: 'Books' },
+                      { type: movie, label: 'Films' },
+                    ],
+              next: null,
+            },
+    });
+    const readTypes = async () =>
+      typesMode === 'late'
+        ? new Promise<import('../src/library/shelf-types-read').ShelfTypesCurrentRead>((resolve) => {
+            resolveTypes = resolve;
+          })
+        : typeResult();
 
     function MountedCard() {
       const [version, setVersion] = useState(initialPreferences.version);
@@ -327,6 +363,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
         version,
         csrfToken,
         io,
+        readTypes,
         onVersionChange: (next) => {
           confirmedVersion = next;
           setVersion(next);
@@ -369,7 +406,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     };
     try {
       await render();
-      expect(host.querySelectorAll('select')).toHaveLength(8);
+      expect(host.querySelectorAll('select')).toHaveLength(9);
       expect(host.textContent).toContain(m.settings_shelf_columns_unavailable({ columns: 'creator, rating, started' }));
       expect(host.textContent).toContain(
         m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }),
@@ -452,13 +489,125 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       expect(patches[4]?.body).toEqual({ expectedVersion: 7, shelf: { layouts: { all: 'list' } } });
       expect(confirmedVersion).toBe(8);
 
+      // Choosing and inspecting a type never saves. Discovery failure is distinct from no types.
+      await click(m.settings_shelf_types_load());
+      expect(host.textContent).toContain(m.library_types_unavailable());
+      expect(host.textContent).not.toContain(m.library_types_empty());
+      await select(8, book);
+      expect(host.textContent).toContain(m.settings_shelf_type_absent());
+      expect(host.textContent).toContain(m.settings_shelf_type_override({ layout: m.library_layout_grid() }));
+      expect(host.textContent).toContain(book);
+      expect(patches).toHaveLength(5);
+      typesMode = 'loaded';
+      await click(m.library_types_retry());
+      await select(8, movie);
+      expect(host.textContent).toContain(m.settings_shelf_type_inherits({ layout: m.library_layout_list() }));
+      await select(9, 'table');
+      await select(8, book);
+      await select(9, 'list');
+      expect(patches).toHaveLength(5);
+      await click(m.settings_shelf_save());
+      expect(patches[5]?.body).toEqual({
+        expectedVersion: 8,
+        shelf: { layouts: { [movie]: 'table', [book]: 'list' } },
+      });
+      expect((current.shelf as typeof initialShelf).gridSize).toBe('small');
+      expect((current.shelf as typeof initialShelf).tableColumns).toEqual(initialShelf.tableColumns);
+      expect((current.shelf as typeof initialShelf).sorts).toEqual(initialShelf.sorts);
+      await select(8, movie);
+      const visit = Array.from(host.querySelectorAll('a')).find(
+        (node) => node.textContent === m.settings_shelf_type_visit(),
+      )!;
+      const destination = new URL(visit.href);
+      expect(destination.searchParams.get('type')).toBe(movie);
+      expect(destination.searchParams.has('layout')).toBe(false);
+      const newVisit = await io.read();
+      if (!newVisit.signedIn || !('preferences' in newVisit)) throw new Error('Expected private readback');
+      const returned = resolveShelfPresentation(
+        validateShelfSearch(Object.fromEntries(destination.searchParams)),
+        newVisit.preferences.shelf,
+      );
+      expect(returned.display).toMatchObject({ layout: 'table', layoutSource: 'type', size: 's' });
+      const urlWins = resolveShelfPresentation(
+        { type: movie, layout: 'grid', columns: 'title,status', size: 'l' },
+        newVisit.preferences.shelf,
+      );
+      expect(urlWins.display).toMatchObject({
+        layout: 'grid',
+        layoutSource: 'url',
+        columns: 'title,status',
+        size: 'l',
+      });
+      await click(m.settings_shelf_type_remove());
+      expect(host.textContent).toContain(m.settings_shelf_type_inherits({ layout: m.library_layout_list() }));
+      await click(m.settings_shelf_save());
+      expect(patches[6]?.body).toEqual({ expectedVersion: 9, shelf: { layouts: { [movie]: null } } });
+      expect((current.shelf as typeof initialShelf).layouts).toEqual({ all: 'list', [book]: 'list' });
+      expect(resolveShelfPresentation({ type: movie }, current.shelf as never).display).toMatchObject({
+        layout: 'list',
+        layoutSource: 'all',
+      });
+
+      // A conflict refreshes clean fields and new/absent siblings, retaining only edited scopes.
+      await select(9, 'grid');
+      current = {
+        ...current,
+        version: 11,
+        shelf: {
+          ...(current.shelf as object),
+          layouts: { all: 'table', [book]: 'table', [absent]: 'grid' },
+          gridSize: 'large',
+        },
+      };
+      await click(m.settings_shelf_save());
+      expect(host.textContent).toContain(m.settings_shelf_conflict());
+      await click(m.settings_shelf_reload());
+      expect((host.querySelectorAll('select')[0] as HTMLSelectElement).value).toBe('table');
+      expect((host.querySelectorAll('select')[1] as HTMLSelectElement).value).toBe('large');
+      expect((host.querySelectorAll('select')[9] as HTMLSelectElement).value).toBe('grid');
+      await click(m.settings_shelf_save());
+      expect(patches[8]?.body).toEqual({ expectedVersion: 11, shelf: { layouts: { [movie]: 'grid' } } });
+      await select(8, absent);
+      expect(host.textContent).toContain(m.settings_shelf_type_absent());
+      expect(host.querySelectorAll('select')).toHaveLength(9);
+      await click(m.settings_shelf_type_remove());
+      await click(m.settings_shelf_save());
+      expect(patches[9]?.body).toEqual({ expectedVersion: 12, shelf: { layouts: { [absent]: null } } });
+      typesMode = 'empty';
+      await click(m.settings_shelf_types_load());
+      expect(host.textContent).toContain(m.library_types_empty());
+
       await click(m.settings_shelf_reset());
-      expect(patches[5]?.body).toEqual({ expectedVersion: 8, shelf: null });
+      expect(patches[10]?.body).toEqual({ expectedVersion: 13, shelf: null });
       expect(Object.hasOwn(current, 'shelf')).toBe(false);
       expect(current.spoilerLevel).toBe(1);
       expect(current.suitability).toBe('show');
       expect(current.notifications).toEqual({ reply: true, mention: false });
-      expect(confirmedVersion).toBe(9);
+      expect(confirmedVersion).toBe(14);
+      // Credential replacement retires late discovery and cannot revive a private editor via ABA.
+      holdSave = true;
+      await select(0, 'list');
+      await click(m.settings_shelf_save());
+      expect(patches[11]?.body).toEqual({ expectedVersion: 14, shelf: { layouts: { all: 'list' } } });
+      typesMode = 'late';
+      await click(m.settings_shelf_types_load());
+      await act(async () =>
+        queryClient.setQueryData(sessionQuery.queryKey, {
+          state: 'signed-in',
+          subject: accountId,
+          csrfToken: 'replacement',
+        }),
+      );
+      await act(async () => {
+        resolveTypes?.(typeResult());
+        resolveSave?.();
+      });
+      expect(confirmedVersion).toBe(14);
+      expect(host.textContent).toBe('');
+      await act(async () =>
+        queryClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: accountId, csrfToken }),
+      );
+      expect(host.textContent).toBe('');
     } finally {
       await act(async () => root.unmount());
       owner.retire();

@@ -55,7 +55,8 @@ function OwnerShelfTypes({
   const renderedRevision = revision.current;
   const currentChoice = () => isCurrent() && renderedRevision === revision.current;
   const selectionLabel = view.type ? (typeLabel ?? m.library_type_unnamed()) : m.library_types_all();
-  const { type: _type, cursor: _cursor, ...retained } = view;
+  const { type: _type, cursor: _cursor, layout, ...rest } = view;
+  const retained = { ...rest, ...(view.layoutExplicit !== false && layout ? { layout } : {}) };
   const href = (type?: string) => shelfHref(locale, { ...retained, ...(type ? { type } : {}) });
   async function read(cursor?: string) {
     if (!currentChoice() || inFlight.current) return;
