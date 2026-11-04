@@ -1243,6 +1243,16 @@ including explicitly installed extensions and roles dropped for unmounted action
 read to built-in definitions. A grant row alone never installs a role. Neither action
 inference nor group membership supplies a direct role or current account eligibility.
 
+`readRealmOwnerLeaveObservation(client: AccessClient, input: {resource: Resource, accountId: string,
+at: AuthoritativeTime}): Promise<{owner: boolean, remaining: boolean, source: string | null}>` reads the same
+bounded native holder predicate after the caller admits the exact resource read. `source` is the current explicit
+owner grant's transaction ID and binds advice to that owner source. The target point uses
+`resource_role_grant_point_lookup` with `valid @> T`; the remaining-owner probe uses the current-only
+`realm_owner_continuity` GiST index with `upper_inf(valid)`, so closed history and scheduled owners do not satisfy
+the result. Cost: one current target point and one current open-owner existence probe, at most one result row; the
+target ID is 36 ASCII bytes. The command guard uses this same predicate under its existing lock and ignores that
+source field; no extra command statement, role, account or membership expansion is added.
+
 `assertRealmOwnerMayLeave(client: AccessClient, input: {resource: Resource, accountId: string,
 at: AuthoritativeTime}): Promise<void>` requires the actual authorized live Realm command and its exact T.
 It locks `access.resource_initialization`, checks the target's current explicit owner grant and requires another
