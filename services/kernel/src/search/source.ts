@@ -2,6 +2,7 @@ import type { FilterQualifier, SpoilerThreshold } from '@rezics/filter';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
+import type { CreditSearchProjection, CreditSearchSource } from './credit-search.ts';
 
 export type LanguageValue = { language: string; value: string };
 
@@ -85,7 +86,13 @@ export type IndexedSubject = {
 };
 
 /** The partition's `core.partition.position` and the listed subjects' state, read in one snapshot. */
-export type SubjectSnapshot = { partition: number; position: bigint; subjects: IndexedSubject[] };
+export type SubjectSnapshot = {
+  partition: number;
+  position: bigint;
+  subjects: IndexedSubject[];
+  /** Complete creator projections are attached only by the private index-input read. */
+  creditSearch?: ReadonlyMap<string, CreditSearchProjection>;
+};
 
 /** A page retains its source cuts and complete per-pool authorization until disclosure finishes. */
 export type RetainedRelationFacetPage = Readonly<{
@@ -97,6 +104,10 @@ export type RetainedRelationFacetPage = Readonly<{
 export interface SubjectSource {
   /** Unknown ids are omitted. Every id must route to `partition`. */
   read(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+  /** Index-only complete input. Ordinary reader observations must not pay for creator projection. */
+  readForIndex?(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+  /** Exact current native support for one bounded credited-name projection. */
+  creditSearch?: CreditSearchSource;
   /** Visible, non-redirected subjects of the partition and its position, in one snapshot. */
   count(partition: number): Promise<{ position: bigint; count: number }>;
   /**

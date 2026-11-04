@@ -161,6 +161,9 @@ analysis. Preserve multivalue phrase boundaries and description-only matches. Na
 preserve this text, analyzer, phrase/Boolean meaning and ranking, not title-only, substring/ILIKE or private-corpus
 scores. Private notes, progress and label names add no public text fields.
 
+Decision: `textField` defaults to this existing all-catalogue text; `credited_creator` is an explicit choice limited
+to complete, currently public outgoing credits and remains part of query-share and cursor bindings.
+
 Default remains relevance with text and name without text. Preserve today's relevance `_score DESC, id ASC`,
 exact-name/phrase boosts, name, ID, public-Collection-count and both rating phases with their existing ties,
 missing treatment and guards. Ordinary mixed Library/scope, tag, quantity over one million words and text
