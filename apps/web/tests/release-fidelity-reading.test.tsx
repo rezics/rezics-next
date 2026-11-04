@@ -216,6 +216,7 @@ test('a later page inspects one exact repeated occurrence and returns from its e
     await visit.click(visit.byLabel(m.correction_title({}, options)));
     const relationLabel = m.relation_title({}, options);
     await visit.waitFor(() => expect(visit.host.querySelector(`[aria-label="${relationLabel}"]`)).not.toBeNull());
+    await visit.click(visit.byLabel(m.relation_open({}, options)));
     await visit.waitFor(() => expect(hooks.relationReads.length).toBeGreaterThan(0));
     expect(hooks.relationReads[0]).toMatchObject({
       holder: releaseSubject,
