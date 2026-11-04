@@ -68,7 +68,7 @@ export type CrossMediaPlan = {
   edges: GraphEdgeDraft[];
   franchises: Record<Franchise, { bangumi: string[]; vndb: string[] }>;
   members: CrossMediaMember[];
-  characterAppearances: BangumiCharacterAppearance[];
+  characterAppearances?: BangumiCharacterAppearance[];
   gaps: CrossMediaGap[];
 };
 function ensure(value: unknown, message: string): asserts value {
@@ -1004,7 +1004,7 @@ export async function seedCrossMedia(
       port,
       sourceAlias: crossMediaAliases.bangumi,
       records: [...plan.records.bangumi, ...plan.entities.bangumi],
-      appearances: plan.characterAppearances,
+      appearances: plan.characterAppearances ?? [],
     ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
     });
     ensure(fidelity.run.status === 'committed', `Bangumi character fidelity import failed: ${fidelity.run.status}`);
