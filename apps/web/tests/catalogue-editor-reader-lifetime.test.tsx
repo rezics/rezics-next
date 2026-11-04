@@ -378,7 +378,7 @@ test('catalogue editors retain only their original live reader, exact address an
   };
   const termsSelector = (part: 'labels' | 'labels-mode') => `[id="${termsControl(part)!.id}"]`;
   const submitTerms = async () => {
-    const submit = ui.queued(ui.host.querySelector('form')!);
+    const submit = ui.queued(termsControl('labels')!.closest('form')!);
     await act(async () => {
       void submit('onSubmit');
     });

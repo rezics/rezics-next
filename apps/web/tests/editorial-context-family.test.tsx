@@ -629,6 +629,7 @@ test('Editorial Context family retains supplied comparison, independent controls
     await router.load();
     await render(<RouterProvider router={router} />);
     await until(() => !!host.querySelector('[data-editorial-form]'));
+    await until(() => !button(m.editorial_create({}, o)).disabled);
     const nameInput = host.querySelector('input')!;
     const languageSelect = host.querySelector('select')!;
     await act(async () => userEvent.type(nameInput, 'Unfinished Context'));
