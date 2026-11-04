@@ -1,3 +1,4 @@
+import { QueryTextRecovery } from './query-text-recovery';
 import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';
@@ -875,7 +876,7 @@ export function SearchPage({
     if (initiallyOpen) openFilters();
   }, [initiallyOpen, openFilters]);
   useEffect(() => {
-    if (data?.problem?.errors?.length) openFilters();
+    if (data?.problem?.errors?.some(({ pointer }) => pointer !== '/text')) openFilters();
   }, [data?.problem, openFilters]);
 
   const hasFilterPanel = data !== undefined;
@@ -1339,16 +1340,31 @@ export function SearchPage({
   }
 
   const browsing = isRealmDiscoverySearch(committedState) && !editing && !result && !discovery && !data?.recovery;
-  const content = browsing ? (
-    <SearchRealmDiscovery
-      key={JSON.stringify([locale, stateKey, realmDiscovery])}
-      initial={realmDiscovery ?? { kind: 'loading' }}
-      locale={locale}
-      {...(realmDiscoveryRead ? { read: realmDiscoveryRead } : {})}
-    />
-  ) : (
-    results
-  );
+  const textError = data?.recovery?.status === 'invalid' ? data.recovery.textError : undefined;
+  const content =
+    textError && textError.query === query && committedState.query === query ? (
+      <QueryTextRecovery
+        key={JSON.stringify([stateKey, locale, session])}
+        value={query}
+        diagnostic={textError.diagnostic}
+        locale={locale}
+        retryAt={data?.recovery && 'retryAt' in data.recovery ? data.recovery.retryAt : undefined}
+        onApply={(value) => {
+          void router?.navigate({
+            href: discoverySearchHref(locale, { ...committedState, query: value, cursor: undefined }),
+          });
+        }}
+      />
+    ) : browsing ? (
+      <SearchRealmDiscovery
+        key={JSON.stringify([locale, stateKey, realmDiscovery])}
+        initial={realmDiscovery ?? { kind: 'loading' }}
+        locale={locale}
+        {...(realmDiscoveryRead ? { read: realmDiscoveryRead } : {})}
+      />
+    ) : (
+      results
+    );
 
   return (
     <section className="mx-auto max-w-5xl space-y-6">

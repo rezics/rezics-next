@@ -1,4 +1,6 @@
-export const GLOBAL_SEARCH_QUERY_BYTE_LIMIT = 512;
+import { TEXT_LIMITS } from '../../../../packages/search-text/src/index.ts';
+
+export const GLOBAL_SEARCH_QUERY_BYTE_LIMIT = TEXT_LIMITS.bytes;
 
 const encoder = new TextEncoder();
 

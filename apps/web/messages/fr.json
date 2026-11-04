@@ -9601,5 +9601,19 @@
   "creator_review_page_no_cursor": "Aucun curseur de continuation fourni",
   "creator_review_page_cursor_hint": "Le curseur natif est opaque. Les filtres locaux ne le modifient pas et ne transportent aucune condition cachée au redémarrage. Son absence ne certifie pas un historique financier complet.",
   "creator_review_refresh_reselection": "L’actualisation peut remplacer la page même si les titres ou références semblent identiques. L’examen et la comparaison imposent une nouvelle sélection explicite.",
-  "creator_review_reveal_inspected": "Afficher la vente examinée dans les lignes reçues"
+  "creator_review_reveal_inspected": "Afficher la vente examinée dans les lignes reçues",
+  "search_text_label": "Texte de recherche",
+  "search_text_expected_operand": "Ajoutez ici un mot, une expression ou un groupe. Chaque côté de | doit contenir une recherche.",
+  "search_text_unexpected_close": "Supprimez cette parenthèse fermante ou ajoutez la parenthèse ouvrante.",
+  "search_text_unclosed_group": "Fermez le groupe qui commence ici avec ).",
+  "search_text_unclosed_phrase": "Fermez l’expression qui commence ici avec un guillemet droit (\").",
+  "search_text_unsupported_escape": "Après une barre oblique inverse, seuls \\, \", |, (, ) et - sont permis. Supprimez-la devant les autres caractères.",
+  "search_text_empty_phrase": "Saisissez du texte entre les guillemets ou supprimez l’expression vide.",
+  "search_text_negated_operand": "Placez un mot, une expression ou un groupe juste après -.",
+  "search_text_byte_limit": "Raccourcissez la recherche à {maximum} octets UTF-8 au maximum. Les caractères CJK utilisent généralement 3 octets et les émojis 4.",
+  "search_text_depth_limit": "Limitez les groupes imbriqués à {maximum} niveaux. Supprimez une paire de parenthèses.",
+  "search_text_leaf_limit": "Utilisez au maximum {maximum} mots ou expressions. Supprimez un terme.",
+  "search_text_phrase_token_limit": "Raccourcissez cette expression à {maximum} unités : chaque caractère CJK compte séparément ; les autres lettres et chiffres consécutifs comptent comme un mot.",
+  "search_text_position": "Au caractère {position} (points de code Unicode).",
+  "search_text_grammar": "Une espace exige les deux termes ; | autorise l’un ou l’autre ; - exclut le terme ou groupe suivant. ( ) regroupe et les guillemets droits délimitent une expression exacte. Une barre oblique inverse rend \\, \", |, (, ) et - littéraux. Modifiez le texte d’origine, puis appliquez la correction."
 }

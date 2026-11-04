@@ -9604,5 +9604,19 @@
   "creator_review_page_no_cursor": "未提供後續頁游標",
   "creator_review_page_cursor_hint": "原生游標不透明。本頁篩選不會更改游標，也不會在重新開始時帶入隱藏條件。沒有游標不代表財務歷史完整。",
   "creator_review_refresh_reselection": "重新整理可能替換本頁，即使標題或銷售參照看似相同。檢視與比較都必須再次明確選取。",
-  "creator_review_reveal_inspected": "在已收到的列中顯示檢視中的銷售"
+  "creator_review_reveal_inspected": "在已收到的列中顯示檢視中的銷售",
+  "search_text_label": "查詢文字",
+  "search_text_expected_operand": "請在此加入詞語、片語或群組。| 的兩側都需要查詢內容。",
+  "search_text_unexpected_close": "移除此右括號，或加入對應的左括號。",
+  "search_text_unclosed_group": "請用 ) 關閉從此處開始的群組。",
+  "search_text_unclosed_phrase": "請用雙引號（\"）關閉從此處開始的片語。",
+  "search_text_unsupported_escape": "反斜線後只能接 \\、\"、|、(、) 或 -。其他字元前請移除反斜線。",
+  "search_text_empty_phrase": "請在引號之間輸入文字，或移除空片語。",
+  "search_text_negated_operand": "請在 - 後直接輸入詞語、片語或群組。",
+  "search_text_byte_limit": "請將查詢縮短至最多 {maximum} 個 UTF-8 位元組。中日韓字元通常佔 3 個位元組，表情符號通常佔 4 個。",
+  "search_text_depth_limit": "群組最多可巢狀 {maximum} 層。請移除一組括號。",
+  "search_text_leaf_limit": "最多可使用 {maximum} 個詞語或片語。請移除一個查詢詞。",
+  "search_text_phrase_token_limit": "請將此片語縮短至最多 {maximum} 個詞元：中日韓字元各計一個，其他連續的字母與數字計為一個詞。",
+  "search_text_position": "位於第 {position} 個字元（以 Unicode 碼位計算）。",
+  "search_text_grammar": "空格表示兩項皆須符合；| 表示任一項符合；- 排除後面的詞語或群組。用 ( ) 分組，雙引號表示完整片語。反斜線可將 \\、\"、|、(、) 和 - 視為一般字元。請編輯原文，再套用修正。"
 }

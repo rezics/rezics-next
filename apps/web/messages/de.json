@@ -9601,5 +9601,19 @@
   "creator_review_page_no_cursor": "Kein Fortsetzungscursor übermittelt",
   "creator_review_page_cursor_hint": "Der native Cursor ist undurchsichtig. Lokale Filter ändern ihn nicht und nehmen keine versteckten Bedingungen in einen Neustart mit. Ein fehlender Cursor belegt keine vollständige Finanzhistorie.",
   "creator_review_refresh_reselection": "Aktualisieren kann die Seite ersetzen, selbst wenn Titel oder Verkaufsreferenzen gleich aussehen. Detailansicht und Vergleich erfordern eine bewusste Neuauswahl.",
-  "creator_review_reveal_inspected": "Betrachteten Verkauf in den empfangenen Zeilen zeigen"
+  "creator_review_reveal_inspected": "Betrachteten Verkauf in den empfangenen Zeilen zeigen",
+  "search_text_label": "Suchtext",
+  "search_text_expected_operand": "Fügen Sie hier ein Wort, eine Phrase oder eine Gruppe ein. Auf beiden Seiten von | muss eine Suchbedingung stehen.",
+  "search_text_unexpected_close": "Entfernen Sie diese schließende Klammer oder ergänzen Sie die öffnende Klammer.",
+  "search_text_unclosed_group": "Schließen Sie die hier beginnende Gruppe mit ).",
+  "search_text_unclosed_phrase": "Schließen Sie die hier beginnende Phrase mit einem doppelten Anführungszeichen (\").",
+  "search_text_unsupported_escape": "Nach einem Rückstrich sind nur \\, \", |, (, ) und - erlaubt. Entfernen Sie ihn vor anderen Zeichen.",
+  "search_text_empty_phrase": "Geben Sie Text zwischen den Anführungszeichen ein oder entfernen Sie die leere Phrase.",
+  "search_text_negated_operand": "Setzen Sie direkt nach - ein Wort, eine Phrase oder eine Gruppe.",
+  "search_text_byte_limit": "Kürzen Sie die Suche auf höchstens {maximum} UTF-8-Bytes. CJK-Zeichen benötigen meist 3 Bytes, Emojis meist 4.",
+  "search_text_depth_limit": "Verwenden Sie höchstens {maximum} verschachtelte Gruppen. Entfernen Sie ein Klammerpaar.",
+  "search_text_leaf_limit": "Verwenden Sie höchstens {maximum} Wörter oder Phrasen. Entfernen Sie einen Suchbegriff.",
+  "search_text_phrase_token_limit": "Kürzen Sie diese Phrase auf höchstens {maximum} Tokens: Jedes CJK-Zeichen zählt einzeln, andere zusammenhängende Buchstaben und Zahlen als ein Wort.",
+  "search_text_position": "Bei Zeichen {position} (Unicode-Codepunkte).",
+  "search_text_grammar": "Leerzeichen verlangen beide Begriffe; | erlaubt eine der Seiten; - schließt den folgenden Begriff oder die Gruppe aus. ( ) gruppiert, doppelte Anführungszeichen bilden eine genaue Phrase. Ein Rückstrich macht \\, \", |, (, ) und - zu normalen Zeichen. Bearbeiten Sie den ursprünglichen Text und wenden Sie die Korrektur an."
 }

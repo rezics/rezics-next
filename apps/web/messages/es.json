@@ -9601,5 +9601,19 @@
   "creator_review_page_no_cursor": "No se recibió cursor de continuación",
   "creator_review_page_cursor_hint": "El cursor nativo es opaco. Los filtros locales no lo cambian ni llevan condiciones ocultas al reinicio. Su ausencia no certifica un historial financiero completo.",
   "creator_review_refresh_reselection": "Actualizar puede sustituir esta página aunque los títulos o referencias parezcan iguales. La inspección y la comparación requieren volver a seleccionar explícitamente.",
-  "creator_review_reveal_inspected": "Mostrar la venta inspeccionada en las filas recibidas"
+  "creator_review_reveal_inspected": "Mostrar la venta inspeccionada en las filas recibidas",
+  "search_text_label": "Texto de búsqueda",
+  "search_text_expected_operand": "Añade aquí una palabra, frase o grupo. Ambos lados de | necesitan una consulta.",
+  "search_text_unexpected_close": "Elimina este paréntesis de cierre o añade el de apertura.",
+  "search_text_unclosed_group": "Cierra con ) el grupo que empieza aquí.",
+  "search_text_unclosed_phrase": "Cierra con comillas dobles (\") la frase que empieza aquí.",
+  "search_text_unsupported_escape": "Después de una barra inversa solo se permiten \\, \", |, (, ) y -. Elimínala delante de otros caracteres.",
+  "search_text_empty_phrase": "Escribe texto entre las comillas o elimina la frase vacía.",
+  "search_text_negated_operand": "Coloca una palabra, frase o grupo justo después de -.",
+  "search_text_byte_limit": "Acorta la consulta a un máximo de {maximum} bytes UTF-8. Los caracteres CJK suelen usar 3 bytes y los emojis 4.",
+  "search_text_depth_limit": "Usa como máximo {maximum} niveles de grupos anidados. Elimina un par de paréntesis.",
+  "search_text_leaf_limit": "Usa como máximo {maximum} palabras o frases. Elimina un término.",
+  "search_text_phrase_token_limit": "Acorta esta frase a un máximo de {maximum} unidades: cada carácter CJK cuenta por separado; las demás letras y números consecutivos cuentan como una palabra.",
+  "search_text_position": "En el carácter {position} (puntos de código Unicode).",
+  "search_text_grammar": "Los espacios requieren ambos términos; | permite cualquiera de los lados; - excluye el término o grupo siguiente. Usa ( ) para agrupar y comillas dobles para una frase exacta. Una barra inversa convierte \\, \", |, (, ) y - en caracteres literales. Edita el texto original y aplica la corrección."
 }

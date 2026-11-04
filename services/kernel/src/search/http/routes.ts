@@ -1,3 +1,4 @@
+import { TextDiagnosticSchema } from './text-diagnostic.ts';
 export { FactSchema } from './catalogue.ts';
 import { createCatalogueResponseAdapter, searchResponse, type SearchHttpResponse } from './catalogue.ts';
 import { releaseGroupsResponse, releaseChildrenResponse, releaseResponse } from './releases.ts';
@@ -177,7 +178,7 @@ export function searchRoutes<App>(
           401: unauthorized,
           403: problemSchema('forbidden'),
           409: problemSchema('search_restart_required'),
-          422: problemSchema('unsupported_query'),
+          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema) }),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: {
@@ -440,7 +441,7 @@ export function searchRoutes<App>(
           401: unauthorized,
           403: problemSchema('forbidden'),
           409: problemSchema('search_restart_required'),
-          422: problemSchema('unsupported_query'),
+          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema) }),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: {
@@ -491,7 +492,7 @@ export function searchRoutes<App>(
           401: unauthorized,
           403: problemSchema('forbidden'),
           409: problemSchema('search_restart_required'),
-          422: problemSchema('unsupported_query'),
+          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema) }),
           503: unavailable,
         },
         detail: {

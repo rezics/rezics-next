@@ -9604,5 +9604,19 @@
   "creator_review_page_no_cursor": "継続カーソルは提供されていません",
   "creator_review_page_cursor_hint": "ネイティブカーソルは不透明です。ローカル条件で変更したり、再開時に隠れた条件を持ち越したりしません。カーソルがなくても財務履歴全体の完全性は証明しません。",
   "creator_review_refresh_reselection": "タイトルや売上参照が同じでも更新でページが置き換わる場合があります。詳細や比較には選び直しが必要です。",
-  "creator_review_reveal_inspected": "確認中の売上を受信した行に表示"
+  "creator_review_reveal_inspected": "確認中の売上を受信した行に表示",
+  "search_text_label": "検索語",
+  "search_text_expected_operand": "ここに単語、フレーズ、またはグループを入力してください。| の両側に検索語が必要です。",
+  "search_text_unexpected_close": "この閉じ括弧を削除するか、対応する開き括弧を追加してください。",
+  "search_text_unclosed_group": "ここで始まるグループを ) で閉じてください。",
+  "search_text_unclosed_phrase": "ここで始まるフレーズを二重引用符（\"）で閉じてください。",
+  "search_text_unsupported_escape": "バックスラッシュの後に使えるのは \\、\"、|、(、)、- のみです。それ以外の文字の前ではバックスラッシュを削除してください。",
+  "search_text_empty_phrase": "引用符の間に文字を入力するか、空のフレーズを削除してください。",
+  "search_text_negated_operand": "- の直後に単語、フレーズ、またはグループを入力してください。",
+  "search_text_byte_limit": "検索語を {maximum} UTF-8 バイト以内に短くしてください。日中韓の文字は通常 3 バイト、絵文字は通常 4 バイトです。",
+  "search_text_depth_limit": "グループの入れ子は {maximum} 段階までです。括弧の組を減らしてください。",
+  "search_text_leaf_limit": "単語またはフレーズは {maximum} 個までです。検索語を減らしてください。",
+  "search_text_phrase_token_limit": "フレーズを {maximum} トークン以内に短くしてください。日中韓の文字は一文字ずつ数え、その他の連続した文字と数字は一語と数えます。",
+  "search_text_position": "{position} 文字目（Unicode コードポイントで計算）。",
+  "search_text_grammar": "空白は両方の語、| はいずれかの語、- は直後の語やグループの除外を表します。( ) でグループ化し、二重引用符でフレーズを囲みます。バックスラッシュで \\、\"、|、(、)、- を通常の文字として扱えます。元の検索語を編集し、修正を適用してください。"
 }

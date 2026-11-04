@@ -283,3 +283,45 @@ test('transport failure stays unavailable and cancellation cannot publish a late
   finish();
   await expect(pending).rejects.toBe(abort);
 });
+
+test('text diagnostics belong to the captured submission, never a replacement, refusal or aborted read', async () => {
+  const { diagnoseText } = await import('../../../packages/search-text/src/index.ts');
+  const text = '😀 心 "こころ';
+  const diagnostic = diagnoseText(text)!;
+  const error = {
+    code: 'unsupported_query',
+    errors: [{ pointer: '/text', code: 'unsupported' }],
+    textDiagnostic: diagnostic,
+  };
+  const submitted = { ...request, text };
+  let resolve!: (response: { status: number; error: unknown }) => void;
+  const pending = readSearchOutcome(
+    submitted,
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  submitted.text = 'replacement';
+  resolve({ status: 422, error });
+  const outcome = await pending;
+  expect(outcome.recovery).toMatchObject({ status: 'invalid', textError: { query: text, diagnostic } });
+  for (const status of [401, 403, 409, 503]) {
+    const refused = await readSearchOutcome({ ...request, text }, async () => ({ status, error }));
+    expect(refused.recovery).not.toHaveProperty('textError');
+  }
+  const stale = await readSearchOutcome(submitted, async () => ({ status: 422, error }));
+  expect(stale.recovery).not.toHaveProperty('textError');
+  const controller = new AbortController();
+  const aborted = readSearchOutcome(
+    { ...request, text },
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+    controller.signal,
+  );
+  controller.abort();
+  resolve({ status: 422, error });
+  await expect(aborted).rejects.toThrow();
+});

@@ -1,3 +1,4 @@
+import { diagnoseText, readTextDiagnostic, type TextDiagnostic } from '../../../../packages/search-text/src/index.ts';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { parseDiscoveryPage, parseLegacySearchPage, type DiscoveryState, type LegacySearchPage } from './discovery';
@@ -32,6 +33,7 @@ export type SearchRecoveryState =
         | 'unavailable';
       problem?: NonNullable<ReturnType<typeof facetProblem>>;
       retryAt?: number;
+      textError?: { query: string; diagnostic: TextDiagnostic };
     };
 export type SearchOutcome = {
   recovery: SearchRecoveryState;
@@ -78,12 +80,30 @@ export async function readSearchOutcome(
   send: (request: Request) => Promise<SearchWireResponse>,
   signal?: AbortSignal,
 ): Promise<SearchOutcome> {
+  const submittedText = request.text;
   try {
     signal?.throwIfAborted();
     const response = await send(request);
     signal?.throwIfAborted();
-    if (response.error || response.status !== 200)
-      return { recovery: searchRecoveryFromResponse(response, Date.now(), request.cursor) };
+    if (response.error || response.status !== 200) {
+      const recovery = searchRecoveryFromResponse(response, Date.now(), request.cursor);
+      const raw = response.error ?? response.data;
+      const body = raw && typeof raw === 'object' && 'value' in raw ? raw.value : raw;
+      const diagnostic = readTextDiagnostic(
+        body && typeof body === 'object' && 'textDiagnostic' in body ? body.textDiagnostic : undefined,
+      );
+      if (
+        recovery.status === 'invalid' &&
+        recovery.problem?.code === 'unsupported_query' &&
+        recovery.problem.errors?.some(({ pointer }) => pointer === '/text') &&
+        typeof submittedText === 'string' &&
+        diagnostic &&
+        JSON.stringify(diagnoseText(submittedText)) === JSON.stringify(diagnostic)
+      ) {
+        recovery.textError = { query: submittedText, diagnostic };
+      }
+      return { recovery };
+    }
     if (request.representation === 'discovery-v1') {
       const page = parseDiscoveryPage(response.data);
       if (page && request.cursor && page.hits.length === 0 && page.next === null)
