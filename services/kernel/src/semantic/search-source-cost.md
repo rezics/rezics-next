@@ -30,14 +30,14 @@ Inactive retained rows are absent from that index before `LIMIT`. A `LIMIT` afte
 A ready snapshot, with current facts and the response window fixed, does this native
 work per call:
 
-| Seek | Access path | Live rows |
-| --- | --- | --- |
-| Partition position | `core.partition` by partition | 1 |
-| Requested Subjects | `subject_pkey` plus `search_selection_state` readiness | `≤ B` |
-| Current terms | `current_term_fact` via term heads, not statement history | current term slots |
-| Current nonrelation statements | `search_selected_page` equality `(route, subject_id)`, `active`, `NOT relation`, `LIMIT S·C+1` per Subject | `O(B S)` compact heads plus at most `C` selected candidates per expanded slot |
-| Disclosure / lifecycle / fences | existing point joins on those returned heads only | `O(returned heads)` |
-| Definition releases | exact digest points for the returned pins | distinct digests on the page |
+| Seek                            | Access path                                                                                                | Live rows                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Partition position              | `core.partition` by partition                                                                              | 1                                                                             |
+| Requested Subjects              | `subject_pkey` plus `search_selection_state` readiness                                                     | `≤ B`                                                                         |
+| Current terms                   | `current_term_fact` via term heads, not statement history                                                  | current term slots                                                            |
+| Current nonrelation statements  | `search_selected_page` equality `(route, subject_id)`, `active`, `NOT relation`, `LIMIT S·C+1` per Subject | `O(B S)` compact heads plus at most `C` selected candidates per expanded slot |
+| Disclosure / lifecycle / fences | existing point joins on those returned heads only                                                          | `O(returned heads)`                                                           |
+| Definition releases             | exact digest points for the returned pins                                                                  | distinct digests on the page                                                  |
 
 Physical selected rows are `O(B S + C_returned)`, with `C_returned ≤ B S C` only as the
 product of already admitted write caps, not a new ceiling. The obsolete fact count

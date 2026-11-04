@@ -171,8 +171,7 @@ export function subjectSource(
     canonicalNames: createSubjectCanonicalNames(pool),
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
-      if (ids.length > SEARCH_SOURCE_SUBJECT_BATCH)
-        throw new TypeError('A subject snapshot accepts at most 256 ids');
+      if (ids.length > SEARCH_SOURCE_SUBJECT_BATCH) throw new TypeError('A subject snapshot accepts at most 256 ids');
       const requested = new Map<string, number>();
       for (const id of ids) {
         const route = routeOf(id);
