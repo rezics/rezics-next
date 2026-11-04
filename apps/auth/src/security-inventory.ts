@@ -1,4 +1,4 @@
-import { createServerFn } from '@tanstack/react-start';
+import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
 import { authPost } from './api';
 import { readConsent } from './consent';
 import { privateAuthRead } from './private-auth-read';
@@ -75,7 +75,7 @@ export function parseInventoryPage<V extends InventoryView>(view: V, body: unkno
 }
 
 type InventoryInput = { view: InventoryView; cursor?: string };
-export async function issuerSecurityRequest(path: string, body?: unknown): Promise<Response> {
+export const issuerSecurityRequest = createServerOnlyFn(async (path: string, body?: unknown): Promise<Response> => {
   const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
   const request = getRequest();
   setResponseHeader('Cache-Control', 'private, no-store');
@@ -101,7 +101,7 @@ export async function issuerSecurityRequest(path: string, body?: unknown): Promi
     cache: 'no-store',
     signal: AbortSignal.any([request.signal, AbortSignal.timeout(5000)]),
   });
-}
+});
 
 // Browser GET cannot set Origin. Use the existing Start BFF and carry the
 // originating POST's real Origin/cookie to the same issuer's declared GET API.
@@ -252,7 +252,7 @@ export function parseSecurityPage(body: unknown): SecurityPageEnvelope | null {
 export type NativeSecurityPage =
   | { kind: 'ready'; page: SecurityPageEnvelope }
   | { kind: 'signed-out' | 'denied' | 'unavailable' };
-export async function readNativeSecurityPage(): Promise<NativeSecurityPage> {
+export const readNativeSecurityPage = createServerOnlyFn(async (): Promise<NativeSecurityPage> => {
   try {
     const response = await issuerSecurityRequest('/security-page');
     if (response.status === 401) return { kind: 'signed-out' };
@@ -263,8 +263,8 @@ export async function readNativeSecurityPage(): Promise<NativeSecurityPage> {
   } catch {
     return { kind: 'unavailable' };
   }
-}
-const readPage = createServerFn({ method: 'POST' }).handler(readNativeSecurityPage);
+});
+const readPage = createServerFn({ method: 'POST' }).handler(async () => readNativeSecurityPage());
 export async function loadSecurityPage(signal?: AbortSignal): Promise<NativeSecurityPage> {
   try {
     return await privateAuthRead((readSignal) => readPage({ signal: readSignal }), signal);
