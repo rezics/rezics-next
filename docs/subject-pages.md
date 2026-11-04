@@ -1872,6 +1872,20 @@ acceptance is `apps/web/tests/subject-graph-browser.test.tsx`.
 
 ## Read an admitted quotation
 
+Native admission: `schema:Quotation` is a released Thing with a document-valued `schema:text`, `schema:inLanguage`, a
+`schema:about` work-context, `schema:spokenByCharacter`, a credited `schema:creator` and an optional `schema:actor`.
+The ordinary subject `POST /v1/pages:read` carries current viewer state and Access-derived correction actions for this
+type. Historical pins without the type keep unsupported reading. Quotation class, text, about, creator and actor live
+in `works.yaml` with `schema:spokenByCharacter`, so labels stay in the eight works presentation files. Work-context is
+`schema:about`, not episode `schema:isPartOf`. Credited creator and performing voice use association, not credit.
+Decision: the ordinary overview includes admitted `schema:text` in the existing document composition; `Summary` still
+hydrates only `schema:abstract`. Catalogue file and release-group pages keep viewer
+`{ state, context, statementPropose }`; admitted quotation pages keep `{ kind }` plus correction `actions`.
+Decision: quotation pages derive one native Global `statement:propose` check, matching catalogue pages and
+`readSubjectCorrectionActions`; accept and adopt stay on their Context commands. Journey tests run native link
+projection so GET waits on actual outbound relations. A hidden speaker stays omitted from statements and related,
+matching ordinary subject disclosure, while `somevalue` remains the withheld unknown speaker.
+
 The `/quotations` companion follows only relation targets whose released type extends `schema:Quotation`. A quote's
 text comes from the first released `schema:text` or `schema:abstract` property on that type and one unambiguous
 best-ranked statement. The reader keeps that statement ID, its exact language, permitted qualifiers and reference
@@ -1898,6 +1912,7 @@ link, and selecting a quotation moves focus to its detail region.
 
 Reading a quotation from a subject uses one current subject read, at most one relation page of 20 entries, one exact
 selected-quotation subject read and at most one exact document hydration. Direct quotation routes skip the relation
-page and selected-quotation read. Qualifiers and reference parts come from that same selected subject response; they
+page and selected-quotation read. Native growth measures that bounded quotation page (header, admitted text and
+speaker facts, one document) rather than the full platform overview relation widgets. Qualifiers and reference parts come from that same selected subject response; they
 add no provider or per-reference requests. Continuation replaces the visible 20-entry page. Focus revalidation repeats
 the same bounded read and hides old source controls until it completes.

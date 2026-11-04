@@ -2,6 +2,9 @@ types:
   schema:MusicAlbum: 音樂專輯
   schema:MusicRelease: 音樂發行
   schema:MusicRecording: 錄音
+
+  schema:Quotation: 引文
+
 properties:
   schema:releaseOf: 所屬專輯
   schema:catalogNumber: 目錄號
@@ -9,15 +12,31 @@ properties:
   schema:track: 曲目
   schema:byArtist: 藝人
   wdt:P642: 所屬部分
+
+  schema:text: 正文
+  schema:spokenByCharacter: 說話者
+  schema:about: 作品
+  schema:creator: 具名創作者
+  schema:actor: 配音
+
 inverseProperties:
   schema:releaseOf: 專輯發行
   schema:recordLabel: 該廠牌發行
   schema:track: 收錄此錄音的發行
   schema:byArtist: 該藝人的錄音
+
+  schema:spokenByCharacter: 說出的引文
+  schema:about: 引文
+  schema:creator: 具名的引文
+  schema:actor: 配音的引文
+
 typeDescriptions:
   schema:MusicAlbum: '彙集曲目的音樂專輯作品，獨立於特定實體副本或發行版本。'
   schema:MusicRelease: '帶有目錄號、載體、日期與有序錄音的音樂專輯具體發行版。與專輯作品、個人藏本、播放檔與單條錄音分開。'
   schema:MusicRecording: '可識別的音樂作品錄音，例如某一首歌的一次錄製。與專輯彙總、發行版本、播放檔和個人藏本分開。'
+
+  schema:Quotation: '作品中的引文，說話者、具名創作者與出處分開保存。'
+
 propertyDescriptions:
   schema:releaseOf: '此發行版所實現的音樂專輯作品；發行版不是該專輯的另一個名稱。'
   schema:catalogNumber: '發行廠牌為這一版給出的目錄號，按來源文字保存。'
@@ -25,3 +44,10 @@ propertyDescriptions:
   schema:track: '此發行版上可識別的一條錄音。位置、署名、職責、日期與列表出現用來區分同一錄音的重複收錄。'
   schema:byArtist: '作為此錄音演奏者被記載的人物或組織，帶有署名、順序與具體職責。'
   wdt:P642: '把指向同一錄音的兩條關聯分開放在不同槽位的列表出現概念。它不是已發布的碟面或面次。'
+
+  schema:text: '引文的準確正文文件。使用文件值，而不是關係標籤或其他文字欄。'
+  schema:spokenByCharacter: '說出這段引文的虛構角色。不是具名創作者，也不是配音。'
+  schema:about: '這段引文所指向的作品。需要準確的作品或部分身分；子串比對不會建立關係。'
+  schema:creator: '這段引文具名的人物或組織，與虛構說話者分開。'
+  schema:actor: '可選的配音。說話者不會在沒有合格來源斷言時被當成配音。'
+

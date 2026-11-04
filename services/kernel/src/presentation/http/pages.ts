@@ -48,6 +48,9 @@ import {
   cataloguePageMetadata,
   characterWorkIdentityOverlay,
   pageViewerActions,
+  quotationPageDocuments,
+  quotationTypeAdmitted,
+  readQuotationPageAuthority,
   semanticPageView,
   type CharacterWorkIdentityOverlay,
 } from '../semantic-page.ts';
@@ -618,11 +621,15 @@ function nativePageRoute<App>(
         resolved,
         views,
         subject: subject?.id ?? null,
+        subjectType: subject?.type ?? null,
         account,
         probes,
         budget,
         probeSession,
         actor,
+        access: authority.deps.access,
+        pool,
+        deadline: job.deadline,
         ...(languages === undefined ? {} : { languages }),
       });
     },
@@ -646,6 +653,7 @@ async function pageAnswer(input: {
   resolved: ResolvedTemplate;
   views: View[] | null;
   subject: string | null;
+  subjectType: string | null;
   account: PageAccount | null;
   probes: Map<string, ReadResult>;
   budget: PageReadBudget;
@@ -664,6 +672,9 @@ async function pageAnswer(input: {
     actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
   }>;
   actor: import('../../request/access.ts').Actor;
+  access: Access;
+  pool: Pool;
+  deadline: number;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -732,7 +743,14 @@ async function pageAnswer(input: {
   const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
   const properties =
     isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
-  const documents = documentRead(input.resolved.document, input.subject, properties, input.context?.id);
+  const documents = quotationPageDocuments(
+    documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+    input.release,
+    input.subjectType,
+    input.subject,
+    properties,
+    input.context?.id,
+  );
   const incoming = new Request(input.request.url, { headers: input.request.headers, signal: input.request.signal });
   const forwarded = mergedSession(
     input.session.ring,
@@ -812,7 +830,7 @@ async function pageAnswer(input: {
       typeof composedBody.body.subject.type === 'string'
         ? composedBody.body.subject.type
         : undefined;
-    if (type) {
+    if (type && !quotationTypeAdmitted(input.release, input.subjectType)) {
       try {
         input.budget.charge(1);
         const headers = new Headers(incoming.headers);
@@ -845,6 +863,16 @@ async function pageAnswer(input: {
     }
   }
 
+  const quotationAuthority =
+    input.subject !== null && quotationTypeAdmitted(input.release, input.subjectType)
+      ? await readQuotationPageAuthority({
+          pool: input.pool,
+          access: input.access,
+          actor: input.actor,
+          deadline: input.deadline,
+        })
+      : null;
+
   return respond(
     200,
     {
@@ -860,9 +888,10 @@ async function pageAnswer(input: {
       ...(input.catalogue ? { catalogue: input.catalogue } : {}),
       ...(catalogueViewer ? { viewer: catalogueViewer } : {}),
       ...(subjectViewer ? { viewer: subjectViewer } : {}),
+      ...(quotationAuthority ? { viewer: quotationAuthority.viewer } : {}),
       reads,
       ...(input.overlay ? { meanings: input.overlay.meanings, unavailable: input.overlay.unavailable } : {}),
-      ...(viewerEnvelope ? { actions: viewerEnvelope.actions } : {}),
+      ...(quotationAuthority ? { actions: quotationAuthority.actions } : viewerEnvelope ? { actions: viewerEnvelope.actions } : {}),
     },
     readSession,
     true,
