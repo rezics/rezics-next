@@ -1,5 +1,5 @@
 import { requirePrivatePageAccess } from '../session/guard';
-import { isSessionUnavailablePage, loadPrivatePage, SessionUnavailablePrompt } from '../session/private-page';
+import { loadPrivatePage } from '../session/private-page';
 import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 import { sessionQuery } from '../session/query';
@@ -28,7 +28,6 @@ export const Route = createFileRoute('/settings')({
 
 function SettingsRoute() {
   const data = Route.useLoaderData();
-  if (isSessionUnavailablePage(data)) return <SessionUnavailablePrompt signInHref={data.signInHref} />;
   const { page, requestSession } = data;
   return <SettingsPageView page={page} csrfToken={requestSession?.csrfToken ?? null} requestSession={requestSession} />;
 }

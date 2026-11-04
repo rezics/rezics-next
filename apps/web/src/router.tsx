@@ -10,7 +10,10 @@ import { NotFoundPage } from './shell/shell';
 import { PendingPage } from './shell/pending';
 import { routeTree } from './routeTree.gen';
 import { deLocalizeUrl, localizeUrl } from './paraglide/runtime.js';
-import { applyDependencyErrorComponents } from './shell/dependency-recovery/route-error';
+import {
+  applyDependencyErrorComponents,
+  type DependencyRouteNode,
+} from './shell/dependency-recovery/route-error';
 
 type RouteNode = {
   options?: { id?: string; path?: string; staticData?: { publicCache?: boolean } };
@@ -114,7 +117,7 @@ function stringifySearch(search: Record<string, unknown>): string {
 }
 
 export function getRouter() {
-  applyDependencyErrorComponents(routeTree as unknown as RouteNode);
+  applyDependencyErrorComponents(routeTree as unknown as DependencyRouteNode);
   const cspNonce = nonce();
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
   const router = createRouter({

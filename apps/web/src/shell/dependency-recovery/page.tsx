@@ -32,13 +32,13 @@ export function DependencyUnavailablePage({
           ? m.dependency_unavailable_command_message({}, { locale })
           : m.dependency_unavailable_message({}, { locale })
       }
-      retryHref={retryHref}
-      returnHref={returnHref}
+      {...(retryHref ? { retryHref } : {})}
+      {...(returnHref ? { returnHref } : {})}
       onRetry={onRetry}
       retrying={retrying}
       retryFailed={retryFailed}
       retryDisabled={retryDisabled}
-      recovery={recovery}
+      {...(recovery ? { recovery } : {})}
     />
   );
 }

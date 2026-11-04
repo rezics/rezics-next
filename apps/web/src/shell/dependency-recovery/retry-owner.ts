@@ -1,6 +1,6 @@
 import type { BrowserObservationSnapshot } from '../../session/observation';
 
-export type RecoveryOwner = { visit: string; reader: BrowserObservationSnapshot };
+export type RecoveryOwner = { visit: string | undefined; reader: BrowserObservationSnapshot };
 
 /** A retry can settle only for the visit and reader incarnation that own its pending request. */
 export function recoveryOwnerIsCurrent(

@@ -3,9 +3,9 @@ import type { ErrorComponentProps } from '@tanstack/react-router';
 import { ClosedErrorPage } from '../closed';
 import { isDependencyUnavailableError } from '../../session/unavailable';
 
-type RouteNode = {
+export type DependencyRouteNode = {
   options?: { errorComponent?: unknown };
-  children?: Record<string, RouteNode>;
+  children?: Record<string, DependencyRouteNode>;
 };
 
 const patchedOptions = new WeakSet<object>();
@@ -19,7 +19,7 @@ export function dependencyErrorComponent<T extends ElementType>(fallback: T): Co
 }
 
 /** Keep each mounted route's existing error page, with the shared outage page for typed dependencies. */
-export function applyDependencyErrorComponents(route: RouteNode): void {
+export function applyDependencyErrorComponents(route: DependencyRouteNode): void {
   const options = route.options;
   if (options && !patchedOptions.has(options)) {
     const fallback = options.errorComponent;
