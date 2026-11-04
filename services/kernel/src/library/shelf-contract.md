@@ -51,7 +51,18 @@ No new content-family declaration or state coercion is introduced.
 `GET /v1/libraryShelfSummary?type=` returns `{tabs}`. `tabs` has the keys `all`, `in_progress`, `planned`, `completed`,
 `paused`, `dropped`, `collections`, each `{total, shown}`. `total` ignores the type filter and `shown` applies it; without
 `type` they are equal. `all` is the entry count. `collections` is the account's active Collections and ignores `type`.
-The web hides empty overview sections from these counts.
+Counts measure Entries rather than Works, progress, loaded rows or Collection members. Custom states outside the five
+legacy buckets still contribute to `all`. Counts and separately admitted shelf rows are independent observations.
+
+The Web transport seam is `readShelfSummaryCurrent` / `loadShelfSummaryCurrent` in
+`apps/web/src/library/shelf-summary-read.ts`. It derives `ShelfSummary` from the installed root `KernelClient` method,
+performs one no-store GET with only Entry-list authority, validates all seven safe nonnegative count pairs, and returns
+`{sessionSubject, authorizationAgrees, requested: {type, locale, source}, page}`. The page discriminates loaded,
+signed-out, closed, denied, preparing and unavailable; only loaded includes a summary. No omitted or refused observation
+means zero. A consumer must retire this envelope on originating session/account/type/address/locale changes before
+rendering counts. This transport does not establish browser currentness or authorize a command. Existing writers and
+their revision, incarnation, original-key retry and recovery operands retain command ownership. Native growth and
+mounted navigation/acknowledgement measurements remain required; this boundary supplies no population-cost proof.
 
 `GET /v1/libraryShelfTypes?limit=&cursor=` returns `{types: [{type, count}], next}` in stable private UUID order
 (the UUID is not returned). Counts are the account's entries of the type in any state. Limit 1 to 100, default 20.
