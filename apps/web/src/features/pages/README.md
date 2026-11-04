@@ -236,8 +236,8 @@ browse/evidence focus; a replaced or no-longer-admitted reading offers an explic
 
 The overview keeps the current grouped relation renderer at its existing placement. Web composes its target,
 Connections and value-inspection addresses through `subjectVisitReturn`; the receiving route validates the same
-address it consumes. Realm, finite-view node/property and opaque cursor context survive when supported by that
-route. No cursor is transplanted from a composition window into the independent Connections reader. Empty,
+address it consumes. Realm survives on overview returns; Connections retains its own exact native cursor/history. Finite-view
+node/property/cursor origins require the native reader handoff before work-region fragments are admitted there. No cursor is transplanted from a composition window into the independent Connections reader. Empty,
 unavailable, historical and withheld streams keep their own current state and their own selected-stream entry.
 
 `WorkRelation` hands back the mounted browse link or evidence summary. Returning to evidence focuses its summary

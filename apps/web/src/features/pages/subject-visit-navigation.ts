@@ -131,6 +131,16 @@ export function workFranchiseReturnHref(
   return subjectVisitReturn(`${source.pathname}${source.search}${source.hash}`, locale) ?? fallback;
 }
 
+/** Restart the selected current reader without transplanting the retired native continuation. */
+export function workFranchiseRestartHref(href: string, locale: string): string {
+  const accepted = subjectVisitReturn(href, locale);
+  if (!accepted) return href;
+  const url = new URL(accepted, 'https://rezics.invalid');
+  url.searchParams.delete('cursor');
+  url.hash = '#work-franchise';
+  return subjectVisitReturn(`${url.pathname}${url.search}${url.hash}`, locale) ?? href;
+}
+
 /** Concept work-tag journeys share Subject visit validation; graph-only origins keep their separate contract. */
 export function workTagOriginatingReturn(value: unknown, locale?: string): string | undefined {
   const accepted = subjectVisitReturn(value, locale);
@@ -566,7 +576,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const fragment = url.hash === '' ? '#connections' : url.hash;
     if (
       fragment !== '#literary-reader' &&
-      !(subject && (fragment === '#work-franchise' || workFranchiseReturn(fragment))) &&
+      !(subject && !subject[2] && (fragment === '#work-franchise' || workFranchiseReturn(fragment))) &&
       fragment !== '#connections' &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&
