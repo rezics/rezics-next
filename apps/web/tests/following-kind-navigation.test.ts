@@ -35,3 +35,22 @@ test('uninstalled whole-population producer never reads or filters a mixed page,
   }
   expect(requests).toBe(0);
 });
+
+test('unavailable kind retires inspection and destinations without presenting an empty population', async () => {
+  const { mountFollowing, follow, page } = await import('./helpers/following-reading');
+  const row = follow('space');
+  row.destination = { kind: 'space', spaceId: row.targetId, address: 'reading' };
+  const view = await mountFollowing(page(row));
+  try {
+    await view.inspect(row.targetId);
+    expect(view.host.querySelector('h3')?.textContent).toBe('space title');
+    await view.replace({ signedIn: true, follows: [], next: null, kindUnavailable: true });
+    expect(view.host.querySelector('h3')).toBeNull();
+    expect(view.host.querySelector('a[href*="/spaces/"]')).toBeNull();
+    expect(view.host.querySelector('[role="alert"]')?.textContent).toContain('currently unavailable');
+    expect(view.host.textContent).not.toContain('You aren’t following');
+    expect(view.host.querySelector('nav a[aria-current="page"]')?.textContent).toBe('All kinds');
+  } finally {
+    await view.dispose();
+  }
+});
