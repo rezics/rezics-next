@@ -401,7 +401,7 @@ test('compiler cleanup and no-diagnostic compiler failures are infrastructure, n
     });
     const output = collector();
     const code = await typecheck({ root: commandFixture.root, changedFiles: ['packages/failing/fail.ts'], stdout: output.stdout });
-    expect(code).toBe(1);
+    expect(code).toBe(75);
     expect(output.text()).toContain('infrastructure after');
     expect(output.text()).not.toContain('type-errors after');
   } finally {
