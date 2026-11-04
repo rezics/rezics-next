@@ -162,6 +162,7 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
             if (Number.isSafeInteger(total) && total >= 0)
               return {
                 ...common,
+                position: current.position,
                 state: 'ready',
                 generation: state.generation,
                 installed: true,
