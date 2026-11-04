@@ -272,7 +272,7 @@ async function conceptCreateSession(options?: { token?: string; prepare?: (stora
   const token = options?.prepare?.(window.sessionStorage) ?? options?.token;
   const host = window.document.createElement('div');
   window.document.body.append(host);
-  const root = createRoot(host as unknown as HTMLElement);
+  let root = createRoot(host as unknown as HTMLElement);
   const canvas = within(host as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document, delay: null });
   function Harness() {
@@ -297,6 +297,11 @@ async function conceptCreateSession(options?: { token?: string; prepare?: (stora
     storage: window.sessionStorage,
     async refresh() {
       client.setQueryData(['session'], viewer);
+      await act(async () => root.render(<Harness />));
+    },
+    async remount() {
+      await act(async () => root.unmount());
+      root = createRoot(host as unknown as HTMLElement);
       await act(async () => root.render(<Harness />));
     },
     async close() {
@@ -512,6 +517,160 @@ test('uncertain Concept retry keeps the exact command; known-id recovery reads w
   }
 });
 
+test('a remounted detour restores its acknowledged UUID, rereads it, and returns only a fresh disclosure', async () => {
+  const createdId = '00000000-0000-4000-8000-00000000c403';
+  const sourceId = '00000000-0000-4000-8000-00000000a075';
+  const holder = '00000000-0000-4000-8000-00000000b002';
+  viewer = signedIn;
+  observe = async () => allowedCreateAuthority;
+  intakeAuthority = allowedCreateAuthority;
+  intakeMode = 'empty';
+  commands.length = 0;
+  submitImpl = async () => ({ ok: true, id: createdId, reader: { state: 'unavailable' } });
+  let reads = 0;
+  readImpl = async (id) => {
+    expect(id).toBe(createdId);
+    reads += 1;
+    if (reads === 1) return { state: 'unavailable' };
+    if (reads === 2) {
+      return {
+        state: 'ready',
+        href: `/en/subjects/${createdId}/stale-type`,
+        identity: { id: createdId, type: 'wd:Q95074', label: 'Stale Type identity' },
+      };
+    }
+    return {
+      state: 'ready',
+      href: `/en/subjects/${createdId}/recovered`,
+      identity: { id: createdId, type: concept, label: 'Recovered concept' },
+    };
+  };
+  const token = crypto.randomUUID();
+  const page = await conceptCreateSession({
+    prepare(storage) {
+      storage.setItem(
+        `rezics:classification-create-handoff:${token}`,
+        JSON.stringify({
+          version: 1,
+          token,
+          createdAt: Date.now(),
+          sourceId,
+          sourceLabel: 'The source',
+          sourceType: 'wd:Q95074',
+          returnPath: '/en/catalogue/character',
+          reader: 'alice',
+          context: candidateContext,
+          releaseDigest: 'catalogue:1',
+          propertyId: 'schema:keywords',
+          propertyLabel: 'keywords',
+          holder,
+          originalStatementId: null,
+          targets: [concept],
+          drafts: [
+            {
+              holder,
+              property: 'schema:keywords',
+              source: null,
+              included: true,
+              statement: {
+                property: { id: 'schema:keywords' },
+                value: { type: 'value', content: '' },
+                qualifiers: [],
+                references: [],
+                rank: 'normal',
+              },
+              baseline: null,
+            },
+          ],
+          reviewFingerprint: '',
+          phase: 'creating',
+        }),
+      );
+      return token;
+    },
+  });
+  try {
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
+    await chooseTypeAndName(page, concept, 'Recovered concept');
+    await confirmIdentity(page);
+    await act(async () => page.user.click(submitButton(page)));
+    await page.waitFor(() => expect(page.host.querySelector('[data-concept-create-review]')).not.toBeNull());
+    await act(async () => page.user.click(submitButton(page)));
+    await page.waitFor(() => expect(page.host.textContent).toContain(createdId));
+    expect(commands).toHaveLength(1);
+
+    await page.remount();
+    await page.waitFor(() => expect(page.host.textContent).toContain(createdId));
+    expect(commands).toHaveLength(1);
+    await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_retry() })));
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.catalogue_create_reader_unavailable()));
+    expect(page.host.textContent).toContain(createdId);
+    expect(commands).toHaveLength(1);
+
+    await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_retry() })));
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.catalogue_create_reader_stale()));
+    expect(page.host.textContent).toContain(createdId);
+    expect(page.canvas.queryByRole('button', { name: page.m.classification_create_return_to_draft() })).toBeNull();
+
+    await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_retry() })));
+    await page.waitFor(() =>
+      expect(page.canvas.getByRole('link', { name: page.m.catalogue_create_open() })).toBeDefined(),
+    );
+    await page.waitFor(() => expect(page.host.textContent).toContain('Recovered concept'));
+    expect(page.host.textContent).toContain(concept);
+    expect(page.host.textContent).toContain('schema:Thing');
+    expect(reads).toBe(3);
+    await act(async () =>
+      page.user.click(page.canvas.getByRole('button', { name: page.m.classification_create_return_to_draft() })),
+    );
+    expect(page.assigned.at(-1)).toContain('/en/catalogue/character?classificationHandoff=');
+    expect(reads).toBe(4);
+    expect(commands).toHaveLength(1);
+
+    const handoffKey = `rezics:classification-create-handoff:${token}`;
+    const raw = page.storage.getItem(handoffKey);
+    expect(raw).toBeTruthy();
+    const expired = JSON.parse(raw!) as { createdAt: number };
+    expired.createdAt = Date.now() - 31 * 60 * 1000;
+    page.storage.setItem(handoffKey, JSON.stringify(expired));
+    await page.remount();
+    await page.waitFor(() => expect(page.host.textContent).toContain(createdId));
+    expect(page.host.textContent).toContain(page.m.classification_create_handoff_invalid());
+    expect(page.canvas.queryByRole('button', { name: page.m.classification_create_return_to_draft() })).toBeNull();
+    expect(commands).toHaveLength(1);
+
+    let readStarted = false;
+    let resolveLateRead: ((reader: CreatedReader) => void) | undefined;
+    readImpl = async (id) => {
+      expect(id).toBe(createdId);
+      readStarted = true;
+      return new Promise((resolve) => {
+        resolveLateRead = resolve;
+      });
+    };
+    await page.remount();
+    await page.waitFor(() => expect(page.host.textContent).toContain(createdId));
+    await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_retry() })));
+    await page.waitFor(() => expect(readStarted).toBe(true));
+    viewer = { state: 'signed-in', subject: 'bob', csrfToken: 'csrf-bob' };
+    await page.refresh();
+    await page.waitFor(() => expect(page.host.textContent).not.toContain(createdId));
+    await act(async () =>
+      resolveLateRead?.({
+        state: 'ready',
+        href: `/en/subjects/${createdId}/recovered`,
+        identity: { id: createdId, type: concept, label: 'Recovered concept' },
+      }),
+    );
+    expect(page.host.textContent).not.toContain(createdId);
+    expect(page.host.textContent).not.toContain('Recovered concept');
+    expect(page.canvas.queryByRole('button', { name: page.m.classification_create_return_to_draft() })).toBeNull();
+    expect(commands).toHaveLength(1);
+  } finally {
+    await page.close();
+  }
+});
+
 test('classification return records the admitted identity; expired handoff keeps the known create', async () => {
   const createdId = '00000000-0000-4000-8000-00000000c402';
   const sourceId = '00000000-0000-4000-8000-00000000a074';
@@ -521,6 +680,15 @@ test('classification return records the admitted identity; expired handoff keeps
   intakeAuthority = allowedCreateAuthority;
   intakeMode = 'empty';
   commands.length = 0;
+  let returnReads = 0;
+  readImpl = async (id) => {
+    returnReads += 1;
+    return {
+      state: 'ready',
+      href: `/en/subjects/${id}/night`,
+      identity: { id, type: concept, label: 'Night' },
+    };
+  };
   submitImpl = async (command) => ({
     ok: true,
     id: createdId,
@@ -592,7 +760,8 @@ test('classification return records the admitted identity; expired handoff keeps
     await act(async () =>
       page.user.click(page.canvas.getByRole('button', { name: page.m.classification_create_return_to_draft() })),
     );
-    expect(page.assigned[0]).toContain(`classificationHandoff=${token}`);
+    await page.waitFor(() => expect(page.assigned[0]).toContain(`classificationHandoff=${token}`));
+    expect(returnReads).toBe(1);
     expect(commands).toHaveLength(1);
   } finally {
     await page.close();
@@ -628,6 +797,7 @@ test('classification return records the admitted identity; expired handoff keeps
         expiredPage.canvas.getByRole('button', { name: expiredPage.m.classification_create_return_to_draft() }),
       ),
     );
+    await expiredPage.waitFor(() => expect(returnReads).toBe(2));
     expect(expiredPage.host.textContent).toContain(createdId);
     expect(expiredPage.assigned).toHaveLength(0);
     expect(commands).toHaveLength(1);

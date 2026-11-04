@@ -1351,6 +1351,11 @@ creator never writes a parent-work classification or grants adoption. Unknown de
 after acknowledgement, recovery reads only the returned UUID. Creating a concept proposes no vocabulary release, source
 licence, provider claim, equivalence mapping, or ballot.
 
+A detour acknowledgement retains only its exact UUID in a bounded, same-reader session record separate from the
+expiring classification draft. On remount the visit restores the UUID before offering submission and retries only its
+ordinary exact-ID read. A failed read keeps the UUID and retry useful. Return rereads the UUID and requires current
+Concept Type and structural-base admission; stored labels or Types never stand in for that disclosure.
+
 The visit returns current Global Context `subject.create` eligibility through the private BFF, independently of
 definition success, and consumes that shared observation in the mounted controls. Guest, confirmed refusal and
 unavailable observation stay distinct; admitted Types remain readable when creation is unavailable. A stale allowed
@@ -1358,9 +1363,7 @@ observation is not an authorization bypass: fresh submission re-reads current el
 command remains final. Identity search, definitions and authority stay independent; a matching title is not identity
 and confers no create grant. An expired or mismatched classification handoff cannot authorize a return or a write, and
 it does not discard a known create result.
-Decision: a classification-create handoff stays in viewer-bound sessionStorage across editor-generation remount and is
-re-read in creating or ready phase; discard only expired, wrong-phase or mismatched-reader handoffs, and keep a known
-create UUID without another write.
+Decision: keep only an acknowledged Concept UUID in a bounded 24-hour, same-reader session record separate from the expiring classification draft; require a fresh exact-ID read and current Type/base admission before return.
 
 Decision: Concept creation observes current Global Context `subject.create` eligibility through the shared private BFF;
 definitions, identity search and authority stay independent.

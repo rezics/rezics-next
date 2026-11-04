@@ -167,6 +167,8 @@ function CreateSubjectFormLive({
   navigation,
   typeAdmission,
   identityIntake,
+  restoredAcknowledgementId,
+  recoveryOnly = false,
 }: {
   profile?: {
     title: string;
@@ -217,12 +219,16 @@ function CreateSubjectFormLive({
     admitType?: (type: CreateType) => boolean;
   };
   identityIntake?: { viewerKey: string; viewerState: Session };
+  /** Restore only a known native acknowledgement; its reader state is always retried separately. */
+  restoredAcknowledgementId?: string;
+  /** Render the shared exact-ID recovery panel without loading creation definitions or controls. */
+  recoveryOnly?: boolean;
 }) {
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
   const client = useQueryClient();
   const directoryMode = !profile && !!transport.typeDirectory;
-  const usesDefinitions = !directoryMode && !!transport.definitions;
+  const usesDefinitions = !recoveryOnly && !directoryMode && !!transport.definitions;
   const queryKey = ['catalogue-create', 'definitions', locale, String(lifetime.generation)];
   if (profile) queryKey.push(profile.scope);
   async function loadDefinitions(refresh = false) {
@@ -242,7 +248,7 @@ function CreateSubjectFormLive({
       if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' } satisfies CreateAuthority;
       return observedCreateAuthority(await transport.eligibility());
     },
-    enabled: !!transport.eligibility && session !== 'unknown',
+    enabled: !recoveryOnly && !!transport.eligibility && session !== 'unknown',
     retry: false,
     staleTime: 0,
   });
@@ -312,9 +318,13 @@ function CreateSubjectFormLive({
     setFailure(result);
   }
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<Created>();
+  const [created, setCreated] = useState<Created>(() =>
+    restoredAcknowledgementId
+      ? { ok: true, id: restoredAcknowledgementId, reader: { state: 'unavailable' } }
+      : undefined,
+  );
   const [itemReview, setItemReview] = useState<CreateItemReview>();
-  const confirmed = useRef(false);
+  const confirmed = useRef(!!restoredAcknowledgementId);
   function invalidateReview() {
     setItemReview((current) => (current && !current.stale ? { ...current, stale: true } : current));
   }
@@ -681,7 +691,7 @@ function CreateSubjectFormLive({
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       {navigation ? navigation(departure) : <CreateSubjectLifetime {...departure} />}
-      {!profile?.hideHeading && (
+      {!profile?.hideHeading && !recoveryOnly && (
         <header className="space-y-3">
           {profile ? (
             <PageHeading>{profile.title}</PageHeading>

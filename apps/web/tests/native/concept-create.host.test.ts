@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import type { Page } from 'playwright';
 import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
+import { candidateContext } from '../../src/subject/candidates.ts';
+import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack } from './auth-stack.ts';
 import { startNativeWebStack } from './stack.ts';
 
@@ -202,5 +204,115 @@ test('an expired classification handoff still creates and never writes a classif
   expect(createdId).toBeTruthy();
   await stack.syncKernelRequests();
   expect(posts(label)).toHaveLength(1);
+  expect(candidateWrites()).toHaveLength(0);
+});
+
+test('an acknowledged detour resumes by UUID and returns a fresh suggestion without a classification write', async () => {
+  const sourceLabel = `Native classification source ${crypto.randomUUID().slice(0, 8)}`;
+  const source = await json<{ subject: { id: string } }>(
+    await stack.kernel(
+      '/v1/subjects',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+        body: JSON.stringify({ type: 'wd:Q95074', labels: { en: sourceLabel } }),
+      },
+      'alice',
+    ),
+    'create classification source',
+  );
+  const reader = await stack.authPersona('alice');
+  const token = crypto.randomUUID();
+  const holder = crypto.randomUUID();
+  const returnPath = `${subjectHref({ id: source.subject.id, label: sourceLabel }, 'en').href}/character`;
+  const journey = await auth.signIn('alice', { returnTo: '/en/catalogue/concept' });
+  const page = journey.context.pages().at(-1)!;
+  page.setDefaultTimeout(60_000);
+  await page.goto(`${stack.web}/en/catalogue/concept`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(
+    ({ token, holder, sourceId, sourceLabel, reader, returnPath }) => {
+      window.sessionStorage.setItem(
+        `rezics:classification-create-handoff:${token}`,
+        JSON.stringify({
+          version: 1,
+          token,
+          createdAt: Date.now(),
+          sourceId,
+          sourceLabel,
+          sourceType: 'wd:Q95074',
+          returnPath,
+          reader,
+          context: candidateContext,
+          releaseDigest: 'native-release',
+          propertyId: 'schema:keywords',
+          propertyLabel: 'keywords',
+          holder,
+          originalStatementId: null,
+          targets: ['skos:Concept'],
+          drafts: [
+            {
+              holder,
+              property: 'schema:keywords',
+              source: null,
+              included: true,
+              statement: {
+                property: { id: 'schema:keywords' },
+                value: { type: 'value', content: '' },
+                qualifiers: [],
+                references: [],
+                rank: 'normal',
+              },
+              baseline: null,
+            },
+          ],
+          reviewFingerprint: '',
+          phase: 'creating',
+        }),
+      );
+    },
+    { token, holder, sourceId: source.subject.id, sourceLabel, reader: reader.accountId, returnPath },
+  );
+  await page.goto(`${stack.web}/en/catalogue/concept?classificationHandoff=${token}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  await selectConceptType(page);
+  const label = `Native resumed concept ${crypto.randomUUID().slice(0, 8)}`;
+  await confirmIdentity(page, label);
+  await stack.injectCreatedSubjectReadFailureOnce({
+    status: 503,
+    body: '{"title":"Reader temporarily unavailable"}',
+  });
+  await confirmCreate(page);
+  const result = page.locator('section[role="status"]');
+  await result.waitFor({ state: 'visible' });
+  const createdId = (await result.locator('code').innerText()).trim();
+  expect(createdId).toMatch(/^[0-9a-f-]{36}$/i);
+  await stack.syncKernelRequests();
+  expect(posts(label)).toHaveLength(1);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByText(createdId, { exact: true }).waitFor({ state: 'visible' });
+  await stack.syncKernelRequests();
+  expect(posts(label)).toHaveLength(1);
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.getByText('Current public reading', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText(label, { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('skos:Concept', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('schema:Thing', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Return to the classification draft', exact: true }).click();
+  await page.waitForURL((url) => url.pathname === returnPath);
+  await page.getByRole('button', { name: 'Choose this concept', exact: true }).waitFor({ state: 'visible' });
+  await stack.syncKernelRequests();
+  expect(posts(label)).toHaveLength(1);
+  const createdPost = posts(label)[0];
+  expect(createdPost && (JSON.parse(createdPost.body!) as { type?: string }).type).toBe('skos:Concept');
+  const exactReads = stack
+    .kernelRequests()
+    .filter((request) => request.method === 'GET' && request.url === `/v1/subjects/${createdId}`);
+  expect(exactReads.length).toBeGreaterThanOrEqual(2);
+  expect(stack.kernelRequests().some((request) => request.method === 'POST' && request.url === '/v1/viewerActions')).toBe(
+    true,
+  );
   expect(candidateWrites()).toHaveLength(0);
 });
