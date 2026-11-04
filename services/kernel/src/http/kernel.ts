@@ -573,6 +573,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     access: () => resolveAccess({ actions: actionCatalogue(feed), realmRoleReader }),
     contentAccess: () => realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(feed), realmRoleReader })),
     viewerPersonalActions,
+    viewerActionRuntime,
   });
   const contextual = contextRoutes(feed as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,

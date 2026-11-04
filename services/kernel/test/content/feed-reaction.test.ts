@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { FeedPage } from '../../src/content/feed-contract.ts';
+import { REACTION_KINDS } from '../../src/content/events.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from '../../src/content/feed-activity.ts';
 import { projectFeedReactions } from '../../src/content/feed-reactions.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -107,6 +108,25 @@ test('Following feed projects native counts and only the current viewer slot for
       viewerReaction: null,
     });
     expect(empty.reactionsAsOf).toBeNull();
+
+    const homeResult = await world.call('GET', '/v1/feedItems?stream=home&limit=20', { bearer: world.other.bearer });
+    expect(homeResult.response.status, homeResult.text).toBe(200);
+    const home = homeResult.value as FeedPage;
+    expect(home.feedItems.find((item) => item.key.kind === 'thread')?.summary).toMatchObject({
+      reactionAdvice: {
+        target: { targetKind: 'thread', targetId: world.mainTarget.threadId },
+        state: 'current',
+        allowed: [...REACTION_KINDS],
+      },
+    });
+    expect(home.feedItems.find((item) => item.key.kind === 'post')?.summary).toMatchObject({
+      reactionAdvice: {
+        target: { targetKind: 'post', targetId: reply.post.id },
+        state: 'current',
+        allowed: [...REACTION_KINDS],
+      },
+      parentContext: { kind: 'reply', parent: { id: world.mainTarget.postId } },
+    });
 
     effects = await world.startEffects();
     for (const [path, kind] of [

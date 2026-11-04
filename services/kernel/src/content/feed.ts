@@ -18,6 +18,7 @@ import { readAccountDiscoverySummaries } from '../access/account-discovery-sourc
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
 import { prepareFeedContentContext, type FeedContentContextReference } from './feed-context.ts';
 import { projectFeedReactions } from './feed-reactions.ts';
+import { prepareFeedReactionAdvice, type FeedReactionAdviceComposition } from './feed-reaction-advice.ts';
 import { prepareFeedSubjectReactions } from './feed-subject-reactions.ts';
 import { feedDiscoveryItem } from './feed-discovery.ts';
 import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
@@ -48,6 +49,7 @@ import {
   type FeedSourceState,
   type FeedSelection,
 } from './feed-contract.ts';
+import type { ReadingPageViewerActionRuntime } from './reading-page.ts';
 
 export type FeedDependencies = {
   pool: Pool;
@@ -61,6 +63,8 @@ export type FeedDependencies = {
   search?: SearchService;
   /** Home calls this bounded seam only after its feed candidates are admitted and disclosed. */
   viewerPersonalActions: ViewerPersonalActionsReader;
+  /** Reuse the mounted Content reading-page action catalogue for selected Home targets. */
+  viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
 };
 
 /** The native factory and mounted route share this query and response contract. */
@@ -757,6 +761,17 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
             feedItems.splice(index, 1);
         reactionsAsOf = undefined;
       }
+      let reactionAdvice: FeedReactionAdviceComposition | undefined;
+      if (stream === 'home') {
+        reactionAdvice = prepareFeedReactionAdvice(
+          feedItems,
+          contextWitnesses,
+          { pool: deps.pool, viewerActionRuntime: deps.viewerActionRuntime },
+          actor,
+          deadline,
+        );
+        feedItems.splice(0, feedItems.length, ...reactionAdvice.items);
+      }
       const subjectLanes = new Set(
         feedItems.filter((item) => item.destination.kind === 'subject').map((item) => item.source as Lane),
       );
@@ -813,68 +828,71 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         }
       }
       let viewerPersonalActions: FeedPage['viewerPersonalActions'];
-      if (personal && stream === 'home') {
+      const finalFeedAdmission = async () => {
+        // Reopen the exact independent source queries after all foreign work. Their
+        // new cursors are observations only: retries retain the original frontier.
+        const retainedNext = { ...next };
+        const selectedLanes = [...new Set(feedItems.map((item) => item.source))];
+        await space?.finish();
+        if (query.spaceId !== undefined)
+          space = await openFollowingSpace(deps, actor, query.spaceId, deadline, now.toISOString());
+        for (const lane of selectedLanes) await loadLane(lane);
+        Object.assign(next, retainedNext);
+        const current = new Map(
+          selectedLanes.flatMap((lane) =>
+            lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
+          ),
+        );
+        for (let index = feedItems.length - 1; index >= 0; index--) {
+          const item = feedItems[index]!;
+          if (current.get(item.id) !== sourceWitnesses.get(item.id)) {
+            feedItems.splice(index, 1);
+            next[item.source] = position[item.source];
+            if (item.source === 'continue') next.resume = position.resume;
+          }
+        }
+        if (contextReferences.length) {
+          const finalContexts = await (
+            await prepareFeedContentContext(
+              content,
+              contextReferences.map(({ key, threadId, postId }) => ({
+                key,
+                threadId,
+                ...(postId === undefined ? {} : { postId }),
+              })),
+              { actor, deadline },
+              languages,
+            )
+          ).finish();
+          for (let index = feedItems.length - 1; index >= 0; index--) {
+            const item = feedItems[index]!;
+            if (!contextWitnesses.has(item.id)) continue;
+            const context = finalContexts.contexts.get(item.id);
+            if (
+              !context ||
+              JSON.stringify({ thread: context.thread, post: context.post }) !== contextWitnesses.get(item.id)
+            ) {
+              feedItems.splice(index, 1);
+              next[item.source] = position[item.source];
+            }
+          }
+        }
+        await space?.finish();
+        await spacePopulation?.finish();
+        return feedItems;
+      };
+      if (personal && stream === 'home')
         viewerPersonalActions = await composeFeedViewerPersonalActions(
           deps,
           actor,
           feedItems,
           deadline,
           languages,
-          async () => {
-            // Reopen the exact independent source queries after all foreign work. Their
-            // new cursors are observations only: retries retain the original frontier.
-            const retainedNext = { ...next };
-            const selectedLanes = [...new Set(feedItems.map((item) => item.source))];
-            await space?.finish();
-            if (query.spaceId !== undefined)
-              space = await openFollowingSpace(deps, actor, query.spaceId, deadline, now.toISOString());
-            for (const lane of selectedLanes) await loadLane(lane);
-            Object.assign(next, retainedNext);
-            const current = new Map(
-              selectedLanes.flatMap((lane) =>
-                lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
-              ),
-            );
-            for (let index = feedItems.length - 1; index >= 0; index--) {
-              const item = feedItems[index]!;
-              if (current.get(item.id) !== sourceWitnesses.get(item.id)) {
-                feedItems.splice(index, 1);
-                next[item.source] = position[item.source];
-                if (item.source === 'continue') next.resume = position.resume;
-              }
-            }
-            if (contextReferences.length) {
-              const finalContexts = await (
-                await prepareFeedContentContext(
-                  content,
-                  contextReferences.map(({ key, threadId, postId }) => ({
-                    key,
-                    threadId,
-                    ...(postId === undefined ? {} : { postId }),
-                  })),
-                  { actor, deadline },
-                  languages,
-                )
-              ).finish();
-              for (let index = feedItems.length - 1; index >= 0; index--) {
-                const item = feedItems[index]!;
-                if (!contextWitnesses.has(item.id)) continue;
-                const context = finalContexts.contexts.get(item.id);
-                if (
-                  !context ||
-                  JSON.stringify({ thread: context.thread, post: context.post }) !== contextWitnesses.get(item.id)
-                ) {
-                  feedItems.splice(index, 1);
-                  next[item.source] = position[item.source];
-                }
-              }
-            }
-            await space?.finish();
-            await spacePopulation?.finish();
-            return feedItems;
-          },
+          finalFeedAdmission,
         );
-      }
+      else if (stream === 'home' && reactionAdvice?.hasTargets) await finalFeedAdmission();
+      if (reactionAdvice)
+        feedItems.splice(0, feedItems.length, ...(await reactionAdvice.finish(feedItems)));
       const hasNext = names.some((lane) => next[lane] !== false && sources[lane] === 'ready');
       return {
         feedItems,
