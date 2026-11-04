@@ -626,11 +626,7 @@ function changedWorkingFiles(cwd: string, policy = defaultPolicy.merge): string[
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
 }
 
-function landingWorkingFiles(
-  cwd: string,
-  declaredPaths: readonly string[],
-  policy = defaultPolicy.merge,
-): string[] {
+function landingWorkingFiles(cwd: string, declaredPaths: readonly string[], policy = defaultPolicy.merge): string[] {
   const changed = changedWorkingFiles(cwd, policy);
   if (!declaredPaths.length) return changed;
   const ignoredDeclared = mergeGit(
@@ -2255,7 +2251,9 @@ export class MergeTrain {
               this.options.policy?.merge,
             );
             if (difference.error || difference.status === null || difference.status > 1)
-              throw new Error(difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`);
+              throw new Error(
+                difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`,
+              );
             return difference.status === 1;
           });
           if (frozenNotOnTarget.length) {
@@ -3517,8 +3515,7 @@ export class MergeTrain {
       if (!workspace && !request.devResolution && !request.managerLanding) {
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const frozenPaths = new Set(frozen.map((file) => file.path));
-        const sourceBase =
-          controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', sourceTip, target());
+        const sourceBase = controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', sourceTip, target());
         const committedPaths = changedPathsBetween(o.mainCheckout, sourceBase, sourceTip, this.options.policy?.merge);
         const frozenNotOnTarget = committedPaths.filter((path) => {
           if (!frozenPaths.has(path)) return false;
@@ -3528,7 +3525,9 @@ export class MergeTrain {
             this.options.policy?.merge,
           );
           if (difference.error || difference.status === null || difference.status > 1)
-            throw new Error(difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`);
+            throw new Error(
+              difference.stderr?.trim() || difference.error?.message || `Cannot compare frozen path ${path}`,
+            );
           return difference.status === 1;
         });
         if (frozenNotOnTarget.length) {
@@ -5053,7 +5052,11 @@ export class MergeTrain {
     );
     if (dropped.length)
       appendFileSync(logPath, `Ignored paths not declared by the brief were dropped: ${dropped.join(', ')}\n`);
-    const staged = mergeGit(request.worktree, ['diff', '--cached', '--quiet', 'HEAD', '--'], this.options.policy?.merge);
+    const staged = mergeGit(
+      request.worktree,
+      ['diff', '--cached', '--quiet', 'HEAD', '--'],
+      this.options.policy?.merge,
+    );
     if (staged.error || staged.status === null || staged.status > 1)
       throw new Error(staged.stderr?.trim() || staged.error?.message || 'Cannot inspect staged worker changes');
     if (staged.status === 0) return { tip, committed: false, frozenPaths: [] };

@@ -209,10 +209,7 @@ export const REFUSAL_GUARDS = {
   'merge-failed': 'merge-failed',
 } satisfies Record<GateOutcomeRefusal['kind'], GuardId>;
 
-export function guardIdsForFailure(
-  failure: FailureClass,
-  refusal?: GateOutcomeRefusal,
-): GuardId[] {
+export function guardIdsForFailure(failure: FailureClass, refusal?: GateOutcomeRefusal): GuardId[] {
   return [...new Set([FAILURE_GUARDS[failure], ...(refusal ? [REFUSAL_GUARDS[refusal.kind]] : [])])];
 }
 
@@ -266,9 +263,7 @@ export function guardLedger(
   const attemptsByAttempt = new Map(attempts.map((attempt) => [attemptKey(attempt.taskId, attempt.attempt), attempt]));
   return (Object.keys(GUARDS) as GuardId[])
     .map((id) => {
-      const firings = records.filter(
-        (record) => inWindow(record.endedAt, start, now) && record.guardIds?.includes(id),
-      );
+      const firings = records.filter((record) => inWindow(record.endedAt, start, now) && record.guardIds?.includes(id));
       const next = firings.flatMap((record) => {
         const nextRecord = recordsByAttempt.get(attemptKey(record.taskId, record.attempt + 1));
         const nextAttempt = attemptsByAttempt.get(attemptKey(record.taskId, record.attempt + 1));
@@ -286,9 +281,10 @@ export function guardLedger(
         tokens: firings.reduce((sum, record) => sum + record.tokens.input + record.tokens.output, 0),
         rewrittenShare,
         landedShare: next.length ? landed / next.length : null,
-        action: firings.length >= 20 && rewrittenShare !== null && rewrittenShare < 0.1
-          ? 'repairable in place' as const
-          : 'monitor' as const,
+        action:
+          firings.length >= 20 && rewrittenShare !== null && rewrittenShare < 0.1
+            ? ('repairable in place' as const)
+            : ('monitor' as const),
       };
     })
     .sort((a, b) => b.firings - a.firings || a.id.localeCompare(b.id));
