@@ -82,3 +82,22 @@ test('a retired credential/page episode aborts and cannot revive controls with a
   expect(receiver.isCurrent()).toBe(false);
   expect(receiver.snapshot()).toEqual({ state: 'retired' });
 });
+
+test('an observed away episode cannot revive when its identity looks equal on return', async () => {
+  let current = true;
+  const receiver = new ContributionActionsReceiver(
+    input(),
+    {
+      async read() {
+        return 'private';
+      },
+    },
+    () => current,
+  );
+  await receiver.refresh();
+  current = false;
+  expect(receiver.snapshot()).toEqual({ state: 'retired' });
+  current = true;
+  await receiver.refresh();
+  expect(receiver.snapshot()).toEqual({ state: 'retired' });
+});
