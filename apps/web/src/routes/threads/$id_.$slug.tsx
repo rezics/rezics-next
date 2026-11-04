@@ -53,6 +53,8 @@ import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
 import { threadPageOperation, threadPageViewerMatches } from '../../threads/thread-page-advice';
 import type { ThreadPageObservation } from '../../threads/thread-page';
+import { ClosedErrorPage } from '../../shell/closed';
+import { isThreadPageCursorError } from '../../threads/thread-page-errors';
 import { ThreadPageError } from '../../threads/thread-page-error';
 import { ThreadWatch } from '../../threads/thread-watch';
 import { boardReadingHref, parseBoardReadingReturn } from '../../threads/board-reading';
@@ -122,10 +124,9 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   },
   head: ({ loaderData }) => (loaderData ? threadPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
   component: ThreadPage,
-  errorComponent: ({ error }) => {
+  errorComponent: (props) => {
     const { id } = Route.useParams();
-    const router = useRouter();
-    return <ThreadPageError error={error} threadId={id} retry={() => void router.invalidate()} />;
+    return isThreadPageCursorError(props.error) ? <ThreadPageError threadId={id} /> : <ClosedErrorPage {...props} />;
   },
 });
 
