@@ -509,5 +509,13 @@
   "auth_security_passkey_present": "Esta clave de acceso está presente actualmente. Revisa las indicaciones actuales antes de otro intento.",
   "auth_security_session_absent": "Esta sesión no aparece en el inventario actual completo. Esto no demuestra qué hizo el comando anterior.",
   "auth_security_passkey_absent": "Esta clave de acceso no aparece en el inventario actual completo. Esto no demuestra qué hizo el comando anterior.",
-  "auth_security_target_historical": "Datos mostrados anteriormente. Comprueba el estado actual antes de otro intento."
+  "auth_security_target_historical": "Datos mostrados anteriormente. Comprueba el estado actual antes de otro intento.",
+  "auth_account_delete_approval_pending": "Comprobando si se puede continuar con esta solicitud de eliminación…",
+  "auth_account_delete_execution_pending": "Enviando la solicitud de eliminación…",
+  "auth_account_delete_recovery_description": "La solicitud de eliminación anterior podría haberse completado. Actualizar la revisión consulta la disponibilidad actual y no envía una eliminación. Si la revisión actual lo permite, puedes confirmar deliberadamente la misma solicitud escribiendo otra vez la frase.",
+  "auth_account_delete_recovery_precision": "Al volver solo queda una indicación guardada de que se envió la solicitud. Esta página no puede saber en qué fase quedó.",
+  "auth_account_delete_recovery_refresh": "Actualizar la revisión de eliminación",
+  "auth_account_delete_recovery_refreshing": "Actualizando las condiciones actuales para eliminar…",
+  "auth_account_delete_recovery_repeat": "Confirmar de nuevo la misma eliminación",
+  "auth_account_delete_recovery_title": "El resultado de la eliminación sigue siendo desconocido"
 }

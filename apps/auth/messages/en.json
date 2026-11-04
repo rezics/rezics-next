@@ -509,5 +509,13 @@
   "auth_security_passkey_present": "This passkey is currently present. Review its current advice before another attempt.",
   "auth_security_session_absent": "This session is absent from the complete current inventory. This does not establish what the earlier command did.",
   "auth_security_passkey_absent": "This passkey is absent from the complete current inventory. This does not establish what the earlier command did.",
-  "auth_security_target_historical": "Previously shown details. Check current status before another attempt."
+  "auth_security_target_historical": "Previously shown details. Check current status before another attempt.",
+  "auth_account_delete_approval_pending": "Checking whether this deletion request can proceed…",
+  "auth_account_delete_execution_pending": "Sending the deletion request…",
+  "auth_account_delete_recovery_description": "The earlier deletion request may have completed. Refreshing the review checks current availability and does not send a deletion. If the current review permits it, you can deliberately confirm the same request again by typing the phrase.",
+  "auth_account_delete_recovery_precision": "Only a saved submitted hint is available after returning. This page cannot tell which phase ran.",
+  "auth_account_delete_recovery_refresh": "Refresh deletion review",
+  "auth_account_delete_recovery_refreshing": "Refreshing current deletion advice…",
+  "auth_account_delete_recovery_repeat": "Confirm the same deletion again",
+  "auth_account_delete_recovery_title": "Deletion outcome is still unknown"
 }

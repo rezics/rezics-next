@@ -92,16 +92,27 @@ export function authLocale(Story: () => ReactNode, context: { globals: Record<st
   return <Story />;
 }
 
-type Mode = 'success' | 'refused' | 'closed' | 'unavailable' | 'unknown' | 'last-credential';
+type Mode =
+  | 'success'
+  | 'refused'
+  | 'closed'
+  | 'unavailable'
+  | 'unknown'
+  | 'unknown-then-refused'
+  | 'approval-pending'
+  | 'execution-pending'
+  | 'last-credential';
 /** Story-only HTTP responses. These are presentation fixtures, not native outcome evidence. */
 export function AuthStory({
   children,
   mode = 'success',
   returning,
+  returningSubmitted,
 }: {
   children: ReactNode;
   mode?: Mode;
   returning?: 'delete' | 'organization';
+  returningSubmitted?: boolean;
 }) {
   useLayoutEffect(() => {
     const originalFetch = globalThis.fetch;
@@ -117,9 +128,17 @@ export function AuthStory({
           ? { kind: 'delete' as const, accountId: storyAccount }
           : { kind: 'organization' as const, handle: 'reading-group' };
       const operationKey = operationKeyFor(operation, storyAccount);
-      storePendingAccountOperationStepUp({ kind: returning, accountId: storyAccount, operationKey, operation });
+      storePendingAccountOperationStepUp({
+        kind: returning,
+        accountId: storyAccount,
+        operationKey,
+        operation,
+        ...(returningSubmitted === undefined ? {} : { submitted: returningSubmitted }),
+      });
       if (returning === 'organization') storePendingOrganizationHandle('reading-group');
     }
+    let approvals = 0;
+    let executions = 0;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(input instanceof Request ? input.url : String(input), window.location.href).pathname;
       if (path === '/consent/third-party')
@@ -133,6 +152,17 @@ export function AuthStory({
         !['/account-operations/approve', '/account-operations/execute', '/consent', '/passkeys/remove'].includes(path)
       )
         return originalFetch(input, init);
+      if (path === '/account-operations/approve') {
+        approvals++;
+        if (mode === 'approval-pending') return new Promise<Response>(() => {});
+        if (mode === 'unknown-then-refused' && approvals > 1)
+          return Response.json({ error: 'account_operation_denied' }, { status: 403 });
+      }
+      if (path === '/account-operations/execute') {
+        executions++;
+        if (mode === 'execution-pending') return new Promise<Response>(() => {});
+        if (mode === 'unknown-then-refused' && executions <= 2) throw new TypeError('Story: lost response');
+      }
       if (mode === 'unknown' && ['/account-operations/execute', '/consent'].includes(path))
         throw new TypeError('Story: lost response');
       const failure =

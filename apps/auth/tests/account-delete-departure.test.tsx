@@ -12,6 +12,7 @@ import { creationFixture, approval, button, dom, fill, flush, open, send, sessio
 import { DeleteAccountContent } from '../src/routes/account.delete';
 import { emptyInventory } from '../src/stories/accounts-operations/story';
 import { readPendingAccountOperationStepUp } from '../src/account-operation-step-up';
+import { m } from '../src/paraglide/messages.js';
 creationFixture();
 const initial: Extract<AccountDeletionPage, { kind: 'review' }> = {
   kind: 'review',
@@ -95,11 +96,12 @@ test('Stay preserves unresolved deletion; Leave retires late execution and recov
   expect(page.host.querySelector('input')!.value).toBe('delete my account');
   expect(readPendingAccountOperationStepUp()).toEqual(original);
   await flush(() => page.calls[0]!.resolve(approval()));
+  expect(readPendingAccountOperationStepUp()?.submitted).toBe(true);
   await page.navigate();
   await page.choose('Leave');
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   expect(page.calls).toHaveLength(2);
-  expect(readPendingAccountOperationStepUp()).toEqual(original);
+  expect(readPendingAccountOperationStepUp()).toMatchObject({ ...original, submitted: true });
   await page.render(page.view({ ...initial }));
   expect(page.host.querySelector('input')!.value).toBe('');
   expect(page.unload()).toBe(true);
@@ -123,8 +125,10 @@ test('intended step-up and accepted deletion leave freely; unknown outcomes warn
     expect(page.calls[1]!.body.operationKey).toBe(original.operationKey);
     await flush(() => page.calls[1]!.resolve(approval()));
     await flush(() => page.calls[2]!.resolve(Response.json({})));
-    expect(page.host.querySelector('input')!.value).toBe('');
+    expect(page.host.querySelector('input')).toBeNull();
     expect(page.unload()).toBe(true);
+    await flush(() => button(page.host, m.auth_account_delete_recovery_refresh())!.click());
+    expect(page.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
     await page.type();
     await flush(() => send(page.host));
     await flush(() => page.calls[3]!.resolve(approval()));

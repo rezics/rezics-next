@@ -509,5 +509,13 @@
   "auth_security_passkey_present": "Cette clé d’accès est actuellement présente. Examinez les indications actuelles avant une nouvelle tentative.",
   "auth_security_session_absent": "Cette session est absente de l’inventaire actuel complet. Cela ne prouve pas l’effet de la commande précédente.",
   "auth_security_passkey_absent": "Cette clé d’accès est absente de l’inventaire actuel complet. Cela ne prouve pas l’effet de la commande précédente.",
-  "auth_security_target_historical": "Informations affichées précédemment. Vérifiez l’état actuel avant une nouvelle tentative."
+  "auth_security_target_historical": "Informations affichées précédemment. Vérifiez l’état actuel avant une nouvelle tentative.",
+  "auth_account_delete_approval_pending": "Vérification des conditions pour poursuivre cette demande de suppression…",
+  "auth_account_delete_execution_pending": "Envoi de la demande de suppression…",
+  "auth_account_delete_recovery_description": "La demande de suppression précédente a peut-être abouti. Actualiser la vérification consulte les conditions actuelles sans envoyer de suppression. Si la vérification actuelle le permet, vous pourrez confirmer volontairement la même demande en saisissant à nouveau la phrase.",
+  "auth_account_delete_recovery_precision": "À votre retour, seul un indicateur enregistré signale que la demande a été envoyée. Cette page ne peut pas déterminer à quelle étape elle est arrivée.",
+  "auth_account_delete_recovery_refresh": "Actualiser la vérification de suppression",
+  "auth_account_delete_recovery_refreshing": "Actualisation des conditions actuelles de suppression…",
+  "auth_account_delete_recovery_repeat": "Confirmer à nouveau la même suppression",
+  "auth_account_delete_recovery_title": "Le résultat de la suppression reste inconnu"
 }

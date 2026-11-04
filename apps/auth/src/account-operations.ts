@@ -60,11 +60,16 @@ export async function loadAccountSession(signal?: AbortSignal): Promise<AccountS
   }
 }
 
-function post<Body>(path: string, body: unknown): Promise<AuthPostResult<Body>> {
-  return authPost<Body>(path, body).then((first) => {
-    if (!first.ok && first.status === 503 && first.code === 'unavailable') return authPost<Body>(path, body);
-    return first;
-  });
+async function post<Body>(path: string, body: unknown, isCurrent?: () => boolean): Promise<AuthPostResult<Body>> {
+  const first = await authPost<Body>(path, body);
+  if (
+    !first.ok &&
+    first.status === 503 &&
+    first.code === 'unavailable' &&
+    (!isCurrent || isCurrent())
+  )
+    return authPost<Body>(path, body);
+  return first;
 }
 
 function failure(result: Exclude<AuthPostResult, { ok: true }>): AccountOperationResult {
@@ -80,13 +85,18 @@ function failure(result: Exclude<AuthPostResult, { ok: true }>): AccountOperatio
 export async function runAccountOperation(
   operationKey: string,
   operation: AccountOperation,
-  browser?: { isCurrent: () => boolean; retryUncertain?: boolean },
+  browser?: {
+    isCurrent: () => boolean;
+    retryUncertain?: boolean;
+    onExecutionDispatch?: () => boolean;
+  },
 ): Promise<AccountOperationResult> {
   if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
-  const approved = await post<{ reference?: unknown; expiresAt?: unknown }>('/account-operations/approve', {
-    operationKey,
-    operation,
-  });
+  const approved = await post<{ reference?: unknown; expiresAt?: unknown }>(
+    '/account-operations/approve',
+    { operationKey, operation },
+    browser?.onExecutionDispatch ? browser.isCurrent : undefined,
+  );
   if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
   if (!approved.ok) return failure(approved);
   if (
@@ -103,6 +113,9 @@ export async function runAccountOperation(
     operation,
     reference: approved.body.reference,
   };
+  if (browser?.onExecutionDispatch && !browser.onExecutionDispatch())
+    return { ok: false, reason: 'failure' };
+  if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
   // Keep the same reference/body/key for the existing unavailable retry. A timeout
   // ends waiting with an unknown outcome; recovery must remain explicit.
   let executed = await authPost<{ accountId?: unknown; expired?: unknown; error?: unknown }>(

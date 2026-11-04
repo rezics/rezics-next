@@ -509,5 +509,13 @@
   "auth_security_passkey_present": "此通行密钥目前仍然存在。再次尝试前，请检查当前操作提示。",
   "auth_security_session_absent": "当前完整列表中没有此会话。这不能证明之前的命令产生了什么结果。",
   "auth_security_passkey_absent": "当前完整列表中没有此通行密钥。这不能证明之前的命令产生了什么结果。",
-  "auth_security_target_historical": "这是之前显示的信息。再次尝试前，请检查当前状态。"
+  "auth_security_target_historical": "这是之前显示的信息。再次尝试前，请检查当前状态。",
+  "auth_account_delete_approval_pending": "正在确认这项删除请求是否可以继续…",
+  "auth_account_delete_execution_pending": "正在发送删除请求…",
+  "auth_account_delete_recovery_description": "之前的删除请求可能已经完成。刷新审核只会检查当前是否允许继续，不会发送删除请求。如果当前审核允许，你可以重新输入确认语句，明确确认同一项请求。",
+  "auth_account_delete_recovery_precision": "返回后只剩下已提交请求的保存提示。此页面无法判断之前进行到了哪个阶段。",
+  "auth_account_delete_recovery_refresh": "刷新删除审核",
+  "auth_account_delete_recovery_refreshing": "正在刷新当前删除条件…",
+  "auth_account_delete_recovery_repeat": "再次确认同一项删除",
+  "auth_account_delete_recovery_title": "删除结果仍然未知"
 }

@@ -509,5 +509,13 @@
   "auth_security_passkey_present": "此通行金鑰目前仍然存在。再次嘗試前，請檢視目前操作提示。",
   "auth_security_session_absent": "目前完整清單中沒有此工作階段。這不能證明先前命令產生了什麼結果。",
   "auth_security_passkey_absent": "目前完整清單中沒有此通行金鑰。這不能證明先前命令產生了什麼結果。",
-  "auth_security_target_historical": "這是先前顯示的資訊。再次嘗試前，請檢查目前狀態。"
+  "auth_security_target_historical": "這是先前顯示的資訊。再次嘗試前，請檢查目前狀態。",
+  "auth_account_delete_approval_pending": "正在確認這項刪除要求是否可以繼續…",
+  "auth_account_delete_execution_pending": "正在送出刪除要求…",
+  "auth_account_delete_recovery_description": "先前的刪除要求可能已經完成。重新整理審核只會檢查目前是否允許繼續，不會送出刪除要求。若目前的審核允許，你可以再次輸入確認文字，明確確認同一項要求。",
+  "auth_account_delete_recovery_precision": "返回後只剩下已送出要求的儲存提示。此頁面無法判斷先前進行到哪個階段。",
+  "auth_account_delete_recovery_refresh": "重新整理刪除審核",
+  "auth_account_delete_recovery_refreshing": "正在更新目前的刪除條件…",
+  "auth_account_delete_recovery_repeat": "再次確認同一項刪除",
+  "auth_account_delete_recovery_title": "刪除結果仍未明確"
 }

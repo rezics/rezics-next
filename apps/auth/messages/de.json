@@ -509,5 +509,13 @@
   "auth_security_passkey_present": "Dieser Passkey ist derzeit vorhanden. Prüfe vor einem weiteren Versuch die aktuellen Hinweise.",
   "auth_security_session_absent": "Diese Sitzung fehlt im vollständigen aktuellen Verzeichnis. Daraus folgt nicht, was der frühere Befehl bewirkt hat.",
   "auth_security_passkey_absent": "Dieser Passkey fehlt im vollständigen aktuellen Verzeichnis. Daraus folgt nicht, was der frühere Befehl bewirkt hat.",
-  "auth_security_target_historical": "Zuvor angezeigte Angaben. Prüfe vor einem weiteren Versuch den aktuellen Status."
+  "auth_security_target_historical": "Zuvor angezeigte Angaben. Prüfe vor einem weiteren Versuch den aktuellen Status.",
+  "auth_account_delete_approval_pending": "Wir prüfen, ob diese Löschung fortgesetzt werden kann…",
+  "auth_account_delete_execution_pending": "Die Löschanfrage wird gesendet…",
+  "auth_account_delete_recovery_description": "Die frühere Löschanfrage könnte bereits abgeschlossen sein. Durch Aktualisieren der Prüfung wird nur die aktuelle Verfügbarkeit geprüft; es wird keine Löschung gesendet. Wenn die aktuelle Prüfung es erlaubt, können Sie dieselbe Anfrage bewusst bestätigen, indem Sie die Bestätigungsphrase erneut eingeben.",
+  "auth_account_delete_recovery_precision": "Nach der Rückkehr ist nur noch ein gespeicherter Hinweis „gesendet“ verfügbar. Diese Seite kann nicht feststellen, welche Phase erreicht wurde.",
+  "auth_account_delete_recovery_refresh": "Prüfung zur Kontolöschung aktualisieren",
+  "auth_account_delete_recovery_refreshing": "Aktuelle Löschfreigabe wird geprüft…",
+  "auth_account_delete_recovery_repeat": "Dieselbe Löschung erneut bestätigen",
+  "auth_account_delete_recovery_title": "Ergebnis der Kontolöschung weiterhin unbekannt"
 }

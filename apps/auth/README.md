@@ -277,19 +277,26 @@ website's managed-account settings: Auth has neither a trusted website destinati
 its session/security inventories, so it keeps the local Security fallback rather than inventing a list target or
 opening membership management without a valid organization ID.
 
-Each attempt uses one operation key for `POST /account-operations/approve` and
-`POST /account-operations/execute`. A 401 `step_up_required` goes to `/step-up?return_to=%2Faccount%2Fdelete`; the page
-keeps the operation key so the person can submit again after confirming their identity. A 409 shows the prerequisites
-again and performs no deletion. Other failures show a retry using the same key, so an execute that completed before its
-response was lost is replayed without repeating its effect. Success shows a confirmation without session-dependent
-actions. The flow makes three Auth requests for its initial page and submit, independent of the number of sessions,
+Each deletion attempt keeps one exact account, operation key and payload for `POST /account-operations/approve` and
+`POST /account-operations/execute`. Approval is unsent navigation state; the continuation stores `submitted: false`
+until execution is dispatched. A 401 `step_up_required` returns through `/step-up?return_to=%2Faccount%2Fdelete` and
+requires a fresh review and typed confirmation. Once execution may have been sent, the continuation keeps
+`submitted: true`. A lost or malformed execution response remains unknown across later refusal, step-up, unavailable
+advice, signout or account replacement. Only a validated native completion reports deletion accepted; cleanup remains
+pending. After returning with only the submitted hint, the page cannot reconstruct which phase ran. It never dispatches
+on mount or return. Refreshing deletion review only reads current advice. Repeating a command requires current review,
+the same retained account, key and payload, and deliberate typed confirmation. One same-body execution retry remains
+limited to the existing unavailable response; a timeout ends browser waiting without cancelling native work.
+The initial review and successful submit remain three Auth requests, independent of the number of sessions,
 organizations or operated accounts.
 
-Unavailable session reads offer Retry for the intended account, without submitting deletion; recovery and cached-page
-restoration require fresh typed confirmation, and departure retires callbacks while preserving the original command
-for explicit reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
+Unavailable session reads offer a review refresh without submitting deletion; recovery and cached-page restoration
+require fresh typed confirmation, and departure retires callbacks while preserving the original command for explicit
+reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
 
 Decision: protect nonblank typed confirmation and unresolved deletion in memory with Stay/Leave and unload warnings; Stay keeps the exact review and focus, while Leave retires callbacks and preserves the original reconciliation identity. Authority loss and intended reauthentication release the guard immediately.
+
+Decision: after a failed retry of an unresolved deletion, require a fresh native review before another explicit exact retry; the unknown outcome, account, key and payload remain unchanged.
 
 ## Delete organization
 
