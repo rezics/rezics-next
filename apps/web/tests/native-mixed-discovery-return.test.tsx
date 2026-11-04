@@ -1,9 +1,12 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KernelClient } from '@rezics/client';
 import { ContentItem } from '@rezics/ui/content-item';
-import { HomeFeed } from '../src/features/pages/home-feed';
-import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
+mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
+mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
 import { createHomeSpaceSelection, type HomeSpaceResult } from '../src/features/pages/home-feed-spaces';
 import {
   createHomeFeedWindow,

@@ -3,7 +3,10 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { HomeFeed, HomeFeedConsumer } from '../src/features/pages/home-feed';
+mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
+mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed, HomeFeedConsumer } = await import('../src/features/pages/home-feed');
 import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
 import {
   HOME_FEED_HISTORY_KEY,
@@ -134,9 +137,6 @@ test('Home public owners keep supplied text, empty and unavailable context, exac
 });
 
 test('mounted Home controls restore the exact owner return selection and same cursor on retry', async () => {
-  mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
-  mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
-  mock.module('cloudflare:workers', () => ({ env: {} }));
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );

@@ -1,8 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ContentItem } from '@rezics/ui/content-item';
-import { HomeFeed } from '../src/features/pages/home-feed';
-import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
+mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
+mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { HomeFeed } = await import('../src/features/pages/home-feed');
+const { homeFeedItemPresentation } = await import('../src/features/feed/home-feed-item');
 import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
 import { exactRevisionHref } from '../src/threads/exact-revision-href';
