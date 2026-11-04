@@ -334,7 +334,43 @@ export async function createCountedGrowthFixture() {
                     vote(id, 11),
                   ],
                 };
-              if (axis === 'selected retained votes') return { 'rating.vote': [vote(id, 7, null)] };
+              if (axis === 'selected retained votes')
+                return {
+                  'rating.vote': [vote(id, 7, null)],
+                  // These are losing original slots of this selected destination, rather than arbitrary nulls.
+                  // Their original identities grow, while the supplied source's own history stays fixed.
+                  'semantic.subject': [
+                    {
+                      route: sourceRoute,
+                      subject_id: id,
+                      type: 'schema:Book',
+                      recorded_transaction_id: transaction,
+                      current_facts: 0,
+                      current_release: bundledDigest,
+                    },
+                  ],
+                  'semantic.redirect': [
+                    {
+                      route: sourceRoute,
+                      subject_id: id,
+                      sequence: 1,
+                      target: terminal,
+                      recorded_transaction_id: transaction,
+                    },
+                  ],
+                  'semantic.identity_epoch_mapping': [
+                    {
+                      route: sourceRoute,
+                      original: id,
+                      terminal,
+                      epoch: 1,
+                      origin: 'published',
+                      control_partition: controlHome,
+                      control_group: terminal,
+                      recorded_transaction_id: transaction,
+                    },
+                  ],
+                };
               if (axis === 'repair backlog')
                 return {
                   'rating.identity_repair_receipt': [
