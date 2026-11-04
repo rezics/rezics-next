@@ -292,6 +292,10 @@ export async function projectSubjectThreadCards(
     const selectedCard = cardById.get(thread.id);
     if (!selectedCard) throw new ProblemError('dependency_unavailable');
     if (selectedCard.state === 'withheld') continue;
+    const currentSelection: CurrentCardSelection = {
+      ...selectedCard,
+      state: selectedCard.state === 'erased' ? 'erased' : 'current',
+    };
     const composed = contentResult.contexts.get(thread.id);
     if (!composed?.thread || !composed.post) continue;
     if (
@@ -299,8 +303,8 @@ export async function projectSubjectThreadCards(
       JSON.stringify(thread.firstPost) !== JSON.stringify(composed.post)
     )
       throw new ProblemError('dependency_unavailable');
-    if (selectedCard.state === 'current') mediaPosts.push(composed.post);
-    ready.push({ thread, selected: selectedCard, post: composed.post, context: composed });
+    if (currentSelection.state === 'current') mediaPosts.push(composed.post);
+    ready.push({ thread, selected: currentSelection, post: composed.post, context: composed });
   }
 
   const images = await readMedia(dependencies, context, mediaPosts);

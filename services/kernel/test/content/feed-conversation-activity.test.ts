@@ -104,6 +104,7 @@ test.serial('Home Feed shows command-created public conversation activity throug
 
     const page = await world.call('GET', '/v1/feedItems?stream=home&limit=20', { bearer: world.base.other.bearer });
     requireStatus(page, 200);
+    if (!page.value) throw new Error('Home feed response omitted its body');
     const card = page.value.feedItems.find(
       (item: { source: string; key: { owner: string } }) => item.source === 'following' && item.key.owner === 'content',
     );

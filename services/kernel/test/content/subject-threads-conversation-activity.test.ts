@@ -60,6 +60,7 @@ test.serial('Subject cards keep public reply activity current through edits, rem
         { bearer: world.base.author.bearer },
       );
       requireStatus(result, 200);
+      if (!result.value) throw new Error('Subject threads response omitted its body');
       const card = result.value.threads.find((entry: { id: string }) => entry.id === thread.id)?.card;
       expect(card).toBeDefined();
       return card.comments;
