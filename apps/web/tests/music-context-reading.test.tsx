@@ -110,7 +110,13 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     url: `https://site.test/en/subjects/${anchor}/harbor-stage/music-context`,
     width: 390,
   });
-  const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, value });

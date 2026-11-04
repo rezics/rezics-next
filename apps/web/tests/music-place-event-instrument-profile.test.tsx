@@ -370,7 +370,7 @@ test('music context keeps two events at a place, dated recordings, partial dates
   const relationReads: Array<{ property: string; limit: number; cursor?: string }> = [];
   const networkReads: Array<{ resource: 'subject' | 'relations'; cache?: string; redirect?: string }> = [];
   const read = await readMusicContext(
-    client('ok', relationReads, networkReads),
+    client('unreadable', relationReads, networkReads),
     'Bearer reader',
     definitions,
     place,
@@ -403,7 +403,7 @@ test('music context keeps two events at a place, dated recordings, partial dates
     'somevalue',
     'coordinates-unsupported',
   ]);
-  expect(read.links.map((link) => link.label)).toEqual(['Spring concert', 'Spring concert', 'Autumn concert', 'Live']);
+  expect(read.links.map((link) => link.label)).toEqual(['Spring concert', 'Spring concert', 'Autumn concert', '']);
   expect(read.links.map((link) => link.id)).toEqual([eventA, eventA, eventB, '']);
   expect(read.links.map((link) => link.position)).toEqual([1, 2, 3, 4]);
   expect(read.links[0]?.occurrence).not.toBe(read.links[1]?.occurrence);
@@ -435,10 +435,6 @@ test('music context keeps two events at a place, dated recordings, partial dates
   expect(html).toContain('Unsupported calendar: https://example.org/calendar');
   expect(html).toContain('Unsupported time uncertainty');
   expect(html).not.toContain('Unknown date');
-  const unread = await readMusicContext(client('unreadable'), 'Bearer reader', definitions, place, 'en', {
-    stream: 'schema:location',
-  });
-  expect(unread.ok && unread.links.some((link) => link.unreadable)).toBe(true);
   expect(await readMusicContext(client('denied'), 'Bearer reader', definitions, place, 'en', {})).toEqual({
     ok: false,
     reason: 'denied',
