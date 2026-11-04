@@ -85,7 +85,7 @@ export const DEFAULT_ACCOUNT_PREFERENCES: Readonly<AccountPreferences> = Object.
 });
 export const READING_SPOILER_LEVELS = [0, 1, 2] as const;
 export const READING_SUITABILITY = ['blur', 'show'] as const;
-export const READING_DEFAULTS = Object.freeze({ spoilerLevel: 0, suitability: 'blur' }) as const;
+export const READING_DEFAULTS = Object.freeze({ spoilerLevel: 0, suitability: 'blur' } as const);
 export type PreferenceActionAdvice =
   | { readonly allowed: true }
   | { readonly allowed: false; readonly reason: 'not_authorized' };

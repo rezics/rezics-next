@@ -67,7 +67,7 @@ type ReadingState = {
   pending: Readonly<PreferenceChange> | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
   knownCurrent: boolean;
-  advice?: ReadingAdvice;
+  advice?: ReadingAdvice | undefined;
   failureOrigin?: 'read' | undefined;
   reason?: string | undefined;
   failure?: NativePreferenceFailure | undefined;

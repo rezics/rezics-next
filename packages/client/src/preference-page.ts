@@ -1,6 +1,6 @@
 /** Strict decoder for the additive account preference-page envelope. */
 
-export const PREFERENCE_READING_DEFAULTS = Object.freeze({ spoilerLevel: 0, suitability: 'blur' }) as const;
+export const PREFERENCE_READING_DEFAULTS = Object.freeze({ spoilerLevel: 0, suitability: 'blur' } as const);
 export type PreferenceSpoilerLevel = 0 | 1 | 2;
 export type PreferenceSuitability = 'blur' | 'show';
 export type PreferenceActionAdvice =
