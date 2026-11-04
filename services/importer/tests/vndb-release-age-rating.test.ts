@@ -98,7 +98,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
       { external_id: 'r99', record_revision: '7', record: { id: 'r99', minage: 15 } },
       { source: crossMediaAliases.vndb },
     );
-    expect(kana.proposals.some((item) => item.statement.property.id === 'wdt:P2899')).toBe(true);
+    expect(kana.proposals.some((item) => item.op === 'propose' && item.statement.property.id === 'wdt:P2899')).toBe(true);
 
     const previousRevision = 'cross-media-entities@5';
     const legacy: SourceRegistration = {
