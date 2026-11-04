@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { CreditInspection } from '../features/catalogue/credit-inspection/view';
 import { creditAssertion, type CreditVisit } from '../features/catalogue/credit-inspection/model';
-import { relationFixture, relationActor, relationProperty } from '../kernel/fake/catalogue-relations';
+import { relationFixture, relationActor, relationProperty, relationRole } from '../kernel/fake/catalogue-relations';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { ConnectedStory } from './connected-story';
@@ -17,6 +17,11 @@ function Inspection({ denied = false, plain = false }: { denied?: boolean; plain
   const fixture = useMemo(() => {
     const fixture = relationFixture('ready', locale);
     fixture.candidate.id = fixture.original.id;
+    fixture.original.qualifiers.find((part) => part.property.id === 'wdt:P1932')!.value = {
+      type: 'value', content: 'A very long original credited name with several professional and performance names',
+    };
+    fixture.original.qualifiers.push({ property: { id: 'wdt:P3831', data_type: 'wikibase-item' },
+      value: { type: 'value', content: relationRole } });
     fixture.candidate.statement = structuredClone(fixture.original);
     if (denied) fixture.setActions([]);
     return fixture;
@@ -33,7 +38,7 @@ function Inspection({ denied = false, plain = false }: { denied?: boolean; plain
     <button onClick={() => setOpen(true)}>{m.credit_inspect()}</button>
     {open && <CreditInspection credit={credit} visit={visit} title="A long original work heading with several credited roles and original names"
       locale={locale} propertyLabel="Voice actor" onClose={() => setOpen(false)} metadata={async () => ({ kind: 'unavailable' })}
-      transport={fixture.transport} signedIn={!plain} search={async () => ({ items: [], next: null })} isCurrent={() => true} />}
+      transport={fixture.transport} signedIn={!plain} search={async () => []} isCurrent={() => true} />}
   </ConnectedStory>;
 }
 export const Original: Story = { render: () => <Inspection /> };
