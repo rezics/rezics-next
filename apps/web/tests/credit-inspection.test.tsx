@@ -72,6 +72,7 @@ test('inspect original credit, retain authorized draft and citations, retry meta
     const opener = button(m.credit_inspect());
     opener.focus();
     await click(m.credit_inspect());
+    await act(async () => { await import('../src/features/catalogue/credit-inspection/session'); });
     expect(window.document.body.textContent).toContain('https://example.org/credits');
     expect(window.document.body.textContent).toContain(fixture.original.id);
     expect(window.document.body.textContent).toContain(m.credit_proposal_meaning());
@@ -84,7 +85,9 @@ test('inspect original credit, retain authorized draft and citations, retry meta
     const propose = button(m.relation_propose());
     expect(propose.disabled).toBe(false);
     await click(m.relation_propose());
-    await click(m.relation_propose());
+    const confirmation = [...window.document.querySelectorAll('[role="group"]')].find((node) =>
+      node.getAttribute('aria-label') === m.candidate_confirm_title({ action: m.relation_propose() }))!;
+    await act(async () => { (confirmation.querySelector('button') as HTMLButtonElement).click(); });
     const write = fixture.calls.find((call) => call.method === 'POST' && call.path.endsWith('/candidates'))!;
     expect((write.body as any).statement.qualifiers).toContainEqual({ property: { id: 'wdt:P518' }, value: { type: 'value', content: '00000000-0000-8000-8000-000000000999' } });
     expect(window.document.body.textContent).toContain(m.relation_proposed());
