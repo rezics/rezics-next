@@ -116,6 +116,50 @@ test('permission filtering, review, and confirmation preserve exact native actio
 });
 
 test('installed governance, author, and ballot roles show their returned expansion; unknown names retain their identifiers', async () => {
+  const governanceActions = [
+    'access:grant',
+    'gate:any',
+    'exposure:open',
+    'exposure:close',
+    'exposure:manage_read',
+    'account:assign_reserved_handle',
+    'account:suspend',
+    'account:reinstate',
+    'account:set_rate_tier',
+    'account:verify_agent',
+    'account:renew_cleanup',
+    'account:read_erasure',
+    'client:manage',
+    'organization:create',
+    'subject:create',
+    'subject:batch_write',
+    'source_statistic:write',
+    'source_fence:read',
+    'source_fence:takedown',
+    'media:import_from_url',
+    'definitions:publish',
+    'definitions:activate',
+    'presentation:publish',
+    'presentation:activate',
+    'context:create',
+    'statement:propose',
+    'context:accept',
+    'context:adopt',
+    'subject:merge',
+    'moderation:hide',
+    'moderation:takedown',
+    'moderation:read_reports',
+    'post:erase',
+    'media:erase',
+    'offer:create',
+    'payout_statement:mark_paid',
+    'space:create',
+    'space:restore',
+    'realm:create',
+    'realm:restore',
+    'realm:approve_claim',
+    'zone:create',
+  ];
   const cases: {
     resourceType: string;
     role: string;
@@ -126,7 +170,7 @@ test('installed governance, author, and ballot roles show their returned expansi
       resourceType: 'semantic.context',
       role: 'platform.governance',
       label: m.access_role_governance(),
-      actions: ['context:accept', 'context:adopt'],
+      actions: governanceActions,
     },
     {
       resourceType: 'semantic.revision',
@@ -175,6 +219,8 @@ test('installed governance, author, and ballot roles show their returned expansi
       const row = within(canvas.getByRole('heading', { level: 3, name: 'Aki' }).closest('li')!);
       expect(row.getAllByText(item.label).length).toBeGreaterThan(0);
       for (const action of item.actions) expect(row.getByText(action, { selector: 'code' })).toBeTruthy();
+      if (item.role === 'platform.governance')
+        expect(row.getByText(m.access_permission_account_suspend())).toBeTruthy();
       if (item.role === 'future.review_role') {
         expect(row.getByText('future:first', { selector: 'code' })).toBeTruthy();
         expect(row.getByText('future:second', { selector: 'code' })).toBeTruthy();
