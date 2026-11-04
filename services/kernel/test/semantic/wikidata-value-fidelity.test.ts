@@ -70,9 +70,16 @@ function subject(response: HttpResponse): Subject {
 
 beforeAll(async () => {
   driver = await createSemanticDriver();
-  const compiled = await driver.compile('wikidata.yaml', { 'wikidata.yaml': schema }, {
-    en: { types: { 'ex:Sample': 'Wikidata value sample' }, properties: { 'ex:time': 'time', 'ex:quantity': 'quantity' } },
-  });
+  const compiled = await driver.compile(
+    'wikidata.yaml',
+    { 'wikidata.yaml': schema },
+    {
+      en: {
+        types: { 'ex:Sample': 'Wikidata value sample' },
+        properties: { 'ex:time': 'time', 'ex:quantity': 'quantity' },
+      },
+    },
+  );
   release = compiled.release as unknown as Release;
   digest = compiled.digest;
   expect(validateRelease(release)).toEqual([]);
@@ -106,11 +113,16 @@ test('Wikidata adapter distinguishes missing, unknown, none and typed unsupporte
     datatype: 'time',
     value: { type: 'value', content: time },
   });
-  expect(admitWikidataValue({
-    snaktype: 'value',
-    datatype: 'quantity',
-    datavalue: { type: 'quantity', value: quantity },
-  }, release.properties['ex:quantity']!)).toEqual({
+  expect(
+    admitWikidataValue(
+      {
+        snaktype: 'value',
+        datatype: 'quantity',
+        datavalue: { type: 'quantity', value: quantity },
+      },
+      release.properties['ex:quantity']!,
+    ),
+  ).toEqual({
     state: 'admitted',
     datatype: 'quantity',
     value: { type: 'value', content: quantity },
@@ -119,13 +131,22 @@ test('Wikidata adapter distinguishes missing, unknown, none and typed unsupporte
     state: 'unsupported',
     reason: 'unsupported-datatype',
   });
-  expect(admitWikidataValue({ type: 'time', value: { ...time, calendarmodel: 'https://example.org/calendar' } }, timeProperty))
-    .toEqual({ state: 'unsupported', reason: 'unsupported-calendar' });
+  expect(
+    admitWikidataValue(
+      { type: 'time', value: { ...time, calendarmodel: 'https://example.org/calendar' } },
+      timeProperty,
+    ),
+  ).toEqual({ state: 'unsupported', reason: 'unsupported-calendar' });
   expect(admitWikidataValue({ type: 'time', value: { ...time, precision: 12 } }, timeProperty)).toEqual({
     state: 'unsupported',
     reason: 'unsupported-precision',
   });
-  expect(admitWikidataValue({ type: 'quantity', value: { amount: '+1', unit: `https://units.example/${'x'.repeat(1_048_576)}` } }, release.properties['ex:quantity']!)).toEqual({
+  expect(
+    admitWikidataValue(
+      { type: 'quantity', value: { amount: '+1', unit: `https://units.example/${'x'.repeat(1_048_576)}` } },
+      release.properties['ex:quantity']!,
+    ),
+  ).toEqual({
     state: 'unsupported',
     reason: 'invalid-value',
   });
@@ -166,9 +187,13 @@ test('native proposal, reference, acceptance, adoption, revision detail and publ
     rank: 'preferred',
     value: { type: 'value', content: time },
     qualifiers: [{ property: { id: 'ex:quantity' }, value: { type: 'value', content: quantity } }],
-    references: [{ parts: expect.arrayContaining([
-      { property: { id: 'ex:quantity', data_type: 'quantity' }, value: { type: 'value', content: quantity } },
-    ]) }],
+    references: [
+      {
+        parts: expect.arrayContaining([
+          { property: { id: 'ex:quantity', data_type: 'quantity' }, value: { type: 'value', content: quantity } },
+        ]),
+      },
+    ],
     rezics: { release: digest },
   });
   const proposalDetail = await get(`/v1/subjects/${holder.id}/revisions/${proposedRevision}`);

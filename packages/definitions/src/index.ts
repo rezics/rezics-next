@@ -288,8 +288,7 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
       if (!own(fields, 'lowerBound') && !own(fields, 'upperBound')) options.exact = true;
     }
     const currentFixedSchema = canonicalize(value) === canonicalize(valueSchema(property.datatype, options));
-    const historicalTime =
-      property.datatype === 'time' && canonicalize(value) === canonicalize(historicalTimeSchema);
+    const historicalTime = property.datatype === 'time' && canonicalize(value) === canonicalize(historicalTimeSchema);
     const fixedSchema = currentFixedSchema || historicalTime;
     if (!fixedSchema) add(at(pointer, 'value'));
     patterns(value, at(pointer, 'value'));

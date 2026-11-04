@@ -40,7 +40,11 @@ function editableField(
         ? properties.calendarmodel.enum
         : [properties.calendarmodel.const]
       : [];
-    if (!calendars.includes('http://www.wikidata.org/entity/Q1985727') && !calendars.includes('http://www.wikidata.org/entity/Q1985786')) return;
+    if (
+      !calendars.includes('http://www.wikidata.org/entity/Q1985727') &&
+      !calendars.includes('http://www.wikidata.org/entity/Q1985786')
+    )
+      return;
   }
   if (path === '/value' || path === '/value/type') return 'state';
   if (part.value.type !== 'value') return;

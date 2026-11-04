@@ -16,7 +16,11 @@ export type WikidataValueFailure =
   | 'unsupported-unit';
 
 export type WikidataValueAdmission =
-  | { state: 'admitted'; datatype?: 'time' | 'quantity'; value: { type: 'value'; content: unknown } | { type: 'somevalue' | 'novalue' } }
+  | {
+      state: 'admitted';
+      datatype?: 'time' | 'quantity';
+      value: { type: 'value'; content: unknown } | { type: 'somevalue' | 'novalue' };
+    }
   | { state: 'unsupported'; reason: WikidataValueFailure };
 
 type RecordValue = Record<string, unknown>;
@@ -43,7 +47,9 @@ function bounded(value: unknown): boolean {
   }
 }
 
-function sourceValue(input: RecordValue):
+function sourceValue(
+  input: RecordValue,
+):
   | { state: 'missing' }
   | { state: 'snak'; type: 'somevalue' | 'novalue' }
   | { state: 'value'; datatype: string; content: unknown } {
@@ -58,14 +64,19 @@ function sourceValue(input: RecordValue):
 
 function unsupportedTime(content: unknown): WikidataValueFailure | undefined {
   if (!isRecord(content)) return 'invalid-value';
-  if (typeof content.precision !== 'number' || ![9, 10, 11].includes(content.precision))
-    return 'unsupported-precision';
+  if (typeof content.precision !== 'number' || ![9, 10, 11].includes(content.precision)) return 'unsupported-precision';
   if (content.calendarmodel !== GREGORIAN && content.calendarmodel !== JULIAN) return 'unsupported-calendar';
-  if (Object.hasOwn(content, 'timezone') && (typeof content.timezone !== 'number' || !Number.isSafeInteger(content.timezone)))
+  if (
+    Object.hasOwn(content, 'timezone') &&
+    (typeof content.timezone !== 'number' || !Number.isSafeInteger(content.timezone))
+  )
     return 'unsupported-timezone';
   for (const key of ['before', 'after']) {
     const uncertainty = content[key];
-    if (Object.hasOwn(content, key) && (typeof uncertainty !== 'number' || !Number.isSafeInteger(uncertainty) || uncertainty < 0))
+    if (
+      Object.hasOwn(content, key) &&
+      (typeof uncertainty !== 'number' || !Number.isSafeInteger(uncertainty) || uncertainty < 0)
+    )
       return 'unsupported-uncertainty';
   }
   return;
@@ -92,7 +103,9 @@ export function admitWikidataValue(input: unknown, property: PropertyDefinition)
   const statement = {
     property: { id: 'ex:value' },
     value: { type: 'value', content: parsed.content },
-    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://www.wikidata.org/' } }] }],
+    references: [
+      { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://www.wikidata.org/' } }] },
+    ],
   };
   const url: PropertyDefinition = {
     iri: 'https://schema.org/url',

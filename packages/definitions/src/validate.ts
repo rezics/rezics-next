@@ -440,8 +440,7 @@ export function checkSubjectRelease(
       typeof content.time === 'string' &&
       typeof content.precision === 'number'
     ) {
-      if (!dateExists(content.time, content.precision, content.calendarmodel))
-        add(`${pointer}/time`, 'invalid_format');
+      if (!dateExists(content.time, content.precision, content.calendarmodel)) add(`${pointer}/time`, 'invalid_format');
     } else if (property.datatype === 'wikibase-item' && typeof content === 'string') {
       items.push({ pointer, id: content, targets: property.targets! });
     }

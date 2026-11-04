@@ -27,7 +27,9 @@ const release = { properties: { 'ex:date': property, 'schema:url': url } };
 const statement = (content: unknown) => ({
   property: { id: 'ex:date' },
   value: { type: 'value', content },
-  references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } }] }],
+  references: [
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } }] },
+  ],
 });
 
 test('portable time admits exact signed Julian partial dates and metadata, while rejecting unsupported forms', () => {
@@ -40,8 +42,10 @@ test('portable time admits exact signed Julian partial dates and metadata, while
     after: 3,
   };
   expect(checkStatementInput(statement(supported), release).violations).toEqual([]);
-  expect(checkStatementInput(statement({ ...supported, time: '+1900-02-29T00:00:00Z', calendarmodel: gregorian }), release).violations)
-    .toContainEqual({ pointer: '/statement/value/content/time', code: 'invalid_format' });
+  expect(
+    checkStatementInput(statement({ ...supported, time: '+1900-02-29T00:00:00Z', calendarmodel: gregorian }), release)
+      .violations,
+  ).toContainEqual({ pointer: '/statement/value/content/time', code: 'invalid_format' });
   for (const content of [
     { ...supported, calendarmodel: 'https://example.org/unknown' },
     { ...supported, precision: 12 },
@@ -50,8 +54,9 @@ test('portable time admits exact signed Julian partial dates and metadata, while
     { ...supported, time: `+${'1'.repeat(17)}-02-29T00:00:00Z` },
   ])
     expect(checkStatementInput(statement(content), release).violations.length).toBeGreaterThan(0);
-  expect(checkStatementInput(statement({ ...supported, precision: 9, time: '+2000-00-00T00:00:00Z' }), release).violations)
-    .toEqual([]);
+  expect(
+    checkStatementInput(statement({ ...supported, precision: 9, time: '+2000-00-00T00:00:00Z' }), release).violations,
+  ).toEqual([]);
 });
 
 test('exact quantity schema and pinned Gregorian time releases retain their historical shape', () => {

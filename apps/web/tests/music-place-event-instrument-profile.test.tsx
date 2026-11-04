@@ -29,7 +29,14 @@ function admit(release: Release) {
       listPresentation: { imageAspect: 'portrait', keyFacts: [] },
     };
   };
-  type('schema:Place', 'place', ['schema:startDate', 'schema:location', 'wdt:P1619', 'wdt:P9000', 'wdt:P9001', 'wdt:P9002']);
+  type('schema:Place', 'place', [
+    'schema:startDate',
+    'schema:location',
+    'wdt:P1619',
+    'wdt:P9000',
+    'wdt:P9001',
+    'wdt:P9002',
+  ]);
   type('schema:Event', 'event', ['schema:startDate', 'schema:location']);
   type('schema:MusicInstrument', 'instrument', ['schema:name']);
   const time = {
@@ -60,8 +67,16 @@ function admit(release: Release) {
     iri: 'http://www.wikidata.org/prop/direct/P1619',
     labels: { en: 'date of official opening' },
   };
-  for (const [id, label] of [['wdt:P9000', 'unsupported precision'], ['wdt:P9001', 'unsupported calendar'], ['wdt:P9002', 'unsupported uncertainty']])
-    release.properties[id] = { ...time, iri: `http://www.wikidata.org/prop/direct/${id.slice(4)}`, labels: { en: label } };
+  for (const [id, label] of [
+    ['wdt:P9000', 'unsupported precision'],
+    ['wdt:P9001', 'unsupported calendar'],
+    ['wdt:P9002', 'unsupported uncertainty'],
+  ])
+    release.properties[id] = {
+      ...time,
+      iri: `http://www.wikidata.org/prop/direct/${id.slice(4)}`,
+      labels: { en: label },
+    };
   return release;
 }
 
@@ -117,30 +132,54 @@ function placeRead(): SubjectRead {
             references: [],
           },
         ],
-      'wdt:P9000': [
-        {
-          id: '00000000-0000-4000-8000-00000000e034', rank: 'normal',
-          property: { id: 'wdt:P9000', data_type: 'time' },
-          value: { type: 'value', content: { time: '+2001-05-00T00:00:00Z', precision: 12, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' } },
-          qualifiers: [], references: [],
-        },
-      ],
-      'wdt:P9001': [
-        {
-          id: '00000000-0000-4000-8000-00000000e035', rank: 'normal',
-          property: { id: 'wdt:P9001', data_type: 'time' },
-          value: { type: 'value', content: { time: '+2001-05-01T00:00:00Z', precision: 11, calendarmodel: 'https://example.org/calendar' } },
-          qualifiers: [], references: [],
-        },
-      ],
-      'wdt:P9002': [
-        {
-          id: '00000000-0000-4000-8000-00000000e036', rank: 'normal',
-          property: { id: 'wdt:P9002', data_type: 'time' },
-          value: { type: 'value', content: { time: '+2001-05-01T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727', before: -1 } },
-          qualifiers: [], references: [],
-        },
-      ],
+        'wdt:P9000': [
+          {
+            id: '00000000-0000-4000-8000-00000000e034',
+            rank: 'normal',
+            property: { id: 'wdt:P9000', data_type: 'time' },
+            value: {
+              type: 'value',
+              content: {
+                time: '+2001-05-00T00:00:00Z',
+                precision: 12,
+                calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+              },
+            },
+            qualifiers: [],
+            references: [],
+          },
+        ],
+        'wdt:P9001': [
+          {
+            id: '00000000-0000-4000-8000-00000000e035',
+            rank: 'normal',
+            property: { id: 'wdt:P9001', data_type: 'time' },
+            value: {
+              type: 'value',
+              content: { time: '+2001-05-01T00:00:00Z', precision: 11, calendarmodel: 'https://example.org/calendar' },
+            },
+            qualifiers: [],
+            references: [],
+          },
+        ],
+        'wdt:P9002': [
+          {
+            id: '00000000-0000-4000-8000-00000000e036',
+            rank: 'normal',
+            property: { id: 'wdt:P9002', data_type: 'time' },
+            value: {
+              type: 'value',
+              content: {
+                time: '+2001-05-01T00:00:00Z',
+                precision: 11,
+                calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+                before: -1,
+              },
+            },
+            qualifiers: [],
+            references: [],
+          },
+        ],
       },
       resolution: {},
       relationCounts: {},
@@ -173,7 +212,14 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                   qualifiers: [
                     {
                       property: { id: 'schema:startDate', data_type: 'time' },
-                      value: { type: 'value', content: { time: '+2001-05-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985786' } },
+                      value: {
+                        type: 'value',
+                        content: {
+                          time: '+2001-05-00T00:00:00Z',
+                          precision: 10,
+                          calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
+                        },
+                      },
                     },
                   ],
                   references: [],
@@ -190,7 +236,14 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                   qualifiers: [
                     {
                       property: { id: 'schema:startDate', data_type: 'time' },
-                      value: { type: 'value', content: { time: '+2002-01-01T00:00:00Z', precision: 11, calendarmodel: 'https://example.org/calendar' } },
+                      value: {
+                        type: 'value',
+                        content: {
+                          time: '+2002-01-01T00:00:00Z',
+                          precision: 11,
+                          calendarmodel: 'https://example.org/calendar',
+                        },
+                      },
                     },
                   ],
                   references: [],

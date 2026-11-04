@@ -9,11 +9,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { proposeStatement } from '../../src/semantic/candidates.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import {
-  checkGrowth,
-  openGrowthDatabase,
-  type GrowthDatabase,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import {
   captureUnforcedIndexes,
   logGrowthSeeding,
@@ -86,11 +82,19 @@ beforeAll(async () => {
       type: 'schema:Book',
       labels: { en: 'Wikidata growth anchor' },
       statements: {
-        'schema:datePublished': [{
-          property: { id: 'schema:datePublished' },
-          value: { type: 'value', content: time },
-          references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/evidence' } }] }],
-        }],
+        'schema:datePublished': [
+          {
+            property: { id: 'schema:datePublished' },
+            value: { type: 'value', content: time },
+            references: [
+              {
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/evidence' } },
+                ],
+              },
+            ],
+          },
+        ],
       },
     },
     release: { digest: bundledDigest, release: bundledRelease },
@@ -106,7 +110,11 @@ test('bounded time validation and current-head reads stay fixed across unrelated
   const supported = {
     property: { id: 'schema:datePublished' },
     value: { type: 'value', content: time },
-    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/evidence' } }] }],
+    references: [
+      {
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/evidence' } }],
+      },
+    ],
   };
   expect(checkStatementInput(supported, bundledRelease).violations).toEqual([]);
   for (const content of [
@@ -114,8 +122,9 @@ test('bounded time validation and current-head reads stay fixed across unrelated
     { ...time, time: `+${'9'.repeat(16)}-99-99T00:00:00Z` },
     { ...time, after: 9007199254740992 },
   ])
-    expect(checkStatementInput({ ...supported, value: { type: 'value', content } }, bundledRelease).violations.length)
-      .toBeGreaterThan(0);
+    expect(
+      checkStatementInput({ ...supported, value: { type: 'value', content } }, bundledRelease).violations.length,
+    ).toBeGreaterThan(0);
 
   const population = unrelatedSemanticPopulation('growth-wikidata-values-unrelated', UNRELATED_PARTITION);
   const indexed = new Set<number>();
@@ -125,11 +134,20 @@ test('bounded time validation and current-head reads stay fixed across unrelated
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 3,
     grow: async (_database, scale, previous) => {
-      await seedSemanticPopulation({ pool: db.pool, admin: db.admin }, population.population, { from: previous, to: scale });
+      await seedSemanticPopulation({ pool: db.pool, admin: db.admin }, population.population, {
+        from: previous,
+        to: scale,
+      });
       const proposal = {
         property: { id: 'schema:inLanguage' },
         value: { type: 'value', content: 'ja' },
-        references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/obsolete' } }] }],
+        references: [
+          {
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/obsolete' } },
+            ],
+          },
+        ],
       };
       for (let ordinal = previous; ordinal < scale; ordinal++)
         await proposeStatement(db.pool, {

@@ -45,8 +45,7 @@ function unsupported(reason: UnsupportedReason, locale: string, value?: unknown)
       reason,
       text: m.time_unsupported_precision({ precision: value === undefined ? '' : String(value) }, options),
     };
-  if (reason === 'timezone')
-    return { state: 'unsupported', reason, text: m.time_unsupported_timezone({}, options) };
+  if (reason === 'timezone') return { state: 'unsupported', reason, text: m.time_unsupported_timezone({}, options) };
   if (reason === 'uncertainty')
     return { state: 'unsupported', reason, text: m.time_unsupported_uncertainty({}, options) };
   return { state: 'unsupported', reason, text: m.time_unsupported_value({}, options) };
@@ -103,24 +102,27 @@ export function timePresentation(input: unknown, locale: string): TimePresentati
   }
   if (!isRecord(input)) return unsupported('value', locale);
   const value = input;
-  if (Object.keys(value).some((key) => !['time', 'precision', 'calendarmodel', 'timezone', 'before', 'after'].includes(key)))
+  if (
+    Object.keys(value).some(
+      (key) => !['time', 'precision', 'calendarmodel', 'timezone', 'before', 'after'].includes(key),
+    )
+  )
     return unsupported('value', locale);
   if (!Number.isInteger(value.precision) || ![9, 10, 11].includes(value.precision as number))
     return unsupported('precision', locale, value.precision);
   if (value.calendarmodel !== GREGORIAN_CALENDAR && value.calendarmodel !== JULIAN_CALENDAR)
     return unsupported('calendar', locale, value.calendarmodel);
-  if (
-    Object.hasOwn(value, 'timezone') &&
-    (typeof value.timezone !== 'number' || !Number.isSafeInteger(value.timezone))
-  )
+  if (Object.hasOwn(value, 'timezone') && (typeof value.timezone !== 'number' || !Number.isSafeInteger(value.timezone)))
     return unsupported('timezone', locale);
   for (const key of ['before', 'after'] as const) {
     const uncertainty = value[key];
-    if (Object.hasOwn(value, key) && (typeof uncertainty !== 'number' || !Number.isSafeInteger(uncertainty) || uncertainty < 0))
+    if (
+      Object.hasOwn(value, key) &&
+      (typeof uncertainty !== 'number' || !Number.isSafeInteger(uncertainty) || uncertainty < 0)
+    )
       return unsupported('uncertainty', locale);
   }
-  if (typeof value.time !== 'string' || value.time.length > 33)
-    return unsupported('value', locale);
+  if (typeof value.time !== 'string' || value.time.length > 33) return unsupported('value', locale);
   const match = /^([+-][0-9]{4,16})-([0-9]{2})-([0-9]{2})T00:00:00Z$/.exec(value.time);
   if (!match || !/[1-9]/.test(match[1]!.slice(1))) return unsupported('value', locale);
   const precision = value.precision as TimePrecision;
@@ -140,8 +142,7 @@ export function timePresentation(input: unknown, locale: string): TimePresentati
   const calendarText =
     calendar === GREGORIAN_CALENDAR ? m.time_calendar_gregorian({}, options) : m.time_calendar_julian({}, options);
   const metadata: string[] = [];
-  if (Object.hasOwn(value, 'timezone'))
-    metadata.push(m.time_timezone({ minutes: String(value.timezone) }, options));
+  if (Object.hasOwn(value, 'timezone')) metadata.push(m.time_timezone({ minutes: String(value.timezone) }, options));
   if (Object.hasOwn(value, 'before') || Object.hasOwn(value, 'after'))
     metadata.push(
       m.time_uncertainty(
@@ -153,7 +154,12 @@ export function timePresentation(input: unknown, locale: string): TimePresentati
       ),
     );
   const text = m.time_value(
-    { date, precision: precisionText, calendar: calendarText, metadata: metadata.length ? ` · ${metadata.join(' · ')}` : '' },
+    {
+      date,
+      precision: precisionText,
+      calendar: calendarText,
+      metadata: metadata.length ? ` · ${metadata.join(' · ')}` : '',
+    },
     options,
   );
   const jsonLdDate = structuredDate(year, month, day, precision, calendar, value as TimeValue);

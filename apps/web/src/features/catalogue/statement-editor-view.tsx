@@ -415,7 +415,7 @@ function ScalarControl({
                 {...invalid('date')}
                 aria-label={m.correction_precision({}, o)}
                 value={precision ?? ''}
-              onChange={(event) => setDate(0, date?.[1] ?? '', Number(event.target.value))}
+                onChange={(event) => setDate(0, date?.[1] ?? '', Number(event.target.value))}
               >
                 <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
                 {typeof precision === 'number' && ![9, 10, 11].includes(precision) && (
@@ -478,17 +478,33 @@ function ScalarControl({
                     {value === gregorian ? m.time_calendar_gregorian({}, o) : m.time_calendar_julian({}, o)}
                   </NativeSelectOption>
                 ))}
-                {typeof record.calendarmodel === 'string' && !supportedCalendars.some((calendar) => calendar === record.calendarmodel) && (
-                  <NativeSelectOption value={record.calendarmodel}>
-                    {m.time_unsupported_calendar({ calendar: record.calendarmodel }, o)}
-                  </NativeSelectOption>
-                )}
+                {typeof record.calendarmodel === 'string' &&
+                  !supportedCalendars.some((calendar) => calendar === record.calendarmodel) && (
+                    <NativeSelectOption value={record.calendarmodel}>
+                      {m.time_unsupported_calendar({ calendar: record.calendarmodel }, o)}
+                    </NativeSelectOption>
+                  )}
               </NativeSelect>
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
-              {field('timezone', m.correction_timezone({}, o), record.timezone === undefined ? '' : String(record.timezone), (value) => patchInteger('timezone', value))}
-              {field('before', m.correction_before({}, o), record.before === undefined ? '' : String(record.before), (value) => patchInteger('before', value))}
-              {field('after', m.correction_after({}, o), record.after === undefined ? '' : String(record.after), (value) => patchInteger('after', value))}
+              {field(
+                'timezone',
+                m.correction_timezone({}, o),
+                record.timezone === undefined ? '' : String(record.timezone),
+                (value) => patchInteger('timezone', value),
+              )}
+              {field(
+                'before',
+                m.correction_before({}, o),
+                record.before === undefined ? '' : String(record.before),
+                (value) => patchInteger('before', value),
+              )}
+              {field(
+                'after',
+                m.correction_after({}, o),
+                record.after === undefined ? '' : String(record.after),
+                (value) => patchInteger('after', value),
+              )}
             </div>
           </div>
         ) : definition.datatype === 'monolingualtext' ? (
