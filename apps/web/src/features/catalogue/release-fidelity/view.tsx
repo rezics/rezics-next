@@ -133,7 +133,7 @@ function ReleaseFidelityLive({
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const readerRef = useRef(reader);
   readerRef.current = reader;
-  const returnFocus = useRef<ReleaseReturnReceipt>();
+  const returnFocus = useRef<ReleaseReturnReceipt | undefined>(undefined);
   const clearFocus = useRef(false);
   const readFocus = useConsentFocus();
   const sliceKey = (() => {
@@ -745,8 +745,8 @@ function ReleaseFidelityLive({
                     void startRead(
                       {
                         kind: 'page',
-                        stream: read.stream?.key,
-                        cursor: read.next ?? undefined,
+                        ...(read.stream?.key ? { stream: read.stream.key } : {}),
+                        ...(read.next ? { cursor: read.next } : {}),
                         ...(admitted?.address.session ? { session: admitted.address.session } : {}),
                       },
                       event,
