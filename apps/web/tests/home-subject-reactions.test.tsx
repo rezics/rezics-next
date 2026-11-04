@@ -286,3 +286,16 @@ test('an uncertain Home write retries the immutable original intent and retires 
   expect(host.querySelector('button')?.textContent).not.toBe(m.editorial_retry());
   expect(nativeFetch).not.toHaveBeenCalled();
 });
+
+test('Subject fallback does not borrow counts, selection or sign-in advice from another target', async () => {
+  const projection = {
+    ...mountedProjection('love'),
+    action: 'sign_in',
+    target: { targetKind: 'subject', targetId: 'another-subject' },
+  };
+  await paint(item(projection), false);
+  const fallback = host.querySelector('[data-slot="subject-reaction-unavailable"]')!;
+  expect(fallback.querySelector('a')).toBeNull();
+  expect(fallback.querySelectorAll('button[aria-label*="—"]')).toHaveLength(5);
+  expect(writes).toHaveLength(0);
+});

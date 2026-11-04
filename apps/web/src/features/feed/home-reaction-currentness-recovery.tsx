@@ -157,9 +157,7 @@ export function HomeReactionRecovery({
             disabled={entry.phase === 'pending' || !scope.canRetry(entry.command)}
             onClick={() => {
               if (!scope.canRetry(entry.command)) return;
-              void scope.recovery.retry(entry).then((accepted) => {
-                if (accepted) onRefresh?.();
-              });
+              void scope.recovery.retry(entry);
             }}
           >
             {m.editorial_retry({}, options)}

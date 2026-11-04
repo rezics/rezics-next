@@ -17,33 +17,41 @@ const record = (value: unknown): Record<string, unknown> | undefined =>
 export function homeFeedSubjectReactionProjection(item: FeedItem): unknown {
   if (item.destination.kind !== 'subject' || item.key.owner !== 'semantic' || !('subjectReactions' in item.summary))
     return undefined;
-  return item.summary.subjectReactions;
+  const projection = item.summary.subjectReactions;
+  const target = record(record(projection)?.target);
+  if (target?.targetKind !== 'subject' || target.targetId !== item.destination.id || target.targetId !== item.key.id)
+    return undefined;
+  return projection;
+}
+
+/** Parse the action receiver once for both its admitted control and unavailable presentation. */
+export function homeFeedSubjectReactionState(projection: unknown) {
+  const value = record(projection);
+  const counts = record(value?.counts);
+  return {
+    action: value?.action,
+    counts,
+    values: counts?.state === 'available' ? record(counts.values) : undefined,
+    viewer: record(value?.viewer),
+  };
 }
 
 function subjectReaction(item: FeedItem, projection: unknown, input: { signedIn: boolean; origin?: FeedOrigin }) {
   if (item.destination.kind !== 'subject' || item.key.owner !== 'semantic') return;
   if (input.origin && !input.origin.isCurrent()) return;
-  const value = record(projection);
-  const target = record(value?.target);
-  if (
-    !target ||
-    target.targetKind !== 'subject' ||
-    target.targetId !== item.destination.id ||
-    target.targetId !== item.key.id
-  )
-    return;
-  const countState = record(value?.counts);
-  const countsValue = record(countState?.values);
+  const state = homeFeedSubjectReactionState(projection);
+  const countState = state.counts;
+  const countsValue = state.values;
   if (countState?.state !== 'available' || !countsValue || !Object.hasOwn(countState, 'asOf')) return;
   const counts: Partial<Record<ReactionKind, number>> = {};
   for (const [kind, count] of Object.entries(countsValue)) {
     if (!subjectKinds.has(kind as ReactionKind) || !Number.isSafeInteger(count) || (count as number) <= 0) return;
     counts[kind as ReactionKind] = count as number;
   }
-  const action = value?.action;
+  const action = state.action;
   let selected: ReactionKind | null = null;
   if (input.signedIn) {
-    const viewer = record(value?.viewer);
+    const viewer = state.viewer;
     if (viewer?.state !== 'available') return;
     if (viewer.kind !== null && !subjectKinds.has(viewer.kind as ReactionKind)) return;
     selected = viewer.kind as ReactionKind | null;
@@ -93,7 +101,10 @@ export function homeFeedReaction(
   return {
     target: { kind: target.targetKind, id: target.targetId },
     counts: summary.reactions,
-    value: input.signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
+    value:
+      input.signedIn && (input.origin?.isCurrent() ?? true) && 'viewerReaction' in summary
+        ? (summary.viewerReaction ?? null)
+        : null,
     ...(input.origin ? { reactionOrigin: input.origin } : {}),
     sourceWatermark: input.reactionsAsOf,
     ...nativeAdvice(item, input),
@@ -148,8 +159,8 @@ export function homeFeedReactionStatus(
         : 'unavailable';
   if (item.destination.kind !== 'subject') return;
 
-  const projection = record(homeFeedSubjectReactionProjection(item));
-  const action = projection?.action;
+  const projection = homeFeedSubjectReactionState(homeFeedSubjectReactionProjection(item));
+  const action = projection.action;
   if (action === 'denied') return 'denied';
   if (input.signedIn && (action !== 'allowed' || !input.reaction)) return 'unavailable';
   if (!input.signedIn && action !== 'sign_in') return 'unavailable';
