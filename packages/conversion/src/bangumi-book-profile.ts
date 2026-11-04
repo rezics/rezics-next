@@ -91,10 +91,7 @@ export function parseBangumiBookInfobox(infobox: string | undefined): BangumiBoo
   return template ? { template, fields, omitted } : { fields, omitted };
 }
 
-export function bangumiInfoboxField(
-  parsed: BangumiBookInfobox,
-  key: string,
-): string | undefined {
+export function bangumiInfoboxField(parsed: BangumiBookInfobox, key: string): string | undefined {
   return parsed.fields.find((field) => field.key === key)?.value;
 }
 
@@ -112,9 +109,24 @@ export function selectBangumiBookProfile(input: {
   const template = bangumiInfoboxTemplate(input.infobox);
   const platform = input.platform?.trim();
   if (platform === COMIC_PLATFORM || template === 'Manga')
-    return template ? { outcome: 'selected', type: 'schema:Book', template } : { outcome: 'selected', type: 'schema:Book' };
-  if (input.series === true && (platform === undefined || platform === '' || NOVEL_PLATFORMS.has(platform) || template === 'Novel' || template === 'BookSeries' || template === 'Book' || template === 'PhotoBook'))
-    return { outcome: 'selected', type: 'schema:BookSeries', ...(template && BOOK_TEMPLATES.has(template) ? { template } : {}) };
+    return template
+      ? { outcome: 'selected', type: 'schema:Book', template }
+      : { outcome: 'selected', type: 'schema:Book' };
+  if (
+    input.series === true &&
+    (platform === undefined ||
+      platform === '' ||
+      NOVEL_PLATFORMS.has(platform) ||
+      template === 'Novel' ||
+      template === 'BookSeries' ||
+      template === 'Book' ||
+      template === 'PhotoBook')
+  )
+    return {
+      outcome: 'selected',
+      type: 'schema:BookSeries',
+      ...(template && BOOK_TEMPLATES.has(template) ? { template } : {}),
+    };
   return {
     outcome: 'selected',
     type: 'schema:Book',

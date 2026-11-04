@@ -7,11 +7,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { convertBangumi, converter_revision } from '@rezics/conversion/bangumi';
 import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
-import {
-  importShowcaseBooks,
-  planShowcaseBooks,
-  showcaseBookFamily,
-} from '../src/showcase-books.ts';
+import { importShowcaseBooks, planShowcaseBooks, showcaseBookFamily } from '../src/showcase-books.ts';
 
 const series = {
   id: 499,
@@ -101,7 +97,9 @@ function port(commands: BatchCommand[]): CrossMediaPort {
         results: request.commands.map((command) => {
           if (command.op === 'create') {
             const sourceKey = `${command.source.source}\0${command.source.external_id}`;
-            const existing = [...subjects.values()].find((row) => `${command.source.source}\0${row.externalId}` === sourceKey);
+            const existing = [...subjects.values()].find(
+              (row) => `${command.source.source}\0${row.externalId}` === sourceKey,
+            );
             const id = existing?.id ?? randomUUID();
             subjects.set(id, { id, type: command.subject.type, externalId: command.source.external_id });
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
@@ -129,9 +127,7 @@ function port(commands: BatchCommand[]): CrossMediaPort {
         subject: {
           id,
           type: known?.type ?? 'schema:Person',
-          statements: identity
-            ? { [identity.property]: [{ value: { type: 'value', content: identity.value } }] }
-            : {},
+          statements: identity ? { [identity.property]: [{ value: { type: 'value', content: identity.value } }] } : {},
         },
       } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
@@ -152,7 +148,9 @@ test('default planning converts the documented Book Girl family and keeps unrela
     ['26', 'schema:Book', converter_revision],
     ['27', 'schema:Book', converter_revision],
   ]);
-  expect(plan.edges.map((edge) => [edge.holder, edge.property, edge.target, edge.relation?.code, edge.relation?.order])).toEqual([
+  expect(
+    plan.edges.map((edge) => [edge.holder, edge.property, edge.target, edge.relation?.code, edge.relation?.order]),
+  ).toEqual([
     ['26', 'wdt:P179', '499', 1002, 0],
     ['27', 'wdt:P179', '499', 1002, 0],
   ]);
@@ -218,9 +216,22 @@ test('default planning converts the documented Book Girl family and keeps unrela
         command.op === 'propose' && command.statement.property.id === 'wdt:P179',
     );
     expect(membership).toHaveLength(2);
-    expect(membership.every((command) => command.subject === first.identities['26']?.id || command.subject === first.identities['27']?.id)).toBe(true);
-    expect(membership.every((command) => command.statement.value.type === 'value' && command.statement.value.content === first.identities['499']?.id)).toBe(true);
-    expect(JSON.stringify(commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P179'))).not.toContain(first.identities['26'] && `"${first.identities['499']?.id}"` && 'hasPart');
+    expect(
+      membership.every(
+        (command) => command.subject === first.identities['26']?.id || command.subject === first.identities['27']?.id,
+      ),
+    ).toBe(true);
+    expect(
+      membership.every(
+        (command) =>
+          command.statement.value.type === 'value' && command.statement.value.content === first.identities['499']?.id,
+      ),
+    ).toBe(true);
+    expect(
+      JSON.stringify(
+        commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P179'),
+      ),
+    ).not.toContain(first.identities['26'] && `"${first.identities['499']?.id}"` && 'hasPart');
     const again = await importShowcaseBooks({
       tables: tables(),
       path: join(directory, 'state.sqlite'),

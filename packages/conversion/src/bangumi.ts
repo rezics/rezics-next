@@ -8,10 +8,7 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
-import {
-  bangumiEditionFactsWithheldOnWork,
-  parseBangumiBookInfobox,
-} from './bangumi-book-profile.ts';
+import { bangumiEditionFactsWithheldOnWork, parseBangumiBookInfobox } from './bangumi-book-profile.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { bangumiDiagnosticLimit, extractBangumiSubjectNames } from './bangumi-subject-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
@@ -182,7 +179,9 @@ function retainedFieldDiagnostics(
 ): { pointer: string; code: string }[] {
   const citedDate = citedPublicationDate(record);
   const parsed = record.type === 1 ? parseBangumiBookInfobox(record.infobox) : undefined;
-  const retained: { pointer: string; code: string }[] = (['tags', 'platform', 'series', 'infobox', 'nsfw', 'date'] as const)
+  const retained: { pointer: string; code: string }[] = (
+    ['tags', 'platform', 'series', 'infobox', 'nsfw', 'date'] as const
+  )
     .filter((field) => record[field] !== undefined)
     .filter((field) => field !== 'date' || !citedDate)
     .filter((field) => field !== 'infobox' || (!handledInfobox && record.type !== 1))

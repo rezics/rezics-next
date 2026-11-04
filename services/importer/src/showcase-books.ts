@@ -1,7 +1,10 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
 import { convertBangumi } from '@rezics/conversion/bangumi';
-import { selectBangumiBookProfile, type BangumiBookGrain } from '../../../packages/conversion/src/bangumi-book-profile.ts';
+import {
+  selectBangumiBookProfile,
+  type BangumiBookGrain,
+} from '../../../packages/conversion/src/bangumi-book-profile.ts';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
@@ -159,7 +162,13 @@ export async function planShowcaseBooks(input: {
   const seriesRow = subjects.get(SERIES_ID);
   if (!seriesRow) gaps.push(gap('subject', { id: SERIES_ID }, 'Selected book series is missing from the dump'));
   else if (!isNovelSeries(seriesRow))
-    gaps.push(gap('subject', { id: SERIES_ID, type: seriesRow.type, platform: seriesRow.platform, series: seriesRow.series }, 'Selected series is not a novel BookSeries'));
+    gaps.push(
+      gap(
+        'subject',
+        { id: SERIES_ID, type: seriesRow.type, platform: seriesRow.platform, series: seriesRow.series },
+        'Selected series is not a novel BookSeries',
+      ),
+    );
 
   const members: ShowcaseBookMember[] = [];
   const volumes: Row[] = [];
@@ -218,7 +227,10 @@ export async function planShowcaseBooks(input: {
     });
   }
 
-  const selectedIds = new Set<number>([...(seriesRow && isNovelSeries(seriesRow) ? [SERIES_ID] : []), ...volumes.map((row) => asId(row.id)!)]);
+  const selectedIds = new Set<number>([
+    ...(seriesRow && isNovelSeries(seriesRow) ? [SERIES_ID] : []),
+    ...volumes.map((row) => asId(row.id)!),
+  ]);
   const authorIds = new Set<number>();
   const credits: BangumiCreatorCreditDraft[] = [];
   for await (const row of input.tables.rows('bangumi', 'subject-persons')) {
@@ -332,7 +344,9 @@ export async function planShowcaseBooks(input: {
       authors: people.map((row) => row.key),
     },
     gaps,
-    relationScope: [...new Set(relationRows.flatMap((row) => [String(row.subject_id), String(row.related_subject_id)]))].sort(),
+    relationScope: [
+      ...new Set(relationRows.flatMap((row) => [String(row.subject_id), String(row.related_subject_id)])),
+    ].sort(),
     relationSnapshotDigest: sourceDigest(relationRows),
   };
 }
@@ -364,8 +378,9 @@ export function showcaseBooksToCrossMediaPlan(plan: ShowcaseBookPlan): CrossMedi
 }
 
 function readingIdentity(reading: CrossMediaReading): { id: string; type: string } | undefined {
-  const subject = (reading.subject as { subject?: { id?: string; type?: string }; id?: string; type?: string }).subject
-    ?? (reading.subject as { id?: string; type?: string });
+  const subject =
+    (reading.subject as { subject?: { id?: string; type?: string }; id?: string; type?: string }).subject ??
+    (reading.subject as { id?: string; type?: string });
   if (!subject?.id || !uuid.test(subject.id)) return;
   return { id: subject.id, type: typeof subject.type === 'string' ? subject.type : '' };
 }
