@@ -88,7 +88,7 @@ test('nullable and unadmitted latin keep the primary title', () => {
   const absent = convertCrossMediaEntity(record([title('ja', '港')]));
   const empty = convertCrossMediaEntity(record([title('ja', '港', '')]));
   expect(absent.normalizedRecord.releases_titles).toEqual([{ id: 'r1', lang: 'ja', mtl: false, title: '港', latin: null }]);
-  expect(empty.normalizedRecord.releases_titles?.[0]?.latin).toBe('');
+  expect((empty.normalizedRecord.releases_titles as { latin: string | null }[])[0]?.latin).toBe('');
   expect(empty.digest).not.toBe(absent.digest);
   expect(empty.diagnostics).toEqual([{ pointer: '/releases_titles/0/latin', code: 'unadmitted_empty_latin' }]);
   if (absent.proposals[0]?.op !== 'create' || empty.proposals[0]?.op !== 'create') throw new Error('Expected bootstrap');

@@ -390,8 +390,8 @@ function copyFlag(value: unknown, pointer: string): boolean {
 }
 
 function releaseTitleText(value: unknown, pointer: string): string {
+  if (typeof value !== 'string') fail(pointer);
   if (
-    typeof value !== 'string' ||
     !value.isWellFormed() ||
     !value.trim() ||
     [...value].length > vndbReleaseNameLimits.titleChars ||
@@ -423,13 +423,10 @@ function projectReleaseTitles(
   diagnostics: ConversionDiagnostic[];
 } {
   const value = own(raw, 'releases_titles', '/releases_titles');
-  if (
-    utilTypes.isProxy(value) ||
-    !Array.isArray(value) ||
-    Object.getPrototypeOf(value) !== Array.prototype
-  )
+  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
     fail('/releases_titles');
-  const length = Object.getOwnPropertyDescriptor(value, 'length')!.value as number;
+  const rows = value as object;
+  const length = Object.getOwnPropertyDescriptor(rows, 'length')!.value as number;
   if (length > vndbReleaseNameLimits.maxTitles) fail('/releases_titles', 'invalid_record_row_limit');
   const titles: {
     id: string;
@@ -444,7 +441,7 @@ function projectReleaseTitles(
   const seen = new Set<string>();
   for (let i = 0; i < length; i++) {
     const pointer = `/releases_titles/${i}`;
-    const entry = own(value, String(i), pointer);
+    const entry = own(rows, String(i), pointer);
     if (entry === undefined) fail(pointer);
     const row = object(entry, pointer);
     const id = own(row, 'id', `${pointer}/id`);
@@ -461,7 +458,7 @@ function projectReleaseTitles(
     let admittedLatin: string | null;
     let romanizedText: string | undefined;
     if (latin === null) admittedLatin = null;
-    else if (typeof latin !== 'string') fail(`${pointer}/latin`);
+    else if (typeof latin !== 'string') return fail(`${pointer}/latin`);
     else if (latin === '') {
       admittedLatin = '';
       diagnostics.push({ pointer: `${pointer}/latin`, code: 'unadmitted_empty_latin' });
@@ -508,6 +505,13 @@ function projectReleaseTitles(
     if (!listed.includes(name.text)) (aliases[name.language] ??= []).push(name.text);
   }
   if (!Object.keys(labels).length) fail('/releases_titles', 'invalid_record_title');
+  titles.sort(
+    (a, b) =>
+      compareText(a.lang, b.lang) ||
+      compareText(a.title, b.title) ||
+      compareText(a.latin ?? '', b.latin ?? '') ||
+      Number(a.mtl) - Number(b.mtl),
+  );
   return { titles, names: [...uniqueNames.values()], alternateNames, labels, aliases, diagnostics };
 }
 
