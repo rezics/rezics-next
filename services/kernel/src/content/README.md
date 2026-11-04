@@ -2506,6 +2506,15 @@ variants, ThumbHash and average colour. Available avatar variants are public; or
 taken-down, erased or collection-pending avatars are never served. Owners erase avatars with the existing
 `DELETE /v1/media/{id}`.
 
+`GET /v1/media/avatar-upload-advice` (operation `media.avatar_upload_advice`) is the current authenticated
+self-avatar upload observation. It requires `media:create`, rejects unknown queries, and is `private, no-store`.
+The closed body is `{ viewerState: "signed_in", viewer: { accountId }, target: { containerId, purpose: "avatar" },
+constraints: { mediaTypes, maxByteCount }, allowedActions }`: the target container is the viewer account, the five
+native image types, `maxByteCount` 20971520, and `allowedActions` `["upload"]` or `[]`. Access evidence is prepared
+before the account-home checkout; a current denial returns empty actions, while authentication, concealed or invalid
+accounts, and dependency failures keep the existing read errors. The observation is not a grant: reservation and
+receipt replay still run the current native command checks. No receipt or creation child is minted to read it.
+
 Reserve an avatar with `POST /v1/media`, setting `purpose: "avatar"` and `containerId` to the authenticated
 account id. Another account's container returns 404, even with a creation grant; `newThread` remains exclusive
 to post images. The reservation response and `GET /v1/media/{id}` include `purpose: "avatar"` alongside the

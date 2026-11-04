@@ -89,12 +89,82 @@ export async function reserveMedia(
   client: KernelClient,
   credential: string | null,
   input: ReservationInput,
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<Media> {
   const result = await client.media.post(input, {
-    headers: { ...viewerHeaders(credential), 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+    headers: { ...viewerHeaders(credential), 'idempotency-key': JSON.stringify(idempotencyKey) },
   });
   if (result.error) throwClientError(result.error, result.headers);
   return result.data.media;
+}
+
+const adviceMediaTypes = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
+export type AvatarUploadAdvice = {
+  viewerState: 'signed_in';
+  viewer: { accountId: string };
+  target: { containerId: string; purpose: 'avatar' };
+  constraints: { mediaTypes: typeof adviceMediaTypes; maxByteCount: 20971520 };
+  allowedActions: ['upload'] | [];
+};
+
+function adviceGet(client: KernelClient): { get: (input: object) => Promise<unknown> } | undefined {
+  const route = Reflect.get(client.media, 'avatar-upload-advice');
+  if (!route || typeof route !== 'object') return undefined;
+  const get = Reflect.get(route, 'get');
+  return typeof get === 'function' ? { get: get.bind(route) } : undefined;
+}
+
+export function parseAvatarUploadAdvice(value: unknown, viewerId: string): AvatarUploadAdvice | null {
+  if (!value || typeof value !== 'object') return null;
+  const body = value as Record<string, unknown>;
+  const viewer = body.viewer as Record<string, unknown> | undefined;
+  const target = body.target as Record<string, unknown> | undefined;
+  const constraints = body.constraints as Record<string, unknown> | undefined;
+  const types = constraints?.mediaTypes;
+  const actions = body.allowedActions;
+  if (
+    body.viewerState !== 'signed_in' ||
+    !viewer ||
+    typeof viewer.accountId !== 'string' ||
+    viewer.accountId === '' ||
+    viewer.accountId !== viewerId ||
+    !target ||
+    target.containerId !== viewer.accountId ||
+    target.purpose !== 'avatar' ||
+    !constraints ||
+    !Array.isArray(types) ||
+    types.length !== adviceMediaTypes.length ||
+    adviceMediaTypes.some((type, index) => types[index] !== type) ||
+    constraints.maxByteCount !== 20_971_520 ||
+    !Array.isArray(actions) ||
+    (actions.length !== 0 && (actions.length !== 1 || actions[0] !== 'upload'))
+  )
+    return null;
+  return {
+    viewerState: 'signed_in',
+    viewer: { accountId: viewer.accountId },
+    target: { containerId: viewer.accountId, purpose: 'avatar' },
+    constraints: { mediaTypes: adviceMediaTypes, maxByteCount: 20_971_520 },
+    allowedActions: actions.length === 1 ? ['upload'] : [],
+  };
+}
+
+export async function readAvatarUploadAdvice(
+  client: KernelClient,
+  credential: string | null,
+  viewerId: string,
+): Promise<AvatarUploadAdvice> {
+  const route = adviceGet(client);
+  if (!route) throw dependencyUnavailable();
+  const result = (await route.get({ headers: viewerHeaders(credential) })) as {
+    data?: unknown;
+    error?: { value: unknown; status: number };
+    headers?: HeadersInit;
+  };
+  if (result.error) throwClientError(result.error, result.headers);
+  const advice = parseAvatarUploadAdvice(result.data, viewerId);
+  if (!advice) throw dependencyUnavailable();
+  return advice;
 }
 
 export async function completeReservation(

@@ -15,6 +15,7 @@ import { mutateContentPoint } from './erase-post.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   reserveMedia,
+  readAvatarUploadAdvice,
   NewThreadTargetExistsError,
   completeMedia,
   readReservation,
@@ -30,6 +31,8 @@ import {
   MediaCompletionResponseSchema,
   MediaDownloadQuerySchema,
   MediaDownloadResponseSchema,
+  AvatarUploadAdviceQuerySchema,
+  AvatarUploadAdviceResponseSchema,
   DocumentMediaInputSchema,
   DocumentMediaPageSchema,
   OwnMediaInventoryQuerySchema,
@@ -241,6 +244,28 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
             return status(201, { media: metadata(media) });
           }),
         ),
+    )
+    .get(
+      '/v1/media/avatar-upload-advice',
+      {
+        query: strictContentSchema(AvatarUploadAdviceQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(AvatarUploadAdviceResponseSchema), sessionHeader),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'media.avatar_upload_advice',
+          'x-exposure': 'public',
+          'x-action': 'media:create',
+          security: secured,
+        },
+      },
+      async ({ actor, admission, job, set }) =>
+        admission.run('normal', job, async () => {
+          if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+          set.headers['cache-control'] = 'private, no-store';
+          return readAvatarUploadAdvice(dependencies, actor, job.deadline);
+        }),
     )
     .get(
       '/v1/media/:id',

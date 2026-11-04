@@ -195,8 +195,9 @@ export function ProfileCard({
     if (field && editor.canWrite()) (controls.current[field] ?? document.getElementById(`${ids}-${field}`))?.focus();
   }, [editor, validationAttempt]);
   const busy = state.phase === 'saving' || state.phase === 'reloading';
-  const closed = !writable || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
-  const avatar = useProfileAvatarUpload(editor, closed, avatarUpload, avatarResume);
+  const unreadable = !canRead || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
+  const closed = !writable || unreadable;
+  const avatar = useProfileAvatarUpload(editor, unreadable, avatarUpload, avatarResume);
   useProfileNavigationUpload(avatar.controller);
   const uploading = avatar.blocked;
   const changed =
@@ -339,7 +340,9 @@ export function ProfileCard({
               avatar={profile.avatar}
               known={state.known?.avatar ?? null}
               upload={avatar}
-              disabled={closed || busy || !!state.attempt}
+              disabled={unreadable || busy || !!state.attempt}
+              referenceDisabled={closed || busy || !!state.attempt}
+              saving={state.phase === 'saving' || state.phase === 'reloading' || state.phase === 'uncertain'}
             />
             <div
               id={`${ids}-links`}

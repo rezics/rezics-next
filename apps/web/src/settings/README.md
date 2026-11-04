@@ -8,6 +8,12 @@ Applicant verification requests use the same ten-second account budget, includin
 
 **Decision:** Private verification status uses owner verification authority for request and withdraw advice; a missing authority handle returns the latest request with empty viewerActions and never treats that read as no request.
 
+## Profile avatar
+
+Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current `media:create` admission, independently of profile-reference `account:update` advice. Missing, malformed or wrong-viewer advice hides upload while name, biography and avatar-reference edits stay usable. One in-memory reservation intent binds the reviewed file, avatar purpose, self container and idempotency key; a lost first acknowledgement retries that key and body, a known media id resumes, and a changed file, crop export or target mints a new intent. The generated advice handle is unavailable until Content publication `d9c5a408-5c67-4d33-bf97-76a9918a21b5`; until then the control stays honestly unavailable.
+
+**Decision:** Web advice decoding binds the current viewer, self target and native constraints without a second UUID grammar; Content schemas remain the identifier authority.
+
 ## Notifications
 
 The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory

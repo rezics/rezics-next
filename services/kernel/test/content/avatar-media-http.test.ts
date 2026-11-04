@@ -152,3 +152,20 @@ test('avatar reservations require an account container and reject new-thread tar
   ])
     expect((await call('POST', '/v1/media', body)).status).toBe(400);
 });
+
+test('avatar upload advice is a private current observation mounted before media id', async () => {
+  const result = await call('GET', '/v1/media/avatar-upload-advice');
+  expect(result.status).toBe(200);
+  expect(result.body).toEqual({
+    viewerState: 'signed_in',
+    viewer: { accountId },
+    target: { containerId: accountId, purpose: 'avatar' },
+    constraints: {
+      mediaTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'],
+      maxByteCount: 20_971_520,
+    },
+    allowedActions: ['upload'],
+  });
+  expect(result.response.headers.get('cache-control')).toBe('private, no-store');
+  expect((await call('GET', '/v1/media/avatar-upload-advice?extra=1')).status).toBe(400);
+});

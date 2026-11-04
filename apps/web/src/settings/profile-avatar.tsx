@@ -5,12 +5,34 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { MediaImage } from '@rezics/ui/media-image';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
-import { resumeReplyImageUpload, uploadAvatar, type UploadRefusalReason } from '../threads/upload';
+import {
+  readSiteAvatarUploadAdvice,
+  resumeReplyImageUpload,
+  uploadAvatar,
+  type UploadRefusalReason,
+} from '../threads/upload';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
-import { avatarMedia, ProfileAvatarUpload, type AvatarResume, type AvatarUpload } from './profile-avatar-upload';
+import {
+  avatarMedia,
+  ProfileAvatarUpload,
+  type AvatarAdviceRead,
+  type AvatarResume,
+  type AvatarUpload,
+} from './profile-avatar-upload';
 import { ProfileAvatarCrop } from './profile-avatar-crop.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
+
+const admittedAdvice = (accountId: string) => ({
+  viewerState: 'signed_in' as const,
+  viewer: { accountId },
+  target: { containerId: accountId, purpose: 'avatar' as const },
+  constraints: {
+    mediaTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const,
+    maxByteCount: 20_971_520 as const,
+  },
+  allowedActions: ['upload'] as const,
+});
 
 export function useProfileAvatarUpload(
   editor: ProfileEditor,
@@ -19,17 +41,19 @@ export function useProfileAvatarUpload(
   resume: AvatarResume | undefined = upload === uploadAvatar ? resumeReplyImageUpload : undefined,
 ) {
   const controller = useMemo(() => {
-    const guardedUpload: AvatarUpload = (accountId, file, signal) => {
-      if (!editor.canWrite()) return Promise.reject(new Error('Profile unavailable'));
-      return upload(accountId, file, signal);
-    };
+    const guardedUpload: AvatarUpload = (accountId, file, signal, intent, onStage) =>
+      upload(accountId, file, signal, intent, onStage);
     const guardedResume: AvatarResume | undefined =
-      resume &&
-      ((mediaId, file, signal) => {
-        if (!editor.canWrite()) return Promise.reject(new Error('Profile unavailable'));
-        return resume(mediaId, file, signal);
-      });
-    return new ProfileAvatarUpload(editor, guardedUpload, URL, guardedResume);
+      resume && ((mediaId, file, signal) => resume(mediaId, file, signal));
+    const readAdvice: AvatarAdviceRead =
+      upload === uploadAvatar
+        ? readSiteAvatarUploadAdvice
+        : async () => {
+            const accountId = editor.snapshot().draft?.accountId;
+            if (!accountId) throw new Error('unavailable');
+            return admittedAdvice(accountId);
+          };
+    return new ProfileAvatarUpload(editor, guardedUpload, URL, guardedResume, readAdvice);
   }, [editor, upload, resume]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   useLayoutEffect(() => {
@@ -39,6 +63,7 @@ export function useProfileAvatarUpload(
     controller,
     state,
     canInteract: () => !closed && editor.canWrite(),
+    canUpload: () => !closed && controller.canUpload(),
     blocked: ['preparing', 'crop', 'original-only', 'exporting', 'uploading', 'error'].includes(state.phase),
   };
 }
@@ -64,8 +89,15 @@ function avatarStatus(
   state: ReturnType<ProfileAvatarUpload['snapshot']>,
   avatar: ProfileValues['avatar'],
   changed: boolean,
+  saving: boolean,
 ) {
-  if (state.phase === 'uploading') return m.settings_profile_uploading();
+  if (saving && (state.phase === 'ready' || changed)) return m.settings_profile_avatar_saving();
+  if (state.phase === 'uploading') {
+    if (state.stage === 'reservation') return m.settings_profile_avatar_reserving();
+    if (state.stage === 'transfer') return m.settings_profile_avatar_transferring();
+    if (state.stage === 'processing') return m.settings_profile_avatar_processing();
+    return m.settings_profile_uploading();
+  }
   if (state.phase === 'preparing' || state.phase === 'exporting') return m.settings_profile_crop_preparing();
   if (state.cropIssue === 'decode') return m.settings_profile_crop_decode_error();
   if (state.cropIssue === 'encode') return m.settings_profile_crop_encode_error();
@@ -74,6 +106,8 @@ function avatarStatus(
   if (state.phase === 'ready') return m.settings_profile_avatar_ready();
   if (state.phase === 'error') return avatarFailure(state.failure?.reason);
   if (changed) return avatar ? m.settings_profile_avatar_draft() : m.settings_profile_avatar_removal();
+  if ((state.advice === 'unavailable' || state.advice === 'denied') && !avatar)
+    return m.settings_profile_avatar_unavailable();
   return avatar ? m.settings_profile_avatar_saved() : m.settings_profile_avatar_empty();
 }
 
@@ -83,11 +117,15 @@ export function ProfileAvatar({
   known,
   upload,
   disabled,
+  referenceDisabled = disabled,
+  saving = false,
 }: {
   avatar: ProfileValues['avatar'];
   known: ProfileValues['avatar'];
   upload: ReturnType<typeof useProfileAvatarUpload>;
   disabled: boolean;
+  referenceDisabled?: boolean;
+  saving?: boolean;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -98,7 +136,9 @@ export function ProfileAvatar({
   const selected = local || state.phase === 'preparing' || state.phase === 'original-only';
   const localPreview = local && state.phase !== 'preparing' && state.phase !== 'original-only';
   const changed = avatarMedia(avatar) !== avatarMedia(known);
-  const status = avatarStatus(state, avatar, changed);
+  const status = avatarStatus(state, avatar, changed, saving);
+  const chooseDisabled = disabled || !upload.canUpload();
+  const editDisabled = referenceDisabled;
   return (
     <div role="group" aria-labelledby={`${id}-label`} className="space-y-3">
       <p id={`${id}-label`} className="text-sm font-medium">
@@ -149,9 +189,9 @@ export function ProfileAvatar({
           type="button"
           variant="outline"
           className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-          disabled={disabled}
+          disabled={chooseDisabled}
           onClick={() => {
-            if (upload.canInteract()) input.current?.click();
+            if (upload.canUpload()) input.current?.click();
           }}
         >
           {m.settings_profile_choose_avatar()}
@@ -162,9 +202,9 @@ export function ProfileAvatar({
           type="file"
           accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
           aria-label={m.settings_profile_choose_avatar()}
-          disabled={disabled}
+          disabled={chooseDisabled}
           onChange={(event) => {
-            if (!upload.canInteract()) return;
+            if (!upload.canUpload()) return;
             controller.choose(event.target.files?.[0]);
             event.target.value = '';
           }}
@@ -176,7 +216,7 @@ export function ProfileAvatar({
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled}
             onClick={() => {
-              if (!upload.canInteract()) return;
+              if (disabled) return;
               controller.cancel();
               choose.current?.focus();
             }}
@@ -188,9 +228,9 @@ export function ProfileAvatar({
           <Button
             type="button"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-            disabled={disabled}
+            disabled={chooseDisabled}
             onClick={() => {
-              if (upload.canInteract()) controller.useOriginal();
+              if (upload.canUpload()) controller.useOriginal();
             }}
           >
             {m.settings_profile_crop_use_original()}
@@ -203,7 +243,7 @@ export function ProfileAvatar({
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
             disabled={disabled || waiting}
             onClick={() => {
-              if (!upload.canInteract()) return;
+              if (disabled) return;
               controller.retry();
               choose.current?.focus();
             }}
@@ -216,7 +256,7 @@ export function ProfileAvatar({
             type="button"
             variant="outline"
             className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2"
-            disabled={disabled}
+            disabled={editDisabled}
             onClick={() => {
               if (!upload.canInteract()) return;
               controller.remove();

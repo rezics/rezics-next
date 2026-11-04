@@ -1,4 +1,11 @@
-import { UploadRefusal } from '../threads/upload';
+import { parseAvatarUploadAdvice } from '../media/kernel';
+import {
+  createMediaReservationIntent,
+  readSiteAvatarUploadAdvice,
+  UploadRefusal,
+  type MediaReservationIntent,
+  type UploadStage,
+} from '../threads/upload';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
@@ -14,8 +21,16 @@ import {
   type AvatarCropPosition,
 } from './profile-avatar-crop.ts';
 
-export type AvatarUpload = (accountId: string, file: File, signal: AbortSignal) => Promise<{ src: string }>;
+export type AvatarUpload = (
+  accountId: string,
+  file: File,
+  signal: AbortSignal,
+  intent?: MediaReservationIntent,
+  onStage?: (stage: UploadStage) => void,
+) => Promise<{ src: string }>;
 export type AvatarResume = (mediaId: string, file: File, signal: AbortSignal) => Promise<{ src: string }>;
+export type AvatarAdviceRead = (signal: AbortSignal) => Promise<unknown>;
+export type AvatarAdviceState = 'loading' | 'unavailable' | 'denied' | 'allowed';
 type Failure = Pick<UploadRefusal, 'reason' | 'retryAfter'>;
 type Avatar = ProfileValues['avatar'];
 type Selection = {
@@ -28,6 +43,7 @@ type Selection = {
   crop?: AvatarCropPosition;
   reservation?: string;
   media?: string;
+  intent?: MediaReservationIntent;
 };
 type UploadState = {
   phase: 'idle' | 'preparing' | 'crop' | 'original-only' | 'exporting' | 'uploading' | 'ready' | 'error' | 'cancelled';
@@ -36,6 +52,8 @@ type UploadState = {
   cropIssue?: AvatarCropIssue;
   failure?: Failure;
   retryAt?: number;
+  stage?: UploadStage;
+  advice?: AvatarAdviceState;
 };
 const idle: UploadState = { phase: 'idle', url: null };
 export const avatarMedia = (avatar: Avatar) => avatar?.media ?? null;
@@ -50,11 +68,14 @@ export class ProfileAvatarUpload {
   private retryAt = 0;
   private rateFailure: Failure | undefined;
   private preparation = 0;
+  private advice: AvatarAdviceState = 'loading';
+  private adviceRequest: AbortController | null = null;
   constructor(
     private editor: ProfileEditor,
     private upload: AvatarUpload,
     private urls: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL,
     private resume?: AvatarResume,
+    private readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice,
   ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -65,7 +86,10 @@ export class ProfileAvatarUpload {
   };
   private update(state: UploadState) {
     const failure = state.failure ?? this.rateFailure;
-    this.state = this.waiting() ? { ...state, retryAt: this.retryAt, ...(failure ? { failure } : {}) } : state;
+    this.state = {
+      ...(this.waiting() ? { ...state, retryAt: this.retryAt, ...(failure ? { failure } : {}) } : state),
+      advice: this.advice,
+    };
     this.listeners.forEach((listener) => listener());
   }
   private waiting() {
@@ -73,12 +97,42 @@ export class ProfileAvatarUpload {
   }
   connect() {
     this.connected = true;
+    void this.refreshAdvice();
     const unsubscribe = this.editor.subscribe(() => this.reconcile());
     return () => {
       this.connected = false;
       unsubscribe();
+      this.adviceRequest?.abort();
+      this.adviceRequest = null;
       this.clear();
     };
+  }
+  canUpload = () => this.advice === 'allowed' && !!this.live();
+  private live() {
+    const { draft, phase, attempt } = this.editor.snapshot();
+    return this.connected && draft && !attempt && !['saving', 'reloading', 'unavailable'].includes(phase)
+      ? draft
+      : null;
+  }
+  private async refreshAdvice() {
+    const request = new AbortController();
+    this.adviceRequest?.abort();
+    this.adviceRequest = request;
+    this.advice = 'loading';
+    this.update(this.state);
+    try {
+      const body = await this.readAdvice(request.signal);
+      if (this.adviceRequest !== request || !this.connected) return;
+      const accountId = this.editor.snapshot().draft?.accountId;
+      const parsed = accountId ? parseAvatarUploadAdvice(body, accountId) : null;
+      this.advice = !parsed ? 'unavailable' : parsed.allowedActions.length ? 'allowed' : 'denied';
+    } catch {
+      if (this.adviceRequest !== request || !this.connected) return;
+      this.advice = 'unavailable';
+    } finally {
+      if (this.adviceRequest === request) this.adviceRequest = null;
+      if (this.connected) this.update(this.state);
+    }
   }
   private clear() {
     // Invalidate ownership before abort listeners or a late promise can run.
@@ -95,18 +149,23 @@ export class ProfileAvatarUpload {
     this.update(idle);
   }
   private reconcile() {
-    const selection = this.selection;
-    if (!selection) return;
     const { draft, known, phase } = this.editor.snapshot();
-    if (!draft || draft.accountId !== selection.accountId || phase === 'unavailable') this.clear();
-    else if (selection.media && avatarMedia(known?.avatar ?? null) === selection.media) this.clear();
+    const selection = this.selection;
+    if (!draft || phase === 'unavailable') {
+      if (selection) this.clear();
+      return;
+    }
+    if (selection && draft.accountId !== selection.accountId) {
+      this.clear();
+      void this.refreshAdvice();
+      return;
+    }
+    if (!selection) return;
+    if (selection.media && avatarMedia(known?.avatar ?? null) === selection.media) this.clear();
     else if (avatarMedia(draft.avatar) !== (selection.media ?? avatarMedia(selection.before))) this.clear();
   }
   private editable() {
-    const { draft, phase, attempt } = this.editor.snapshot();
-    return this.connected && draft && !attempt && !['saving', 'reloading', 'unavailable'].includes(phase)
-      ? draft
-      : null;
+    return this.live();
   }
   cancel = () => {
     const draft = this.editable();
@@ -123,7 +182,7 @@ export class ProfileAvatarUpload {
     this.editor.edit({ avatar: null });
   };
   choose = (file: File | undefined) => {
-    if (!file || !this.editable()) return;
+    if (!file || !this.canUpload()) return;
     // Replacement restores only our prior avatar draft, preserving all other edits.
     this.cancel();
     const draft = this.editable();
@@ -185,6 +244,21 @@ export class ProfileAvatarUpload {
     !!this.selection &&
     (!this.selection.reservation || !!this.resume) &&
     !['type', 'too-large', 'rejected'].includes(this.state.failure?.reason ?? 'unavailable');
+  private bindIntent(selection: Selection) {
+    if (
+      selection.intent &&
+      selection.intent.file === selection.file &&
+      selection.intent.viewer === selection.accountId
+    )
+      return selection.intent;
+    selection.intent = createMediaReservationIntent(
+      { containerId: selection.accountId },
+      selection.file,
+      'avatar',
+      selection.accountId,
+    );
+    return selection.intent;
+  }
   private async send(selection: Selection) {
     // Replacing or clearing a selection never bypasses the native delay. Expiry does no IO.
     if (this.waiting()) {
@@ -193,13 +267,21 @@ export class ProfileAvatarUpload {
     }
     const reservation = selection.reservation;
     if (reservation && !this.resume) return;
+    if (!reservation && !this.canUpload()) return;
+    const intent = reservation ? selection.intent : this.bindIntent(selection);
     const request = new AbortController();
     this.request = request;
-    this.update({ phase: 'uploading', url: selection.url });
+    this.update({
+      phase: 'uploading',
+      url: selection.url,
+      stage: reservation ? 'transfer' : 'reservation',
+    });
     try {
       const result = reservation
         ? await this.resume!(reservation, selection.file, request.signal)
-        : await this.upload(selection.accountId, selection.file, request.signal);
+        : await this.upload(selection.accountId, selection.file, request.signal, intent, (stage) => {
+            if (this.owns(selection, request)) this.update({ phase: 'uploading', url: selection.url, stage });
+          });
       if (!this.owns(selection, request)) return;
       if (reservation && result.src !== reservation) throw new UploadRefusal('unavailable');
       selection.media = result.src;
