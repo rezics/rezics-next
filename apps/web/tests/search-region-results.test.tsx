@@ -28,6 +28,8 @@ const props: SearchResultsRegionProps = {
 test('the result region preserves mixed native identities and current loader context', () => {
   const html = renderToStaticMarkup(<SearchResultsRegion {...props} />);
   expect(html).toContain('data-search-results');
+  expect(html).toContain('data-search-window-current');
+  expect(html).toContain('Window 1');
   expect(html).toContain('data-search-coverage');
   expect(html).toContain('@mira');
   expect(html).toContain('/en/@mira');
