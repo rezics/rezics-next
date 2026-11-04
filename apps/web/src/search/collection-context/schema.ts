@@ -39,7 +39,7 @@ export const collectionPreview = v.variant('state', [
 ]);
 export const collectionFollows = v.variant('state', [
   v.strictObject({ state: v.literal('signed-out') }),
-  v.strictObject({ state: v.literal('unavailable'), reason: v.picklist(['identity', 'scope', 'changed', 'native']) }),
+  v.strictObject({ state: v.literal('unavailable'), reason: v.picklist(['identity', 'changed', 'native']) }),
   v.strictObject({
     state: v.literal('current'),
     accountId: id,

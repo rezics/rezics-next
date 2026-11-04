@@ -5,13 +5,13 @@ import { createCollectionRulesFixture, type CollectionRulesFixture } from './sup
 
 let f: CollectionRulesFixture;
 beforeAll(async () => {
-  f = await createCollectionRulesFixture(['follow:read', 'follow:create', 'follow:delete']);
+  f = await createCollectionRulesFixture(['follow:create', 'follow:delete']);
 }, 120000);
 afterAll(async () => {
   await f?.close();
 });
 
-test('private preparation rejects changed edges, withdrawn read permission and fenced reader authority', async () => {
+test('private preparation rejects changed edges, respects withdrawn write scopes and fences retired authority', async () => {
   const collection = await f.collection({ visibility: 'public' });
   const actor = await f.runtime.identity.access.authenticate(f.owner, {
     pool: f.database.pool,
@@ -24,7 +24,7 @@ test('private preparation rejects changed edges, withdrawn read permission and f
   const changing = {
     ...base,
     async prepare(...args: Parameters<NonNullable<typeof base.prepare>>) {
-      if (args[1] === 'follow:read' && ++preparations === 2)
+      if (args[1] === 'follow:create' && ++preparations === 2)
         expect((await f.send('PUT', `/v1/follows/${collection.id}`)).status).toBe(200);
       return base.prepare?.(...args);
     },
@@ -33,15 +33,14 @@ test('private preparation rejects changed edges, withdrawn read permission and f
     state: 'unavailable',
     reason: 'changed',
   });
-  const denied = {
-    ...base,
-    authorize: ((...args) =>
-      args[2] === 'follow:read' ? Promise.resolve(false) : base.authorize(...args)) satisfies typeof base.authorize,
-  };
-  expect(await readFollowDiscovery({ ...dependencies, access: denied }, actor, targets, Date.now() + 30000)).toEqual({
-    state: 'unavailable',
-    reason: 'identity',
-  });
+  expect(
+    await readFollowDiscovery(
+      dependencies,
+      actor.kind === 'account' ? { ...actor, scopes: [] } : actor,
+      targets,
+      Date.now() + 30000,
+    ),
+  ).toMatchObject({ state: 'current', rows: [{ following: true, actions: { follow: false, unfollow: false } }] });
   await f.database.admin.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
     routeOf(actor.accountId),
     actor.accountId,

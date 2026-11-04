@@ -19,7 +19,7 @@ export type FollowDiscoveryRow = FollowDiscoveryTarget &
   }>;
 export type FollowDiscovery =
   | Readonly<{ state: 'signed-out' }>
-  | Readonly<{ state: 'unavailable'; reason: 'identity' | 'scope' | 'changed' | 'native' }>
+  | Readonly<{ state: 'unavailable'; reason: 'identity' | 'changed' | 'native' }>
   | Readonly<{ state: 'current'; accountId: string; partition: number; rows: readonly FollowDiscoveryRow[] }>;
 export type FollowDiscoveryDependencies = Readonly<{ pool: Pool; access: Access; clock?: KernelClock }>;
 
@@ -51,19 +51,12 @@ export async function readFollowDiscovery(
   const route = routeOf(viewer.accountId);
   if (route === null || !Number.isSafeInteger(viewer.authnEpoch) || viewer.authnEpoch <= 0)
     return { state: 'unavailable', reason: 'identity' };
-  if (!viewer.scopes.includes('follow:read')) return { state: 'unavailable', reason: 'scope' };
   const partition = partitionOf(route);
   const snapshot = async () => {
     requireAccessDeadline(deadline);
     const context = { pool: dependencies.pool, deadline };
     // Foreign Access preparation completes before the account-home checkout.
-    const read = await accessCheck(
-      dependencies.access,
-      viewer,
-      'follow:read',
-      { route, id: viewer.accountId },
-      context,
-    );
+    // The existing own follow reader requires an authenticated account, without a read scope.
     const follow = viewer.scopes.includes('follow:create')
       ? await accessCheck(dependencies.access, viewer, 'follow:create', { route, id: viewer.accountId }, context)
       : null;
@@ -85,8 +78,7 @@ export async function readFollowDiscovery(
           account.kind !== 'actor' ||
           account.state !== 'active' ||
           account.fenced ||
-          account.minimumAuthnEpoch > BigInt(viewer.authnEpoch) ||
-          !(await read(client, time))
+          account.minimumAuthnEpoch > BigInt(viewer.authnEpoch)
         ) {
           await client.query('COMMIT');
           return null;

@@ -12,7 +12,7 @@ import {
 
 let f: CollectionRulesFixture;
 beforeAll(async () => {
-  f = await createCollectionRulesFixture(['follow:read', 'follow:create', 'follow:delete']);
+  f = await createCollectionRulesFixture(['follow:create', 'follow:delete']);
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -138,7 +138,7 @@ test('public curator and bounded ordered occurrences stay separate from account-
   expect(
     await readFollowDiscovery(
       dependencies(),
-      actor.kind === 'account' ? { ...actor, scopes: ['follow:read'] } : actor,
+      actor.kind === 'account' ? { ...actor, scopes: [] } : actor,
       targets,
       Date.now() + 30000,
     ),

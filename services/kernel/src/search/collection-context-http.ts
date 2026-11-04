@@ -59,7 +59,7 @@ export const FollowDiscoverySchema = t.Union([
   t.Object(
     {
       state: t.Literal('unavailable'),
-      reason: t.Union([t.Literal('identity'), t.Literal('scope'), t.Literal('changed'), t.Literal('native')]),
+      reason: t.Union([t.Literal('identity'), t.Literal('changed'), t.Literal('native')]),
     },
     closed,
   ),

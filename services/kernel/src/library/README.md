@@ -1970,7 +1970,7 @@ bytes per native batch, before the existing aggregate transport ceiling. No Libr
 `{ targetId, targetType: collection|space, source }` tuples, not index hints. It derives the home only from the explicit
 Account actor and returns signed-out, unavailable or current account/partition/rows with exact follow/unfollow advice.
 Two fresh home snapshots recheck active actor kind, fencing, authn epoch, partition incarnation and current own-account
-Access for the read and both write directions. One statement per round seeks <=100 complete `(route, account_id, target_id)` keys;
+Access for both write directions; reading one's own follow state uses the existing authenticated-account contract, without a read scope. One statement per round seeks <=100 complete `(route, account_id, target_id)` keys;
 there is no target scan or follower count. Source is <=1024 characters; envelopes exceeding 32768 UTF-8 bytes become
 unavailable. Advice is separate from the existing idempotent follow/unfollow commands, which still
 reauthorize native actor retirement and target readability. Other consumers must supply their own current target source.
