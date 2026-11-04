@@ -11,194 +11,107 @@ import type { RelationDefinition } from '../src/subject/relations';
 
 const property = 'wdt:P144';
 const context = '00000000-0000-8000-8000-000000000000';
-const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
-const messages: PageMessages = {
-  unknown: 'Unknown value',
-  none: 'No value',
-  unlabelled: 'Unlabelled subject',
-  sources: 'Sources',
-  aliases: 'Also known as',
-  search: 'Search',
-};
-const relations: Record<string, RelationDefinition> = {
-  [property]: { label: 'Based on', forwardLabel: 'Based on', group: 'derivation', symmetric: false },
-  'schema:author': { label: 'Author', forwardLabel: 'Author', group: 'credit', symmetric: false },
-  'schema:hasPart': { label: 'Part', forwardLabel: 'Part', group: 'membership', symmetric: false },
-  'wdt:P725': { label: 'Voice', forwardLabel: 'Voice', group: 'credit', symmetric: false },
-};
+const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const messages: PageMessages = { unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: 'Aliases', search: 'Search' };
+const relations: Record<string, RelationDefinition> = Object.fromEntries(
+  [property, 'schema:author', 'schema:hasPart', 'wdt:P725'].map((key) => [key, { label: 'Related', forwardLabel: 'Related', group: 'credit', symmetric: false }]),
+);
+const statement = (n: number, p: string, target: string) => ({
+  id: id(n), rank: 'normal' as const, property: { id: p, data_type: 'wikibase-item' as const },
+  value: { type: 'value' as const, content: target }, qualifiers: [], references: [],
+  rezics: { release: 'sha256:showcase', revision: 1 },
+});
 
-function statement(number: number, relation: string, target: string) {
-  return {
-    id: id(number),
-    rank: 'normal' as const,
-    property: { id: relation, data_type: 'wikibase-item' as const },
-    value: { type: 'value' as const, content: target },
-    qualifiers: [],
-    references: [],
-    rezics: { release: 'sha256:showcase', revision: 1 },
-  };
-}
-
-function relatedWork(type: string, label: string, locale: string) {
-  return { type, types: [type], labels: { [locale]: label }, cover: null };
-}
-
-function workRead(
-  workType: string,
-  workLabel: string,
-  workId: string,
-  destinationType: string,
-  destinationLabel: string,
-  destinationId: string,
-  locale: string,
-  contributors: { property: string; id: string; type: string; label: string }[] = [],
-): SubjectRead {
-  const statements = {
-    [property]: [statement(101, property, destinationId)],
-    ...Object.fromEntries(contributors.map((entry, index) => [entry.property, [statement(200 + index, entry.property, entry.id)]])),
-  };
+function read(type: string, label: string, work: string, destinationType: string, destination: string, destinationId: string,
+  entries: { property: string; id: string; type: string; label: string }[] = []): SubjectRead {
+  const relatedEntries = [[destinationId, destinationType, destination], ...entries.map((e) => [e.id, e.type, e.label])];
   return {
     subject: {
-      id: workId,
-      type: workType,
-      revision: 1,
-      release: 'sha256:showcase',
-      context,
-      labels: { [locale]: workLabel },
-      descriptions: {},
-      aliases: {},
-      resolution: {},
-      relationCounts: { [property]: 1 },
-      sourceRecords: [],
-      statements,
+      id: work, type, revision: 1, release: 'sha256:showcase', context, labels: { ja: label }, descriptions: {},
+      aliases: {}, resolution: {}, relationCounts: { [property]: 1 }, sourceRecords: [],
+      statements: Object.fromEntries([[property, [statement(101, property, destinationId)]],
+        ...entries.map((e, i) => [e.property, [statement(200 + i, e.property, e.id)]]),
+      ]),
     },
-    account: null,
-    summary: null,
-    related: {
-      [destinationId]: relatedWork(destinationType, destinationLabel, locale),
-      ...Object.fromEntries(contributors.map((entry) => [entry.id, relatedWork(entry.type, entry.label, locale)])),
-    },
+    account: null, summary: null,
+    related: Object.fromEntries(relatedEntries.map(([targetId, targetType, targetLabel]) => [targetId, {
+      type: targetType, types: [targetType], labels: { ja: targetLabel }, cover: null,
+    }])),
   };
 }
 
-function pageFor(read: SubjectRead): SubjectPageData {
+function pageFor(source: SubjectRead): SubjectPageData {
   const content = [
     { type: 'SubjectList', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8 } },
-    ...Object.keys(read.subject.statements)
-      .filter((key) => key !== property)
-      .map((key) =>
-        key === 'schema:author' || key === 'wdt:P725'
-          ? { type: 'Credits', props: { id: `credits-${key}`, property: key, limit: 8 } }
-          : { type: 'SubjectList', props: { id: `parts-${key}`, title: { en: 'Volumes or episodes' }, property: key, limit: 8 } },
-      ),
+    ...Object.keys(source.subject.statements).filter((key) => key !== property).map((key) => key === 'schema:author' || key === 'wdt:P725'
+      ? { type: 'Credits', props: { id: key, property: key, limit: 8 } }
+      : { type: 'SubjectList', props: { id: key, title: { en: 'Parts' }, property: key, limit: 8 } }),
   ];
   const document = { root: { props: {} }, content } as unknown as CompositionDocument;
-  const plan = planReads(platformRegistry, document, { subject: read.subject.id });
+  const plan = planReads(platformRegistry, document, { subject: source.subject.id });
   const reads: SubjectPageData['reads'] = {};
   for (const [key, planned] of Object.entries(plan.reads)) {
-    if (planned.kind === 'links') {
-      const entries = Object.entries(read.related).filter(([, target]) => target.type !== 'wd:Q689445');
-      const items = entries.map(([targetId, target], index) => ({
-        subject: targetId,
-        property: planned.property,
-        statement: id(500 + index),
-        label: Object.values(target.labels)[0] ?? '',
-        type: target.type ?? 'schema:Thing',
-        summary: {
-          id: targetId,
-          type: target.type ?? 'schema:Thing',
-          types: target.types ?? [],
-          label: { value: Object.values(target.labels)[0] ?? '', language: Object.keys(target.labels)[0] ?? 'en' },
-          creativeWork: true,
-          cover: target.cover,
-        },
-      }));
-      reads[key] = { status: 200, body: { links: items, count: { value: items.length, exact: true }, next: null } };
-    } else {
-      reads[key] = { status: 200, body: read };
-    }
+    if (planned.kind !== 'links') { reads[key] = { status: 200, body: source }; continue; }
+    const entries = Object.entries(source.related).filter(([, item]) => item.type !== 'wd:Q689445');
+    reads[key] = { status: 200, body: { links: entries.map(([targetId, item], i) => ({
+      subject: targetId, property: planned.property, statement: id(500 + i), label: Object.values(item.labels)[0] ?? '',
+      type: item.type ?? 'schema:Thing', summary: { id: targetId, type: item.type ?? 'schema:Thing', types: item.types ?? [],
+        label: { value: Object.values(item.labels)[0] ?? '', language: 'ja' }, creativeWork: true, cover: item.cover },
+    })), count: { value: entries.length, exact: true }, next: null } };
   }
-  return {
-    subject: read.subject.id,
-    profile: read.subject.release,
-    template: { scope: 'type', key: read.subject.type },
-    document,
-    views: ['overview', 'relations', 'editions', 'contents', 'credits', 'characters'],
-    reads,
-  } satisfies SubjectPageData;
+  return { subject: source.subject.id, profile: source.subject.release, template: { scope: 'type', key: source.subject.type },
+    document, views: ['overview', 'relations', 'editions', 'contents', 'credits', 'characters'], reads } satisfies SubjectPageData;
 }
 
-async function renderPage(page: SubjectPageData, locale: string) {
+async function render(source: SubjectRead) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  const route = createRootRoute({
-    component: () =>
-      createElement(SubjectPage, {
-        page,
-        locale,
-        view: 'overview',
-        messages,
-        relations,
-        renderJsonLd: false,
-      }),
-  });
+  const route = createRootRoute({ component: () => createElement(SubjectPage, {
+    page: pageFor(source), locale: 'ja', view: 'overview', messages, relations, renderJsonLd: false,
+  }) });
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();
-  const markup = renderToStaticMarkup(
-    createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
-  );
-  client.clear();
-  router.dispose();
-  return markup;
+  const html = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+  client.clear(); router.dispose();
+  return html;
 }
+const link = (html: string, target: string) => new RegExp(`<a\\b[^>]*href="([^"]*${target}[^"]*)"[^>]*>([\\s\\S]*?)<\\/a>`).exec(html);
 
-function destinationLink(markup: string, targetId: string) {
-  return new RegExp(`<a\\b[^>]*href="([^"]*${targetId}[^"]*)"[^>]*>([\\s\\S]*?)<\\/a>`).exec(markup);
-}
-
-test('the Subject composition joins VN, anime and book readers with localized admitted-work links and safe returns', async () => {
-  const vnId = id(1);
-  const animeId = id(2);
-  const bookId = id(3);
-  const vn = workRead('wd:Q689445', '原作ビジュアルノベル', vnId, 'schema:TVSeries', '港のアニメ', animeId, 'ja');
-  const anime = workRead('schema:TVSeries', '港のアニメ', animeId, 'schema:Book', '港の小説', bookId, 'ja', [
+test('Subject composition joins the VN, anime and book with localized, disclosed links and safe return', async () => {
+  const vnId = id(1), animeId = id(2), bookId = id(3);
+  const vn = read('wd:Q689445', '原作ビジュアルノベル', vnId, 'schema:TVSeries', '港のアニメ', animeId);
+  const anime = read('schema:TVSeries', '港のアニメ', animeId, 'schema:Book', '港の小説', bookId, [
     { property: 'wdt:P725', id: id(11), type: 'schema:Person', label: '出演者' },
+    { property: 'schema:hasPart', id: id(14), type: 'schema:TVEpisode', label: '第一話' },
   ]);
-  const book = workRead('schema:Book', '港の小説', bookId, 'wd:Q689445', '原作ビジュアルノベル', vnId, 'ja', [
+  const book = read('schema:Book', '港の小説', bookId, 'wd:Q689445', '原作ビジュアルノベル', vnId, [
     { property: 'schema:author', id: id(12), type: 'schema:Person', label: '作家' },
     { property: 'schema:hasPart', id: id(13), type: 'schema:Book', label: '第一巻' },
   ]);
 
-  const vnMarkup = await renderPage(pageFor(vn), 'ja');
-  expect(vnMarkup).toContain('data-slot="game-reader"');
-  expect(vnMarkup).toContain('data-slot="work-franchise"');
-  const animeLink = destinationLink(vnMarkup, animeId)!;
-  const animeUrl = new URL(animeLink[1]!.replaceAll('&amp;', '&'), 'https://site.test');
-  expect(animeLink[2]).toContain('映像作品');
-  expect(animeLink[2]).toContain('港のアニメ');
+  const vnHtml = await render(vn), animeUrl = new URL(link(vnHtml, animeId)![1]!.replaceAll('&amp;', '&'), 'https://site.test');
+  expect(vnHtml).toContain('data-slot="game-reader"');
+  expect(link(vnHtml, animeId)?.[2]).toContain('映像作品');
   expect(animeUrl.pathname).toMatch(new RegExp(`^/ja/subjects/${animeId}/`));
-  expect(animeUrl.searchParams.get('via')).toMatch(new RegExp(`^/ja/subjects/${vnId}/`));
-  expect(animeUrl.searchParams.get('via')).toMatch(/#connections$/);
-  expect(animeLink[0]).not.toContain('target="_blank"');
+  expect(animeUrl.searchParams.get('via')).toMatch(new RegExp(`^/ja/subjects/${vnId}/.*#connections$`));
+  expect(link(vnHtml, animeId)?.[0]).not.toContain('target="_blank"');
 
-  const animeMarkup = await renderPage(pageFor(anime), 'ja');
-  expect(animeMarkup).toContain('data-slot="screen-profile-reader"');
-  expect(destinationLink(animeMarkup, bookId)?.[2]).toContain('港の小説');
-  expect(animeMarkup).toContain('出演者');
+  const animeHtml = await render(anime);
+  expect(animeHtml).toContain('data-slot="screen-profile-reader"');
+  expect(animeHtml).toContain('港の小説');
+  expect(animeHtml).toContain('出演者');
+  expect(animeHtml).toContain('第一話');
+  const bookHtml = await render(book);
+  expect(bookHtml).toContain('data-slot="literary-reader"');
+  expect(bookHtml).toContain('原作ビジュアルノベル');
+  expect(bookHtml).toContain('作家');
+  expect(bookHtml).toContain('第一巻');
 
-  const bookMarkup = await renderPage(pageFor(book), 'ja');
-  expect(bookMarkup).toContain('data-slot="literary-reader"');
-  expect(destinationLink(bookMarkup, vnId)?.[2]).toContain('原作ビジュアルノベル');
-  expect(bookMarkup).toContain('作家');
-  expect(bookMarkup).toContain('第一巻');
-
-  const replacement = workRead('wd:Q689445', '別のビジュアルノベル', vnId, 'schema:TVSeries', '別のアニメ', id(20), 'ja');
-  const replacementMarkup = await renderPage(pageFor(replacement), 'ja');
-  expect(replacementMarkup).toContain('別のアニメ');
-  expect(destinationLink(replacementMarkup, animeId)).toBeNull();
-
-  const withheld = workRead('wd:Q689445', '原作ビジュアルノベル', vnId, 'schema:TVSeries', '非公開のアニメ', animeId, 'ja');
+  const replacement = await render(read('wd:Q689445', '別のビジュアルノベル', vnId, 'schema:TVSeries', '別のアニメ', id(20)));
+  expect(replacement).toContain('別のアニメ');
+  expect(link(replacement, animeId)).toBeNull();
+  const withheld = read('wd:Q689445', '原作ビジュアルノベル', vnId, 'schema:TVSeries', '非公開のアニメ', animeId);
   withheld.related = {};
-  const withheldMarkup = await renderPage(pageFor(withheld), 'ja');
-  expect(withheldMarkup).not.toContain('data-slot="work-franchise"');
-  expect(withheldMarkup).not.toContain(animeId);
+  const withheldHtml = await render(withheld);
+  expect(withheldHtml).not.toContain('data-slot="work-franchise"');
+  expect(withheldHtml).not.toContain(animeId);
 });
