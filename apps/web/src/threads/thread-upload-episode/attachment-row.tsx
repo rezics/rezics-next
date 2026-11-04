@@ -6,7 +6,7 @@ import type { AttachmentObservation } from './attachments';
 
 function status(observation: AttachmentObservation | undefined, failed: boolean): string {
   if (failed && observation?.stage === 'insertion') return m.thread_attachment_insertion_failed();
-  if (!observation) return m.editor_upload_unavailable();
+  if (!observation) return failed ? m.editor_upload_unavailable() : m.editor_uploading();
   switch (observation.stage) {
     case 'reservation':
       return m.thread_attachment_reserving();
@@ -52,24 +52,28 @@ export function ComposerAttachmentRow({
   const label = useId();
   const input = useRef<HTMLInputElement>(null);
   const host = useRef<HTMLDivElement>(null);
-  const failed = attachment.phase === 'failed';
+  const failed = attachment.phase === 'failed' || observation?.stage === 'failed';
   const insertionFailed = failed && observation?.stage === 'insertion';
   const retry =
-    failed && (insertionFailed || observation?.recovery === 'exact' || observation?.recovery === 'known-media');
+    attachment.phase === 'failed' &&
+    (insertionFailed || observation?.recovery === 'exact' || observation?.recovery === 'known-media');
   // An uncertain reserve cannot be disguised as a fresh command. Definitive local
   // validation/native rejection and a still-running selection can be replaced.
   const replace = !failed || insertionFailed || observation?.recovery === 'replace';
-  function focusEditor() {
+  function deliberate(operation: () => void) {
     if (!current()) return;
-    host.current?.closest('[data-slot="rich-text-editor"]')?.querySelector<HTMLElement>('.ProseMirror')?.focus();
-  }
-  function dismiss() {
-    if (!current()) return;
-    const editor = host.current?.closest('[data-slot="rich-text-editor"]')?.querySelector<HTMLElement>('.ProseMirror');
+    const element = host.current;
+    const editor = element?.closest('[data-slot="rich-text-editor"]')?.querySelector<HTMLElement>('.ProseMirror');
     const focused = document.activeElement;
-    actions.dismiss();
-    // Synchronous deliberate action only. A later user focus action always wins.
-    if (focused && host.current?.contains(focused) && current()) editor?.focus();
+    const returning = focused && element?.contains(focused);
+    operation();
+    // Restore synchronously only for this control. No delayed focus competes with a later action.
+    if (
+      returning &&
+      current() &&
+      (document.activeElement === focused || (!focused.isConnected && document.activeElement === document.body))
+    )
+      editor?.focus();
   }
   return (
     <div ref={host} role="group" aria-labelledby={label} className="my-2 min-w-0 rounded-md border p-3 text-sm">
@@ -100,16 +104,18 @@ export function ComposerAttachmentRow({
             variant="secondary"
             className="h-auto min-h-11 whitespace-normal"
             onClick={() => {
-              if (current()) {
-                actions.retry();
-                focusEditor();
-              }
+              deliberate(actions.retry);
             }}
           >
             {m.editor_retry_upload()}
           </Button>
         ) : null}
-        <Button type="button" variant="ghost" className="h-auto min-h-11 whitespace-normal" onClick={dismiss}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-auto min-h-11 whitespace-normal"
+          onClick={() => deliberate(actions.dismiss)}
+        >
           {m.editor_dismiss_upload()}
         </Button>
         {replace ? (
@@ -136,10 +142,7 @@ export function ComposerAttachmentRow({
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
-            if (file && current()) {
-              actions.replace(file);
-              focusEditor();
-            }
+            if (file) deliberate(() => actions.replace(file));
           }}
         />
       ) : null}
