@@ -1059,11 +1059,13 @@ export { initializeResourceGrants } from './resource-initialization.ts';
 export { resourceRoleHeld } from './resource-role-held.ts';
 export {
   readRealmOwnershipRoles,
+  readRealmOwnerLeaveObservation,
   assertRealmOwnerMayLeave,
   RealmLastOwnerError,
   createRealmOwnershipCommands,
   readAppliedRealmErasureSuccession,
   type AppliedRealmErasureSuccession,
+  type RealmOwnerLeaveObservation,
   type RealmErasureSuccessionInput,
   type RealmErasureSuccessionSource,
   type PreparedRealmErasureSuccession,

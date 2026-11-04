@@ -10,6 +10,7 @@ import {
 } from './community-driver.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { createRealmViewerObservation } from '../../src/community/own-realms-viewer.ts';
+import { REALM_OWNER_ROLE } from '../../src/access/realm-ownership.ts';
 import type { Account, CommunityDriver, Fixture } from '../../../../specs/community-driver.ts';
 import { routeOf } from '../../src/route/route.ts';
 
@@ -24,6 +25,22 @@ afterAll(async () => {
 });
 
 const key = () => JSON.stringify(crypto.randomUUID());
+async function grantOwner(realmId: string, accountId: string) {
+  const result = await driver.request({
+    actor: fixture.owner,
+    method: 'POST',
+    path: '/v1/roleGrants',
+    key: key(),
+    body: {
+      resource: { route: routeOf(realmId)!, id: realmId },
+      subject: { kind: 'account', id: accountId },
+      role: REALM_OWNER_ROLE,
+      valid: '(,)',
+    },
+  });
+  expect(result.status).toBe(201);
+  await driver.settle();
+}
 async function inventory(actor: Account) {
   // Exercise the installed generated response against the production handler.
   const client = createKernelClient('https://community.test', {
@@ -204,7 +221,7 @@ test('current native identity and presentation follow membership completion and 
   ).toBe(200);
   expect(owned.current.actions.leave).toEqual({
     state: 'unavailable',
-    reason: 'owner_invariant_observation_unavailable',
+    reason: 'last_explicit_holder',
   });
   expect(
     (
@@ -215,6 +232,23 @@ test('current native identity and presentation follow membership completion and 
       })
     ).status,
   ).toBe(409);
+  await grantOwner(realm.realmId, fixture.member.id);
+  const permitted = (await inventory(fixture.owner)).items.find((item) => item.realmId === realm.realmId)!;
+  expect(permitted.current.actions.leave).toMatchObject({
+    state: 'available',
+    method: 'DELETE',
+    path: membership,
+    expectedStatus: 202,
+  });
+  const leaveAdvice = permitted.current.actions.leave;
+  if (leaveAdvice.state !== 'available' || leaveAdvice.method !== 'DELETE')
+    throw new Error('Permitted owner leave advice is unavailable');
+  const leaveIntent = { actor: fixture.owner, method: leaveAdvice.method, path: leaveAdvice.path, key: key() };
+  expect((await driver.request(leaveIntent)).status).toBe(202);
+  await driver.settle();
+  expect((await inventory(fixture.owner)).items.some((item) => item.realmId === realm.realmId)).toBe(false);
+  expect((await driver.request(leaveIntent)).status).toBe(202);
+  expect((await driver.commandEvidence(fixture.owner, leaveIntent.key)).receipts).toHaveLength(1);
   expect((await inventory(fixture.outsider)).items).toEqual([]);
 
   const lifecycle = await driver.request({
