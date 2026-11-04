@@ -1,9 +1,13 @@
 import { expect, mock, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { musicContextKind, readMusicContext } from '../src/features/catalogue/music-context-profile';
 import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
+import { MusicContextProfile } from '../src/features/pages/music-context-profile';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -25,7 +29,7 @@ function admit(release: Release) {
       listPresentation: { imageAspect: 'portrait', keyFacts: [] },
     };
   };
-  type('schema:Place', 'place', ['schema:startDate', 'schema:location', 'wdt:P1619']);
+  type('schema:Place', 'place', ['schema:startDate', 'schema:location', 'wdt:P1619', 'wdt:P9000', 'wdt:P9001', 'wdt:P9002']);
   type('schema:Event', 'event', ['schema:startDate', 'schema:location']);
   type('schema:MusicInstrument', 'instrument', ['schema:name']);
   const time = {
@@ -56,6 +60,8 @@ function admit(release: Release) {
     iri: 'http://www.wikidata.org/prop/direct/P1619',
     labels: { en: 'date of official opening' },
   };
+  for (const [id, label] of [['wdt:P9000', 'unsupported precision'], ['wdt:P9001', 'unsupported calendar'], ['wdt:P9002', 'unsupported uncertainty']])
+    release.properties[id] = { ...time, iri: `http://www.wikidata.org/prop/direct/${id.slice(4)}`, labels: { en: label } };
   return release;
 }
 
@@ -76,7 +82,17 @@ function placeRead(): SubjectRead {
             id: '00000000-0000-4000-8000-00000000e031',
             rank: 'normal',
             property: { id: 'schema:startDate', data_type: 'time' },
-            value: { type: 'value', content: { time: '+1999-00-00T00:00:00Z', precision: 9 } },
+            value: {
+              type: 'value',
+              content: {
+                time: '+1999-00-00T00:00:00Z',
+                precision: 9,
+                calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+                timezone: -300,
+                before: 2,
+                after: 1,
+              },
+            },
             qualifiers: [],
             references: [],
           },
@@ -101,6 +117,30 @@ function placeRead(): SubjectRead {
             references: [],
           },
         ],
+      'wdt:P9000': [
+        {
+          id: '00000000-0000-4000-8000-00000000e034', rank: 'normal',
+          property: { id: 'wdt:P9000', data_type: 'time' },
+          value: { type: 'value', content: { time: '+2001-05-00T00:00:00Z', precision: 12, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' } },
+          qualifiers: [], references: [],
+        },
+      ],
+      'wdt:P9001': [
+        {
+          id: '00000000-0000-4000-8000-00000000e035', rank: 'normal',
+          property: { id: 'wdt:P9001', data_type: 'time' },
+          value: { type: 'value', content: { time: '+2001-05-01T00:00:00Z', precision: 11, calendarmodel: 'https://example.org/calendar' } },
+          qualifiers: [], references: [],
+        },
+      ],
+      'wdt:P9002': [
+        {
+          id: '00000000-0000-4000-8000-00000000e036', rank: 'normal',
+          property: { id: 'wdt:P9002', data_type: 'time' },
+          value: { type: 'value', content: { time: '+2001-05-01T00:00:00Z', precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727', before: -1 } },
+          qualifiers: [], references: [],
+        },
+      ],
       },
       resolution: {},
       relationCounts: {},
@@ -133,7 +173,7 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                   qualifiers: [
                     {
                       property: { id: 'schema:startDate', data_type: 'time' },
-                      value: { type: 'value', content: { time: '+2001-05-00T00:00:00Z', precision: 10 } },
+                      value: { type: 'value', content: { time: '+2001-05-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985786' } },
                     },
                   ],
                   references: [],
@@ -150,7 +190,7 @@ function client(mode: 'ok' | 'unreadable' | 'denied') {
                   qualifiers: [
                     {
                       property: { id: 'schema:startDate', data_type: 'time' },
-                      value: { type: 'value', content: { time: '+2002-00-00T00:00:00Z', precision: 9 } },
+                      value: { type: 'value', content: { time: '+2002-01-01T00:00:00Z', precision: 11, calendarmodel: 'https://example.org/calendar' } },
                     },
                   ],
                   references: [],
@@ -191,10 +231,35 @@ test('music context keeps two events at a place, dated recordings, partial dates
   const read = await readMusicContext(client('ok'), 'Bearer reader', definitions, place, 'en', {});
   if (!read.ok) throw new Error('expected place');
   expect(read.kind).toBe('place');
-  expect(read.facts.some((fact) => fact.precision === '9' && fact.text === '1999')).toBe(true);
+  const timeFact = (property: string) => read.facts.find((fact) => fact.property === property)?.time;
+  expect(timeFact('schema:startDate')).toMatchObject({ state: 'supported', date: '+1999', precision: 9 });
+  expect(timeFact('wdt:P9000')).toMatchObject({ state: 'unsupported', reason: 'precision' });
+  expect(timeFact('wdt:P9001')).toMatchObject({ state: 'unsupported', reason: 'calendar' });
+  expect(timeFact('wdt:P9002')).toMatchObject({ state: 'unsupported', reason: 'uncertainty' });
+  expect(timeFact('wdt:P1619')).toMatchObject({ state: 'novalue' });
   expect(read.facts.some((fact) => fact.unknown)).toBe(true);
   expect(read.links.map((link) => link.label)).toEqual(['Spring concert', 'Autumn concert', 'Live']);
-  expect(read.links[0]?.date).toBe('2001-05');
+  expect(read.links[0]?.date).toMatchObject({ state: 'supported', date: '+2001-05', calendar: 'julian' });
+  expect(read.links[1]?.date).toMatchObject({ state: 'unsupported', reason: 'calendar' });
+  const queryClient = new QueryClient();
+  const html = renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      createElement(MusicContextProfile, {
+        id: place,
+        locale: 'en',
+        initial: read,
+        transport: { read: async () => read },
+      }),
+    ),
+  );
+  queryClient.clear();
+  expect(html).toContain('+1999');
+  expect(html).toContain('Unsupported precision: 12');
+  expect(html).toContain('Unsupported calendar: https://example.org/calendar');
+  expect(html).toContain('Unsupported time uncertainty');
+  expect(html).not.toContain('Unknown date');
   const unread = await readMusicContext(client('unreadable'), 'Bearer reader', definitions, place, 'en', {});
   expect(unread.ok && unread.links.some((link) => link.unreadable)).toBe(true);
   expect(await readMusicContext(client('denied'), 'Bearer reader', definitions, place, 'en', {})).toEqual({

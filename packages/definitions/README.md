@@ -39,7 +39,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.5 is current, while release 1.0.0 through 1.0.4 bytes and their digests remain loadable for existing pins. Book
+is immutable: 1.0.6 is current, while release 1.0.0 through 1.0.5 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -182,6 +182,14 @@ boundary and remaining acceptance.
 `valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
 `releaseDigest(release)` returns `sha256:` followed by the SHA-256 digest of its
 RFC 8785 canonical JSON. Validate first: the digest function does not validate.
+
+### Wikidata time values
+
+Decision: Preserve signed 4–16 digit years at year, month and day precision on Gregorian and Julian calendars, with optional safe-integer timezone minutes and optional nonnegative safe-integer `before`/`after` fields; all other Wikibase time specializations remain explicitly unsupported.
+
+The portable time content is a closed object with required `time`, `precision` and `calendarmodel` fields. Its signed year uses Wikibase historical numbering and remains a string; month/day precision is not converted or filled in. The admitted calendar IRIs are Gregorian `Q1985727` and Julian `Q1985786`. Optional `timezone` is retained as signed integer minutes. Optional nonnegative `before` and `after` values are retained as uncertainty counts in the value's precision. Every integer is capped at JavaScript's safe-integer limit so JSON serialization remains exact. The old Gregorian-only portable schema remains accepted for pinned releases and existing stored values.
+
+This follows Wikibase's [time and quantity value model](https://www.mediawiki.org/wiki/Wikibase/DataModel), including its signed historical year numbering, calendar IRI, timezone and uncertainty fields, and the current [JSON datatype encodings](https://www.wikidata.org/wiki/Wikidata:Data_formats/JSON_datatype_encodings), which show the actual `time` and `quantity` value objects. Wikidata documents Gregorian and Julian as its current supported calendars in [Help:Dates](https://www.wikidata.org/wiki/Help:Dates). Values with another calendar, precision outside 9–11, or an unrepresentable uncertainty/timezone field receive a typed unsupported admission result.
 
 ### Exact quantities
 

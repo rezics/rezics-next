@@ -9,6 +9,10 @@ export type ScalarField =
   | 'state'
   | 'value'
   | 'date'
+  | 'calendar'
+  | 'timezone'
+  | 'before'
+  | 'after'
   | 'amount'
   | 'unit'
   | 'lowerBound'
@@ -30,16 +34,22 @@ function editableField(
   if (!editableScalar(definition)) return;
   const schema = isRecord(definition.value) ? definition.value : {};
   const properties = isRecord(schema.properties) ? schema.properties : {};
-  if (
-    definition.datatype === 'time' &&
-    (!isRecord(properties.calendarmodel) ||
-      properties.calendarmodel.const !== 'http://www.wikidata.org/entity/Q1985727')
-  )
-    return;
+  if (definition.datatype === 'time') {
+    const calendars = isRecord(properties.calendarmodel)
+      ? Array.isArray(properties.calendarmodel.enum)
+        ? properties.calendarmodel.enum
+        : [properties.calendarmodel.const]
+      : [];
+    if (!calendars.includes('http://www.wikidata.org/entity/Q1985727') && !calendars.includes('http://www.wikidata.org/entity/Q1985786')) return;
+  }
   if (path === '/value' || path === '/value/type') return 'state';
   if (part.value.type !== 'value') return;
   if (definition.datatype === 'time') {
     if (['/value/content', '/value/content/time', '/value/content/precision'].includes(path)) return 'date';
+    if (path === '/value/content/calendarmodel') return 'calendar';
+    if (path === '/value/content/timezone') return 'timezone';
+    if (path === '/value/content/before') return 'before';
+    if (path === '/value/content/after') return 'after';
   } else if (definition.datatype === 'quantity') {
     if (path === '/value/content') return 'value';
     if (path === '/value/content/amount') return 'amount';
@@ -77,6 +87,10 @@ export function presentStatementViolations(
     state: m.correction_value_state({}, o),
     value: m.correction_value({}, o),
     date: m.correction_date({}, o),
+    calendar: m.correction_calendar({}, o),
+    timezone: m.correction_timezone({}, o),
+    before: m.correction_before({}, o),
+    after: m.correction_after({}, o),
     amount: m.correction_amount({}, o),
     unit: m.correction_unit({}, o),
     lowerBound: m.correction_lower({}, o),

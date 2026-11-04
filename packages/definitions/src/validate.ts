@@ -338,9 +338,9 @@ function compareDecimal(left: string, right: string): number {
   return a.negative ? -magnitude : magnitude;
 }
 
-function dateExists(time: string, precision: number): boolean {
+function dateExists(time: string, precision: number, calendarmodel: unknown): boolean {
   const match = /^[+-]([0-9]{4,})-([0-9]{2})-([0-9]{2})T00:00:00Z$/.exec(time);
-  if (!match) return false;
+  if (!match || !/[1-9]/.test(match[1]!)) return false;
   const month = Number(match[2]);
   const day = Number(match[3]);
   if (precision === 9) return month === 0 && day === 0;
@@ -348,7 +348,10 @@ function dateExists(time: string, precision: number): boolean {
   if (precision === 10) return day === 0;
   // Divisibility by 400, 100 and 4 depends only on the last four year digits.
   const year = Number(match[1]!.slice(-4));
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const leap =
+    calendarmodel === 'http://www.wikidata.org/entity/Q1985786'
+      ? year % 4 === 0
+      : year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
   const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   return precision === 11 && day >= 1 && day <= days[month - 1]!;
 }
@@ -437,7 +440,8 @@ export function checkSubjectRelease(
       typeof content.time === 'string' &&
       typeof content.precision === 'number'
     ) {
-      if (!dateExists(content.time, content.precision)) add(`${pointer}/time`, 'invalid_format');
+      if (!dateExists(content.time, content.precision, content.calendarmodel))
+        add(`${pointer}/time`, 'invalid_format');
     } else if (property.datatype === 'wikibase-item' && typeof content === 'string') {
       items.push({ pointer, id: content, targets: property.targets! });
     }
@@ -495,7 +499,7 @@ function valueLimits(content: unknown, pointer: string): Violation[] {
     if (typeof content[key] === 'string' && content[key].length > 127)
       return [{ pointer: `${pointer}/${key}`, code: 'out_of_range' }];
   }
-  if (typeof content.time === 'string' && /^[+-]?[0-9]{17}/.test(content.time))
+  if (typeof content.time === 'string' && content.time.length > 33)
     return [{ pointer: `${pointer}/time`, code: 'out_of_range' }];
   return [];
 }

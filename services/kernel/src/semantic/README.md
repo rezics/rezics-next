@@ -27,6 +27,14 @@ projecting `subject.list_candidates`; the proposal operation is anchored to Glob
 editorial decision (`context:accept`) and selection (`context:adopt`) remain distinct, and command execution performs
 its normal native authorization again.
 
+### Wikidata time and quantity value admission
+
+`admitWikidataValue(input, property)` in `wikidata-value-admission.ts` is the receiving adapter for Imports. It accepts a Wikibase value snak or a DataValue wrapper and returns either an exact native value (`value`, `somevalue` or `novalue`) or `{ state: 'unsupported', reason }`. Missing input, unknown value, no-value, unsupported datatype and invalid content remain separate. Its output is still subject to the selected property's Definitions schema and `checkStatementInput`; it grants no permission and writes no parallel store. The importer supplies the real source reference and retains unsupported source data under its existing source-record owner.
+
+Time content is the closed portable shape `{ time, precision, calendarmodel, timezone?, before?, after? }`: signed 4–16 digit historical year strings, precision 9–11, Gregorian or Julian calendar IRI, safe-integer timezone minutes and safe nonnegative uncertainty counts. The timestamp stays a lexical string; no calendar conversion or day/month completion occurs. Quantity content keeps exact `amount`, optional `lowerBound`/`upperBound`, and unit strings; decimal fields retain the existing 127-character bound and disclosed unit behavior. `globe-coordinate`, lexeme values and other specialized types return typed unsupported results. See the [Definitions time value contract](../../../../packages/definitions/README.md#wikidata-time-values) for the admitted schema and primary Wikibase serialization references.
+
+Admission is linear in at most the native 1,048,576-byte request-body limit. The native statement validator caps one Subject at 512 facts, each statement at 16 qualifiers and 16 references, and each reference at 16 parts; time lexical length is at most 33 characters and quantity amount/bounds at most 127. Native candidate/revision/item storage serializes these closed objects as JSON without converting numeric strings, so proposal, acceptance, adoption, current read and candidate-linked revision detail observe the same candidate identity and exact value. Existing statement execution stays generic and Definitions-driven.
+
 ## Public exposure boundary
 
 Existing active/released definitions, common editor/profile data, subject creation, proposal, acceptance,
