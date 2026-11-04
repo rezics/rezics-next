@@ -64,6 +64,7 @@ export function ClassificationsReader({
   }
   const visit = latest.current;
   const [result, update] = useState<{ visit: object; value: OwnClassificationsRead } | null>(null);
+  if (result && result.visit !== visit) update(null);
   const [pending, setPending] = useState<object | null>(null);
   const mounted = useRef(false);
   const inFlight = useRef<object | null>(null);

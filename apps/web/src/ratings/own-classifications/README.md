@@ -45,6 +45,9 @@ Every browser admission reads its exact raw frontier again, including both selec
 never admits rows. Account, credential/CSRF observation, exposure, locale, address and source replacement retire the
 visit. Abort signals and generation guards reject late reads and commands. Return starts a fresh admission.
 
+Decision: the route loader retains session preparation only, so router caches never accumulate private native rows;
+the mounted browser admission performs the single exact inventory read.
+
 The selected editor follows native `actions.state`, set, clear and readback advice. A visible binding mismatch offers
 no Clear; withheld withdrawal requires the producer's actual withdrawal advice and the native writer's preparation.
 Revoked SET scope cannot become withdrawal authority. Read-only and concealed rows never infer permission from a

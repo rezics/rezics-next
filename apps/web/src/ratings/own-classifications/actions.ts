@@ -34,11 +34,26 @@ async function prepareNativeClient() {
   }) : null };
 }
 
-export const readOwnClassificationsForViewer = createServerFn({ method: 'GET' })
-  .validator((input: unknown) =>
+const readFrontier = (input: unknown) =>
     input && typeof input === 'object' && !Array.isArray(input)
-      ? classificationFrontier(input as Record<string, unknown>) : null,
-  )
+      ? classificationFrontier(input as Record<string, unknown>) : null;
+
+/** Router loader caches retain only session preparation, never private inventory rows. */
+export const prepareOwnClassificationsVisit = createServerFn({ method: 'GET' })
+  .validator(readFrontier)
+  .handler(async ({ data }): Promise<OwnClassificationsRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const locale = requestLocale(getRequest()) ?? 'en';
+    if (!data) return unavailableOwnClassifications(null, locale, null, 'invalid-address');
+    try {
+      const session = await prepareNativeClient();
+      return unavailableOwnClassifications(data, locale, session.subject,
+        !session.subject ? 'signed-out' : session.client ? 'preparing' : 'unavailable');
+    } catch { return unavailableOwnClassifications(data, locale, null); }
+  });
+
+export const readOwnClassificationsForViewer = createServerFn({ method: 'GET' })
+  .validator(readFrontier)
   .handler(async ({ data }): Promise<OwnClassificationsRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const locale = requestLocale(getRequest()) ?? 'en';

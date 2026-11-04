@@ -4,7 +4,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import { executeClassificationIntent, reviewClassificationIntent, readOwnClassificationsForViewer } from '../../ratings/own-classifications/actions';
+import { executeClassificationIntent, reviewClassificationIntent, readOwnClassificationsForViewer, prepareOwnClassificationsVisit } from '../../ratings/own-classifications/actions';
 import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
 import { OwnVotesDeparture } from '../../ratings/own-votes/departure';
 import { useClassificationAddress } from '../../ratings/own-classifications/address';
@@ -22,7 +22,7 @@ export const Route = createFileRoute('/library/classification-assessments')({
     return frontier ? classificationSearch(frontier) : { invalidAddress: true };
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => readOwnClassificationsForViewer({ data: 'invalidAddress' in deps ? { cursor: '' } : deps }),
+  loader: ({ deps }) => prepareOwnClassificationsVisit({ data: 'invalidAddress' in deps ? { cursor: '' } : deps }),
   head: ({ match }) =>
     pageHead({ title: m.own_classifications_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: ClassificationAssessmentsRoute,
