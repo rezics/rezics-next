@@ -446,9 +446,21 @@ Operator-transfer read failures offer Retry within the same page view. A failed 
 attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
 fresh confirmation. Signed-out or changed accounts cannot act on it. Relation retries repeat only the failed read;
 after a submit failure, Retry reads the current relationship and leaves approval/execution in the original explicit
-reconciliation flow, retaining the request, operation key and references.
+reconciliation flow, retaining the request, operation key and references. If native execution may have occurred, its
+generic unresolved notice and Stay/Leave protection survive authority retirement and cached-page return. A current
+relationship observation never attributes that relationship to the earlier operation; an exact retry remains a
+separate, freshly reviewed and explicitly confirmed action using the retained descriptor.
 
-Decision: transfer departure protects meaningful input and unresolved review in memory with Stay/Leave; only a review created here and never submitted is discarded, while restored attempts are conservatively retained because approval may already have reached native. Caller replacement and permission loss retire local authority without prompting.
+Decision: browser authority retirement keeps only a generic stage summary in mounted state; the existing exact descriptor remains the sole recovery record, current-state review is query-only, and a matching relation never settles an unknown execution.
+
+An explicit current-state recovery action is bounded to one existing `/session` binding and one operator-transfer review
+request (2 Auth requests total), with zero approve or execute requests. Source execution uncertainty and acknowledged
+readback recovery read only the current relation; destination acceptance recovery rereads only destination advice.
+Unavailable reads can be retried deliberately. No polling or automatic command retry runs.
+
+Departure protects meaningful input and unresolved review with Stay/Leave; only a review created here and never
+submitted is discarded, while restored attempts are conservatively retained because approval may already have reached
+native. Caller replacement and permission loss retire local authority without prompting away an unresolved send.
 
 ## Rename account
 

@@ -55,7 +55,7 @@ function Fixture({
 }: {
   children: ReactNode;
   attempt?: TransferAttempt;
-  mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain';
+  mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain' | 'refused';
   tone?: 'light' | 'dark';
 }) {
   const [fixtureReady, setFixtureReady] = useState(false);
@@ -72,7 +72,10 @@ function Fixture({
       if (path === OPERATOR_TRANSFER_PAGE_PATH) {
         const input = JSON.parse(String(init?.body));
         if (input.kind === 'readiness')
-          return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } });
+          return Response.json({
+            viewer: { kind: mode === 'refused' ? 'refused' : 'ready' },
+            review: { kind: 'readiness' },
+          });
         if (mode === 'unavailable') return new Response(null, { status: 503 });
         if (input.kind === 'source') {
           if (mode === 'denied') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'refused' } });
@@ -134,7 +137,10 @@ function Fixture({
     </div>
   );
 }
-const page = (attempt?: TransferAttempt, mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain') => (
+const page = (
+  attempt?: TransferAttempt,
+  mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain' | 'refused',
+) => (
   <Fixture {...(attempt ? { attempt } : {})} {...(mode ? { mode } : {})}>
     <OperatorTransferPage initial={session} />
   </Fixture>
@@ -211,9 +217,43 @@ export const UncertainRestore = {
   render: () =>
     page({ ...source, phase: 'execute', acceptance: 'opaque-acceptance', reference: 'original-approval' }, 'ready'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_recovery_source_unknown()));
+    if (canvasElement.textContent?.includes(source.request.previous.subjectAccountId))
+      throw new Error('A restored operation must stay private until current advice is reviewed.');
+    const review = [...canvasElement.querySelectorAll('button')].find(
+      (entry) => entry.textContent?.trim() === m.auth_transfer_recovery_review(),
+    );
+    review?.click();
     await hierarchy(canvasElement, '#transfer-confirm');
-    if (!canvasElement.querySelector('[role="alert"]')?.textContent?.includes(m.auth_transfer_uncertain()))
-      throw new Error('The restored uncertain result must remain visible outside the guide.');
+    if (!canvasElement.textContent?.includes(m.auth_transfer_recovery_source_unknown()))
+      throw new Error('Reviewing current state must keep the unknown source outcome visible.');
+  },
+};
+export const AcknowledgedReadbackRecovery = {
+  render: () =>
+    page({ ...source, phase: 'readback', acceptance: 'opaque-acceptance', reference: 'opaque-approval' }, 'unavailable'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_recovery_acknowledged()));
+    const review = [...canvasElement.querySelectorAll('button')].find(
+      (entry) => entry.textContent?.trim() === m.auth_transfer_recovery_review(),
+    );
+    review?.click();
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_recovery_unavailable()));
+  },
+};
+export const DestinationAcceptanceRecovery = {
+  render: () => page({ ...source, side: 'destination', phase: 'accepted', reference: 'opaque-destination-acceptance' }, 'ready'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_recovery_destination()));
+  },
+};
+export const RetiredAuthority = {
+  render: () =>
+    page({ ...source, phase: 'execute', acceptance: 'opaque-acceptance', reference: 'opaque-approval' }, 'refused'),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_recovery_authority()));
+    if (canvasElement.textContent?.includes(source.request.previous.subjectAccountId))
+      throw new Error('A refused viewer must see no private transfer identity.');
   },
 };
 export const LongIdentifiers = {
