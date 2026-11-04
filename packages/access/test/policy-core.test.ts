@@ -14,7 +14,8 @@ import {
 } from '../src/index.ts';
 
 const compiled = compilePolicyCatalogue(vectors.catalogue as PolicyCatalogueInput);
-if (!compiled.ok) throw new Error(`Conformance catalogue failed: ${compiled.errors.map((error) => error.code).join(',')}`);
+if (!compiled.ok)
+  throw new Error(`Conformance catalogue failed: ${compiled.errors.map((error) => error.code).join(',')}`);
 
 for (const vector of vectors.cases) {
   test(`policy vector: ${vector.id}`, () => {
@@ -38,9 +39,7 @@ test('catalogue rejects duplicates and unknown role actions before evaluation', 
   expect(unknown).toMatchObject({ ok: false, errors: [{ code: 'unknown-role-action' }] });
 
   const unsupported = compilePolicyCatalogue({
-    actions: [
-      { action: 'test:read', anonymous: false, authority: 'delegated', resourceTypes: [], globalReach: false },
-    ],
+    actions: [{ action: 'test:read', anonymous: false, authority: 'delegated', resourceTypes: [], globalReach: false }],
     roles: [],
     resourceTypes: [],
   } as unknown as PolicyCatalogueInput);
@@ -48,13 +47,11 @@ test('catalogue rejects duplicates and unknown role actions before evaluation', 
 });
 
 test('invalid requests differ from missing evidence', () => {
-  expect(decidePolicy(compiled.catalogue, null as unknown as PolicyRequest, {} as PolicyFacts).decision).toBe('invalid');
+  expect(decidePolicy(compiled.catalogue, null as unknown as PolicyRequest, {} as PolicyFacts).decision).toBe(
+    'invalid',
+  );
   expect(
-    decidePolicy(
-      compiled.catalogue,
-      vectors.cases[0]!.request as PolicyRequest,
-      null as unknown as PolicyFacts,
-    ),
+    decidePolicy(compiled.catalogue, vectors.cases[0]!.request as PolicyRequest, null as unknown as PolicyFacts),
   ).toMatchObject({ decision: 'unavailable', reason: 'evidence' });
 });
 
@@ -85,5 +82,7 @@ test('temporal conformance uses exact half-open integer-microsecond intervals', 
   }
   expect(qualifyTemporalEvidence({ complete: true, intervals: [] }, '100')).toBe(false);
   expect(qualifyTemporalEvidence({ complete: false, intervals: [] }, '100')).toBeNull();
-  expect(qualifyTemporalEvidence({ complete: true, intervals: [] }, '1'.repeat(MAX_POLICY_TEMPORAL_INTEGER_CHARS + 1))).toBeNull();
+  expect(
+    qualifyTemporalEvidence({ complete: true, intervals: [] }, '1'.repeat(MAX_POLICY_TEMPORAL_INTEGER_CHARS + 1)),
+  ).toBeNull();
 });

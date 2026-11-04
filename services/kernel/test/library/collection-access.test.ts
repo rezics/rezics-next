@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createListPresentationFixture, type ListPresentationFixture } from '../semantic/support/list-presentation-fixture.ts';
+import {
+  createListPresentationFixture,
+  type ListPresentationFixture,
+} from '../semantic/support/list-presentation-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
 
 let fixture: ListPresentationFixture;
@@ -14,12 +17,7 @@ afterAll(async () => {
 }, 180_000);
 
 async function collection(title: string, visibility: 'private' | 'unlisted' | 'public') {
-  const created = await fixture.checked(
-    'POST',
-    '/v1/collections',
-    { title, visibility },
-    'editor',
-  );
+  const created = await fixture.checked('POST', '/v1/collections', { title, visibility }, 'editor');
   return created.collection as { id: string };
 }
 
@@ -30,8 +28,12 @@ test('native Collection reads keep public floors scopeless, private reads curato
 
   expect((await fixture.call('GET', `/v1/collections/${privateCollection.id}`, undefined, 'editor')).status).toBe(200);
   expect((await fixture.call('GET', `/v1/collections/${privateCollection.id}`, undefined, 'reader')).status).toBe(404);
-  expect((await fixture.call('GET', `/v1/collections/${privateCollection.id}`, undefined, 'anonymous')).status).toBe(404);
-  expect((await fixture.call('GET', `/v1/collections/${unlistedCollection.id}`, undefined, 'anonymous')).status).toBe(200);
+  expect((await fixture.call('GET', `/v1/collections/${privateCollection.id}`, undefined, 'anonymous')).status).toBe(
+    404,
+  );
+  expect((await fixture.call('GET', `/v1/collections/${unlistedCollection.id}`, undefined, 'anonymous')).status).toBe(
+    200,
+  );
   const publicRead = await fixture.call('GET', `/v1/collections/${publicCollection.id}`, undefined, 'anonymous');
   expect(publicRead.status).toBe(200);
   expect(JSON.stringify(publicRead.body)).not.toContain('explanation');

@@ -83,7 +83,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createKindAudienceOriginal, type KindOriginalProducer } from './kind-audience-original.ts';
 import { kindOriginalFormulaPlan } from './kind-audience-formula.ts';
 import { readExposure, GLOBAL_CONTEXT } from './gates/catalogue.ts';
-import { compileNativePolicyCatalogue, decideNativePermission, type NativePermissionProjection } from './policy-core.ts';
+import {
+  compileNativePolicyCatalogue,
+  decideNativePermission,
+  type NativePermissionProjection,
+} from './policy-core.ts';
 import type { PolicyCatalogue } from '@rezics/access';
 // Only the Kind original invocation needs a Source-eight-axis declaration for
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
@@ -1244,9 +1248,14 @@ export function createAccess(config: PermissionConfig): Access {
                   };
                   const projection = row as unknown as NativePermissionProjection;
                   const ordinary = decideNativePermission(policyCatalogue, { ...input, mode: 'ordinary' }, projection);
-                  const explicit = scope && identity.kind === 'account'
-                    ? decideNativePermission(policyCatalogue, { ...input, floor: false, mode: 'explicit' }, projection)
-                    : undefined;
+                  const explicit =
+                    scope && identity.kind === 'account'
+                      ? decideNativePermission(
+                          policyCatalogue,
+                          { ...input, floor: false, mode: 'explicit' },
+                          projection,
+                        )
+                      : undefined;
                   result[id] = Object.freeze({
                     allowed: ordinary.decision === 'allow',
                     explicit: explicit !== undefined && explicit.decision === 'allow',

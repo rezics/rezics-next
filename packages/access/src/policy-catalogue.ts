@@ -38,7 +38,10 @@ function dataArray(value: unknown, maximum: number): unknown[] | undefined {
   if (!Array.isArray(value) || value.length > maximum) return undefined;
   if (Object.getPrototypeOf(value) !== Array.prototype) return undefined;
   const own = Reflect.ownKeys(value);
-  if (own.length !== value.length + 1 || own.some((key) => key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key))))
+  if (
+    own.length !== value.length + 1 ||
+    own.some((key) => key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key)))
+  )
     return undefined;
   for (let index = 0; index < value.length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
@@ -64,13 +67,15 @@ export function compilePolicyCatalogue(input: PolicyCatalogueInput): PolicyCatal
     const rawRoles = dataArray(root.roles, MAX_POLICY_ACTIONS * MAX_POLICY_ROLE_REFERENCES_PER_ACTION);
     const rawTypes = dataArray(root.resourceTypes, MAX_POLICY_RESOURCE_TYPES);
     if (!rawActions || !rawRoles || !rawTypes) {
-      const code = Array.isArray(root.actions) && root.actions.length > MAX_POLICY_ACTIONS
-        ? 'too-many-actions'
-        : Array.isArray(root.resourceTypes) && root.resourceTypes.length > MAX_POLICY_RESOURCE_TYPES
-          ? 'too-many-resource-types'
-          : Array.isArray(root.roles) && root.roles.length > MAX_POLICY_ACTIONS * MAX_POLICY_ROLE_REFERENCES_PER_ACTION
-            ? 'too-many-role-references'
-            : 'invalid-input';
+      const code =
+        Array.isArray(root.actions) && root.actions.length > MAX_POLICY_ACTIONS
+          ? 'too-many-actions'
+          : Array.isArray(root.resourceTypes) && root.resourceTypes.length > MAX_POLICY_RESOURCE_TYPES
+            ? 'too-many-resource-types'
+            : Array.isArray(root.roles) &&
+                root.roles.length > MAX_POLICY_ACTIONS * MAX_POLICY_ROLE_REFERENCES_PER_ACTION
+              ? 'too-many-role-references'
+              : 'invalid-input';
       return { ok: false, errors: sortedErrors([{ code, index: 0 }]) };
     }
 
@@ -185,7 +190,13 @@ export function compilePolicyCatalogue(input: PolicyCatalogueInput): PolicyCatal
     }
     for (const [action, count] of actionRoleCounts) {
       if (count > MAX_POLICY_ROLE_REFERENCES_PER_ACTION) {
-        errors.push({ code: 'too-many-role-references', index: Math.max(0, actions.findIndex((item) => item.action === action)) });
+        errors.push({
+          code: 'too-many-role-references',
+          index: Math.max(
+            0,
+            actions.findIndex((item) => item.action === action),
+          ),
+        });
       }
     }
 
@@ -251,9 +262,15 @@ export function compilePolicyCatalogue(input: PolicyCatalogueInput): PolicyCatal
     }
 
     if (errors.length > 0) return { ok: false, errors: sortedErrors(errors) };
-    const sortedActions = Object.freeze([...actions].sort((left, right) => left.action < right.action ? -1 : left.action > right.action ? 1 : 0));
-    const sortedRoles = Object.freeze([...roles].sort((left, right) => left.role < right.role ? -1 : left.role > right.role ? 1 : 0));
-    const sortedTypes = Object.freeze([...resourceTypes].sort((left, right) => left.type < right.type ? -1 : left.type > right.type ? 1 : 0));
+    const sortedActions = Object.freeze(
+      [...actions].sort((left, right) => (left.action < right.action ? -1 : left.action > right.action ? 1 : 0)),
+    );
+    const sortedRoles = Object.freeze(
+      [...roles].sort((left, right) => (left.role < right.role ? -1 : left.role > right.role ? 1 : 0)),
+    );
+    const sortedTypes = Object.freeze(
+      [...resourceTypes].sort((left, right) => (left.type < right.type ? -1 : left.type > right.type ? 1 : 0)),
+    );
     const actionByName: Record<string, PolicyAction> = Object.create(null);
     const roleByName: Record<string, PolicyRole> = Object.create(null);
     const resourceTypeByName: Record<string, PolicyResourceType> = Object.create(null);

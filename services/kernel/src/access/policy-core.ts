@@ -55,8 +55,15 @@ export type NativePermissionProjection = Readonly<{
 
 function subject(
   row: NativePermissionProjection,
-  prefix: 'actor' | 'principal' | 'explicitActor' | 'explicitPrincipal' | 'globalActor' | 'globalPrincipal' |
-    'explicitGlobalActor' | 'explicitGlobalPrincipal',
+  prefix:
+    | 'actor'
+    | 'principal'
+    | 'explicitActor'
+    | 'explicitPrincipal'
+    | 'globalActor'
+    | 'globalPrincipal'
+    | 'explicitGlobalActor'
+    | 'explicitGlobalPrincipal',
 ): PolicySubjectFacts {
   const key = (name: string) => `${prefix}${name}` as keyof NativePermissionProjection;
   return {
@@ -68,10 +75,7 @@ function subject(
 }
 
 /** Project the one native Access registration into the standalone data catalogue. */
-export function compileNativePolicyCatalogue(
-  actions: ActionCatalogue,
-  roles: ResolvedResourceRoles,
-): PolicyCatalogue {
+export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: ResolvedResourceRoles): PolicyCatalogue {
   const typesByAction = new Map<string, Set<string>>();
   for (const [type, template] of roles.types) {
     const registeredRoles = [template.owner, ...template.standing].filter((role): role is string => role !== undefined);
@@ -98,7 +102,10 @@ export function compileNativePolicyCatalogue(
       standingRoles: [...template.standing],
     })),
   });
-  if (!result.ok) throw new TypeError(`Invalid native Access policy catalogue: ${result.errors.map((error) => error.code).join(',')}`);
+  if (!result.ok)
+    throw new TypeError(
+      `Invalid native Access policy catalogue: ${result.errors.map((error) => error.code).join(',')}`,
+    );
   return result.catalogue;
 }
 

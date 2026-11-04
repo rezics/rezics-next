@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
-import { compileNativePolicyCatalogue, decideNativePermission, type NativePermissionProjection } from '../../src/access/policy-core.ts';
+import {
+  compileNativePolicyCatalogue,
+  decideNativePermission,
+  type NativePermissionProjection,
+} from '../../src/access/policy-core.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
 import type { ResolvedResourceRoles } from '../../src/access/resource-roles.ts';
 
@@ -78,7 +82,9 @@ const collection = {
 
 test('Collection policy consumes separate actor and principal facts, never the legacy allow bit', () => {
   const input = projection({ actorActionGrant: true, principalActionGrant: false });
-  expect(decideNativePermission(catalogue, collection, { ...input, allowed: true } as NativePermissionProjection)).toMatchObject({
+  expect(
+    decideNativePermission(catalogue, collection, { ...input, allowed: true } as NativePermissionProjection),
+  ).toMatchObject({
     decision: 'deny',
     reason: 'grant',
   });
@@ -96,11 +102,8 @@ test('Collection floor remains public and scopeless while explicit advice drops 
 
   const explicit = projection({ explicitActorResourceRoleGrant: true });
   expect(
-    decideNativePermission(
-      catalogue,
-      { ...collection, hasPrincipal: false, floor: true, mode: 'explicit' },
-      explicit,
-    ).decision,
+    decideNativePermission(catalogue, { ...collection, hasPrincipal: false, floor: true, mode: 'explicit' }, explicit)
+      .decision,
   ).toBe('deny');
 });
 
@@ -121,10 +124,6 @@ test('exact registered Global reach is the only alternate path, and unavailable 
   );
   expect(reach).toMatchObject({ decision: 'allow', reason: 'global-reach' });
 
-  const unknown = decideNativePermission(
-    catalogue,
-    collection,
-    projection({ actorActionGrant: null }),
-  );
+  const unknown = decideNativePermission(catalogue, collection, projection({ actorActionGrant: null }));
   expect(unknown.decision).toBe('unavailable');
 });

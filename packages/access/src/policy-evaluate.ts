@@ -43,7 +43,13 @@ function validRequest(request: unknown): request is PolicyRequest {
     const prototype = Object.getPrototypeOf(request);
     if (prototype !== Object.prototype && prototype !== null) return false;
     const keys = Reflect.ownKeys(request);
-    if (keys.some((key) => typeof key !== 'string' || !['action', 'resourceType', 'mode', 'anonymous', 'hasPrincipal', 'authenticatedBenefit'].includes(key)))
+    if (
+      keys.some(
+        (key) =>
+          typeof key !== 'string' ||
+          !['action', 'resourceType', 'mode', 'anonymous', 'hasPrincipal', 'authenticatedBenefit'].includes(key),
+      )
+    )
       return false;
     const value: Record<string, unknown> = Object.create(null);
     for (const key of keys) {
@@ -119,11 +125,7 @@ export function describeRequiredOperands(
 ): readonly RequiredPolicyOperand[] {
   if (!validRequest(request)) return Object.freeze([]);
   const action = catalogue.actionByName[request.action];
-  if (
-    !action ||
-    !action.resourceTypes.includes(request.resourceType) ||
-    (request.anonymous && !action.anonymous)
-  )
+  if (!action || !action.resourceTypes.includes(request.resourceType) || (request.anonymous && !action.anonymous))
     return Object.freeze([]);
 
   const required: RequiredPolicyOperand[] = [
@@ -166,11 +168,7 @@ export function describeRequiredOperands(
 }
 
 /** Pure, bounded decision over qualified primitive facts. */
-export function decidePolicy(
-  catalogue: PolicyCatalogue,
-  request: PolicyRequest,
-  facts: PolicyFacts,
-): PolicyDecision {
+export function decidePolicy(catalogue: PolicyCatalogue, request: PolicyRequest, facts: PolicyFacts): PolicyDecision {
   if (!validRequest(request)) return invalid();
   const action = catalogue.actionByName[request.action];
   if (
@@ -260,7 +258,8 @@ export function decidePolicy(
       operands,
       'principal.action-grant',
       truth(facts.principal?.actionGrant),
-      (localGrantActive && facts.principal?.actionGrant === true) || (decision === 'false' && principalGrant === 'false'),
+      (localGrantActive && facts.principal?.actionGrant === true) ||
+        (decision === 'false' && principalGrant === 'false'),
     );
     addOperand(
       operands,
@@ -273,7 +272,8 @@ export function decidePolicy(
         operands,
         'principal.own-account',
         truth(facts.principal?.ownAccount),
-        (localGrantActive && facts.principal?.ownAccount === true) || (decision === 'false' && principalGrant === 'false'),
+        (localGrantActive && facts.principal?.ownAccount === true) ||
+          (decision === 'false' && principalGrant === 'false'),
       );
     if (useBenefit)
       addOperand(
@@ -284,12 +284,12 @@ export function decidePolicy(
       );
   }
   addOperand(operands, 'local.denial', localDenial, decision === 'false' && localDenial === 'true');
-    addOperand(
-      operands,
-      'public.floor',
-      canUseFloor ? floor : 'not-required',
-      decision === 'true' && floor === 'true' && localDecision === 'true',
-    );
+  addOperand(
+    operands,
+    'public.floor',
+    canUseFloor ? floor : 'not-required',
+    decision === 'true' && floor === 'true' && localDecision === 'true',
+  );
   if (action.globalReach) {
     addOperand(operands, 'global.denial', globalDenial, decision === 'false' && globalDenial === 'true');
     addOperand(
@@ -364,9 +364,7 @@ export function decidePolicy(
 const INTEGER = /^-?(?:0|[1-9][0-9]*)$/;
 
 function temporalInteger(value: unknown): value is string {
-  return typeof value === 'string' &&
-    value.length <= MAX_POLICY_TEMPORAL_INTEGER_CHARS &&
-    INTEGER.test(value);
+  return typeof value === 'string' && value.length <= MAX_POLICY_TEMPORAL_INTEGER_CHARS && INTEGER.test(value);
 }
 
 /** Qualify complete temporal evidence using exact integer microseconds and [from, until). */
@@ -380,9 +378,16 @@ export function qualifyTemporalEvidence(evidence: TemporalEvidence | undefined, 
     const complete = Object.getOwnPropertyDescriptor(evidence, 'complete');
     const intervalField = Object.getOwnPropertyDescriptor(evidence, 'intervals');
     if (
-      !complete || !('value' in complete) || !complete.enumerable || complete.value !== true ||
-      !intervalField || !('value' in intervalField) || !intervalField.enumerable || !Array.isArray(intervalField.value)
-    ) return null;
+      !complete ||
+      !('value' in complete) ||
+      !complete.enumerable ||
+      complete.value !== true ||
+      !intervalField ||
+      !('value' in intervalField) ||
+      !intervalField.enumerable ||
+      !Array.isArray(intervalField.value)
+    )
+      return null;
     const intervals: unknown[] = intervalField.value;
     if (Object.getPrototypeOf(intervals) !== Array.prototype) return null;
     const intervalKeys = Reflect.ownKeys(intervals);
@@ -391,7 +396,8 @@ export function qualifyTemporalEvidence(evidence: TemporalEvidence | undefined, 
       intervalKeys.length !== intervals.length + 1 ||
       intervalKeys.some((key) => key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key))) ||
       !temporalInteger(atMicros)
-    ) return null;
+    )
+      return null;
     const at = BigInt(atMicros);
     for (let index = 0; index < intervals.length; index += 1) {
       const descriptor = Object.getOwnPropertyDescriptor(intervals, String(index));
@@ -405,8 +411,12 @@ export function qualifyTemporalEvidence(evidence: TemporalEvidence | undefined, 
       const fromField = Object.getOwnPropertyDescriptor(interval, 'fromMicros');
       const untilField = Object.getOwnPropertyDescriptor(interval, 'untilMicros');
       if (
-        !fromField || !('value' in fromField) || !fromField.enumerable ||
-        !untilField || !('value' in untilField) || !untilField.enumerable
+        !fromField ||
+        !('value' in fromField) ||
+        !fromField.enumerable ||
+        !untilField ||
+        !('value' in untilField) ||
+        !untilField.enumerable
       )
         return null;
       const fromText: unknown = fromField.value;
