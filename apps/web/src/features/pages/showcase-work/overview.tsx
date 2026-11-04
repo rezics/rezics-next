@@ -53,6 +53,7 @@ export function WorkFranchiseOverview({
     value?.context,
     value?.reader,
     value?.cacheReader,
+    value?.releaseDigest,
     value?.viewer,
     incarnation.current.serial,
   ]);

@@ -26,6 +26,10 @@ const original = (n: number, inverse = false, spoiler = false) => ({
   value: { type: 'value', content: id(inverse ? 1 : 2) },
   qualifiers: [
     { property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: 'Side story' } },
+    {
+      property: { id: 'schema:datePublished', data_type: 'time' },
+      value: { type: 'value', content: { time: '+2001-00-00T', precision: 9 } },
+    },
     ...(spoiler
       ? [
           {
@@ -145,8 +149,12 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     unlabelled: 'Unlabelled',
     spoilerShow: 'Reveal',
     candidatePropertyLabel: (p: string) =>
-      ({ 'schema:position': 'Position', 'schema:url': 'URL', 'rezics:spoilerLevel': 'Spoiler level' })[p] ??
-      'Unlabelled',
+      ({
+        'schema:position': 'Position',
+        'schema:datePublished': 'Publication date',
+        'schema:url': 'URL',
+        'rezics:spoilerLevel': 'Spoiler level',
+      })[p] ?? 'Unlabelled',
     relations: definitions,
     sections: new Map(),
   } as unknown as OverviewValue;
@@ -178,6 +186,9 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     expect(host.textContent).toContain('This relation is unavailable');
     expect(host.textContent).toContain('not supported');
     expect(host.textContent).toContain('Position');
+    expect(host.textContent).toContain('Publication date');
+    expect(host.textContent).toContain('2001');
+    expect(host.textContent).not.toContain('2001-01-01');
     expect(host.querySelector('[lang="ja"]')?.textContent).toContain('海の物語');
     expect(host.textContent).not.toContain('Secret sequel');
     expect(host.innerHTML).not.toContain('original-12');
@@ -216,6 +227,8 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     const reveal = host.querySelector<HTMLButtonElement>('button')!;
     await act(async () => reveal.click());
     expect(host.textContent).toContain('Secret sequel');
+    await draw(windows, { ...value, releaseDigest: 'sha256:changed-definitions' });
+    expect(host.textContent).not.toContain('Secret sequel');
     await draw(
       structuredClone(windows),
       { ...value, cacheReader: 'replacement', context: { ...value.context!, id: id(5) } },
