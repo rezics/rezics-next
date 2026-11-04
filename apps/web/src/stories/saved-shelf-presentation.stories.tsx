@@ -3,9 +3,11 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { expect, userEvent, within } from 'storybook/test';
 import { PersonalLibraryPage } from '../library/entries-page';
+import type { PersonalLibraryCurrentRead } from '../library/personal-library-server';
+import { LibraryPresentationBoundary } from '../library/shelf-preferences-current';
 import type { PersonalLibraryView } from '../library/entries-read';
-import { resolveShelfPresentation } from '../library/shelf-preferences';
 import { withShelfAdvice, type ShelfPreferencePatch, type ShelfPreferences } from '../settings/preferences';
+import type { ShelfPreferenceSnapshot } from '../settings/shelf-preferences-current';
 import { ShelfPreferencesCard } from '../settings/shelf-preferences';
 import { SettingsSessionContext, SettingsSessionOwner } from '../settings/settings-session-owner';
 import type { ReadingIO } from '../settings/reading-preferences';
@@ -107,7 +109,14 @@ function mergeShelf(current: ShelfPreferences, patch: ShelfPreferencePatch | nul
   return next;
 }
 
-function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc' }) {
+type SavedVisitState = 'saved-view' | 'current-unavailable' | 'recovered-visit';
+function SavedShelfJourney({
+  scoreDirection,
+  visitState = 'saved-view',
+}: {
+  scoreDirection?: 'asc' | 'desc';
+  visitState?: SavedVisitState;
+}) {
   const [queryClient] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: accountId, csrfToken: token });
@@ -154,7 +163,30 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
       },
     };
   }
-  const resolved = resolveShelfPresentation({ type: 'https://schema.org/Book' }, saved.shelf);
+  const shelfSnapshot: ShelfPreferenceSnapshot = {
+    generation: `${visitState}-${saved.version}`,
+    accountId,
+    csrfToken: token,
+    shelf: saved.shelf,
+  };
+  const data =
+    visitState === 'current-unavailable'
+      ? { sessionUnavailable: true as const }
+      : ({
+          sessionSubject: accountId,
+          requested: {
+            type: 'https://schema.org/Book',
+            state: null,
+            cursor: null,
+            orderBy: 'lastActivity',
+            direction: 'desc',
+            locale: getLocale(),
+          },
+          page: libraryPage,
+          continueEntries: { state: 'loaded', entries: [], next: null },
+          navigation: { pins: { state: 'closed' }, collections: [], collectionsState: 'closed' },
+          shelfSnapshot,
+        } as unknown as PersonalLibraryCurrentRead & { shelfSnapshot: ShelfPreferenceSnapshot });
   return (
     <QueryClientProvider client={queryClient}>
       <SettingsSessionContext.Provider value={owner}>
@@ -175,24 +207,41 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
             <h2 id="saved-shelf-story-library" className="mb-4 text-xl font-semibold">
               {m.library_heading()}
             </h2>
-            <div data-testid="library-preview" data-layout={resolved.display.layout}>
-              <PersonalLibraryPage
-                page={
-                  libraryPage.signedIn
-                    ? {
-                        ...libraryPage,
-                        sort: resolved.sort,
-                        ...(resolved.sort.orderBy === 'personalScore'
-                          ? { readState: 'score-unavailable', entries: [], next: null }
-                          : {}),
-                      }
-                    : libraryPage
-                }
-                continueState={{ state: 'loaded', entries: [], next: null }}
-                locale={getLocale()}
-                display={resolved.display}
-              />
-            </div>
+            <LibraryPresentationBoundary
+              key={visitState}
+              data={data}
+              rawSearch={{ type: 'https://schema.org/Book' }}
+              locale={getLocale()}
+              readLabel={async () => {
+                throw new Error('This personal shelf story does not read label shelves.');
+              }}
+              renderCurrent={({ presentation }) => {
+                const page = libraryPage.signedIn
+                  ? {
+                      ...libraryPage,
+                      sort: presentation.sort,
+                      ...(presentation.sort.orderBy === 'personalScore'
+                        ? { readState: 'score-unavailable' as const, entries: [], next: null }
+                        : {}),
+                    }
+                  : libraryPage;
+                return (
+                  <div
+                    data-testid="library-preview"
+                    data-layout={presentation.display.layout}
+                    data-sort={`${presentation.sort.orderBy}:${presentation.sort.direction}`}
+                  >
+                    <PersonalLibraryPage
+                      page={page}
+                      continueState={{ state: 'loaded', entries: [], next: null }}
+                      locale={getLocale()}
+                      display={presentation.display}
+                      presentation={presentation}
+                    />
+                  </div>
+                );
+              }}
+            />
           </section>
         </main>
       </SettingsSessionContext.Provider>
@@ -230,4 +279,44 @@ export const SavedScoreLowest: Story = {
 export const SavedScoreHighest: Story = {
   render: () => <SavedShelfJourney scoreDirection="desc" />,
   globals: { viewport: { value: 'desktop1280' } },
+};
+
+export const SavedViewPhone390: Story = {
+  render: () => <SavedShelfJourney visitState="saved-view" />,
+  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390' } },
+};
+
+export const SavedViewDesktop1280: Story = {
+  render: () => <SavedShelfJourney visitState="saved-view" />,
+  globals: { locale: 'zh-Hant', theme: 'dark', viewport: { value: 'desktop1280' } },
+};
+
+export const CurrentUnavailablePhone390: Story = {
+  render: () => <SavedShelfJourney visitState="current-unavailable" />,
+  globals: { locale: 'ja', theme: 'dark', viewport: { value: 'phone390' } },
+};
+
+export const CurrentUnavailableDesktop1280: Story = {
+  render: () => <SavedShelfJourney visitState="current-unavailable" />,
+  globals: { locale: 'de', theme: 'light', viewport: { value: 'desktop1280' } },
+};
+
+export const RecoveredVisitPhone390: Story = {
+  render: () => <SavedShelfJourney visitState="recovered-visit" />,
+  globals: { locale: 'fr', theme: 'light', viewport: { value: 'phone390' } },
+};
+
+export const RecoveredVisitDesktop1280: Story = {
+  render: () => <SavedShelfJourney visitState="recovered-visit" />,
+  globals: { locale: 'es', theme: 'dark', viewport: { value: 'desktop1280' } },
+};
+
+export const SavedViewSimplifiedChinese: Story = {
+  render: () => <SavedShelfJourney visitState="saved-view" />,
+  globals: { locale: 'zh-Hans', theme: 'light', viewport: { value: 'phone390' } },
+};
+
+export const SavedViewKorean: Story = {
+  render: () => <SavedShelfJourney visitState="saved-view" />,
+  globals: { locale: 'ko', theme: 'dark', viewport: { value: 'desktop1280' } },
 };

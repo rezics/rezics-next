@@ -172,3 +172,5 @@ Library exports thin naming adapters for existing callers. Its operation episode
 retention distinct from dispatch authority; healthy same-account credential rotation can retain native intent while
 all prior callbacks retire. Copy and label reading require current read admission, not mutation credentials.
 Library action adapters continue to own exact uncertain-command recovery and original operands, credential and key.
+
+Presentation decision: the Library shows the source of its effective layout and sort, and flags saved sorts or table columns that current native reads cannot honor; navigation keeps inherited choices out of the URL.

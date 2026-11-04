@@ -11,11 +11,11 @@ import {
   DialogTrigger,
 } from '@rezics/ui/shadcn/dialog';
 import { m } from '../paraglide/messages.js';
-import { shelfHref, type ShelfDisplay, type ShelfSearch } from './shelf-params';
+import { shelfHref, type ShelfPresentationIntent } from './shelf-params';
 import { readShelfTypesCurrent, SHELF_TYPES_LIMIT, type ShelfTypesView } from './shelf-types-read';
 import { useShelfTypesLifetime } from './shelf-types-current';
 
-type Props = { locale: string; view: ShelfSearch & Pick<ShelfDisplay, 'layoutExplicit'>; typeLabel?: string };
+type Props = { locale: string; view: ShelfPresentationIntent; typeLabel?: string };
 
 export function ShelfTypes(props: Props) {
   // Standalone/pure previews have no observed viewer and cannot make private requests.

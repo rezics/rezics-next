@@ -1,7 +1,7 @@
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
-import { shelfHref, type ShelfDisplay, type ShelfSearch } from './shelf-params';
+import { shelfHref, type ShelfPresentationIntent } from './shelf-params';
 import { libraryNavigation } from './navigation';
 import type { PersonalLibraryView } from './entries-read';
 import type { ShelfSummaryState } from './shelf-summary-observation';
@@ -55,7 +55,7 @@ export function ShelfSummaryNavigation({
 }: {
   summary: ShelfSummaryPresentation;
   locale: string;
-  view: ShelfSearch & ShelfDisplay;
+  view: ShelfPresentationIntent;
 }) {
   const { page, retry } = summary;
   if (page.state !== 'loaded') {

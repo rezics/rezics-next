@@ -5,7 +5,8 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useNavigate } from '@tanstack/react-router';
 import { useId } from 'react';
 import { m } from '../paraglide/messages.js';
-import { shelfColumnIds, shelfColumns, type ShelfSearch, type PersonalShelfColumnId } from './shelf-params';
+import { shelfColumnIds, shelfColumns, type ShelfPresentationIntent, type PersonalShelfColumnId } from './shelf-params';
+import { replaceShelfAddress } from './shelf-preferences';
 
 export function shelfColumnLabel(id: PersonalShelfColumnId): string {
   switch (id) {
@@ -37,7 +38,7 @@ export function ShelfColumnsControl({
 }: {
   value?: string;
   disabled: boolean;
-  view: ShelfSearch;
+  view: ShelfPresentationIntent;
   isCurrent?: () => boolean;
 }) {
   const navigate = useNavigate();
@@ -46,7 +47,10 @@ export function ShelfColumnsControl({
   const change = (columns: string | undefined) => {
     if (disabled || !(isCurrent?.() ?? true)) return;
     const { columns: _columns, ...rest } = view;
-    void navigate({ to: '/library', search: { ...rest, ...(columns ? { columns } : {}) } });
+    void navigate({
+      to: '/library',
+      search: (previous) => replaceShelfAddress(previous, { ...rest, ...(columns ? { columns, columnsExplicit: true } : {}) }),
+    });
   };
   return (
     <Menu

@@ -9,13 +9,16 @@ import {
   shelfHref,
   shelfLayouts,
   shelfSizes,
+  explicitShelfDisplay,
   validateShelfSearch,
   type ShelfSort,
   type ShelfLayout,
   type ShelfSize,
   type ShelfDisplay,
   type ShelfSearch,
+  type ShelfPresentationIntent,
 } from './shelf-params';
+import { replaceShelfAddress, shelfIntentWith, type ShelfPresentationResolution } from './shelf-preferences';
 import { ShelfColumnsControl } from './shelf-columns';
 import { useHydrated } from './shelf-rows';
 
@@ -30,16 +33,63 @@ function layoutLabel(layout: ShelfLayout): string {
 function sizeLabel(size: ShelfSize): string {
   return size === 's' ? m.library_size_small() : size === 'm' ? m.library_size_medium() : m.library_size_large();
 }
+function PresentationNotice({
+  presentation,
+  display,
+  label,
+}: {
+  presentation?: ShelfPresentationResolution;
+  display: Display;
+  label?: string;
+}) {
+  if (!presentation) return null;
+  return (
+    <div role="note" className="w-full text-sm text-muted-foreground" data-testid="shelf-presentation-source">
+      {display.layoutSource === 'url'
+        ? m.library_layout_source_url()
+        : display.layoutSource === 'type'
+          ? m.library_layout_source_type()
+          : display.layoutSource === 'all'
+            ? m.library_layout_source_all()
+            : m.library_layout_source_application()}{' '}
+      {presentation.sources.size === 'url'
+        ? m.library_size_source_url()
+        : presentation.sources.size === 'saved'
+          ? m.library_size_source_saved()
+          : m.library_size_source_application()}{' '}
+      {!label
+        ? presentation.sources.columns === 'url'
+          ? m.library_columns_source_url()
+          : presentation.sources.columns === 'saved'
+            ? m.library_columns_source_saved()
+            : m.library_columns_source_application()
+        : null}{' '}
+      {!label
+        ? presentation.sources.sort === 'url'
+          ? m.library_sort_source_url()
+          : presentation.sources.sort === 'saved'
+            ? m.library_sort_source_saved()
+            : m.library_sort_source_application()
+        : null}
+      {!label && presentation.unsupported.sort ? (
+        <span className="block">{m.library_saved_sort_unsupported({ field: presentation.unsupported.sort })}</span>
+      ) : null}
+      {!label && presentation.unsupported.columns.length ? (
+        <span className="block">{m.library_saved_columns_unsupported()}</span>
+      ) : null}
+    </div>
+  );
+}
 export function DisplayControls({
   state,
   type,
   locale,
   display,
   label,
-  sort,
   cursor,
   filterSort,
   tableAvailable,
+  presentation,
   isCurrent,
 }: {
   state?: LibraryEntryStateWrite;
@@ -47,23 +97,37 @@ export function DisplayControls({
   locale: string;
   display: Display;
   label?: string;
-  sort?: ShelfSort;
   filterSort?: ShelfSort;
   cursor?: string;
   tableAvailable?: boolean;
+  presentation?: ShelfPresentationResolution;
   isCurrent?: () => boolean;
 }) {
   const hydrated = useHydrated();
   const navigate = useNavigate();
   const typeSearch = type ? { type } : {};
-  const stateSearch = { ...typeSearch, ...(state ? { state } : {}), ...sort, ...(cursor ? { cursor } : {}) };
-  const labelSearch = label ? { label } : {};
-  const displaySearch = {
-    layout: display.layout,
-    size: display.size,
-    ...(display.columns !== undefined ? { columns: display.columns } : {}),
+  const stateSearch: ShelfPresentationIntent = presentation?.intent ?? {
+    ...typeSearch,
+    ...(state ? { state } : {}),
+    ...(filterSort ?? {}),
+    ...explicitShelfDisplay(display),
+    ...(cursor ? { cursor } : {}),
+    ...(label ? { label } : {}),
   };
+  const labelSearch = label ? { label } : {};
   const restoreHref = shelfHref(locale, { ...(label ? labelSearch : typeSearch), ...(state ? { state } : {}) });
+  const choice = (patch: Partial<ShelfPresentationIntent>, clearCursor = false): ShelfPresentationIntent => {
+    const next = presentation ? shelfIntentWith(presentation, patch, { clearCursor }) : { ...stateSearch, ...patch };
+    if (clearCursor) delete next.cursor;
+    return next;
+  };
+  const navigateToChoice = (patch: Partial<ShelfPresentationIntent>) => {
+    if (!(isCurrent?.() ?? true)) return;
+    const next = choice(patch);
+    void navigate({ to: '/library', search: (previous) => replaceShelfAddress(previous, next) });
+  };
+  const clearStateView: ShelfPresentationIntent = { ...stateSearch };
+  delete clearStateView.state;
   if (!hydrated) {
     const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
     return (
@@ -72,7 +136,7 @@ export function DisplayControls({
           {shelfLayouts.map((layout) => (
             <a
               key={layout}
-              href={shelfHref(locale, { ...stateSearch, ...display, layout, layoutExplicit: true, ...labelSearch })}
+              href={shelfHref(locale, choice({ layout, layoutExplicit: true }))}
               aria-current={display.layout === layout ? 'page' : undefined}
               className={`${selected(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
             >
@@ -85,7 +149,7 @@ export function DisplayControls({
             {shelfSizes.map((size) => (
               <a
                 key={size}
-                href={shelfHref(locale, { ...stateSearch, ...display, size, sizeExplicit: true, ...labelSearch })}
+                href={shelfHref(locale, choice({ size, sizeExplicit: true }))}
                 aria-current={display.size === size ? 'page' : undefined}
                 className={selected(display.size === size)}
               >
@@ -97,16 +161,19 @@ export function DisplayControls({
         {state ? (
           <a
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
+            href={shelfHref(locale, clearStateView)}
           >
             {m.library_clear_state()}
           </a>
         ) : null}
-        {!label ? (
-          <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
-            {m.library_shelf_restore_defaults()}
-          </a>
-        ) : null}
+        <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
+          {m.library_shelf_restore_defaults()}
+        </a>
+        <PresentationNotice
+          {...(presentation ? { presentation } : {})}
+          display={display}
+          {...(label ? { label } : {})}
+        />
       </div>
     );
   }
@@ -117,13 +184,7 @@ export function DisplayControls({
         value={[display.layout]}
         onValueChange={(values) => {
           const layout = values[0] as ShelfLayout | undefined;
-          if (layout && (isCurrent?.() ?? true))
-            void navigate({
-              to: '/library',
-              search: label
-                ? (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...displaySearch, layout })
-                : { ...stateSearch, ...displaySearch, layout },
-            });
+          if (layout) navigateToChoice({ layout, layoutExplicit: true });
         }}
         variant="outline"
       >
@@ -138,7 +199,7 @@ export function DisplayControls({
           <ShelfColumnsControl
             {...(display.columns ? { value: display.columns } : {})}
             disabled={!hydrated}
-            view={{ ...stateSearch, ...displaySearch }}
+            view={stateSearch}
             {...(isCurrent ? { isCurrent } : {})}
           />
         </div>
@@ -152,9 +213,7 @@ export function DisplayControls({
             if (size && (isCurrent?.() ?? true))
               void navigate({
                 to: '/library',
-                search: label
-                  ? (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...displaySearch, size })
-                  : { ...stateSearch, ...displaySearch, size },
+                search: (previous) => replaceShelfAddress(previous, choice({ size, sizeExplicit: true })),
               });
           }}
           variant="outline"
@@ -169,16 +228,19 @@ export function DisplayControls({
       {state ? (
         <a
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
+          href={shelfHref(locale, clearStateView)}
         >
           {m.library_clear_state()}
         </a>
       ) : null}
-      {!label ? (
-        <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
-          {m.library_shelf_restore_defaults()}
-        </a>
-      ) : null}
+      <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
+        {m.library_shelf_restore_defaults()}
+      </a>
+      <PresentationNotice
+        {...(presentation ? { presentation } : {})}
+        display={display}
+        {...(label ? { label } : {})}
+      />
     </div>
   );
 }
@@ -190,6 +252,7 @@ export function SortControls({
   type,
   display,
   sort,
+  presentation,
   isCurrent,
 }: {
   locale: string;
@@ -197,6 +260,7 @@ export function SortControls({
   type?: string;
   display: Display;
   sort: ShelfSort;
+  presentation?: ShelfPresentationResolution;
   isCurrent?: () => boolean;
 }) {
   const navigate = useNavigate();
@@ -227,15 +291,25 @@ export function SortControls({
       onSubmit={(event) => {
         event.preventDefault();
         if (!(isCurrent?.() ?? true)) return;
-        const search = validateShelfSearch(Object.fromEntries(new FormData(event.currentTarget)));
-        void navigate({ to: '/library', search });
+        const changed = selection.orderBy !== sort.orderBy || selection.direction !== sort.direction;
+        const next: ShelfPresentationIntent = presentation
+          ? shelfIntentWith(
+              presentation,
+              {
+                ...(selection.orderBy !== sort.orderBy ? { orderBy: selection.orderBy } : {}),
+                ...(selection.direction !== sort.direction ? { direction: selection.direction } : {}),
+              },
+              { clearCursor: changed },
+            )
+          : validateShelfSearch(Object.fromEntries(new FormData(event.currentTarget)));
+        void navigate({ to: '/library', search: (previous) => replaceShelfAddress(previous, next) });
       }}
     >
       {state ? <input type="hidden" name="state" value={state} /> : null}
       {type ? <input type="hidden" name="type" value={type} /> : null}
-      <input type="hidden" name="layout" value={display.layout} />
-      <input type="hidden" name="size" value={display.size} />
-      {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
+      {display.layoutExplicit ? <input type="hidden" name="layout" value={display.layout} /> : null}
+      {display.sizeExplicit ? <input type="hidden" name="size" value={display.size} /> : null}
+      {display.columnsExplicit && display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
       {/* A disabled selected option is not a successful form control. Retain the explicit score address. */}
       {unavailableOrder ? <input type="hidden" name="orderBy" value={selection.orderBy} /> : null}
       <label className="grid min-w-0 max-w-full gap-1 text-sm">

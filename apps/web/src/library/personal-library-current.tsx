@@ -16,6 +16,7 @@ import {
   type PersonalLibraryAddress,
 } from './personal-library-server';
 import type { ShelfDisplay, ShelfSearch } from './shelf-params';
+import type { ShelfPresentationResolution } from './shelf-preferences';
 import { PersonalShelfOrigin, usePersonalShelfObservation, type ShelfOrigin } from './personal-shelf-origin';
 
 import { ShelfSummaryAcknowledgement, useShelfSummaryCurrent } from './shelf-summary-current';
@@ -32,11 +33,13 @@ export function PersonalLibraryCurrent({
   search,
   locale,
   display,
+  presentation,
 }: {
   initial: PersonalLibraryCurrentRead;
   search: ShelfSearch;
   locale: string;
   display: ShelfDisplay;
+  presentation?: ShelfPresentationResolution;
 }) {
   const hydrated = useSyncExternalStore(
     subscribe,
@@ -145,6 +148,7 @@ export function PersonalLibraryCurrent({
         seed={scope.seed}
         hydrated={hydrated}
         display={display}
+        {...(presentation ? { presentation } : {})}
         origin={origin.current.authority}
         mutationLease={lease.value}
         input={search}
@@ -163,6 +167,7 @@ function PersonalLibraryRead({
   seed,
   hydrated,
   display,
+  presentation,
   origin,
   input,
   pinsAdmitted,
@@ -176,6 +181,7 @@ function PersonalLibraryRead({
   seed: boolean;
   hydrated: boolean;
   display: ShelfDisplay;
+  presentation?: ShelfPresentationResolution;
   origin: ShelfOrigin;
   input: ShelfSearch;
   pinsAdmitted: boolean;
@@ -404,12 +410,16 @@ function PersonalLibraryRead({
           {m.library_heading()}
           <ShelfSummaryCount page={summary.page} locale={address.locale} />
         </h1>
-        <ShelfSummaryNavigation summary={summary} locale={address.locale} view={{ ...input, ...display }} />
+        <ShelfSummaryNavigation
+          summary={summary}
+          locale={address.locale}
+          view={presentation?.intent ?? input}
+        />
         <p role={query.isError || query.data ? 'alert' : 'status'}>
           {query.isError || query.data ? m.error_message() : m.library_sort_preparing()}
         </p>
         {query.isError || query.data ? (
-          <EntriesFirstPage locale={address.locale} view={{ ...input, ...display }} />
+          <EntriesFirstPage locale={address.locale} view={presentation?.intent ?? input} />
         ) : null}
       </div>
     );
@@ -423,6 +433,7 @@ function PersonalLibraryRead({
           entriesAdmitted={regionAdmitted('entries')}
           locale={address.locale}
           display={display}
+          {...(presentation ? { presentation } : {})}
           {...(address.cursor ? { cursor: address.cursor } : {})}
           acceptedNavigation={{
             pins: pinsAdmitted ? accepted.value.navigation.pins : { state: 'closed' },

@@ -14,6 +14,7 @@ import {
   type LabelShelfSource,
 } from './label-shelf-read';
 import { validateShelfSearch, type ShelfDisplay } from './shelf-params';
+import type { ShelfPresentationResolution } from './shelf-preferences';
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -105,11 +106,13 @@ export function CurrentLabelShelf({
   initial,
   locale,
   display,
+  presentation,
   read,
 }: {
   initial: CurrentLabelShelfData;
   locale: string;
   display: ShelfDisplay;
+  presentation?: ShelfPresentationResolution;
   read: ReadShelf;
 }) {
   const search = useLocation({ select: (location) => location.search });
@@ -136,7 +139,14 @@ export function CurrentLabelShelf({
         matches(initial, initial.provenance.subject, source, locale))
         ? initial
         : { state: 'preparing' };
-    return <LabelShelfPage page={serverPage} locale={locale} display={display} />;
+    return (
+      <LabelShelfPage
+        page={serverPage}
+        locale={locale}
+        display={display}
+        {...(presentation ? { presentation } : {})}
+      />
+    );
   }
   const enrolled = origin.capture(...readGroups);
   const current = () => enrolled() && origin.read().owner === value.owner && origin.read().subject === value.subject;
@@ -151,7 +161,9 @@ export function CurrentLabelShelf({
               ? 'closed'
               : 'preparing',
     };
-    return <LabelShelfPage page={page} locale={locale} display={display} />;
+    return (
+      <LabelShelfPage page={page} locale={locale} display={display} {...(presentation ? { presentation } : {})} />
+    );
   }
   return (
     <LabelShelfRead
@@ -164,6 +176,7 @@ export function CurrentLabelShelf({
       source={source}
       locale={locale}
       display={display}
+      {...(presentation ? { presentation } : {})}
       read={read}
     />
   );
@@ -178,6 +191,7 @@ function LabelShelfRead({
   source,
   locale,
   display,
+  presentation,
   read,
 }: {
   origin: ReturnType<typeof usePrivateReportOrigin>['origin'];
@@ -188,6 +202,7 @@ function LabelShelfRead({
   source: LabelShelfSource;
   locale: string;
   display: ShelfDisplay;
+  presentation?: ShelfPresentationResolution;
   read: ReadShelf;
 }) {
   const client = useQueryClient();
@@ -313,7 +328,14 @@ function LabelShelfRead({
   const shown = reopened?.binding === binding.id ? reopened.page : page;
   if (page.state !== 'loaded')
     return (
-      <LabelShelfPage page={page} locale={locale} display={display} isCurrent={isCurrent} canUnassign={canUnassign} />
+      <LabelShelfPage
+        page={page}
+        locale={locale}
+        display={display}
+        {...(presentation ? { presentation } : {})}
+        isCurrent={isCurrent}
+        canUnassign={canUnassign}
+      />
     );
   return (
     <ConsolidationWorkspace
@@ -335,7 +357,14 @@ function LabelShelfRead({
           {refreshState === 'loading' ? m.library_consolidation_refreshing() : m.library_consolidation_refresh_failed()}
         </p>
       ) : null}
-      <LabelShelfPage page={shown} locale={locale} display={display} isCurrent={isCurrent} canUnassign={canUnassign} />
+      <LabelShelfPage
+        page={shown}
+        locale={locale}
+        display={display}
+        {...(presentation ? { presentation } : {})}
+        isCurrent={isCurrent}
+        canUnassign={canUnassign}
+      />
     </ConsolidationWorkspace>
   );
 }
