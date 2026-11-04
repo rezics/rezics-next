@@ -96,7 +96,12 @@ function writeFailure(status: number | null, body?: unknown, headers?: HeadersIn
 
 function failureFromException(error: unknown): { status: number | null; body?: unknown; headers?: HeadersInit } {
   if (isPlatformClosedError(error)) return { status: error.status, body: error.problem };
-  if (error instanceof MediaProblem) return { status: error.problem.status, body: error.problem, headers: error.headers };
+  if (error instanceof MediaProblem)
+    return {
+      status: error.problem.status,
+      body: error.problem,
+      ...(error.headers ? { headers: error.headers } : {}),
+    };
   return { status: null };
 }
 
