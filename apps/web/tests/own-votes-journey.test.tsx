@@ -209,10 +209,10 @@ async function setup(
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  const { createRoot } = await import('react-dom/client');
+  const { hydrateRoot } = await import('react-dom/client');
+  const { renderToString } = await import('react-dom/server');
   const host = window.document.createElement('main');
   window.document.body.append(host);
-  const root = createRoot(host);
   const calls: OwnVoteIntent[] = [];
   const refreshCount = { value: 0 };
   const reviewCalls: OwnVoteIntent[] = [];
@@ -265,7 +265,10 @@ async function setup(
   }
   const previousLocale = getLocale();
   await setLocale('en', { reload: false });
-  await act(async () => root.render(<Provider />));
+  const tree = <Provider />;
+  host.innerHTML = renderToString(tree);
+  const root = hydrateRoot(host, tree);
+  await act(async () => new Promise((resolve) => window.requestAnimationFrame(() => resolve(undefined))));
   return {
     host,
     outside,
