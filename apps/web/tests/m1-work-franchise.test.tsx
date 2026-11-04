@@ -243,3 +243,178 @@ test('Subject composition joins the VN, anime and book with localized, disclosed
   expect(withheldHtml).toContain('data-slot="work-franchise"');
   expect(withheldHtml).not.toContain(animeId);
 });
+
+// Captured provider evidence supplies the decimal token; association ids here belong only to this test read.
+const capturedWeights = (await import('../../../services/kernel/test/fixtures/vndb-source-weight-v17.json')).default;
+const publicBook = (await import('../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json')).default;
+const releasedTags = (await import('../src/kernel/recorded/definitions-release.json')).default.release;
+const { SubjectConceptTags } = await import('../src/features/pages/subject-slots');
+const { readWorkTags, workTagWeight } = await import('../src/features/pages/showcase-work/tags');
+const tagQualifier = (property: string, content: unknown, datatype = 'quantity') => ({
+  property: { id: property, data_type: datatype },
+  value: { type: 'value', content },
+});
+function tagReading(size = 1) {
+  const source = read('schema:Book', publicBook.name, id(700), 'skos:Concept', publicBook.meta_tags[1]!, id(701));
+  source.subject.relationCounts = { 'schema:genre': size };
+  const weight = capturedWeights.results[0]!.tags[0]!;
+  source.subject.statements = {
+    'schema:genre': Array.from({ length: size }, (_, n) => ({
+      ...statement(800 + n, 'schema:genre', id(701)),
+      qualifiers: [
+        tagQualifier('rezics:sourceTagWeight', { amount: `+${weight.rating}`, unit: '1' }),
+        tagQualifier('rezics:sourceTagWeightMetric', 'vndbTagsRating', 'string'),
+        tagQualifier('rezics:spoilerLevel', { amount: '+1', unit: '1' }),
+      ],
+      references: [{ parts: [tagQualifier('schema:url', 'https://vndb.org/v17', 'url')] }],
+    })) as SubjectRead['subject']['statements'][string],
+  };
+  return source;
+}
+function tagMarkup(source: SubjectRead, spoilerThreshold = 1, definitions = releasedTags) {
+  return renderToStaticMarkup(
+    createElement(SubjectConceptTags, {
+      subject: source.subject,
+      related: source.related,
+      definitions,
+      locale: 'en',
+      spoilerThreshold,
+    }),
+  );
+}
+
+test('tag assertions preserve exact provider meaning, duplicate rows, original identity and disclosure before previewing', () => {
+  const source = tagReading(2);
+  source.related[id(701)] = { ...source.related[id(701)]!, redirect: id(799) } as never;
+  source.subject.statements['schema:genre']![0]!.rank = 'preferred';
+  const tags = readWorkTags(source.subject, source.related, releasedTags, 'en', 1);
+  expect(tags.state).toBe('ready');
+  if (tags.state !== 'ready') throw new Error('Expected admitted tags');
+  expect(tags.tags.map((tag) => tag.statement.id)).toEqual([id(800), id(801)]);
+  expect(tags.tags[0]?.weight).toEqual({ state: 'source', amount: '+2.59999990463257', metric: 'vndbTagsRating' });
+  const html = tagMarkup(source);
+  expect(html.match(/data-tag-index=/g)).toHaveLength(2);
+  expect(html).toContain('VNDB tags.rating: +2.59999990463257');
+  expect(html).toContain('Supplied spoiler level: 1');
+  expect(html).not.toContain(id(799));
+  expect(html).toContain(`/subjects/${id(701)}/`);
+  for (const threshold of [0, 2]) {
+    const concealed = structuredClone(source);
+    if (threshold === 2)
+      concealed.subject.statements['schema:genre']![0]!.qualifiers.push(
+        tagQualifier('rezics:spoilerLevel', { amount: '+0', unit: 'unknown' }) as never,
+      );
+    const markup = tagMarkup(concealed, threshold);
+    if (threshold === 0) {
+      expect(markup).not.toContain(id(701));
+      expect(markup).not.toContain('2.59999990463257');
+      expect(markup).not.toContain(publicBook.meta_tags[1]!);
+    } else expect(markup.match(/data-tag-index=/g)).toHaveLength(1);
+  }
+  const statementWithWeight = source.subject.statements['schema:genre']![0]!;
+  const absent = { ...statementWithWeight, qualifiers: [] };
+  expect(workTagWeight(absent, releasedTags)).toEqual({ state: 'absent' });
+  for (const [amount, unit] of [
+    ['+0', '1'],
+    ['+3.00000000000000000001', '1'],
+    ['+2', 'confidence'],
+  ]) {
+    const unsupported = structuredClone(statementWithWeight);
+    unsupported.qualifiers[0]!.value.content = { amount, unit } as never;
+    expect(workTagWeight(unsupported, releasedTags)).toEqual({ state: 'unavailable' });
+  }
+  const unsupported = structuredClone(statementWithWeight);
+  unsupported.qualifiers[1]!.value.content = 'importConfidence';
+  expect(workTagWeight(unsupported, releasedTags)).toEqual({ state: 'unsupported' });
+  expect(tagMarkup({ ...source, subject: { ...source.subject, statements: { 'schema:genre': [absent] } } })).toContain(
+    'No source weight supplied',
+  );
+});
+
+test('the 24-row preview exposes native continuation without hidden totals and distinguishes unavailable from no admitted tags', () => {
+  const source = tagReading(27);
+  const html = tagMarkup(source);
+  expect(html.match(/data-tag-index=/g)).toHaveLength(24);
+  expect(html).toContain('first 24 admitted assertions');
+  expect(html).toContain('/details?via=');
+  expect(html).toContain('property=schema%3Agenre');
+  expect(html).not.toContain('27');
+  const empty = tagMarkup(source, 0);
+  expect(empty).toContain('No admitted tag assertions');
+  expect(empty).not.toContain('first 24 admitted assertions');
+  expect(empty).not.toContain('27');
+  const unavailable = renderToStaticMarkup(
+    createElement(SubjectConceptTags, {
+      subject: source.subject,
+      related: source.related,
+      locale: 'en',
+      spoilerThreshold: 0,
+    }),
+  );
+  expect(unavailable).toContain('Tag evidence is unavailable');
+  expect(unavailable).not.toContain('No admitted tag assertions');
+});
+
+test('evidence inspection is independent of browsing and retires on preference and equal source replacement', async () => {
+  const { dirname } = await import('node:path');
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: `https://site.test/en/subjects/${id(700)}/book` });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    MutationObserver: window.MutationObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { act } = await import('react');
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const source = tagReading();
+  const draw = (read: SubjectRead, threshold: number) =>
+    act(async () => {
+      root.render(
+        createElement(SubjectConceptTags, {
+          subject: read.subject,
+          related: read.related,
+          definitions: releasedTags,
+          locale: 'en',
+          spoilerThreshold: threshold,
+        }),
+      );
+    });
+  const inspect = () => host.querySelector<HTMLButtonElement>('[data-tag-action="evidence"]')!;
+  try {
+    await draw(source, 1);
+    expect(inspect().tagName).toBe('BUTTON');
+    expect(host.querySelector('[data-tag-action="browse"]')?.tagName).toBe('A');
+    await act(async () => inspect().click());
+    expect(host.textContent).toContain('https://vndb.org/v17');
+    expect(host.textContent).toContain(id(800));
+    expect(host.textContent).toContain('not a REZICS rating or import confidence');
+    await draw(structuredClone(source), 1);
+    expect(host.querySelector('[data-slot="work-tag-evidence"]')).toBeNull();
+    await act(async () => inspect().click());
+    await draw(source, 0);
+    expect(host.textContent).not.toContain('2.59999990463257');
+    await draw(source, 1);
+    expect(host.querySelector('[data-slot="work-tag-evidence"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+    await window.happyDOM.close();
+  }
+});

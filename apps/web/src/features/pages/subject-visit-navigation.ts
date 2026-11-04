@@ -13,6 +13,76 @@ const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/libr
 const returnAddressCap = 32768;
 const collectionDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/collections/${uuid}$`);
 
+export type WorkTagReturn = {
+  statement: string;
+  property: string;
+  spoiler: 0 | 1 | 2;
+  focus: 'browse' | 'evidence';
+};
+
+/** A focus locator for one admitted assertion, never a label, weight, grant or disclosure override. */
+export function workTagReturn(hash: string): WorkTagReturn | undefined {
+  if (!hash.startsWith('#work-tags?') || hash.length > 1024) return;
+  const params = new URLSearchParams(hash.slice('#work-tags?'.length));
+  const keys = [...params.keys()];
+  if (
+    keys.length !== 4 ||
+    new Set(keys).size !== keys.length ||
+    keys.some((key) => !['statement', 'property', 'spoiler', 'focus'].includes(key))
+  )
+    return;
+  const statement = params.get('statement');
+  const property = params.get('property');
+  const spoiler = params.get('spoiler');
+  const focus = params.get('focus');
+  if (
+    !statement ||
+    !new RegExp(`^${uuid}$`, 'i').test(statement) ||
+    !property ||
+    property.length > 128 ||
+    /[\s\u0000-\u001f\u007f]/u.test(property) ||
+    (spoiler !== '0' && spoiler !== '1' && spoiler !== '2') ||
+    (focus !== 'browse' && focus !== 'evidence')
+  )
+    return;
+  return { statement, property, spoiler: Number(spoiler) as 0 | 1 | 2, focus };
+}
+
+export function workTagReturnFragment(value: WorkTagReturn): string {
+  const hash = `#work-tags?${new URLSearchParams({ ...value, spoiler: String(value.spoiler) })}`;
+  return workTagReturn(hash) ? hash : '#work-tags';
+}
+
+/** Preserve the supported source address, including its opaque native window, in the existing visit facility. */
+export function workTagReturnHref(
+  currentHref: string | undefined,
+  fallbackHref: string,
+  locale: string,
+  selection?: WorkTagReturn,
+): string {
+  const fallback = subjectVisitReturn(`${fallbackHref.split('#')[0]}#work-tags`, locale);
+  if (!fallback) return fallbackHref;
+  const accepted = subjectVisitReturn(currentHref, locale);
+  const base = new URL(fallback, 'https://rezics.invalid');
+  const source = accepted ? new URL(accepted, base) : base;
+  const expectedSubject = base.pathname.split('/')[3];
+  const actualSubject = source.pathname.split('/')[3];
+  const path = subjectDestination.exec(source.pathname);
+  if (!path || actualSubject !== expectedSubject) return fallback;
+  source.hash = selection ? workTagReturnFragment(selection) : '#work-tags';
+  return subjectVisitReturn(`${source.pathname}${source.search}${source.hash}`, locale) ?? fallback;
+}
+
+/** Concept work-tag journeys share Subject visit validation; graph-only origins keep their separate contract. */
+export function workTagOriginatingReturn(value: unknown, locale?: string): string | undefined {
+  const accepted = subjectVisitReturn(value, locale);
+  if (!accepted) return;
+  const url = new URL(accepted, 'https://rezics.invalid');
+  if (!subjectDestination.test(url.pathname)) return;
+  if (url.hash !== '#work-tags' && !workTagReturn(url.hash)) return;
+  return accepted;
+}
+
 export type ConnectionReturnWindow = {
   stream: string;
   cursor?: string;
@@ -308,6 +378,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject && connectionReturnWindow(fragment)) &&
       !(subject && summaryReadingReturn(fragment)) &&
       fragment !== '#manga-reader' &&
+      !(subject && (fragment === '#work-tags' || workTagReturn(fragment))) &&
       fragment !== '#screen-episode-list' &&
       screenEntry === null &&
       !recordingStatement &&

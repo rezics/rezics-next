@@ -158,3 +158,60 @@ Relations view, and a validated single-hop `via` address provides the return to 
 - **Return:** Only the route's validated same-locale single-hop `via` address is retained in page props and propagated
   to Recording relation destinations and finite-view links. Invalid, nested or cross-locale addresses are omitted by
   the existing return-address validator.
+
+## Work tag evidence and visits
+
+Decision: keep a 24-assertion overview preview, use Details for the rest of the supplied reading and the existing
+property-selected Relations reader for native continuation; never display a hidden or inferred total.
+
+The Work overview mounts the tag reader from the admitted Subject read and its exact released definitions. A
+missing release is unavailable, independently of an admitted page with no readable tags. Non-work types do not
+acquire a tag model. The reader performs no native calls, per-tag hydration, result crawling or writes.
+
+Tags retain the original classification property, assertion id and Concept Subject id. A redirect may inform the
+existing destination reader but never substitutes the assertion's original operand. Equal labels, repeated target
+Subjects and assertions under different properties remain separate rows in supplied order. When the native page
+has already selected current relation slots, the preview does not re-rank that bounded window. Otherwise it uses
+the existing preferred/normal selection rule.
+
+Spoiler admission runs before reading labels, weight evidence, selected rows or preview length. Every supplied
+spoiler qualifier must have the native dimensionless exact level; unknown or malformed evidence never
+becomes a level-zero assertion. The page shows only admitted assertions. Empty means no admitted assertions in
+this reading at the current preference, not an assertion that the complete work has no tags. No native relation
+count is used as a tag total, continuation indicator or hidden-evidence count.
+
+`rezics:sourceTagWeight` plus `rezics:sourceTagWeightMetric=vndbTagsRating` has the released VNDB `(0,3]`, unit `1`
+meaning from [Semantic](../../../../../services/kernel/src/semantic/README.md#released-source-weighted-classification-tags).
+The exact signed decimal token is preserved. No rounding, normalization, sort score, confidence or REZICS rating
+is derived. Absent weight, unsupported semantics and unreadable supplied evidence have separate presentations.
+The independently reachable evidence control uses the existing StatementSummary, value and qualifier readers,
+including the assertion's own references and released labels with their fallback language. The raw supported
+meaning comes from the immutable release; the preview does not publish or map provider evidence.
+
+Native `schema:genre` and `schema:keywords` associations do not imply a weight exists. VNDB dump votes and Bangumi
+public metadata are not converted to the Kana aggregate by this UI. The producer's live preparation retains its
+owner; a missing weight remains explicitly absent on the public page.
+
+Tag navigation uses the Concept host's existing `role`, `tagQualifiers` and `spoiler` fields. Only native supported
+spoiler equality qualifiers are carried; numeric weight evidence is not converted to a new filter language. The
+Concept reader continues to own scheme selection, result filters, current membership rechecks and page boundaries.
+The return address is a validated Subject visit address with its original locale, Realm, view, node and opaque
+cursor. Its bounded `#work-tags` locator names only an admitted assertion/property, focus target and preference;
+it is neither identity authority nor a disclosure grant. Unsupported or lost source addresses restart safely.
+Graph-only classification return validation remains unchanged.
+
+A return restores the browse or evidence control only when that assertion is still admitted at the same spoiler
+preference; otherwise the tag heading is the safe restart. It never opens stale evidence automatically. One
+explicit evidence disclosure is retained at a time. A successful source replacement, even an equal one, resets it.
+Preference, address, account and credential replacement retire it through the existing catalogue/browser lifetime;
+A/B/A cannot revive a previous callback. Source and evidence reads remain separate from command owners.
+
+### Cost and presentation
+
+The projection visits the supplied facet properties and their already bounded assertion arrays once. It retains
+at most 24 rendered cards and one opened evidence panel; it starts zero reads and retains zero result windows or
+command intents. Remaining evidence uses Details, and property continuation uses the mounted Relations reader's
+native page and opaque cursor without refilling sparse pages or implying completeness. The overview keeps exact
+values, weight-state text and spoiler evidence visible beside separate browse and inspect controls. Actions wrap,
+have at least 44px targets and retain focus outlines in light and dark themes. All eight UI locales include these
+states; definition/Subject labels retain their native fallback language.
