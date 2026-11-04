@@ -62,3 +62,12 @@ acceptance, along with the mounted lifecycle, lost acknowledgements and refresh,
 `../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.`
 That client export is unchanged from the base, where the referenced module is absent. The output also reports
 errors in unchanged Community, Content and Search source/tests. This is not a successful workspace typecheck.
+
+After fixing the test fixture types and applying the repository formatter, the workspace compiler reported no
+loan source or loan test diagnostics; its unrelated workspace errors remain. The focused landing command
+`bun run --cwd services/kernel check test/library/loan-date.test.ts test/library/loan-model.test.ts` executed
+both files: 9 tests passed, 0 failed, with 139 assertions. Its native command completed, but the wrapper exited 1
+while returning artifacts:
+`error: remote-check: returned empty directory differs from its manifest: services/kernel/.temp/schema-diagnostics/schema-3aQitT`.
+The test phase passed; the overall landing command did not. Full native HTTP lifecycle, frozen acceptance,
+64/512/4096 growth and browser review were not run and remain deferred to integration and the continuation.
