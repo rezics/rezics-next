@@ -335,17 +335,50 @@ function executableSorts(supported: ShelfAdvice['supported'] | undefined) {
   return (['last_activity', 'added', 'finished'] as const).filter((field) => supported?.sortFields.includes(field));
 }
 
-function choiceAdmitted(draft: ShelfDraft, advice: ReadingAdvice | undefined): boolean {
-  const supported = advice?.shelfAdvice?.supported;
-  if (!supported) return false;
-  if (!supported.layouts.includes(draft.layout) || !supported.gridSizes.includes(draft.gridSize)) return false;
-  for (const layout of Object.values(draft.layouts)) if (layout && !supported.layouts.includes(layout)) return false;
-  for (const choice of Object.values(draft.sorts)) {
+function choiceAdmitted(
+  draft: ShelfDraft,
+  advice: ReadingAdvice | undefined,
+  dirty: Set<string>,
+  baseline?: ShelfPreferences,
+): boolean {
+  const shelfAdvice = advice?.shelfAdvice;
+  if (!shelfAdvice) return false;
+  const { supported, limits } = shelfAdvice;
+  const original = baseline ? draftFrom(baseline) : undefined;
+  if (
+    dirty.has('layout') &&
+    (!baseline || baseline.layouts?.all !== draft.layout) &&
+    !supported.layouts.includes(draft.layout)
+  )
+    return false;
+  if (
+    dirty.has('gridSize') &&
+    (!baseline || baseline.gridSize !== draft.gridSize) &&
+    !supported.gridSizes.includes(draft.gridSize)
+  )
+    return false;
+  for (const key of dirty) {
+    if (!key.startsWith('layout:')) continue;
+    const scope = key.slice(7);
+    const layout = draft.layouts[scope];
+    if (baseline && baseline.layouts?.[scope] === layout) continue;
+    if (!layout) continue;
+    if (
+      scope === 'all' ||
+      scope.length > limits.scopeMaxLength ||
+      !new RegExp(limits.scopePattern).test(scope) ||
+      !supported.layouts.includes(layout)
+    )
+      return false;
+  }
+  for (const tab of tabs) {
+    if (!dirty.has(`sort:${tab}`) || (baseline && original?.sorts[tab] === draft.sorts[tab])) continue;
+    const choice = draft.sorts[tab];
     if (choice === defaultSortChoice || choice.startsWith('unsupported:')) continue;
     const [field, direction] = choice.split(':');
     if (
-      !supported.sortFields.includes(field as ShelfPreferenceSort['field']) ||
-      !supported.sortDirections.includes(direction as 'asc' | 'desc')
+      !supported.sortFields.some((supportedField) => supportedField === field) ||
+      !supported.sortDirections.some((supportedDirection) => supportedDirection === direction)
     )
       return false;
   }
@@ -414,33 +447,39 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   edit(next: Partial<ShelfDraft>, dirtyKey: string) {
-    if (!this.editable()) return;
+    const draft = { ...this.state.draft, ...next };
+    if (
+      !this.editable() ||
+      !choiceAdmitted(draft, this.state.advice, new Set([dirtyKey]), this.state.known.shelf)
+    )
+      return;
     this.update({
-      draft: { ...this.state.draft, ...next },
+      draft,
       dirty: new Set([...this.state.dirty, dirtyKey]),
       phase: this.state.phase === 'saved' ? 'idle' : this.state.phase,
     });
   }
 
   editSort(tab: ShelfPreferenceTab, choice: string) {
-    if (!this.editable()) return;
+    const dirtyKey = `sort:${tab}`;
+    const draft = { ...this.state.draft, sorts: { ...this.state.draft.sorts, [tab]: choice } };
+    if (
+      !this.editable() ||
+      !choiceAdmitted(draft, this.state.advice, new Set([dirtyKey]), this.state.known.shelf)
+    )
+      return;
     this.update({
-      draft: { ...this.state.draft, sorts: { ...this.state.draft.sorts, [tab]: choice } },
-      dirty: new Set([...this.state.dirty, `sort:${tab}`]),
+      draft,
+      dirty: new Set([...this.state.dirty, dirtyKey]),
       phase: this.state.phase === 'saved' ? 'idle' : this.state.phase,
     });
   }
 
   editTypeLayout(scope: string, layout: ShelfDraft['layout'] | undefined) {
     const limits = this.state.advice?.shelfAdvice?.limits;
-    if (
-      !this.editable() ||
-      !limits ||
-      scope === 'all' ||
-      scope.length > limits.scopeMaxLength ||
-      !new RegExp(limits.scopePattern).test(scope)
-    )
-      return;
+    if (!this.editable() || !limits || scope === 'all') return;
+    if (layout && (scope.length > limits.scopeMaxLength || !new RegExp(limits.scopePattern).test(scope))) return;
+    if (!layout && !this.state.draft.layouts[scope]) return;
     const layouts = { ...this.state.draft.layouts };
     delete layouts[scope];
     if (layout) layouts[scope] = layout;
@@ -579,7 +618,7 @@ export class ShelfPreferenceDraftRecovery {
       (pending.reset && pending.dirty.size > 0) ||
       changedAfterReceipt ||
       !!readIssue ||
-      (remainingDirty.size > 0 && !choiceAdmitted(resetDraft, current.advice));
+      (remainingDirty.size > 0 && !choiceAdmitted(resetDraft, current.advice, remainingDirty));
     this.update({
       known: { shelf, version: current.version },
       advice: current.advice,
@@ -610,6 +649,15 @@ export class ShelfPreferenceDraftRecovery {
       return;
     }
     const shelf = reset ? null : patchFor(this.state.known.shelf, this.state.draft, this.state.dirty);
+    if (
+      !reset &&
+      shelf &&
+      Object.keys(shelf).length > 0 &&
+      !choiceAdmitted(this.state.draft, this.state.advice, this.state.dirty, this.state.known.shelf)
+    ) {
+      this.update({ phase: 'failed', reason: 'write:invalid' });
+      return;
+    }
     if (shelf?.layouts) {
       const maxLayouts = this.state.advice?.shelfAdvice?.limits.maxLayouts ?? 0;
       const merged = { ...this.state.known.shelf.layouts, ...shelf.layouts };
@@ -890,7 +938,7 @@ export function ShelfPreferencesCard({
                     ? offeredLayouts
                     : [state.draft.layout, ...offeredLayouts]
                   ).map((layout) => (
-                    <option key={layout} value={layout}>
+                    <option key={layout} value={layout} disabled={!offeredLayouts.includes(layout)}>
                       {layoutName(layout)}
                     </option>
                   ))}
@@ -1015,6 +1063,8 @@ export function ShelfPreferencesCard({
             <ShelfTypeDefaults
               key={JSON.stringify([sessionOwner?.subject, csrfToken, getLocale()])}
               layouts={{ ...state.draft.layouts, ...(state.dirty.has('layout') ? { all: state.draft.layout } : {}) }}
+              supportedLayouts={shelfAdvice.supported.layouts}
+              layoutLabel={layoutName}
               globalLayout={state.draft.layout}
               savedLayouts={state.known.shelf.layouts ?? {}}
               disabled={disabled}

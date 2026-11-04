@@ -9,15 +9,15 @@ import {
   type ShelfTypesCurrentRead,
   type ShelfTypesView,
 } from '../../library/shelf-types-read';
-import type { ShelfPreferences } from '../preferences';
+import type { ShelfAdvice, ShelfPreferences } from '../preferences';
 
 const nativeRead = (cursor?: string) => readShelfTypesCurrent({ data: cursor ? { cursor } : {} });
-const layoutLabel = (layout: ShelfLayout) =>
-  layout === 'grid' ? m.library_layout_grid() : layout === 'list' ? m.library_layout_list() : m.library_layout_table();
 
 /** One replacement owner-index page; saved scopes remain removable when discovery cannot name them. */
 export function ShelfTypeDefaults({
   layouts,
+  supportedLayouts,
+  layoutLabel,
   globalLayout,
   savedLayouts,
   disabled,
@@ -29,6 +29,8 @@ export function ShelfTypeDefaults({
   readTypes = nativeRead,
 }: {
   layouts: NonNullable<ShelfPreferences['layouts']>;
+  supportedLayouts: ShelfAdvice['supported']['layouts'];
+  layoutLabel: (layout: string) => string;
   globalLayout: ShelfLayout;
   savedLayouts: NonNullable<ShelfPreferences['layouts']>;
   disabled: boolean;
@@ -159,11 +161,18 @@ export function ShelfTypeDefaults({
                 disabled={disabled || !current()}
                 onChange={(event) => {
                   const value = event.currentTarget.value;
-                  if (current() && (!atLimit || !value)) onChange(selected, value ? (value as ShelfLayout) : undefined);
+                  if (!current() || (atLimit && value)) return;
+                  const layout = supportedLayouts.find((candidate) => candidate === value);
+                  if (!value || layout) onChange(selected, layout);
                 }}
               >
                 <option value="">{m.settings_shelf_type_inherit()}</option>
-                {(['grid', 'list', 'table'] as const).map((layout) => (
+                {override && !supportedLayouts.includes(override) ? (
+                  <option value={override} disabled>
+                    {layoutLabel(override)}
+                  </option>
+                ) : null}
+                {supportedLayouts.map((layout) => (
                   <option key={layout} value={layout} disabled={atLimit}>
                     {layoutLabel(layout)}
                   </option>
