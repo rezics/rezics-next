@@ -449,7 +449,11 @@ export async function prepareShowcaseTags(input: {
   known?: VndbPublicTagKnownBindings;
 }) {
   const known = input.known ?? { schemes: [], concepts: [] };
-  const projected = await projectShowcaseTagTables(input.tables, input.selectedVids);
+  const projected = await projectShowcaseTagTables(
+    input.tables,
+    input.selectedVids,
+    known.concepts.length ? new Set(known.concepts.map((row) => row.code)) : undefined,
+  );
   const bindings = await readVndbPublicTagBindings(input.port, known);
   const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
   return { ...planned, bindings, vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, planned.admitted) };
@@ -466,11 +470,7 @@ export async function importShowcaseTags(input: {
   manifest?: { recordVocabulary?(records: readonly ShowcaseTagVocabularyRecord[]): void };
 }): Promise<ShowcaseTagsResult> {
   const known = input.known ?? { schemes: [], concepts: [] };
-  const projected = await projectShowcaseTagTables(
-    input.tables,
-    input.selectedVids,
-    known.concepts.length ? new Set(known.concepts.map((row) => row.code)) : undefined,
-  );
+  const projected = await projectShowcaseTagTables(input.tables, input.selectedVids);
   const bindings = await readVndbPublicTagBindings(input.port, known);
   const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
   input.manifest?.recordVocabulary?.(planned.vocabulary);
