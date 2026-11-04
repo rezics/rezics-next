@@ -195,14 +195,14 @@ test('served operands, exact own status and recovery form one fresh private rout
     await click('Load more');
     expect(router.state.location.search).toEqual({ cursor });
     expect(host.textContent).toContain('next page could not be loaded');
-    expect(window.document.activeElement).toBe(host.querySelector('h1'));
+    expect(window.document.activeElement === host.querySelector('h1')).toBe(true);
     const failedAddress = history.location.href;
     await click('Try again');
     expect(history.location.href).toBe(failedAddress);
     expect(reads.slice(1, 3)).toEqual([{ cursor }, { cursor }]);
     await click('Select report');
     expect(router.state.location.search).toEqual({ cursor, reportId: otherId });
-    expect(window.document.activeElement).toBe(host.querySelector('[aria-pressed="true"]'));
+    expect(window.document.activeElement === host.querySelector('[aria-pressed="true"]')).toBe(true);
     const selectedAddress = history.location.href;
     await follow(host.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]')!);
     expect(statuses).toEqual([otherId]);
@@ -214,7 +214,7 @@ test('served operands, exact own status and recovery form one fresh private rout
     await follow(back);
     expect(history.location.href).toBe(selectedAddress);
     expect(reads.at(-1)).toEqual({ cursor, reportId: otherId });
-    expect(window.document.activeElement).toBe(host.querySelector('[aria-pressed="true"]'));
+    expect(window.document.activeElement === host.querySelector('[aria-pressed="true"]')).toBe(true);
     const beforeBack = statuses.length;
     await act(async () => {
       history.back();
@@ -273,7 +273,7 @@ test('served operands, exact own status and recovery form one fresh private rout
       resolveLate!();
       await tick();
     });
-    expect(window.document.activeElement).toBe(elsewhere);
+    expect(window.document.activeElement === elsewhere).toBe(true);
     expect(host.textContent).not.toContain('Own evidence');
     expect(host.querySelector('a[href*="historyReportId"]')).toBeNull();
   } finally {
