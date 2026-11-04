@@ -1,8 +1,6 @@
 import { privateAuthRead } from './private-auth-read';
 
-export type SignInPageViewer =
-  | { kind: 'signed-out' }
-  | { kind: 'signed-in'; account_id: string; email: string | null };
+export type SignInPageViewer = { kind: 'signed-out' } | { kind: 'signed-in'; account_id: string; email: string | null };
 
 export type SignInPage = {
   methods: { password: boolean; passkey: boolean };
@@ -12,12 +10,10 @@ export type SignInPage = {
 
 export type SignInPageResult = { kind: 'ready'; page: SignInPage } | { kind: 'unavailable' };
 export type SignInPageReadOwner = {
-  beginPageRead():
-    | {
-        finish(): boolean;
-        retire(): void;
-      }
-    | null;
+  beginPageRead(): {
+    finish(): boolean;
+    retire(): void;
+  } | null;
 };
 
 const maxQueryBytes = 4096;
@@ -29,11 +25,7 @@ const encoder = new TextEncoder();
 /** One no-store native read. The only request data is the current route query;
  * an entered email never participates in method or session advice.
  */
-export async function loadSignInPage(
-  query: string,
-  origin: string,
-  caller?: AbortSignal,
-): Promise<SignInPageResult> {
+export async function loadSignInPage(query: string, origin: string, caller?: AbortSignal): Promise<SignInPageResult> {
   if (encoder.encode(query).byteLength > maxQueryBytes) return { kind: 'unavailable' };
   try {
     const page = await privateAuthRead(async (signal) => {
@@ -144,7 +136,8 @@ export function canContinueAsCurrentAccount(page: SignInPage): boolean {
 
 async function readJsonBounded(response: Response): Promise<unknown> {
   const announced = Number(response.headers.get('content-length'));
-  if (Number.isSafeInteger(announced) && announced > maxResponseBytes) throw new Error('Sign-in page response too large');
+  if (Number.isSafeInteger(announced) && announced > maxResponseBytes)
+    throw new Error('Sign-in page response too large');
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Sign-in page response is empty');
   const chunks: Uint8Array[] = [];

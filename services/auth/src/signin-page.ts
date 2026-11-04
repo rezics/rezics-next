@@ -1,6 +1,4 @@
-export type SignInPageViewer =
-  | { kind: 'signed-out' }
-  | { kind: 'signed-in'; account_id: string; email: string | null };
+export type SignInPageViewer = { kind: 'signed-out' } | { kind: 'signed-in'; account_id: string; email: string | null };
 
 export type SignInPage = {
   methods: { password: true; passkey: true };

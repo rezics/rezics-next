@@ -252,7 +252,10 @@ test('pages sign in with the login client resumes authorization and replaces the
   const first = await signIn({ email: `${person}@example.test`, password });
   expect(first.status).toBe(200);
   const firstCookie = cookie(first);
-  const page = await readSignInPage('client_id=rezics-website&scope=media%3Aread&prompt=login&sig=old&exp=1', firstCookie);
+  const page = await readSignInPage(
+    'client_id=rezics-website&scope=media%3Aread&prompt=login&sig=old&exp=1',
+    firstCookie,
+  );
   expect(page.status).toBe(200);
   expect(await page.json()).toEqual({
     methods: { password: true, passkey: true },

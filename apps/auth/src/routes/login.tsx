@@ -29,11 +29,7 @@ import { ErrorAlert } from '../alert';
 import { selectManagementOperationStepUp } from '../management-operation-step-up';
 import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
 import { LoginAttempt, useLoginJourney } from '../login-attempt';
-import {
-  canContinueAsCurrentAccount,
-  loadSignInPageForJourney,
-  type SignInPageResult,
-} from '../signin-page';
+import { canContinueAsCurrentAccount, loadSignInPageForJourney, type SignInPageResult } from '../signin-page';
 
 const emailId = 'login-email';
 const emailErrorId = 'login-email-error';
@@ -195,8 +191,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     void loadSignInPageForJourney(query, window.location.origin, attempt, controller.signal).then((result) => {
       if (!result) return;
       setPage(result);
-      if (result.kind === 'ready' && result.page.viewer.kind === 'signed-in')
-        setEmail(result.page.viewer.email ?? '');
+      if (result.kind === 'ready' && result.page.viewer.kind === 'signed-in') setEmail(result.page.viewer.email ?? '');
     });
     return () => {
       controller.abort();
@@ -234,9 +229,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     if (
       page.kind !== 'ready' ||
       !page.page.methods.passkey ||
-      (page.page.viewer.kind === 'signed-in' &&
-        !switching &&
-        canContinueAsCurrentAccount(page.page)) ||
+      (page.page.viewer.kind === 'signed-in' && !switching && canContinueAsCurrentAccount(page.page)) ||
       passkeySupport !== 'autofill' ||
       selectManagementOperationStepUp(query).kind !== 'ordinary'
     )
@@ -352,8 +345,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   const pageData = page.kind === 'ready' ? page.page : null;
   const currentViewer = pageData?.viewer.kind === 'signed-in' ? pageData.viewer : null;
   const canContinue = pageData ? canContinueAsCurrentAccount(pageData) : false;
-  const showCredentials =
-    !!pageData && (!currentViewer || switching || pageData.continuation.requires_sign_in);
+  const showCredentials = !!pageData && (!currentViewer || switching || pageData.continuation.requires_sign_in);
 
   return (
     <AuthPage heading={m.auth_login_heading()}>
@@ -390,73 +382,71 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
           ) : null}
         </section>
       ) : null}
-      {pageData && !pageData.methods.passkey ? (
-        <p role="status">{m.auth_login_passkey_method_unavailable()}</p>
-      ) : null}
+      {pageData && !pageData.methods.passkey ? <p role="status">{m.auth_login_passkey_method_unavailable()}</p> : null}
       {pageData && pageData.methods.passkey && passkeySupport === 'none' ? (
         <p role="status">{m.auth_login_passkey_browser_unsupported()}</p>
       ) : null}
       {showCredentials ? (
-      <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
-        <Field data-invalid={Boolean(emailError)}>
-          <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
-          <Input
-            ref={emailInput}
-            id={emailId}
-            name="email"
-            type="email"
-            autoComplete={passkeySupport === 'autofill' ? 'username webauthn' : 'username'}
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setEmailError('');
-            }}
-            aria-invalid={emailError ? true : undefined}
-            aria-describedby={emailError ? emailErrorId : undefined}
-            readOnly={pending && !passkeyPending}
-            required
-          />
-          {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
-        </Field>
-        <Field data-invalid={Boolean(passwordError)}>
-          <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
-          <PasswordInput
-            name="password"
-            autoComplete="current-password"
-            required
-            readOnly={pending && !passkeyPending}
-            id={passwordId}
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setPasswordError('');
-            }}
-            aria-invalid={passwordError ? true : undefined}
-            aria-describedby={passwordError ? passwordErrorId : undefined}
-          />
-          {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
-        </Field>
-        {message ? (
-          <ErrorAlert tabIndex={-1} ref={alert}>
-            {message}
-          </ErrorAlert>
-        ) : null}
-        <Button type="submit" disabled={pending && !passkeyPending} aria-busy={pending && !passkeyPending}>
-          {m.auth_login_heading()}
-        </Button>
-        {!pageData.methods.passkey || passkeySupport === 'none' || passkeySupport === 'checking' ? null : (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            aria-busy={passkeyPending}
-            onClick={() => void submitPasskey()}
-          >
-            <KeyRound aria-hidden="true" />
-            {m.auth_login_passkey()}
+        <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
+          <Field data-invalid={Boolean(emailError)}>
+            <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
+            <Input
+              ref={emailInput}
+              id={emailId}
+              name="email"
+              type="email"
+              autoComplete={passkeySupport === 'autofill' ? 'username webauthn' : 'username'}
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setEmailError('');
+              }}
+              aria-invalid={emailError ? true : undefined}
+              aria-describedby={emailError ? emailErrorId : undefined}
+              readOnly={pending && !passkeyPending}
+              required
+            />
+            {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
+          </Field>
+          <Field data-invalid={Boolean(passwordError)}>
+            <FieldLabel htmlFor={passwordId}>{m.auth_login_password()}</FieldLabel>
+            <PasswordInput
+              name="password"
+              autoComplete="current-password"
+              required
+              readOnly={pending && !passkeyPending}
+              id={passwordId}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setPasswordError('');
+              }}
+              aria-invalid={passwordError ? true : undefined}
+              aria-describedby={passwordError ? passwordErrorId : undefined}
+            />
+            {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
+          </Field>
+          {message ? (
+            <ErrorAlert tabIndex={-1} ref={alert}>
+              {message}
+            </ErrorAlert>
+          ) : null}
+          <Button type="submit" disabled={pending && !passkeyPending} aria-busy={pending && !passkeyPending}>
+            {m.auth_login_heading()}
           </Button>
-        )}
-      </form>
+          {!pageData.methods.passkey || passkeySupport === 'none' || passkeySupport === 'checking' ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              aria-busy={passkeyPending}
+              onClick={() => void submitPasskey()}
+            >
+              <KeyRound aria-hidden="true" />
+              {m.auth_login_passkey()}
+            </Button>
+          )}
+        </form>
       ) : null}
       {recoveryComplete ? (
         <div className="auth-login-alert" role="status">

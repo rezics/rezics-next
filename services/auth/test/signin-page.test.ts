@@ -6,11 +6,11 @@ const signedOut = { kind: 'signed-out' } as const;
 
 test('sign-in page projects installed methods and a safe interactive continuation', () => {
   expect(
-    signInPage(
-      'client_id=search&scope=work%3Aread&prompt=login&sig=old&exp=1',
-      origin,
-      { kind: 'signed-in', account_id: 'account-a', email: 'person@example.test' },
-    ),
+    signInPage('client_id=search&scope=work%3Aread&prompt=login&sig=old&exp=1', origin, {
+      kind: 'signed-in',
+      account_id: 'account-a',
+      email: 'person@example.test',
+    }),
   ).toEqual({
     methods: { password: true, passkey: true },
     viewer: { kind: 'signed-in', account_id: 'account-a', email: 'person@example.test' },
