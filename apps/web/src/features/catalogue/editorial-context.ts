@@ -1,6 +1,8 @@
 import type { KernelClient } from '@rezics/client';
 import { checkSubjectStructure } from '@rezics/definitions/validate';
 import type { ReviewContext } from '../../subject/candidates';
+import { createContextApi } from '../contexts/api';
+import type { Actions, ContextDirectoryEntry, Failure, Result } from '../contexts/model';
 import { settingsId } from '../contexts/settings';
 import type { EditorialSettingsTransport } from './context-settings';
 
@@ -18,7 +20,15 @@ export type EditorialFailure = Continuity & {
   ok: false;
   reason: 'denied' | 'missing' | 'invalid' | 'conflict' | 'unavailable';
 };
-export type EditorialRead = EditorialFailure | (Continuity & { ok: true; context: ReviewContext });
+export type EditorialRead =
+  | EditorialFailure
+  | (Continuity & {
+      ok: true;
+      context: ReviewContext | null;
+      lifecycle: ContextDirectoryEntry | null;
+      lifecycleUnavailable: boolean;
+      actions: Result<Actions>;
+    });
 export type EditorialResult =
   | EditorialFailure
   | (Continuity & {
@@ -29,6 +39,7 @@ export type EditorialResult =
     });
 export type EditorialTransport = {
   read: (address: EditorialAddress) => Promise<EditorialRead>;
+  creation: (session?: string) => Promise<Result<Actions>>;
   submit: (command: EditorialCommand) => Promise<EditorialResult>;
   settings?: EditorialSettingsTransport;
 };
@@ -46,6 +57,11 @@ export function editorialAddress(input: unknown): EditorialAddress {
   const value = record(input);
   if (typeof value.id !== 'string' || !uuid.test(value.id)) throw new Error('Invalid Context');
   return { id: value.id, ...continuity(value) };
+}
+export function editorialCreationInput(input: unknown): Continuity {
+  const value = record(input);
+  if (Object.keys(value).some((key) => key !== 'session')) throw new Error('Invalid Context creation authority');
+  return continuity(value);
 }
 export function editorialCommand(input: unknown): EditorialCommand {
   const value = record(input);
@@ -102,20 +118,33 @@ export async function readEditorialContext(
   authorization: string,
   address: EditorialAddress,
 ): Promise<EditorialRead> {
-  try {
-    const response = await client.contexts({ id: address.id }).get({
-      headers: {
-        authorization,
-        ...(address.session ? { 'rezics-session-token': address.session } : {}),
-      },
-    });
-    if (response.status !== 200 || !response.data)
-      return failure(response.status, response.error?.value, response.headers);
-    if (response.data.context.id !== address.id) return { ok: false, reason: 'unavailable' };
-    return { ok: true, context: response.data.context, ...token(response.headers) };
-  } catch {
-    return { ok: false, reason: 'unavailable' };
-  }
+  const result = await createContextApi(client, authorization).detail(address.id, address.session);
+  if (result.kind !== 'ready')
+    return { ok: false, reason: editorialReadReason(result), ...(result.session ? { session: result.session } : {}) };
+  return {
+    ok: true,
+    context: result.value.context,
+    lifecycle: result.value.lifecycle,
+    lifecycleUnavailable: result.value.lifecycleUnavailable,
+    actions: result.value.actions,
+    ...(result.session ? { session: result.session } : {}),
+  };
+}
+
+function editorialReadReason(result: Failure): EditorialFailure['reason'] {
+  if (result.kind === 'signed-out' || result.kind === 'denied') return 'denied';
+  if (result.kind === 'missing') return 'missing';
+  if (result.kind === 'invalid') return 'invalid';
+  if (result.kind === 'conflict' || result.kind === 'stale') return 'conflict';
+  return 'unavailable';
+}
+
+export async function readEditorialCreationActions(
+  client: KernelClient,
+  authorization: string,
+  session?: string,
+): Promise<Result<Actions>> {
+  return createContextApi(client, authorization).creation(session);
 }
 
 /** Bind only generated native methods. No creator flags, client deadline or invented lifecycle DTO. */

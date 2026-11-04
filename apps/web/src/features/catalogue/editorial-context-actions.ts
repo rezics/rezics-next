@@ -7,12 +7,15 @@ import { kernelClient } from '../../kernel/client';
 import {
   editorialAddress,
   editorialCommand,
+  editorialCreationInput,
+  readEditorialCreationActions,
   readEditorialContext,
   submitEditorialContext,
   type EditorialFailure,
   type EditorialRead,
   type EditorialResult,
 } from './editorial-context';
+import type { Actions, Result } from '../contexts/model';
 
 async function credential(expectedReader: string): Promise<string | EditorialFailure> {
   setResponseHeader('cache-control', 'private, no-store');
@@ -35,6 +38,14 @@ export const readEditorialWorkspace = createServerFn({ method: 'POST', strict: f
     return typeof authorization === 'string'
       ? readEditorialContext(kernelClient(), authorization, data)
       : authorization;
+  });
+export const readEditorialCreation = createServerFn({ method: 'POST', strict: false })
+  .validator(originalReaderInput(editorialCreationInput))
+  .handler(async ({ data }): Promise<Result<Actions>> => {
+    const authorization = await credential(data.expectedReader);
+    return typeof authorization === 'string'
+      ? readEditorialCreationActions(kernelClient(), authorization, data.session)
+      : { kind: authorization.reason === 'denied' ? 'denied' : 'unavailable' };
   });
 export const changeEditorialWorkspace = createServerFn({ method: 'POST', strict: false })
   .validator(originalReaderInput(editorialCommand))

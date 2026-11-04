@@ -206,9 +206,11 @@ function Permission({ actions, locale }: { actions: Result<Actions> | null; loca
     <p role="status" className="text-sm text-muted-foreground">
       {!actions
         ? m.ctxw_loading({}, o)
-        : actions.kind !== 'ready'
-          ? m.ctxw_actions_unavailable({}, o)
-          : m.ctxw_current_actions({}, o)}
+        : actions.kind === 'denied' || actions.kind === 'signed-out'
+          ? m.ctxw_denied({}, o)
+          : actions.kind !== 'ready'
+            ? m.ctxw_actions_unavailable({}, o)
+            : m.ctxw_current_actions({}, o)}
     </p>
   );
 }
@@ -292,6 +294,17 @@ export function ContextDirectoryView({
           </Button>
         )}
         <Permission actions={data?.creation ?? null} locale={locale} />
+        {!data ||
+        (data.creation.kind !== 'ready' && data.creation.kind !== 'denied' && data.creation.kind !== 'signed-out') ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClassName}
+            onClick={() => void reload().catch(() => {})}
+          >
+            {m.ctxw_reread({}, o)}
+          </Button>
+        ) : null}
       </header>
       <nav aria-label={m.ctxw_views({}, o)} className="flex flex-wrap gap-4">
         <a
@@ -389,9 +402,11 @@ export function ContextCreateView({
   const [inventory, setInventory] = useState<SettingsRead | null | undefined>(settings);
   const [captured, setCaptured] = useState<SettingsRead | null>(null);
   const [changed, setChanged] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const preparingRef = useRef(false);
   const preview = useRef<SettingsPreview | null>(null);
   const intent = useContextIntent(submit, reload);
-  const locked = intent.busy || !!intent.pending;
+  const locked = intent.busy || !!intent.pending || preparing;
   const created = intent.result?.kind === 'confirmed' ? intent.result : null;
   const createdContext = created?.created ?? (created?.current.kind === 'ready' ? created.current.value.context : null);
   const snapshot = inventory?.kind === 'ready' ? inventory.snapshot : null;
@@ -405,6 +420,7 @@ export function ContextCreateView({
           : captured.kind
         : null);
   const review = snapshot ? policyPreview(snapshot, selected) : { settings: selected, release: '', defaults: {} };
+  const settingsReady = selected === null || (snapshot !== null && !!policyPreview(snapshot, selected).settings);
   useEffect(() => {
     if (settings) setInventory(settings);
   }, [settings]);
@@ -412,9 +428,13 @@ export function ContextCreateView({
     if (!current() || !loadSettings || inventory) return;
     let cancelled = false;
     setInventory({ kind: 'loading' });
-    void loadSettings().then((latest) => {
-      if (!cancelled && current() && latest) setInventory(latest);
-    });
+    void loadSettings()
+      .then((latest) => {
+        if (!cancelled && current() && latest) setInventory(latest);
+      })
+      .catch(() => {
+        if (!cancelled && current()) setInventory({ kind: 'unavailable' });
+      });
     return () => {
       cancelled = true;
     };
@@ -425,25 +445,41 @@ export function ContextCreateView({
     if (snapshot?.digest === capturedDigest) return;
     let cancelled = false;
     setCaptured({ kind: 'loading' });
-    void loadSettings(capturedDigest).then((latest) => {
-      if (!cancelled && current() && latest) setCaptured(latest);
-    });
+    void loadSettings(capturedDigest)
+      .then((latest) => {
+        if (!cancelled && current() && latest) setCaptured(latest);
+      })
+      .catch(() => {
+        if (!cancelled && current()) setCaptured({ kind: 'unavailable' });
+      });
     return () => {
       cancelled = true;
     };
   }, [capturedDigest, current, loadSettings, snapshot]);
   async function confirm() {
-    if (!current() || !actions || !admits(actions, 'create') || locked) return;
+    if (!current() || !actions || !admits(actions, 'create') || locked || preparingRef.current) return;
     const labels = labelsFromDraft(rows);
     if (!labels) return;
-    let settingsId = selected ?? undefined;
-    if (selected && loadSettings) {
-      const latest = await loadSettings();
-      if (!current()) return;
-      if (latest?.kind === 'ready') {
+    preparingRef.current = true;
+    setPreparing(true);
+    try {
+      let settingsId = selected ?? undefined;
+      if (selected) {
+        if (!loadSettings) {
+          setInventory({ kind: 'unavailable' });
+          return;
+        }
+        let latest: SettingsRead;
+        try {
+          latest = await loadSettings();
+        } catch {
+          latest = { kind: 'unavailable' };
+        }
+        if (!current()) return;
+        setInventory(latest);
+        if (latest.kind !== 'ready') return;
         const next = policyPreview(latest.snapshot, selected);
         const previous = snapshot ? policyPreview(snapshot, selected) : next;
-        setInventory(latest);
         if (!next.settings) return;
         if (policyFingerprint(previous) !== policyFingerprint(next)) {
           setChanged(true);
@@ -452,24 +488,20 @@ export function ContextCreateView({
         settingsId = next.settings;
         preview.current = next;
       } else {
-        if (latest) setInventory(latest);
-        preview.current = {
-          settings: selected,
-          release: snapshot?.digest ?? '',
-          defaults: snapshot?.contexts[selected]?.defaults ?? {},
-        };
+        preview.current = review;
       }
-    } else {
-      preview.current = review;
+      setChanged(false);
+      await intent.submit({
+        operation: 'create',
+        labels,
+        key: crypto.randomUUID(),
+        ...(actions.session ? { session: actions.session } : {}),
+        ...(settingsId ? { settings: settingsId } : {}),
+      });
+    } finally {
+      preparingRef.current = false;
+      if (current()) setPreparing(false);
     }
-    setChanged(false);
-    await intent.submit({
-      operation: 'create',
-      labels,
-      key: crypto.randomUUID(),
-      ...(actions.session ? { session: actions.session } : {}),
-      ...(settingsId ? { settings: settingsId } : {}),
-    });
   }
   return (
     <article className={width}>
@@ -506,7 +538,7 @@ export function ContextCreateView({
       ) : (
         <form
           className="max-w-xl space-y-5"
-          aria-busy={intent.busy}
+          aria-busy={intent.busy || preparing}
           onSubmit={(event) => {
             event.preventDefault();
             void confirm();
@@ -558,11 +590,22 @@ export function ContextCreateView({
           ) : null}
           <Permission actions={actions} locale={locale} />
           {actions?.kind === 'ready' && !admits(actions, 'create') ? <p role="status">{m.ctxw_denied({}, o)}</p> : null}
+          {(!actions || (actions.kind !== 'ready' && actions.kind !== 'denied' && actions.kind !== 'signed-out')) && (
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClassName}
+              disabled={locked}
+              onClick={() => void reload().catch(() => {})}
+            >
+              {m.ctxw_reread({}, o)}
+            </Button>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
               className={actionClassName}
               type="submit"
-              disabled={locked || !actions || !admits(actions, 'create') || !labelsFromDraft(rows)}
+              disabled={locked || !actions || !admits(actions, 'create') || !settingsReady || !labelsFromDraft(rows)}
             >
               {m.ctxw_create({}, o)}
             </Button>

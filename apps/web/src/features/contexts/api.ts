@@ -90,12 +90,13 @@ export function createContextApi(
         { resources: [{ type: 'semantic.context', id }] },
         { headers: headers(session) },
       );
-      if (response.status !== 200 || !response.data) return failure(response.status, response.error?.value);
+      if (response.status !== 200 || !response.data)
+        return { ...failure(response.status, response.error?.value), ...continuity(response.headers) };
       const resource = response.data.resources.find((entry) => entry.type === 'semantic.context' && entry.id === id);
       // A missing precise resolver is unavailable. It never implies creator authority or a grant.
       return resource && 'viewerActions' in resource
         ? { kind: 'ready', value: resource.viewerActions, ...continuity(response.headers) }
-        : unavailable;
+        : { ...unavailable, ...continuity(response.headers) };
     } catch (error) {
       return caught(error);
     }
@@ -119,13 +120,11 @@ export function createContextApi(
         directory.lifecycle(id, headers(session)),
         actions(id, session),
       ]);
-      for (const result of [context, lifecycle, permissions])
-        if (result.kind === 'signed-out' || result.kind === 'denied') return result;
+      if (context.kind === 'signed-out' || context.kind === 'denied') return context;
       const token = context.session ?? lifecycle.session ?? permissions.session ?? session;
       const next = token ? { session: token } : {};
       if (lifecycle.kind === 'ready' && lifecycle.value.id !== id) return unavailable;
       if (context.kind === 'ready') {
-        if (lifecycle.kind === 'missing') return lifecycle;
         if (
           lifecycle.kind === 'ready' &&
           (lifecycle.value.state !== 'active' || lifecycle.value.kind !== context.value.kind)
@@ -158,8 +157,8 @@ export function createContextApi(
       directory.list(input, headers()).catch(() => unavailable),
       actions(PAGE_GLOBAL_CONTEXT),
     ]);
-    const denied = [page, creation].find((result) => result.kind === 'signed-out' || result.kind === 'denied');
-    return denied && denied.kind !== 'ready' ? { page: denied, creation: denied } : { page, creation };
+    if (page.kind === 'signed-out' || page.kind === 'denied') return { page, creation: page };
+    return { page, creation };
   }
   async function submit(input: Command): Promise<MutationResult> {
     let command: Command;
@@ -215,5 +214,5 @@ export function createContextApi(
       return caught(error, true);
     }
   }
-  return { list, detail, submit, creation: () => actions(PAGE_GLOBAL_CONTEXT) };
+  return { list, detail, submit, creation: (session?: string) => actions(PAGE_GLOBAL_CONTEXT, session) };
 }

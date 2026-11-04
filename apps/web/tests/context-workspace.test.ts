@@ -191,6 +191,8 @@ describe('An editor finds current readable Contexts creates one and follows nati
       settings: null,
       defaults: {},
     };
+    let actionStatus = 200;
+    let lifecycleStatus = 200;
     const json = (body: unknown) =>
       new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
     const client = createKernelClient('https://context-generated.invalid', {
@@ -207,10 +209,21 @@ describe('An editor finds current readable Contexts creates one and follows nati
             next: null,
           });
         }
-        if (url.pathname === `/v1/contexts/${fixtureId}/lifecycle`) return json({ context: entry });
+        if (url.pathname === `/v1/contexts/${fixtureId}/lifecycle`)
+          return lifecycleStatus === 200
+            ? json({ context: entry })
+            : new Response(JSON.stringify({ code: 'not_found' }), {
+                status: lifecycleStatus,
+                headers: { 'content-type': 'application/json' },
+              });
         if (url.pathname === `/v1/contexts/${fixtureId}`) return json({ context: dto });
         if (url.pathname === '/v1/viewerActions')
-          return json({ resources: [{ type: 'semantic.context', id: fixtureId, viewerActions: [] }] });
+          return actionStatus === 200
+            ? json({ resources: [{ type: 'semantic.context', id: fixtureId, viewerActions: [] }] })
+            : new Response(JSON.stringify({ code: 'forbidden' }), {
+                status: actionStatus,
+                headers: { 'content-type': 'application/json' },
+              });
         return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
       }) as typeof fetch,
     });
@@ -229,6 +242,21 @@ describe('An editor finds current readable Contexts creates one and follows nati
     expect(await api.detail(fixtureId)).toMatchObject({
       kind: 'ready',
       value: { context: dto, lifecycle: entry, lifecycleUnavailable: false },
+    });
+    actionStatus = 403;
+    expect(await api.detail(fixtureId)).toMatchObject({
+      kind: 'ready',
+      value: { context: dto, actions: { kind: 'denied' } },
+    });
+    expect(await api.list(directoryInput({}))).toMatchObject({
+      page: { kind: 'ready' },
+      creation: { kind: 'denied' },
+    });
+    actionStatus = 200;
+    lifecycleStatus = 404;
+    expect(await api.detail(fixtureId)).toMatchObject({
+      kind: 'ready',
+      value: { context: dto, lifecycle: null, lifecycleUnavailable: true },
     });
     expect(calls.some((call) => call.path === `/v1/contexts/${fixtureId}/lifecycle`)).toBe(true);
   });

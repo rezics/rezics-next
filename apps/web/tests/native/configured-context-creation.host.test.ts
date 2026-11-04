@@ -211,8 +211,32 @@ test('both Web creation callers capture a reviewed released policy and keep nati
     201,
   );
   const slug = subjectHref({ id: book.subject.id, label: 'Configured book' }, 'en').href.split('/').at(-1)!;
+  const parentAuthorityResponse = await stack.kernel(
+    '/v1/viewerActions',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ resources: [{ type: 'semantic.context', id: GLOBAL_CONTEXT }] }),
+    },
+    'alice',
+  );
+  expect(parentAuthorityResponse.status).toBe(200);
+  const parentAuthority = (await parentAuthorityResponse.json()) as {
+    resources: { type: string; id: string; viewerActions?: { action: string; operations: string[] }[] }[];
+  };
+  expect(
+    parentAuthority.resources
+      .find((resource) => resource.type === 'semantic.context' && resource.id === GLOBAL_CONTEXT)
+      ?.viewerActions?.some(
+        (entry) => entry.action === 'context:create' && entry.operations.includes('context.create'),
+      ),
+  ).toBe(true);
   const editorial = await visit(`/en/contexts/new?${new URLSearchParams({ subject: book.subject.id, slug })}`);
-  await editorial.locator('[data-editorial-form] input[id$="-text"]').fill(editorialLabel);
+  await editorial.locator('[data-context-label-row]').nth(0).locator('input').fill(editorialLabel);
+  await editorial.getByRole('button', { name: 'Add a language' }).click();
+  await editorial.locator('[data-context-label-row]').nth(1).locator('select').selectOption('ja');
+  const editorialJapaneseLabel = `讀者設定 ${crypto.randomUUID().slice(0, 6)}`;
+  await editorial.locator('[data-context-label-row]').nth(1).locator('input').fill(editorialJapaneseLabel);
   await editorial.getByText('Inherit published policy', { exact: true }).click();
   const editorialStart = stack.kernelRequests().length;
   const editorialBff = editorial.waitForResponse(
@@ -221,12 +245,22 @@ test('both Web creation callers capture a reviewed released policy and keep nati
   await editorial.getByRole('button', { name: 'Create Context' }).click();
   expect((await editorialBff).status()).toBe(200);
   await expect(editorial.getByText('Context created')).toBeVisible();
+  await waitForBff(editorial);
+  const creationAuthorityRequests = bffRequests(editorialStart).filter(
+    (request) => request.method === 'POST' && new URL(request.url, stack.kernelOrigin).pathname === '/v1/viewerActions',
+  );
+  expect(
+    creationAuthorityRequests.some((request) => {
+      const body = JSON.parse(request.body ?? '{}') as { resources?: { id: string }[] };
+      return body.resources?.some((resource) => resource.id === GLOBAL_CONTEXT) ?? false;
+    }),
+  ).toBe(true);
   const editorialWrites = bffRequests(editorialStart).filter(
     (request) => request.method === 'POST' && new URL(request.url, stack.kernelOrigin).pathname === '/v1/contexts',
   );
   expect(editorialWrites).toHaveLength(1);
   expect(JSON.parse(editorialWrites[0]!.body ?? '{}')).toMatchObject({
-    labels: { en: editorialLabel },
+    labels: { en: editorialLabel, ja: editorialJapaneseLabel },
     settings: 'inherit-readers',
   });
   const review = editorial.getByRole('link', { name: 'Review this subject' });
@@ -284,6 +318,20 @@ test('both Web creation callers capture a reviewed released policy and keep nati
   );
   await raced.getByRole('button', { name: 'Create a Context' }).click();
   expect((await racedBff).status()).toBe(200);
+  await expect(raced.getByText('Current released policies are unavailable. Check again.')).toBeVisible();
+  await waitForBff(raced);
+  expect(
+    bffRequests(createStart).filter(
+      (request) => request.method === 'POST' && new URL(request.url, stack.kernelOrigin).pathname === '/v1/contexts',
+    ),
+  ).toHaveLength(0);
+  await raced.getByRole('button', { name: 'Read current state' }).click();
+  await expect(raced.getByText('Review this Context')).toBeVisible();
+  const retryBff = raced.waitForResponse(
+    (response) => response.request().method() === 'POST' && isServerFn(response.url()),
+  );
+  await raced.getByRole('button', { name: 'Create a Context' }).click();
+  expect((await retryBff).status()).toBe(200);
   await expect(raced.getByText('The request was confirmed')).toBeVisible();
   const racedHref = await raced.getByRole('link', { name: 'Open Context' }).getAttribute('href');
   const racedId = racedHref!.split('/').at(-1)!;
@@ -293,4 +341,62 @@ test('both Web creation callers capture a reviewed released policy and keep nati
   if (racedRead.context.settings?.release !== first)
     await expect(raced.getByText('The returned Context captured a different policy')).toBeVisible();
   await raced.close();
+
+  const bobIdentity = await stack.authPersona('bob');
+  const bobBeforeGrant = await stack.kernel(
+    '/v1/viewerActions',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ resources: [{ type: 'semantic.context', id: GLOBAL_CONTEXT }] }),
+    },
+    'bob',
+  );
+  expect(bobBeforeGrant.status).toBe(200);
+  const beforeGrant = (await bobBeforeGrant.json()) as {
+    resources: { viewerActions?: { operations: string[] }[] }[];
+  };
+  expect(beforeGrant.resources[0]?.viewerActions?.flatMap((entry) => entry.operations) ?? []).not.toContain(
+    'context.create',
+  );
+  await grant(bobIdentity.accountId, ['context:create']);
+  const bobJourney = await auth.signIn('bob');
+  expect((await bobJourney.response()).status()).toBe(200);
+  const bobPage = await bobJourney.context.newPage();
+  bobPage.setDefaultTimeout(30_000);
+  await bobPage.goto(new URL('/en/my/contexts/new', stack.web).href, { waitUntil: 'domcontentloaded' });
+  await bobPage.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+  const revokedLabel = `Revoked creation ${crypto.randomUUID()}`;
+  await bobPage.getByLabel('Context name').fill(revokedLabel);
+  await expect(bobPage.getByRole('button', { name: 'Create a Context' })).toBeEnabled();
+  const revoke = await stack.kernel(
+    '/v1/grants:revoke',
+    {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: bobIdentity.accountId },
+        actions: ['context:create'],
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+  await json(revoke, 'revoke Context creation', 200);
+  const revokedStart = stack.kernelRequests().length;
+  const revokedBff = bobPage.waitForResponse(
+    (response) => response.request().method() === 'POST' && isServerFn(response.url()),
+  );
+  await bobPage.getByRole('button', { name: 'Create a Context' }).click();
+  expect((await revokedBff).status()).toBe(200);
+  await expect(bobPage.getByText('Your current permissions do not allow this request.')).toBeVisible();
+  await waitForBff(bobPage);
+  const revokedWrites = bffRequests(revokedStart).filter(
+    (request) => request.method === 'POST' && new URL(request.url, stack.kernelOrigin).pathname === '/v1/contexts',
+  );
+  expect(revokedWrites).toHaveLength(1);
+  expect(revokedWrites[0]!.responseStatus).toBe(403);
+  await bobPage.close();
+  await bobJourney.context.close();
 });

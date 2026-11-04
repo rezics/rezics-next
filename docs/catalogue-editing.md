@@ -119,6 +119,9 @@ result. Candidate accept/adopt remain independent. Decision: live review stays o
 action; a pre-submit active-release reread requires another Create only when the selected policy's id and defaults
 change.
 
+Decision: both creation surfaces read the mounted create operation on its fixed Global Context parent; lifecycle
+controls use current action availability and exact Context retention state.
+
 ## Browser flow: subject contributions
 
 The existing subject header and compact view frame expose one **Contribute** menu. The shared UI Menu supplies
