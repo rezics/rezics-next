@@ -610,6 +610,8 @@
   "board_start_thread": "Crear un hilo",
   "board_thread_last_activity": "Última actividad {time}",
   "board_thread_replies": "Respuestas: {count}",
+  "board_thread_replies_lower_bound": "Al menos {count} respuestas",
+  "board_thread_activity_unavailable": "La actividad de respuestas no está disponible.",
   "board_rank_refreshed": "Clasificación actualizada {time}",
   "board_threads_page_empty": "No hay debates visibles en esta página. Continúa a la página siguiente.",
   "board_threads_empty": "Todavía no hay debates en este tablón.",

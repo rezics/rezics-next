@@ -3747,3 +3747,28 @@ fail closed for retry.
   hydration. It reserves 32 KiB per author and 16 KiB per reaction target; source bodies and every nested native
   query remain charged even though they are not serialized in this projection. Cross-home observations are
   independent. A later command remains the final authority check.
+
+## Home and Subject conversation activity
+
+Home uses the selected Feed references and Subject uses the selected native thread rows. Both bind the installed
+conversation-activity witness before page hydration, confirm it after source, place, Realm and viewer disclosure,
+and retain the native page's order and cursor. A current public cohort carries exact or lower-bound reply count and
+the original last-contribution time; incomplete cohorts carry no count or time.
+
+Decision: Home and Subject cards show conversation details only after a final public-cohort witness; stale or failed
+activity retries the same page frontier, while incomplete activity stays withheld.
+
+### Cost: Home and Subject conversation activity assembly
+
+- **Touches:** compose selected Home/Subject references, both activity snapshots, all page hydration and final
+  source/place/Realm/viewer disclosure. Charge existing native batch helpers, Semantic, Accounts, Access, media,
+  citation and reaction callees, every participating pool/control/runner phase, full-body reads and serialized bytes.
+- **Bound:** derive from selected T <= 20 native thread keys, represented homes H <= T, fixed page budgets and the
+  installed producer limits. Preserve physical-prefix bounds for initial/final observations. Include duplicate keys,
+  known-zero/lower-bound/withheld, sparse, guest/private, dependency-failure and exact retry branches. Output length
+  alone cannot bound authority/history work.
+- **Growth check:** independently grow unrelated threads/posts, selected removed/contribution history, account/
+  authority history and source repair backlog at 256/1024/4096 while T, H, page limits and admitted bytes stay fixed.
+  Measure the complete consumer operation, including strict indexed plans, actual examined rows/blocks, SQL/control
+  work, retained/materialized/serialized UTF-8 bytes and all owner phases. Keep producer repair measurements with
+  its original owner; this journey measures how page consumers call it.

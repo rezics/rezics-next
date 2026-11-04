@@ -610,6 +610,8 @@
   "board_start_thread": "新しいスレッドを作成",
   "board_thread_last_activity": "最終更新 {time}",
   "board_thread_replies": "返信: {count}",
+  "board_thread_replies_lower_bound": "{count}件以上の返信",
+  "board_thread_activity_unavailable": "返信の状況を表示できません。",
   "board_rank_refreshed": "ランキング更新：{time}",
   "board_threads_page_empty": "このページに表示できるスレッドはありません。次のページへ進んでください。",
   "board_threads_empty": "このボードにはまだスレッドがありません。",

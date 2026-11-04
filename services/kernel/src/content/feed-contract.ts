@@ -112,15 +112,45 @@ export type FeedContentSummary = {
   author?: FeedAuthor;
   excerpt?: string;
   reviewContext?: FeedReviewContext;
+  conversationActivity?: FeedConversationActivity;
   reactionTarget?: FeedReactionTarget;
   reactions?: FeedReactionCounts;
   viewerReaction?: ViewerReactionKind | null;
 };
+export type FeedConversationActivity =
+  | Readonly<{
+      state: 'current';
+      cohort: 'public';
+      count: ConversationActivityReplyCount;
+      lastActivityAt: string | null;
+    }>
+  | Readonly<{ state: 'withheld' }>;
+export type ConversationActivityReplyCount = Readonly<
+  { kind: 'exact'; value: number } | { kind: 'lower-bound'; value: number }
+>;
+const conversationActivity = t.Unsafe<FeedConversationActivity>(
+  t.Union([
+    t.Object(
+      {
+        state: t.Literal('current'),
+        cohort: t.Literal('public'),
+        count: t.Object(
+          { kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]), value: t.Integer({ minimum: 0 }) },
+          closed,
+        ),
+        lastActivityAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+      },
+      closed,
+    ),
+    t.Object({ state: t.Literal('withheld') }, closed),
+  ]),
+);
 type FeedPostContentSummary = FeedContentSummary & { parentContext?: FeedParentContext };
 const contentSummaryFields = {
   author: t.Optional(FeedAuthorSchema),
   excerpt: t.Optional(t.String({ maxLength: 160 })),
   reviewContext: t.Optional(FeedReviewContextSchema),
+  conversationActivity: t.Optional(conversationActivity),
   reactionTarget: t.Optional(reactionTarget),
   reactions: t.Optional(reactionCounts),
   viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
@@ -160,7 +190,7 @@ const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(
 );
 const discoveryReviewSummary = t.Unsafe<
   PublicReviewDiscoverySummary &
-    Pick<FeedContentSummary, 'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext'>
+    Pick<FeedContentSummary, 'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext' | 'conversationActivity'>
 >(
   t.Object(
     {
@@ -171,6 +201,7 @@ const discoveryReviewSummary = t.Unsafe<
       excerpt: t.Optional(t.String({ maxLength: 640 })),
       subject: t.Optional(t.Union([t.Object({ id: uuid, title: nullable }, closed), t.Null()])),
       reviewContext: t.Optional(FeedReviewContextSchema),
+      conversationActivity: t.Optional(conversationActivity),
       reactionTarget: t.Optional(reactionTarget),
       reactions: t.Optional(reactionCounts),
       viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),

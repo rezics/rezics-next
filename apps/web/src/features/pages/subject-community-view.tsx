@@ -227,6 +227,7 @@ export function SubjectCommunityRegion({
                       summary={thread.summary}
                       locale={locale}
                       now={now}
+                      retryHref={retryHref}
                     />
                   ) : (
                     thread.summary && (

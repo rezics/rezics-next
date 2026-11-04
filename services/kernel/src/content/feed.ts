@@ -30,6 +30,13 @@ import {
   type ThreadView,
 } from './reads.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
+import { createConversationActivityBatch } from './conversation-activity.ts';
+import {
+  feedActivityLanesForThreads,
+  feedActivityReferences,
+  projectFeedConversationActivity,
+  staleFeedActivityThreads,
+} from './feed-conversation-activity.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
 import {
   readFeedKind,
@@ -146,6 +153,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
     threads: ReadonlyMap<string, ThreadView | null>,
     authors: Map<string, string>,
     contextSources: Map<string, Readonly<{ thread: ThreadView; post?: PostEntry }>>,
+    activitySources: Map<string, ActivityRef>,
     space?: FollowingSpace,
   ): Promise<FeedItem | null> {
     if (!(await supported(activity, actor, deadline))) return null;
@@ -248,6 +256,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         destination: { kind: 'collection', id: collection.id, title: collection.title },
       };
     }
+    if (item) activitySources.set(item.id, activity);
     return item;
   }
 
@@ -341,6 +350,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       type Candidate = { item: FeedItem | null; after?: string };
       const lanes: Record<Lane, Candidate[]> = { continue: [], following: [], discovery: [] };
       const contextSources = new Map<string, Readonly<{ thread: ThreadView; post?: PostEntry }>>();
+      const activitySources = new Map<string, ActivityRef>();
       const next = { ...position };
       let continueFingerprint = '';
       let discoveryAsOf: string | undefined;
@@ -470,6 +480,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
                         threads,
                         authorIds,
                         contextSources,
+                        activitySources,
                         space,
                       ),
                     };
@@ -554,6 +565,28 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           };
       }
       next.turn = turn;
+      const activityReferences = feedActivityReferences(feedItems);
+      const conversationActivity = createConversationActivityBatch(deps.pool);
+      let initialActivity: Awaited<ReturnType<typeof conversationActivity.select>> = [];
+      const rewindActivityLanes = (affected: ReadonlySet<'discovery' | 'following'>, error: unknown) => {
+        for (const lane of affected) {
+          sources[lane] = sourceState(error);
+          lanes[lane] = [];
+          next[lane] = position[lane];
+        }
+        for (let index = feedItems.length - 1; index >= 0; index--)
+          if (affected.has(feedItems[index]!.source as 'discovery' | 'following')) feedItems.splice(index, 1);
+      };
+      if (activityReferences.threadIds.length) {
+        try {
+          initialActivity = await conversationActivity.select(activityReferences.threadIds, deadline);
+        } catch (error) {
+          rewindActivityLanes(
+            feedActivityLanesForThreads(activityReferences, new Set(activityReferences.threadIds)),
+            error,
+          );
+        }
+      }
       const contextReferences: Array<FeedContentContextReference & { source: 'discovery' | 'following' }> = [];
       for (const item of feedItems) {
         if (isDiscoveryReview(item)) {
@@ -716,6 +749,34 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       // reaction projection and final follow checks, including sparse examined pages.
       await space?.finish();
       await spacePopulation?.finish();
+      try {
+        const selectedFollowing = feedItems.filter((item) => item.source === 'following');
+        const currentFollowing = await Promise.all(
+          selectedFollowing.map(async (item) => ({
+            id: item.id,
+            current: await supported(activitySources.get(item.id)!, actor, deadline),
+          })),
+        );
+        const withdrawn = new Set(currentFollowing.filter(({ current }) => !current).map(({ id }) => id));
+        for (let index = feedItems.length - 1; index >= 0; index--)
+          if (withdrawn.has(feedItems[index]!.id)) feedItems.splice(index, 1);
+      } catch (error) {
+        rewindActivityLanes(new Set(['following']), error);
+      }
+      if (initialActivity.length) {
+        try {
+          const finalActivity = await conversationActivity.confirm(initialActivity, deadline);
+          const staleThreads = staleFeedActivityThreads(finalActivity);
+          if (staleThreads.size) {
+            rewindActivityLanes(feedActivityLanesForThreads(activityReferences, staleThreads), new ProblemError('dependency_unavailable'));
+          } else projectFeedConversationActivity(feedItems, finalActivity);
+        } catch (error) {
+          rewindActivityLanes(
+            feedActivityLanesForThreads(activityReferences, new Set(activityReferences.threadIds)),
+            error,
+          );
+        }
+      }
       const hasNext = names.some((lane) => next[lane] !== false && sources[lane] === 'ready');
       return {
         feedItems,
