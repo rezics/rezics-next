@@ -184,6 +184,8 @@ export type VerifiedDocumentExcerpt = Readonly<{
 }> | Readonly<{ status: 'unavailable' | 'restart' }>;
 
 function windowValid(text: string, window: DocumentTextWindow): boolean {
+  if (text.length > DOCUMENT_TEXT_COST.textBytesPerSubject || window.text.length > DOCUMENT_TEXT_COST.excerptCodePoints * 2)
+    return false;
   const { start, end } = window;
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length)
     return false;

@@ -55,11 +55,19 @@ test('missing producer, unsupported blocks and dependency failure are not comple
 
 test('finite dispatch and UTF-8 prefix coverage preserve independent bodies and languages', async () => {
   const { source, requests } = owner(value('猫'.repeat(30_000)));
-  const projection = await projectDocumentText({ ...selection, references: [reference, { ...reference, language: 'en' }] }, source);
+  const second = { ...reference, language: 'en', document: '018f0000-0000-7000-8000-007000000004' };
+  const read = source.read;
+  source.read = async input => {
+    const result = await read(input);
+    return input.reference.language === 'en' ? { status: 'public', document: { ...value('second'),
+      id: second.document, language: 'en' } } : result;
+  };
+  const projection = await projectDocumentText({ ...selection, references: [reference, second] }, source);
   expect(projection.coverage).toBe('partial');
   expect(Buffer.byteLength(projection.documents[0]!.text)).toBeLessThanOrEqual(DOCUMENT_TEXT_COST.textBytesPerSubject);
   expect(projection.documents[0]!.text).not.toContain('�');
-  expect(projection.documents).toHaveLength(1);
+  expect(projection.documents.map(document => document.reference.language)).toEqual(['ja', 'en']);
+  expect(projection.documents[1]!.text).toBe('s');
   expect(requests.length).toBeLessThanOrEqual(2);
   await expect(projectDocumentText({ ...selection, references: Array(9).fill(reference) }, source)).rejects.toThrow(RangeError);
   expect(requests.length).toBeLessThanOrEqual(2);
