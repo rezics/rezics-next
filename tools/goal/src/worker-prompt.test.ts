@@ -170,7 +170,7 @@ test('every worker can ask for research, and a research worker is told how to do
   expect(research).toContain('This is a research task');
   expect(research).toContain('.reference/<topic>/<project>/');
   expect(research).toContain('never install, build or run anything from them');
-  expect(research).toContain('write only inside /work/trees/t1 and the reference clones under /repo/main/.reference/.');
+  expect(research).toContain('write only inside /work/trees/t1 and the reference clones under that checkout\'s .reference/.');
   expect(implementation).not.toContain('and the reference clones');
 });
 
@@ -409,7 +409,8 @@ test('a worker is told where reference projects are and to read the ones its con
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('/repo/main/.reference/');
+  expect(prompt).toContain('/repo/main');
+  expect(prompt).toContain("the main checkout's .reference/");
   expect(prompt).toContain('read any reference source the contract names before designing');
 });
 

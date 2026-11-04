@@ -318,7 +318,7 @@ function promptView(input: WorkerPromptInput): PromptView {
       : '',
     researchNeeded: research
       ? ''
-      : ` A question needing a large survey of products or sources is a \`spec-conflict\` blocker starting "Research needed:"; research the rest yourself in owner documents, primary sources and ${mainCheckout}/.reference/ (INDEX.md), read any reference source the contract names before designing, and list what you read.`,
+      : ' A question needing a large survey of products or sources is a `spec-conflict` blocker starting "Research needed:"; research the rest yourself in owner documents, primary sources and the main checkout\'s .reference/ (INDEX.md), read any reference source the contract names before designing, and list what you read.',
     frozenFilesLine: frozen.length
       ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.`
       : '',

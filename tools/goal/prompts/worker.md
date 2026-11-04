@@ -4,11 +4,11 @@ The contract is self-sufficient: open the workflow skill, docs/development, arch
 
 Commit before each check and after each fix; an attempt without a commit counts as stalled. {{task.mergeRule}}{{task.premiseCheck}}
 
-If the requested behaviour already exists on the clean retained source, do not make an empty or unrelated commit. Report success without source changes; the controller runs the exact frozen acceptance on that bound source. Dirty source, changed contract or failed acceptance stays non-green.
+If the behaviour already exists on the clean retained source, report success without source changes. Dirty source, a changed contract or failed acceptance stays non-green.
 
 {{task.acceptanceTests}}
 
-Declared paths are where work is expected, not a fence: change any other file the acceptance or a blocking defect needs, minimally, and list each with its reason; undeclared risk-area files stay closed. Decide ambiguities, product choices included: take the reversible option most consistent with the owner documents{{task.decisionFollowThrough}}
+Declared paths are expected work, not a fence: change any other file the outcome needs, list each, and keep undeclared risk-area files closed. Decide ambiguities, product choices included: take the reversible option most consistent with the owner documents{{task.decisionFollowThrough}}
 
 A blocker is only two requirements in existing specs or tests that cannot both hold (quote both), or a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after {{task.toolFailureRetries}} retries: a `tool` blocker starting with the exact error line; never weaken a check instead.{{task.devInfrastructure}} Code another Goal has not delivered is not a blocker: build against its documented contract or a minimal seam, and name it.{{task.researchNeeded}}
 
