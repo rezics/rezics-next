@@ -9,10 +9,16 @@ import {
 } from '../access/viewer-actions.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Access, AccessClient, Actor } from '../request/access.ts';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
 import read from './viewer-actions.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { relationSlotForApi } from './item.ts';
+import {
+  readStatementDisclosure,
+  readStatementRetraction,
+  statementDisclosureTargetOwnedBy,
+} from './statement-disclosure.ts';
 
 /** Shared native evidence for ordinary subject disclosure and personal batches. */
 export async function readSubjectPublicStates(client: AccessClient, ids: readonly string[]) {
@@ -213,5 +219,151 @@ export async function readSubjectCorrectionActions(input: {
     return witness.state === 'concealed' || witness.state === 'stale'
       ? { state: witness.state }
       : { state: 'unavailable' };
+  }
+}
+
+export type StatementConsentActions =
+  | { state: 'available'; disclosed: boolean; operations: ('statement.disclose' | 'statement.retract')[] }
+  | { state: 'refused' | 'terminal' | 'unavailable' };
+
+/** Read current consent operations through the mounted Global Context catalogue and native candidate custody. */
+export async function readStatementConsentActions(input: {
+  pool: Pool;
+  access: Access;
+  bindings: ViewerActionBindings;
+  actor: Actor;
+  clock: () => Date;
+  subject: string;
+  candidate: string;
+  property: string;
+  slot: { target?: string; sameAs?: string; key?: string };
+  deadline: number;
+}): Promise<StatementConsentActions> {
+  const route = routeOf(input.candidate);
+  if (route === null || routeOf(input.subject) === null || input.actor.kind !== 'account') return { state: 'refused' };
+  const accountId = input.actor.accountId;
+  const mounted = (input.bindings.get('semantic.context') ?? []).filter(
+    (binding) =>
+      binding.action === 'statement:propose' &&
+      (binding.operationId === 'statement.disclose' || binding.operationId === 'statement.retract') &&
+      binding.authority === 'resource' &&
+      binding.fixedResourceId === GLOBAL_CONTEXT &&
+      !binding.accountAuthority,
+  );
+  const operationIds = new Set(mounted.map((binding) => binding.operationId));
+  if (!operationIds.has('statement.disclose') || !operationIds.has('statement.retract'))
+    return { state: 'unavailable' };
+
+  const observation: { state: 'pending' | 'ready' | 'refused' | 'terminal'; disclosed?: boolean } = {
+    state: 'pending',
+  };
+  const exactContext: ViewerActionResource = {
+    ...contextViewerActionResource,
+    async prepare(preparation) {
+      const prepared = await contextViewerActionResource.prepare!(preparation);
+      return {
+        ...prepared,
+        async read(client, ids, at, time) {
+          const contexts = await prepared.read(client, ids, at, time);
+          if (!contexts[GLOBAL_CONTEXT]) {
+            observation.state = 'refused';
+            return {};
+          }
+          const disclosure = await readStatementDisclosure(client as PoolClient, input.candidate);
+          if (
+            !disclosure ||
+            disclosure.subject_id !== input.subject ||
+            disclosure.property !== input.property
+          ) {
+            observation.state = 'refused';
+            return {};
+          }
+          const statement = disclosure.statement as {
+            references?: unknown[];
+            value?: { type?: string; content?: unknown };
+          };
+          if (
+            !Array.isArray(statement?.references) ||
+            statement.references.length ||
+            statement.value?.type !== 'value'
+          ) {
+            observation.state = 'refused';
+            return {};
+          }
+          const target = statement.value.content;
+          if (typeof target !== 'string') {
+            observation.state = 'refused';
+            return {};
+          }
+          const release = await readRelease(client as PoolClient, disclosure.release);
+          if (!release) throw new Error('Consent release is unavailable');
+          const property = release.properties[input.property];
+          if (
+            property?.disclosure !== 'sourceOrConsent' ||
+            relationSlotForApi(input.subject, input.property, property.relation, input.slot) !== disclosure.slot_id
+          ) {
+            observation.state = 'refused';
+            return {};
+          }
+          if (!(await statementDisclosureTargetOwnedBy(client as PoolClient, target, accountId))) {
+            observation.state = 'refused';
+            return {};
+          }
+          const retraction = await readStatementRetraction(client as PoolClient, input.subject, input.candidate);
+          if (retraction) {
+            observation.state = 'terminal';
+            return {};
+          }
+          observation.state = 'ready';
+          observation.disclosed = disclosure.disclosed;
+          return contexts;
+        },
+        async actionAvailability(_client, ids) {
+          return Object.fromEntries(ids.map((id) => [id, { 'statement:propose': observation.state === 'ready' }]));
+        },
+      };
+    },
+  };
+  const bindings: ViewerActionBindings = new Map([
+    [
+      'semantic.context',
+      mounted.map(({ action, operationId, exposure }) => ({ action, operationId, exposure, authority: 'resource' })),
+    ],
+  ]);
+  try {
+    const result = await readViewerActions(
+      {
+        pool: input.pool,
+        access: input.access,
+        resources: new Map([['semantic.context', exactContext]]),
+        bindings,
+        clock: input.clock,
+      },
+      input.actor,
+      [{ type: 'semantic.context', id: GLOBAL_CONTEXT }],
+      input.deadline,
+    );
+    if (observation.state === 'terminal') return { state: 'terminal' };
+    if (observation.state === 'refused') return { state: 'refused' };
+    if (observation.state !== 'ready' || observation.disclosed === undefined) return { state: 'unavailable' };
+    const selected = result.resources[0];
+    if (!selected || 'error' in selected) return { state: 'refused' };
+    const operations = selected.viewerActions
+      .filter((entry) => entry.action === 'statement:propose')
+      .flatMap((entry) => entry.operations)
+      .filter(
+        (operation): operation is 'statement.disclose' | 'statement.retract' =>
+          (operation === 'statement.disclose' || operation === 'statement.retract') &&
+          (operation !== 'statement.disclose' || !observation.disclosed),
+      );
+    return operations.length
+      ? { state: 'available', disclosed: observation.disclosed, operations }
+      : { state: 'refused' };
+  } catch {
+    return observation.state === 'terminal'
+      ? { state: 'terminal' }
+      : observation.state === 'refused'
+        ? { state: 'refused' }
+        : { state: 'unavailable' };
   }
 }

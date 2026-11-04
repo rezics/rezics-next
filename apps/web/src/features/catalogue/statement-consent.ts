@@ -9,6 +9,9 @@ export type ConsentFailure = { ok: false; reason: 'denied' | 'missing' | 'invali
 export type ConsentPublic =
   | { state: 'present'; statement: Candidate['statement']; related: SubjectRead['related'] }
   | { state: 'absent' | 'pending' | ConsentFailure['reason'] };
+export type ConsentActions =
+  | { state: 'available'; disclosed: boolean; operations: ('statement.disclose' | 'statement.retract')[] }
+  | { state: 'refused' | 'terminal' | 'unavailable' | 'not-applicable' };
 export type ConsentRead =
   | ConsentFailure
   | {
@@ -17,6 +20,7 @@ export type ConsentRead =
       terminal: boolean;
       disclosure: boolean;
       field: Record<string, string>;
+      actions: ConsentActions;
       public: ConsentPublic;
       next: string | null;
       session?: string;
@@ -26,6 +30,7 @@ export type ConsentResult =
   | {
       ok: true;
       kind: 'disclosed' | 'retracted';
+      actions: ConsentActions;
       public: ConsentPublic;
       session?: string;
     };
@@ -167,6 +172,35 @@ export async function readConsentPublic(
   }
 }
 
+/** Native viewer operations are a separate, failure-isolated component of the private read. */
+export async function readConsentActions(
+  client: KernelClient,
+  authorization: string,
+  address: ConsentAddress,
+  session?: string,
+): Promise<ConsentActions> {
+  try {
+    const result = await client.statements({ id: address.candidate }).consent.get({
+      query: { subject: address.id, property: address.property, ...address.slot },
+      headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
+      fetch: { cache: 'no-store' },
+    });
+    if (result.status !== 200 || !result.data)
+      return { state: result.status === 401 || result.status === 403 || result.status === 404 ? 'refused' : 'unavailable' };
+    if (result.data.state !== 'available') return { state: result.data.state };
+    return {
+      state: 'available',
+      disclosed: result.data.disclosed,
+      operations: result.data.operations.filter(
+        (operation): operation is 'statement.disclose' | 'statement.retract' =>
+          operation === 'statement.disclose' || operation === 'statement.retract',
+      ),
+    };
+  } catch {
+    return { state: 'unavailable' };
+  }
+}
+
 /** A bounded native candidate page supplies identity and state, never an ownership/permission mirror. */
 export async function readStatementConsent(
   client: KernelClient,
@@ -200,6 +234,7 @@ export async function readStatementConsent(
         terminal: false,
         disclosure: false,
         field: {},
+        actions: { state: 'not-applicable' },
         public: current,
         next: page.data.next,
         ...(token ? { session: token } : {}),
@@ -215,6 +250,7 @@ export async function readStatementConsent(
         terminal: true,
         disclosure: false,
         field: {},
+        actions: { state: 'terminal' },
         public: current.state === 'present' ? { state: 'pending' } : current,
         next: null,
         ...(token ? { session: token } : {}),
@@ -223,12 +259,30 @@ export async function readStatementConsent(
     if (definitions.status !== 200 || !definitions.data) return consentFailure(definitions.status);
     const property = (definitions.data.release as Release).properties[address.property];
     if (definitions.data.digest !== candidate.release || !property) return consentFailure(503);
+    const disclosure = property.disclosure === 'sourceOrConsent';
+    const applicable = disclosure && candidate.statement.references.length === 0;
+    const actions = applicable
+      ? await readConsentActions(client, authorization, address, token)
+      : { state: 'not-applicable' as const };
+    if (actions.state === 'terminal')
+      return {
+        ok: true,
+        candidate: null,
+        terminal: true,
+        disclosure: false,
+        field: {},
+        actions,
+        public: current.state === 'present' ? { state: 'pending' as const } : current,
+        next: null,
+        ...(token ? { session: token } : {}),
+      };
     return {
       ok: true,
       candidate,
       terminal: false,
-      disclosure: property.disclosure === 'sourceOrConsent',
+      disclosure,
       field: property.labels,
+      actions,
       public: current,
       next: null,
       ...(token ? { session: token } : {}),
@@ -261,10 +315,15 @@ export async function changeStatementConsent(
     if (result.status !== 200 || !result.data) return consentFailure(result.status);
     if (result.data.candidate !== command.candidate) return consentFailure(503);
     const session = new Headers(result.headers).get('rezics-session-token') ?? command.session;
+    const actions =
+      command.operation === 'retract'
+        ? { state: 'terminal' as const }
+        : await readConsentActions(client, authorization, command, session);
     return {
       ok: true,
       kind: command.operation === 'disclose' ? 'disclosed' : 'retracted',
-      public: await readConsentPublic(client, command, session, command.operation === 'retract'),
+      actions,
+      public: await readConsentPublic(client, command, session, command.operation === 'retract' || actions.state === 'terminal'),
       ...(session ? { session } : {}),
     };
   } catch {
@@ -279,8 +338,9 @@ export function consentAfterChange(
 ): Extract<ConsentRead, { ok: true }> {
   return {
     ...read,
-    ...(result.kind === 'retracted' ? { candidate: null, terminal: true } : {}),
+    ...(result.kind === 'retracted' || result.actions.state === 'terminal' ? { candidate: null, terminal: true } : {}),
     public: result.public,
+    actions: result.actions,
     ...(result.session ? { session: result.session } : {}),
   };
 }
