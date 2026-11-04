@@ -1,8 +1,22 @@
-import plan from './identity-native-planner-read.sql';
-import job from './identity-native-planner-job.sql';
-import current from './identity-native-planner-current.sql';
-import seal from './identity-scope-effects-seal.sql';
+import { sql as planSQL } from './identity-native-planner-read.sql';
+import { sql as jobSQL } from './identity-native-planner-job.sql';
+import { sql as currentSQL } from './identity-native-planner-current.sql';
+import { sql as sealSQL } from './identity-scope-effects-seal.sql';
 import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
+
+/** Consume Reylo's compiled statement export, including its parameter order and file marker.
+ * Refuse a changed statement shape rather than silently dispatching an unbounded projection.
+ */
+function projectNativeSQL(sql: string, projections: readonly (readonly [string, string])[]): string {
+  let projected = sql;
+  for (const [selected, bounded] of projections) {
+    const at = projected.indexOf(selected);
+    if (at === -1 || projected.indexOf(selected, at + selected.length) !== -1)
+      throw new Error(`Native Library projection requires exactly one ${selected}`);
+    projected = projected.replace(selected, bounded);
+  }
+  return projected;
+}
 
 const uuid = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const fields = ['readyGeneration', 'readyBasis', 'workingGeneration', 'workingBasis'] as const;
@@ -24,19 +38,22 @@ const oldValid = `(old_state IS NULL OR (jsonb_typeof(old_state)='object'
 const digestValid = "scope_digest ~ '^[0-9a-f]{64}$'";
 
 /** Invalid native state is returned as a bounded invalid marker, never truncated or treated as absent. */
-export const libraryIdentityBoundedPlanSQL = plan.sql
-  .replace('scope_digest,', `CASE WHEN ${digestValid} THEN scope_digest ELSE NULL END AS scope_digest,`)
-  .replace('old_state,', `CASE WHEN ${oldValid} THEN old_state ELSE NULL END AS old_state,`)
-  .replace(
+export const libraryIdentityBoundedPlanSQL = projectNativeSQL(planSQL, [
+  ['scope_digest,', `CASE WHEN ${digestValid} THEN scope_digest ELSE NULL END AS scope_digest,`],
+  ['old_state,', `CASE WHEN ${oldValid} THEN old_state ELSE NULL END AS old_state,`],
+  [
     'FROM library.identity_scope_plan',
     `, (${digestValid} AND ${oldValid}) AS projection_valid FROM library.identity_scope_plan`,
-  );
+  ],
+]);
 
 // The actual admission producer writes a SHA256 hex digest. Do not return arbitrary stored text.
-export const libraryIdentityBoundedJobSQL = job.sql.replace(
-  'j.scope_digest,\n jsonb_build_array',
-  `CASE WHEN j.scope_digest ~ '^[0-9a-f]{64}$' THEN j.scope_digest ELSE NULL END AS scope_digest,\n jsonb_build_array`,
-);
+export const libraryIdentityBoundedJobSQL = projectNativeSQL(jobSQL, [
+  [
+    'j.scope_digest,\n jsonb_build_array',
+    `CASE WHEN j.scope_digest ~ '^[0-9a-f]{64}$' THEN j.scope_digest ELSE NULL END AS scope_digest,\n jsonb_build_array`,
+  ],
+]);
 
 /** Inclusive JSON projection from schema widths: four <=2048-byte JSON values, UTF8 scope <=256,
  * UUIDs, signed bigint decimal widths and the retained native state (two UUIDs/two <=256-byte bases).
@@ -82,10 +99,12 @@ export const LIBRARY_IDENTITY_PLAN_RESULT_BYTES = Buffer.byteLength(
 );
 
 // The native writer's immutable effect key is library-native:SHA256(operation), never user text.
-export const libraryIdentityBoundedEffectPageSQL = libraryIdentitySQL.effectPage.replace(
-  'SELECT effect_key,',
-  "SELECT CASE WHEN effect_key ~ '^library-native:[0-9a-f]{64}$' THEN effect_key ELSE NULL END AS effect_key,",
-);
+export const libraryIdentityBoundedEffectPageSQL = projectNativeSQL(libraryIdentitySQL.effectPage, [
+  [
+    'SELECT effect_key,',
+    "SELECT CASE WHEN effect_key ~ '^library-native:[0-9a-f]{64}$' THEN effect_key ELSE NULL END AS effect_key,",
+  ],
+]);
 
 // Maximum ORIGINAL JSON binds, derived from the native source/plan field widths. A control byte
 // is the largest JSON encoding of one allowed UTF8 byte. No caller can enlarge these declarations.
@@ -98,7 +117,7 @@ export const LIBRARY_IDENTITY_SELECTED_STATEMENTS = Object.freeze({
     values: Object.freeze([65535, nativeId, 'f'.repeat(64)]),
   }),
   current: Object.freeze({
-    sql: current.sql,
+    sql: currentSQL,
     values: Object.freeze([
       65535,
       nativeId,
@@ -118,7 +137,7 @@ export const LIBRARY_IDENTITY_SELECTED_STATEMENTS = Object.freeze({
     ]),
   }),
   job: Object.freeze({ sql: libraryIdentityBoundedJobSQL, values: Object.freeze([4095, nativeId, decimal]) }),
-  seal: Object.freeze({ sql: seal.sql, values: Object.freeze([65535, nativeId, 'f'.repeat(64)]) }),
+  seal: Object.freeze({ sql: sealSQL, values: Object.freeze([65535, nativeId, 'f'.repeat(64)]) }),
   page: Object.freeze({
     sql: libraryIdentityBoundedEffectPageSQL,
     values: Object.freeze([65535, nativeId, 'f'.repeat(64), escaped.repeat(256), 'first-apply', 1]),
