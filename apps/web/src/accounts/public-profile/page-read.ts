@@ -128,15 +128,15 @@ export async function loadPublicAccountJourney(
         ).catch(() => null)
       : null;
     const identity = profile?.operatorId ? identities?.[profile.operatorId] : undefined;
-    const handle =
+    const operatorHandle =
       identity && 'handle' in identity && typeof identity.handle === 'string' && identity.handle ? identity.handle : null;
     const displayName =
       identity && 'displayName' in identity && typeof identity.displayName === 'string' && identity.displayName
         ? identity.displayName
         : null;
     const operator =
-      identity && 'handle' in identity && identity.state !== 'deleted' && (handle || displayName)
-        ? { id: identity.id, handle, displayName }
+      identity && identity.state !== 'deleted' && 'handle' in identity && (operatorHandle || displayName)
+        ? { id: identity.id, handle: operatorHandle, displayName }
         : undefined;
     const page =
       compositionView && cursor
