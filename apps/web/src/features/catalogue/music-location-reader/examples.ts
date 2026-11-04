@@ -392,7 +392,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
                             '00000000-0000-4000-8000-00000000d215',
                             'schema:instrument',
                             'wikibase-item',
-                            musicInstrumentId,
+                            { type: 'value', content: musicInstrumentId },
                           ),
                           summary: summary(musicEventId, 'schema:Event', 'Harbour concert'),
                           type: 'schema:Event',
