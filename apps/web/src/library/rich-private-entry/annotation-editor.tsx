@@ -102,10 +102,8 @@ export function AnnotationEditor({
             ref={refs.priority}
             id={id + '-priority'}
             className="min-h-11 w-full rounded-md border bg-background px-3"
-            type="number"
-            min={1}
-            max={100}
-            step={1}
+            type="text"
+            autoComplete="off"
             inputMode="numeric"
             value={draft.priority}
             readOnly={disabled}
