@@ -456,9 +456,11 @@ function admittedCoverMedia(
   const receipt = plan.coverSources?.find(
     (item) => item.sourceAlias === record.sourceAlias && item.externalId === record.sourceKey,
   );
-  const imageUrl = (plan.records.bangumi.find((row) => row.key === record.sourceKey)?.payload as
-    | { images?: { large?: unknown } }
-    | undefined)?.images?.large;
+  const imageUrl = (
+    plan.records.bangumi.find((row) => row.key === record.sourceKey)?.payload as
+      | { images?: { large?: unknown } }
+      | undefined
+  )?.images?.large;
   if (
     !outcome ||
     !receipt ||
@@ -516,7 +518,11 @@ async function currentCoverFence(
 ): Promise<'open' | 'fenced' | 'unavailable'> {
   if (!review.fence) return 'unavailable';
   try {
-    const current = await review.fence({ source: source.sourceAlias, externalId: source.externalId, fieldGroup: 'cover' });
+    const current = await review.fence({
+      source: source.sourceAlias,
+      externalId: source.externalId,
+      fieldGroup: 'cover',
+    });
     if (current.fenced) return 'fenced';
     return current.securityRevision === null ? 'open' : 'unavailable';
   } catch {
@@ -693,15 +699,16 @@ async function resolveLegacyCandidates(input: {
     if (!id) continue;
     const alias = input.aliases[provider];
     const registration = createSourceRegistration(provider, { source: alias, converterRevision: entityRevision });
-    const mediaContext = provider === 'bangumi'
-      ? showcaseMediaContext({
-          plan: input.plan,
-          outcomes: input.result.mediaOutcomes,
-          alias,
-          externalId: row.key,
-          containerId: id,
-        })
-      : undefined;
+    const mediaContext =
+      provider === 'bangumi'
+        ? showcaseMediaContext({
+            plan: input.plan,
+            outcomes: input.result.mediaOutcomes,
+            alias,
+            externalId: row.key,
+            containerId: id,
+          })
+        : undefined;
     const converted = registration.convert(
       { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
       { source: alias, subjectId: id, ...(mediaContext ?? {}) },
@@ -920,7 +927,11 @@ export async function publishShowcase(input: {
       }
       const state = await currentCoverFence(input.review, outcome);
       if (state !== 'open') {
-        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable' });
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable',
+        });
         blockedCoverCandidates.add(assertion.candidateId);
         continue;
       }
@@ -1002,7 +1013,11 @@ export async function publishShowcase(input: {
       const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
       if (state !== 'open') {
         blockedCoverCandidates.add(assertion.candidateId);
-        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable' });
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable',
+        });
         continue;
       }
     }
@@ -1064,12 +1079,19 @@ export async function publishShowcase(input: {
     if (!id || stoppedSubjects.has(id)) continue;
     if (group.property === 'schema:image') {
       const assertion = assertions.find(
-        (entry) => entry.record.subjectId === id && entry.assertion.property === 'schema:image' && group.ids.has(entry.assertion.candidateId),
+        (entry) =>
+          entry.record.subjectId === id &&
+          entry.assertion.property === 'schema:image' &&
+          group.ids.has(entry.assertion.candidateId),
       );
       const outcome = assertion && admittedCoverMedia(input.plan, mediaOutcomes, group.record, assertion.assertion);
       const state = outcome ? await currentCoverFence(input.review, outcome) : 'unavailable';
       if (state !== 'open') {
-        omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable' });
+        omissions.push({
+          provider: group.record.provider,
+          sourceKey: group.record.sourceKey,
+          code: state === 'fenced' ? 'cover-fenced' : 'cover-fence-unavailable',
+        });
         continue;
       }
     }
@@ -1243,8 +1265,13 @@ export async function publishShowcase(input: {
           (outcome) => outcome.sourceAlias === record.sourceAlias && outcome.externalId === record.sourceKey,
         );
         if (index >= 0) {
-          const { mediaId: _mediaId, mediaKey: _mediaKey, credit: _credit, provenance: _provenance, ...source } =
-            finalMediaOutcomes[index]!;
+          const {
+            mediaId: _mediaId,
+            mediaKey: _mediaKey,
+            credit: _credit,
+            provenance: _provenance,
+            ...source
+          } = finalMediaOutcomes[index]!;
           finalMediaOutcomes[index] = {
             ...source,
             status: state === 'fenced' ? 'fenced' : 'unavailable',
@@ -1264,7 +1291,9 @@ export async function publishShowcase(input: {
       return rows.some((row) => statementOnPublicRead(row, assertion.statement));
     });
     const imageVisible =
-      imagePublishable && !!imageAssertion && visible.some((assertion) => assertion.candidateId === imageAssertion.candidateId);
+      imagePublishable &&
+      !!imageAssertion &&
+      visible.some((assertion) => assertion.candidateId === imageAssertion.candidateId);
     const reportable = visible.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
     const required = record.assertions.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
     if (imageAssertion && imagePublishable && !imageVisible) {
@@ -1327,8 +1356,7 @@ export async function publishShowcase(input: {
       const { gap: _gap, ...record } = item;
       return { ...record, readHandoff: handoff };
     }
-    if (item.status === 'available' && item.candidateId)
-      return { ...item, gap: 'cover-not-public' };
+    if (item.status === 'available' && item.candidateId) return { ...item, gap: 'cover-not-public' };
     return item;
   });
   const finalOmissions = [

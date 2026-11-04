@@ -354,17 +354,15 @@ export function createBoundedPublicGet(options: {
         signal.throwIfAborted();
         let response: Response;
         try {
-          response = await abortable(
-            signal,
-            () =>
-              upstream(url.href, {
-                method: 'GET',
-                headers: { accept: 'application/json' },
-                credentials: 'omit',
-                referrerPolicy: 'no-referrer',
-                redirect: 'error',
-                signal,
-              }),
+          response = await abortable(signal, () =>
+            upstream(url.href, {
+              method: 'GET',
+              headers: { accept: 'application/json' },
+              credentials: 'omit',
+              referrerPolicy: 'no-referrer',
+              redirect: 'error',
+              signal,
+            }),
           );
         } catch (error) {
           signal.throwIfAborted();
@@ -383,7 +381,10 @@ export function createBoundedPublicGet(options: {
           response = await boundedResponse(response, maxResponseBytes, signal);
           buffered = true;
           const problem: unknown = await abortable(signal, () =>
-            response.clone().json().catch(() => null),
+            response
+              .clone()
+              .json()
+              .catch(() => null),
           );
           overload =
             typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;

@@ -44,7 +44,9 @@ test('default selected cover reaches authorized media work, exact publication an
     };
     const rawPlan = await planCrossMediaSeed(tables);
     const bytes = new Uint8Array(
-      await sharp({ create: { width: 40, height: 56, channels: 3, background: '#176aa0' } }).png().toBuffer(),
+      await sharp({ create: { width: 40, height: 56, channels: 3, background: '#176aa0' } })
+        .png()
+        .toBuffer(),
     );
     await runtime.mediaBoundary.source(sourceUrl, undefined, bytes);
     const sourcePlan = await acquireBangumiCoverSources(rawPlan, {
@@ -80,10 +82,16 @@ test('default selected cover reaches authorized media work, exact publication an
       },
     } as unknown as CrossMediaPort;
     const firstPort = captureShowcaseCommands(mediaPort, journal);
-    const initial = await seedCrossMedia(sourcePlan, statePath, firstPort, { origin: runtime.origin }, {
-      providers: ['bangumi'],
-      mediaDeadlineMs: 0,
-    });
+    const initial = await seedCrossMedia(
+      sourcePlan,
+      statePath,
+      firstPort,
+      { origin: runtime.origin },
+      {
+        providers: ['bangumi'],
+        mediaDeadlineMs: 0,
+      },
+    );
     expect(initial.mediaOutcomes[0]?.status).toBe('pending');
     expect(mediaRequests).toBe(1);
     expect(statusReads).toBe(0);
@@ -149,13 +157,16 @@ test('default selected cover reaches authorized media work, exact publication an
     });
     expect(imagePage.adoption?.selection?.some((item) => item.candidate === mediaRecord.candidateId)).toBe(true);
     const publicRead = await publicClient.readSubject(subjectId);
-    const statements = (publicRead.subject as { statements: Record<string, { value: { content: unknown } }[]> }).statements;
+    const statements = (publicRead.subject as { statements: Record<string, { value: { content: unknown } }[]> })
+      .statements;
     expect(statements['schema:image']?.some((row) => row.value.content === mediaId)).toBe(true);
     const cover = (publicRead as { summary?: { cover?: unknown } }).summary?.cover;
     expect(cover).toBeTruthy();
     const variant = stored.variants[0]!;
-    expect((await runtime.request(`/v1/media/${mediaId}:authorizeDownload?variant=${variant.format}-${variant.width}`)).status)
-      .toBe(200);
+    expect(
+      (await runtime.request(`/v1/media/${mediaId}:authorizeDownload?variant=${variant.format}-${variant.width}`))
+        .status,
+    ).toBe(200);
 
     const takedown = await editor.http('/v1/sourceFences:takedown', {
       source: crossMediaAliases.bangumi,
@@ -166,8 +177,10 @@ test('default selected cover reaches authorized media work, exact publication an
     expect(takedown.status).toBe(200);
     const suppressed = await publicClient.readSubject(subjectId);
     expect((suppressed as { summary?: { cover?: unknown } }).summary?.cover).toBeNull();
-    expect((await runtime.request(`/v1/media/${mediaId}:authorizeDownload?variant=${variant.format}-${variant.width}`)).status)
-      .toBe(404);
+    expect(
+      (await runtime.request(`/v1/media/${mediaId}:authorizeDownload?variant=${variant.format}-${variant.width}`))
+        .status,
+    ).toBe(404);
 
     batchCalls.length = 0;
     journal.close();

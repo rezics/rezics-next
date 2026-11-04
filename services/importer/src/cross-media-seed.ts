@@ -1877,7 +1877,10 @@ export async function seedCrossMedia(
           const source = plan.coverSources?.find(
             (item) => item.sourceAlias === input.owner.source && item.externalId === input.owner.external_id,
           );
-          ensure(source?.sourceStatus === 'available' && source.sourceUrl, 'Media intent has no admitted Bangumi cover source');
+          ensure(
+            source?.sourceStatus === 'available' && source.sourceUrl,
+            'Media intent has no admitted Bangumi cover source',
+          );
           ensure(input.mediaImportIntents.length === 1, 'Unexpected Bangumi showcase media asset count');
           const intent = input.mediaImportIntents[0]!;
           const sourceRecord = [...plan.records.bangumi, ...plan.entities.bangumi].find(
@@ -1895,11 +1898,13 @@ export async function seedCrossMedia(
             },
             { source: source.sourceAlias, subjectId: input.subject },
           );
-          const expectedIntent = (conversion as typeof conversion & { mediaImportIntents?: typeof input.mediaImportIntents })
-            .mediaImportIntents?.[0];
+          const expectedIntent = (
+            conversion as typeof conversion & { mediaImportIntents?: typeof input.mediaImportIntents }
+          ).mediaImportIntents?.[0];
           ensure(
-            expectedIntent && JSON.stringify(expectedIntent) === JSON.stringify(intent) &&
-            intent.containerId === input.subject &&
+            expectedIntent &&
+              JSON.stringify(expectedIntent) === JSON.stringify(intent) &&
+              intent.containerId === input.subject &&
               intent.sourceUrl === source.sourceUrl &&
               intent.provenance.source === source.sourceAlias &&
               intent.provenance.external_id === source.externalId &&
@@ -1911,9 +1916,7 @@ export async function seedCrossMedia(
               intent.credit.via.url === bangumiRecordUrl(source.externalId) &&
               intent.credit.license === 'LicenseRef-unknown' &&
               intent.provenance.references.some((reference) =>
-                reference.parts.some(
-                  (part) => part.value.type === 'value' && part.value.content === source.sourceUrl,
-                ),
+                reference.parts.some((part) => part.value.type === 'value' && part.value.content === source.sourceUrl),
               ),
             'Bangumi cover intent does not match its admitted source evidence',
           );
@@ -1943,7 +1946,10 @@ export async function seedCrossMedia(
           mediaAttempts.set(recordKey, observed);
           if (asset.outcome === 'rejected') return { status: 'rejected' };
           if (asset.outcome === 'pending') return { status: 'pending' };
-          ensure(mediaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(mediaId), 'Available media identity is invalid');
+          ensure(
+            mediaId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(mediaId),
+            'Available media identity is invalid',
+          );
           return { status: 'available', mediaIds: resolution.mediaIds };
         },
       };
@@ -2115,7 +2121,11 @@ export async function seedCrossMedia(
       }
       if (containerId) {
         try {
-          const fence = await port.fence({ source: source.sourceAlias, externalId: source.externalId, fieldGroup: 'cover' });
+          const fence = await port.fence({
+            source: source.sourceAlias,
+            externalId: source.externalId,
+            fieldGroup: 'cover',
+          });
           if (fence.fenced) {
             mediaOutcomes.push({ ...source, status: 'fenced', containerId });
             continue;
@@ -2129,7 +2139,9 @@ export async function seedCrossMedia(
       const mediaId = containerId ? importer.session.bindings.mediaIds(owner).cover : undefined;
       let storedIntent: CrossMediaMediaOutcome | undefined;
       if (containerId && mediaId) {
-        const row = [...plan.records.bangumi, ...plan.entities.bangumi].find((candidate) => candidate.key === source.externalId);
+        const row = [...plan.records.bangumi, ...plan.entities.bangumi].find(
+          (candidate) => candidate.key === source.externalId,
+        );
         if (row) {
           const converted = createSourceRegistration('bangumi', {
             source: source.sourceAlias,
@@ -2141,7 +2153,12 @@ export async function seedCrossMedia(
               record: row.payload,
             },
             { source: source.sourceAlias, subjectId: containerId },
-          ) as { mediaImportIntents?: Array<{ credit: CrossMediaMediaOutcome['credit']; provenance: CrossMediaMediaOutcome['provenance'] }> };
+          ) as {
+            mediaImportIntents?: Array<{
+              credit: CrossMediaMediaOutcome['credit'];
+              provenance: CrossMediaMediaOutcome['provenance'];
+            }>;
+          };
           const intent = converted.mediaImportIntents?.[0];
           if (intent)
             storedIntent = {
@@ -2154,8 +2171,7 @@ export async function seedCrossMedia(
             };
         }
       }
-      const outcome =
-        prior ??
+      const outcome = prior ??
         storedIntent ?? {
           ...source,
           status: 'unavailable' as const,
@@ -2163,7 +2179,13 @@ export async function seedCrossMedia(
           code: 'media-intent-not-delivered' as const,
         };
       if (outcome.status === 'available' && (!mediaId || outcome.mediaId !== mediaId)) {
-        const { mediaId: _mediaId, mediaKey: _mediaKey, credit: _credit, provenance: _provenance, ...sourceEvidence } = outcome;
+        const {
+          mediaId: _mediaId,
+          mediaKey: _mediaKey,
+          credit: _credit,
+          provenance: _provenance,
+          ...sourceEvidence
+        } = outcome;
         mediaOutcomes.push({
           ...sourceEvidence,
           status: 'unavailable',

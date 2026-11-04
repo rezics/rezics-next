@@ -222,9 +222,10 @@ function selectedEnvelopes(
       converterRevision: entityRevision,
     });
     for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
-      const context = provider === 'bangumi'
-        ? showcaseMediaContext({ plan, outcomes: mediaOutcomes, alias: aliases[provider], externalId: row.key })
-        : undefined;
+      const context =
+        provider === 'bangumi'
+          ? showcaseMediaContext({ plan, outcomes: mediaOutcomes, alias: aliases[provider], externalId: row.key })
+          : undefined;
       const converted = registration.convert(
         { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
         { source: aliases[provider], ...(context ?? {}) },
@@ -382,15 +383,16 @@ export function buildShowcaseManifest(input: {
     const alias = aliases[provider];
     const reading = readingIndex.get(`${provider}\0${row.key}`);
     const subject = currentSubject(reading);
-    const mediaContext = provider === 'bangumi'
-      ? showcaseMediaContext({
-          plan,
-          outcomes: mediaOutcomes,
-          alias,
-          externalId: row.key,
-          ...(subject?.id ? { containerId: subject.id } : {}),
-        })
-      : undefined;
+    const mediaContext =
+      provider === 'bangumi'
+        ? showcaseMediaContext({
+            plan,
+            outcomes: mediaOutcomes,
+            alias,
+            externalId: row.key,
+            ...(subject?.id ? { containerId: subject.id } : {}),
+          })
+        : undefined;
     const registration = createSourceRegistration(provider, { source: alias, converterRevision: entityRevision });
     const conversion = registration.convert(
       { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },

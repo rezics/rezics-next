@@ -2,11 +2,7 @@ import { createHash } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { safeSourceUrl, sourceDigest } from '../../../packages/conversion/src/support.ts';
-import {
-  createBoundedPublicGet,
-  MAX_IMPORT_DEADLINE_MS,
-  MAX_IMPORT_RESPONSE_BYTES,
-} from './import-fetch.ts';
+import { createBoundedPublicGet, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_RESPONSE_BYTES } from './import-fetch.ts';
 import type { CrossMediaPlan } from './cross-media-seed.ts';
 
 const BANGUMI_ORIGIN = 'https://api.bgm.tv';
@@ -34,15 +30,16 @@ export type BangumiCoverSource = Readonly<{
     | 'media-intent-not-delivered';
 }>;
 
-export type CrossMediaMediaOutcome = Omit<BangumiCoverSource, 'sourceStatus'> & Readonly<{
-  sourceStatus: BangumiCoverSource['sourceStatus'];
-  status: 'available' | 'pending' | 'rejected' | 'fenced' | 'absent' | 'unavailable';
-  containerId: string | null;
-  mediaId?: string;
-  mediaKey?: string;
-  credit?: MediaImportRequest['credit'];
-  provenance?: MediaImportRequest['provenance'];
-}>;
+export type CrossMediaMediaOutcome = Omit<BangumiCoverSource, 'sourceStatus'> &
+  Readonly<{
+    sourceStatus: BangumiCoverSource['sourceStatus'];
+    status: 'available' | 'pending' | 'rejected' | 'fenced' | 'absent' | 'unavailable';
+    containerId: string | null;
+    mediaId?: string;
+    mediaKey?: string;
+    credit?: MediaImportRequest['credit'];
+    provenance?: MediaImportRequest['provenance'];
+  }>;
 
 export interface BangumiCoverSourceJournal {
   coverSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiCoverSource | null;
@@ -54,7 +51,9 @@ function ensure(value: unknown, message: string): asserts value {
 }
 
 function object(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function etagValue(value: string | null): string | undefined {
@@ -71,10 +70,14 @@ async function readResponse(response: Response): Promise<Uint8Array> {
       const { done, value } = await reader.read();
       if (done) return output.subarray(0, size);
       ensure(value instanceof Uint8Array, 'Invalid Bangumi API response body');
-      ensure(value.buffer.byteLength <= MAX_IMPORT_RESPONSE_BYTES && value.byteLength <= MAX_IMPORT_RESPONSE_BYTES - size,
-        'Bangumi API response exceeds its byte limit');
+      ensure(
+        value.buffer.byteLength <= MAX_IMPORT_RESPONSE_BYTES && value.byteLength <= MAX_IMPORT_RESPONSE_BYTES - size,
+        'Bangumi API response exceeds its byte limit',
+      );
       if (size + value.byteLength > output.byteLength) {
-        const expanded = new Uint8Array(Math.min(MAX_IMPORT_RESPONSE_BYTES, Math.max(size + value.byteLength, output.byteLength * 2)));
+        const expanded = new Uint8Array(
+          Math.min(MAX_IMPORT_RESPONSE_BYTES, Math.max(size + value.byteLength, output.byteLength * 2)),
+        );
         expanded.set(output);
         output = expanded;
       }
@@ -89,11 +92,7 @@ async function readResponse(response: Response): Promise<Uint8Array> {
   }
 }
 
-function cachedSource(
-  source: BangumiCoverSource,
-  row: SourceRecord,
-  endpoint: string,
-): BangumiCoverSource {
+function cachedSource(source: BangumiCoverSource, row: SourceRecord, endpoint: string): BangumiCoverSource {
   ensure(
     source.sourceAlias === 'bangumi_cross_media' &&
       source.externalId === row.key &&
@@ -198,18 +197,21 @@ export async function acquireBangumiCoverSources(
   } = {},
 ): Promise<CrossMediaPlan> {
   const signalForBatch = AbortSignal.timeout(MAX_IMPORT_DEADLINE_MS);
-  const pause = options.sleep ?? ((ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
-    signal.throwIfAborted();
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', aborted);
-      resolve();
-    }, ms);
-    const aborted = () => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    };
-    signal.addEventListener('abort', aborted, { once: true });
-  }));
+  const pause =
+    options.sleep ??
+    ((ms: number, signal: AbortSignal) =>
+      new Promise<void>((resolve, reject) => {
+        signal.throwIfAborted();
+        const timer = setTimeout(() => {
+          signal.removeEventListener('abort', aborted);
+          resolve();
+        }, ms);
+        const aborted = () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        };
+        signal.addEventListener('abort', aborted, { once: true });
+      }));
   const get = createBoundedPublicGet({
     origin: BANGUMI_ORIGIN,
     pathPrefix: SUBJECT_PATH,
@@ -221,7 +223,9 @@ export async function acquireBangumiCoverSources(
       .filter((member) => member.source === 'bangumi' && member.kind === 'work' && member.membership === 'family')
       .map((member) => member.key),
   );
-  const workRows = plan.records.bangumi.filter((row) => selectedWorks.has(row.key) && [1, 2].includes(Number(row.payload.type)));
+  const workRows = plan.records.bangumi.filter(
+    (row) => selectedWorks.has(row.key) && [1, 2].includes(Number(row.payload.type)),
+  );
   ensure(workRows.length <= COVER_LIMIT, 'Selected Bangumi cover limit exceeded');
   const results = new Map<string, BangumiCoverSource>();
   const endpointless = new Map<string, BangumiCoverSource>();

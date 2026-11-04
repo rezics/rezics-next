@@ -75,7 +75,14 @@ test('default selected Bangumi media intent resumes its journalled reservation t
     expect(sourceReads).toBe(1);
 
     const fake = {
-      async batch(request: { commands: readonly { key: string; op: string; source: { external_id: string }; subject?: { type: string; labels: Record<string, string> } }[] }) {
+      async batch(request: {
+        commands: readonly {
+          key: string;
+          op: string;
+          source: { external_id: string };
+          subject?: { type: string; labels: Record<string, string> };
+        }[];
+      }) {
         return {
           results: request.commands.map((command) => {
             if (command.op === 'create')
@@ -140,10 +147,16 @@ test('default selected Bangumi media intent resumes its journalled reservation t
       },
     } as unknown as CrossMediaPort;
     const port = captureShowcaseCommands(fake, journal);
-    const initial = await seedCrossMedia(firstPlan, statePath, port, { origin: 'https://fixture.test' }, {
-      providers: ['bangumi'],
-      mediaDeadlineMs: 0,
-    });
+    const initial = await seedCrossMedia(
+      firstPlan,
+      statePath,
+      port,
+      { origin: 'https://fixture.test' },
+      {
+        providers: ['bangumi'],
+        mediaDeadlineMs: 0,
+      },
+    );
     expect(initial.mediaOutcomes[0]).toMatchObject({ status: 'pending', containerId: subjectId, sourceUrl });
     expect(mediaRequest).toMatchObject({ containerId: subjectId, sourceUrl });
     expect(mediaRequest!.provenance).toMatchObject({
@@ -155,10 +168,16 @@ test('default selected Bangumi media intent resumes its journalled reservation t
     expect(statusReads).toBe(1);
 
     terminal = 'available';
-    const resumed = await seedCrossMedia(resumedPlan, statePath, port, { origin: 'https://fixture.test' }, {
-      providers: ['bangumi'],
-      mediaDeadlineMs: 0,
-    });
+    const resumed = await seedCrossMedia(
+      resumedPlan,
+      statePath,
+      port,
+      { origin: 'https://fixture.test' },
+      {
+        providers: ['bangumi'],
+        mediaDeadlineMs: 0,
+      },
+    );
     expect(resumed.mediaOutcomes[0]).toMatchObject({ status: 'available', containerId: subjectId, mediaId });
     expect(reservations).toBe(1);
     expect(statusReads).toBe(2);
