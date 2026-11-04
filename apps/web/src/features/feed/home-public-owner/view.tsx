@@ -10,8 +10,7 @@ export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; local
   const kind = item.destination.kind;
   if (kind !== 'collection' && kind !== 'space') return null;
   const options = { locale: locale as Locale };
-  if (!homeFeedDestination(item, locale))
-    return <p role="status">{m.home_owner_context_unavailable({}, options)}</p>;
+  if (!homeFeedDestination(item, locale)) return <p role="status">{m.home_owner_context_unavailable({}, options)}</p>;
   const summary = item.summary;
   const description =
     kind === 'collection' && 'description' in summary
