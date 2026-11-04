@@ -8479,5 +8479,11 @@
   "collection_review_native_help": "変更はまだ下書きです。ネイティブ操作の成功が確認されると、コレクションを再読み込みします。",
   "collection_review_move_start": "{title} をコレクションの先頭に移動します。",
   "collection_review_move_after": "{title} を {anchor} の後に移動します。",
-  "collection_review_add_help": "同じ対象がすでに含まれていても、コレクションの末尾に別の項目として追加します。"
+  "collection_review_add_help": "同じ対象がすでに含まれていても、コレクションの末尾に別の項目として追加します。",
+  "work_franchise_title": "関連作品",
+  "work_franchise_kind_visual_novel": "ビジュアルノベル",
+  "work_franchise_kind_game": "ゲーム",
+  "work_franchise_kind_screen": "映像作品",
+  "work_franchise_kind_book": "書籍",
+  "work_franchise_relation_label_unavailable": "関係ラベルを利用できません"
 }

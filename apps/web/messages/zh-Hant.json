@@ -8479,5 +8479,11 @@
   "collection_review_native_help": "這些變更仍是草稿。原生操作確認成功後，收藏集才會重新載入。",
   "collection_review_move_start": "將 {title} 移至收藏集開頭。",
   "collection_review_move_after": "將 {title} 移至 {anchor} 之後。",
-  "collection_review_add_help": "這會在收藏集末尾新增一個獨立項目，即使該主題已是成員。"
+  "collection_review_add_help": "這會在收藏集末尾新增一個獨立項目，即使該主題已是成員。",
+  "work_franchise_title": "相關作品",
+  "work_franchise_kind_visual_novel": "視覺小說",
+  "work_franchise_kind_game": "遊戲",
+  "work_franchise_kind_screen": "影視作品",
+  "work_franchise_kind_book": "書籍",
+  "work_franchise_relation_label_unavailable": "關係標籤無法使用"
 }

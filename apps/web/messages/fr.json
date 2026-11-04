@@ -8479,5 +8479,11 @@
   "collection_review_native_help": "Ces modifications sont un brouillon. La Collection est actualisée après confirmation native.",
   "collection_review_move_start": "Déplacer {title} au début de la Collection.",
   "collection_review_move_after": "Déplacer {title} après {anchor}.",
-  "collection_review_add_help": "Une occurrence distincte est ajoutée à la fin de la Collection, même si le sujet en fait déjà partie."
+  "collection_review_add_help": "Une occurrence distincte est ajoutée à la fin de la Collection, même si le sujet en fait déjà partie.",
+  "work_franchise_title": "Œuvres liées",
+  "work_franchise_kind_visual_novel": "Roman visuel",
+  "work_franchise_kind_game": "Jeu vidéo",
+  "work_franchise_kind_screen": "Œuvre audiovisuelle",
+  "work_franchise_kind_book": "Livre",
+  "work_franchise_relation_label_unavailable": "Libellé de relation indisponible"
 }

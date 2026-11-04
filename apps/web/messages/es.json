@@ -8479,5 +8479,11 @@
   "collection_review_native_help": "Estos cambios son un borrador. La Colección se actualiza tras la confirmación nativa.",
   "collection_review_move_start": "Mover {title} al principio de la Colección.",
   "collection_review_move_after": "Mover {title} después de {anchor}.",
-  "collection_review_add_help": "Esto añade una entrada independiente al final de la Colección, aunque el tema ya sea miembro."
+  "collection_review_add_help": "Esto añade una entrada independiente al final de la Colección, aunque el tema ya sea miembro.",
+  "work_franchise_title": "Obras relacionadas",
+  "work_franchise_kind_visual_novel": "Novela visual",
+  "work_franchise_kind_game": "Juego",
+  "work_franchise_kind_screen": "Obra audiovisual",
+  "work_franchise_kind_book": "Libro",
+  "work_franchise_relation_label_unavailable": "Etiqueta de relación no disponible"
 }

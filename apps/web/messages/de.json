@@ -8479,5 +8479,11 @@
   "collection_review_native_help": "Diese Änderungen sind ein Entwurf. Nach nativer Bestätigung wird die Sammlung neu geladen.",
   "collection_review_move_start": "{title} an den Anfang der Sammlung verschieben.",
   "collection_review_move_after": "{title} hinter {anchor} verschieben.",
-  "collection_review_add_help": "Dies fügt am Ende der Sammlung einen eigenen Eintrag hinzu, auch wenn das Thema bereits enthalten ist."
+  "collection_review_add_help": "Dies fügt am Ende der Sammlung einen eigenen Eintrag hinzu, auch wenn das Thema bereits enthalten ist.",
+  "work_franchise_title": "Verwandte Werke",
+  "work_franchise_kind_visual_novel": "Visual Novel",
+  "work_franchise_kind_game": "Spiel",
+  "work_franchise_kind_screen": "Film- oder Fernseharbeit",
+  "work_franchise_kind_book": "Buch",
+  "work_franchise_relation_label_unavailable": "Beziehungsbezeichnung nicht verfügbar"
 }

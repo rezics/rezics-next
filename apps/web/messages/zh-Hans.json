@@ -8479,5 +8479,11 @@
   "collection_review_native_help": "这些更改仍是草稿。原生操作确认成功后，收藏集才会重新加载。",
   "collection_review_move_start": "将 {title} 移至收藏集开头。",
   "collection_review_move_after": "将 {title} 移至 {anchor} 之后。",
-  "collection_review_add_help": "这会在收藏集末尾新增一个独立条目，即使该主题已是成员。"
+  "collection_review_add_help": "这会在收藏集末尾新增一个独立条目，即使该主题已是成员。",
+  "work_franchise_title": "相关作品",
+  "work_franchise_kind_visual_novel": "视觉小说",
+  "work_franchise_kind_game": "游戏",
+  "work_franchise_kind_screen": "影视作品",
+  "work_franchise_kind_book": "图书",
+  "work_franchise_relation_label_unavailable": "关系标签暂不可用"
 }

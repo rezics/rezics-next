@@ -81,6 +81,8 @@ import { subjectVisitReturn, withSubjectVisitReturn } from './subject-visit-navi
 import { MangaReaderEntry } from '../catalogue/manga-reader/entry';
 import { isMangaReaderType } from '../catalogue/manga-reader/model';
 import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
+import { WorkFranchiseOverview } from './showcase-work/overview';
+import { showcaseWorkKind } from './showcase-work/model';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -589,6 +591,14 @@ export function SubjectPage({
   const returnSource = catalogueFileSourceId(fileSource);
   const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
   const realm = subjectPageRealm(page);
+  const showcaseWork = read && !page.account ? showcaseWorkKind(read.subject.type, read.summary?.types) : undefined;
+  const workAddress = read && !page.account
+    ? subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale)
+    : undefined;
+  const workReturn = workAddress ? visitReturn ?? contextHref(workAddress.href, realm) : undefined;
+  const workRelationsHref = workAddress && page.views?.includes('relations')
+    ? subjectUrlForView(workAddress, 'relations')
+    : undefined;
   const ContextLink = useMemo(() => {
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
@@ -801,6 +811,18 @@ export function SubjectPage({
                 locale={locale}
               />
             )}
+            {overview && read && !page.account && showcaseWork && workReturn ? (
+              <WorkFranchiseOverview
+                subject={read.subject}
+                related={read.related}
+                definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
+                locale={locale}
+                returnTo={workReturn}
+                {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
+                readerSpoiler={reader?.spoilerLevel ?? 0}
+                link={ContextLink}
+              />
+            ) : null}
             {mangaSubject && (view === 'overview' || view === 'contents' || view === 'editions') ? (
               <MangaReaderEntry
                 source={page}

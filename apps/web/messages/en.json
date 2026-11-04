@@ -8591,5 +8591,11 @@
   "collection_review_native_help": "These changes are a draft. The Collection refreshes after native acknowledgement.",
   "collection_review_move_start": "Move {title} to the start of the Collection.",
   "collection_review_move_after": "Move {title} after {anchor}.",
-  "collection_review_add_help": "This adds a separate occurrence at the end of the Collection, even if the Subject is already a member."
+  "collection_review_add_help": "This adds a separate occurrence at the end of the Collection, even if the Subject is already a member.",
+  "work_franchise_title": "Related works",
+  "work_franchise_kind_visual_novel": "Visual novel",
+  "work_franchise_kind_game": "Game",
+  "work_franchise_kind_screen": "Screen work",
+  "work_franchise_kind_book": "Book",
+  "work_franchise_relation_label_unavailable": "Relation label unavailable"
 }
