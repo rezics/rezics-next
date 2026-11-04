@@ -128,7 +128,7 @@
   "settings_watches_stop": "Dejar de seguir",
   "settings_watches_stopping": "Dejando de seguir…",
   "settings_watches_removed": "Seguimiento detenido. No recibirás futuras notificaciones de esta suscripción.",
-  "settings_watches_removed_current": "Se confirmó la solicitud original para detener el seguimiento. La lista aún muestra una suscripción actual; detenerla enviará una solicitud nueva.",
+  "settings_watches_removed_current": "Se confirmó la solicitud original para detener el seguimiento. La lista actualizada aún incluía una suscripción vigente; detenerla enviará una solicitud nueva.",
   "settings_watches_rejected": "El seguimiento no se detuvo. Actualiza la lista antes de volver a intentarlo.",
   "settings_watches_uncertain_title": "¿Se detuvo el seguimiento?",
   "settings_watches_uncertain_text": "El resultado es desconocido. Actualiza la lista para comprobar si se permite cancelar. Si es así, vuelve a intentar la misma solicitud para confirmar el resultado.",
