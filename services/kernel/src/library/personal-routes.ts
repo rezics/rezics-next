@@ -794,20 +794,14 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const result = await readPage();
         const libraryEntries =
           query.view === 'FULL'
-            ? await attachLibraryListFacts(
-                actor,
-                result.entries.map(entryView),
-                job.deadline,
-                languages,
-                async () => {
-                  const current = await readPage();
-                  if (
-                    JSON.stringify(current.entries) !== JSON.stringify(result.entries) ||
-                    Boolean(current.next) !== Boolean(result.next)
-                  )
-                    throw new ProblemError('semantic_not_ready');
-                },
-              )
+            ? await attachLibraryListFacts(actor, result.entries.map(entryView), job.deadline, languages, async () => {
+                const current = await readPage();
+                if (
+                  JSON.stringify(current.entries) !== JSON.stringify(result.entries) ||
+                  Boolean(current.next) !== Boolean(result.next)
+                )
+                  throw new ProblemError('semantic_not_ready');
+              })
             : result.entries.map(entryView);
         const response = { libraryEntries, next: result.next };
         return withLibraryViewerFacts(actor, response, job.deadline);

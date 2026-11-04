@@ -64,164 +64,176 @@ async function staged(id: string) {
   return prepared;
 }
 
-bunTest.serial('native merge selection reaches survivor and redirected duplicate rows with exact Entry precedence', async () => {
-  const [original, survivor, absent] = await Promise.all([
-    fixture.createSubject(),
-    fixture.createSubject(),
-    fixture.createSubject(),
-  ]);
-  await entry(original, 'paused');
-  await entry(survivor, 'planned');
-  await vote(original, 7);
-  await fixture.merge(original, survivor);
-  expect(await page([original, survivor])).toMatchObject({ state: 'unavailable', retryable: true });
-  await fixture.nativeFigures!.drain();
-  const expectedVote = {
-    state: 'present',
-    units: 7,
-    revision: 1,
-  };
-  expect(await page([original, survivor, survivor, absent])).toMatchObject({
-    state: 'current',
-    rows: [
-      {
-        rowKey: '0',
-        subjectId: original,
-        entry: { entryState: 'paused' },
-        vote: expectedVote,
-      },
-      {
-        rowKey: '1',
-        subjectId: survivor,
-        entry: { entryState: 'planned' },
-        vote: expectedVote,
-      },
-      { rowKey: '2', subjectId: survivor, vote: expectedVote },
-      { rowKey: '3', entry: { state: 'absent' }, vote: { state: 'absent' } },
-    ],
-  });
-  expect(await page([original], { ...owner, accountId: fixture.nativeFigures!.globalVoters[1]!.id })).toMatchObject({
-    state: 'current',
-    rows: [{ entry: { state: 'absent' }, vote: { state: 'absent' } }],
-  });
-  const reads = createCollectionReads({
-    ...deps(),
-    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
-  });
-  expect(
-    await reads.withViewerFacts(owner, { members: [{ id: 'admitted', subjectId: survivor }] }, deadline()),
-  ).toMatchObject({ viewerFacts: { rows: [{ rowKey: 'admitted', vote: expectedVote }] } });
-  await fixture.database.admin.query('DELETE FROM library.entry WHERE account_id=$1 AND subject_id=$2', [
-    owner.accountId,
-    original,
-  ]);
-  expect(await page([original])).toMatchObject({ state: 'current', rows: [{ entry: { entryState: 'planned' } }] });
-  await fixture.database.admin.query(
-    "UPDATE library.entry SET state='paused',revision=2 WHERE account_id=$1 AND subject_id=$2",
-    [owner.accountId, survivor],
-  );
-  expect(await page([survivor])).toMatchObject({
-    state: 'current',
-    rows: [{ entry: { state: 'present', entryState: 'paused', revision: 2 } }],
-  });
-  await vote(survivor, 0);
-  expect(await page([original, survivor])).toMatchObject({
-    state: 'current',
-    rows: [{ vote: { state: 'present', units: 0 } }, { vote: { state: 'present', units: 0 } }],
-  });
-  await vote(survivor, null);
-  expect(await page([survivor, absent])).toMatchObject({
-    state: 'current',
-    rows: [{ vote: { state: 'absent' } }, { vote: { state: 'absent' } }],
-  });
-  expect(await page(Array(100).fill(survivor))).toMatchObject({ state: 'current', rows: expect.any(Array) });
-  await expect(page(Array(101).fill(survivor))).rejects.toThrow('at most 100 rows');
-  await expect(
-    readViewerFactsPage(
-      deps(),
-      owner,
-      [{ rowKey: 'x'.repeat(16_384), subjectId: survivor }],
-      STANDARD_QUESTION_ID,
-      deadline(),
-    ),
-  ).rejects.toThrow('16384');
-}, 180_000);
+bunTest.serial(
+  'native merge selection reaches survivor and redirected duplicate rows with exact Entry precedence',
+  async () => {
+    const [original, survivor, absent] = await Promise.all([
+      fixture.createSubject(),
+      fixture.createSubject(),
+      fixture.createSubject(),
+    ]);
+    await entry(original, 'paused');
+    await entry(survivor, 'planned');
+    await vote(original, 7);
+    await fixture.merge(original, survivor);
+    expect(await page([original, survivor])).toMatchObject({ state: 'unavailable', retryable: true });
+    await fixture.nativeFigures!.drain();
+    const expectedVote = {
+      state: 'present',
+      units: 7,
+      revision: 1,
+    };
+    expect(await page([original, survivor, survivor, absent])).toMatchObject({
+      state: 'current',
+      rows: [
+        {
+          rowKey: '0',
+          subjectId: original,
+          entry: { entryState: 'paused' },
+          vote: expectedVote,
+        },
+        {
+          rowKey: '1',
+          subjectId: survivor,
+          entry: { entryState: 'planned' },
+          vote: expectedVote,
+        },
+        { rowKey: '2', subjectId: survivor, vote: expectedVote },
+        { rowKey: '3', entry: { state: 'absent' }, vote: { state: 'absent' } },
+      ],
+    });
+    expect(await page([original], { ...owner, accountId: fixture.nativeFigures!.globalVoters[1]!.id })).toMatchObject({
+      state: 'current',
+      rows: [{ entry: { state: 'absent' }, vote: { state: 'absent' } }],
+    });
+    const reads = createCollectionReads({
+      ...deps(),
+      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
+    });
+    expect(
+      await reads.withViewerFacts(owner, { members: [{ id: 'admitted', subjectId: survivor }] }, deadline()),
+    ).toMatchObject({ viewerFacts: { rows: [{ rowKey: 'admitted', vote: expectedVote }] } });
+    await fixture.database.admin.query('DELETE FROM library.entry WHERE account_id=$1 AND subject_id=$2', [
+      owner.accountId,
+      original,
+    ]);
+    expect(await page([original])).toMatchObject({ state: 'current', rows: [{ entry: { entryState: 'planned' } }] });
+    await fixture.database.admin.query(
+      "UPDATE library.entry SET state='paused',revision=2 WHERE account_id=$1 AND subject_id=$2",
+      [owner.accountId, survivor],
+    );
+    expect(await page([survivor])).toMatchObject({
+      state: 'current',
+      rows: [{ entry: { state: 'present', entryState: 'paused', revision: 2 } }],
+    });
+    await vote(survivor, 0);
+    expect(await page([original, survivor])).toMatchObject({
+      state: 'current',
+      rows: [{ vote: { state: 'present', units: 0 } }, { vote: { state: 'present', units: 0 } }],
+    });
+    await vote(survivor, null);
+    expect(await page([survivor, absent])).toMatchObject({
+      state: 'current',
+      rows: [{ vote: { state: 'absent' } }, { vote: { state: 'absent' } }],
+    });
+    expect(await page(Array(100).fill(survivor))).toMatchObject({ state: 'current', rows: expect.any(Array) });
+    await expect(page(Array(101).fill(survivor))).rejects.toThrow('at most 100 rows');
+    await expect(
+      readViewerFactsPage(
+        deps(),
+        owner,
+        [{ rowKey: 'x'.repeat(16_384), subjectId: survivor }],
+        STANDARD_QUESTION_ID,
+        deadline(),
+      ),
+    ).rejects.toThrow('16384');
+  },
+  180_000,
+);
 
-bunTest.serial('selected row and account changes withhold stale assembly, while unchanged same-input visits complete', async () => {
-  const id = await fixture.createSubject();
-  await vote(id, 8);
-  const unchanged = await staged(id);
-  expect(await viewerFactsCurrent(deps(), owner, unchanged, deadline())).toBe(true);
-  const changed = await staged(id);
-  await vote(id, 9);
-  expect(
-    await withReadTransaction(fixture.database.pool, (client) => readViewerFacts(client, owner, changed), deadline()),
-  ).toMatchObject({ state: 'unavailable', reason: 'currentness' });
-  expect(await viewerFactsCurrent(deps(), owner, changed, deadline())).toBe(false);
-  expect(await page([id])).toMatchObject({ state: 'current', rows: [{ vote: { units: 9 } }] });
-  const scoped = await staged(id);
-  expect(await viewerFactsCurrent(deps(), { ...owner, scopes: ['library_entry:read'] }, scoped, deadline())).toBe(
-    false,
-  );
-  expect(await page([id], { ...owner, scopes: ['library_entry:read'] })).toMatchObject({
-    state: 'current',
-    rows: [{ vote: { state: 'unavailable', reason: 'scope' } }],
-  });
-  expect(await page([id], owner, id)).toMatchObject({
-    state: 'current',
-    rows: [{ vote: { state: 'unavailable', reason: 'question' } }],
-  });
-  const question = await staged(id);
-  await fixture.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [
-    STANDARD_QUESTION_ID,
-  ]);
-  try {
-    expect(await viewerFactsCurrent(deps(), owner, question, deadline())).toBe(false);
-  } finally {
-    await fixture.database.admin.query('UPDATE rating.question SET revision=1 WHERE id=$1', [STANDARD_QUESTION_ID]);
-  }
-  const account = await staged(id);
-  await fixture.database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [
-    owner.accountId,
-  ]);
-  try {
-    expect(await viewerFactsCurrent(deps(), owner, account, deadline())).toBe(false);
-  } finally {
-    await fixture.database.admin.query('UPDATE access.account SET minimum_authn_epoch=1 WHERE account_id=$1', [
+bunTest.serial(
+  'selected row and account changes withhold stale assembly, while unchanged same-input visits complete',
+  async () => {
+    const id = await fixture.createSubject();
+    await vote(id, 8);
+    const unchanged = await staged(id);
+    expect(await viewerFactsCurrent(deps(), owner, unchanged, deadline())).toBe(true);
+    const changed = await staged(id);
+    await vote(id, 9);
+    expect(
+      await withReadTransaction(fixture.database.pool, (client) => readViewerFacts(client, owner, changed), deadline()),
+    ).toMatchObject({ state: 'unavailable', reason: 'currentness' });
+    expect(await viewerFactsCurrent(deps(), owner, changed, deadline())).toBe(false);
+    expect(await page([id])).toMatchObject({ state: 'current', rows: [{ vote: { units: 9 } }] });
+    const scoped = await staged(id);
+    expect(await viewerFactsCurrent(deps(), { ...owner, scopes: ['library_entry:read'] }, scoped, deadline())).toBe(
+      false,
+    );
+    expect(await page([id], { ...owner, scopes: ['library_entry:read'] })).toMatchObject({
+      state: 'current',
+      rows: [{ vote: { state: 'unavailable', reason: 'scope' } }],
+    });
+    expect(await page([id], owner, id)).toMatchObject({
+      state: 'current',
+      rows: [{ vote: { state: 'unavailable', reason: 'question' } }],
+    });
+    const question = await staged(id);
+    await fixture.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [
+      STANDARD_QUESTION_ID,
+    ]);
+    try {
+      expect(await viewerFactsCurrent(deps(), owner, question, deadline())).toBe(false);
+    } finally {
+      await fixture.database.admin.query('UPDATE rating.question SET revision=1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+    }
+    const account = await staged(id);
+    await fixture.database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [
       owner.accountId,
     ]);
-  }
-}, 180_000);
+    try {
+      expect(await viewerFactsCurrent(deps(), owner, account, deadline())).toBe(false);
+    } finally {
+      await fixture.database.admin.query('UPDATE access.account SET minimum_authn_epoch=1 WHERE account_id=$1', [
+        owner.accountId,
+      ]);
+    }
+  },
+  180_000,
+);
 
-bunTest.serial('late Subject disclosure loss refuses currentness and never exposes a concealed terminal', async () => {
-  const id = await fixture.createSubject();
-  await vote(id, 4);
-  const prepared = await staged(id);
-  const { system, kernel } = communityFixtureRuntime();
-  const response = await kernel.handle(
-    new Request(`http://kernel.test/v1/subjects/${id}:hide`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${system.actors.moderator.bearer}`,
-        'content-type': 'application/json',
-        'idempotency-key': JSON.stringify(randomUUID()),
-      },
-      body: JSON.stringify({ reason: 'Current Subject disclosure' }),
-    }),
-  );
-  expect(response.status, await response.clone().text()).toBe(200);
-  expect(await viewerFactsCurrent(deps(), owner, prepared, deadline())).toBe(false);
-  expect(await page([id])).toMatchObject({
-    state: 'unavailable',
-    reason: 'identity',
-    retryable: true,
-  });
-  const concealed = await createCollectionReads({ ...deps(), tokens: testTokens() }).withViewerFacts(
-    owner,
-    { members: [{ id: 'concealed', subjectId: id }] },
-    deadline(),
-  );
-  expect(concealed).toMatchObject({
-    viewerFacts: { state: 'unavailable', reason: 'identity', retryable: true },
-  });
-}, 180_000);
+bunTest.serial(
+  'late Subject disclosure loss refuses currentness and never exposes a concealed terminal',
+  async () => {
+    const id = await fixture.createSubject();
+    await vote(id, 4);
+    const prepared = await staged(id);
+    const { system, kernel } = communityFixtureRuntime();
+    const response = await kernel.handle(
+      new Request(`http://kernel.test/v1/subjects/${id}:hide`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${system.actors.moderator.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(randomUUID()),
+        },
+        body: JSON.stringify({ reason: 'Current Subject disclosure' }),
+      }),
+    );
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await viewerFactsCurrent(deps(), owner, prepared, deadline())).toBe(false);
+    expect(await page([id])).toMatchObject({
+      state: 'unavailable',
+      reason: 'identity',
+      retryable: true,
+    });
+    const concealed = await createCollectionReads({ ...deps(), tokens: testTokens() }).withViewerFacts(
+      owner,
+      { members: [{ id: 'concealed', subjectId: id }] },
+      deadline(),
+    );
+    expect(concealed).toMatchObject({
+      viewerFacts: { state: 'unavailable', reason: 'identity', retryable: true },
+    });
+  },
+  180_000,
+);
