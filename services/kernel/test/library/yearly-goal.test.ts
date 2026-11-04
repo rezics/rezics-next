@@ -49,12 +49,7 @@ async function read(year: number) {
   return result.value;
 }
 
-async function change(
-  year: number,
-  target: number | null,
-  expectedRevision: string | null,
-  key = crypto.randomUUID(),
-) {
+async function change(year: number, target: number | null, expectedRevision: string | null, key = crypto.randomUUID()) {
   return call('PUT', path, { year, metric, target, expectedRevision }, key);
 }
 
