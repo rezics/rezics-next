@@ -6,7 +6,11 @@ import { join } from 'node:path';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { ImportSession } from '../src/import-session.ts';
-import { readReviewedBangumiBinding, seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
+import {
+  readReviewedBangumiBinding,
+  seedReviewedCatalogue,
+  type ReviewedCataloguePort,
+} from '../src/reviewed-catalogue.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
 type Candidate = {
@@ -158,6 +162,20 @@ test('current reviewed binding accepts transport JSON records and still refuses 
       const page = JSON.parse(JSON.stringify(await native.reviewedCandidates(...args)), (_key, value) =>
         value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
       );
+      for (const candidate of page.candidates) {
+        const statement = candidate.statement;
+        Object.assign(statement, {
+          id: candidate.id,
+          rank: 'normal',
+          qualifiers: [],
+          rezics: { release: 'released', revision: 1 },
+        });
+        statement.property.data_type = 'url';
+        for (const reference of statement.references ?? []) {
+          reference.hash = 'native-reference-hash';
+          for (const part of reference.parts) part.property.data_type = 'url';
+        }
+      }
       if (changed && page.candidates[0]) page.candidates[0].statement.references = [];
       return page;
     },
@@ -167,12 +185,17 @@ test('current reviewed binding accepts transport JSON records and still refuses 
     const session = new ImportSession(path);
     try {
       expect(await readReviewedBangumiBinding(session.bindings, port)).toEqual({
-        sourceConcept: result.subjects['source-harem'], canonicalConcept: result.subjects['canonical-harem'],
+        sourceConcept: result.subjects['source-harem'],
+        canonicalConcept: result.subjects['canonical-harem'],
       });
       changed = true;
       expect(await readReviewedBangumiBinding(session.bindings, port)).toBeNull();
-    } finally { session.close(); }
-  } finally { await rm(directory, { recursive: true, force: true }); }
+    } finally {
+      session.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('default cross-media seed binds the exact editor tag and resumes unchanged facts across a current-binding outage', async () => {
