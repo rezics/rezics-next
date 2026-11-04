@@ -94,6 +94,7 @@ function ReaderStory({
   read?: ScreenEpisodeRead;
 }) {
   const address = `${origin.pathname}${origin.searchStr}${origin.hash ?? ''}`;
+  const directReturn = screenEpisodeReturn(origin.searchStr, 'en');
   const visit = useScreenEpisodeVisit({
     sourceKey: JSON.stringify([id, type, contextId, origin.pathname]),
     pageKey: address,
@@ -101,16 +102,16 @@ function ReaderStory({
     locale: 'en',
     observation,
     observationCurrent: () => true,
-    read,
+    ...(read ? { read } : {}),
     loading: false,
     settledKey: 'story',
-    directReturn: screenEpisodeReturn(origin.searchStr, 'en'),
+    ...(directReturn ? { directReturn } : {}),
   });
   return (
     <ScreenProfileReader
       locale="en"
       public={subject(id, type, label)}
-      episodeRead={read}
+      {...(read ? { episodeRead: read } : {})}
       episodeOrigin={origin}
       episodeVisit={visit}
       episodeVisitKey={address}
