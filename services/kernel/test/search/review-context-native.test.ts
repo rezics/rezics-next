@@ -110,7 +110,7 @@ test('selected mixed Search preserves the opening citation and current target, a
     for (const [index, hit] of wire.hits.entries()) {
       if (hit.summary.kind !== 'review') throw new Error('Expected native review');
       expect(hit.summary.value.source?.openingRevisionId).toBeTruthy();
-      expect(hit.summary.value.reviewContext).toMatchObject({
+      expect(hit.summary.value.searchContext).toMatchObject({
         state: 'available',
         openingPostId: posts[index],
         target: {
@@ -119,8 +119,8 @@ test('selected mixed Search preserves the opening citation and current target, a
         },
         citation: { state: 'available', recorded: votes[index], historicalQuestion: { state: 'unavailable' } },
       });
-      expect(JSON.stringify(hit.summary.value.reviewContext)).not.toContain('How much did you like');
-      expect(JSON.stringify(hit.summary.value.reviewContext)).not.toContain('"units":19');
+      expect(JSON.stringify(hit.summary.value.searchContext)).not.toContain('How much did you like');
+      expect(JSON.stringify(hit.summary.value.searchContext)).not.toContain('"units":19');
     }
     expect(Buffer.byteLength(JSON.stringify(wire.hits))).toBeLessThan(REVIEW_CONTEXT_LIMITS.pageBytes);
 
