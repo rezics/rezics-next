@@ -29,9 +29,11 @@ function RecipeStory({
   signedOut = false,
   onCreate,
   onFixture,
+  evidenceReview = false,
 }: {
   scenario?: RecipeScenario;
   correction?: boolean;
+  evidenceReview?: boolean;
   signedOut?: boolean;
   onCreate?: ObserveCreate;
   onFixture?: (fixture: ReturnType<typeof recipeFixture>) => void;
@@ -45,7 +47,16 @@ function RecipeStory({
         ? {
             ...fixture.corrections,
             load: async () => {
-              await fixture.transport.create({ item: recipeExample(), key: crypto.randomUUID() });
+              const item = recipeExample();
+              if (evidenceReview) {
+                const evidence = item.statements['schema:recipeIngredient']![0]!.references;
+                evidence[0]!.parts.push({
+                  ...structuredClone(evidence[0]!.parts[0]!),
+                  property: { id: 'schema:sameAs' },
+                });
+                evidence.push(structuredClone(evidence[0]!));
+              }
+              await fixture.transport.create({ item, key: crypto.randomUUID() });
               fixture.setScenario(scenario);
               return fixture.corrections.load();
             },
@@ -58,7 +69,7 @@ function RecipeStory({
               return result;
             },
           },
-    [fixture, scenario, correction, onCreate],
+    [fixture, scenario, correction, onCreate, evidenceReview],
   );
   return (
     <PatternStory path="/catalogue/recipe" visitor={signedOut ? 'Signed Out' : 'Signed In'}>
@@ -629,4 +640,37 @@ export const IndependentFamilyRtl: Story = {
   ...IndependentFamilyPhone,
   args: { onFixture: observeRecipe() },
   render: (args) => <RecipeFamilyStory onFixture={args.onFixture} rtl />,
+};
+
+export const EvidenceCorrection: Story = {
+  args: { correction: true, evidenceReview: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const property of ['schema:recipeIngredient', 'schema:recipeInstructions']) {
+      const heading = await canvas.findByRole('heading', { name: fieldName(property) });
+      await userEvent.click(within(heading.closest('section')!).getByRole('button', { name: m.recipe_correct() }));
+      const field = within(
+        canvas
+          .getAllByRole('heading', { name: fieldName(property) })
+          .at(-1)!
+          .closest('section')!,
+      );
+      if (property === 'schema:recipeInstructions') {
+        await userEvent.click(field.getByRole('button', { name: m.recipe_replace_method() }));
+        await userEvent.type(field.getByRole('textbox', { name: m.catalogue_create_language() }), 'en');
+        await userEvent.type(field.getByRole('textbox', { name: m.subject_source_licence() }), 'CC-BY-4.0');
+        await userEvent.type(
+          await field.findByRole('textbox', { name: fieldName(property) }),
+          'My revised original method.',
+        );
+        await userEvent.click(field.getByRole('checkbox', { name: m.recipe_original() }));
+      } else {
+        const citation = field.getAllByRole('textbox', { name: m.correction_url() })[0]!;
+        await userEvent.clear(citation);
+        await userEvent.type(citation, 'https://cook.example/revised');
+      }
+      await userEvent.click(field.getByRole('button', { name: m.recipe_review() }));
+      await expect(field.getByRole('region', { name: m.recipe_review_statement() })).toBeVisible();
+    }
+  },
 };

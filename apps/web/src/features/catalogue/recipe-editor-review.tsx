@@ -8,7 +8,10 @@ import { DefinitionMeaning } from './definition-meaning';
 import { recipeEvidenceChanges, type RecipeProperty } from './recipe-editor';
 import type { TermDraft } from './create-subject';
 import { PartValue, type StatementFieldsRead } from './statement-editor-view';
-import type { StatementInput } from './statement-editor';
+import type { SnakInput, StatementInput } from './statement-editor';
+import { StatementSummary } from './statement-summary';
+
+type ReviewStatement = Omit<StatementInput, 'rank'> & { rank?: StatementInput['rank'] | 'deprecated' };
 
 const wrap =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -18,57 +21,74 @@ type RecipeReviewRow = {
   statement: StatementInput;
   definition: RecipeProperty;
   original?: boolean | undefined;
-  source?: StatementInput | undefined;
+  source?: ReviewStatement | undefined;
 };
 
-function RecipeEvidenceList({
-  statement,
-  read,
-  locale,
-}: {
-  statement: StatementInput;
-  read: StatementFieldsRead;
-  locale: string;
-}) {
-  const o = { locale: locale as never };
-  if (!statement.references.length) return null;
+// Authored evidence and comparison entries stay local; ordinary assertions use StatementSummary.
+function RecipeEvidencePart({ part, read, locale }: { part: SnakInput; read: StatementFieldsRead; locale: string }) {
+  const label = pickText(read.release.properties[part.property.id]?.labels ?? {}, locale);
   return (
-    <ol className="min-w-0 space-y-3">
-      {statement.references.map((group, index) => (
-        <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3 text-sm">
-          <p className="text-muted-foreground">
-            {m.correction_references({}, o)} {index + 1}
-          </p>
-          <ul className="min-w-0 space-y-1">
-            {group.parts.map((part, partIndex) => (
-              <li key={partIndex} className="min-w-0">
-                <PartValue part={part} read={read} locale={locale} />
-              </li>
-            ))}
-          </ul>
-        </li>
-      ))}
-    </ol>
+    <div className="min-w-0 space-y-1">
+      <dt lang={label.lang ?? undefined} className="text-muted-foreground">
+        {label.text || part.property.id}
+      </dt>
+      <dd className="min-w-0 space-y-1">
+        <code className="break-all">{part.property.id}</code>
+        <PartValue part={part} read={read} locale={locale} />
+      </dd>
+    </div>
   );
 }
 
-function RecipeAuthoredPreview({ statement, locale }: { statement: StatementInput; locale: string }) {
+function RecipeReferenceGroup({
+  group,
+  read,
+  locale,
+}: {
+  group: StatementInput['references'][number];
+  read: StatementFieldsRead;
+  locale: string;
+}) {
+  return group.parts.length ? (
+    <dl className="min-w-0 space-y-2">
+      {group.parts.map((part, index) => (
+        <RecipeEvidencePart key={index} part={part} read={read} locale={locale} />
+      ))}
+    </dl>
+  ) : (
+    <p className="text-muted-foreground">{m.facts_reuse_empty({}, { locale: locale as never })}</p>
+  );
+}
+
+function RecipeAuthoredPreview({ statement, locale }: { statement: ReviewStatement; locale: string }) {
   const o = { locale: locale as never };
   const content = statement.value.type === 'value' ? statement.value.content : undefined;
   const authored =
-    content && typeof content === 'object'
+    content && typeof content === 'object' && !Array.isArray(content)
       ? (content as { language?: string; licence?: string; document?: unknown })
       : undefined;
   const document = authored?.document;
   if (!authored) return <p className="text-sm text-muted-foreground">{m.correction_error_required({}, o)}</p>;
   return (
     <div className="min-w-0 space-y-2">
-      <p className="text-sm">
-        {m.catalogue_create_language({}, o)}: {authored.language || m.correction_error_required({}, o)}
-      </p>
-      <p className="text-sm">
-        {m.subject_source_licence({}, o)}: {authored.licence || m.correction_error_required({}, o)}
-      </p>
+      <dl className="min-w-0 space-y-2 text-sm">
+        <div>
+          <dt className="text-muted-foreground">{m.catalogue_create_language({}, o)}</dt>
+          <dd>
+            {typeof authored.language === 'string' && authored.language
+              ? authored.language
+              : m.correction_error_required({}, o)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{m.subject_source_licence({}, o)}</dt>
+          <dd>
+            {typeof authored.licence === 'string' && authored.licence
+              ? authored.licence
+              : m.correction_error_required({}, o)}
+          </dd>
+        </div>
+      </dl>
       {checkDocument(document) ? (
         <DocumentBody document={document} locale={locale} />
       ) : (
@@ -87,41 +107,57 @@ function RecipeAssertionPreview({
   locale,
   original,
 }: {
-  statement: StatementInput;
+  statement: ReviewStatement;
   definition: RecipeProperty;
   read: StatementFieldsRead;
   locale: string;
   original?: boolean | undefined;
 }) {
   const o = { locale: locale as never };
+  if (definition.datatype !== 'document') return <StatementSummary statement={statement} read={read} locale={locale} />;
+  const label = pickText(definition.labels, locale);
   return (
-    <div className="min-w-0 space-y-3">
-      {definition.datatype === 'document' ? (
-        <RecipeAuthoredPreview statement={statement} locale={locale} />
-      ) : (
-        <div className="min-w-0 text-base leading-relaxed">
-          <PartValue part={statement} read={read} locale={locale} />
+    <div className="min-w-0 space-y-3 text-sm">
+      <p lang={label.lang ?? undefined} className="text-muted-foreground">
+        {label.text || statement.property.id}
+      </p>
+      <code className="break-all">{statement.property.id}</code>
+      <RecipeAuthoredPreview statement={statement} locale={locale} />
+      {original !== undefined && <p>{original ? m.recipe_original({}, o) : m.correction_error_required({}, o)}</p>}
+      {(statement.qualifiers ?? []).length > 0 && (
+        <div className="min-w-0 space-y-2">
+          <p className="font-medium">{m.correction_qualifiers({}, o)}</p>
+          <ol className="min-w-0 space-y-3">
+            {(statement.qualifiers ?? []).map((part, index) => (
+              <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3">
+                <p className="text-muted-foreground">
+                  {m.correction_qualifiers({}, o)} {index + 1}
+                </p>
+                <dl>
+                  <RecipeEvidencePart part={part} read={read} locale={locale} />
+                </dl>
+              </li>
+            ))}
+          </ol>
         </div>
       )}
-      {definition.datatype === 'document' && (
-        <p className="text-sm">{original ? m.recipe_original({}, o) : m.correction_error_required({}, o)}</p>
-      )}
-      {(statement.qualifiers ?? []).length > 0 && (
-        <dl className="min-w-0 space-y-2 text-sm">
-          {(statement.qualifiers ?? []).map((part, index) => (
-            <div key={index} className="min-w-0 space-y-1">
-              <dt className="text-muted-foreground">
-                {pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text ||
-                  m.subject_value_unlabelled({}, o)}
-              </dt>
-              <dd>
-                <PartValue part={part} read={read} locale={locale} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      <RecipeEvidenceList statement={statement} read={read} locale={locale} />
+      <ol className="min-w-0 space-y-3">
+        {statement.references.map((group, index) => (
+          <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3">
+            <p className="text-muted-foreground">
+              {m.correction_references({}, o)} {index + 1}
+            </p>
+            <RecipeReferenceGroup group={group} read={read} locale={locale} />
+          </li>
+        ))}
+      </ol>
+      <p>
+        {statement.rank === 'preferred'
+          ? m.candidate_rank_preferred({}, o)
+          : statement.rank === 'deprecated'
+            ? m.changes_rank_deprecated({}, o)
+            : m.candidate_rank_normal({}, o)}
+      </p>
     </div>
   );
 }
@@ -143,10 +179,13 @@ export function RecipeCreateReview({
 }) {
   const o = { locale: locale as never };
   return (
-    <section className="min-w-0 space-y-4" aria-label={m.recipe_review_title({}, o)}>
+    <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-label={m.recipe_review_title({}, o)}>
       <ContentItemHeading level={2} className="text-lg font-semibold">
         {m.recipe_review_title({}, o)}
       </ContentItemHeading>
+      <p className="text-sm text-muted-foreground">
+        <DefinitionMeaning values={row.definition.descriptions} locale={locale} />
+      </p>
       <p className="text-sm text-muted-foreground">{m.recipe_review_intro({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
@@ -232,10 +271,13 @@ export function RecipeCorrectionReview({
     removed: m.recipe_evidence_removed({}, o),
   };
   return (
-    <section className="min-w-0 space-y-4" aria-label={m.recipe_review_statement({}, o)}>
+    <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-label={m.recipe_review_statement({}, o)}>
       <ContentItemHeading level={3} className="text-base font-semibold" lang={label.lang ?? undefined}>
         {label.text || row.statement.property.id}
       </ContentItemHeading>
+      <p className="text-sm text-muted-foreground">
+        <DefinitionMeaning values={row.definition.descriptions} locale={locale} />
+      </p>
       <p className="text-sm text-muted-foreground">{m.recipe_review_intro({}, o)}</p>
       {stale && (
         <p role="status" className="text-sm">
@@ -262,18 +304,29 @@ export function RecipeCorrectionReview({
           />
         </ContentItemFrame>
       </div>
-      <ul className="min-w-0 space-y-2 text-sm">
+      <ol className="min-w-0 space-y-3 text-sm" aria-label={m.correction_references({}, o)}>
         {groups.map((group, index) => (
-          <li key={index}>
-            {changeLabel[group.change]}
-            {(group.next ?? group.current)?.parts.map((part, partIndex) => (
-              <span key={partIndex} className="ms-2">
-                <PartValue part={part} read={read} locale={locale} />
-              </span>
-            ))}
+          <li key={index} className="min-w-0 space-y-2 rounded-lg border border-border p-3">
+            <p className="font-medium">
+              {m.correction_references({}, o)} {index + 1} · {changeLabel[group.change]}
+            </p>
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
+              {group.current && (
+                <div className="min-w-0 space-y-2">
+                  <p className="font-medium text-muted-foreground">{m.recipe_review_current({}, o)}</p>
+                  <RecipeReferenceGroup group={group.current} read={read} locale={locale} />
+                </div>
+              )}
+              {group.next && (
+                <div className="min-w-0 space-y-2">
+                  <p className="font-medium">{m.recipe_review_statement({}, o)}</p>
+                  <RecipeReferenceGroup group={group.next} read={read} locale={locale} />
+                </div>
+              )}
+            </div>
           </li>
         ))}
-      </ul>
+      </ol>
       <Button type="button" variant="outline" className={wrap} onClick={() => onJump(row.id)}>
         {m.facts_review_open_field({}, o)}
       </Button>

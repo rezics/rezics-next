@@ -1161,12 +1161,13 @@ function RecipeEditorLive({
                     read={{
                       release: draftRead.release,
                       source: null,
-                      public: { related: {}, subject: { type: 'schema:Recipe' } },
+                      public: { related: draftRead.public?.related ?? {}, subject: { type: 'schema:Recipe' } },
                     }}
                     locale={locale}
                     stale={!createReviewCurrent}
                     onJump={(target) => {
                       if (!lifetime.active()) return;
+                      setCreateReview(undefined);
                       const term = terms.find((row) => `term-${row.id}` === target);
                       focusRecipeCorrection(
                         workspace.current?.ownerDocument ?? document,
@@ -1340,7 +1341,7 @@ function RecipeFieldLive({
   const result = row.result;
   const [reviewing, setReviewing] = useState(false);
   const [statementReview, setStatementReview] = useState<string>();
-  const statementReviewFingerprint = JSON.stringify(row.statement);
+  const statementReviewFingerprint = JSON.stringify([row.statement, row.original === true]);
   const statementReviewCurrent = statementReview === statementReviewFingerprint;
   const running = useRef(false);
   const command = row.command;
@@ -1840,7 +1841,7 @@ function RecipeFieldLive({
                   statement: recipeEvidence(row.statement),
                   definition,
                   original: row.original,
-                  source: row.source ? statementInput(row.source) : undefined,
+                  source: row.source ? { ...statementInput(row.source), rank: row.source.rank } : undefined,
                 }}
                 read={{
                   release: read.release,
@@ -1852,7 +1853,11 @@ function RecipeFieldLive({
                 }}
                 locale={locale}
                 stale={!statementReviewCurrent}
-                onJump={() => focusRecipeCorrection(section.current?.ownerDocument ?? document, `${fieldId}-heading`)}
+                onJump={() => {
+                  if (!lifetime.active()) return;
+                  setStatementReview(undefined);
+                  focusRecipeCorrection(section.current?.ownerDocument ?? document, `${fieldId}-heading`);
+                }}
               />
             )}
             {(currentRead?.public || (command && wasUncertain)) && (

@@ -450,6 +450,21 @@ test('Recipe creation and current correction share complete frames with independ
 
     correction.setScenario('conflict');
     await reviewRecipe(draft);
+    await click(within(draft).getByRole('region', { name: m.recipe_review_statement() }), m.facts_review_open_field());
+    expect(draft.contains(window.document.activeElement as unknown as Node)).toBe(true);
+    expect((within(draft).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await replace(input(draft, m.correction_value()), 'Revised ingredient');
+    await reviewRecipe(draft);
+    expect(within(draft).getByRole('region', { name: m.recipe_review_statement() }).textContent).toContain(
+      'Revised ingredient',
+    );
+    await replace(input(draft, m.correction_value()), longValue);
+    expect((within(draft).getByRole('button', { name: m.correction_submit() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await reviewRecipe(draft);
     await act(async () => {
       within(draft).getByRole('button', { name: m.correction_submit() }).focus();
       await user.keyboard('{Enter}');
@@ -585,6 +600,20 @@ test('Recipe creation and current correction share complete frames with independ
     await act(async () => user.click(within(methodA).getByRole('checkbox', { name: m.recipe_original() })));
     await cite(methodA, longCitation);
     await cancelRemoval(methodA);
+    await reviewRecipe(a);
+    const reviewRegion = () => within(a).getByRole('region', { name: m.recipe_review_title() });
+    const jump = () => within(reviewRegion()).getAllByRole('button', { name: m.facts_review_open_field() });
+    await act(async () => user.click(jump()[0]!));
+    expect(window.document.activeElement).toBe(input(a, m.catalogue_create_language()));
+    expect((within(a).getByRole('button', { name: m.recipe_title() }) as HTMLButtonElement).disabled).toBe(true);
+    await reviewRecipe(a);
+    await act(async () => user.click(jump()[1]!));
+    expect(ownIngredient.contains(window.document.activeElement as unknown as Node)).toBe(true);
+    await replace(input(ownIngredient, m.correction_value()), 'Revised water');
+    expect((within(a).getByRole('button', { name: m.recipe_title() }) as HTMLButtonElement).disabled).toBe(true);
+    await reviewRecipe(a);
+    expect(reviewRegion().textContent).toContain('Revised water');
+    await replace(input(ownIngredient, m.correction_value()), '400 ml water');
     await reviewRecipe(a);
     await click(a, m.recipe_title());
     await until(() => within(a).queryAllByRole('button', { name: m.catalogue_create_review_new() }).length > 0);
