@@ -1,3 +1,6 @@
+import { CollectionPresentationSummary } from './showcase-collection/presentation';
+import { CollectionEditReview } from './showcase-collection/edit-review';
+import { collectionComparisonHref } from './collection-comparison/model';
 import type { CollectionComparisonDefinitions } from './collection-comparison/model';
 import { useCollectionComparisonReturn } from './collection-comparison/return';
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
@@ -209,7 +212,7 @@ export function collectionPageHead(
 const visibilities = ['private', 'unlisted', 'public'] as const;
 export { fieldClass } from './collection-editor';
 export const buttonClass =
-  'inline-flex min-h-10 items-center rounded-lg border border-border px-3 text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60';
 
 function visibilityLabel(visibility: CollectionVisibility): string {
   if (visibility === 'public') return m.library_visibility_public();
@@ -1530,6 +1533,11 @@ function CollectionPageLifetime({
             ]}
           />
           <CollectionDescriptionReader description={page.description} />
+          <CollectionPresentationSummary
+            layout={layout}
+            kind={page.presentationKindSource === 'owner' ? page.presentationKind : null}
+            types={page.presentationTypes}
+          />
           <div data-slot="collection-actions" className="flex min-w-0 flex-wrap items-center gap-2">
             <ResourceAccessLink resourceId={page.id} />
             {addAdmitted ? (
@@ -2321,6 +2329,18 @@ function CollectionPageLifetime({
             />
           )}
         </section>
+        {editing && owner && draftChanged && !transfer ? (
+          <CollectionEditReview
+            initial={editorMembers ?? draftPage.members}
+            desired={members}
+            firstPage={draftPage.firstPage}
+            title={title}
+            description={description}
+            kind={kind}
+            types={page.presentationTypes}
+            visibility={visibility}
+          />
+        ) : null}
         {editing && owner ? (
           <div
             className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm"
@@ -2518,7 +2538,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
           <Button
             type="button"
             variant="ghost"
-            size="icon-sm"
+            size="icon-lg"
             aria-label={`${m.library_collection_actions()}: ${title.text}`}
           >
             <EllipsisIcon aria-hidden="true" />
@@ -2529,9 +2549,15 @@ export function CollectionReadMembers<Member extends ReadMember>({
     );
     if (layout === 'grid')
       return (
-        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0">
+        <div
+          key={key}
+          role="listitem"
+          data-collection-member-id={member.id}
+          data-slot="collection-member-card"
+          className="min-w-0"
+        >
           <CoverCard
-            href={subjectHref({ id: subject.id, label: title.text }, locale).href}
+            href={collectionComparisonHref(subject.id, title.text, locale, currentHref, member.id)}
             title={title.text}
             {...(title.lang ? { titleLang: title.lang } : {})}
             cover={{
@@ -2549,7 +2575,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
     return (
       <MemberListRow
         key={key}
-        href={subjectHref({ id: subject.id, label: title.text }, locale).href}
+        href={collectionComparisonHref(subject.id, title.text, locale, currentHref, member.id)}
         subject={{ id: subject.id, title: title.text, types: [subject.type] }}
         cover={subject.cover}
         src={coverSrc}
@@ -2564,7 +2590,23 @@ export function CollectionReadMembers<Member extends ReadMember>({
     );
   });
   return layout === 'grid' ? (
-    <div role="list" className="min-w-0" data-collection-members>
+    <div
+      role="list"
+      className="min-w-0"
+      data-collection-members
+      data-collection-layout={layout}
+      onClickCapture={(event) => {
+        const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
+        if (anchor && new URL(anchor.href).searchParams.has('via')) {
+          // The UI row owns its stretched link; its disclosed details own the occurrence anchor.
+          const row = anchor.closest('[data-slot="list-row"], [data-slot="collection-member-card"]');
+          const occurrence = row?.querySelector<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
+          if (occurrence && row instanceof HTMLElement) row.dataset.collectionMemberId = occurrence;
+          admitReferenceReturn(anchor);
+          onReferenceNavigate?.();
+        }
+      }}
+    >
       <CoverGrid
         ratio={collectionMemberRatio(
           presentationKind ? { type: presentationKind } : null,
@@ -2576,7 +2618,22 @@ export function CollectionReadMembers<Member extends ReadMember>({
       </CoverGrid>
     </div>
   ) : (
-    <ul className="min-w-0 space-y-3" data-collection-members>
+    <ul
+      className="min-w-0 space-y-3"
+      data-collection-members
+      data-collection-layout={layout}
+      onClickCapture={(event) => {
+        const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
+        if (anchor && new URL(anchor.href).searchParams.has('via')) {
+          // The UI row owns its stretched link; its disclosed details own the occurrence anchor.
+          const row = anchor.closest('[data-slot="list-row"], [data-slot="collection-member-card"]');
+          const occurrence = row?.querySelector<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
+          if (occurrence && row instanceof HTMLElement) row.dataset.collectionMemberId = occurrence;
+          admitReferenceReturn(anchor);
+          onReferenceNavigate?.();
+        }
+      }}
+    >
       {items}
     </ul>
   );

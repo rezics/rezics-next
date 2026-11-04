@@ -8468,5 +8468,16 @@
   "realm_question_management_retired": "Retirée",
   "realm_question_management_units": "Unités de notation enregistrées",
   "realm_question_management_zero": "Zéro est une note valide. Aucune note signifie aucune réponse.",
-  "realm_question_management_display_step": "Pas d’affichage {step}"
+  "realm_question_management_display_step": "Pas d’affichage {step}",
+  "collection_presentation_ordered": "Lignes ordonnées",
+  "collection_presentation_ordered_help": "Les membres suivent l’ordre natif des occurrences. Les filtres et les pages suivantes n’indiquent pas de rang absolu.",
+  "collection_presentation_grid": "Grille de couvertures",
+  "collection_presentation_grid_help": "Parcourez les couvertures dans leur ordre natif. Chaque membre conserve son type, ses proportions et ses détails.",
+  "collection_presentation_dynamic": "Collection dynamique",
+  "collection_presentation_dynamic_help": "Les membres proviennent de la règle enregistrée. Les filtres de propriétés s’appliquent au résultat natif, y compris aux pages suivantes.",
+  "collection_review_heading": "Vérifier avant d’enregistrer",
+  "collection_review_native_help": "Ces modifications sont un brouillon. La Collection est actualisée après confirmation native.",
+  "collection_review_move_start": "Déplacer {title} au début de la Collection.",
+  "collection_review_move_after": "Déplacer {title} après {anchor}.",
+  "collection_review_add_help": "Une occurrence distincte est ajoutée à la fin de la Collection, même si le sujet en fait déjà partie."
 }

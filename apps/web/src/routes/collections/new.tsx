@@ -1,3 +1,4 @@
+import { CollectionPresentationSummary } from '../../library/showcase-collection/presentation';
 import { collectionTextIssue } from '../../library/collection-text-input';
 import { CollectionTextInputHelp, collectionTextInputAttributes } from '../../library/collection-text-input-field';
 import { useOperation } from '../../kernel/exposure';
@@ -195,6 +196,18 @@ export function NewCollectionForm({
         />
         <VisibilityField onChange={setVisibility} value={visibility} disabled={pending || uncertain} />
       </fieldset>
+      {title.trim() ? (
+        <section
+          className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4 [overflow-wrap:anywhere]"
+          data-collection-create-review
+        >
+          <h2 className="font-semibold">{m.collection_review_heading()}</h2>
+          <p className="whitespace-pre-wrap font-medium">{title}</p>
+          {description ? <p className="whitespace-pre-wrap text-muted-foreground">{description}</p> : null}
+          <CollectionPresentationSummary kind={kind} types={types} />
+          <p className="text-sm text-muted-foreground">{m.collection_review_native_help()}</p>
+        </section>
+      ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
       <button className={buttonClass} disabled={pending || visibility === ''} aria-busy={pending} type="submit">
         {uncertain ? m.library_publication_retry() : m.library_collection_create()}

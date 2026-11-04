@@ -8468,5 +8468,16 @@
   "realm_question_management_retired": "已退役",
   "realm_question_management_units": "儲存的評分單位",
   "realm_question_management_zero": "零是有效分數；沒有分數代表沒有回覆。",
-  "realm_question_management_display_step": "顯示刻度 {step}"
+  "realm_question_management_display_step": "顯示刻度 {step}",
+  "collection_presentation_ordered": "依序排列",
+  "collection_presentation_ordered_help": "成員依收藏集的原生項目順序顯示。篩選結果與後續頁面不代表全域名次。",
+  "collection_presentation_grid": "封面格狀檢視",
+  "collection_presentation_grid_help": "依原生順序瀏覽封面。每位成員保留自己的類型、比例與詳細資訊。",
+  "collection_presentation_dynamic": "動態收藏集",
+  "collection_presentation_dynamic_help": "成員由已儲存的規則決定。屬性篩選套用於原生結果，也適用於後續頁面。",
+  "collection_review_heading": "儲存前確認",
+  "collection_review_native_help": "這些變更仍是草稿。原生操作確認成功後，收藏集才會重新載入。",
+  "collection_review_move_start": "將 {title} 移至收藏集開頭。",
+  "collection_review_move_after": "將 {title} 移至 {anchor} 之後。",
+  "collection_review_add_help": "這會在收藏集末尾新增一個獨立項目，即使該主題已是成員。"
 }

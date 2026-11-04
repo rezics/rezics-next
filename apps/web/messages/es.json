@@ -8468,5 +8468,16 @@
   "realm_question_management_retired": "Retirada",
   "realm_question_management_units": "Unidades de valoración almacenadas",
   "realm_question_management_zero": "Cero es una puntuación válida. Si no hay puntuación, no hay respuesta.",
-  "realm_question_management_display_step": "Incremento mostrado {step}"
+  "realm_question_management_display_step": "Incremento mostrado {step}",
+  "collection_presentation_ordered": "Filas ordenadas",
+  "collection_presentation_ordered_help": "Los miembros siguen el orden nativo de sus entradas. Los filtros y las páginas siguientes no indican una posición absoluta.",
+  "collection_presentation_grid": "Cuadrícula de portadas",
+  "collection_presentation_grid_help": "Explora las portadas en su orden nativo. Cada miembro conserva su tipo, proporción y detalles.",
+  "collection_presentation_dynamic": "Colección dinámica",
+  "collection_presentation_dynamic_help": "Los miembros proceden de la regla guardada. Los filtros de propiedades se aplican al resultado nativo, incluidas las páginas siguientes.",
+  "collection_review_heading": "Revisar antes de guardar",
+  "collection_review_native_help": "Estos cambios son un borrador. La Colección se actualiza tras la confirmación nativa.",
+  "collection_review_move_start": "Mover {title} al principio de la Colección.",
+  "collection_review_move_after": "Mover {title} después de {anchor}.",
+  "collection_review_add_help": "Esto añade una entrada independiente al final de la Colección, aunque el tema ya sea miembro."
 }

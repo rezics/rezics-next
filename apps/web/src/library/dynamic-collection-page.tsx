@@ -1,3 +1,5 @@
+import { Cover } from '@rezics/ui/cover';
+import { coverSrc } from '../media/cover-src';
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
 import { CollectionFilteredStatus } from './bulk-filtered-status-view';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -14,6 +16,7 @@ import { LibraryNavigation } from './library-nav';
 import { useCurrentLibraryNavigation } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
+import { CollectionPresentationSummary } from './showcase-collection/presentation';
 import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
@@ -142,7 +145,22 @@ function DynamicCollectionPageLifetime({
       <article className="w-full min-w-0 space-y-6 text-foreground">
         <header className="rounded-2xl bg-card p-4 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <PageHeading>{current.title}</PageHeading>
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="w-16 shrink-0 sm:w-24" data-collection-cover-source={current.coverSource}>
+                <Cover
+                  subject={{
+                    id: current.id,
+                    title: current.title,
+                    types: current.presentationKind ? [current.presentationKind] : [],
+                  }}
+                  cover={current.cover ?? null}
+                  src={coverSrc}
+                  size="fill"
+                  decorative
+                />
+              </div>
+              <PageHeading>{current.title}</PageHeading>
+            </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <PinControlView control={pinActions} />
               <RuleEditLink
@@ -166,6 +184,10 @@ function DynamicCollectionPageLifetime({
             </div>
           ) : null}
           <CollectionDescriptionReader description={current.description} className="mt-3" />
+          <CollectionPresentationSummary
+            dynamic
+            kind={current.presentationKindSource === 'owner' ? current.presentationKind : null}
+          />
           <FollowTargetControl targetId={current.id} following={current.following ?? null} />
         </header>
         <SavedQueryManagement

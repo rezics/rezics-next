@@ -173,3 +173,36 @@ test('an unlabelled author reference stays absent while a supplied publication y
   expect(html).not.toContain('private-or-unknown-author');
   expect(html).toContain(new Intl.NumberFormat(getLocale(), { useGrouping: false }).format(1943));
 });
+
+test('unset presentation stays mixed and exact member hints do not follow a parent or Collection Type', async () => {
+  const { collectionPresentationOf } = await import('../src/library/collection-presentation');
+  expect(collectionPresentationOf({ presentationKind: 'schema:Book', presentationKindSource: 'mixed' })).toMatchObject({
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+  });
+  const hints: CollectionListPresentations = {
+    work: { imageAspect: 'landscape', keyFacts: [] },
+    character: { imageAspect: 'portrait', keyFacts: [] },
+    person: { imageAspect: 'square', keyFacts: [] },
+  };
+  expect(
+    ['work', 'character', 'person', 'unreleased'].map((type) => collectionMemberRatio({ type }, {}, hints)),
+  ).toEqual(['16:9', '5:7', '1:1', '5:7']);
+});
+
+test('native order and reorder preserve duplicate Subject occurrences and later-page boundaries', async () => {
+  const { reorderCollectionMembers } = await import('../src/library/collection-presentation');
+  const { buildCollectionMemberEditPlan } = await import('../src/library/collection-editor');
+  const initial = [0, 1, 2].map((index) => ({ ...book, id: `occurrence-${index}`, subjectId: book.subject!.id }));
+  const desired = reorderCollectionMembers(initial, initial[2]!.id, null, true);
+  expect(desired.map((member) => member.id)).toEqual(['occurrence-2', 'occurrence-0', 'occurrence-1']);
+  expect(desired.every((member) => member.subjectId === book.subject!.id && member.subject === book.subject)).toBe(
+    true,
+  );
+  expect(buildCollectionMemberEditPlan(initial, desired, true)).toEqual([
+    { kind: 'move', memberId: 'occurrence-2', after: null },
+  ]);
+  expect(reorderCollectionMembers(initial, 'occurrence-2', null, false)).toEqual(initial);
+  expect(reorderCollectionMembers(initial, 'occurrence-0', 'occurrence-2', false)).toEqual(initial);
+  expect(reorderCollectionMembers(initial, 'occurrence-2', 'off-page', true)).toEqual(initial);
+});

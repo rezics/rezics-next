@@ -8580,5 +8580,16 @@
   "realm_question_management_retired": "Retired",
   "realm_question_management_units": "Stored rating units",
   "realm_question_management_zero": "Zero is a valid score. No score means no response.",
-  "realm_question_management_display_step": "Display step {step}"
+  "realm_question_management_display_step": "Display step {step}",
+  "collection_presentation_ordered": "Ordered rows",
+  "collection_presentation_ordered_help": "Members follow the Collection’s native occurrence order. Filters and later pages do not imply an absolute rank.",
+  "collection_presentation_grid": "Cover grid",
+  "collection_presentation_grid_help": "Browse covers in native order. Each member keeps its own Type, shape and details.",
+  "collection_presentation_dynamic": "Dynamic Collection",
+  "collection_presentation_dynamic_help": "Members come from the saved rule. Property filters apply to the native result, including later pages.",
+  "collection_review_heading": "Review before saving",
+  "collection_review_native_help": "These changes are a draft. The Collection refreshes after native acknowledgement.",
+  "collection_review_move_start": "Move {title} to the start of the Collection.",
+  "collection_review_move_after": "Move {title} after {anchor}.",
+  "collection_review_add_help": "This adds a separate occurrence at the end of the Collection, even if the Subject is already a member."
 }
