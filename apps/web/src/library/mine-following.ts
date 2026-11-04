@@ -54,7 +54,11 @@ export async function loadMineFollowingPage(
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, follows: [], next: null };
   const kind = followingKind(input.kind);
-  if (!kind || input.invalidAddress || !personalDirectoryAddress(input.cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid)
+  if (
+    !kind ||
+    input.invalidAddress ||
+    !personalDirectoryAddress(input.cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid
+  )
     return { signedIn: true, follows: [], next: null, addressInvalid: true };
   // Never approximate whole-population filtering using the current mixed page.
   if (kind !== 'all') return { signedIn: true, follows: [], next: null, kindUnavailable: true };

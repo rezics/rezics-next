@@ -10,9 +10,10 @@ import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/following')({
   beforeLoad: requireSignedIn,
-  validateSearch: (search: Record<string, unknown>) =>
-    ({ ...(search.cursor === undefined ? {} : { cursor: search.cursor as string }),
-      ...(search.kind === undefined ? {} : { kind: typeof search.kind === 'string' ? search.kind : 'invalid' }) }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...(search.cursor === undefined ? {} : { cursor: search.cursor as string }),
+    ...(search.kind === undefined ? {} : { kind: typeof search.kind === 'string' ? search.kind : 'invalid' }),
+  }),
   loaderDeps: ({ search }) => ({ cursor: search.cursor, kind: search.kind }),
   loader: ({ deps }) => readMineFollowingForViewer({ data: { cursor: deps.cursor, kind: deps.kind } }),
   head: ({ match }) =>

@@ -13,15 +13,25 @@ test('kind address admits the rebuilt target kinds without broadening unknown fi
 
 test('uninstalled whole-population producer never reads or filters a mixed page, even with a cursor', async () => {
   let requests = 0;
-  const client = createKernelClient('https://kernel.test', { fetch: async () => {
-    requests++;
-    throw new Error('unsupported kind must not request a mixed page');
-  } });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async () => {
+      requests++;
+      throw new Error('unsupported kind must not request a mixed page');
+    },
+  });
   const env = {
     SITE_ORIGINS: 'https://site.test',
-    SESSIONS: { idFromName: (name: string) => name, get: () => ({
-      credential: async () => ({ status: 'active', subject: 'reader', accessToken: 'token', csrfToken: 'A'.repeat(22) }),
-    }) },
+    SESSIONS: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject: 'reader',
+          accessToken: 'token',
+          csrfToken: 'A'.repeat(22),
+        }),
+      }),
+    },
   } as unknown as Partial<SessionEnv>;
   for (const kind of ['subject', 'collection', 'space', 'author']) {
     const request = new Request('https://site.test/library/following', {

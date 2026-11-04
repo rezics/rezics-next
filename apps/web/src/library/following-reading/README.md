@@ -62,5 +62,4 @@ the retained base requested one hundred rows and grouped them by type.
 Decision: route only current supplied Realm membership actions to the canonical Realm owner; unsupported Community
 actions stay unavailable in Following.
 
-
 Kind navigation is owned by [Following kind navigation](../following-kind-navigation/README.md).

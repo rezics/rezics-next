@@ -67,7 +67,13 @@ export const mineFollowingQuery = (
     refetchOnReconnect: false,
   });
 
-function matches(read: MineFollowingRead, subject: string, cursor: string | null, locale: string, kind: FollowingKind = 'all'): boolean {
+function matches(
+  read: MineFollowingRead,
+  subject: string,
+  cursor: string | null,
+  locale: string,
+  kind: FollowingKind = 'all',
+): boolean {
   return (
     read.page.signedIn &&
     !read.page.addressInvalid &&
@@ -102,11 +108,17 @@ export function CurrentViewerMineFollowingPage({
     initial.page.signedIn ? initial.subject : null,
   );
   const current = () => address.isCurrent() && origin.current(0);
-  const options = mineFollowingQuery(origin.subject ?? '', address.cursor, locale, {
-    lifetime: origin.boundary.lifetime,
-    key: origin.lifetime(0),
-    isCurrent: current,
-  }, kind);
+  const options = mineFollowingQuery(
+    origin.subject ?? '',
+    address.cursor,
+    locale,
+    {
+      lifetime: origin.boundary.lifetime,
+      key: origin.lifetime(0),
+      isCurrent: current,
+    },
+    kind,
+  );
   const read = useQuery(
     {
       ...options,
@@ -117,7 +129,10 @@ export function CurrentViewerMineFollowingPage({
         !!origin.subject &&
         origin.allowed[0] === true &&
         address.isCurrent(),
-      ...(!addressInvalid && origin.seed && origin.subject && matches(initial, origin.subject, address.cursor, locale, kind)
+      ...(!addressInvalid &&
+      origin.seed &&
+      origin.subject &&
+      matches(initial, origin.subject, address.cursor, locale, kind)
         ? { initialData: initial }
         : {}),
     },
@@ -339,11 +354,20 @@ function MineFollowingPageState({
       </header>
       <nav aria-label={m.following_kind_label()} className="flex flex-wrap gap-2">
         {(['all', 'subject', 'collection', 'space'] as const).map((value) => (
-          <Link key={value} to="/library/following" search={value === 'all' ? {} : { kind: value }}
+          <Link
+            key={value}
+            to="/library/following"
+            search={value === 'all' ? {} : { kind: value }}
             aria-current={kind === value ? 'page' : undefined}
-            className={buttonVariants({ variant: kind === value ? 'default' : 'outline', className: 'min-h-11' })}>
-            {value === 'all' ? m.following_kind_all() : value === 'subject' ? m.following_kind_subject() :
-              value === 'collection' ? m.following_kind_collection() : m.following_kind_space()}
+            className={buttonVariants({ variant: kind === value ? 'default' : 'outline', className: 'min-h-11' })}
+          >
+            {value === 'all'
+              ? m.following_kind_all()
+              : value === 'subject'
+                ? m.following_kind_subject()
+                : value === 'collection'
+                  ? m.following_kind_collection()
+                  : m.following_kind_space()}
           </Link>
         ))}
       </nav>
@@ -359,7 +383,9 @@ function MineFollowingPageState({
       ) : null}
       {addressRejected ? (
         <div className="space-y-3">
-          <p role="alert">{page.kindUnavailable ? m.following_kind_unavailable() : m.library_directory_address_invalid()}</p>
+          <p role="alert">
+            {page.kindUnavailable ? m.following_kind_unavailable() : m.library_directory_address_invalid()}
+          </p>
           <a href={`/${getLocale()}/library/following`} className={buttonVariants({ variant: 'outline' })}>
             {m.library_directory_address_first_page()}
           </a>

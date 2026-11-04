@@ -46,7 +46,13 @@ async function readFollowingRequest(data: MineFollowingInput): Promise<MineFollo
   const page = subject ? loaded : { signedIn: false, follows: [], next: null };
   if (!page.addressInvalid)
     await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
-  return { subject, kind: data.kind ?? 'all', cursor: data.cursor ?? null, locale: requestLocale(request) ?? 'en', page };
+  return {
+    subject,
+    kind: data.kind ?? 'all',
+    cursor: data.cursor ?? null,
+    locale: requestLocale(request) ?? 'en',
+    page,
+  };
 }
 
 export const readMineFollowingPage = createServerFn({ method: 'GET' })
