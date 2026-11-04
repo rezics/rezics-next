@@ -13,14 +13,14 @@ export const conceptWorksPageByteLimit = 65_536;
 
 export type ConceptWorksSelection = {
   conceptId: string;
-  property?: string;
-  scheme?: string;
-  type?: string;
-  includeChildren?: boolean;
-  spoilerThreshold?: 0 | 1 | 2;
-  qualifiers?: readonly FilterQualifier[];
-  condition?: FilterDocument;
-  cursor?: string;
+  property?: string | undefined;
+  scheme?: string | undefined;
+  type?: string | undefined;
+  includeChildren?: boolean | undefined;
+  spoilerThreshold?: 0 | 1 | 2 | undefined;
+  qualifiers?: readonly FilterQualifier[] | undefined;
+  condition?: FilterDocument | undefined;
+  cursor?: string | undefined;
 };
 
 function leafCount(filter: FilterDocument): number {
@@ -118,8 +118,12 @@ export function conceptWorksExactEmpty(state: DiscoveryState): boolean {
     state.status === 'ready' &&
     state.page.hits.length === 0 &&
     state.page.next === null &&
-    state.page.freshness.state === 'current'
+    state.page.freshness?.state === 'current'
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function boundedFixedConceptRequest(request: DiscoveryRequest): boolean {

@@ -27,8 +27,8 @@ type Props = {
   pinUnsupported?: boolean;
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
-  worksRoute?: ConceptWorksRouteState;
-  onWorksChange?: (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void;
+  worksRoute?: ConceptWorksRouteState | undefined;
+  onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
 };
 
 export function SourceConceptView(props: Props) {

@@ -39,7 +39,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       scheme: typeof scheme === 'string' && /^[0-9a-f-]{36}$/i.test(scheme) ? scheme : undefined,
       type: typeof type === 'string' && type.length <= 128 ? type : undefined,
       includeChildren: children === 'true' || children === true,
-      spoilerThreshold: spoiler === '1' ? 1 : spoiler === '2' ? 2 : 0,
+      ...(spoiler === '1' || spoiler === '2'
+        ? { spoilerThreshold: spoiler === '1' ? 1 : 2 }
+        : {}),
       conditionText: typeof condition === 'string' && condition.length <= 16_384 ? condition : undefined,
       tagQualifiersText: typeof tagQualifiers === 'string' && tagQualifiers.length <= 2048 ? tagQualifiers : undefined,
       cursor: typeof cursor === 'string' && new TextEncoder().encode(cursor).byteLength <= 4096 ? cursor : undefined,
