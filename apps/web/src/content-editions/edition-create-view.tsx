@@ -177,6 +177,7 @@ export function EditionPublication({
   originToken?: string | undefined;
   originAccountId?: string | undefined;
 }) {
+  const session = useSession();
   const router = useRouter({ warn: false });
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [sourceLink, setSourceLink] = useState('');
