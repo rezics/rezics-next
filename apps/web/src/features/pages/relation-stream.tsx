@@ -629,12 +629,7 @@ function StreamState({
         <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
       ) : items.length ? (
         castWindowReady ? (
-          <WorkCastWindow
-            items={items}
-            value={value}
-            label={title}
-            creditVisit={currentCreditVisit}
-          />
+          <WorkCastWindow items={items} value={value} label={title} creditVisit={currentCreditVisit} />
         ) : (
           <CoverList items={items} value={value} label={title} creditVisit={currentCreditVisit} />
         )

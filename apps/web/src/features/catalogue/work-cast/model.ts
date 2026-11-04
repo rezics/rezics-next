@@ -47,4 +47,3 @@ export function castWindow(items: readonly Item[]): CastWindow {
 
   return { groups: [...groups.values()], unpaired };
 }
-

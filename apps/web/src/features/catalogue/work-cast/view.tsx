@@ -33,17 +33,18 @@ export function WorkCastWindow({
   label: string;
 }) {
   const [presentation, setPresentation] = useState<Presentation>('character');
-  const actionableTargets = new Set(items.flatMap((item) => [
-    item.id,
-    ...(item.qualified ?? []).flatMap((note) => note.property === 'wdt:P453' && note.subject ? [note.subject.id] : []),
-  ]));
+  const actionableTargets = new Set(
+    items.flatMap((item) => [
+      item.id,
+      ...(item.qualified ?? []).flatMap((note) =>
+        note.property === 'wdt:P453' && note.subject ? [note.subject.id] : [],
+      ),
+    ]),
+  );
   const unlabelledTargets = new Set(items.filter((item) => !item.label.text.trim()).map((item) => item.id));
   const CurrentLink = value.link;
   const returnTo = value.subject
-    ? subjectHref(
-        { id: value.subject, label: value.subjectLabel ?? value.unlabelled },
-        value.locale,
-      ).href
+    ? subjectHref({ id: value.subject, label: value.subjectLabel ?? value.unlabelled }, value.locale).href
     : '';
   const returnUrl = new URL(returnTo || '/', 'https://rezics.invalid');
   if (value.context?.population.kind === 'realm') returnUrl.searchParams.set('realm', value.context.population.id);
@@ -116,7 +117,11 @@ export function WorkCastWindow({
                   const performerItem: Item = {
                     ...performer,
                     ...(performer.qualified
-                      ? { qualified: performer.qualified.filter((note) => note.property !== 'wdt:P453' || !note.subject) }
+                      ? {
+                          qualified: performer.qualified.filter(
+                            (note) => note.property !== 'wdt:P453' || !note.subject,
+                          ),
+                        }
                       : {}),
                   };
                   const characterItem: Item = {

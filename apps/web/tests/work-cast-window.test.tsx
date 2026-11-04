@@ -53,14 +53,25 @@ function castPage(work: string, cursor: string | null, performerName = 'A. Perfo
     };
   };
   const character = (target: string) => snak('wdt:P453', 'wikibase-item', target);
-  const common = [character(characters[0]!), snak('wdt:P3831', 'wikibase-item', role), snak('wdt:P1932', 'string', 'A. Player')];
+  const common = [
+    character(characters[0]!),
+    snak('wdt:P3831', 'wikibase-item', role),
+    snak('wdt:P1932', 'string', 'A. Player'),
+  ];
   const rows = [
     row(first, common),
     row(second, common),
     row(id(13), [character(characters[1]!), ...common.slice(1)]),
     row(id(14), [character(characters[0]!), character(characters[1]!), ...common.slice(1)]),
     row(id(15), [{ property: { id: 'wdt:P453', data_type: 'wikibase-item' }, value: { type: 'somevalue' } }]),
-    row(id(16), [character(secret)], Object.fromEntries([[performer, disclosed[performer]!], [role, disclosed[role]!]])),
+    row(
+      id(16),
+      [character(secret)],
+      Object.fromEntries([
+        [performer, disclosed[performer]!],
+        [role, disclosed[role]!],
+      ]),
+    ),
     row(id(17), [character(secret), snak('rezics:spoilerLevel', 'quantity', { amount: '2' })]),
     {
       target: unlabelledPerformer,
@@ -120,7 +131,8 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
   const held: { request: RelationGroupRequest; resolve(value: Section): void; reject(error: Error): void }[] = [];
   const start = await import('../.storybook/react-start');
   mock.module('@tanstack/react-start', () => start);
@@ -155,7 +167,10 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
   const context = id(50);
   const initial = { value: castValue(work, realm, context), section: castPage(work, 'opaque-window-2') };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData((await import('../src/session/query')).sessionQuery.queryKey, { state: 'signed-in', subject: 'reader' });
+  client.setQueryData((await import('../src/session/query')).sessionQuery.queryKey, {
+    state: 'signed-in',
+    subject: 'reader',
+  });
   let replace: (value: typeof initial) => void = () => {};
   const rootRoute = routing.createRootRoute({
     component: () => {
@@ -171,12 +186,16 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
       });
     },
   });
-  const router = routing.createRouter({ routeTree: rootRoute, history: routing.createMemoryHistory({ initialEntries: ['/en/subjects/cast'] }) });
+  const router = routing.createRouter({
+    routeTree: rootRoute,
+    history: routing.createMemoryHistory({ initialEntries: ['/en/subjects/cast'] }),
+  });
   await router.load();
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const render = () => act(async () => root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router }))));
+  const render = () =>
+    act(async () => root.render(h(QueryClientProvider, { client }, h(routing.RouterProvider, { router }))));
   const flush = () => act(async () => void (await Bun.sleep(0)));
   const click = async (element: HTMLElement) => {
     await act(async () => element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true })));
@@ -195,7 +214,8 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
       const windowView = castWindow(projected.items);
       metrics.push({
         typedCalls: held.length,
-        retainedRows: windowView.groups.reduce((total, group) => total + group.performances.length, 0) + windowView.unpaired.length,
+        retainedRows:
+          windowView.groups.reduce((total, group) => total + group.performances.length, 0) + windowView.unpaired.length,
         responseBytes: new TextEncoder().encode(JSON.stringify(section.body)).length,
         loaded: windowView.groups.map((group) => group.performances.map((entry) => entry.performer.statement)),
       });
@@ -204,11 +224,14 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     expect(metrics[2]).toEqual(metrics[0]);
     expect(metrics[0]!.typedCalls).toBe(0);
     expect(metrics[0]!.retainedRows).toBe(9);
-    expect(metrics[0]!.loaded).toEqual([[id(11), id(12), id(14), id(18)], [id(13), id(14)]]);
+    expect(metrics[0]!.loaded).toEqual([
+      [id(11), id(12), id(14), id(18)],
+      [id(13), id(14)],
+    ]);
     expect(projected.items[0]!.summary?.cover).toEqual(portrait);
-    expect(projected.items[0]!.qualified?.find((note) => note.property === 'wdt:P453')?.subject?.summary?.cover).toEqual(
-      portrait,
-    );
+    expect(
+      projected.items[0]!.qualified?.find((note) => note.property === 'wdt:P453')?.subject?.summary?.cover,
+    ).toEqual(portrait);
 
     const group = host.querySelector('[role="group"][aria-label="Voice cast presentation"]')!;
     expect((group.querySelector('button') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
@@ -235,9 +258,9 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     expect(host.querySelector('[data-presentation="character"]')).not.toBeNull();
 
     await click(group.querySelectorAll('button')[1]!);
-    expect([...host.querySelectorAll('li[data-statement]')].slice(0, 8).map((row) => row.getAttribute('data-statement'))).toEqual(
-      [id(11), id(12), id(13), id(14), id(15), id(16), id(17), id(18)],
-    );
+    expect(
+      [...host.querySelectorAll('li[data-statement]')].slice(0, 8).map((row) => row.getAttribute('data-statement')),
+    ).toEqual([id(11), id(12), id(13), id(14), id(15), id(16), id(17), id(18)]);
     await click(more);
     held[0]!.reject(new TypeError('Network connection lost'));
     await flush();
@@ -248,7 +271,11 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     held[1]!.resolve(castPage(work, 'cursor-3'));
     await flush();
     expect(host.querySelector('[data-presentation="credit-order"]')).not.toBeNull();
-    expect(new URL((host.querySelector('[data-slot="continue-group"]') as HTMLAnchorElement).href).searchParams.get('cursor')).toBe('cursor-3');
+    expect(
+      new URL((host.querySelector('[data-slot="continue-group"]') as HTMLAnchorElement).href).searchParams.get(
+        'cursor',
+      ),
+    ).toBe('cursor-3');
     await click(host.querySelector('[data-slot="continue-group"]') as HTMLAnchorElement);
     expect(held[2]!.request.cursor).toBe('cursor-3');
 

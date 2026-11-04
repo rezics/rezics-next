@@ -83,9 +83,7 @@ export function qualifiedNotes(statement: Stmt, related: unknown, locale: string
                 subject: {
                   id: content,
                   label,
-                  ...(summary && type
-                    ? { summary: summary as unknown as SubjectSummary }
-                    : {}),
+                  ...(summary && type ? { summary: summary as unknown as SubjectSummary } : {}),
                 },
               }
             : {}),
