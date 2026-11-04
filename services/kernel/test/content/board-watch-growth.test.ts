@@ -245,6 +245,7 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
           const count = scale - previous;
           const resources = Array.from({ length: count }, () => newId(0x7865));
           const oldCreatedAt = "'2000-01-01T00:00:00Z'::timestamptz";
+          const afterSelectedCreatedAt = "clock_timestamp()+interval '100 years'";
           const identityKind =
             step === 'board-list' || step === 'board-remove'
               ? 'board'
@@ -261,7 +262,7 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
             if (identityKind === 'board') {
               const insertBoardHistory = `
                 INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
-                SELECT $1,$2,board,watch,true,1,${oldCreatedAt}
+                SELECT $1,$2,board,watch,true,1,${afterSelectedCreatedAt}
                 FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`;
               await db.admin.query(insertBoardHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
               await db.admin.query(insertBoardHistory, [
@@ -273,7 +274,7 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
             } else {
               const insertThreadHistory = `
                 INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
-                SELECT $1,$2,thread,watch,${oldCreatedAt}
+                SELECT $1,$2,thread,watch,${afterSelectedCreatedAt}
                 FROM unnest($3::uuid[],$4::uuid[]) n(thread,watch)`;
               await db.admin.query(insertThreadHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
               await db.admin.query(insertThreadHistory, [
