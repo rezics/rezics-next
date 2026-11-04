@@ -511,6 +511,7 @@ test('Album recovery retires every current surface and retains private drafts an
     await click(m.album_create_review()); // Fresh validation rejects the retained retired fact.
     expect(submitted).toHaveLength(1);
     await click(m.recipe_remove_field(), host.querySelector<HTMLElement>(`#${scalar.id}`)!);
+    await click(m.recipe_remove_field(), host.querySelector<HTMLElement>(`#${scalar.id}`)!);
     await click(m.album_create_review());
     await click(m.album_create());
     expect(submitted).toHaveLength(2);
