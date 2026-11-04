@@ -74,6 +74,8 @@ import { readSubjectCorrectionActions } from '../viewer-actions.ts';
 import { workReleaseCardFieldLimit, workReleaseCardLimit } from '../work-release-cards.ts';
 import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
 import { requireAccessDeadline } from '../../access/unavailable.ts';
+import { PublicDocumentViewSchema } from '../../content/document-routes.ts';
+import { readCharacterPublicDocuments } from '../character-public-reading-documents.ts';
 import { withReadTransaction } from '../read.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { readContributionLifecycle } from '../contribution-lifecycle-read.ts';
@@ -311,6 +313,7 @@ const readResponse = t.Object(
     account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
     related: t.Record(t.String(), LabelsSchema),
+    documents: t.Optional(t.Record(t.String({ format: 'uuid' }), PublicDocumentViewSchema)),
     viewerActions: t.Optional(
       t.Union([
         t.Object(
@@ -1024,6 +1027,7 @@ function subjectRoutes(
           context: t.Optional(EditorialBodyContext),
           language: t.Optional(t.String()),
           includeViewerActions: t.Optional(t.Boolean()),
+          includeDocuments: t.Optional(t.Boolean()),
         }),
         response: {
           200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
@@ -1163,14 +1167,26 @@ function subjectRoutes(
           if (summary) related[id] = { ...reference, type: summary.type, types: summary.types, cover: summary.cover };
         }
 
+        const documentRead = query.includeDocuments
+          ? await readCharacterPublicDocuments(
+              { pool, access: access(), routeKey },
+              result.subject,
+              release,
+              { actor, deadline: job.deadline },
+              languages[0] ?? 'en',
+            )
+          : undefined;
+        for (const anchor of documentRead?.anchors ?? [])
+          session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
-        set.headers['cache-control'] = query.includeViewerActions ? 'private, no-store' : 'no-cache';
+        set.headers['cache-control'] = query.includeViewerActions || documentRead ? 'private, no-store' : 'no-cache';
         return {
           subject: result.subject,
           account: result.account,
           summary: result.summary,
           related,
+          ...(documentRead ? { documents: documentRead.documents } : {}),
           ...(currentViewerActions ? { viewerActions: currentViewerActions } : {}),
         };
       },
