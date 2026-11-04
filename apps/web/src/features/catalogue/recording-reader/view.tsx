@@ -27,7 +27,7 @@ function returnLink(link: PageLink, returnTo: string | undefined, locale: string
 function targetOf(read: SubjectRead, targetId: string, locale: string) {
   if (!Object.hasOwn(read.related, targetId)) return;
   const target = read.related[targetId];
-  if (!target || target.id !== targetId) return;
+  if (!target) return;
   const label = pickText(target.labels, locale);
   return label.text ? { id: targetId, label: label.text, language: label.lang ?? undefined } : undefined;
 }
@@ -118,7 +118,7 @@ function fieldValue({
     <div className="min-w-0 space-y-1 [overflow-wrap:anywhere]">
       {value}
       {field.definition.relation
-        ? qualifiedFacts({ field, fact, read, release, locale, link, returnTo })
+        ? qualifiedFacts({ field, fact, read, release, locale, link, ...(returnTo ? { returnTo } : {}) })
         : null}
     </div>
   );
@@ -162,7 +162,16 @@ function FieldGroup({
               <ul className="min-w-0 space-y-3">
                 {field.facts.map((fact) => (
                   <li key={fact.id} data-statement={fact.id} className="min-w-0 space-y-1">
-                    {fieldValue({ field, fact, read, locale, context, link, returnTo, release })}
+                    {fieldValue({
+                      field,
+                      fact,
+                      read,
+                      locale,
+                      ...(context ? { context } : {}),
+                      link,
+                      ...(returnTo ? { returnTo } : {}),
+                      release,
+                    })}
                   </li>
                 ))}
               </ul>
@@ -238,9 +247,9 @@ export function RecordingReader({
             read={read}
             release={release}
             locale={locale}
-            context={context}
+            {...(context ? { context } : {})}
             link={link}
-            returnTo={returnTo}
+            {...(returnTo ? { returnTo } : {})}
           />
           <FieldGroup
             title={m.recording_reader_contributions({}, options(locale))}
@@ -248,9 +257,9 @@ export function RecordingReader({
             read={read}
             release={release}
             locale={locale}
-            context={context}
+            {...(context ? { context } : {})}
             link={link}
-            returnTo={returnTo}
+            {...(returnTo ? { returnTo } : {})}
           />
           <FieldGroup
             title={m.recording_reader_associations({}, options(locale))}
@@ -258,9 +267,9 @@ export function RecordingReader({
             read={read}
             release={release}
             locale={locale}
-            context={context}
+            {...(context ? { context } : {})}
             link={link}
-            returnTo={returnTo}
+            {...(returnTo ? { returnTo } : {})}
           />
         </>
       ) : null}

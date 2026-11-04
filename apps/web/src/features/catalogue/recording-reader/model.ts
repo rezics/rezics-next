@@ -36,7 +36,7 @@ function emptyGroups(): Record<RecordingGroup, RecordingField[]> {
 
 function visitState(
   state: RecordingReaderState,
-  grain = { text: '', lang: null },
+  grain: { text: string; lang: string | null } = { text: '', lang: null },
   bounds: readonly ProfileBound[] = [],
 ): RecordingVisit {
   return {
