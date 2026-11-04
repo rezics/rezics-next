@@ -35,8 +35,6 @@ const tableRows: Record<string, Record<string, unknown>[]> = {
 };
 const tables: CrossMediaTables = { async *rows(provider, table) { yield* tableRows[`${provider}/${table}`] ?? []; } };
 
-type Candidate = { id: string };
-
 test('selected character traits and appearances use current adopted vocabulary and retain identity on refresh', async () => {
   const previous = process.env.TMPDIR;
   const runtime = await (async () => {
