@@ -408,11 +408,8 @@ test('the request accepts one to one hundred IDs and rejects malformed or unknow
 test('the observation validates before SQL and deduplicates native seeks by route', async () => {
   const query = spyOn(pool, 'query');
   try {
-    await Promise.all(
-      [[], Array.from({ length: 101 }, () => identity.first), ['not-a-uuid']].map((ids) =>
-        expect(readPublicIdentityObservations(pool, ids)).rejects.toMatchObject({ code: 'invalid_request' }),
-      ),
-    );
+    for (const ids of [[], Array.from({ length: 101 }, () => identity.first), ['not-a-uuid']])
+      await expect(readPublicIdentityObservations(pool, ids)).rejects.toMatchObject({ code: 'invalid_request' });
     expect(query).not.toHaveBeenCalled();
   } finally {
     query.mockRestore();
@@ -427,9 +424,7 @@ test('the observation validates before SQL and deduplicates native seeks by rout
   const batch = spyOn(pool, 'query');
   try {
     const routed = [identity.first, identity.second, other, identity.first];
-    expect((await readPublicIdentityObservations(pool, routed)).map(({ id }) => id)).toEqual(
-      routed,
-    );
+    expect((await readPublicIdentityObservations(pool, routed)).map(({ id }) => id)).toEqual(routed);
     expect(batch).toHaveBeenCalledTimes(2);
   } finally {
     batch.mockRestore();
