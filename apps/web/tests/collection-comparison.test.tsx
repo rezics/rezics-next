@@ -69,12 +69,13 @@ test('actual grid, list and editor compositions retain property meanings, suppli
       editing: true,
       firstPage: false,
       selectedIds: new Set([id(3)]),
+      onSelectionChange() {},
       listPresentations,
       comparisonDefinitions,
     }),
   );
   expect(editor).toContain('Creator');
-  expect(editor).toContain('data-state="checked"');
+  expect(editor).toContain('aria-checked="true"');
   expect(editor).not.toContain('data-comparison-reference');
 });
 
@@ -103,7 +104,9 @@ test('missing, empty, unavailable and concealed context stays truthful without i
   });
   expect(concealed).toContain('Readable label');
   expect(concealed).not.toContain('data-comparison-reference');
-  expect(render({ ...base, subject: null })).not.toContain('Same name');
+  const hidden = render({ ...base, subject: null });
+  expect(hidden).not.toContain('Same name');
+  expect(hidden).toContain(`id="collection-member-${base.id}"`);
   expect(render(base)).toContain('Property name unavailable');
   expect(
     collectionComparisonFacts({ ...base, facts: { date: [{ kind: 'time', year: 1943 }] } }, undefined, {}, 'en')[0]

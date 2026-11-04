@@ -2435,11 +2435,24 @@ export function CollectionReadMembers<Member extends ReadMember>({
     const key = member.id ?? `${subject?.id ?? 'unavailable'}:${index}`;
     if (!subject) {
       return layout === 'grid' ? (
-        <div key={key} role="listitem" className="py-4 text-sm text-muted-foreground">
+        <div
+          key={key}
+          role="listitem"
+          id={member.id ? `collection-member-${member.id}` : undefined}
+          tabIndex={-1}
+          data-collection-member-id={member.id}
+          className="py-4 text-sm text-muted-foreground"
+        >
           {m.library_subject_unavailable()}
         </div>
       ) : (
-        <ListRow key={key} className="py-4 text-muted-foreground">
+        <ListRow
+          key={key}
+          id={member.id ? `collection-member-${member.id}` : undefined}
+          tabIndex={-1}
+          data-collection-member-id={member.id}
+          className="py-4 text-muted-foreground"
+        >
           {m.library_subject_unavailable()}
         </ListRow>
       );
