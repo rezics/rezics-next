@@ -123,7 +123,7 @@ test('missing, empty, unavailable and concealed context stays truthful without i
   expect(filtered.searchParams.get('via')).toBe(source);
 });
 
-test('mounted return focuses only the loaded occurrence, survives same-cursor recovery and cannot revive selection on replacement', async () => {
+test('mounted reference returns repeat on the retained page and retire on replacement without taking focus', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -144,12 +144,12 @@ test('mounted return focuses only the loaded occurrence, survives same-cursor re
   const container = window.document.createElement('main');
   window.document.body.append(container);
   const root = createRoot(container);
-  const render = async (rows: CollectionMember[]) =>
+  const render = async (rows: CollectionMember[], href = source) =>
     act(async () =>
       root.render(
         createElement(CollectionReadMembers, {
           members: rows,
-          currentHref: `${source}#collection-member-${id(3)}`,
+          currentHref: href,
           listPresentations,
           comparisonDefinitions,
           onCopy() {},
@@ -164,7 +164,53 @@ test('mounted return focuses only the loaded occurrence, survives same-cursor re
     expect(links).toHaveLength(2);
     expect(links.every((link) => !link.parentElement?.closest('a'))).toBe(true);
     expect(new URL(links[1]!.href).searchParams.get('via')).toBe(`${source}#collection-member-${id(3)}`);
+    const target = window.document.getElementById(`collection-member-${id(3)}`)!;
+    const returnEvent = () => window.dispatchEvent(new window.PageTransitionEvent('pageshow', { persisted: true }));
+    const depart = () => {
+      links[1]!.focus();
+      links[1]!.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      links[1]!.click();
+    };
+    for (let visit = 0; visit < 2; visit++) {
+      depart();
+      await act(async () => returnEvent());
+      expect(window.document.activeElement).toBe(target);
+    }
+    const away = window.document.createElement('button');
+    container.prepend(away);
+    depart();
+    away.focus();
+    await act(async () => returnEvent());
+    expect(window.document.activeElement).toBe(away);
+    away.blur();
+    await act(async () => returnEvent());
+    expect(window.document.activeElement).toBe(window.document.body);
+    // A new fragment navigation admits another return, including the same occurrence later.
+    window.history.replaceState(null, '', source);
+    await act(async () => window.dispatchEvent(new window.HashChangeEvent('hashchange')));
+    window.history.replaceState(null, '', `${source}#collection-member-${id(3)}`);
+    await act(async () => window.dispatchEvent(new window.HashChangeEvent('hashchange')));
+    expect(window.document.activeElement).toBe(target);
+    // A native response replacement retires an admitted departure, even with identical IDs.
+    depart();
+    const replacement = members.map((member) => ({ ...member }));
+    await render(replacement);
+    target.blur();
+    await act(async () => returnEvent());
+    expect(window.document.activeElement).toBe(window.document.body);
+    // Reused occurrence fragments cannot replay a departure into another address.
+    for (const next of [source.replace(id(1), id(8)), source.replace('cursor=two', 'cursor=three')]) {
+      await render(members);
+      depart();
+      window.history.replaceState(null, '', `${next}#collection-member-${id(3)}`);
+      await render(members, next);
+      links[1]!.blur();
+      await act(async () => returnEvent());
+      expect(window.document.activeElement).toBe(window.document.body);
+    }
     await render([{ ...members[0]!, id: id(99), facts: {} }]);
+    await act(async () => returnEvent());
+    expect(window.document.activeElement).toBe(window.document.body);
     expect(container.querySelector('[data-comparison-reference]')).toBeNull();
     expect(container.querySelector('input,textarea,[role="checkbox"]')).toBeNull();
     expect(container.querySelector(`#collection-member-${id(3)}`)).toBeNull();
