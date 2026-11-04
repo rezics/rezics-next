@@ -221,6 +221,7 @@ async function classificationFixture(
       return Response.json({
         observationDigest: digest,
         state: path.endsWith(':clear') ? 'cleared' : 'published',
+        ...(path.endsWith(':clear') ? {} : { figure: {} }),
       });
     }) as typeof fetch,
   });
