@@ -9,7 +9,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { editorRequest } from './editor-request';
 import { CreateSubjectForm } from './create-subject-form';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import type { CreateType, InitialSubject } from './create-subject';
 import { relationTargetSearch } from './relation-editor-search';
 import { createCatalogueFileSubject, loadCatalogueFileCreate } from './catalogue-file-create-actions';
@@ -118,6 +118,7 @@ function CatalogueFileCreateSessionLive({ locale, initial }: { locale: string; i
 
   const transport = useMemo(
     () => ({
+      eligibility: () => readCatalogueCreateEligibility(),
       submit: (command: { item: InitialSubject; key: string }) =>
         createCatalogueFileSubject({
           data: editorRequest(command as CatalogueFileCreateCommand, work),
