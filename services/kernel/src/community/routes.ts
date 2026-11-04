@@ -92,6 +92,8 @@ import {
   confirmRealmMemberSelection,
   MemberPageUnavailableError,
   publicMemberIdentity,
+  REALM_MEMBER_PAGE_SIZE,
+  realmMemberAuthorityToken,
   realmMemberEpisodeToken,
   readRealmMemberActions,
   readRealmMemberIdentities,
@@ -508,10 +510,17 @@ const memberPageQuery = t.Object(
   { cursor: t.Optional(t.String({ maxLength: 4096 })), accountId: t.Optional(id) },
   closed,
 );
+const memberPageViewer = t.Union([
+  t.Object({ accountId: id, authority: t.String({ maxLength: 64 }) }, closed),
+  t.Null(),
+]);
 const memberPageResponse = t.Object(
   {
     realmId: id,
+    realmLabel: t.String({ maxLength: 4096 }),
+    pageBound: t.Literal(REALM_MEMBER_PAGE_SIZE),
     state: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+    viewer: memberPageViewer,
     items: t.Array(memberRow, { maxItems: 20 }),
     next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
     selected: t.Union([selectedMember, t.Null()]),
@@ -521,7 +530,13 @@ const memberPageResponse = t.Object(
     examples: [
       {
         realmId: '00000000-0000-0000-0000-000000000010',
+        realmLabel: 'Members Realm',
+        pageBound: REALM_MEMBER_PAGE_SIZE,
         state: 'ready',
+        viewer: {
+          accountId: '00000000-0000-0000-0000-000000000010',
+          authority: 'mra1.0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        },
         items: [
           {
             accountId: '00000000-0000-0000-0000-000000000020',
@@ -557,7 +572,10 @@ const memberPageResponse = t.Object(
       },
       {
         realmId: '00000000-0000-0000-0000-000000000010',
+        realmLabel: 'Members Realm',
+        pageBound: REALM_MEMBER_PAGE_SIZE,
         state: 'preparing',
+        viewer: null,
         items: [],
         next: null,
         selected: null,
@@ -2543,7 +2561,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             if (selection.state === 'preparing')
               return assertRealmMemberPageBytes({
                 realmId,
+                realmLabel: currentRealm.title,
+                pageBound: REALM_MEMBER_PAGE_SIZE,
                 state: 'preparing' as const,
+                viewer: null,
                 items: [],
                 next: selection.next,
                 selected: null,
@@ -2568,7 +2589,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             )
               return assertRealmMemberPageBytes({
                 realmId,
+                realmLabel: currentRealm.title,
+                pageBound: REALM_MEMBER_PAGE_SIZE,
                 state: 'preparing' as const,
+                viewer: null,
                 items: [],
                 next: query.cursor ?? null,
                 selected: null,
@@ -2612,7 +2636,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             )
               return assertRealmMemberPageBytes({
                 realmId,
+                realmLabel: currentRealm.title,
+                pageBound: REALM_MEMBER_PAGE_SIZE,
                 state: 'preparing' as const,
+                viewer: null,
                 items: [],
                 next: query.cursor ?? null,
                 selected: null,
@@ -2630,7 +2657,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
             if (!stillCurrent)
               return assertRealmMemberPageBytes({
                 realmId,
+                realmLabel: currentRealm.title,
+                pageBound: REALM_MEMBER_PAGE_SIZE,
                 state: 'preparing' as const,
+                viewer: null,
                 items: [],
                 next: query.cursor ?? null,
                 selected: null,
@@ -2705,7 +2735,18 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
                   })();
             return assertRealmMemberPageBytes({
               realmId,
+              realmLabel: finalRealm.title,
+              pageBound: REALM_MEMBER_PAGE_SIZE,
               state: 'ready' as const,
+              viewer: {
+                accountId: actor.accountId,
+                authority: realmMemberAuthorityToken({
+                  tokens: dependencies.tokens,
+                  realmId,
+                  viewerAccountId: actor.accountId,
+                  epoch: selection.epoch,
+                }),
+              },
               items,
               next: selection.next,
               selected,

@@ -146,6 +146,34 @@ export function realmMemberEpisodeToken(input: {
   return `mep1.${input.tokens.current}.${digest}`;
 }
 
+/** Stable opaque binding for one admitted manager's Realm page authority observation. */
+export function realmMemberAuthorityToken(input: {
+  tokens: KeyRing;
+  realmId: string;
+  viewerAccountId: string;
+  epoch: number;
+}): string {
+  const key = input.tokens.keys.get(input.tokens.current);
+  if (
+    !key ||
+    !Number.isInteger(input.tokens.current) ||
+    input.tokens.current < 0 ||
+    input.tokens.current > 255 ||
+    key.byteLength < 32 ||
+    routeOf(input.realmId) === null ||
+    routeOf(input.viewerAccountId) === null ||
+    !Number.isSafeInteger(input.epoch) ||
+    input.epoch < 1
+  )
+    throw new MemberPageUnavailableError();
+  const scope = JSON.stringify([input.realmId, input.viewerAccountId]);
+  const observation = JSON.stringify([input.epoch]);
+  const digest = createHmac('sha256', key)
+    .update(`community.realm.member-authority.v1\0${scope}\0${observation}`, 'utf8')
+    .digest('base64url');
+  return `mra1.${input.tokens.current}.${digest}`;
+}
+
 function cursorBinding(realmId: string, viewerAccountId: string): MemberCursorBinding {
   return {
     operation: 'community.realm.members',

@@ -56,7 +56,14 @@ export function MemberAddition({
   useAuthoringDeparture(
     () => current() && (working.current || stateNow.current.kind === 'review' || stateNow.current.kind === 'uncertain'),
     () => working.current || stateNow.current.kind === 'uncertain',
-    JSON.stringify([address.realmId, address.accountId, address.authority, address.membershipInterval, state.kind]),
+    JSON.stringify([
+      address.realmId,
+      address.accountId,
+      address.authority,
+      address.membershipInterval,
+      selected.membershipEpisode,
+      state.kind,
+    ]),
     undefined,
     () => {
       sequence.current++;
@@ -72,6 +79,7 @@ export function MemberAddition({
       realmId: address.realmId,
       accountId: selected.identity.accountId,
       membershipInterval: selected.membershipInterval,
+      membershipEpisode: selected.membershipEpisode,
       authority: address.authority,
       idempotencyKey: crypto.randomUUID(),
     });

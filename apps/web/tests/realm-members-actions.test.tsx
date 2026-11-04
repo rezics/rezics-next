@@ -42,6 +42,7 @@ test('1/10/20 rows need one page request, no hydration and one explicit selected
           ...address,
           identity: { accountId: address.accountId, reference: address.accountId, label: 'Current private fallback' },
           membershipInterval: address.membershipInterval ?? null,
+          membershipEpisode: address.membershipInterval ?? `episode-${address.accountId}`,
           membership: 'pending',
           advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
         };

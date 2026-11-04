@@ -9,7 +9,7 @@ Decision: management discovery uses the existing exact-Realm `realm.update` perm
 `canManage` observation, both owned by `realm:manage`; ban-list admission and Space-only grants do not qualify.
 The management host supplies these observations without a new probe or a private query snapshot.
 
-Decision: keep production unavailable until the installed roster has generated GET declarations and exposes current viewer/authority advice for selection; neither account ID nor `membership: 'member'` can stand in for that interval.
+Decision: bind page authority directly to the producer's stable HMAC for the current Realm, viewer and partition epoch; the consumer copies it unchanged and never derives it from an Account ID or membership state.
 
 Decision: interval tokens are opaque within their exact Account selection; tokens need not be globally unique across
 different Accounts.
@@ -20,8 +20,9 @@ The installed [native producer](../../../../../services/kernel/src/community/REA
 `GET /v1/realms/:realmId/members` (`realm.members`, public operation exposure, private `realm:manage` admission), with
 optional exact `accountId` inspection. Its installed schema caps pages at 20 rows, names at 4,096 UTF-16 units, cursors
 at 4,096 characters and serialized responses at 600,000 UTF-8 bytes. It publishes add/ban/unban advice and explicitly
-unavailable remove/role variants; it publishes no media grants. Its rows and selected observations now expose the producer-owned opaque `episode` binding; a leave/rejoin changes it. Shared generated declaration installation remains publisher-owned. A server source or a local factory does not establish an installed generated
-consumer. The visit therefore retains its unavailable production adapter. These consumer types remain illustrative
+unavailable remove/role variants; it publishes no media grants. Its rows and selected observations now expose the producer-owned opaque `episode` binding; a leave/rejoin changes it. Ready pages also carry the current Realm label, producer page bound and viewer-scoped authority token. Shared generated declaration installation remains publisher-owned. A server source or a local factory does not establish an installed generated
+consumer. The production route wires a session-scoped source; the unavailable adapter remains only as the default
+composition fixture. These consumer types remain illustrative
 composition types, not a proposed wire schema. `pageBound` must come from that installed producer when bound;
 fixtures use 20 only to exercise bounded composition.
 Cursor bytes pass through unchanged. Selected inspection never moves the page cursor. An empty page with `next`
@@ -29,8 +30,10 @@ retains More. A failed page retries the exact original address. Denial is distin
 
 The visit indexes one admitted page and obtains one observation per deliberate selection. Selection captures the
 exact account, producer-owned membership interval when selected from a row, and authority revision; an entered
-Account ID never supplies an interval. A reordered or replaced page cannot substitute another account. Failed
-selected lookup shows no fallback identity. Concealment or interval change removes the former page observation.
+Account ID never supplies an interval. The selected episode stays separate from its nullable interval so the consumer
+can retire changed observations while allowing accepted-work readback to replace them. A reordered or replaced page
+cannot substitute another account. Failed selected lookup shows no fallback identity. Concealment or interval change
+removes the former page observation.
 Returning restores keyboard focus to the still-current account button, otherwise the heading.
 
 Realm, caller, session/CSRF epoch, locale, exposure or source replacement retires the old visit and all deferred
@@ -51,8 +54,9 @@ This seam does not publish native notifications or permit production binding bef
 
 ## Actions and pending work
 
-The default production source remains unavailable and makes no requests. An explicitly installed consumer source may
-provide selected advice only with its current Account observation. The composition has one entered Account lookup,
+The mounted production source makes its bounded native GET through the session-owned server function. It maps native
+`member` to consumer `current` and `none` to `none`; absence is never treated as workflow `pending`. The composition has
+one entered Account lookup,
 uses the existing membership POST owner for selected add, and passes one selected identity through a narrow context
 to the default `RealmBansPanel`; that Panel remains the ban/unban writer. No remove, role, approve or mute command is
 added. Neither enumeration nor identity alone supplies action authority.
@@ -70,7 +74,8 @@ identity, advice or producer currentness retires the review before it can write.
 - Touches: one page request per explicit page operation, at most one selected request per deliberate selection,
   explicit retry or status check; no identity hydration, global scans, hidden refill, client sorting, accumulation or
   polling.
-  The installed unavailable adapter makes zero native requests.
+  The explicitly unavailable composition fixture makes zero native requests; the mounted source requires the admitted
+  browser session and viewer binding.
 - Bound: one page, one O(N) index and one active selection. Its last ready observation may stay in component memory
   during an explicit same-address status read so accepted work remains pending after a failed read; it is never shown
   as a fallback identity. No guessed wire string, cursor or media caps; publication must provide them before
@@ -91,20 +96,18 @@ No legacy code was ported.
 
 Connected stories exercise ready, long/private names, sparse, denied, selected unavailable, pending membership,
 revocation, and add rejection, uncertainty and accepted-pending through the existing membership command owner with
-deterministic response fixtures. The remaining mounted native/page source acceptance and phone390/desktop1280 light/dark keyboard
-review across all eight locales are integration-owned. Existing Storybook capture ownership remains unchanged.
-Consumer fixtures and an unavailable production source do not establish native 256/1024/4096 growth or a production
-roster binding.
+deterministic response fixtures. The mounted production source is connected; generated declarations, native execution
+and phone390/desktop1280 light/dark keyboard review across all eight locales remain integration-owned. Existing
+Storybook capture ownership remains unchanged. Consumer fixtures do not establish native 256/1024/4096 growth.
 
 ## Native read transport
 
-Decision: preserve the unavailable default until native viewer/authority projection is connected; the minimal
-`native.ts` wire seam reads real mounted data without converting episode tokens into page authority or inventing viewer advice.
+`native.ts` reads real mounted data and validates the producer-owned viewer authority and selected action advice. The
+source copies viewer authority and producer page bound without synthesizing either.
 `request.ts` resolves the admitted browser session and checks its subject before calling the native GET; `transport.ts`
 keeps this explicit read private and outside route loaders. The seam is source integration, not installed generated
-typing or completion of the route journey. No membership or ban writer is introduced. Native `member` maps to
-consumer `current` only once connected; `none` establishes absence of a current membership, never `pending` or workflow
-completion. Preparation stays separate from a ready empty roster.
+typing or native execution. No new membership or ban writer is introduced. Preparation stays separate from a ready
+empty roster.
 
 Cost: native read transport
 
