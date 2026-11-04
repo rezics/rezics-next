@@ -651,6 +651,8 @@ test('list restart cannot lose an unknown command or a later choice, and native 
   await pager.restart();
   expect(reads).toEqual([null]); // A resolved original command does not discard the later unsaved choice.
   await editor.reload();
+  expect(pager.snapshot().restartBlocked).toBe(true);
+  editor.discardDraft();
   expect(pager.snapshot().restartBlocked).toBe(false);
   await pager.restart();
   expect(reads).toEqual([null, null]);

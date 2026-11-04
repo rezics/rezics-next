@@ -321,7 +321,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       this.consumeAcknowledgedIntent();
       const readWaiting = this.currentReadWaiting();
       this.update({
-        desired: this.intent?.visibility ?? this.state.current?.visibility ?? this.state.desired,
+        desired: this.intent?.visibility ?? receipt.visibility,
         phase: readWaiting ? 'readback' : 'reloading',
         receipt: originalReceipt,
         outcomeUnknown: false,
