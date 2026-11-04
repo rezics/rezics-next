@@ -527,6 +527,7 @@ type PostComposerProps<T, Context> = {
   initialKey: string;
   initialBody?: DocumentSnapshot;
   titleRequired?: boolean;
+  localDraft?: boolean;
   canSubmit?: boolean;
   containerId?: string;
   boardId?: string;
@@ -556,6 +557,7 @@ function PostComposerContent<T, Context = undefined>({
   initialKey,
   initialBody,
   titleRequired = false,
+  localDraft = true,
   canSubmit = true,
   containerId,
   boardId,
@@ -753,7 +755,7 @@ function PostComposerContent<T, Context = undefined>({
   }
 
   const localWriting = useLocalWritingDraft({
-    actor: session?.state === 'signed-in' ? (session.subject ?? null) : null,
+    actor: localDraft && session?.state === 'signed-in' ? (session.subject ?? null) : null,
     scope: writingScope({ containerId, boardId, replyTargetId, submissionContext }),
     current: () => lifetime.current(),
     signal: lifetime.controller.signal,

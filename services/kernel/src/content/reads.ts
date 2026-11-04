@@ -2267,17 +2267,60 @@ export async function discloseThreads(
 
 /** Exact native rules reader. It shares the ordinary row, ancestry and Access
  * formula; the immutable requested revision never becomes the current head. */
+export type ExactPublishedRulesAuthoringObservation =
+  | Readonly<{
+      state: 'available';
+      rules: import('./community-presentation-rules.ts').PresentedRules;
+      title: string | null;
+      authorId: string;
+      threadId: string;
+      boardId: string;
+      boardTitle: string | null;
+      mediaIds: readonly string[];
+      currentRevision: boolean;
+      revisionAction: 'allowed' | 'denied' | 'unavailable';
+    }>
+  | Readonly<{ state: 'erased' | 'concealed' }>;
+
 export async function readExactPublishedRules(
   dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
   references: readonly (import('./community-presentation-rules.ts').RulesReference & { realmId: string })[],
   context: ReadContext,
 ): Promise<ReadonlyMap<string, import('./community-presentation-rules.ts').PresentedRules>> {
+  return (await readExactPublishedRulesInternal(dependencies, references, context, false)).rules;
+}
+
+/** Authoring adds only current native header and body state to the existing exact reader.
+ * Erasure is disclosed only when the same native post/thread read authority admits it. */
+export async function readExactPublishedRulesForAuthoring(
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
+  references: readonly (import('./community-presentation-rules.ts').RulesReference & { realmId: string })[],
+  context: ReadContext,
+): Promise<ReadonlyMap<string, ExactPublishedRulesAuthoringObservation>> {
+  return (await readExactPublishedRulesInternal(dependencies, references, context, true)).authoring;
+}
+
+async function readExactPublishedRulesInternal(
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access' | 'clock'>,
+  references: readonly (import('./community-presentation-rules.ts').RulesReference & { realmId: string })[],
+  context: ReadContext,
+  includeAuthoring: boolean,
+): Promise<{
+  rules: ReadonlyMap<string, import('./community-presentation-rules.ts').PresentedRules>;
+  authoring: ReadonlyMap<string, ExactPublishedRulesAuthoringObservation>;
+}> {
   if (references.length > 100) throw new RangeError('At most 100 rules references');
   const refs = [...new Map(references.map((ref) => [`${ref.postId}/${ref.revisionId}/${ref.realmId}`, ref])).values()];
-  if (!refs.length) return new Map();
+  if (!refs.length) return { rules: new Map(), authoring: new Map() };
   const decisions = await prepareReadDecisions(dependencies.access, {
     actor: context.actor,
-    actions: new Set(['thread:read', 'post:read', 'board:read', 'realm:read']),
+    actions: new Set([
+      'thread:read',
+      'post:read',
+      'board:read',
+      'realm:read',
+      ...(includeAuthoring ? ['post:revise'] : []),
+    ]),
     context: { pool: dependencies.pool, deadline: context.deadline },
   });
   const ids = refs.flatMap((ref) => [ref.postId, ref.revisionId, ref.realmId]);
@@ -2321,6 +2364,7 @@ export async function readExactPublishedRules(
       );
       const parent = await decideBoardAndRealms(client, decisions, context.actor, boards, realms);
       const permitted = new Map<string, boolean>();
+      const tombstonePermitted = new Map<string, boolean>();
       for (const [kind, rows] of [
         ['thread', threads],
         ['post', [...posts.values()]],
@@ -2331,10 +2375,37 @@ export async function readExactPublishedRules(
             action: `${kind}:read`,
             resourceType: `content.${kind}`,
             ids: chunk.map((row) => row.id),
-            eligibility: async () => Object.fromEntries(chunk.map((row) => [row.id, contentFloor(row, false, false)])),
+            eligibility: async () =>
+              Object.fromEntries(
+                chunk.map((row) => [row.id, contentFloor(row, includeAuthoring, includeAuthoring)]),
+              ),
+          });
+          for (const row of chunk) {
+            permitted.set(
+              row.id,
+              row.availability === 'available' && decisionAllowed(row, allowed[row.id], context.actor, false),
+            );
+            if (includeAuthoring)
+              tombstonePermitted.set(row.id, decisionAllowed(row, allowed[row.id], context.actor, true));
+          }
+        }
+      }
+      const revisionAllowed = new Map<string, boolean>();
+      if (includeAuthoring) {
+        const selectedPosts = [...new Set(refs.map((ref) => ref.postId))]
+          .map((id) => posts.get(id))
+          .filter((row): row is Row => row !== undefined);
+        for (let start = 0; start < selectedPosts.length; start += 100) {
+          const chunk = selectedPosts.slice(start, start + 100);
+          const allowed = await decisions.decide(client, {
+            action: 'post:revise',
+            resourceType: 'content.post',
+            ids: chunk.map((row) => row.id),
+            eligibility: async () =>
+              Object.fromEntries(chunk.map((row) => [row.id, contentFloor(row, false, false)])),
           });
           for (const row of chunk)
-            permitted.set(
+            revisionAllowed.set(
               row.id,
               row.availability === 'available' && decisionAllowed(row, allowed[row.id], context.actor, false),
             );
@@ -2344,11 +2415,114 @@ export async function readExactPublishedRules(
       const byBoard = new Map(boards.map((row) => [row.id, row]));
       const byRevision = new Map(revisions.map((row) => [row.id, row]));
       const passed = new Map<string, string>();
+      const authoring = new Map<
+        string,
+        Readonly<{
+          state: 'available' | 'erased' | 'concealed';
+          signature: string;
+          title: string | null;
+          authorId: string | null;
+          threadId: string | null;
+          boardId: string | null;
+          boardTitle: string | null;
+          mediaIds: readonly string[];
+          currentRevision: boolean;
+          revisionAllowed: boolean;
+        }>
+      >();
       for (const ref of refs) {
+        const key = `${ref.realmId}/${ref.postId}/${ref.revisionId}`;
         const selected = posts.get(ref.postId);
         const revision = byRevision.get(ref.revisionId);
         const thread = selected && byThread.get(selected.thread_id!);
         const board = thread && byBoard.get(thread.board_id!);
+        let currentChain: Row[] = [];
+        let completeChain = false;
+        if (selected && thread) {
+          const seen = new Set<string>();
+          let post: Row | undefined = selected;
+          while (post && currentChain.length < 33 && !seen.has(post.id)) {
+            if (post.thread_id !== thread.id) break;
+            seen.add(post.id);
+            currentChain.push(post);
+            if (post.parent_id === null) {
+              completeChain = true;
+              break;
+            }
+            post = posts.get(post.parent_id);
+          }
+        }
+        const exactRelation = Boolean(
+          selected &&
+            selected.visibility === 'published' &&
+            revision &&
+            thread &&
+            board &&
+            revision.parent_id === selected.id &&
+            revision.thread_id === thread.id &&
+            revision.board_id === board.id &&
+            route(ref.revisionId) === route(selected.id) &&
+            board.realm_id === ref.realmId &&
+            parent.boards.get(board.id) &&
+            parent.realms.get(ref.realmId),
+        );
+        if (includeAuthoring) {
+          const readableTombstone = Boolean(
+            exactRelation &&
+              thread &&
+              tombstonePermitted.get(thread.id) &&
+              completeChain &&
+              currentChain.every((post) => tombstonePermitted.get(post.id)),
+          );
+          const erased = Boolean(
+            readableTombstone &&
+              (thread?.availability === 'erased' ||
+                revision?.availability === 'erased' ||
+                currentChain.some((post) => post.availability === 'erased')),
+          );
+          const available = Boolean(
+            exactRelation &&
+              thread &&
+              revision?.availability === 'available' &&
+              permitted.get(thread.id) &&
+              completeChain &&
+              currentChain.every((post) => permitted.get(post.id)),
+          );
+          if (erased || available) {
+            const realm = realms.find((row) => row.realm_id === ref.realmId)!;
+            const observationSignature = JSON.stringify([
+              signature(thread!),
+              signature(board!),
+              ...currentChain.map(signature),
+              signature(revision!),
+              realm,
+              [...anchors.values(), ...extraPartitions].map((p) => [p.partitionNo, p.epoch]),
+            ]);
+            authoring.set(key, {
+              state: erased ? 'erased' : 'available',
+              signature: observationSignature,
+              title: thread!.title,
+              authorId: selected!.author_id,
+              threadId: thread!.id,
+              boardId: board!.id,
+              boardTitle: board!.title,
+              mediaIds: revision!.media_ids,
+              currentRevision: selected!.head_id === revision!.id,
+              revisionAllowed: revisionAllowed.get(selected!.id) === true,
+            });
+          } else {
+            authoring.set(key, {
+              state: 'concealed',
+              signature: JSON.stringify([selected ?? null, revision ?? null, thread ?? null, board ?? null]),
+              title: null,
+              authorId: null,
+              boardId: null,
+              boardTitle: null,
+              currentRevision: false,
+              revisionAllowed: false,
+            });
+          }
+        }
         if (
           !selected ||
           selected.visibility !== 'published' ||
@@ -2396,6 +2570,7 @@ export async function readExactPublishedRules(
       }
       return {
         passed,
+        authoring,
         clientBodies: await presentationRuleBodies.run(client, {
           keys: JSON.stringify(
             refs
@@ -2641,7 +2816,41 @@ export async function readNoticePostContexts(
       }
     }
   }
-  return output;
+  const authoring = new Map<string, ExactPublishedRulesAuthoringObservation>();
+  if (includeAuthoring) {
+    for (const ref of refs) {
+      const key = `${ref.realmId}/${ref.postId}/${ref.revisionId}`;
+      const before = initial.value.authoring.get(key);
+      const after = final.value.authoring.get(key);
+      if (!before || !after || before.state !== after.state || before.signature !== after.signature) {
+        authoring.set(key, { state: 'concealed' });
+      } else if (after.state === 'erased') {
+        authoring.set(key, { state: 'erased' });
+      } else if (after.state === 'available') {
+        const rules = output.get(key);
+        if (rules && after.authorId && after.threadId && after.boardId) {
+          authoring.set(key, {
+            state: 'available',
+            rules,
+            title: after.title,
+            authorId: after.authorId,
+            threadId: after.threadId,
+            boardId: after.boardId,
+            boardTitle: after.boardTitle,
+            mediaIds: after.mediaIds,
+            currentRevision: after.currentRevision,
+            revisionAction:
+              before.revisionAllowed === after.revisionAllowed
+                ? after.revisionAllowed
+                  ? 'allowed'
+                  : 'denied'
+                : 'unavailable',
+          });
+        } else authoring.set(key, { state: 'concealed' });
+      } else authoring.set(key, { state: 'concealed' });
+    }
+  }
+  return { rules: output, authoring };
 }
 
 export type NoticeBoardContext = Readonly<{ boardId: string; boardTitle: string | null }>;

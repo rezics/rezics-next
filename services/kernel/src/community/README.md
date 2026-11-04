@@ -1669,6 +1669,34 @@ role admission, removal or creator authority.
 - Growth check: later reuse `test/community/growth-realm.test.ts` and `test/content/growth-threads.test.ts`;
   focused native outcomes live in `test/community/presentation.test.ts`. Type checking proves no native cost outcome.
 
+### Realm rules authoring
+
+Decision: new rules explicitly select the existing native `LicenseRef-rezics-terms`; Content attributes the post to the
+signed-in account, and edits retain the stored licence through the native revision command.
+
+`GET /v1/realms/:realmId/rulesAuthoring` is a private, no-store `realm:manage` preparation. It composes the current
+settings/policy reader, the exact native Content revision reader, the existing 20-board Realm page, and native
+`thread:create`/`post:revise` advice. Advice is current page evidence only; Content and Realm commands repeat their own
+authorization and currentness checks. The page keeps none, available, erased, concealed and unavailable references
+distinct. It returns no historical body unless the exact published Content reader currently admits it. Its final exact
+Content observation follows board preparation and the second settings read, so late advice work cannot keep an earlier
+body authorized. New Content publication and Realm presentation update remain separate acknowledged effects; only their exact acknowledged
+revision is offered to the existing settings writer.
+
+- Touches: two complete Realm settings/policy reads, including each reader's two selected rules and optional media
+  references; one final exact rules authoring observation with native `post:revise` advice and the selected revision's
+  thread/media metadata; one 20-item Realm board page;
+  and at most one existing board action-evidence read per returned board. Each nested reader retains its own Access,
+  Accounts, Realm, Content and partition checks.
+- Bound: fixed work at a 20-board page, 33 posts per ancestry chain, two exact-source disclosure rounds, and 65,536
+  canonical document bytes. The settings composition may retain up to five bounded copies of the exact selected body
+  across its two selected reads and the authoring observation; response bytes remain fixed by the page and document
+  limits. There is no board refill, revision-history walk or cross-home transaction.
+- Growth check: `test/community/rules-authoring-journey.test.ts` varies unrelated Realm rows, Realm revisions,
+  same-post Content revisions, selected media history and Realm authority history at 256/1024/4096 while checking
+  fixed statement, row and response bounds. Installed publication-preparation and downstream action execution remain
+  owned by their native commands.
+
 ## Current native Realm member count
 
 `readRealmMemberCount(client, { realmId, at })` in `member-count.ts` returns only
