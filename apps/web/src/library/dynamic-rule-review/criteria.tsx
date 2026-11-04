@@ -30,6 +30,7 @@ export type DynamicRuleReviewProps = {
   basisKind?: 'loaded' | 'original' | undefined;
   collectionId?: string | undefined;
   returnedId?: string | undefined;
+  locale?: string | undefined;
   ownerCurrent: boolean;
 };
 
@@ -337,9 +338,10 @@ export const DynamicRuleReview = memo(function DynamicRuleReview({
   basisKind,
   collectionId,
   returnedId,
+  locale: requestedLocale,
   ownerCurrent,
 }: DynamicRuleReviewProps) {
-  const locale = getLocale();
+  const locale = requestedLocale ?? getLocale();
   const acceptedRelease = accepted ?? current;
   const acceptedMeaning = useMemo(() => release(acceptedRelease), [acceptedRelease]);
   const currentMeaning = useMemo(() => release(current), [current]);

@@ -111,6 +111,7 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
   const root = createRoot(host);
   let props: Props = {
     page: ready(),
+    locale,
     viewerId: 'alice',
     collectionId: 'private-rule',
     csrfToken: 'csrf-alice',
@@ -119,12 +120,17 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
     reload: async () => ready(),
     ...initial,
   };
+  let lastSave: Promise<CollectionWriteResult> | undefined;
+  function trackedSave(value: RuleWrite, csrf: string) {
+    lastSave = props.save(value, csrf);
+    return lastSave;
+  }
   async function render(patch: Partial<Props> = {}) {
     props = { ...props, ...patch };
     await act(async () =>
       root.render(
         <StrictMode>
-          <CollectionRuleEditor {...props} />
+          <CollectionRuleEditor {...props} save={trackedSave} />
         </StrictMode>,
       ),
     );
@@ -152,11 +158,13 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
       expect(button).toBeDefined();
       await act(async () => button!.click());
     },
-    async submit() {
+    async submit(waitForSave = true) {
       const form = host.querySelector('form');
       expect(form).not.toBeNull();
+      lastSave = undefined;
       await act(async () => {
         form!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+        if (waitForSave && lastSave) await lastSave;
       });
     },
     async close() {
@@ -418,7 +426,7 @@ test('viewer, address, CSRF and admission retirement remove exact private detail
   const ui = await mount({ page: original, ...authority, save: async () => late.promise, navigate: (id) => navigation.push(id) });
   try {
     for (const [index, loss] of losses.entries()) {
-      await ui.submit();
+      await ui.submit(false);
       await ui.render(loss);
       expect(ui.host.querySelector('form, details, code, select, a')).toBeNull();
       expect(ui.host.textContent).not.toContain(original.rule.releaseDigest);
