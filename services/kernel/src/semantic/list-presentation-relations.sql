@@ -11,6 +11,6 @@ CROSS JOIN LATERAL (
     AND filter_value='00000000-0000-0000-0000-000000000000'::uuid
     AND relation AND present
   ORDER BY order_key, target_subject_id, statement_id
-  LIMIT 3
+  LIMIT $2::integer
 ) link
 ORDER BY wanted.id, wanted.property, link.order_key, link.target_subject_id, link.statement_id;

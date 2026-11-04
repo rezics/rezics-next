@@ -103,6 +103,7 @@ export type CharacterPersonDiscoveryContexts = {
   appearances: DiscoveryContextList;
 };
 export type DiscoveryHit = {
+  workContext?: import('./work-context.ts').WorkContext;
   key: DiscoveryKey;
   summary: DiscoverySummary;
   labels?: Record<string, string>;

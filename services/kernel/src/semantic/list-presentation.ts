@@ -11,6 +11,14 @@ import { accessCheck, type Access, type AccessClient, type Actor } from '../requ
 import { withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { chooseTexts, pendingFacts, validateHitOptions, type Fact } from '../search/hits.ts';
+import {
+  listWorkPlan,
+  prepareListWorkContext,
+  listWorkTargets,
+  finishListWorkContext,
+  type WorkTarget,
+} from './list-presentation-work-context.ts';
+import type { WorkContext } from '../search/work-context.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import { activeRelease } from './definitions.ts';
 import { subjectReadEligibility } from './eligibility.ts';
@@ -50,7 +58,13 @@ type Origin = {
   retracted: boolean;
 };
 type Selected = { id: string; property: string; fact: FactRow; origin: Origin };
-type SubjectObservation = { header: Header; selected: Selected[]; basis: unknown[]; labels?: Record<string, string> };
+type SubjectObservation = {
+  header: Header;
+  selected: Selected[];
+  basis: unknown[];
+  withheld: string[];
+  labels?: Record<string, string>;
+};
 type Account = { id: string; state: string; fenced: boolean; epoch: string };
 
 function unready(): never {
@@ -108,6 +122,7 @@ async function observeSubjects(
   release: Release,
   facts: boolean,
   labels = false,
+  workContext = false,
 ) {
   const results = new Map<string, SubjectObservation | null>();
   for (const [home, group] of groups(ids)) {
@@ -141,7 +156,7 @@ async function observeSubjects(
           if (facts && !row) unready();
           if (row?.visibility !== 'visible' || !(await checks.get(id)!(client))) continue;
           if (row.revision === null || row.release === null) unready();
-          visible.set(id, { header: row, selected: [], basis: [] });
+          visible.set(id, { header: row, selected: [], basis: [], withheld: [] });
         }
         if (labels && visible.size) {
           const values = await readLabels(client, [...visible.keys()]);
@@ -152,7 +167,13 @@ async function observeSubjects(
           if (header.redirect) return [];
           const type = release.types[header.type];
           if (!type) unready();
-          return (type.listPresentation?.keyFacts ?? []).map((property) => ({
+          const plan = workContext ? listWorkPlan(release, header.type) : undefined;
+          return [
+            ...new Set([
+              ...(type.listPresentation?.keyFacts ?? []),
+              ...(plan ? [...plan.creators, ...plan.relations, ...plan.dates] : []),
+            ]),
+          ].map((property) => ({
             route: routeOf(header.id)!,
             id: header.id,
             property,
@@ -169,7 +190,7 @@ async function observeSubjects(
                 order_key: string;
                 source_revision: number;
                 source_security_revision: string;
-              }>(relationsSQL.sql, [json(relations)])
+              }>(relationsSQL.sql, [json(relations), workContext ? 4 : 3])
             ).rows
           : [];
         if (relations.length) {
@@ -197,19 +218,29 @@ async function observeSubjects(
               unready();
           }
         }
+        // Four candidate locators per category prove at most three disclosed entries plus lookahead.
+        // Generic facts retain their independent three-per-property prefix.
+        const workCandidates = new Set<string>();
+        if (workContext)
+          for (const [id, observation] of visible) {
+            const plan = listWorkPlan(release, observation.header.type);
+            if (!plan) continue;
+            for (const group of ['creators', 'relations'] as const)
+              for (const row of locators
+                .filter((row) => row.id === id && plan[group].includes(row.property))
+                .slice(0, 4))
+                workCandidates.add(`${id}/${row.candidate}`);
+          }
         const selected: { id: string; property: string; fact: FactRow }[] = [];
         for (const request of requested) {
           const observation = visible.get(request.id)!;
           const relation = isRelationProperty(release, request.property);
-          const slots = relation
-            ? [
-                ...new Set(
-                  locators
-                    .filter((row) => row.id === request.id && row.property === request.property)
-                    .map((row) => row.slot),
-                ),
-              ]
-            : [undefined];
+          const allLocators = locators.filter((row) => row.id === request.id && row.property === request.property);
+          const generic = release.types[observation.header.type]!.listPresentation?.keyFacts.includes(request.property);
+          const chosenLocators = allLocators.filter(
+            (row, index) => (generic && index < 3) || workCandidates.has(`${request.id}/${row.candidate}`),
+          );
+          const slots = relation ? [...new Set(chosenLocators.map((row) => row.slot))] : [undefined];
           observation.basis.push({
             property: request.property,
             locators: relation
@@ -219,9 +250,22 @@ async function observeSubjects(
           for (const slot of slots) {
             const view = await effectiveGlobalSlotFacts(client, request.id, request.property, slot);
             observation.basis.push(view);
+            if (workContext) {
+              const basis = view.basis as { selection?: { rank: string }[] } | { rank: string }[] | null;
+              const count = (Array.isArray(basis) ? basis : (basis?.selection ?? [])).filter(
+                (entry) => entry.rank !== 'deprecated',
+              ).length;
+              if (
+                count > view.facts.length ||
+                (relation &&
+                  chosenLocators
+                    .filter((row) => row.slot === slot)
+                    .some((row) => !view.facts.some((fact) => fact.statement_id === row.candidate)))
+              )
+                observation.withheld.push(request.property);
+            }
             for (const fact of view.facts) {
-              if (relation && !locators.some((row) => row.id === request.id && row.candidate === fact.statement_id))
-                continue;
+              if (relation && !chosenLocators.some((row) => row.candidate === fact.statement_id)) continue;
               selected.push({ id: request.id, property: request.property, fact });
             }
           }
@@ -352,15 +396,17 @@ function representable(fact: FactRow, release: Release): IndexedStatement | null
 export async function readListPresentationFacts(
   deps: Dependencies,
   originals: readonly string[],
-  options: { languages?: readonly string[] } = {},
-): Promise<Map<string, { id: string; facts: Record<string, Fact[]> } | null>> {
+  options: { languages?: readonly string[]; workContext?: boolean } = {},
+): Promise<Map<string, { id: string; facts: Record<string, Fact[]>; workContext?: WorkContext } | null>> {
   if (!Array.isArray(originals) || originals.length > 100 || originals.some((id) => typeof id !== 'string'))
     throw new RangeError('List presentation accepts at most 100 raw original IDs');
   if (!Number.isFinite(deps.deadline) || !(deps.routeKey instanceof Uint8Array) || deps.routeKey.length !== 32)
     throw new TypeError('List presentation requires the trusted route key and finite request deadline');
   const { languages } = validateHitOptions(options);
   const input = [...new Set(originals)];
-  const result = new Map<string, { id: string; facts: Record<string, Fact[]> } | null>(input.map((id) => [id, null]));
+  const result = new Map<string, { id: string; facts: Record<string, Fact[]>; workContext?: WorkContext } | null>(
+    input.map((id) => [id, null]),
+  );
   requireAccessDeadline(deps.deadline);
   if (!input.length) return result;
   return withRequestDeadline(deps.deadline, () =>
@@ -378,7 +424,14 @@ export async function readListPresentationFacts(
           const terminals = [
             ...new Set(mapping.flatMap((value) => (value.state === 'mapped' ? [value.terminal] : []))),
           ];
-          const subjects = await observeSubjects(deps, terminals, active.release, true);
+          const subjects = await observeSubjects(
+            deps,
+            terminals,
+            active.release,
+            true,
+            false,
+            options.workContext === true,
+          );
           const allSelected = [...subjects.values()].flatMap((value) => value?.selected ?? []);
           const sourceTuples = allSelected.flatMap(({ origin }) => {
             const tuple = tupleFor(deps, origin.source);
@@ -398,20 +451,34 @@ export async function readListPresentationFacts(
           let authorStates = await accounts(deps, accountIds);
           if (accountIds.some((id) => !authorStates.has(id))) unready();
           const liveAccount = (id: string | null) => id === null || authorStates.get(id)?.state !== 'deleted';
+          const workDrafts = new Map<string, ReturnType<typeof prepareListWorkContext>>();
           const projected = new Map(
             [...subjects].flatMap(([id, subject]) => {
               if (!subject) return [];
+              const allowed: FactRow[] = [];
+              const withheld = new Set(subject.withheld);
               const statements = subject.selected.flatMap(({ fact, origin }) => {
                 if (
                   origin.retracted ||
                   (origin.consent_account && (!origin.disclosed || !liveAccount(origin.consent_account)))
-                )
+                ) {
+                  withheld.add(fact.property!);
                   return [];
+                }
                 const tuple = tupleFor(deps, origin.source);
-                if (tuple && fences.get(fenceKey(tuple))?.takenDown) return [];
+                if (tuple && fences.get(fenceKey(tuple))?.takenDown) {
+                  withheld.add(fact.property!);
+                  return [];
+                }
+                allowed.push(fact);
                 const value = representable(fact, active.release);
                 return value ? [value] : [];
               });
+              if (options.workContext)
+                workDrafts.set(
+                  id,
+                  prepareListWorkContext(id, subject.header.type, active.release, allowed, withheld, languages),
+                );
               return [
                 [
                   id,
@@ -425,13 +492,14 @@ export async function readListPresentationFacts(
           );
           // Only the formatter's three admitted values need related disclosure. A denied item is not refilled.
           const itemIds = [
-            ...new Set(
-              [...projected.values()].flatMap((properties) =>
+            ...new Set([
+              ...[...workDrafts.values()].flatMap(listWorkTargets),
+              ...[...projected.values()].flatMap((properties) =>
                 [...properties.values()].flatMap((values) =>
                   values.flatMap((value) => (value.kind === 'item' ? [value.id] : [])),
                 ),
               ),
-            ),
+            ]),
           ];
           const itemMapping: IdentityMapping[] = [];
           for (let offset = 0; offset < itemIds.length; offset += 100)
@@ -454,7 +522,13 @@ export async function readListPresentationFacts(
           // Double collection of the complete finite dependency set proves a common current cut.
           if (!equal(mapping, await readIdentityMappings(deps.pool, admitted))) unready();
           if (!equal([...sources], [...(await observeSubjects(deps, valid, active.release, false))])) unready();
-          if (!equal([...subjects], [...(await observeSubjects(deps, terminals, active.release, true))])) unready();
+          if (
+            !equal(
+              [...subjects],
+              [...(await observeSubjects(deps, terminals, active.release, true, false, options.workContext === true))],
+            )
+          )
+            unready();
           const finalItemMapping: IdentityMapping[] = [];
           for (let offset = 0; offset < itemIds.length; offset += 100)
             finalItemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
@@ -470,6 +544,28 @@ export async function readListPresentationFacts(
             unready();
           const finalActive = await snapshot(deps, 0, (client) => activeRelease(client));
           if (finalActive?.digest !== active.digest) unready();
+          const workTargets = new Map<string, WorkTarget | null>();
+          for (const [index, id] of itemIds.entries()) {
+            const identity = itemMapping[index];
+            const original = related.get(id);
+            const terminal = identity?.state === 'mapped' ? related.get(identity.terminal) : null;
+            if (
+              !original ||
+              !terminal ||
+              !liveAccount(original.header.account) ||
+              !liveAccount(terminal.header.account)
+            ) {
+              workTargets.set(id, null);
+              continue;
+            }
+            if (
+              identity?.state !== 'mapped' ||
+              original.header.redirect !== (id === identity.terminal ? null : identity.terminal) ||
+              terminal.header.redirect
+            )
+              unready();
+            workTargets.set(id, { id: identity.terminal, type: terminal.header.type, labels: terminal.labels ?? {} });
+          }
           for (const [index, original] of admitted.entries()) {
             const identity = mapping[index]!;
             if (identity.state !== 'mapped') continue;
@@ -516,7 +612,14 @@ export async function readListPresentationFacts(
               });
               if (disclosed.length) facts[property] = disclosed;
             }
-            result.set(original, { id: identity.terminal, facts });
+            const workContext = finishListWorkContext(
+              identity.terminal,
+              workDrafts.get(identity.terminal),
+              workTargets,
+              active.release,
+              languages,
+            );
+            result.set(original, { id: identity.terminal, facts, ...(workContext ? { workContext } : {}) });
           }
           requireAccessDeadline(deps.deadline);
           return result;

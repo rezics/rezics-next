@@ -1,3 +1,4 @@
+import { boundWorkContexts } from './work-context.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -122,7 +123,7 @@ async function enrichDiscoveryPage(
       deadline: context.deadline,
     },
     originals,
-    { languages },
+    { languages, workContext: true },
   );
   const facts = subjects.map((hit) => {
     const value = presentation.get(hit.key.id);
@@ -182,6 +183,8 @@ async function enrichDiscoveryPage(
     for (const id of figureIds)
       if (!snapshot.figures.has(id)) throw new SearchUnavailableError('Current public figure is incomplete');
   }
+  const contexts = boundWorkContexts(subjects.map((hit) => presentation.get(hit.key.id)?.workContext));
+  const byContext = new Map(subjects.map((hit, index) => [hit.key.id, contexts[index]]));
   const bySubject = new Map(subjects.map((hit, index) => [hit.key.id, facts[index]!]));
   return {
     page: {
@@ -193,6 +196,7 @@ async function enrichDiscoveryPage(
         return {
           ...hit,
           ...(current ? { facts: current.facts } : {}),
+          ...(byContext.get(hit.key.id) ? { workContext: byContext.get(hit.key.id) } : {}),
           ...(figure && hit.summary.value.creativeWork ? { figure: { ...figure, scale: { ...figure.scale } } } : {}),
         };
       }),
@@ -787,7 +791,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
               deadline: context.deadline,
             },
             enriched.semanticOriginals,
-            { languages },
+            { languages, workContext: true },
           );
           if (!isDeepStrictEqual(enriched.semanticPresentation, finalPresentation))
             throw new ProblemError('search_restart_required');
