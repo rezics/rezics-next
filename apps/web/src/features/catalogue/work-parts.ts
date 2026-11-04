@@ -12,6 +12,7 @@ import {
 type Definitions = Pick<Release, 'types' | 'properties'>;
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type ForwardPage = NonNullable<Awaited<ReturnType<Endpoint['relations']['get']>>['data']>;
+export const WORK_PARTS_PAGE_CAP = 20;
 export type PartStream = {
   key: string;
   property: string;
@@ -170,7 +171,7 @@ export async function readWorkParts(
       property: stream.property,
       context: candidateContext,
       language: locale,
-      limit: 20,
+      limit: WORK_PARTS_PAGE_CAP,
       ...(cursor ? { cursor } : {}),
     };
     const result =

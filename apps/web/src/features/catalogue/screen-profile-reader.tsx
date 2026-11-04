@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from '@tanstack/react-router';
+import { useId, useRef } from 'react';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
@@ -9,7 +11,10 @@ import { ScreenProfileEntry } from './screen-profile-entry';
 import { isScreenType, screenReaderVisit, type ScreenReaderVisit } from './screen-profile';
 import { screenGroupLabel } from './screen-profile-fields';
 import type { ScreenGroup } from './screen-profile';
-import { loadScreenProfile } from './screen-profile-actions';
+import { loadScreenProfileForReader } from './screen-episode-reader/actions';
+import { screenEpisodeCursor, screenEpisodeReturnHref, type ScreenEpisodeOrigin } from './screen-episode-reader/navigation';
+import { ScreenEpisodeList } from './screen-episode-reader/view';
+import type { ScreenEpisodeRead } from './screen-episode-reader/read';
 import { ProfileBoundNotes, ProfileLibraryNote, ProfileReaderGroups, ProfileSourceList } from './music-reader-view';
 import type { ProfileBound, ProfileReaderState } from './music-reader';
 
@@ -44,6 +49,11 @@ export function ScreenProfileReader({
   loading,
   onRetry,
   link = PlainLink,
+  episodeRead,
+  episodeLoading = false,
+  onEpisodeRetry,
+  episodeOrigin,
+  returnHref,
 }: {
   locale: string;
   release?: Release;
@@ -53,7 +63,13 @@ export function ScreenProfileReader({
   loading?: boolean;
   onRetry?: () => void;
   link?: PageLink;
+  episodeRead?: ScreenEpisodeRead;
+  episodeLoading?: boolean;
+  onEpisodeRetry?: () => void;
+  episodeOrigin?: ScreenEpisodeOrigin;
+  returnHref?: string;
 }) {
+  const Link = link;
   const visit: ScreenReaderVisit = screenReaderVisit({
     locale,
     ...(publicRead !== undefined ? { public: publicRead } : {}),
@@ -72,11 +88,28 @@ export function ScreenProfileReader({
           <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
         </ContentItemHeading>
         <p className="text-muted-foreground">{m.screen_intro({}, o)}</p>
-        {visit.type === 'schema:Movie' || visit.type === 'schema:TVSeries' || visit.type === 'schema:TVSeason' ? (
+        {visit.type === 'schema:Movie' ? (
           <p className="text-sm text-muted-foreground">{m.screen_reader_episodes_unpublished({}, o)}</p>
+        ) : null}
+        {visit.type === 'schema:Episode' && returnHref ? (
+          <div className="flex min-w-0 flex-wrap gap-3">
+            <Link href={returnHref} className={`${actionClass} text-primary underline underline-offset-4`}>
+              {m.screen_episode_reader_return({}, o)}
+            </Link>
+          </div>
         ) : null}
         <ProfileLibraryNote library={visit.library} locale={locale} kind="screen" />
       </header>
+      {publicRead && !visit.unpublished.episodes ? (
+        <ScreenEpisodeList
+          locale={locale}
+          read={episodeRead}
+          loading={episodeLoading}
+          retry={onEpisodeRetry}
+          origin={episodeOrigin ?? { pathname: '', searchStr: '' }}
+          link={link}
+        />
+      ) : null}
       {visit.state !== 'ready' && visit.state !== 'empty' ? (
         <p role={visit.state === 'loading' ? 'status' : 'alert'}>{screenStateCopy(visit.state, locale)}</p>
       ) : null}
@@ -112,23 +145,62 @@ export function ScreenProfileOverview({
   public: publicRead,
   bounds,
   link = PlainLink,
+  context,
+  viewerKey,
 }: {
   locale: string;
   public: SubjectRead;
   bounds?: readonly ProfileBound[];
   link?: PageLink;
+  context?: string;
+  viewerKey?: string | null;
 }) {
+  const location = useLocation();
+  const instance = useId();
+  const observedSubject = useRef(publicRead.subject);
+  const observationGeneration = useRef(0);
+  if (observedSubject.current !== publicRead.subject) {
+    observedSubject.current = publicRead.subject;
+    observationGeneration.current += 1;
+  }
+  const episodeCursor = screenEpisodeCursor(location.searchStr);
   const query = useQuery({
-    queryKey: ['screen-profile-reader', publicRead.subject.id, locale],
-    queryFn: () => loadScreenProfile({ data: publicRead.subject.id }),
+    queryKey: [
+      'screen-profile-reader',
+      instance,
+      publicRead.subject.id,
+      publicRead.subject.type,
+      publicRead.subject.context,
+      context ?? '',
+      viewerKey ?? '',
+      locale,
+      episodeCursor ?? '',
+      observationGeneration.current,
+    ],
+    queryFn: () =>
+      loadScreenProfileForReader({
+        data: {
+          id: publicRead.subject.id,
+          expectedType: publicRead.subject.type,
+          locale,
+          ...(context ? { context } : {}),
+          ...(episodeCursor !== undefined ? { cursor: episodeCursor } : {}),
+        },
+      }),
     retry: false,
-    staleTime: Infinity,
+    staleTime: 0,
     gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const release = query.data?.ok ? query.data.release : undefined;
-  const reason = query.data && !query.data.ok ? query.data.reason : query.isError ? 'unavailable' : undefined;
+  const profile = query.data?.profile;
+  const release = profile?.ok ? profile.release : undefined;
+  const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
+  const episodeRead = query.data?.episodes;
+  const returnHref =
+    publicRead.subject.type === 'schema:Episode'
+      ? screenEpisodeReturnHref(locale, location.searchStr)
+      : undefined;
   return (
     <ScreenProfileReader
       locale={locale}
@@ -138,6 +210,11 @@ export function ScreenProfileOverview({
       {...(reason ? { reason } : {})}
       {...(query.isPending ? { loading: true } : {})}
       onRetry={() => void query.refetch()}
+      {...(episodeRead ? { episodeRead } : {})}
+      {...(query.isPending ? { episodeLoading: true } : {})}
+      onEpisodeRetry={() => void query.refetch()}
+      episodeOrigin={{ pathname: location.pathname, searchStr: location.searchStr }}
+      {...(returnHref ? { returnHref } : {})}
       link={link}
     />
   );

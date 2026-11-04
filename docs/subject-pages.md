@@ -42,14 +42,14 @@ has no Library profile, so Library states, copies and progress stay unpublished.
 Movie and pinned TV-template platforms to TVSeries; unknown platform codes stay ignored. Movie and TVSeries expose the
 existing `anime.film` and `anime.series` Library controls. Opening an admitted `schema:TVSeason` or `schema:Episode`
 subject uses that grain's released fields and Library pin; Bangumi episode family bootstrap stays unpublished on the
-series page.
+series page. A Screen work reader can still browse already-admitted TVSeason and Episode members from the released
+work-parts relation; this does not create an episode family or imply personal completion.
 
 Correction uses the existing album and screen editors: an explicit proposal, native candidate review, and a current
 reread of the same subject. Empty, loading, denied, stale and unavailable readings keep useful copy and a bounded retry;
 retry never creates. A contributor list previews the credits view.
 
-Decision: MusicAlbum keeps no Library profile; type3 tracks and type6 episode families stay unpublished until those
-immutable native profiles and source bindings are published. Admitted public containment is independently readable through the [album contents owner](../apps/web/src/features/catalogue/album-track-reader/README.md).
+Admitted public containment is independently readable through the [album contents owner](../apps/web/src/features/catalogue/album-track-reader/README.md).
 
 ## Read a music edition
 
@@ -69,6 +69,19 @@ The reader repeats at most four reads for one deliberate window: Subject, active
 20-row association page. It performs no target hydration or writes. The [reader Cost](../apps/web/src/features/catalogue/music-release-reader/README.md#cost)
 defines subject/page byte bounds, bounded retention and retirement on replacement authority or observation. Existing
 release/file companion costs and release type meanings remain unchanged.
+Decision: TVSeries and TVSeason readers use one active-release work-parts stream, preferring inverse
+`schema:isPartOf` and otherwise the released default; they show only disclosed TVSeason/Episode identities, retain
+native relation order and position strings, and return with the same context and cursor.
+
+### Screen work membership cost
+
+A TVSeries or TVSeason visit reads one current Screen profile, its active and released definitions, and one work-parts
+page capped at 20 rows. A deliberate continuation repeats those bounded reads for its opaque cursor; the reader does
+not refill sparse pages, hydrate each member or traverse a season's episodes from the series. The native relation page
+supplies each disclosed member summary, its admitted order and any string `schema:position`; absent positions remain
+absent and specials keep their exact identity and position. Withheld, stale or unavailable membership remains distinct
+from an exact empty page. The reader exposes navigation only; personal completion, current advice and mutation stay with
+the existing progress checklist. No Screen reader read or navigation grants checklist authority.
 
 ## Read a story arc
 

@@ -793,6 +793,8 @@ export function SubjectPage({
                 public={composedSubjectRead(read)}
                 bounds={boundedProfileRelations(page)}
                 link={ContextLink}
+                context={page.context?.id}
+                viewerKey={page.requestedReader ?? null}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (

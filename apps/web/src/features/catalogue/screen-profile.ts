@@ -24,7 +24,7 @@ export const screenTypes = ['schema:Movie', 'schema:TVSeries', 'schema:TVSeason'
 export function isScreenType(type: string): boolean {
   return screenTypes.some((id) => id === type);
 }
-export type ScreenAddress = { id?: string | undefined; series?: string | undefined };
+export type ScreenAddress = { id?: string | undefined; series?: string | undefined; context?: string | undefined };
 export type ScreenRead =
   | { ok: false; reason: 'concealed' | 'invalid' | 'unavailable' }
   | {
@@ -116,7 +116,12 @@ export async function readScreenProfile(client: KernelClient, address: ScreenAdd
   if (address.id && !id) return { ok: false, reason: 'invalid' };
   try {
     const [subject, active, series] = await Promise.all([
-      id ? client.subjects({ id }).get() : undefined,
+      id
+        ? client.subjects({ id }).get({
+            ...(address.context ? { query: { context: address.context } } : {}),
+            fetch: { cache: 'no-store', redirect: 'manual' },
+          })
+        : undefined,
       client.definitions.active.get(),
       seriesId ? client.subjects({ id: seriesId }).get() : undefined,
     ]);
@@ -175,7 +180,7 @@ export type ScreenReaderVisit = {
   type: string;
   grain: { text: string; lang: string | null };
   library: ProfileLibrary;
-  unpublished: { tracks: false; episodes: true };
+  unpublished: { tracks: false; episodes: boolean };
   groups: ProfileGroup[];
   sources: ProfileSourceRecord[];
   bounds: ProfileBound[];
@@ -203,7 +208,7 @@ function screenReaderGroups(release: Release, type: string): Record<string, stri
   };
 }
 
-/** Ordinary Movie/TVSeries reader visit. Episode lists stay unpublished unless that exact subject is opened. */
+/** Ordinary Screen reader visit. TVSeries and TVSeason readers can browse released work-parts membership. */
 export function screenReaderVisit(input: {
   locale: string;
   type?: string;
@@ -216,7 +221,10 @@ export function screenReaderVisit(input: {
   const type = input.public?.subject.type ?? input.type ?? 'schema:Movie';
   const bounds = [...(input.bounds ?? [])];
   const emptyLibrary: ProfileLibrary = { admitted: false, states: [], copies: false, progress: false };
-  const unpublished = { tracks: false as const, episodes: true as const };
+  const unpublished = {
+    tracks: false as const,
+    episodes: type !== 'schema:TVSeries' && type !== 'schema:TVSeason',
+  };
   if (input.loading) {
     return {
       state: 'loading',

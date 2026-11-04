@@ -100,7 +100,7 @@ test('Imported MusicAlbum Movie and TVSeries readers expose admitted profile sou
     });
     expect(visit.state).toBe('ready');
     expect(visit.type).toBe(type);
-    expect(visit.unpublished.episodes).toBe(true);
+    expect(visit.unpublished.episodes).toBe(type === 'schema:Movie');
     expect(visit.library.admitted).toBe(true);
     expect(visit.library.profileId).toBe(type === 'schema:Movie' ? 'anime.film' : 'anime.series');
     expect(visit.library.states.length).toBeGreaterThan(0);
