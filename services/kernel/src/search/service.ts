@@ -1588,12 +1588,10 @@ export function createSearchService({
         ratingPhase = useful.frontier.ratingPhase;
         const shown = [...useful.values];
         const results: SearchHit[] = boundMatchEvidencePage(
-          shown.map((subject) =>
-            projectHit(subject, {
-              ...hitOptions,
-              matchEvidence: projectMatchEvidence(subject, evidenceById.get(subject.id), matchEvidencePlan),
-            }),
-          ),
+          shown.map((subject) => ({
+            ...projectHit(subject, hitOptions),
+            matchEvidence: projectMatchEvidence(subject, evidenceById.get(subject.id), matchEvidencePlan),
+          })),
         );
         for (const subject of shown) {
           if (request.cursor === undefined && request.kindCursor === undefined && witnessCount < 2) {

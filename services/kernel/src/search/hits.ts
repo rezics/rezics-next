@@ -122,11 +122,6 @@ function originalLanguage(subject: IndexedSubject): string | undefined {
   return subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value;
 }
 
-export function projectHit(
-  subject: IndexedSubject,
-  options: HitOptions & { matchEvidence: MatchEvidence },
-): SearchHit & { matchEvidence: MatchEvidence };
-export function projectHit(subject: IndexedSubject, options: HitOptions): SearchHit;
 export function projectHit(subject: IndexedSubject, { descriptions, languages, matchEvidence }: HitOptions): SearchHit {
   const original = originalLanguage(subject);
   return {
