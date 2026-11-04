@@ -313,6 +313,9 @@ test('commands: final Save uses captured operands and identity, duplicate guard,
     r.setLatest({ ...entry, note: 'new received note', annotationRevision: 5 });
     await r.refresh();
     expect(r.host.textContent).toContain(m.library_rich_entry_uncertain());
+    expect(
+      [...r.host.querySelectorAll('button')].some((node) => node.textContent === m.library_rich_entry_review_latest()),
+    ).toBe(false);
     expect(r.host.textContent).not.toContain(m.library_annotation_saved());
     await r.openDiary();
     expect(r.window.document.body.textContent).toContain(m.library_annotation_unresolved_departure());
