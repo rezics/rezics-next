@@ -250,7 +250,7 @@ test('Default public identity and management presentation keeps long phone ident
   expect(heading[1]).toContain('font-sans');
   expect(heading[1]).toContain('wrap-anywhere');
   expect(heading[2]).toBe(displayName);
-  expect(html).toContain(`@${handle}</p></div><div data-slot="agent-description"`);
+  expect(html).toContain(`@${handle}</p><p data-slot="agent-kind"`);
   const description = html.match(/data-slot="agent-description" class="([^"]+)">/)!;
   // The default phone body spans both avatar/name columns; desktop keeps its text column.
   expect(description[1]).toContain('col-span-full');
