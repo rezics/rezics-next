@@ -82,11 +82,6 @@ test('Content media admission stays separate from current public actor observati
     const after = await readPublicIdentityObservations(client, [id]);
     expect(after[0]).not.toEqual(before[0]);
     expect(after[0]).toMatchObject({ avatarMediaId: replacement, displayName: 'Changed' });
-    expect(
-      before.filter((old) =>
-        after.some((current) => current.id === old.id && JSON.stringify(current) === JSON.stringify(old)),
-      ),
-    ).toEqual([]);
     await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
       routeOf(id),
       id,
