@@ -58,6 +58,8 @@ import {
   type PasswordChangeLimits,
 } from '../password-change-attempt';
 import { PasswordChangeForm, type PasswordChangeOperation, type PasswordReviewBinding } from '../password-change-form';
+import { PasswordChangeReturnController, type PasswordChangeReturnHistory } from '../password-change-return';
+import { PasswordChangeReturnView } from '../password-change-return-view';
 
 export const Route = createFileRoute('/security')({
   head: () => ({ meta: [{ title: `${m.auth_security_heading()} · REZICS` }] }),
@@ -103,10 +105,13 @@ type DepartureState = { protected: boolean; allow: boolean };
 type DepartureBlocker =
   | { status: 'idle'; proceed: undefined; reset: undefined }
   | { status: 'blocked'; proceed: () => void; reset: () => void };
+type SecurityPageSource = Omit<SecuritySource, 'load'> & {
+  load?: (withPasskeys: boolean, signal?: AbortSignal) => Promise<SecurityLoadResult>;
+};
 type SecurityPageProps = {
   initial?: SecurityLoadResult;
   inventorySource?: InventorySource;
-  securitySource?: SecuritySource & { reviewRegistration?: typeof reviewPasskeyRegistration };
+  securitySource?: SecurityPageSource & { reviewRegistration?: typeof reviewPasskeyRegistration };
   identitySource?: AccountIdentitySource;
   passwordLimits?: PasswordChangeLimits | null;
 };
@@ -184,6 +189,9 @@ function SecurityPageView({
   const [operation, setOperation] = useState<SecurityOperation | null>(null);
   // The ref closes the boundary synchronously, including two submissions before React renders.
   const activeOperation = useRef<SecurityOperation | null>(null);
+  const passwordReturnController = useRef(new PasswordChangeReturnController());
+  const [passwordReturnHistory, setPasswordReturnHistory] = useState<PasswordChangeReturnHistory | null>(null);
+  const [passwordReturnAcknowledged, setPasswordReturnAcknowledged] = useState(false);
   const passwordOperation = operation?.kind === 'password' ? operation : null;
   const passwordReview = operation?.kind === 'password-review' ? operation.binding : null;
   const passkeyAdding = operation?.kind === 'passkey-add';
@@ -261,9 +269,13 @@ function SecurityPageView({
       clearPrivateData('loading');
       setConsentReduced(false);
       const generation = authorityGeneration.current;
+      const signal = lifetime.current.signal;
       const result =
         provided ??
-        (await (securitySource?.load ?? loadSecurity)(passkeysSupported()).catch((): SecurityLoadResult => ({
+        (await (securitySource?.load
+          ? securitySource.load(passkeysSupported(), signal)
+          : loadSecurity(passkeysSupported(), signal)
+        ).catch((): SecurityLoadResult => ({
           kind: 'failure',
           message: failureMessage(503, 'unavailable', null),
         })));
@@ -448,6 +460,14 @@ function SecurityPageView({
     setTargetReturn(null);
   }
 
+  function captureRetiredPasswordOperation() {
+    const held = activeOperation.current;
+    if (held?.kind === 'password' && passwordReturnController.current.capture(held)) {
+      setPasswordReturnHistory(passwordReturnController.current.snapshot());
+      setPasswordReturnAcknowledged(false);
+    }
+  }
+
   function beginConsentReview(): ConsentReviewOperation | null {
     if (activeOperation.current || !activeAccount.current) return null;
     const held: SecurityOperation = { kind: 'consent' };
@@ -470,6 +490,7 @@ function SecurityPageView({
   ) {
     const outcome = returnedOutcome ?? securityTargetReturnFromAttempt(activeOperation.current);
     if (outcome) rememberTargetReturn(outcome);
+    captureRetiredPasswordOperation();
     if (departure) departure.current.protected = false;
     authorityGeneration.current++;
     adviceGeneration.current++;
@@ -479,6 +500,7 @@ function SecurityPageView({
     targetOrigin.current = null;
     returnTargetFocus.current = null;
     updateOperation(null);
+    setPasswordReturnAcknowledged(false);
     setAccountId('');
     setPage(null);
     setSessions([]);
@@ -750,6 +772,10 @@ function SecurityPageView({
         continue;
       }
       if (result.kind === 'complete') {
+        passwordReturnController.current.confirmApplication();
+        setPasswordReturnHistory(passwordReturnController.current.snapshot());
+        setPasswordReturnAcknowledged(false);
+        updateOperation(null);
         clearPrivateData('signed-out', m.auth_security_password_changed());
         return;
       }
@@ -973,6 +999,58 @@ function SecurityPageView({
     reviewTarget({ kind: 'session', id: session.id, accountId });
   }
 
+  function acknowledgePasswordReturn() {
+    if (
+      loadState !== 'ready' ||
+      !activeAccount.current ||
+      activeOperation.current ||
+      passwordDraftPresent ||
+      !canAct(currentPasswordAdvice.current)
+    )
+      return;
+    setPasswordReturnAcknowledged(true);
+  }
+
+  function reviewPasswordReturn() {
+    if (
+      loadState === 'loading' ||
+      loadState === 'signed-out' ||
+      activeOperation.current ||
+      passwordDraftPresent
+    )
+      return;
+    retryLoad.current?.();
+  }
+
+  const passwordReturnView = passwordReturnHistory ? (
+    <PasswordChangeReturnView
+      history={passwordReturnHistory}
+      acknowledged={passwordReturnAcknowledged}
+      reading={loadState === 'loading'}
+      canReview={(loadState === 'ready' || loadState === 'failure') && !operation && !passwordDraftPresent}
+      canStartNew={
+        loadState === 'ready' &&
+        Boolean(activeAccount.current) &&
+        !operation &&
+        !passwordDraftPresent &&
+        canAct(page?.actions.change_password)
+      }
+      advice={page?.actions.change_password}
+      onReview={reviewPasswordReturn}
+      onAcknowledge={acknowledgePasswordReturn}
+    />
+  ) : null;
+  const showPasswordForm =
+    !passwordReturnHistory ||
+    (passwordReturnAcknowledged &&
+      loadState === 'ready' &&
+      Boolean(activeAccount.current) &&
+      canAct(currentPasswordAdvice.current));
+
+  useLayoutEffect(() => {
+    if (passwordReturnHistory && passwordReturnAcknowledged) passwordInput.current?.focus();
+  }, [passwordReturnHistory, passwordReturnAcknowledged]);
+
   if (loadState === 'signed-out')
     return (
       <AuthPage heading={m.auth_security_heading()}>
@@ -984,8 +1062,9 @@ function SecurityPageView({
               dismiss={dismissTargetReturn}
             />
           ) : null}
+          {passwordReturnView}
           <p>{m.auth_security_sign_in_required()}</p>
-          {signedOutNotice ? (
+          {signedOutNotice && !passwordReturnHistory?.applicationConfirmed ? (
             <p ref={signedOutStatus} tabIndex={-1} role="status">
               {signedOutNotice}
             </p>
@@ -1000,7 +1079,7 @@ function SecurityPageView({
             finish={() => {}}
           />
           {consentReduced ? <p role="status">{m.auth_inventory_reduced()}</p> : null}
-          <a href="/login">{m.auth_security_sign_in()}</a>
+          {!passwordReturnHistory ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
         </div>
       </AuthPage>
     );
@@ -1016,6 +1095,7 @@ function SecurityPageView({
               dismiss={dismissTargetReturn}
             />
           ) : null}
+          {passwordReturnView}
           <ErrorAlert>{loadMessage}</ErrorAlert>
           <PasskeyEnrollmentView
             state={enrollment}
@@ -1029,7 +1109,7 @@ function SecurityPageView({
           <Button type="button" variant="outline" onClick={() => retryLoad.current?.()}>
             {m.auth_inventory_reload()}
           </Button>
-          <a href="/login">{m.auth_security_sign_in()}</a>
+          {!passwordReturnHistory ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
         </div>
       </AuthPage>
     );
@@ -1066,6 +1146,7 @@ function SecurityPageView({
           className="auth-security-page"
           aria-busy={loadState === 'loading' || (operationBlocked && operation?.kind !== 'review')}
         >
+          {passwordReturnView}
           {loadState === 'loading' ? (
             <p role="status">{m.auth_inventory_loading()}</p>
           ) : (
@@ -1107,26 +1188,28 @@ function SecurityPageView({
                 finish={finishRegistrationReview}
               />
               {passkeyError ? <ErrorAlert>{passkeyError}</ErrorAlert> : null}
-              <PasswordChangeForm
-                accountId={accountId}
-                accountLabel={
-                  identity.state.kind === 'ready' && identity.state.email ? identity.state.email : accountId
-                }
-                passwordLimits={passwordLimits}
-                advice={page?.actions.change_password}
-                review={passwordReview}
-                operation={passwordOperation}
-                blocked={operation !== null && operation.kind !== 'password-review' && operation.kind !== 'password'}
-                error={passwordError}
-                newPasswordRef={passwordInput}
-                errorRef={passwordAlert}
-                onDraftPresenceChange={setPasswordDraftPresent}
-                onRequestReview={requestPasswordReview}
-                onRetireReview={retirePasswordReview}
-                onConfirm={confirmPasswordChange}
-                onRetry={retryPasswordChange}
-                onDismissError={() => setPasswordError('')}
-              />
+              {showPasswordForm ? (
+                <PasswordChangeForm
+                  accountId={accountId}
+                  accountLabel={
+                    identity.state.kind === 'ready' && identity.state.email ? identity.state.email : accountId
+                  }
+                  passwordLimits={passwordLimits}
+                  advice={page?.actions.change_password}
+                  review={passwordReview}
+                  operation={passwordOperation}
+                  blocked={operation !== null && operation.kind !== 'password-review' && operation.kind !== 'password'}
+                  error={passwordError}
+                  newPasswordRef={passwordInput}
+                  errorRef={passwordAlert}
+                  onDraftPresenceChange={setPasswordDraftPresent}
+                  onRequestReview={requestPasswordReview}
+                  onRetireReview={retirePasswordReview}
+                  onConfirm={confirmPasswordChange}
+                  onRetry={retryPasswordChange}
+                  onDismissError={() => setPasswordError('')}
+                />
+              ) : null}
 
               {passkeysLoad.kind === 'hidden' ? null : (
                 <section aria-labelledby="security-passkeys-heading">

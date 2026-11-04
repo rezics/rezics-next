@@ -321,6 +321,17 @@ resolve that earlier result. A confirmed apply retires the session and the page 
 if that does not work, the existing account-recovery path remains available. When current advice requires step-up, the
 page goes to `/step-up?return_to=%2Fsecurity` before sending any credential-effect request. No password is put in a URL.
 
+Page departure or private-authority retirement captures only the interrupted stage, approval or apply phase and
+whether an apply receipt was confirmed. Passwords, proof, bindings, references, keys and the former identity are
+cleared. This generic history stays in mounted memory through cached-page restoration and cannot be settled by a
+current Security read. It offers sign-in and account recovery; a fresh password form appears only after explicit
+acknowledgement of an earlier unknown result and a current allowed Security review. Exact retry is unavailable after
+the original attempt is retired. Review current Security performs no command: it reuses the existing Security page and
+password-requirements reads (two Auth reads), current account-identity read, and one bounded first page each for
+clients and consents (five reads total). It performs no inventory scan or per-row authority reads.
+
+Decision: mounted return history keeps only the most advanced interrupted phase and whether an apply receipt was observed; read Retry preserves that history, while fresh work requires explicit acknowledgement and current native advice.
+
 Sessions are a list of outlined items spaced by the list's gap, with no separators between them. A local browser and system map formats recognized user agents as a device;
 unrecognized values show a localized unknown-device label, and user agents are never sent elsewhere. The muted
 description contains the app name and signed-in and expiry dates formatted for the page locale and time zone. A
