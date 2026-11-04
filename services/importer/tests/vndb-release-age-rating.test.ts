@@ -101,7 +101,7 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
     expect(projected.minage).toBe('15');
     const kana = current.convert(
       { external_id: 'r99', record_revision: '7', record: { id: 'r99', minage: 15 } },
-      { source: crossMediaAliases.vndb },
+      { source: crossMediaAliases.vndb, subjectId: '11111111-1111-4111-8111-111111111111' },
     );
     expect(kana.proposals.some((item) => item.op === 'propose' && item.statement.property.id === 'wdt:P2899')).toBe(true);
 
