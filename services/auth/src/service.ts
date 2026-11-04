@@ -1240,6 +1240,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (issued.expiresAt <= Date.now()) throw new Denied();
         return issued.token;
       },
+      async hasCurrentAuthSession(headers) {
+        const current = await getAuth().api.getSession({
+          headers,
+          query: { disableCookieCache: true, disableRefresh: true },
+        });
+        return current !== null;
+      },
       async isProofSessionCurrent(proof) {
         const scope = proofScope.getStore();
         const source = proofSources.get(proof);

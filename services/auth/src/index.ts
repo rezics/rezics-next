@@ -266,6 +266,9 @@ export interface AuthService {
     /** Trusted server composition only; the exact native human proof is live only
      * during this instance's trusted authorization callbacks. Never persist it or its JWT. */
     accessTokenForProof(proof: SessionProof): Promise<string>;
+    /** Auth-owned session existence read that does not reinterpret a native
+     * account floor as sign-out. */
+    hasCurrentAuthSession(headers: Headers): Promise<boolean>;
     /** Auth-owned point read used only to distinguish a retired proof session
      * from a still-present session refused by current native authority. */
     isProofSessionCurrent(proof: SessionProof): Promise<boolean>;

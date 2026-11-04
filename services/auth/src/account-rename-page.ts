@@ -184,7 +184,13 @@ export function accountRenamePageTransport(
       return response(result);
     } catch (error) {
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
-      if (status === 401) return response({ state: 'signed-out' });
+      if (status === 401) {
+        try {
+          return response({ state: (await service.internal.hasCurrentAuthSession(request.headers)) ? 'refused' : 'signed-out' });
+        } catch {
+          return response({ state: 'unavailable' });
+        }
+      }
       if (status === 403 || status === 409) return response({ state: 'refused' });
       return response({ state: 'unavailable' });
     }
