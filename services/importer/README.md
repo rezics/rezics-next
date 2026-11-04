@@ -2190,9 +2190,10 @@ for these source Concepts.
 
 ### Bangumi TVAnime subject names
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@8`.
+Ordinary Bangumi registration and selected-family type 2 rows reach
+`convertBangumi`; the selected-family registration uses the combined
+`bangumi@9+cross-media-entities@8` revision while the ordinary caller uses
+`bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2210,12 +2211,40 @@ revision exists, the normalized digest and the acknowledged native UUID.
   `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
   remains controller-owned.
 
+### Bangumi Game subject names
+
+Type 4 Games retain the exact `{{Infobox Game` source names through the
+ordinary Bangumi converter and selected-family registration. Only scalar
+`中文名` becomes `schema:name` in `zh`; scalar or single-level bullet `别名`
+becomes `schema:alternateName` in `und`. Top-level labels keep their existing
+meanings. Names cite the exact Bangumi subject URL after the provider identity
+is bound; no game language, preferred label, translation or title identity is
+inferred. The original bounded infobox remains in the projection and digest.
+
+Unsupported nested markup, mixed fields and other Game keys become bounded
+diagnostics without source prose. Platform, genre, summary and cover remain with
+their current owners. The existing importer journal retains acknowledged UUIDs
+on reopen and keeps ordinary imports proposal-only; review/adoption remains a
+separate current API action.
+
+- Touches: one source-selected Game record, at most 24 distinct names and 16
+  omission diagnostics, with an exact source citation per proposal.
+- Bound: 65,536 infobox characters, 64 visited fields, the normalized record
+  byte cap and existing source journal/batch limits.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` uses the
+  shared JSONL fixture for selected-family selection, exact names/citations,
+  bounded omission, neighbor exclusion and refresh. The authored ordinary
+  review/adoption/reopen/facts-fence journey is
+  `services/kernel/test/imports/bangumi-game-names.test.ts`; native execution
+  remains controller-owned with no pass claimed here.
+
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@8`, advancing the
-`bangumi@7` name extraction. Selected-family seed uses that same converter; this
-journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
+`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@9`, retaining the
+`bangumi@8` original-run and `bangumi@7` name behavior. Selected-family seed uses
+that same converter with its combined revision; this journey adds no publisher.
+Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
 date is not completion or access authority.
 
@@ -2340,9 +2369,10 @@ The result carries provider and native type bindings, source keys, source and co
 
 ### Bangumi TVAnime subject names
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
+Ordinary Bangumi registration and selected-family type 2 rows reach
+`convertBangumi`; the selected-family registration uses the combined
+`bangumi@9+cross-media-entities@8` revision while the ordinary caller uses
+`bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the

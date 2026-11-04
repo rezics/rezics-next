@@ -10,6 +10,7 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
+import { extractBangumiGameNames } from './bangumi-game-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import {
   checkCoverIntent,
@@ -23,13 +24,14 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@8';
+export const converter_revision = 'bangumi@9';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Twelve projected top-level fields; at most nine commands, one cover intent,
-// and one citation envelope per statement with at most two URL parts.
+// Twelve projected top-level fields; at most 24 distinct names, with final
+// command count enforced by BATCH_LIMIT. One cover intent and one citation
+// envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
@@ -165,7 +167,7 @@ function retainedFieldDiagnostics(
     (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
   const retained = (['tags', 'platform', 'infobox', 'nsfw', 'date'] as const)
     .filter((field) => record[field] !== undefined)
-    .filter((field) => field !== 'infobox' || record.type !== 2)
+    .filter((field) => field !== 'infobox' || (record.type !== 2 && record.type !== 4))
     .filter((field) => field !== 'date' || !citedDate)
     .filter((field) => field !== 'infobox' || !handledInfobox)
     .map((field) => ({
@@ -271,7 +273,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     value: { type: 'value', content },
     references: references(),
   });
-  const extractedNames = extractBangumiSubjectNames(record);
+  const extractedNames =
+    record.type === 4 ? extractBangumiGameNames(record) : extractBangumiSubjectNames(record);
   const facts = [
     fact('wdt:P5732', input.external_id),
     ...extractedNames.names.map((name) => fact(name.property, { language: name.language, text: name.text })),

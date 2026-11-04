@@ -92,6 +92,9 @@ const nativeSources: Readonly<Record<SourceId, NativeSource>> = {
   },
 };
 
+/** The selected Bangumi seed covers both native subjects and source-typed entities. */
+export const bangumiCrossMediaSeedRevision = `${bangumiRevision}+${crossMediaRevision}`;
+
 /** Reviewed metadata rights only; prose and cover permissions remain converter-owned. */
 function describeSourceRecord(kind: SourceId, id: string): ImportSourceRecord {
   const cc0 = { id: 'CC0-1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' };
@@ -269,7 +272,11 @@ export function createSourceRegistration(
     describeSourceRecord: (externalId) => describeSourceRecord(sourceKind, externalId),
     convert(input, context) {
       if (context.source !== source) throw new TypeError('Conversion context source differs from registration');
-      if (converterRevision === crossMediaRevision && (sourceKind === 'bangumi' || sourceKind === 'vndb')) {
+      if (
+        (converterRevision === crossMediaRevision ||
+          (sourceKind === 'bangumi' && converterRevision === bangumiCrossMediaSeedRevision)) &&
+        (sourceKind === 'bangumi' || sourceKind === 'vndb')
+      ) {
         const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record);
         if (kind) {
           const entity = convertCrossMediaEntity(input, context, { converterRevision, sourceKind });

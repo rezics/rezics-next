@@ -1206,9 +1206,10 @@ explicit `0` is a stated zero.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-`bangumi@8` converts pinned TVAnime `放送开始`, `播放结束` and `话数` through
+`bangumi@9` converts pinned TVAnime `放送开始`, `播放结束` and `话数` through
 the ordinary Bangumi registration used by JSON-lines dumps and the selected
-family, preserving `bangumi@7` name extraction. Native read is on the
+family, preserving the `bangumi@8` original-run and `bangumi@7` name behavior.
+Selected-family registration carries the composite converter revision. Native read is on the
 acknowledged TVSeries. Weekday schedule text, custom infobox keys, OVA/Movie
 templates and episode-row counts stay outside this mapping.
 
@@ -1288,6 +1289,39 @@ projection and digest.
   `services/kernel/test/imports/bangumi-subject-names.test.ts` authors the
   ordinary production-caller review, adoption, reopen and facts-fence journey;
   its native execution remains controller-owned.
+
+## Bangumi Game subject names
+
+Decision: the exact Game template admits scalar `中文名` as `zh` and scalar or
+single-level bullet `别名` as `und`; selected-family Bangumi records use a
+composite Bangumi and cross-media converter revision so unchanged source rows
+are reconsidered.
+
+The pinned `{{Infobox Game` grammar is a distinct source owner from TVAnime.
+Type 4 remains `schema:VideoGame`; only its `中文名` and `别名` occurrences add
+cited `schema:name` or `schema:alternateName` values after the existing source
+identity is bound. Top-level labels keep their current meanings. The complete
+bounded infobox remains in the source projection and digest. Unsupported nested
+markup, mixed forms and unconsumed fields are withheld as bounded omission
+diagnostics without copying source prose. Names do not set `inLanguage`, select
+a preferred label, translate one another or resolve identities by title.
+
+Other game properties, platform, genre, summary and cover rights remain with
+their existing owners. Ordinary registration uses `bangumi@9`; selected-family
+Bangumi registration uses `bangumi@9+cross-media-entities@8`. Both use the
+existing journal, source metadata admission, exact `https://bgm.tv/subject/{id}`
+citations, independent review/adoption and facts fence.
+
+- Touches: one source-selected Game record, at most 24 distinct names and 16
+  omission diagnostics; exact property/language/text tuples deduplicate.
+- Bound: 65,536 infobox characters, 64 field occurrences, the existing
+  normalized-record byte cap, journal and batch limits. No source prose enters
+  diagnostics.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` exercises
+  the shared Game JSONL fixture, selected-family conversion, exact provenance,
+  unsupported occurrence, neighbor exclusion and refresh. The authored ordinary
+  native journey is `services/kernel/test/imports/bangumi-game-names.test.ts`;
+  execution remains controller-owned, with no native pass claimed here.
 
 ## Default Bangumi anime Episodes
 

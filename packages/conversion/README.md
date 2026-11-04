@@ -256,10 +256,11 @@ refreshes under this revision. Unknown or invalid types still fail with
 and retry keys. Platform and community tools use this same pure module;
 importer skipped-count accounting is separate.
 
-Bangumi revision `bangumi@8` converts the pinned TVAnime infobox fields
+Bangumi revision `bangumi@9` converts the pinned TVAnime infobox fields
 `放送开始`, `播放结束` and `话数` on type 2 through the same bound proposal
-path, preserving `bangumi@7` TVAnime name extraction. Start and end keep
-Gregorian year/month/day precision, including explicit `年月日` spellings;
+path, preserving the `bangumi@8` original-run and `bangumi@7` name semantics.
+Start and end keep Gregorian year/month/day precision, including explicit
+`年月日` spellings;
 weekday, relative, range and other schedule text stay field omissions. An
 exact episode total becomes the released nonnegative unitless integer
 quantity; template `*` and other placeholders are unknown, while an explicit
@@ -848,7 +849,7 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 
 ## Bangumi TVAnime subject names
 
-`bangumi@7` consumes only `中文名` and `别名` from the exact pinned
+`bangumi@9` consumes only `中文名` and `别名` from the exact pinned
 `{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
 Bangumi converter and selected-family registrations share this pure extraction.
 The existing top-level `name` and `name_cn` bootstrap labels keep their current
@@ -864,3 +865,34 @@ omissions, with no source prose copied into diagnostics. Parsing scans at most 6
 field occurrences, retains at most 24 distinct name values, and emits at most 16
 omission diagnostics. Each field occurrence is staged until its complete scalar
 or bullet-list form is known; malformed or mixed occurrences contribute no names.
+
+## Bangumi Game subject names
+
+The pinned `{{Infobox Game` grammar is distinct from TVAnime. Bangumi type 4
+uses only scalar `中文名` and scalar or single-level bullet-list `别名`; Chinese
+names are `zh` and aliases stay `und`. Top-level `name` and `name_cn` keep their
+existing bootstrap meanings. These names become independently cited native
+`schema:name` and `schema:alternateName` proposals on the existing VideoGame
+identity. The full infobox stays in the bounded normalized projection and digest.
+
+Nested wiki markup, unsupported keys and incomplete field occurrences are
+withheld as bounded diagnostics. Exact property/language/text tuples dedupe;
+spelling and stable semantic ordering are retained. No game language, preferred
+label, translation or identity match is inferred from a name. Platform, genre,
+summary and cover mappings remain with their current owners.
+
+Decision: selected-family Bangumi subjects use
+`bangumi@9+cross-media-entities@8`, while ordinary Bangumi records use
+`bangumi@9`, so each caller reprocesses unchanged bytes under its current
+conversion behavior.
+
+- Touches: one selected source record, at most 24 distinct names and 16
+  omission diagnostics; every admitted name carries its exact subject citation.
+- Bound: 65,536 infobox characters and normalized record bytes, 64 field
+  occurrences, and the existing source envelope and batch limits; source prose
+  never enters diagnostics.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` covers the
+  Game JSONL fixture, selected-family registration, exact citations, omission,
+  neighbor exclusion and stable identity on refresh. The connected ordinary
+  caller is `services/kernel/test/imports/bangumi-game-names.test.ts`; native
+  execution remains controller-owned and is not recorded as a local pass.
