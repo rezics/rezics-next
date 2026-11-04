@@ -140,6 +140,21 @@ function nextResolved(router: ReturnType<typeof createRouter>) {
     });
   });
 }
+function waitForText(host: HTMLElement, text: string) {
+  return new Promise<void>((resolve, reject) => {
+    const observer = new MutationObserver(() => {
+      if (!host.textContent?.includes(text)) return;
+      clearTimeout(timeout);
+      observer.disconnect();
+      resolve();
+    });
+    const timeout = setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(`Timed out waiting for ${text}`));
+    }, 5_000);
+    observer.observe(host, { childList: true, characterData: true, subtree: true });
+  });
+}
 async function openExactFromLaterSlice(view: Awaited<ReturnType<typeof mount>>) {
   await click(button(view.host, m.thread_history_show()));
   await click(button(view.host, m.thread_history_more()));
@@ -261,12 +276,13 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     expect(view.router.state.location.href).not.toContain(cursor);
 
     const historyResolved = nextResolved(view.router);
+    const restored = waitForText(view.host, m.revision_return_restored());
     await click(
       [...view.host.querySelectorAll<HTMLAnchorElement>('a')].find(
         (link) => link.textContent?.trim() === m.revision_return_to_history(),
       )!,
     );
-    await act(async () => historyResolved);
+    await act(async () => Promise.all([historyResolved, restored]));
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
     expect(view.host.textContent).toContain(m.revision_return_restored());
     const focusedHeading = view.host.querySelector<HTMLElement>('[data-history-focus-boundary][tabindex="-1"]');
@@ -288,12 +304,13 @@ test('a failed return retries the same admitted cursor and does not re-arm focus
     await openExactFromLaterSlice(view);
     failNextHistoryCursor = cursor;
     const historyResolved = nextResolved(view.router);
+    const failed = waitForText(view.host, m.revision_return_failed());
     await click(
       [...view.host.querySelectorAll<HTMLAnchorElement>('a')].find(
         (link) => link.textContent?.trim() === m.revision_return_to_history(),
       )!,
     );
-    await act(async () => historyResolved);
+    await act(async () => Promise.all([historyResolved, failed]));
     expect(view.host.textContent).toContain(m.revision_return_failed());
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
     button(view.host, m.thread_history_hide()).focus();
