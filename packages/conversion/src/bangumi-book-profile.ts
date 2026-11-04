@@ -70,7 +70,7 @@ export function parseBangumiBookInfobox(infobox: string | undefined): BangumiBoo
       if (unit === '{') depth += 1;
       else if (unit === '}' && depth > 0) depth -= 1;
     }
-    if (depth > 1) continue;
+    if (depth > 2) continue;
     if (!line.startsWith('|')) continue;
     const cut = line.indexOf('=');
     if (cut <= 1) continue;
