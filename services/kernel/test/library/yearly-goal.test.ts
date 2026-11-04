@@ -3,6 +3,8 @@ import { createOwnedErasureFixture } from './support/erasure-worker.ts';
 import { deletePersona } from '../support/account-deletion.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { receiptKeyCandidates } from '../../src/command/receipt-key.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 let native: Awaited<ReturnType<typeof createOwnedErasureFixture>>;
 let owner: Awaited<ReturnType<typeof createOwnedErasureFixture>>['people']['bob'];
@@ -215,8 +217,16 @@ test('foreign owners see only their own goal state and account retirement erases
   const receipt = () =>
     native.db.pool.query<{ request_digest: Buffer; response: unknown }>(
       `SELECT request_digest,response FROM core.receipt
-       WHERE principal_id=$1 AND command_kind='library.yearly_completion_goal.change' AND idempotency_key=$2`,
-      [owner.accountId, key],
+       WHERE principal_id=$1 AND command_kind='library.yearly_completion_goal.change' AND idempotency_key=ANY($2::text[])`,
+      [
+        owner.accountId,
+        receiptKeyCandidates(
+          testReceiptKeys(),
+          'library.yearly_completion_goal.change',
+          { kind: 'account', id: owner.accountId },
+          key,
+        ),
+      ],
     );
   const receiptBefore = await receipt();
   expect(receiptBefore.rows).toHaveLength(1);
