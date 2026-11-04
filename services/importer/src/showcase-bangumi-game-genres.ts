@@ -8,7 +8,11 @@ import {
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import type { RecordBindings } from './record-bindings.ts';
 import { ImportTransportError, type ReviewedCandidatePage, type ReviewedSubjectRead } from './import-client.ts';
-import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
+import {
+  isUnavailableIdentifierResolution,
+  type ImportIdentifierLookup,
+  type ImportIdentifierResolution,
+} from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import type { ShowcaseAcknowledgement } from './showcase-manifest.ts';
 import { showcaseDigest } from './showcase-manifest.ts';
@@ -66,7 +70,7 @@ export function composeBangumiImportIdentifierLookups(
       const preserveProperties = new Set<string>();
       let unavailable = false;
       for (const result of results) {
-        if ('status' in result && result.status === 'unavailable') {
+        if (isUnavailableIdentifierResolution(result)) {
           unavailable = true;
           for (const property of result.preserveProperties) preserveProperties.add(property);
           Object.assign(resolvedReferences, result.resolvedReferences ?? {});
@@ -93,6 +97,7 @@ type CurrentSubject = {
 type BindingState =
   | { state: 'bound'; binding: BangumiGameGenreConcept }
   | { state: 'missing' | 'wrong-scheme' | 'retracted-binding' | 'refused-binding' | 'concealed-binding' | 'binding-unavailable' };
+type BindingFailure = Exclude<BindingState, { state: 'bound' }>;
 
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
@@ -173,7 +178,7 @@ function hasCurrentValue(subject: CurrentSubject, property: string, content: str
   );
 }
 
-function failure(error: unknown): BindingState['state'] {
+function failure(error: unknown): BindingFailure['state'] {
   if (error instanceof ImportTransportError) {
     if (error.status === 403) return 'concealed-binding';
     if (error.status === 404) return 'retracted-binding';
@@ -229,7 +234,7 @@ export function createShowcaseBangumiGameGenreLookup(
     id: string,
     property: string,
     value: string,
-  ): Promise<BindingState['state']> {
+  ): Promise<BindingFailure['state']> {
     const key = `${id}\0${property}\0${value}`;
     let pending = associationReads.get(key);
     if (!pending) {

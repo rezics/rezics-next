@@ -111,6 +111,20 @@ export type ImportIdentifierResolution =
       preserveProperties: readonly string[];
       resolvedReferences?: Readonly<Record<string, string>>;
     }>;
+type UnavailableIdentifierResolution = Extract<ImportIdentifierResolution, { status: 'unavailable' }>;
+
+export function isUnavailableIdentifierResolution(
+  value: ImportIdentifierResolution,
+): value is UnavailableIdentifierResolution {
+  if (value === null || typeof value !== 'object') return false;
+  const status = Object.getOwnPropertyDescriptor(value, 'status')?.value;
+  const preserveProperties = Object.getOwnPropertyDescriptor(value, 'preserveProperties')?.value;
+  return (
+    status === 'unavailable' &&
+    Array.isArray(preserveProperties) &&
+    preserveProperties.every((item) => typeof item === 'string')
+  );
+}
 
 type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
 export type ImportRunResult = {
@@ -1927,7 +1941,7 @@ export class Importer {
         let resolvedReferences = ownReferences?.resolvedReferences;
         if (this.options.identifierLookup) {
           const resolution = await this.options.identifierLookup.resolve({ owner, conversion, signal });
-          if ('status' in resolution && resolution.status === 'unavailable') {
+          if (isUnavailableIdentifierResolution(resolution)) {
             lookupUnavailable = true;
             preserveProperties = new Set(resolution.preserveProperties);
             resolvedReferences = resolution.resolvedReferences;
@@ -2153,7 +2167,7 @@ export class Importer {
     let resolvedReferences = ownReferences?.resolvedReferences;
     if (lookup) {
       const resolution = await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal });
-      if ('status' in resolution && resolution.status === 'unavailable')
+      if (isUnavailableIdentifierResolution(resolution))
         resolvedReferences = resolution.resolvedReferences;
       else resolvedReferences = resolution as Readonly<Record<string, string>>;
     }
