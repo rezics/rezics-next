@@ -145,7 +145,11 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     }
     throw new Error('List fixture native link projection did not drain');
   }
-  async function create(type: string, values: Record<string, unknown> = {}, labels = { en: 'Native list subject' }) {
+  async function create(
+    type: string,
+    values: Record<string, unknown> = {},
+    labels: Record<string, string> = { en: 'Native list subject' },
+  ) {
     const result = await checked('POST', '/v1/subjects', {
       type,
       labels,

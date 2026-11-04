@@ -12,6 +12,7 @@ import { withReadTransaction } from '../../src/semantic/read.ts';
 import { routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { communityFixtureRuntime } from '../community/community-driver.ts';
+import { testTokens } from '../support/test-kernel.ts';
 import {
   createSourceStatisticLifecycleFixture,
   type SourceStatisticLifecycleFixture,
@@ -215,7 +216,7 @@ test('late Subject disclosure loss refuses currentness and never exposes a conce
     reason: 'identity',
     retryable: true,
   });
-  const concealed = await createCollectionReads(deps()).withViewerFacts(
+  const concealed = await createCollectionReads({ ...deps(), tokens: testTokens() }).withViewerFacts(
     owner,
     { members: [{ id: 'concealed', subjectId: id }] },
     deadline(),
