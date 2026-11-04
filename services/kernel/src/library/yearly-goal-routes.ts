@@ -30,6 +30,7 @@ const count = t.Object(
   },
   closed,
 );
+const monthCount = t.Object({ ...count.properties, month: t.Integer({ minimum: 1, maximum: 12 }) }, closed);
 const reportedYear = t.Object(
   {
     ...count.properties,
@@ -37,7 +38,7 @@ const reportedYear = t.Object(
     year: t.Integer({ minimum: 1, maximum: 9999 }),
     calendar: t.Literal('gregorian'),
     dateSource: t.Literal('explicitly_reported_journal_finish'),
-    months: t.Array(t.Intersect([count, t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }) }, closed)]), {
+    months: t.Array(monthCount, {
       minItems: 12,
       maxItems: 12,
     }),
@@ -170,6 +171,8 @@ export type YearlyCompletionGoalRouteDependencies = {
   clock?: KernelClock;
 };
 
+export const MAX_YEARLY_COMPLETION_GOAL_RESPONSE_BYTES = 20_480;
+
 /** Owner target read and commands composed with the installed reported-year authority. */
 export function yearlyCompletionGoalRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -221,13 +224,16 @@ export function yearlyCompletionGoalRoutes(
             if (!unavailableSummary(error)) throw error;
             progress = { state: 'unavailable', reason: 'summary_unavailable' };
           }
-          return {
+          const result = {
             year: query.year,
             metric: YEARLY_COMPLETION_GOAL_METRIC,
             viewer: { state: 'owner' as const, actions: { ...targetActions(currentTarget), navigateYear: { allowed: true as const } } },
             target: currentTarget,
             progress,
           };
+          if (new TextEncoder().encode(JSON.stringify(result)).byteLength > MAX_YEARLY_COMPLETION_GOAL_RESPONSE_BYTES)
+            throw new ProblemError('dependency_unavailable');
+          return result;
         });
       },
     )
@@ -235,6 +241,9 @@ export function yearlyCompletionGoalRoutes(
       '/v1/libraryYearlyCompletionGoal',
       {
         headers: idempotencyHeaders,
+        transform: ({ set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+        },
         body: t.Object(
           {
             year: t.Integer({ minimum: 1, maximum: 9999 }),

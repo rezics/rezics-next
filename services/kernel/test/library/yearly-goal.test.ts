@@ -98,7 +98,24 @@ test('target edits keep the revision fence while native repeated and undated occ
   const edited = await change(2026, 2, '1');
   expect(edited.response.status).toBe(200);
   expect(edited.value.revision).toBe('2');
-  expect((await read(2026)).progress.summary.completedOccurrences).toBe('2');
+  expect(await read(2026)).toMatchObject({
+    target: { state: 'set', target: 2, revision: '2' },
+    progress: { state: 'available', summary: { completedOccurrences: '2' } },
+  });
+}, 120_000);
+
+test('year and target operands reject coercion, fractions, and out-of-range values', async () => {
+  for (const query of ['', '?year=0', '?year=10000', '?year=2026.5', '?year=2026&year=2027', '?year=2026&owner=x'])
+    expect((await native.send(owner.bearer, 'GET', path + query)).status).toBe(400);
+  for (const body of [
+    { year: 2026, metric, target: 1.5, expectedRevision: null },
+    { year: 2026, metric, target: '2', expectedRevision: null },
+    { year: 2026, metric, target: 1001, expectedRevision: null },
+    { year: 2026.5, metric, target: 2, expectedRevision: null },
+    { year: 2026, metric, target: null, expectedRevision: null },
+  ])
+    expect((await native.send(owner.bearer, 'PUT', path, body, entryKey())).status).toBe(400);
+  expect((await native.send('anonymous', 'GET', `${path}?year=2026`)).status).toBe(401);
 }, 120_000);
 
 test('correction moves the occurrence between reported years without changing either goal revision', async () => {
