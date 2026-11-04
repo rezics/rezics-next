@@ -12,6 +12,7 @@ import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { CandidateValue } from '../../pages/data';
 import { ViewHeading } from '../../pages/view-heading';
 import { subjectHref } from '../../../subject/subject-href';
+import { catalogueFileSourceId, catalogueFileSourceReturnHref } from '../catalogue-file-reader/navigation';
 import type { CandidateTransport } from '../../../subject/candidate-review';
 import {
   relationDraft,
@@ -86,12 +87,14 @@ function CatalogueFileProfileLive({
   transport,
   search,
   initialReview,
+  returnSourceId,
 }: {
   id: string;
   locale: string;
   transport: CatalogueFileTransport;
   search: EntityPickerSearch;
   initialReview?: { property: string; candidate: string } | undefined;
+  returnSourceId?: string | undefined;
 }) {
   const headingId = useId();
   const lifetime = useEditorLifetime();
@@ -200,6 +203,10 @@ function CatalogueFileProfileLive({
   }, [query.data, page]);
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const href = subjectHref({ id, label: title.text }, locale).href;
+  const sourceId = catalogueFileSourceId(returnSourceId);
+  const sourceReturnHref = sourceId
+    ? catalogueFileSourceReturnHref(sourceId, locale)
+    : undefined;
   const codec = read ? codecProperty(read.release, read.public.subject.type) : undefined;
   const codecEnum = (() => {
     const schema = codec ? read?.release.properties[codec]?.value : undefined;
@@ -215,6 +222,13 @@ function CatalogueFileProfileLive({
     : false;
   return (
     <section className="flex flex-col gap-4" data-slot="catalogue-file-profile" aria-busy={busy}>
+      {sourceReturnHref ? (
+        <p>
+          <a href={sourceReturnHref} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
+            {m.catalogue_file_reader_return({}, o)}
+          </a>
+        </p>
+      ) : null}
       {!readable && (
         <div className="flex flex-col gap-4 p-6">
           <ViewHeading label={m.catalogue_file_title({}, o)} headingClassName="font-sans" headingRef={heading} />

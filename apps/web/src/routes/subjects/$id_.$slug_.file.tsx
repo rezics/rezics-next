@@ -5,6 +5,7 @@ import { CatalogueFileProfileSession } from '../../features/catalogue/catalogue-
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch, subjectHref } from '../../subject/subject-href';
+import { catalogueFileSourceId } from '../../features/catalogue/catalogue-file-reader/navigation';
 
 const canonicalFile = createServerFn({ method: 'GET', strict: false })
   .validator((input: { id: string; slug: string; locale: string; search: string }) => {
@@ -42,6 +43,7 @@ const canonicalFile = createServerFn({ method: 'GET', strict: false })
 export const Route = createFileRoute('/subjects/$id_/$slug_/file')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => ({
+    fileSource: catalogueFileSourceId(input.fileSource),
     reviewProperty:
       typeof input.reviewProperty === 'string' && input.reviewProperty.length <= 256 ? input.reviewProperty : undefined,
     candidate:
@@ -59,11 +61,12 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/file')({
 });
 
 function FileRoute() {
-  const { reviewProperty, candidate } = Route.useSearch();
+  const { reviewProperty, candidate, fileSource } = Route.useSearch();
   return (
     <CatalogueFileProfileSession
       id={Route.useLoaderData().id}
       locale={getLocale()}
+      returnSourceId={fileSource}
       initialReview={reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
     />
   );
