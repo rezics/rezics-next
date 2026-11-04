@@ -60,13 +60,7 @@ test('one current batch preserves the qualified role, partial date and disclosed
 });
 
 test('native work projection keeps exact creator role and same-statement partial date, while concealed identity stays withheld', () => {
-  const statement = (
-    statementId: string,
-    property: string,
-    label: string,
-    id: string,
-    creatorRole: boolean,
-  ) => ({
+  const statement = (statementId: string, property: string, label: string, id: string, creatorRole: boolean) => ({
     statementId,
     sourceId: subjectId,
     direction: 'outgoing' as const,
@@ -89,7 +83,13 @@ test('native work projection keeps exact creator role and same-statement partial
           items: [
             {
               property: { id: 'schema:datePublished', labels: { en: 'Publication date' } },
-              value: { state: 'value' as const, kind: 'time' as const, calendar: 'gregorian' as const, year: 1818, month: 1 },
+              value: {
+                state: 'value' as const,
+                kind: 'time' as const,
+                calendar: 'gregorian' as const,
+                year: 1818,
+                month: 1,
+              },
             },
           ],
         },
@@ -105,7 +105,11 @@ test('native work projection keeps exact creator role and same-statement partial
     type: { id: 'schema:Book', labels: { en: 'Book' } },
     kind: 'work' as const,
     creators: { state: 'current' as const, items: creators, overflow: true },
-    relations: { state: 'current' as const, items: [statement('123e4567-e89b-12d3-a456-426614174005', 'schema:hasPart', 'Part of', workId, false)], overflow: false },
+    relations: {
+      state: 'current' as const,
+      items: [statement('123e4567-e89b-12d3-a456-426614174005', 'schema:hasPart', 'Part of', workId, false)],
+      overflow: false,
+    },
     dates: { state: 'unsupported' as const },
   } satisfies WorkContext;
   const release = {
