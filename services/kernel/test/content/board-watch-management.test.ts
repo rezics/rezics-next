@@ -52,11 +52,15 @@ test('mounted board state uses CAS and exact retry, and delayed first opening se
     value: { watching: true, revision: 1 },
   });
   expect((await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 0 })).status).toBe(409);
-  expect(await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 1 }, crypto.randomUUID())).toMatchObject({
+  expect(
+    await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 1 }, crypto.randomUUID()),
+  ).toMatchObject({
     status: 200,
     value: { watching: false, revision: 2 },
   });
-  expect(await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 2 }, crypto.randomUUID())).toMatchObject({
+  expect(
+    await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 2 }, crypto.randomUUID()),
+  ).toMatchObject({
     status: 200,
     value: { watching: true, revision: 3 },
   });
