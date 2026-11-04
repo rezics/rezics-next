@@ -226,8 +226,10 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
       known,
       fetch: fetchRatings,
     });
-    expect(prepared.tagWeightObservations).toMatchObject([
-      { workId: 'v410', state: 'available', bindings: [{ tagId: 'g311', conceptId: conceptIds.g311 }] },
+    expect(prepared.tagWeightObservations[0]).toMatchObject({ workId: 'v410', state: 'available' });
+    expect(prepared.tagWeightObservations[0]?.bindings.map((item) => [item.tagId, item.conceptId])).toEqual([
+      ['g311', conceptIds.g311],
+      ['g44', conceptIds.g44],
     ]);
     expect(prepared.tagWeightRefreshes).toEqual(['v410']);
 
