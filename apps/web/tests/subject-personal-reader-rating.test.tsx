@@ -1,4 +1,7 @@
 import { expect, mock, test } from 'bun:test';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, createElement, useState } from 'react';
@@ -154,7 +157,7 @@ function makeHarness(initialSession: Session, initialPage: Page, observerCount =
     const binding = personal.binding;
     const readerKey = subjectReaderQuery(page.subjectId, page.locale, binding?.scope).queryKey;
     const ownKey = subjectOwnRatingQuery(page.subjectId, page.locale, binding?.scope).queryKey;
-    const statusText = status?.key === binding?.key ? status.value : '';
+    const statusText = status && status.key === binding?.key ? status.value : '';
     const apply = (units: number | null) => {
       if (!binding) return;
       const key = binding.key;
@@ -621,7 +624,8 @@ test('subject preferences and own rating retire across the complete mounted read
             });
           } else if (retirement === 'equal-session' || retirement === 'session-recreation') {
             await act(async () => {
-              if (retirement === 'session-recreation') harness.client.removeQueries({ queryKey: ['session'], exact: true });
+              if (retirement === 'session-recreation')
+                harness.client.removeQueries({ queryKey: ['session'], exact: true });
               harness.client.setQueryData(['session'], { ...readerA });
               await new Promise((resolve) => setTimeout(resolve, 0));
             });

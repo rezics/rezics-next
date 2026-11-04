@@ -1,6 +1,12 @@
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { addressLease, readLease, browserObservation, type BrowserSession, type BrowserCacheEvent } from '../../session';
+import {
+  addressLease,
+  readLease,
+  browserObservation,
+  type BrowserSession,
+  type BrowserCacheEvent,
+} from '../../session';
 import { personalRead } from '../../kernel/query';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { SubjectOwnRating } from './subject-ratings';

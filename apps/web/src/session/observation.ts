@@ -1,9 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { normalizeSessionObservation, sessionQueryKey } from './browser-state';
 
-export type BrowserCacheEvent = Parameters<
-  Parameters<ReturnType<QueryClient['getQueryCache']>['subscribe']>[0]
->[0];
+export type BrowserCacheEvent = Parameters<Parameters<ReturnType<QueryClient['getQueryCache']>['subscribe']>[0]>[0];
 
 export type BrowserReader = { subject: string; id: number };
 export type BrowserObservationSnapshot =

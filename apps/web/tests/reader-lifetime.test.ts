@@ -1,4 +1,7 @@
 import { expect, mock, test } from 'bun:test';
+import * as start from '../.storybook/react-start';
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 import { addressLease, readLease, operationLease } from '../src/session';
 
@@ -30,7 +33,9 @@ test('read, address and operation admission remain independent and retired addre
 
 test('the mounted Subject reader shares one session listener and retires each successful incarnation', async () => {
   const { dirname } = await import('node:path');
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/subjects/work' });
   const globals = { window, document: window.document, navigator: window.navigator, IS_REACT_ACT_ENVIRONMENT: true };
   const previous = Object.entries(globals).map(([key, value]) => {
@@ -53,29 +58,52 @@ test('the mounted Subject reader shares one session listener and retires each su
   cache.subscribe = (listener) => {
     peak = Math.max(peak, ++active);
     const stop = subscribe(listener);
-    return () => { active--; stop(); };
+    return () => {
+      active--;
+      stop();
+    };
   };
   let lease: ReturnType<typeof useSubjectPersonalReader>['binding'];
   function Page() {
-    lease = useSubjectPersonalReader({ subjectId: 'work', locale: 'en', view: 'overview', session: useSession(),
-      transport: { readReader: async () => ({ reader: 'reader-a', preferences: { spoilerLevel: 0, suitability: 'blur' } }),
-        readOwnRating: async () => ({ reader: 'reader-a', kind: 'ready', units: null }) } }).binding;
+    lease = useSubjectPersonalReader({
+      subjectId: 'work',
+      locale: 'en',
+      view: 'overview',
+      session: useSession(),
+      transport: {
+        readReader: async () => ({ reader: 'reader-a', preferences: { spoilerLevel: 0, suitability: 'blur' } }),
+        readOwnRating: async () => ({ reader: 'reader-a', kind: 'ready', units: null }),
+      },
+    }).binding;
     return null;
   }
   const host = window.document.createElement('main');
   const root = createRoot(host as unknown as HTMLElement);
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
   try {
-    await act(async () => { root.render(createElement(QueryClientProvider, { client }, createElement(Page))); await settle(); });
+    await act(async () => {
+      root.render(createElement(QueryClientProvider, { client }, createElement(Page)));
+      await settle();
+    });
     expect(lease?.isCurrent()).toBe(true);
     expect(peak).toBe(1);
     for (const replace of [
       () => client.setQueryData(['session'], { ...session }),
-      () => { client.removeQueries({ queryKey: ['session'], exact: true }); client.setQueryData(['session'], session); },
-      () => { client.setQueryData(['session'], { ...session, subject: 'reader-b' }); client.setQueryData(['session'], session); },
+      () => {
+        client.removeQueries({ queryKey: ['session'], exact: true });
+        client.setQueryData(['session'], session);
+      },
+      () => {
+        client.setQueryData(['session'], { ...session, subject: 'reader-b' });
+        client.setQueryData(['session'], session);
+      },
     ]) {
       const old = lease!;
-      await act(async () => { replace(); expect(old.isCurrent()).toBe(false); await settle(); });
+      await act(async () => {
+        replace();
+        expect(old.isCurrent()).toBe(false);
+        await settle();
+      });
       expect(lease?.isCurrent()).toBe(true);
       expect(lease?.key).not.toBe(old.key);
       expect(old.beginRatingWrite(undefined, { reader: 'reader-a', kind: 'ready', units: 10 })).toBeNull();
