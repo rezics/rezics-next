@@ -25,7 +25,7 @@ function OwnRatingsRoute() {
   const initial = Route.useLoaderData();
   const search = Route.useSearch();
   const responseVersion = useRouterState({
-    select: ({ matches }) => matches.find((match) => match.routeId === Route.id)?.fetchCount ?? 0,
+    select: ({ matches }) => matches.find((match) => match.routeId === Route.id)?.updatedAt ?? 0,
   });
   const address = ownVotesCursor(search.cursor);
   const invalid = search.invalidCursor === true || !address.valid;
