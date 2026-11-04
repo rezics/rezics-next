@@ -8,6 +8,8 @@ import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
 import { HomeWorkLibraryProvider } from '../feed/home-work-library/view';
 import type { HomeWorkLibraryProjection, HomeWorkLibraryScope } from '../feed/home-work-library/contract';
+import { HomeReactionRecovery, useHomeReactionRecovery } from '../feed/home-reaction-currentness-recovery';
+import { homeFeedDestination } from './home-feed-destination';
 import { useHomeReactionCurrentness } from '../feed/home-reaction-currentness';
 import type { VerificationConfig } from '../../report/turnstile';
 import { createHomeKindChoices, homeKindChoice, type HomeKindsReader } from './home-feed-kinds';
@@ -118,6 +120,7 @@ export function HomeFeed({
   }, [filtersOpen]);
   const page = result.state === 'ready' ? result.page : undefined;
   const reactions = useHomeReactionCurrentness(result, input, stream, signedIn, busy);
+  const recovery = useHomeReactionRecovery(onRetry);
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
   const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
   const results: FeedResultsResult<FeedItem> =
@@ -201,6 +204,7 @@ export function HomeFeed({
           {m.home_feed_public_discovery_unavailable({}, options)}
         </p>
       ) : null}
+      <HomeReactionRecovery scope={recovery} locale={locale} onRefresh={onRetry} />
       <FeedResults
         boundaryRef={boundary}
         regionLabel={m.nav_home({}, options)}
@@ -229,6 +233,8 @@ export function HomeFeed({
               <HomeFeedActions
                 key={item.id}
                 item={item}
+                commandRecovery={recovery.recovery.port(item.id, homeFeedDestination(item, locale) ?? `/${locale}/`)}
+                reactionPending={recovery.recovery.pending(item.id)}
                 locale={locale}
                 signedIn={signedIn}
                 verification={verification}

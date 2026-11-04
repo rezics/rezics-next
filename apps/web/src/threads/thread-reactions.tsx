@@ -82,6 +82,18 @@ function installSingleReactionMenu() {
   });
 }
 
+/** An opaque original command for Home's existing page owner, independent of later advice. */
+export type ReactionCommandRecovery = {
+  start(command: {
+    key: string;
+    reader: string | null;
+    credential: string | null;
+    retry(): Promise<{ ok: true } | ReactionFailure>;
+  }): void;
+  uncertain(key: string): void;
+  accepted(key: string): void;
+};
+
 export type ThreadReactionsProps = {
   target: { kind: 'thread' | 'post' | 'subject'; id: string };
   counts: Partial<Record<ReactionKind, number>>;
@@ -93,6 +105,7 @@ export type ThreadReactionsProps = {
   allowedKinds?: readonly ReactionKind[];
   /** Home can deliberately forget an uncertain command, then refresh its source. */
   allowDiscard?: boolean;
+  commandRecovery?: ReactionCommandRecovery;
   /** Native advice can withhold the signed-out entry without granting a writable viewer slot. */
   signInAllowed?: boolean;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
@@ -246,6 +259,7 @@ function ReactionCaller({
   signInAllowed,
   allowedKinds,
   allowDiscard,
+  commandRecovery,
   requireWatermark,
 }: ThreadReactionsProps & {
   admitted: boolean;
@@ -366,11 +380,14 @@ function ReactionCaller({
     try {
       result = intent.phase === 'read' ? { ok: true } : await intent.send({ data, headers: intent.headers });
     } catch {
+      commandRecovery?.uncertain(intent.commandId);
       if (!current()) return;
       const message = m.reaction_unavailable();
       retain(intent);
       throw new Error(message);
     }
+    if (result.ok) commandRecovery?.accepted(intent.commandId);
+    else commandRecovery?.uncertain(intent.commandId);
     if (!current()) return;
     if (!result.ok) {
       if (result.reason === 'conflict') intent.phase = 'read';
@@ -445,23 +462,30 @@ function ReactionCaller({
       if (focus.generation === generation && focus.element === document.activeElement) focus.commandId = commandId;
       else keyboardFocus.current = null;
     }
-    await submit(
-      {
+    const intent: Intent = {
+      kind,
+      commandId,
+      phase: 'write',
+      data: Object.freeze({
+        target: target.kind,
+        id: target.id,
         kind,
-        commandId,
-        phase: 'write',
-        data: Object.freeze({
-          target: target.kind,
-          id: target.id,
-          kind,
-          ...(expectedReader ? { expectedReader } : {}),
-        }),
-        headers: Object.freeze({ ...headers, 'Idempotency-Key': commandId }),
-        send: preparedTransport?.change ?? changeReaction,
-        read: preparedTransport?.read ?? readReaction,
-      },
-      false,
-    );
+        ...(expectedReader ? { expectedReader } : {}),
+      }),
+      headers: Object.freeze({ ...headers, 'Idempotency-Key': commandId }),
+      send: preparedTransport?.change ?? changeReaction,
+      read: preparedTransport?.read ?? readReaction,
+    };
+    commandRecovery?.start({
+      key: commandId,
+      reader: expectedReader,
+      credential: csrfToken,
+      retry: () =>
+        intent.phase === 'read'
+          ? Promise.resolve({ ok: true })
+          : intent.send({ data: intent.data, headers: intent.headers }),
+    });
+    await submit(intent, false);
   }
 
   async function retry(intent: Intent) {
@@ -548,7 +572,7 @@ function ReactionCaller({
           ? {}
           : { signInHref: `${locale ? `/${locale}` : ''}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
       />
-      {recovery ? (
+      {recovery && !commandRecovery ? (
         <>
           <span role="status">{failed}</span>
           <Button

@@ -35,6 +35,8 @@ const { createRoot } = await import('react-dom/client');
 const { readHomeFeedPage } = await import('../src/features/pages/home-feed-read');
 const { HomeFeed } = await import('../src/features/pages/home-feed');
 const { ThreadReactions } = await import('../src/threads/thread-reactions');
+const { HomeReactionRecovery, useHomeReactionRecovery } =
+  await import('../src/features/feed/home-reaction-currentness-recovery');
 const { useHomeReactionCurrentness } = await import('../src/features/feed/home-reaction-currentness');
 const { m } = await import('../src/paraglide/messages.js');
 const nativeFetch = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected native request'));
@@ -402,4 +404,105 @@ test('public Home rejects private viewer slots and current private advice', asyn
       code: 'invalid_feed_response',
     });
   }
+});
+
+test('Home keeps an original uncertain command across retired advice, A/B/A and remount until retry or discard', async () => {
+  type Transport = NonNullable<Parameters<typeof ThreadReactions>[0]['preparedTransport']>;
+  const sent: Parameters<Transport['change']>[0][] = [];
+  let acknowledge!: (value: { ok: false; reason: 'unavailable' }) => void;
+  const lost = new Promise<{ ok: false; reason: 'unavailable' }>((resolve) => {
+    acknowledge = resolve;
+  });
+  let uncertain = true;
+  let replacementSends = 0;
+  let refreshes = 0;
+  const original: Transport = {
+    change: async (request) => {
+      sent.push(request);
+      return sent.length === 1 ? lost : uncertain ? { ok: false, reason: 'unavailable' } : { ok: true };
+    },
+    read: async () => {
+      throw new Error('Home refreshes through its page owner');
+    },
+  };
+  const replacement: Transport = {
+    ...original,
+    change: async () => {
+      replacementSends++;
+      return { ok: true };
+    },
+  };
+  const originalPage = { ...result, page: { ...result.page } };
+  const anotherPage = { ...result, page: { ...result.page } };
+  const refresh = () => {
+    refreshes++;
+  };
+  function Journey({ page, transport = original }: { page: typeof result; transport?: Transport }) {
+    const scope = useHomeReactionRecovery(refresh);
+    const source = useHomeReactionCurrentness(
+      page,
+      { stream: 'following', cursor: 'original' },
+      'following',
+      true,
+      false,
+    );
+    return (
+      <>
+        <HomeReactionRecovery scope={scope} locale="en" onRefresh={refresh} />
+        <ThreadReactions
+          target={{ kind: 'thread', id }}
+          counts={{ upvote: 8 }}
+          value={null}
+          signedIn
+          returnTo="/en/threads/original?locate=exact"
+          presentation="vote"
+          optimistic={false}
+          settleWithRead={false}
+          personalReady={!scope.recovery.pending('original-occurrence')}
+          reactionOrigin={source.origin}
+          commandRecovery={scope.recovery.port('original-occurrence', '/en/threads/original?locate=exact')}
+          preparedTransport={transport}
+        />
+      </>
+    );
+  }
+  await paint(<Journey page={originalPage} />);
+  await click(host.querySelector<HTMLButtonElement>('[data-slot="vote-control"] button')!);
+  expect(sent).toHaveLength(1);
+  expect(host.querySelector('[data-slot="home-reaction-recovery"] [aria-busy="true"]')).not.toBeNull();
+  await act(async () => {
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
+  });
+  await paint(<Journey page={anotherPage} transport={replacement} />);
+  await paint(<Journey page={originalPage} transport={replacement} />);
+  acknowledge({ ok: false, reason: 'unavailable' });
+  await act(async () => {
+    await lost;
+  });
+  const recovery = () => host.querySelector('[data-slot="home-reaction-recovery"]')!;
+  expect(recovery().querySelector('a')?.getAttribute('href')).toBe('/en/threads/original?locate=exact');
+  uncertain = false;
+  await click([...recovery().querySelectorAll('button')].find((button) => button.textContent === m.editorial_retry())!);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toEqual(sent[0]);
+  expect(replacementSends).toBe(0);
+  expect(refreshes).toBe(1);
+  expect(host.querySelector('[data-slot="home-reaction-recovery"]')).toBeNull();
+  expect(host.querySelectorAll('[data-slot="vote-control"] button:not([disabled])')).toHaveLength(0);
+
+  uncertain = true;
+  const fresh = { ...result, page: { ...result.page } };
+  await paint(<Journey page={fresh} />);
+  await click(host.querySelector<HTMLButtonElement>('[data-slot="vote-control"] button')!);
+  expect(sent).toHaveLength(3);
+  await paint(<span>another route</span>);
+  await paint(<Journey page={fresh} transport={replacement} />);
+  expect(recovery()).not.toBeNull();
+  await click(
+    [...recovery().querySelectorAll('button')].find((button) => button.textContent === m.reaction_discard())!,
+  );
+  expect(refreshes).toBe(2);
+  expect(sent).toHaveLength(3);
+  expect(host.querySelector('[data-slot="home-reaction-recovery"]')).toBeNull();
+  expect(host.querySelectorAll('[data-slot="vote-control"] button:not([disabled])')).toHaveLength(0);
 });
