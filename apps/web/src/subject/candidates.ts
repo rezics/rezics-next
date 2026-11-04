@@ -282,8 +282,7 @@ export async function readCandidates(
         : undefined,
     ]);
     if (!current.data || current.status !== 200) return candidateFailure(current.status);
-    if (current.data.subject.id !== id || current.data.subject.context !== context)
-      return candidateFailure(400);
+    if (current.data.subject.id !== id || current.data.subject.context !== context) return candidateFailure(400);
     if (result && (!result.data || result.status !== 200)) return candidateFailure(result.status);
     const token = result ? new Headers(result.headers).get('rezics-session-token') : null;
     return {

@@ -209,7 +209,9 @@ export async function readReleaseFidelity(
   const headers = { authorization, ...(query.session ? { 'rezics-session-token': query.session } : {}) };
   let work = emptyVisit();
   try {
-    const subject = await client.subjects({ id: query.id }).get({ query: { context, language: query.locale }, headers });
+    const subject = await client
+      .subjects({ id: query.id })
+      .get({ query: { context, language: query.locale }, headers });
     if (subject.status !== 200 || !subject.data) return candidateFailure(subject.status);
     if (subject.data.subject.id !== query.id || subject.data.subject.context !== context)
       return { ok: false, reason: 'stale' };
@@ -243,8 +245,11 @@ export async function readReleaseFidelity(
     let next: string | null = null;
     let count: ForwardPage['count'] | undefined;
     let session: string | undefined;
-    let streamState: 'complete' | 'empty' | 'withheld' | 'unsupported' | 'unavailable' | 'denied' =
-      stream ? 'complete' : streams.length ? 'empty' : 'unsupported';
+    let streamState: 'complete' | 'empty' | 'withheld' | 'unsupported' | 'unavailable' | 'denied' = stream
+      ? 'complete'
+      : streams.length
+        ? 'empty'
+        : 'unsupported';
     if (stream) {
       const pageQuery = {
         property: stream.property,
@@ -258,13 +263,14 @@ export async function readReleaseFidelity(
           ? await client.subjects({ id: query.id }).relations.get({ query: pageQuery, headers })
           : await client.subjects({ id: query.id }).links.get({ query: pageQuery, headers });
       if (result.status !== 200 || !result.data) {
-        streamState = result.status === 401 || result.status === 403
-          ? 'denied'
-          : result.status === 404
-            ? 'withheld'
-            : result.status === 400 || result.status === 422
-              ? 'unsupported'
-              : 'unavailable';
+        streamState =
+          result.status === 401 || result.status === 403
+            ? 'denied'
+            : result.status === 404
+              ? 'withheld'
+              : result.status === 400 || result.status === 422
+                ? 'unsupported'
+                : 'unavailable';
       } else {
         const page = result.data;
         rows = pageRows(query.id, digest, page, stream.direction);

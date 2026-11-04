@@ -180,9 +180,10 @@ function concreteTime(content: unknown): ConcreteTime | 'invalid' | 'unsupported
   if (!content || typeof content !== 'object' || Array.isArray(content)) return 'invalid';
   const value = content as { time?: unknown; precision?: unknown; calendarmodel?: unknown };
   if (value.calendarmodel !== undefined && value.calendarmodel !== GREGORIAN_CALENDAR) return 'unsupported';
-  const precision = typeof value.precision === 'number' && value.precision in TIME_PRECISION
-    ? TIME_PRECISION[value.precision as keyof typeof TIME_PRECISION]
-    : undefined;
+  const precision =
+    typeof value.precision === 'number' && value.precision in TIME_PRECISION
+      ? TIME_PRECISION[value.precision as keyof typeof TIME_PRECISION]
+      : undefined;
   if (!precision) return 'unsupported';
   if (typeof value.time !== 'string') return 'invalid';
   const match = /^([+-])(\d{4,64})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$/.exec(value.time);

@@ -57,14 +57,16 @@ const vndbReleaseCode = /^\d+$/;
  * Bind only already-resolved native Release identities. Provider row codes and the pinned source assertion remain
  * alongside the typed proposal for the Importer; this does not create, accept or adopt a native candidate.
  */
-export function bindVndbReleaseSupersession(input: Readonly<{
-  row: VndbReleaseSupersessionRow;
-  current: ResolvedReleaseEndpoint;
-  superseded: ResolvedReleaseEndpoint;
-  context: string;
-  release: string;
-  sourceRecordUrl: string;
-}>): ReleaseSupersessionAdmission | undefined {
+export function bindVndbReleaseSupersession(
+  input: Readonly<{
+    row: VndbReleaseSupersessionRow;
+    current: ResolvedReleaseEndpoint;
+    superseded: ResolvedReleaseEndpoint;
+    context: string;
+    release: string;
+    sourceRecordUrl: string;
+  }>,
+): ReleaseSupersessionAdmission | undefined {
   const { row, current, superseded } = input;
   if (
     !row ||
@@ -89,7 +91,16 @@ export function bindVndbReleaseSupersession(input: Readonly<{
     property: { id: VNDB_RELEASE_SUPERSESSION_BINDING.property },
     value: { type: 'value' as const, content: superseded.id },
     qualifiers: [] as const,
-    references: [{ parts: [{ property: { id: 'schema:url' as const }, value: { type: 'value' as const, content: input.sourceRecordUrl } }] }],
+    references: [
+      {
+        parts: [
+          {
+            property: { id: 'schema:url' as const },
+            value: { type: 'value' as const, content: input.sourceRecordUrl },
+          },
+        ],
+      },
+    ],
   };
   return {
     subject: current.id,

@@ -36,10 +36,7 @@ function ReleaseFidelitySessionLive({
     [locale],
   );
   const selectedContext = context ?? candidateContext;
-  if (
-    realm ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedContext)
-  )
+  if (realm || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedContext))
     return <p role="status">{m.relation_context({}, { locale: locale as never })}</p>;
   if (state !== 'signed-in')
     return (

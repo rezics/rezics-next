@@ -25,8 +25,14 @@ const statement = (content: unknown) => [
 ];
 
 test('release dates keep TBA, concrete failures, signed years, extended years and native precision separate', () => {
-  expect(dateReading([{ ...statement(null)[0]!, value: { type: 'somevalue' } }], 'schema:datePublished', bundledDigest, 'en'))
-    .toMatchObject({ kind: 'tba' });
+  expect(
+    dateReading(
+      [{ ...statement(null)[0]!, value: { type: 'somevalue' } }],
+      'schema:datePublished',
+      bundledDigest,
+      'en',
+    ),
+  ).toMatchObject({ kind: 'tba' });
   expect(
     dateReading(
       statement({ time: '-0001-00-00T00:00:00Z', precision: 9 }),

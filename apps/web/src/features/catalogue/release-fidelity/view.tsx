@@ -196,7 +196,9 @@ function ReleaseFidelityLive({
   }, [query.data, page]);
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const dateStatement = read?.date.statementId
-    ? read.public.subject.statements['schema:datePublished']?.find((statement) => statement.id === read.date.statementId)
+    ? read.public.subject.statements['schema:datePublished']?.find(
+        (statement) => statement.id === read.date.statementId,
+      )
     : undefined;
   const href = subjectHref({ id, label: title.text }, locale).href;
   const workHref =
@@ -285,13 +287,13 @@ function ReleaseFidelityLive({
                     ? m.release_fidelity_date_invalid({}, o)
                     : read.date.kind === 'unsupported'
                       ? m.release_fidelity_date_unsupported({}, o)
-                  : read.date.kind === 'absent'
-                    ? m.release_fidelity_date_absent({}, o)
-                    : read.date.kind === 'none'
-                      ? m.release_fidelity_date_none({}, o)
-                      : read.date.kind === 'partial'
-                        ? m.release_fidelity_date_partial({ value: read.date.text ?? '' }, o)
-                        : (read.date.text ?? m.release_fidelity_date_absent({}, o))}
+                      : read.date.kind === 'absent'
+                        ? m.release_fidelity_date_absent({}, o)
+                        : read.date.kind === 'none'
+                          ? m.release_fidelity_date_none({}, o)
+                          : read.date.kind === 'partial'
+                            ? m.release_fidelity_date_partial({ value: read.date.text ?? '' }, o)
+                            : (read.date.text ?? m.release_fidelity_date_absent({}, o))}
               </p>
               {read.date.historical && (
                 <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
@@ -451,23 +453,25 @@ function ReleaseFidelityLive({
                             {m.release_fidelity_select_detail({}, o)}
                           </Button>
                         )}
-                        {read.stream && relationSlot(row, read.stream, read.public.subject.context) && row.statement && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className={actionClass}
-                            onClick={() =>
-                              setDraft({
-                                holder: row.holder,
-                                slot: relationSlot(row, read.stream!, read.public.subject.context)!,
-                                statement: relationDraft(row.statement!),
-                                ...(read.session ? { session: read.session } : {}),
-                              })
-                            }
-                          >
-                            {m.correction_title({}, o)}
-                          </Button>
-                        )}
+                        {read.stream &&
+                          relationSlot(row, read.stream, read.public.subject.context) &&
+                          row.statement && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={actionClass}
+                              onClick={() =>
+                                setDraft({
+                                  holder: row.holder,
+                                  slot: relationSlot(row, read.stream!, read.public.subject.context)!,
+                                  statement: relationDraft(row.statement!),
+                                  ...(read.session ? { session: read.session } : {}),
+                                })
+                              }
+                            >
+                              {m.correction_title({}, o)}
+                            </Button>
+                          )}
                       </ContentItemFrame>
                     </li>
                   );

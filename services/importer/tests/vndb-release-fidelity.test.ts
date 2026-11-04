@@ -139,7 +139,11 @@ test('operator plans authored VNDB COPY releases without mixing work and release
     expect(plan.members.filter((row) => row.kind === 'release')).toHaveLength(7);
     expect(plan.gaps.some((gap) => gap.reason.includes('supersession'))).toBe(false);
     expect(plan.edges.filter((edge) => edge.table === 'releases_vn')).toHaveLength(7);
-    expect(plan.edges.filter((edge) => edge.table === 'releases_vn').every((edge) => edge.property === 'schema:exampleOfWork')).toBe(true);
+    expect(
+      plan.edges
+        .filter((edge) => edge.table === 'releases_vn')
+        .every((edge) => edge.property === 'schema:exampleOfWork'),
+    ).toBe(true);
     expect(plan.edges.filter((edge) => edge.table === 'releases_supersedes')).toMatchObject([
       {
         holder: 'r1',

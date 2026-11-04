@@ -247,8 +247,7 @@ export async function readRelationEditor(
   if (slot && !validRelationSlot(slot)) return candidateFailure(400);
   const result = await readCandidates(client, authorization, id, slot?.property, cursor, slot, session, context);
   if (!result.ok) return result;
-  if (result.public.subject.id !== id || result.public.subject.context !== context)
-    return candidateFailure(400);
+  if (result.public.subject.id !== id || result.public.subject.context !== context) return candidateFailure(400);
   let exact: RelationTypeDescriptorRead;
   try {
     exact = await descriptor(result.public.subject.type, locale);

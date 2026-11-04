@@ -156,8 +156,9 @@ test('selected-family and date-fidelity planners bind only selected multilingual
     const supersession = proposed.find((command) => command.statement.property.id === 'rezics:releaseSupersedes');
     expect(supersession?.source.external_id).toBe('r1');
     expect(supersession?.statement.value.type).toBe('value');
-    expect(supersession?.statement.references.flatMap((reference) => reference.parts.map((part) => part.value.content)))
-      .toContain('https://vndb.org/r1');
+    expect(
+      supersession?.statement.references.flatMap((reference) => reference.parts.map((part) => part.value.content)),
+    ).toContain('https://vndb.org/r1');
     expect(
       proposed.some(
         (command) =>

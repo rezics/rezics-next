@@ -57,13 +57,7 @@ async function context(name: string) {
 
 async function adoptInContext(holder: CreatedSubject, statement: StatementInput, selectedContext: string) {
   const proposal = body(
-    await fixture.request(
-      'editor',
-      'POST',
-      `/v1/subjects/${holder.id}/candidates`,
-      { statement },
-      discoveryKey(),
-    ),
+    await fixture.request('editor', 'POST', `/v1/subjects/${holder.id}/candidates`, { statement }, discoveryKey()),
     201,
   );
   const candidate = proposal.candidate as string;
@@ -209,21 +203,28 @@ test('native release supersession keeps direction, chronology, Context, source e
       `/v1/subjects/${current.id}/candidates?property=${encodeURIComponent(relationProperty)}&target=${prior.id}&context=${selectedA}&limit=20`,
     ),
   );
-  const inspected = (candidates.candidates as { id: string; statement?: { references: { parts: { value: { content: unknown } }[] }[] } }[])
-    .find((item) => item.statement?.references[0]?.parts[0]?.value.content === sourceUrl);
+  const inspected = (
+    candidates.candidates as {
+      id: string;
+      statement?: { references: { parts: { value: { content: unknown } }[] }[] };
+    }[]
+  ).find((item) => item.statement?.references[0]?.parts[0]?.value.content === sourceUrl);
   expect(inspected?.statement?.references[0]?.parts[0]?.value.content).toBe(sourceUrl);
   const revisions = body(await fixture.request('acceptor', 'GET', `/v1/subjects/${current.id}/revisions?limit=20`));
   expect((revisions.revisions as { release: string }[]).every((item) => item.release === bundledDigest)).toBe(true);
   expect(revisions.next).toBeNull();
 
-  const composed = body(await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: current.id } }));
+  const composed = body(
+    await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: current.id } }),
+  );
   expect(composed.catalogue).toMatchObject({
     state: 'released',
     type: 'wd:Q20631656',
     digest: bundledDigest,
   });
-  expect((composed.catalogue as { definitions: { properties: Record<string, unknown> } }).definitions.properties)
-    .toHaveProperty(relationProperty);
+  expect(
+    (composed.catalogue as { definitions: { properties: Record<string, unknown> } }).definitions.properties,
+  ).toHaveProperty(relationProperty);
   expect(composed.viewer).toMatchObject({ state: 'anonymous', actions: { statementPropose: 'denied' } });
 
   await fixture.grant('editor', ['moderation:hide'], prior.id);

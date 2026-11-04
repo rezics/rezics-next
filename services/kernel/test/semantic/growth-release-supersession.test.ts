@@ -45,8 +45,22 @@ function history(f: ListPresentationFixture, anchor: string, target: string): Po
           },
         ],
         'semantic.revision': [
-          { route, subject_id: subject, revision: 1, kind: 'create', release: bundledDigest, recorded_transaction_id: transaction },
-          { route, subject_id: subject, revision: 2, kind: 'propose', release: bundledDigest, recorded_transaction_id: randomUUID() },
+          {
+            route,
+            subject_id: subject,
+            revision: 1,
+            kind: 'create',
+            release: bundledDigest,
+            recorded_transaction_id: transaction,
+          },
+          {
+            route,
+            subject_id: subject,
+            revision: 2,
+            kind: 'propose',
+            release: bundledDigest,
+            recorded_transaction_id: randomUUID(),
+          },
         ],
         'semantic.candidate': [
           {
@@ -127,41 +141,37 @@ function history(f: ListPresentationFixture, anchor: string, target: string): Po
   };
 }
 
-test(
-  'one native 20-row supersession window stays bounded as unrelated releases and obsolete revisions grow',
-  async () => {
-    const { createListPresentationFixture } = await import('./support/list-presentation-fixture.ts');
-    const f = await createListPresentationFixture({ poolMax: 1 });
-    try {
-      const prior = await f.create('wd:Q20631656', {}, { en: 'Requested superseded release' });
-      const current = await f.create('wd:Q20631656', { [property]: prior }, { en: 'Requested current release' });
-      const data = history(f, current, prior);
-      const report = await checkGrowth(f.db, {
-        name: 'Native supersession relation window',
-        scales: [64, 512, 4096],
-        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
-        includeBackends: true,
-        counted: { read: () => ({}), limits: { connections: 1 }, bounds: { connections: 'constant' } },
-        async grow(db, scale, previousScale) {
-          await seed(db, data, { from: previousScale, to: scale });
-        },
-        async operation() {
-          const page = await f.call(
-            'GET',
-            `/v1/subjects/${current}/relations?property=${encodeURIComponent(property)}&limit=20`,
-          );
-          expect(page.status, JSON.stringify(page.body)).toBe(200);
-          expect((page.body.relations as unknown[])).toHaveLength(1);
-          expect(page.body.next).toBeNull();
-          expect((page.body.relations as { target: string }[])[0]!.target).toBe(prior);
-          return {};
-        },
-      });
-      allPaths(report);
-    } finally {
-      await f.close();
-    }
-  },
-  1_800_000,
-);
+test('one native 20-row supersession window stays bounded as unrelated releases and obsolete revisions grow', async () => {
+  const { createListPresentationFixture } = await import('./support/list-presentation-fixture.ts');
+  const f = await createListPresentationFixture({ poolMax: 1 });
+  try {
+    const prior = await f.create('wd:Q20631656', {}, { en: 'Requested superseded release' });
+    const current = await f.create('wd:Q20631656', { [property]: prior }, { en: 'Requested current release' });
+    const data = history(f, current, prior);
+    const report = await checkGrowth(f.db, {
+      name: 'Native supersession relation window',
+      scales: [64, 512, 4096],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+      includeBackends: true,
+      counted: { read: () => ({}), limits: { connections: 1 }, bounds: { connections: 'constant' } },
+      async grow(db, scale, previousScale) {
+        await seed(db, data, { from: previousScale, to: scale });
+      },
+      async operation() {
+        const page = await f.call(
+          'GET',
+          `/v1/subjects/${current}/relations?property=${encodeURIComponent(property)}&limit=20`,
+        );
+        expect(page.status, JSON.stringify(page.body)).toBe(200);
+        expect(page.body.relations as unknown[]).toHaveLength(1);
+        expect(page.body.next).toBeNull();
+        expect((page.body.relations as { target: string }[])[0]!.target).toBe(prior);
+        return {};
+      },
+    });
+    allPaths(report);
+  } finally {
+    await f.close();
+  }
+}, 1_800_000);

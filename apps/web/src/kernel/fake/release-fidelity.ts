@@ -258,8 +258,7 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
       }
       if (url.pathname === `/v1/subjects/${releaseSubject}/relations` && request.method === 'GET') {
         const property = url.searchParams.get('property') ?? '';
-        if (property !== basedOnProperty)
-          return json({ relations: [], next: null, count: { value: 0, exact: true } });
+        if (property !== basedOnProperty) return json({ relations: [], next: null, count: { value: 0, exact: true } });
         return json(relationPage(property, url.searchParams.get('cursor')));
       }
       if (request.method === 'GET' && url.pathname.startsWith('/v1/subjects/')) {
