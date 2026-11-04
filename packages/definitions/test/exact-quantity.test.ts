@@ -343,7 +343,7 @@ test('the current release uses a new digest and keeps the historical release pin
     '1.0.1': 'sha256:2d984ead9d128012123bed3f34481f703df84070edcd139f3615441e61ff1de7',
     '1.0.2': 'sha256:085ce689e886123ba2fb4e58353abeab23c29b4d0c80d4196f913678e51f855b',
     '1.0.3': 'sha256:9555d47808257a23a56a3d843ebb4b2b9d3843af3beebb446e379652bf4be002',
-    '1.0.4': 'sha256:60dfcb6002f0d667e770b7f201be9a87ea37d3ec0ede4975ad8958bfa33e3e1d',
+    '1.0.4': 'sha256:1ded81205f3588d10a0cb5dab75bfaec1fcb22cac3e2e54809cf0086f54806f7',
   };
   expect(validateRelease(bundledRelease)).toEqual([]);
   expect(bundledRelease.catalogue.version).toBe('1.0.4');

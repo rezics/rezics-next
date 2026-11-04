@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:60dfcb6002f0d667e770b7f201be9a87ea37d3ec0ede4975ad8958bfa33e3e1d",
+  "digest": "sha256:1ded81205f3588d10a0cb5dab75bfaec1fcb22cac3e2e54809cf0086f54806f7",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -56,6 +56,8 @@
         "mappings": ["wd:Q95074"],
         "coverRatio": "5:7",
         "properties": [
+          "rezics:characterRival",
+          "rezics:relatedCharacterIdentity",
           "schema:abstract",
           "schema:alternateName",
           "schema:birthDate",
@@ -68,7 +70,12 @@
           "schema:url",
           "schema:weight",
           "wdt:P1853",
+          "wdt:P22",
+          "wdt:P25",
+          "wdt:P26",
           "wdt:P3180",
+          "wdt:P3373",
+          "wdt:P451",
           "wdt:P6296"
         ],
         "descriptions": {
@@ -5103,17 +5110,17 @@
             "zh-Hant": "登場作品"
           }
         },
-        "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3831", "wdt:P518"],
+        "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3629", "wdt:P3831", "wdt:P518"],
         "multivalued": true,
         "descriptions": {
-          "de": "Eine Figur, die in diesem Werk auftritt; Rolle, Handlungsabschnitt und Spoilerstufe können den Auftritt präzisieren.",
-          "en": "A character appearing in this work; qualify the appearance with its role, arc or spoiler level where stated.",
-          "es": "Un personaje que aparece en esta obra; se puede precisar su papel, arco narrativo o nivel de spoiler.",
-          "fr": "Un personnage apparaissant dans cette œuvre ; son rôle, son arc ou son niveau de divulgâchage peuvent être précisés.",
-          "ja": "この作品に登場するキャラクター。役割、物語の区間、ネタバレ度を修飾できます。",
-          "ko": "이 작품에 등장하는 캐릭터입니다. 역할, 이야기 구간, 스포일러 수준을 한정할 수 있습니다.",
-          "zh-Hans": "在此作品中登场的角色，可限定其身份、故事篇章和剧透等级。",
-          "zh-Hant": "在這部作品登場的角色，可限定其身分、故事篇章及劇透等級。"
+          "de": "Eine Figur, die in diesem Werk auftritt; Rolle, credited-as, Spoilerstufe, Teil, Alter und Nachweise können den Auftritt präzisieren.",
+          "en": "A character appearing in this work; qualify the appearance with its role, credited name, spoiler, part, age and references where stated.",
+          "es": "Un personaje que aparece en esta obra; se puede precisar su papel, nombre acreditado, spoiler, parte, edad y referencias.",
+          "fr": "Un personnage apparaissant dans cette œuvre ; son rôle, son nom crédité, son niveau de divulgâchage, sa partie, son âge et ses références peuvent être précisés.",
+          "ja": "この作品に登場するキャラクター。役割、クレジット名、ネタバレ度、区間、年齢、典拠を修飾できます。",
+          "ko": "이 작품에 등장하는 캐릭터입니다. 역할, 크레디트 이름, 스포일러, 구간, 나이, 전거를 한정할 수 있습니다.",
+          "zh-Hans": "在此作品中登场的角色，可限定其身份、署名、剧透、篇章、年龄和参考文献。",
+          "zh-Hant": "在這部作品登場的角色，可限定其身分、署名、劇透、篇章、年齡和參考文獻。"
         }
       },
       "schema:deathDate": {
@@ -7322,6 +7329,298 @@
           "ko": "이 작품 또는 릴리스의 개발·공개 상태를 나타내는 개념입니다. 특정 릴리스가 작품에 대해 완전한지는 작품 연관의 한정어입니다.",
           "zh-Hans": "表示此作品或发行版本开发或出版状态的概念；某一发行版本相对作品是否完整，记录在作品关联的限定上。",
           "zh-Hant": "表示此作品或發行版本開發或出版狀態的概念；某一發行版本相對作品是否完整，記錄在作品關聯的限定上。"
+        }
+      },
+      "rezics:characterRival": {
+        "iri": "https://rezics.com/vocab/characterRival",
+        "labels": {
+          "de": "Rivale",
+          "en": "rival",
+          "es": "rival",
+          "fr": "rival",
+          "ja": "ライバル",
+          "ko": "라이벌",
+          "zh-Hans": "对手",
+          "zh-Hant": "對手"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": { "group": "association", "order": "name", "symmetric": true },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Eine andere Figur, die als Rivale oder Gegner genannt wird; keine Auftrittsrolle.",
+          "en": "Another Character stated as this character’s rival or enemy; not a work appearance role.",
+          "es": "Otro personaje indicado como rival o enemigo; no es un rol de aparición.",
+          "fr": "Un autre personnage indiqué comme rival ou ennemi ; ce n’est pas un rôle d’apparition.",
+          "ja": "ライバルや敵として示された別のキャラクター。登場役割ではありません。",
+          "ko": "라이벌이나 적으로 명시된 다른 캐릭터입니다. 등장 역할이 아닙니다.",
+          "zh-Hans": "被记载为对手或敌人的另一角色；不是作品登场角色。",
+          "zh-Hant": "被記載為對手或敵人的另一角色；不是作品登場角色。"
+        }
+      },
+      "wdt:P22": {
+        "iri": "http://www.wikidata.org/prop/direct/P22",
+        "labels": {
+          "de": "Vater",
+          "en": "father",
+          "es": "padre",
+          "fr": "père",
+          "ja": "父親",
+          "ko": "아버지",
+          "zh-Hans": "父亲",
+          "zh-Hant": "父親"
+        },
+        "mappings": ["wd:P22"],
+        "datatype": "wikibase-item",
+        "multivalued": false,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:fatherOf",
+          "inverseLabels": {
+            "de": "Vater von",
+            "en": "father of",
+            "es": "padre de",
+            "fr": "père de",
+            "ja": "父親である対象",
+            "ko": "아버지인 대상",
+            "zh-Hans": "其父亲",
+            "zh-Hant": "其父親"
+          }
+        },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Die Figur, die als Vater genannt wird, mit optionaler Spoilerstufe.",
+          "en": "The Character stated as this character’s father, with optional spoiler qualification.",
+          "es": "El personaje indicado como padre, con calificación opcional de spoiler.",
+          "fr": "Le personnage indiqué comme père, avec un niveau de divulgâchage facultatif.",
+          "ja": "父親として示されたキャラクター。ネタバレ度を付けられます。",
+          "ko": "아버지로 명시된 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.",
+          "zh-Hans": "被记载为父亲的角色，可附剧透等级。",
+          "zh-Hant": "被記載為父親的角色，可附劇透等級。"
+        }
+      },
+      "wdt:P25": {
+        "iri": "http://www.wikidata.org/prop/direct/P25",
+        "labels": {
+          "de": "Mutter",
+          "en": "mother",
+          "es": "madre",
+          "fr": "mère",
+          "ja": "母親",
+          "ko": "어머니",
+          "zh-Hans": "母亲",
+          "zh-Hant": "母親"
+        },
+        "mappings": ["wd:P25"],
+        "datatype": "wikibase-item",
+        "multivalued": false,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:motherOf",
+          "inverseLabels": {
+            "de": "Mutter von",
+            "en": "mother of",
+            "es": "madre de",
+            "fr": "mère de",
+            "ja": "母親である対象",
+            "ko": "어머니인 대상",
+            "zh-Hans": "其母亲",
+            "zh-Hant": "其母親"
+          }
+        },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Die Figur, die als Mutter genannt wird, mit optionaler Spoilerstufe.",
+          "en": "The Character stated as this character’s mother, with optional spoiler qualification.",
+          "es": "El personaje indicado como madre, con calificación opcional de spoiler.",
+          "fr": "Le personnage indiqué comme mère, avec un niveau de divulgâchage facultatif.",
+          "ja": "母親として示されたキャラクター。ネタバレ度を付けられます。",
+          "ko": "어머니로 명시된 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.",
+          "zh-Hans": "被记载为母亲的角色，可附剧透等级。",
+          "zh-Hant": "被記載為母親的角色，可附劇透等級。"
+        }
+      },
+      "wdt:P451": {
+        "iri": "http://www.wikidata.org/prop/direct/P451",
+        "labels": {
+          "de": "Partner",
+          "en": "partner",
+          "es": "pareja",
+          "fr": "partenaire",
+          "ja": "恋人",
+          "ko": "연인",
+          "zh-Hans": "恋人",
+          "zh-Hant": "戀人"
+        },
+        "mappings": ["wd:P451"],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": { "group": "association", "order": "name", "symmetric": true },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Eine andere Figur, die als unverheirateter Partner oder Geliebter genannt wird, mit optionaler Spoilerstufe.",
+          "en": "Another Character stated as this character’s unmarried partner or lover, with optional spoiler qualification.",
+          "es": "Otro personaje indicado como pareja o amante, con calificación opcional de spoiler.",
+          "fr": "Un autre personnage indiqué comme partenaire ou amant, avec un niveau de divulgâchage facultatif.",
+          "ja": "恋人やパートナーとして示された別のキャラクター。ネタバレ度を付けられます。",
+          "ko": "연인이나 파트너로 명시된 다른 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.",
+          "zh-Hans": "被记载为恋人或伴侣的另一角色，可附剧透等级。",
+          "zh-Hant": "被記載為戀人或伴侶的另一角色，可附劇透等級。"
+        }
+      },
+      "rezics:relatedCharacterIdentity": {
+        "iri": "https://rezics.com/vocab/relatedCharacterIdentity",
+        "labels": {
+          "de": "zugehörige Figurenidentität",
+          "en": "related character identity",
+          "es": "identidad de personaje relacionada",
+          "fr": "identité de personnage liée",
+          "ja": "関連キャラクターの同一性",
+          "ko": "관련 캐릭터 정체성",
+          "zh-Hans": "相关角色同一性",
+          "zh-Hant": "相關角色同一性"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": false,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:relatedCharacterIdentityOf",
+          "inverseLabels": {
+            "de": "zugehörige Identität von",
+            "en": "related identity of",
+            "es": "identidad relacionada de",
+            "fr": "identité liée de",
+            "ja": "この同一性を持つキャラクター",
+            "ko": "이 정체성을 갖는 캐릭터",
+            "zh-Hans": "具有此同一性的角色",
+            "zh-Hant": "具有此同一性的角色"
+          }
+        },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Eine andere Figur, mit der diese Identität verknüpft ist; kein Zusammenführen, keine Umleitung, keine Klasseninstanz, keine gemeinsame Biografie und nicht die Auftrittsrolle main.",
+          "en": "Another Character this identity is associated with; not a merge, redirect, class instance, combined biography or the appearance role main.",
+          "es": "Otro personaje con el que se asocia esta identidad; no es fusión, redirección, instancia de clase, biografía combinada ni el rol de aparición main.",
+          "fr": "Un autre personnage auquel cette identité est associée ; ce n’est ni une fusion, ni une redirection, ni une instance de classe, ni une biographie combinée, ni le rôle d’apparition main.",
+          "ja": "この同一性が結びつく別のキャラクター。統合、転送、クラスのインスタンス、経歴の結合、登場役割の main ではありません。",
+          "ko": "이 정체성이 연결되는 다른 캐릭터입니다. 병합, 리다이렉트, 클래스 인스턴스, 전기 결합, 등장 역할 main이 아닙니다.",
+          "zh-Hans": "与此同一性关联的另一角色；不是合并、重定向、类实例、合并传记，也不是登场角色 main。",
+          "zh-Hant": "與此同一性關聯的另一角色；不是合併、重新導向、類別實例、合併傳記，也不是登場角色 main。"
+        }
+      },
+      "wdt:P3373": {
+        "iri": "http://www.wikidata.org/prop/direct/P3373",
+        "labels": {
+          "de": "Geschwister",
+          "en": "sibling",
+          "es": "hermano o hermana",
+          "fr": "frère ou sœur",
+          "ja": "兄弟姉妹",
+          "ko": "형제자매",
+          "zh-Hans": "兄弟姐妹",
+          "zh-Hant": "兄弟姊妹"
+        },
+        "mappings": ["wd:P3373"],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": { "group": "association", "order": "name", "symmetric": true },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Eine andere Figur, die als Geschwister genannt wird, mit optionaler Spoilerstufe.",
+          "en": "Another Character stated as this character’s sibling, with optional spoiler qualification.",
+          "es": "Otro personaje indicado como hermano o hermana, con calificación opcional de spoiler.",
+          "fr": "Un autre personnage indiqué comme frère ou sœur, avec un niveau de divulgâchage facultatif.",
+          "ja": "兄弟姉妹として示された別のキャラクター。ネタバレ度を付けられます。",
+          "ko": "형제자매로 명시된 다른 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.",
+          "zh-Hans": "被记载为兄弟姐妹的另一角色，可附剧透等级。",
+          "zh-Hant": "被記載為兄弟姊妹的另一角色，可附劇透等級。"
+        }
+      },
+      "wdt:P26": {
+        "iri": "http://www.wikidata.org/prop/direct/P26",
+        "labels": {
+          "de": "Ehepartner",
+          "en": "spouse",
+          "es": "cónyuge",
+          "fr": "conjoint",
+          "ja": "配偶者",
+          "ko": "배우자",
+          "zh-Hans": "配偶",
+          "zh-Hant": "配偶"
+        },
+        "mappings": ["wd:P26"],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": { "group": "association", "order": "name", "symmetric": true },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Eine andere Figur, die als Ehepartner genannt wird, mit optionaler Spoilerstufe.",
+          "en": "Another Character stated as this character’s spouse, with optional spoiler qualification.",
+          "es": "Otro personaje indicado como cónyuge, con calificación opcional de spoiler.",
+          "fr": "Un autre personnage indiqué comme conjoint, avec un niveau de divulgâchage facultatif.",
+          "ja": "配偶者として示された別のキャラクター。ネタバレ度を付けられます。",
+          "ko": "배우자로 명시된 다른 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.",
+          "zh-Hans": "被记载为配偶的另一角色，可附剧透等级。",
+          "zh-Hant": "被記載為配偶的另一角色，可附劇透等級。"
+        }
+      },
+      "wdt:P3629": {
+        "iri": "http://www.wikidata.org/prop/direct/P3629",
+        "labels": {
+          "de": "Alter im Auftritt",
+          "en": "age at appearance",
+          "es": "edad en la aparición",
+          "fr": "âge à l'apparition",
+          "ja": "登場時の年齢",
+          "ko": "등장 시점의 나이",
+          "zh-Hans": "登场时年龄",
+          "zh-Hant": "登場時年齡"
+        },
+        "mappings": ["wd:P3629"],
+        "datatype": "quantity",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": ["amount", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "amount": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "lowerBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "upperBound": { "type": "string", "pattern": "^[+-](?:0|[1-9][0-9]*)$" },
+            "unit": { "enum": ["http://www.wikidata.org/entity/Q577"] }
+          }
+        },
+        "units": ["http://www.wikidata.org/entity/Q577"],
+        "minimum": 0,
+        "descriptions": {
+          "de": "Das Alter der Figur in genau diesem Auftritt als nichtnegative Jahresmenge (wd:Q577); ein quellenweites Alter ist dieser Qualifier nicht.",
+          "en": "The character’s age on this exact work appearance as a nonnegative quantity in years (wd:Q577); a source-wide age is not this qualifier.",
+          "es": "La edad del personaje en esta aparición concreta, como cantidad no negativa en años (wd:Q577); una edad de toda la fuente no es este calificador.",
+          "fr": "L’âge du personnage sur cette apparition précise, en quantité non négative d’années (wd:Q577) ; un âge valable pour toute la source n’est pas ce qualificatif.",
+          "ja": "この登場に限った年齢を0以上の年数（wd:Q577）で示します。出典全体の年齢はこの修飾子ではありません。",
+          "ko": "이 등장에만 해당하는 나이를 0 이상 연수(wd:Q577)로 적습니다. 출처 전체의 나이는 이 한정자가 아닙니다.",
+          "zh-Hans": "该登场陈述上的年龄，以非负年数（wd:Q577）记录；来源整体年龄不是此限定。",
+          "zh-Hant": "該登場陳述上的年齡，以非負年數（wd:Q577）記錄；來源整體年齡不是此限定。"
         }
       }
     },

@@ -1,6 +1,6 @@
 import { createKernelClient, type SubjectRead } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { valueSchema, type PropertyDefinition, type Release } from '@rezics/definitions';
+import type { Release } from '@rezics/definitions';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { candidateContext, type Candidate } from '../../subject/candidates';
 import { relationDescriptorReader } from './relation-descriptor';
@@ -12,7 +12,9 @@ import {
 } from '../../subject/relation-candidates';
 import { characterType } from '../../features/catalogue/character-profile';
 import {
+  appearanceAgeProperty,
   appearanceProperty,
+  identityProperty,
   readCharacterRelationships,
 } from '../../features/catalogue/character-relationships/reading';
 import type { CharacterRelationshipsTransport } from '../../features/catalogue/character-relationships/view';
@@ -23,13 +25,15 @@ import type { FakeRoute } from '../fake-modules';
 export type CharacterRelationshipsScenario =
   | 'appearances'
   | 'relationship'
+  | 'identity'
   | 'age'
   | 'spoiler'
   | 'vanished'
   | 'unreleased'
   | 'unreadable'
   | 'denied'
-  | 'unavailable';
+  | 'unavailable'
+  | 'withheld';
 
 export const characterRelationshipsId = '00000000-0000-4000-8000-000000000c01';
 export const appearanceWorkA = '00000000-0000-4000-8000-000000000c02';
@@ -40,48 +44,42 @@ const candidateId = '00000000-0000-4000-8000-000000000c06';
 const statementA = '00000000-0000-4000-8000-000000000c11';
 const statementB = '00000000-0000-4000-8000-000000000c12';
 const statementRel = '00000000-0000-4000-8000-000000000c13';
-const relationshipProperty = 'ex:knows';
-const ageProperty = 'ex:ageAtAppearance';
+const relationshipProperty = 'wdt:P26';
+const ageProperty = appearanceAgeProperty;
+const ageUnit = 'http://www.wikidata.org/entity/Q577';
 
-function withTestVocabulary(base: Release, extras: boolean): Release {
+function withTestVocabulary(base: Release, admitted: boolean): Release {
   const release = structuredClone(base);
-  if (!extras) return release;
-  const age: PropertyDefinition = {
-    iri: 'https://example.test/ageAtAppearance',
-    labels: { en: 'Age at appearance' },
-    mappings: [],
-    datatype: 'quantity',
-    multivalued: false,
-    units: ['1'],
-    minimum: 0,
-    qualifiers: [],
-    value: valueSchema('quantity', { units: ['1'], integer: true }),
-  };
-  const knows: PropertyDefinition = {
-    iri: 'https://example.test/knows',
-    labels: { en: 'Knows' },
-    mappings: [],
-    datatype: 'wikibase-item',
-    multivalued: true,
-    targets: [characterType],
-    qualifiers: ['rezics:spoilerLevel'],
-    relation: {
-      group: 'association',
-      inverse: relationshipProperty,
-      inverseLabels: { en: 'Known by' },
-    },
-    value: valueSchema('wikibase-item'),
-  };
-  release.properties[ageProperty] = age;
-  release.properties[relationshipProperty] = knows;
-  release.properties[appearanceProperty] = {
-    ...release.properties[appearanceProperty]!,
-    qualifiers: [...release.properties[appearanceProperty]!.qualifiers, ageProperty],
-  };
-  release.types[characterType] = {
-    ...release.types[characterType]!,
-    properties: [...release.types[characterType]!.properties, relationshipProperty],
-  };
+  if (admitted) return release;
+  delete release.properties[identityProperty];
+  delete release.properties[appearanceAgeProperty];
+  delete release.properties['wdt:P26'];
+  delete release.properties['wdt:P3373'];
+  delete release.properties['wdt:P22'];
+  delete release.properties['wdt:P25'];
+  delete release.properties['wdt:P451'];
+  delete release.properties['rezics:characterRival'];
+  const appearance = release.properties[appearanceProperty];
+  if (appearance)
+    release.properties[appearanceProperty] = {
+      ...appearance,
+      qualifiers: appearance.qualifiers.filter((id) => id !== appearanceAgeProperty),
+    };
+  const character = release.types[characterType];
+  if (character)
+    release.types[characterType] = {
+      ...character,
+      properties: character.properties.filter(
+        (id) =>
+          id !== identityProperty &&
+          id !== 'wdt:P26' &&
+          id !== 'wdt:P3373' &&
+          id !== 'wdt:P22' &&
+          id !== 'wdt:P25' &&
+          id !== 'wdt:P451' &&
+          id !== 'rezics:characterRival',
+      ),
+    };
   return release;
 }
 
@@ -90,8 +88,7 @@ export function characterRelationshipsFixture(
   locale = 'en',
 ) {
   let scenario = initialScenario;
-  const extras = scenario === 'relationship' || scenario === 'age';
-  const release = withTestVocabulary(bundledRelease, extras);
+  const release = withTestVocabulary(bundledRelease, scenario !== 'unreleased');
   const digest = recording.subject.release;
   const snak = (id: string, value: unknown, datatype: Candidate['statement']['property']['data_type']) => ({
     property: { id, data_type: datatype },
@@ -112,7 +109,7 @@ export function characterRelationshipsFixture(
   });
   const role = (concept: string) => snak('wdt:P3831', concept, 'wikibase-item');
   const spoiler = (amount: string) => snak('rezics:spoilerLevel', { amount, unit: '1' }, 'quantity');
-  const age = (amount: string) => snak(ageProperty, { amount, unit: '1' }, 'quantity');
+  const age = (amount: string) => snak(ageProperty, { amount, unit: ageUnit }, 'quantity');
   const first = appearance(statementA, appearanceWorkA, 'Spring work', [
     role('wd:Q95074'),
     ...(scenario === 'age' ? [age('+16')] : []),
@@ -122,8 +119,10 @@ export function characterRelationshipsFixture(
     role('wd:Q95074'),
     ...(scenario === 'age' ? [age('+18')] : []),
   ]);
+  const relatedProperty =
+    scenario === 'identity' || scenario === 'withheld' ? identityProperty : relationshipProperty;
   const relatedStatement: Candidate['statement'] = {
-    ...snak(relationshipProperty, relatedCharacterId, 'wikibase-item'),
+    ...snak(relatedProperty, relatedCharacterId, 'wikibase-item'),
     id: statementRel,
     rank: 'normal',
     qualifiers: [],
@@ -140,7 +139,10 @@ export function characterRelationshipsFixture(
       type: characterType,
       context: candidateContext,
       labels: { en: 'The traveler' },
-      statements: scenario === 'relationship' ? { [relationshipProperty]: [structuredClone(relatedStatement)] } : {},
+      statements:
+        scenario === 'relationship' || scenario === 'identity'
+          ? { [relatedProperty]: [structuredClone(relatedStatement)] }
+          : {},
       relationCounts: {},
       sourceRecords: [],
     },
@@ -283,7 +285,7 @@ export function characterRelationshipsFixture(
         });
       }
       if (url.pathname.endsWith('/relations')) {
-        if (url.searchParams.get('property') !== relationshipProperty) {
+        if (url.searchParams.get('property') !== relatedProperty) {
           return json({
             relations: [],
             next: null,
@@ -294,7 +296,7 @@ export function characterRelationshipsFixture(
           relations: [
             {
               statement: relatedStatement,
-              summary: summary(relatedCharacterId, 'The companion', characterType),
+              summary: scenario === 'withheld' ? null : summary(relatedCharacterId, 'The companion', characterType),
               related: {
                 [relatedCharacterId]: summary(relatedCharacterId, 'The companion', characterType),
               },
@@ -386,7 +388,9 @@ export function characterRelationshipsFixture(
     second,
     relatedStatement,
     relationshipProperty,
+    identityProperty,
     ageProperty,
+    ageUnit,
     client,
     calls,
     transport,

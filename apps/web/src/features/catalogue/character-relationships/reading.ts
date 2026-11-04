@@ -15,6 +15,8 @@ export const voiceProperty = 'wdt:P725';
 export const voiceCharacterSlot = 'wdt:P453';
 export const spoilerProperty = 'rezics:spoilerLevel';
 export const appearanceRoleProperty = 'wdt:P3831';
+export const identityProperty = 'rezics:relatedCharacterIdentity';
+export const appearanceAgeProperty = 'wdt:P3629';
 const pageLimit = 20;
 const descriptorConcurrency = 4;
 
@@ -86,12 +88,27 @@ export function isAppearanceMeasureQualifier(
   return property?.datatype === 'quantity' && propertyId !== spoilerProperty;
 }
 
+function isIdentityAssociation(id: string, property: PropertyDefinition | undefined, release: Definitions): boolean {
+  return (
+    id === identityProperty &&
+    property?.datatype === 'wikibase-item' &&
+    property.relation?.group === 'association' &&
+    targetsCharacter(property, release)
+  );
+}
+
 export function unavailableConfigurations(release: Definitions): UnavailableConfiguration[] {
   const appearance = release.properties[appearanceProperty];
   const unavailable: UnavailableConfiguration[] = [];
-  const ageAdmitted = appearance?.qualifiers.some((id) => isAppearanceMeasureQualifier(id, release.properties));
+  const ageAdmitted =
+    appearance?.qualifiers.includes(appearanceAgeProperty) ||
+    appearance?.qualifiers.some((id) => isAppearanceMeasureQualifier(id, release.properties));
   if (!ageAdmitted) unavailable.push({ id: 'age-at-appearance', admitted: false });
-  const relationships = Object.entries(release.properties).some(([, property]) => {
+  const identity = release.properties[identityProperty];
+  if (!isIdentityAssociation(identityProperty, identity, release))
+    unavailable.push({ id: 'main-character-linkage', admitted: false });
+  const relationships = Object.entries(release.properties).some(([id, property]) => {
+    if (id === identityProperty) return false;
     const group = property.relation?.group;
     return (
       property.datatype === 'wikibase-item' &&
@@ -100,8 +117,6 @@ export function unavailableConfigurations(release: Definitions): UnavailableConf
     );
   });
   if (!relationships) unavailable.push({ id: 'character-relationship', admitted: false });
-  // Related-character identity (VNDB main) is omitted from the current release; appearance role remains wdt:P3831.
-  unavailable.push({ id: 'main-character-linkage', admitted: false });
   return unavailable;
 }
 

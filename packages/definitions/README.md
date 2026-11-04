@@ -278,7 +278,12 @@ Bundled facts are stored on the later work (`wdt:P155`), derived work
 (credits and `schema:character`). Their reverse terms are metadata, never
 additional properties. `wdt:P1889` is symmetric. Credits admit credited-as,
 position and detailed role, sort by position, and filter by `[wdt:P3831, wdt:P518]`;
-appearances filter by either that role or a story arc and sort by name. Series members sort by
+appearances filter by either that role or a story arc and sort by name. `schema:character` admits
+the appearance-age qualifier `wdt:P3629` (years, `wd:Q577`) on that exact work statement; a source-wide
+character age is not this qualifier. Character-to-character identity is `rezics:relatedCharacterIdentity`
+(VNDB `chars.main`), distinct from the appearance role concept `main`. Spouse, sibling, father, mother,
+partner and rival are association relations targeting Character; unknown Bangumi relation codes stay
+omitted. Series members sort by
 position; follows and edition-of reads sort by date. Other bundled relations
 sort by name without inventing a source ordinal. Episode, edition and release
 profiles admit the credit properties with the same qualifiers as works.

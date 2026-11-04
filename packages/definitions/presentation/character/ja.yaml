@@ -6,9 +6,19 @@ properties:
   schema:weight: 質量
   wdt:P1853: 血液型
   wdt:P6296: 番組計画登場人物識別子
+  rezics:relatedCharacterIdentity: 関連キャラクターの同一性
+  wdt:P26: 配偶者
+  wdt:P3373: 兄弟姉妹
+  wdt:P22: 父親
+  wdt:P25: 母親
+  wdt:P451: 恋人
+  rezics:characterRival: ライバル
 inverseProperties:
   schema:gender: 'このジェンダーの対象'
   wdt:P1853: 'この血液型の対象'
+  rezics:relatedCharacterIdentity: この同一性を持つキャラクター
+  wdt:P22: 父親である対象
+  wdt:P25: 母親である対象
 typeDescriptions:
   wd:Q95074: '独立して識別できる架空のキャラクター。架空の機械、船、組織も含みます。登場や声の出演は作品側に記録します。'
 propertyDescriptions:
@@ -17,3 +27,10 @@ propertyDescriptions:
   schema:weight: '明記された体重を0以上の数量で記録します。単位はキログラム（wd:Q11570）またはグラム（wd:Q41803）で、元の単位を保ちます。'
   wdt:P1853: '明記された血液型をA型などの概念で示します。不明なものを補いません。'
   wdt:P6296: '正の数字で表すBangumiのキャラクター識別子。作品や人物のID、ページURLとは別です。'
+  rezics:relatedCharacterIdentity: 'この同一性が結びつく別のキャラクター。統合、転送、クラスのインスタンス、経歴の結合、登場役割の main ではありません。'
+  wdt:P26: '配偶者として示された別のキャラクター。ネタバレ度を付けられます。'
+  wdt:P3373: '兄弟姉妹として示された別のキャラクター。ネタバレ度を付けられます。'
+  wdt:P22: '父親として示されたキャラクター。ネタバレ度を付けられます。'
+  wdt:P25: '母親として示されたキャラクター。ネタバレ度を付けられます。'
+  wdt:P451: '恋人やパートナーとして示された別のキャラクター。ネタバレ度を付けられます。'
+  rezics:characterRival: 'ライバルや敵として示された別のキャラクター。登場役割ではありません。'
