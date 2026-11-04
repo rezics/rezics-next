@@ -9,6 +9,9 @@ The browser keeps this activity alongside the admitted page, independently of lo
 Zero and null remain native facts: zero is rendered and a null timestamp adds no time label. Continuations and selected
 post visits use that same native page. Retry and accepted replies refresh the original page request through the existing
 reader owner; the composer keeps uncertain command intent. Page/session retirement hides the whole observation.
+Activity uses the reader's exact query key, the shared browser observation/cache subscription and a retiring address
+lease. Fetching, invalidation, replacement and session changes retire displayed advice without retiring readable bodies
+or taking over refresh. Equal session replacement and away/back transitions cannot reactivate a retired observation.
 
 Decision: reuse the existing closed activity display adapter for the additive native page field while the sole publisher
 publishes the complete mounted schema; an absent field is explicitly unavailable, never zero or a guessed total.

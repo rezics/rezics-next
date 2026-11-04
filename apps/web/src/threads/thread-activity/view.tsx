@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import type { QueryKey } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { formatConversationReplyCount, type ConversationActivityDisplay } from '../activity';
+import { useThreadActivityCurrent } from './current';
 
 /** Presentation only: the existing page reader owns admission, session retirement and refresh. */
 export function ThreadActivity({
@@ -10,17 +12,22 @@ export function ThreadActivity({
   current,
   onRetry,
   isCurrent,
+  queryKey,
+  publication,
 }: {
   activity: ConversationActivityDisplay | undefined;
   current: boolean;
   onRetry: () => Promise<unknown>;
   isCurrent: () => boolean;
+  queryKey?: QueryKey;
+  publication?: object;
 }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const locale = getLocale();
   const options = { locale };
-  const visible = current && !pending && !failed ? activity : undefined;
+  const activityCurrent = useThreadActivityCurrent(publication ?? activity, queryKey);
+  const visible = current && activityCurrent && !pending && !failed ? activity : undefined;
 
   async function retry() {
     if (pending || !current || !isCurrent()) return;
