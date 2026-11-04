@@ -8791,5 +8791,22 @@
   "producer_history_correction_retired": "정정 읽기 내용 만료",
   "producer_history_retired_explanation": "이 정정에는 더 이상 유효한 읽기 내용이 없습니다. 이미 보낸 명령은 적용되었을 수 있으며 결과를 알 수 없을 수 있습니다. 만료된 정정에서는 아무것도 다시 보내지 않습니다.",
   "producer_history_slice_lost": "원래 범위는 여기에서 더 이상 사용할 수 없습니다. 이력을 다시 읽은 뒤 새 정정을 직접 시작하세요.",
-  "producer_history_retired_close": "만료된 정정 닫기"
+  "producer_history_retired_close": "만료된 정정 닫기",
+  "people_facts_scope": "이 프로필에서 제공된 현재 사실이며 전체 목록, 후보 집합 또는 출처 목록의 완전성을 뜻하지 않습니다.",
+  "people_facts_filter": "이 로컬 창에 표시된 텍스트 필터",
+  "people_facts_reset": "창 필터 초기화",
+  "people_facts_empty": "이 창에 일치하는 표시된 사실이 없습니다. 필터를 초기화하면 원래 행으로 돌아갑니다.",
+  "people_facts_window": "로컬 사실 창",
+  "people_facts_previous": "이전 사실",
+  "people_facts_next": "다음 사실",
+  "people_facts_collapse": "사실 접기",
+  "people_facts_browse": "제공된 사실 보기",
+  "people_facts_overflow": "첫 번째 로컬 창만 표시됩니다. 제공된 사실을 열어 계속하세요.",
+  "people_facts_unavailable": "이 읽기에서는 로컬 사실 상세 보기를 사용할 수 없습니다. 독립적인 프로필 사실은 계속 읽을 수 있습니다.",
+  "people_facts_return": "이 프로필 사실로 돌아가기",
+  "people_facts_changed": "이 사실이 변경되었거나 더 이상 선택되지 않았습니다. 필드로 돌아가 프로필을 새로 고치세요.",
+  "people_facts_route_return": "수정과 출처는 기존 페이지를 사용합니다. 이 페이지를 떠나면 세부 위치를 복원할 수 없습니다. 이 프로필의 사실 필드로 돌아오세요.",
+  "people_facts_unsupported": "이 필드의 데이터 유형은 지원되지 않습니다.",
+  "people_facts_suppressed": "현재 컨텍스트에서 이 필드는 표시가 억제되었습니다.",
+  "people_facts_unresolved": "현재 컨텍스트에서 이 필드는 미해결 상태입니다."
 }

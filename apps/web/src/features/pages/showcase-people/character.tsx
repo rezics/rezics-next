@@ -14,10 +14,26 @@ import {
 import { profileFields, type PersonDefinitions } from '../../catalogue/person-reader/model';
 import { useSubjectCommunityReading } from '../subject-community-lifetime';
 import { PlainLink } from '../shared';
+import { PeopleFacts } from '../../catalogue/people-facts/visit';
 import { SuppliedNames } from './names';
 
 /** Public composition of supplied character facts. Appearances remain in the producer's bounded reader. */
 export function CharacterReader(reading: ProfileReading) {
+  const groups = characterGroups(reading.release);
+  const fields = [
+    ...Object.values(groups).flat(),
+    ...(reading.release.types[reading.public.subject.type]?.properties ?? []).filter(
+      (id) => reading.release.properties[id]?.datatype === 'document',
+    ),
+  ];
+  return (
+    <PeopleFacts reading={reading} fields={fields}>
+      <CharacterFacts {...reading} />
+    </PeopleFacts>
+  );
+}
+
+function CharacterFacts(reading: ProfileReading) {
   const { public: read, release, locale } = reading;
   if (read.subject.type !== 'wd:Q95074') return null;
   const o = { locale: locale as never };
@@ -49,7 +65,7 @@ export function CharacterReader(reading: ProfileReading) {
         </a>
       </div>
       {(Object.keys(groups) as (keyof typeof groups)[]).map((kind) => {
-        const fields = profileFields(release, read, groups[kind], locale).filter((field) => field.facts.length > 0);
+        const fields = profileFields(release, read, groups[kind], locale);
         return (
           <section key={kind} className="min-w-0 space-y-4" data-slot={`character-reader-${kind}`}>
             <h3 className="text-xl font-semibold">{titles[kind]}</h3>

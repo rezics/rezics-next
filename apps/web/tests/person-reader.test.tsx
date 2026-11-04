@@ -100,7 +100,8 @@ test('unsupported, absent, unknown, withheld and unhydrated values remain distin
     id: crypto.randomUUID(),
   }));
   expect(personGroups(fixture.release, fixture.read, 'en')[1]!.fields[0]!.facts).toHaveLength(personBounds.facts);
-  expect(draw(fixture)).toContain('/details');
+  expect(draw(fixture)).toContain(m.people_facts_browse({}, { locale: 'en' }));
+  expect(draw(fixture)).toContain(m.people_facts_overflow({}, { locale: 'en' }));
   const bio = fixture.read.subject.statements['schema:abstract']![0]!;
   fixture.read.subject.statements['schema:abstract']!.push({ ...bio, id: crypto.randomUUID(), rank: 'deprecated' });
   const record = fixture.documents[fixture.biography];

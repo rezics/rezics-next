@@ -18,6 +18,37 @@ export type PersonGroup = {
 };
 export const personBounds = { fields: 15, facts: 20, qualifiers: 32, references: 32, parts: 32 };
 
+/** The same native selection is used by the compact profile and its local continuation. */
+export function profileFieldFacts(release: PersonDefinitions, read: SubjectRead, id: string, locale: string) {
+  if (!release.types[read.subject.type]?.properties.includes(id) || !release.properties[id]) return [];
+  const all = read.subject.statements[id] ?? [];
+  const rank = all.some((row) => row.rank === 'preferred') ? 'preferred' : 'normal';
+  const rows = all.filter((row) => row.rank === rank);
+  if (release.properties[id]?.datatype !== 'document') return rows;
+  const selected = pageDocumentReferences(read.subject, [id], locale)[0]?.candidate;
+  return selected ? rows.filter((row) => row.id === selected) : [];
+}
+
+/** Explicit profile scalar fields; occupations never come from directed credit roles. */
+export function personScalarFields(release: PersonDefinitions, read: SubjectRead) {
+  return [
+    ...new Set([
+      'schema:alternateName',
+      'wdt:P1559',
+      'schema:birthDate',
+      'schema:deathDate',
+      'schema:gender',
+      'schema:height',
+      'schema:weight',
+      'schema:url',
+      'schema:sameAs',
+      ...(release.types[read.subject.type]?.properties ?? []).filter(
+        (id) => release.properties[id]?.datatype === 'external-id',
+      ),
+    ]),
+  ];
+}
+
 /** Select current native rank and document language once for each displayed field. */
 export function profileFields(release: PersonDefinitions, read: SubjectRead, ids: readonly string[], locale: string) {
   const admitted = release.types[read.subject.type]?.properties ?? [];
@@ -25,12 +56,7 @@ export function profileFields(release: PersonDefinitions, read: SubjectRead, ids
     .filter((id) => admitted.includes(id) && release.properties[id])
     .slice(0, personBounds.fields)
     .map((id) => {
-      const all = read.subject.statements[id] ?? [];
-      const rank = all.some((row) => row.rank === 'preferred') ? 'preferred' : 'normal';
-      const rows = all.filter((row) => row.rank === rank);
-      const document = release.properties[id]?.datatype === 'document';
-      const selected = document ? pageDocumentReferences(read.subject, [id], locale)[0]?.candidate : undefined;
-      const facts = selected ? rows.filter((row) => row.id === selected) : rows;
+      const facts = profileFieldFacts(release, read, id, locale);
       return {
         id,
         label: pickText(release.properties[id]?.labels ?? {}, locale),

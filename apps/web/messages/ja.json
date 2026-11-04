@@ -8791,5 +8791,22 @@
   "producer_history_correction_retired": "訂正の閲覧内容は失効しました",
   "producer_history_retired_explanation": "この訂正には現在有効な閲覧内容がありません。送信済みの操作はすでに反映されている可能性があり、結果が不明な場合があります。この失効した訂正から再送することはありません。",
   "producer_history_slice_lost": "元の範囲はここでは利用できません。履歴を読み直してから、改めて訂正を開始してください。",
-  "producer_history_retired_close": "失効した訂正を閉じる"
+  "producer_history_retired_close": "失効した訂正を閉じる",
+  "people_facts_scope": "このプロフィールの読み取りで提供された現在の事実です。全カタログ、候補集合、出典一覧の完全性を示すものではありません。",
+  "people_facts_filter": "このウィンドウの表示テキストを絞り込む",
+  "people_facts_reset": "絞り込みを解除",
+  "people_facts_empty": "一致する表示項目がありません。絞り込みを解除すると元の行に戻ります。",
+  "people_facts_window": "事実のローカルウィンドウ",
+  "people_facts_previous": "前の事実",
+  "people_facts_next": "次の事実",
+  "people_facts_collapse": "事実を折りたたむ",
+  "people_facts_browse": "提供された事実を見る",
+  "people_facts_overflow": "最初のウィンドウのみ表示しています。続きを見るには提供された事実を開いてください。",
+  "people_facts_unavailable": "この読み取りでは事実の詳細表示を利用できません。プロフィールの他の事実は読めます。",
+  "people_facts_return": "このプロフィールの事実に戻る",
+  "people_facts_changed": "この事実は変更されたか、現在選択されていません。項目に戻りプロフィールを更新してください。",
+  "people_facts_route_return": "修正と出典は既存のページで開きます。このページを離れると詳細な位置は復元できません。このプロフィールの項目に戻ってください。",
+  "people_facts_unsupported": "この項目のデータ型は未対応です。",
+  "people_facts_suppressed": "現在のコンテキストではこの項目は非表示に設定されています。",
+  "people_facts_unresolved": "現在のコンテキストではこの項目は未解決です。"
 }

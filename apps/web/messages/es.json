@@ -8791,5 +8791,22 @@
   "producer_history_correction_retired": "Lectura de la corrección retirada",
   "producer_history_retired_explanation": "Esta corrección ya no tiene una lectura vigente. Una orden ya enviada puede haber surtido efecto; su resultado puede ser desconocido. No se reenviará nada desde esta corrección retirada.",
   "producer_history_slice_lost": "El segmento original ya no está disponible aquí. Vuelve a leer antes de iniciar deliberadamente otra corrección.",
-  "producer_history_retired_close": "Cerrar corrección retirada"
+  "producer_history_retired_close": "Cerrar corrección retirada",
+  "people_facts_scope": "Estos son los hechos actuales suministrados en esta lectura del perfil; no constituyen un catálogo, conjunto de propuestas o inventario de fuentes completo.",
+  "people_facts_filter": "Filtrar el texto mostrado en esta ventana local",
+  "people_facts_reset": "Restablecer el filtro",
+  "people_facts_empty": "Ningún hecho mostrado coincide en esta ventana. Restablece el filtro para volver a sus filas.",
+  "people_facts_window": "Ventana local de hechos",
+  "people_facts_previous": "Hechos anteriores",
+  "people_facts_next": "Hechos siguientes",
+  "people_facts_collapse": "Contraer hechos",
+  "people_facts_browse": "Explorar los hechos suministrados",
+  "people_facts_overflow": "Solo se muestra la primera ventana local. Explora los hechos suministrados para continuar.",
+  "people_facts_unavailable": "La consulta local no está disponible para esta lectura. Los hechos independientes del perfil siguen siendo legibles.",
+  "people_facts_return": "Volver a este hecho del perfil",
+  "people_facts_changed": "Este hecho cambió o ya no está seleccionado. Vuelve al campo y actualiza el perfil.",
+  "people_facts_route_return": "Las correcciones y fuentes usan sus páginas existentes. La posición local detallada no puede restaurarse al salir de esta página; vuelve a este campo del perfil.",
+  "people_facts_unsupported": "El tipo de datos de este campo no es compatible.",
+  "people_facts_suppressed": "Este campo está suprimido en el contexto actual.",
+  "people_facts_unresolved": "Este campo no está resuelto en el contexto actual."
 }
