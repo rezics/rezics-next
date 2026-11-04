@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BatchWriteResult, Rights, Source as SourceEnvelope } from '@rezics/definitions/bulk';
 import { parseDocument, serializeDocument } from '@rezics/document';
-import type { ImportApiDriver, Proposal, RecordView, Source, Effects } from '../../../../specs/imports-api-driver.ts';
+import type { ImportApiDriver, Proposal, RecordView, Effects } from '../../../../specs/imports-api-driver.ts';
 import type { Json, Statement, Subject, HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import { identitySupport } from './identity-fixture.ts';
@@ -88,11 +88,11 @@ export async function openApiObserver(runtime: ApiRuntime) {
   // role administers the explicit parent grant, through the ordinary public API.
   await grant({ route: 0, id: '00000000-0000-8000-8000-000000000000' }, ['context:create']);
 
-  function subject(source: Source, externalId: string) {
+  function subject(source: string, externalId: string) {
     const binding = runtime.importer.session.bindings.claim({ source, external_id: externalId });
     return binding?.state === 'bound' ? binding.subject : null;
   }
-  async function read(source: Source, externalId: string): Promise<RecordView> {
+  async function read(source: string, externalId: string): Promise<RecordView> {
     const id = subject(source, externalId);
     const view: RecordView = { responses: [], subject: null, proposals: [], retracted: [], revisions: [], adopted: {} };
     if (!id) return view;
@@ -288,6 +288,51 @@ export async function openApiObserver(runtime: ApiRuntime) {
     };
   }
 
+  async function adoptSubject(id: string, property: string, value: Json, selectedContext?: string) {
+    let context = selectedContext ?? contexts.get(id);
+    if (!context) {
+      context = (
+        (await required('/v1/contexts', { labels: { en: 'Community catalogue' } }, 201)).context as { id: string }
+      ).id;
+      contexts.set(id, context);
+    }
+    const listing = await required(
+      `/v1/subjects/${id}/candidates?${new URLSearchParams({ property, context, limit: '100' })}`,
+    );
+    let candidate = (listing.candidates as Candidate[]).find(
+      (c) =>
+        JSON.stringify(c.statement.value.content) === JSON.stringify(value) ||
+        (property === 'schema:name' && (c.statement.value.content as { text?: string })?.text === value),
+    )?.id;
+    if (!candidate) {
+      const cited = (listing.candidates as Candidate[]).find((c) => c.statement.references?.length);
+      if (!cited) throw new Error('Manual community proposal requires a retrieved source reference');
+      candidate = (
+        await required(
+          `/v1/subjects/${id}/candidates`,
+          {
+            statement: {
+              property: { id: property },
+              value: { type: 'value', content: property === 'schema:name' ? { language: 'en', text: value } : value },
+              references: cited.statement.references.map((reference) => ({
+                parts: reference.parts.map((part) => ({ property: { id: part.property.id }, value: part.value })),
+              })),
+            },
+          },
+          201,
+        )
+      ).candidate as string;
+    }
+    await required(`/v1/subjects/${id}/candidates/${candidate}:accept`, { context, expected_head: null });
+    await required(`/v1/subjects/${id}:adopt`, {
+      context,
+      property,
+      mode: 'replace',
+      selection: [{ candidate, rank: 'normal' }],
+      expected_head: (listing.adoption as { head: number } | null)?.head ?? null,
+    });
+  }
+
   return {
     read,
     effects,
@@ -296,53 +341,13 @@ export async function openApiObserver(runtime: ApiRuntime) {
     subject,
     http,
     bearer,
-    async adopt(source: Source, externalId: string, property: string, value: Json) {
+    adoptSubject,
+    async adopt(source: string, externalId: string, property: string, value: Json) {
       const id = subject(source, externalId);
       if (!id) throw new Error('Missing adoption subject');
-      let context = contexts.get(id);
-      if (!context) {
-        context = (
-          (await required('/v1/contexts', { labels: { en: 'Community catalogue' } }, 201)).context as { id: string }
-        ).id;
-        contexts.set(id, context);
-      }
-      const listing = await required(
-        `/v1/subjects/${id}/candidates?${new URLSearchParams({ property, context, limit: '100' })}`,
-      );
-      let candidate = (listing.candidates as Candidate[]).find(
-        (c) =>
-          JSON.stringify(c.statement.value.content) === JSON.stringify(value) ||
-          (property === 'schema:name' && (c.statement.value.content as { text?: string })?.text === value),
-      )?.id;
-      if (!candidate) {
-        const cited = (listing.candidates as Candidate[]).find((c) => c.statement.references?.length);
-        if (!cited) throw new Error('Manual community proposal requires a retrieved source reference');
-        candidate = (
-          await required(
-            `/v1/subjects/${id}/candidates`,
-            {
-              statement: {
-                property: { id: property },
-                value: { type: 'value', content: property === 'schema:name' ? { language: 'en', text: value } : value },
-                references: cited.statement.references.map((reference) => ({
-                  parts: reference.parts.map((part) => ({ property: { id: part.property.id }, value: part.value })),
-                })),
-              },
-            },
-            201,
-          )
-        ).candidate as string;
-      }
-      await required(`/v1/subjects/${id}/candidates/${candidate}:accept`, { context, expected_head: null });
-      await required(`/v1/subjects/${id}:adopt`, {
-        context,
-        property,
-        mode: 'replace',
-        selection: [{ candidate, rank: 'normal' }],
-        expected_head: (listing.adoption as { head: number } | null)?.head ?? null,
-      });
+      await adoptSubject(id, property, value);
     },
-    async takedown(source: Source, externalId: string, fieldGroup: string) {
+    async takedown(source: string, externalId: string, fieldGroup: string) {
       if (fieldGroup === 'cover') {
         const view = await read(source, externalId);
         const media = view.proposals.find((p) => p.fieldGroup === 'cover' && p.statement)?.statement?.value.content;

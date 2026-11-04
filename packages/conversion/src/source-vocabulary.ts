@@ -59,7 +59,7 @@ type RowBase = Readonly<{ path: string; origin?: SourceRowOrigin }>;
 export type BangumiVocabularyRow =
   | (RowBase & { kind: 'episode-sort'; episode: NativeIdentity; sort: string | number })
   | (RowBase & { kind: 'episode-kind'; episode: NativeIdentity; code: string | number })
-  | (RowBase & { kind: 'character-kind'; character: NativeIdentity; code: string | number })
+  | (RowBase & { kind: 'character-kind'; character?: NativeIdentity; code: string | number })
   | (RowBase & {
       kind: 'staff';
       subject: NativeIdentity;
@@ -72,10 +72,11 @@ export type BangumiVocabularyRow =
     })
   | (RowBase & {
       kind: 'character-appearance';
-      subject: NativeIdentity;
+      subject?: NativeIdentity;
       character?: NativeIdentity;
       characterCode: string;
-      roleCode: number;
+      roleCode: number | string;
+      order?: number | string | null;
     })
   | (RowBase & {
       kind: 'voice-credit';
@@ -197,6 +198,7 @@ export type SourceVocabularyGap = Readonly<{
 export type SourceVocabularyResult = Readonly<{
   proposals: readonly BatchCommand[];
   gaps: readonly SourceVocabularyGap[];
+  request: SourceVocabularyRequest;
 }>;
 type SourceVocabularyGapInput = Omit<
   SourceVocabularyGap,
@@ -217,6 +219,7 @@ export type MappingEnvironment = Readonly<{
   proposals: BatchCommand[];
   gaps: SourceVocabularyGap[];
   admit(subject: NativeIdentity, property: string, path: string, code?: string, endpoint?: string): boolean;
+  qualifierAllowed(subject: NativeIdentity, property: string, qualifier: string): boolean;
   pushGap(gap: SourceVocabularyGapInput): void;
   propose(args: {
     row: SourceVocabularyRow;
@@ -248,6 +251,37 @@ function record(value: unknown): value is Record<string, unknown> {
   } catch {
     return false;
   }
+}
+function requestSnapshot(value: unknown, depth = 0, state = { nodes: 0 }): unknown {
+  state.nodes += 1;
+  if (state.nodes > 8192 || depth > 12) return null;
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.length <= 4096 ? value : null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'object' || utilTypes.isProxy(value)) return null;
+  if (Array.isArray(value)) {
+    const length = Object.getOwnPropertyDescriptor(value, 'length')?.value;
+    if (!Number.isSafeInteger(length) || length < 0) return null;
+    const output: unknown[] = [];
+    for (let index = 0; index < Math.min(length, 512); index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      output.push(
+        descriptor && descriptor.enumerable && 'value' in descriptor
+          ? requestSnapshot(descriptor.value, depth + 1, state)
+          : null,
+      );
+    }
+    return output;
+  }
+  if (!record(value)) return null;
+  const output: Record<string, unknown> = Object.create(null);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string') continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor && descriptor.enumerable && 'value' in descriptor)
+      output[key] = requestSnapshot(descriptor.value, depth + 1, state);
+  }
+  return output;
 }
 function sourceText(value: unknown, maximum = 500): value is string {
   return (
@@ -292,6 +326,11 @@ function propertyAllowed(subject: NativeIdentity, property: string, release: Rel
   const type = release.types[subject.type];
   const definition = propertyDefinition(release, property);
   return type && definition && type.properties.includes(property) ? definition : null;
+}
+function qualifierAllowed(subject: NativeIdentity, property: string, qualifier: string, release: Release): boolean {
+  if (!identityCompatible(subject, release, bundledDigest)) return false;
+  const definition = propertyAllowed(subject, property, release);
+  return !!definition?.qualifiers.includes(qualifier) && !!propertyDefinition(release, qualifier);
 }
 function textQualifier(property: string, content: unknown) {
   return { property: { id: property }, value: { type: 'value' as const, content } };
@@ -490,6 +529,8 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
     }
     return true;
   };
+  const admitQualifier = (subject: NativeIdentity, property: string, qualifier: string) =>
+    qualifierAllowed(subject, property, qualifier, release);
   const propose: MappingEnvironment['propose'] = ({
     row,
     subject,
@@ -671,6 +712,7 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
     proposals,
     gaps,
     admit,
+    qualifierAllowed: admitQualifier,
     pushGap,
     propose,
     concept,
@@ -682,5 +724,9 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
 }
 
 export function finishMapping(environment: MappingEnvironment): SourceVocabularyResult {
-  return { proposals: environment.proposals, gaps: environment.gaps };
+  return {
+    proposals: environment.proposals,
+    gaps: environment.gaps,
+    request: requestSnapshot({ bindings: environment.input.bindings, rows: environment.input.rows }) as SourceVocabularyRequest,
+  };
 }

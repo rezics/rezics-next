@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, FieldGroup } from '@rezics/definitions/bulk';
 import type { ConversionInput, ConvertedRecord, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
+import type { SourceVocabularyRequest } from '../../../packages/conversion/src/source-vocabulary.ts';
 
 export type ImportBatchRequest = BatchWriteRequest;
 export type ImportBatchResult = BatchWriteResult;
@@ -128,6 +129,7 @@ export type ImportConversion<Extra extends object = {}> = ConvertedRecord<BatchC
   digest: string;
   normalized: unknown;
   sourceMetadata?: unknown;
+  sourceVocabulary?: SourceVocabularyRequest;
   sourceStatistic?: ImportSourceStatistic;
   sourceStatisticClear?: ImportSourceStatisticClear;
 } & Extra;

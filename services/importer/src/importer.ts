@@ -13,6 +13,7 @@ import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { checkBatch, checkResult } from './accepted-checks.ts';
 import type {
   ImportConversion,
+  ImportConversionContext,
   ImportTransport,
   ImportSourceRecord,
   ImportSourceRecordMetadataCommand,
@@ -343,6 +344,10 @@ export class Importer {
       sourceVocabulary?: ConversionContext['sourceVocabulary'];
     } = {},
   ): ImportConversion {
+    const conversionContext =
+      context.sourceVocabulary === undefined && staged.projection.sourceVocabulary !== undefined
+        ? { ...context, sourceVocabulary: staged.projection.sourceVocabulary }
+        : context;
     const result = registration.convert(
       {
         external_id: staged.row.recordKey,
@@ -351,11 +356,17 @@ export class Importer {
       },
       {
         source: registration.source,
-        ...(context.subjectId === undefined ? {} : { subjectId: context.subjectId }),
-        ...(context.mediaIds === undefined ? {} : { mediaIds: context.mediaIds }),
-        ...(context.resolvedReferences === undefined ? {} : { resolvedReferences: context.resolvedReferences }),
-        ...(context.sourceClassification === undefined ? {} : { sourceClassification: context.sourceClassification }),
-        ...(context.sourceVocabulary === undefined ? {} : { sourceVocabulary: context.sourceVocabulary }),
+        ...(conversionContext.subjectId === undefined ? {} : { subjectId: conversionContext.subjectId }),
+        ...(conversionContext.mediaIds === undefined ? {} : { mediaIds: conversionContext.mediaIds }),
+        ...(conversionContext.resolvedReferences === undefined
+          ? {}
+          : { resolvedReferences: conversionContext.resolvedReferences }),
+        ...(conversionContext.sourceClassification === undefined
+          ? {}
+          : { sourceClassification: conversionContext.sourceClassification }),
+        ...(conversionContext.sourceVocabulary === undefined
+          ? {}
+          : { sourceVocabulary: conversionContext.sourceVocabulary }),
       },
     );
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
@@ -500,6 +511,9 @@ export class Importer {
             ...(conversion.sourceClassification === undefined
               ? {}
               : { sourceClassification: conversion.sourceClassification }),
+            ...(conversion.sourceVocabulary === undefined
+              ? {}
+              : { sourceVocabulary: conversion.sourceVocabulary }),
             ...(ignored
               ? {}
               : registration.describeSourceRecord
