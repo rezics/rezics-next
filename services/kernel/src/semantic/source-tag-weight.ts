@@ -9,7 +9,8 @@ const subjectId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 const snapshotLimit = 1024 * 1024;
 
 type JsonNumber = Readonly<{ sourceNumber: string }>;
-type JsonValue = null | boolean | string | JsonNumber | JsonValue[] | { [key: string]: JsonValue };
+type JsonRecord = { [key: string]: JsonValue; sourceNumber?: never };
+type JsonValue = null | boolean | string | JsonNumber | JsonValue[] | JsonRecord;
 
 export type VndbSourceTagWeightInput = Readonly<{
   /** Exact Kana query endpoint that produced the response. */
@@ -87,7 +88,7 @@ function parseSnapshot(source: string): JsonValue {
     if (current === '{') {
       cursor += 1;
       whitespace();
-      const result: { [key: string]: JsonValue } = Object.create(null) as { [key: string]: JsonValue };
+      const result = Object.create(null) as JsonRecord;
       if (source[cursor] === '}') {
         cursor += 1;
         return result;
