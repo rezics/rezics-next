@@ -85,7 +85,7 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     expect(report).toContain('Landing identities: landed#2 at 2026-10-31T01:10:00.000Z (dev).');
     expect(report).toContain('Last useful landing: landed#2 at 2026-10-31T01:10:00.000Z.');
     expect(report).toContain('Worker starts / finishes in bucket: 2 starts (including resumes) / 1 finished attempts.');
-    expect(report).toContain('Guard endings in bucket: environment 1; new-failure 1.');
+    expect(report).toContain('Guard endings in bucket: new-failure 1; environment 1.');
     expect(report).toContain('Current landing queue age: 1 queued attempts; oldest 2700000 ms.');
     expect(report).toContain('queued#1');
     expect(report).toContain('Orphaned landings: 1 (orphan).');
