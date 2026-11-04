@@ -141,9 +141,10 @@ function CandidateReviewLive({
   const subjectActionUnavailable =
     !!context && !!current && (!current.actions || current.actions.subject.state !== 'available');
   const actionObservationRequired = requireActionObservation || !!context;
-  const actionReadUnavailable = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
-    (availability) => availability === 'unavailable',
-  ) || subjectActionUnavailable;
+  const actionReadUnavailable =
+    [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
+      (availability) => availability === 'unavailable',
+    ) || subjectActionUnavailable;
   const actionDenied = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
     (availability) => availability === 'denied',
   );
@@ -338,8 +339,7 @@ function CandidateReviewLive({
       running.current ||
       requiresReload ||
       (confirmation === 'adopt' ? !valid : !candidate) ||
-      (actionObservationRequired &&
-        (selectedAvailability !== 'allowed' || subjectActionUnavailable)) ||
+      (actionObservationRequired && (selectedAvailability !== 'allowed' || subjectActionUnavailable)) ||
       (selectedAvailability !== undefined && selectedAvailability !== 'allowed')
     )
       return;
@@ -383,8 +383,7 @@ function CandidateReviewLive({
               ? 'subject.accept_candidate'
               : 'subject.reject_candidate',
         );
-        const latestSubjectUnavailable =
-          !!context && (!latest.actions || latest.actions.subject.state !== 'available');
+        const latestSubjectUnavailable = !!context && (!latest.actions || latest.actions.subject.state !== 'available');
         if (latestSubjectUnavailable || latestAvailability !== 'allowed') {
           const unavailable = latestSubjectUnavailable || latestAvailability === 'unavailable';
           setActionFailure(unavailable ? 'unavailable' : 'denied');
