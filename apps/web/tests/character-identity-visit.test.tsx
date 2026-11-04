@@ -70,6 +70,8 @@ function identityRow(n: number, label: string, hidden = false, destination = n =
   return {
     target: destination,
     statement: statement(id(100 + n), identity.property, destination, hidden),
+    label,
+    type: 'wd:Q95074',
     summary: summary(destination, label),
     related: { [destination]: summary(destination, label) },
   };
@@ -81,6 +83,8 @@ function parentRow() {
     property: father.property,
     statement: id(140),
     assertion: statement(id(140), father.property, source),
+    label: 'Mina’s father',
+    type: 'wd:Q95074',
     summary: summary(parent, 'Mina’s father'),
     related: {},
   };
@@ -340,8 +344,8 @@ test('64/512/4096 unrelated Subjects leave the adapter calls, current rows and U
             stream.property === identityProperty,
           );
           return stream.direction === 'in'
-            ? { subject: destination, property: stream.property, statement: assertion.id, assertion, summary: summary(destination, `Character ${index}`), related: {} }
-            : { target: destination, statement: assertion, summary: summary(destination, `Character ${index}`), related: { [destination]: summary(destination, `Character ${index}`) } };
+            ? { subject: destination, property: stream.property, statement: assertion.id, assertion, type: 'wd:Q95074', label: `Character ${index}`, summary: summary(destination, `Character ${index}`), related: {} }
+            : { target: destination, statement: assertion, label: `Character ${index}`, type: 'wd:Q95074', summary: summary(destination, `Character ${index}`), related: { [destination]: summary(destination, `Character ${index}`) } };
         });
         return Response.json({ [kind]: rows, next: url.searchParams.has('cursor') ? null : 'opaque-next' });
       }) as typeof fetch,
