@@ -20,7 +20,10 @@ const messages: PageMessages = {
 const document: CompositionDocument = {
   root: { props: {} },
   content: [
-    { type: 'SubjectList', props: { id: 'contributions', title: { en: 'General contributions' }, property: 'schema:author', limit: 6 } },
+    {
+      type: 'SubjectList',
+      props: { id: 'contributions', title: { en: 'General contributions' }, property: 'schema:author', limit: 6 },
+    },
     { type: 'SubjectList', props: { id: 'voice', title: { en: 'Voice credits' }, property: 'wdt:P725', limit: 6 } },
   ],
 };
@@ -54,7 +57,12 @@ function render(directions: ReleasedRelationDirectionResult[]) {
   const reads = Object.fromEntries(
     Object.entries(plan.reads).flatMap(([key, read]) =>
       read.kind === 'links'
-        ? [[key, { status: 200, body: links(read.property, read.property === 'wdt:P725' ? 'Voice role' : 'Book credit') }]]
+        ? [
+            [
+              key,
+              { status: 200, body: links(read.property, read.property === 'wdt:P725' ? 'Voice role' : 'Book credit') },
+            ],
+          ]
         : [],
     ),
   );

@@ -98,11 +98,7 @@ export function createReleasedRelationDirectionResolver(
         property = propertyId ? release.properties[propertyId] : undefined;
       }
       if (!property)
-        return failure(
-          requestedProperty,
-          direction,
-          direction === 'inverse' ? 'missing-inverse' : 'missing-property',
-        );
+        return failure(requestedProperty, direction, direction === 'inverse' ? 'missing-inverse' : 'missing-property');
       if (property.datatype !== 'wikibase-item' || !property.relation)
         return failure(requestedProperty, direction, 'stale-descriptor', 'unavailable');
 
@@ -111,7 +107,8 @@ export function createReleasedRelationDirectionResolver(
         if (direct && (inverses.get(requestedProperty) ?? []).length)
           return failure(requestedProperty, direction, 'ambiguous-inverse');
         if (!inverse) return failure(requestedProperty, direction, 'missing-inverse');
-        if (direct && requestedProperty !== propertyId) return failure(requestedProperty, direction, 'ambiguous-inverse');
+        if (direct && requestedProperty !== propertyId)
+          return failure(requestedProperty, direction, 'ambiguous-inverse');
         const aliases = inverses.get(inverse) ?? [];
         if (aliases.length !== 1 || aliases[0] !== propertyId || release.properties[inverse])
           return failure(requestedProperty, direction, 'ambiguous-inverse');

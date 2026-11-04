@@ -103,7 +103,14 @@ test('one inverse cast window stays fixed across unrelated catalogue growth and 
                 },
               ],
               'semantic.revision': [
-                { route, subject_id: id, revision: 1, kind: 'create', release: bundledDigest, recorded_transaction_id: transaction },
+                {
+                  route,
+                  subject_id: id,
+                  revision: 1,
+                  kind: 'create',
+                  release: bundledDigest,
+                  recorded_transaction_id: transaction,
+                },
               ],
               'semantic.inbound_link': [
                 {

@@ -62,7 +62,11 @@ const statement = (property: string, content: unknown, qualifiers: unknown[] = [
 });
 
 async function create(type: string, label: string, statements?: Record<string, unknown[]>) {
-  const result = await call('POST', '/v1/subjects', { type, labels: { en: label }, ...(statements ? { statements } : {}) });
+  const result = await call('POST', '/v1/subjects', {
+    type,
+    labels: { en: label },
+    ...(statements ? { statements } : {}),
+  });
   expect(result.response.status, JSON.stringify(result.body)).toBe(201);
   return result.body.subject as { id: string; statements: Record<string, any[]> };
 }
@@ -95,8 +99,13 @@ test('released inverse descriptors keep the original cast property and pin quali
     state: 'unsupported',
     reason: 'missing-inverse',
   });
-  expect(createReleasedRelationDirectionResolver(bundledRelease, 'sha256:stale').resolve('schema:Person', 'wdt:P725', 'inverse'))
-    .toMatchObject({ state: 'unavailable', reason: 'stale-release' });
+  expect(
+    createReleasedRelationDirectionResolver(bundledRelease, 'sha256:stale').resolve(
+      'schema:Person',
+      'wdt:P725',
+      'inverse',
+    ),
+  ).toMatchObject({ state: 'unavailable', reason: 'stale-release' });
 
   const role = await create('skos:Concept', 'Narration');
   const actor = await create('schema:Person', 'Voice actor');

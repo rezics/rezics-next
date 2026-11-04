@@ -324,9 +324,7 @@ export function cataloguePageMetadata(
   const directions = [...directionProperties]
     .filter((id) => release.properties[id]?.relation)
     .sort()
-    .map((id) =>
-      resolveDirection.resolve(type, id, inversePropertyIds.has(id) ? 'inverse' : 'forward'),
-    );
+    .map((id) => resolveDirection.resolve(type, id, inversePropertyIds.has(id) ? 'inverse' : 'forward'));
   const types = new Set<string>([type]);
   const addType = (id: string) => {
     if (types.has(id) || !release.types[id]) return;
