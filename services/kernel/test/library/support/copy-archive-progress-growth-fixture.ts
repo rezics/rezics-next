@@ -152,6 +152,7 @@ export function paddedActiveCommand(target = 8000) {
 
 export function expectNoGrownScans(report: GrowthReport) {
   assertGrowthAccessPaths(report.name, report.samples, [
+    'library.progress_session',
     'library.progress_unit',
     'library.progress_change',
     'library.copy_archive_row',
@@ -477,12 +478,14 @@ export async function createCopyArchiveProgressGrowthFixture() {
     operation: (actor: AccountActor, scale: number, repetition: number) => Promise<unknown>,
     hooks?: {
       prepare?: (actor: AccountActor, scale: number, repetition: number) => Promise<void>;
+      verify?: (actor: AccountActor, scale: number, repetition: number, value: unknown) => Promise<void>;
       bounds?: Partial<Record<Metric, Bound>>;
     },
   ) {
     const accountId = person.actor.accountId;
     return checkGrowth(db, {
       name,
+      captureMode: 'cost-folded',
       scales: SCALES,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic', ...hooks?.bounds },
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
@@ -501,6 +504,9 @@ export async function createCopyArchiveProgressGrowthFixture() {
       },
       async operation(_database, scale, repetition) {
         return operation(person.actor, scale, repetition);
+      },
+      async verify(_database, scale, repetition, value) {
+        await hooks?.verify?.(person.actor, scale, repetition, value);
       },
     });
   }

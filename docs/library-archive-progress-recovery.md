@@ -179,17 +179,22 @@ Session/unit/History population is U.
   not in total owner history. Final page: C_child + C_root. 800 KiB is the application-command JSON maximum on an
   all-application child page, charged beside the root/probes/locks/wrapper, not instead of them.
 
+Decision: archive whole-caller checks use the public cost-folded capture and a post-drain boundary for read-only verification.
+
 Native64/512/4096 whole-caller statements, returned/affected rows and shared hit/read for apply, retry,
-rejection/rollback, `progressResult` and owner-remove cleanup are executed by
-`services/kernel/test/library/copy-archive-progress-growth.test.ts` against an isolated native stack and a bounded
-fixture. Unrelated same-owner Session/unit/History rows are seeded as planner population; measured callers remain
-the production apply, result and owner-remove paths. Sequential scans are allowed only while a relation stays within the shared eight-page tiny-heap
-limit; unit, History and archive child tables must be index-only once they exceed it. Native Session writers
-still seq-scan `progress_session` above that limit; Library owns those triggers. Apply's measured archive
-envelope stays constant/log in U. Native growth
-capture admits 128 MiB of charged plan evidence so a ten-step composed apply can retain its nested notices. The installed export currently emits V4, which the archive
-parser does not accept; the growth fixture encodes a V2 artifact from the native Session rather than the live
-producer. Native Session writes require `advance_progress_discovery_generation_update` to alias transition tables as
-`previous_row`/`next_row`; PL/pgSQL `OLD`/`NEW` make `old.route` and `new.route` ambiguous. Until that check records a
-scale, that scale stays unmeasured. The focused owner-outcome test in
-`copy-archive.test.ts` is not a substitute for those measurements.
+rejection/rollback, `progressResult` and owner-remove cleanup remain unmeasured until each scale runs against the
+admitted source, compiler and schema and records supported captured plans. The existing
+`services/kernel/test/library/copy-archive-progress-growth.test.ts` is the acceptance against an isolated native
+stack and bounded fixture. Unrelated same-owner Session/unit/History rows are seeded as planner population; measured
+callers remain the production apply, result and owner-remove paths. Sequential scans are allowed only while a
+relation stays within the shared eight-page tiny-heap limit; unit, History, archive child tables and
+`progress_session` are checked once they exceed it. Source review alone establishes neither a native Session
+failure nor a pass. The fixture encodes a V2 artifact from the native Session; the focused owner-outcome test in
+`copy-archive.test.ts` is not a substitute for these measurements.
+
+Each whole caller uses public `checkGrowth` `captureMode: 'cost-folded'` in one capture; raw remains the default and
+`aggregateCaptures` is refused at admission. The shared capture cap is 32 MiB of charged foreground and background
+evidence, with at most 20,000 cumulative entries. Each native notice is limited to 1 MiB and charged at eight times
+its raw UTF-8 size before parsing. Unsupported or exhausted evidence fails after tracked work drains and returns no
+partial cost or pass. Read-only cleanup observations run through the post-capture verification boundary, after
+capture and drain and before the next preparation mutates the sample.

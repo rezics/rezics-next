@@ -135,20 +135,17 @@ test.serial(
   async () => {
     const person = f.cleanupOwners.applications;
     let retained: string[] = [];
+    let removed: string[] = [];
+    let retainedBytes = 0;
     const report = await f.measure(
       'archive progress cleanup all-application page',
       person,
       'aa000005',
       async (actor) => {
         if (!person.uploadId) throw new Error('Cleanup upload missing');
-        const before = await f.knownApplyBytes(actor.accountId, person.uploadId, retained);
         const page = await f.service.remove(actor, person.uploadId);
         expect(page.removed).toBe(CLEANUP_CHILD_BUDGET);
         expect(page.complete).toBe(false);
-        const after = await f.knownApplyBytes(actor.accountId, person.uploadId, retained);
-        expect(after.ids).toEqual(retained);
-        expect(after.bytes).toBe(before.bytes);
-        expect(after.bytes).toBeLessThanOrEqual(CLEANUP_CHILD_BUDGET * COMMAND_JSON_CAP);
         return page;
       },
       {
@@ -158,12 +155,25 @@ test.serial(
             { actor, uploadId: person.uploadId! },
             { apply: CLEANUP_CHILD_BUDGET + 20, commandBytes: 8000 },
           );
-          const removedIds = seeded.applyIds.slice(0, CLEANUP_CHILD_BUDGET);
+          removed = seeded.applyIds.slice(0, CLEANUP_CHILD_BUDGET);
           retained = seeded.applyIds.slice(CLEANUP_CHILD_BUDGET);
-          const doomed = await f.knownApplyBytes(actor.accountId, person.uploadId!, removedIds);
-          expect(doomed.ids).toHaveLength(CLEANUP_CHILD_BUDGET);
+          expect(removed).toHaveLength(CLEANUP_CHILD_BUDGET);
+          expect(retained).toHaveLength(20);
+          const doomed = await f.knownApplyBytes(actor.accountId, person.uploadId!, removed);
+          expect(doomed.ids).toEqual([...removed].sort());
           expect(doomed.bytes).toBeGreaterThan(0);
           expect(doomed.bytes).toBeLessThanOrEqual(CLEANUP_CHILD_BUDGET * COMMAND_JSON_CAP);
+          const before = await f.knownApplyBytes(actor.accountId, person.uploadId!, retained);
+          expect(before.ids).toEqual(retained);
+          retainedBytes = before.bytes;
+        },
+        async verify(actor) {
+          const deleted = await f.knownApplyBytes(actor.accountId, person.uploadId!, removed);
+          expect(deleted.ids).toEqual([]);
+          const after = await f.knownApplyBytes(actor.accountId, person.uploadId!, retained);
+          expect(after.ids).toEqual(retained);
+          expect(after.bytes).toBe(retainedBytes);
+          expect(after.bytes).toBeLessThanOrEqual(CLEANUP_CHILD_BUDGET * COMMAND_JSON_CAP);
         },
       },
     );
@@ -198,6 +208,10 @@ test.serial(
           );
           remainingApply = seeded.applyIds;
         },
+        async verify(actor) {
+          const leftover = await f.knownApplyBytes(actor.accountId, person.uploadId!, remainingApply);
+          expect(leftover.ids).toEqual([]);
+        },
       },
     );
     expectNoGrownScans(report);
@@ -218,18 +232,20 @@ test.serial(
         expect(page.complete).toBe(true);
         expect(page.removed).toBeGreaterThan(0);
         expect(page.removed).toBeLessThanOrEqual(CLEANUP_CHILD_BUDGET);
-        const root = await f.db.admin.query(
-          `SELECT 1 FROM library.copy_archive_upload WHERE account_id=$1 AND upload_id=$2`,
-          [actor.accountId, person.uploadId],
-        );
-        expect(root.rowCount).toBe(0);
-        delete person.uploadId;
         return page;
       },
       {
         async prepare(actor) {
           await cleanupPerson(person);
           await f.seedChildren({ actor, uploadId: person.uploadId! }, { apply: 8, extraRows: 4 });
+        },
+        async verify(actor) {
+          const root = await f.db.admin.query(
+            `SELECT 1 FROM library.copy_archive_upload WHERE account_id=$1 AND upload_id=$2`,
+            [actor.accountId, person.uploadId],
+          );
+          expect(root.rowCount).toBe(0);
+          delete person.uploadId;
         },
       },
     );

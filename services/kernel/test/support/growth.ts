@@ -148,6 +148,8 @@ export type GrowthCheck = {
    * with `warmup`, for fresh keys.
    */
   operation(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
+  /** Read-only assertions after the measured capture and its tracked queries have drained. */
+  verify?(db: GrowthDatabase, scale: number, repetition: number, value: unknown): Promise<void>;
   /** One unmeasured run of the same code path on spare state, used for warm-ups in place of `operation`. */
   warmup?(db: GrowthDatabase, scale: number, repetition: number): Promise<unknown>;
   /**
@@ -1191,9 +1193,10 @@ async function runGrowthCheck(
         );
         for (const target of captured.databases) measuredDatabases.add(target);
         await assertRunTransactionsClosed(captured);
+        const measured = captured.value;
+        await check.verify?.(db, scale, repetition, measured.value);
         pendingBackends = operationBackends(captured.backends, captured.transactions);
         const writes = captured.writes;
-        const measured = captured.value;
         let measuredCapture: Capture | CostFoldedCapture = measured.capture;
         let catalogCaptures: readonly { readonly name: string; readonly capture: Capture | CostFoldedCapture }[];
         if (isCostFoldedCapture(measured.capture)) {
