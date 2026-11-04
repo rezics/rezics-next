@@ -253,12 +253,18 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
           add(at(relationPointer, 'slotKey'));
       }
     }
-    for (const member of ['targets', 'units', 'minimum', 'maximum'] as const) {
+    for (const member of ['targets', 'units', 'minimum', 'minimumExclusive', 'maximum'] as const) {
       const allowed = member === 'targets' ? property.datatype === 'wikibase-item' : property.datatype === 'quantity';
       const required = member === 'targets' || member === 'units';
       if ((!allowed && own(property, member)) || (allowed && required && !own(property, member)))
         add(at(pointer, member));
     }
+    if (
+      (property.minimumExclusive !== undefined &&
+        (property.minimumExclusive !== true || property.minimum === undefined)) ||
+      (property.minimumExclusive === true && property.maximum !== undefined && property.maximum <= property.minimum!)
+    )
+      add(at(pointer, 'minimumExclusive'));
     if (property.targets) {
       const targetPointer = at(pointer, 'targets');
       list(property.targets, targetPointer);

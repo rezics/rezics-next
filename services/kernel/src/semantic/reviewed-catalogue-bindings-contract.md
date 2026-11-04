@@ -25,6 +25,8 @@ contract does not guess a release identity from a provider label or code.
 
 ## Required meanings
 
+VNDB classification source weights have a separate producer contract: only the exact Kana `/vn` `tags.rating` aggregate is supported as `vndbTagsRating`, in unit `1` on `(0,3]`. Its source identity is the exact VN record, tag id and complete-response digest; `schema:genre`/`schema:keywords`, Concept and Context remain the native association coordinates. The dump column `tags_vn.vote` is an individual user vote and is never converted. Until Imports acquires and retains the API response, no production source-weight binding is available.
+
 | Input meaning                                                 | Native assertion and correspondence                                                                                                                              | Excluded inference                                                                                                                             |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Bangumi public editor field `meta_tags`, exact literal `后宫` | `schema:keywords` value is an actual adopted source Concept, in the actual scheme whose adopted external key is `https://rezics.com/schemes/bangumi/public-tags` | Ordinary `tags`, popularity, personal/private Collection labels, arbitrary infobox, normalized spellings or a matching label supply no binding |

@@ -181,6 +181,14 @@ function iriCompositionProof(source: string): boolean {
   );
 }
 
+/** Prove one fixed-size lowercase hexadecimal SHA-256 suffix after an ASCII identifier prefix. */
+function fixedHexDigestProof(source: string): boolean {
+  const suffix = '[0-9a-f]{64}$(?![\\s\\S])';
+  if (!source.startsWith('^') || !source.endsWith(suffix)) return false;
+  const prefix = source.slice(1, source.length - suffix.length);
+  return prefix.length > 0 && /^[A-Za-z0-9:_-]+$/u.test(prefix);
+}
+
 // The VM evaluates the CommonJS browser bundle; the public import condition selects ESM.
 const checkerPath = new URL('./lib/browser.js', import.meta.resolve('recheck/package.json')).href;
 // The pinned browser checker implements Scala.js nanoTime with performance.now.
@@ -226,10 +234,13 @@ const checkPattern = new Script(`(pattern) => {
 }`).runInContext(context) as (pattern: string) => { safe: boolean; steps: number };
 
 /** The compiler and release validator's sole pattern safety authority. No proof cache. */
-export function analyzePattern(pattern: unknown): { safe: boolean; steps: number; proof?: 'iri-composition' } {
+export function analyzePattern(
+  pattern: unknown,
+): { safe: boolean; steps: number; proof?: 'iri-composition' | 'fixed-hex-digest' } {
   if (typeof pattern !== 'string' || pattern.length > 256) return { safe: false, steps: 0 };
   try {
     new RegExp(pattern, 'u');
+    if (fixedHexDigestProof(pattern)) return { safe: true, steps: 0, proof: 'fixed-hex-digest' };
     if (!admitted(pattern)) return { safe: false, steps: 0 };
     // Independent structural proof, before (and never inferred from) a native
     // unknown/over-budget verdict. Zero steps means no native checkpoints ran.
