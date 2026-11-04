@@ -256,7 +256,8 @@ test('report destination reads remain reporter-scoped after the Inbox admits the
     });
     const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
     expect(page.items[0]?.href).toBe(`/${getLocale()}/moderation/reports/${report}`);
-    if (status === 200 || status === 404) expect(await loadReporterStatus(client, report, 'Bearer reporter')).toBeNull();
+    if (status === 200) expect(await loadReporterStatus(client, report, 'Bearer reporter')).toEqual(submittedReport);
+    else if (status === 404) expect(await loadReporterStatus(client, report, 'Bearer reporter')).toBeNull();
     else await expect(loadReporterStatus(client, report, 'Bearer reporter')).rejects.toThrow();
   }
 });
