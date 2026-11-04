@@ -8,7 +8,7 @@ The checker enforces source coverage, public entry imports (including type-only 
 
 ## Parser and runtime
 
-The check uses the TypeScript Compiler API parser already present in the workspace. It reads TypeScript and JavaScript syntax without executing modules and records import declarations, re-exports, import types, dynamic imports, and literal `require` calls with locations. TypeScript's resolver handles relative imports, workspace exports, aliases, and declaration fallbacks; workspace conditional exports are combined across their declared targets. SQL files are graph targets but are not parsed as TypeScript.
+The check uses Bun's transpiler import scan for value dependencies and a code-aware lexical pass to retain type-only imports and source locations. It does not execute modules. Relative paths, package exports, workspace path aliases, and declaration-file fallbacks are resolved; conditional workspace exports are combined across their declared targets. SQL files are graph targets but are not parsed as TypeScript.
 
 The full graph is cached under `.temp/architecture/graph.json`. `--changed <files...>` hashes the production roots, reparses only the listed changed files, and checks those edges against the complete cached graph. If the changed list is incomplete or the manifest or resolution configuration changed, the command asks for a fresh full scan.
 
@@ -20,4 +20,4 @@ The full graph is cached under `.temp/architecture/graph.json`. `--changed <file
 | `bun scripts/architecture.ts --changed <files...>` | Recheck changed source edges against the cached complete graph. |
 | `bun scripts/architecture.ts --map` | Print the compact worker module map (maximum 2,000 characters). |
 
-Exit code `0` means the check passed, `1` means an architecture or manifest violation, and `2` means invalid CLI input, unavailable cache, or a tool/configuration failure. The full check is budgeted at under 30 seconds; cached changed checks at under 5 seconds. The landing runner owns those acceptance measurements.
+Exit code `0` means the check passed, `1` means an architecture or manifest violation, and `2` means invalid CLI input, unavailable cache, or a tool/configuration failure. The full graph build and initial ratchet seeding took 15.9 seconds for 6,876 production files on this worktree. The full check is budgeted at under 30 seconds; cached changed checks at under 5 seconds. Landing acceptance will record command timings.

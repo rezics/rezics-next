@@ -8,6 +8,7 @@ import {
   formatModuleMap,
   type ArchitectureManifest,
   type BoundaryBaseline,
+  loadManifest,
   validateBaseline,
   writeGraphCache,
 } from "./architecture";
@@ -118,5 +119,10 @@ describe("architecture boundaries", () => {
     const output = formatModuleMap(current);
     expect(output).toContain("core|core|platform|");
     expect(output.length).toBeLessThanOrEqual(2_000);
+  });
+
+  test("keeps the committed module map within the worker prompt limit", () => {
+    const committed = loadManifest(process.cwd());
+    expect(formatModuleMap(committed).length).toBeLessThanOrEqual(2_000);
   });
 });
