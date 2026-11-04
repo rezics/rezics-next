@@ -634,6 +634,7 @@
       "failureCharacters": 8000
     },
     "trainResolver": {
+      "devAttempts": 3,
       "inputBytes": 262144,
       "outputBytes": 262144,
       "timeoutMs": 240000,
