@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { catalogStatementBound, costOf } from './growth-cost.ts';
+import { mergeGrowthCaptures } from './growth-capture-merge.ts';
 import { statementAttributions, statementOccurrences } from './growth-report.ts';
 
 const query = 'SELECT id FROM public.items';
@@ -59,4 +60,53 @@ test('keeps optional legacy evidence and explicitly unowned plans valid', () => 
   const unowned = { ...legacy, planStatements: [undefined] };
   expect(costOf(unowned)).toMatchObject({ rows: 2, blocks: 4 });
   expect(statementOccurrences(unowned).statements[0]?.plans).toEqual([]);
+});
+
+test('mergeGrowthCaptures pads optional evidence, rebases owners and keeps plan databases', () => {
+  const kernel = {
+    statements: [query],
+    plans: [plan],
+    planStatements: [0],
+    planDatabases: ['kernel'],
+    requestBytes: [11],
+    responseBytes: [4],
+  };
+  const auth = {
+    statements: ['SELECT 1'],
+    plans: [
+      {
+        'Query Text': 'SELECT 1',
+        Plan: {
+          'Node Type': 'Result',
+          'Actual Rows': 1,
+          'Shared Hit Blocks': 2,
+          'Shared Read Blocks': 0,
+        },
+      },
+    ],
+    planStatements: [0],
+    planDatabases: ['auth'],
+  };
+  const merged = mergeGrowthCaptures([kernel, auth]);
+  expect(merged.statements).toEqual([query, 'SELECT 1']);
+  expect(merged.planStatements).toEqual([0, 1]);
+  expect(merged.planDatabases).toEqual(['kernel', 'auth']);
+  expect(merged.requestBytes).toEqual([11, 0]);
+  expect(merged.responseBytes).toEqual([4, 0]);
+  expect(costOf(merged)).toMatchObject({
+    rows: 3,
+    sharedHit: 5,
+    sharedRead: 1,
+    blocks: 6,
+  });
+});
+
+test('rejects merged planDatabases that are not parallel to plans', () => {
+  expect(() =>
+    costOf({
+      statements: [query],
+      plans: [plan],
+      planDatabases: [],
+    }),
+  ).toThrow(/planDatabases has 0 items, but plans has 1/);
 });
