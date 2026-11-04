@@ -49,6 +49,8 @@ async function authoredCopy(directory: string, released = '20200229') {
         'r7\tja\tt\tAuthored unsupported completeness\t\\N',
       ].join('\n'),
     ],
+    releases_media: ['id\tmedium\tqty', ''],
+    releases_platforms: ['id\tplatform', ''],
     releases_vn: [
       'id\tvid\trtype',
       [
