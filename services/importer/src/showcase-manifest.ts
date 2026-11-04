@@ -7,6 +7,7 @@ import { vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
+import { bangumiAppearanceSource } from './cross-media-bindings.ts';
 
 export const showcaseLimits = Object.freeze({
   records: 768,
@@ -38,6 +39,8 @@ export type ShowcaseAssertion = Readonly<{
   commandKey: string;
   candidateId: string;
   candidateDigest: string;
+  /** Selected work owning an exact source-row assertion whose envelope has its own row key. */
+  ownerKey?: string;
   property: string;
   source: BatchCommand['source'];
   statement: BatchStatement;
@@ -120,6 +123,15 @@ export function showcasePlanDigest(plan: CrossMediaPlan): string {
     edges: plan.edges,
     credits: plan.credits,
     memberships: plan.members,
+    characterAppearances: (plan.characterAppearances ?? []).map((appearance) => ({
+      source: bangumiAppearanceSource('bangumi_cross_media', appearance),
+      subjectId: appearance.subjectId,
+      characterId: appearance.characterId,
+      sourceIndex: appearance.sourceIndex,
+      roleCode: appearance.roleCode,
+      order: appearance.order,
+      sourceRow: appearance.sourceRow,
+    })),
     relationSnapshotDigest: plan.relationSnapshotDigest,
   });
 }
@@ -229,6 +241,8 @@ function selectedEnvelopes(
         );
     }
   }
+  for (const appearance of plan.characterAppearances ?? [])
+    allowed.add(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)));
   for (const requirement of requirements) allowed.add(envelopeKey(requirement.source));
   return allowed;
 }
@@ -248,6 +262,9 @@ export function buildShowcaseManifest(input: {
   const readingIndex = new Map(readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]));
   const memberIndex = new Map(plan.members.map((member) => [`${member.source}\0${member.key}`, member]));
   const selectedKeys = new Set(selected.map((row) => `${row.source}\0${row.key}`));
+  const appearanceOwners = new Map<string, string>();
+  for (const appearance of plan.characterAppearances ?? [])
+    appearanceOwners.set(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)), appearance.subjectId);
   const omissions: ShowcaseOmission[] = [];
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
   for (const requirement of input.vocabularyRequirements ?? []) {
@@ -262,7 +279,7 @@ export function buildShowcaseManifest(input: {
     if (
       !selectedKeys.has(`${requirement.provider}\0${requirement.ownerKey}`) ||
       requirement.source.source !== aliases[requirement.provider] ||
-      requirement.source.external_id !== requirement.ownerKey ||
+      requirement.source.external_id !== requirement.sourceKey ||
       requirement.source.field_group !== 'facts' ||
       !requirement.sourceUri.startsWith('https://')
     ) {
@@ -297,18 +314,20 @@ export function buildShowcaseManifest(input: {
       const source = ack.command.source;
       if (
         source.source !== alias ||
-        source.external_id !== row.key ||
+        (source.external_id !== row.key && appearanceOwners.get(envelopeKey(source)) !== row.key) ||
         !allowedSources.has(envelopeKey(source)) ||
         (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
       )
         continue;
       const assertion = candidateAssertion(ack);
       if (!assertion) continue;
+      const ownerKey = appearanceOwners.get(envelopeKey(source));
+      const ownedAssertion = ownerKey === undefined ? assertion : { ...assertion, ownerKey };
       if (sourceAssertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
         candidateOverflow = true;
         continue;
       }
-      sourceAssertions.push(assertion);
+      sourceAssertions.push(ownedAssertion);
       remainingCandidates -= 1;
     }
     if (candidateOverflow) omissions.push({ provider, sourceKey: row.key, code: 'candidate-limit' });
