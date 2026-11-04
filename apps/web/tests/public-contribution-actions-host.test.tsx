@@ -2,24 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
-import { act, useState, StrictMode, type ReactNode } from 'react';
+import { act, createElement, useState, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { dirname } from 'node:path';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-type ReportDraft = import('../src/report/submit.server').ReportDraft;
-type ReportResult = import('../src/report/submit.server').ReportResult;
-const reportCalls: {
-  data: ReportDraft;
-  headers: Headers;
-  resolve(value: ReportResult): void;
-  reject(error: Error): void;
-}[] = [];
-mock.module('../src/report/actions', () => ({
-  sendReport: ({ data, headers }: { data: ReportDraft; headers: HeadersInit }) =>
-    new Promise<ReportResult>((resolve, reject) => reportCalls.push({ data, headers: new Headers(headers), resolve, reject })),
-}));
 const { AccountPosts } = await import('../src/features/pages/account');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const {
@@ -275,25 +263,9 @@ async function installDom() {
     window,
     document: window.document,
     navigator: window.navigator,
-    location: window.location,
     HTMLElement: window.HTMLElement,
-    HTMLButtonElement: window.HTMLButtonElement,
-    HTMLFormElement: window.HTMLFormElement,
-    HTMLInputElement: window.HTMLInputElement,
-    HTMLTextAreaElement: window.HTMLTextAreaElement,
-    HTMLScriptElement: window.HTMLScriptElement,
     Element: window.Element,
     Node: window.Node,
-    Document: window.Document,
-    DocumentFragment: window.DocumentFragment,
-    Event: window.Event,
-    KeyboardEvent: window.KeyboardEvent,
-    MutationObserver: window.MutationObserver,
-    ResizeObserver: window.ResizeObserver,
-    getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window),
-    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-    matchMedia: window.matchMedia.bind(window),
     scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   })) {
@@ -310,21 +282,6 @@ async function installDom() {
       }
     },
   };
-}
-
-async function clickButton(root: HTMLElement, label: string) {
-  const candidates = new Set([
-    ...root.querySelectorAll<HTMLElement>('button, [role="menuitem"]'),
-    ...document.querySelectorAll<HTMLElement>('button, [role="menuitem"]'),
-  ]);
-  const button = [...candidates].find(
-    (candidate) => candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label,
-  );
-  expect(button, `${label}; found ${[...candidates].map((item) => item.textContent?.trim()).join(' | ')}`).toBeDefined();
-  await act(async () => {
-    button!.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
 }
 
 test('mounted host shares reader retirement and reacquires only the current original page', async () => {
@@ -784,4 +741,3 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
     }
   },
 );
-
