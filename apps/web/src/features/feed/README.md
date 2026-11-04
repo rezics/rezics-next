@@ -74,6 +74,10 @@ and review ratings, stay absent until their bounded public owner summaries suppl
 reads, does not rank or apply public/private predicates, and omits missing descriptive fields. Following
 Collections and Content thread/post summaries keep their existing native identities and actions.
 
+Decision: Home uses current native review target and question/vote revisions. Reply cards show only the exact
+immediate parent and its disclosed author, language and spoiler fields. Absent, withheld or unavailable context does
+not fall back to hidden bodies, citations or identities; spoiler reveal retires with page, target or account.
+
 An embedded owner list can use the same body without claiming a native mixed-feed branch:
 
 ```tsx

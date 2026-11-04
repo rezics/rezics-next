@@ -444,8 +444,10 @@ the final disclosure or either owner pass. Each `readPost` observes the selected
 including the terminal root, under its own initial/final source and Access checks. These limits do not establish
 bounded grant-history work or replace measurement of nested rows, statements and bytes.
 
-Decision: Home displays recorded rating units without normalizing a nonstandard question to ten, and keeps
-spoiler-marked parent text behind an explicit reveal that retires with the page, target or account.
+Decision: Home uses the current native review target and question/vote revisions. Reply cards show only the exact
+immediate parent and its disclosed author, language and spoiler fields. Absent, withheld or unavailable context does
+not fall back to hidden bodies, citations or identities. Ratings keep their recorded units, and spoiler text requires
+an explicit reveal that retires with the page, target or account.
 
 The existing consumers are `apps/web/src/features/feed/home-feed-item.tsx` and
 `HomeFeedActions` / `FeedActionBar` in `apps/web/src/features/feed/action-bar.tsx`, mounted by
