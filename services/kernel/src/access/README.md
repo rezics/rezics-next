@@ -59,7 +59,9 @@ replay/deadlines, store entry or bounded progress. [History/Work](../history/REA
 
 `access/work.ts` retains optional accounting metadata with dimensions
 `{keys, points, witnesses, rows, bytes, emptySeeks}`. Its existing capture/reservation APIs are implementation
-instrumentation, not another permission operand. A missing foreign declaration is an unmeasured cost gap, never
+instrumentation, not another permission operand. Retained metered adapters still have source-level declaration
+refusals; this adoption does not claim their static-bound migration or native acceptance. A missing foreign
+declaration is an unmeasured cost gap, never
 zero work or permission to bypass native checks. Do not infer bounded physical MVCC work from output cardinality.
 
 Prepare native facts on released connections before acquiring the target client. Use the same live opaque

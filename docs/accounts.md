@@ -196,6 +196,9 @@ actor. The platform importer is an ordinary operated actor and follows the same 
 paths: [Auth session issuance][auth-service] and the [importer credential client][importer-credentials] provide
 no service bypass.
 
+Imported transfer tuples are unverified source data. Proposed destination review establishes neither the source
+relation nor its approval or execution; those require the original native source and exact-intent commands.
+
 ## 3. Credentials, sessions and tokens
 
 Credentials belong to actors, never organizations. A session can be established only by the actor's own

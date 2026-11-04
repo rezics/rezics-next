@@ -580,8 +580,8 @@ membership departure, paging and reload offer Stay/Leave for changed input or un
 
 ## Operator transfer
 
-Imported transfer tuples are unverified source data. Proposed destination review establishes neither source
-relation nor source approval/execution. Only original native source and exact-intent commands establish those facts.
+Imported transfer data follows the [Accounts operator contract](../../docs/accounts.md#2-operators-and-automated-accounts);
+destination presentation cannot establish source approval or execution.
 
 Operator-transfer read failures offer Retry within the same page view. A failed session read preserves the saved
 attempt without treating it as an account mismatch; recovery restores it only for its initiating account and requires
