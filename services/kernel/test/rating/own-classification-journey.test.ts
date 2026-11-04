@@ -133,7 +133,7 @@ test('own classification retains exact private state, current advice, same-key r
       routeKey,
     });
     const base = '80000000-0000-8000-8000-';
-    const release = bundledDigest(bundledRelease);
+    const release = bundledDigest;
     const growthAxes = ['ballots', 'associations', 'identity-history', 'authority'] as const;
     for (const axis of growthAxes) {
       const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 4);
