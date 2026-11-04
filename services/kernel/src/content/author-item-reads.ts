@@ -35,7 +35,7 @@ export type AuthorPostEntry = Extract<ItemView, { availability: 'available' }> &
   thread: { id: string; title: string | null };
 } & Partial<AuthorItemContext>;
 export type AuthorThreadEntry = ThreadView & Partial<AuthorItemContext>;
-export type AuthorItemDependencies = ContentReadDependencies & { cursorNow?: () => number };
+export type AuthorItemDependencies = ContentReadDependencies & { routeKey: Uint8Array; cursorNow?: () => number };
 export type AuthorPage<T> = {
   entries: readonly T[];
   nextCursor: string | null;
@@ -289,23 +289,8 @@ async function listAuthorItems(
   const hasMore = scanned < page.candidates.length || page.candidates.length === limit * SCAN_FACTOR;
   const prepared = await prepareAuthorItemContext(dependencies, selected, context);
   const contexts = await prepared.finish();
-  anchors.push(...prepared.anchors);
-  // Reobserve precisely the selected sources, with no candidate refill or new
-  // frontier. Context may not turn a changed source into a fresh baseline.
-  for (const reference of selected) {
-    const thread = await readThread(dependencies, reference.thread.id, context);
-    anchors.push(thread.anchor);
-    if (JSON.stringify(thread.value) !== JSON.stringify(reference.thread))
-      throw new ProblemError('dependency_unavailable');
-    if (reference.post) {
-      const post = await readPost(dependencies, reference.thread.id, reference.post.id, context);
-      anchors.push(post.anchor);
-      if (JSON.stringify(post.value) !== JSON.stringify(reference.post))
-        throw new ProblemError('dependency_unavailable');
-    }
-  }
-  // Last asynchronous owner call: account deletion/fencing, publication choice
-  // and current editor authority use the same native snapshot as initial choice.
+  // Reobserve the account after owner hydration, then close over the original
+  // Content keys. No replacement cohort or new frontier is selected here.
   const final = await within(context.deadline, () =>
     withConnection(dependencies.pool, async (connection) => {
       const client = deadlineClient(connection, context.deadline);
@@ -332,8 +317,32 @@ async function listAuthorItems(
     }),
   );
   anchors.push(final);
+
+  await prepared.confirm();
+  anchors.push(...prepared.anchors);
+  // Keep this as the last source pass: a revision replacement during Semantic,
+  // parent or final Account work cannot become a successful replacement page.
+  for (const reference of selected) {
+    const thread = await readThread(dependencies, reference.thread.id, context);
+    anchors.push(thread.anchor);
+    if (JSON.stringify(thread.value) !== JSON.stringify(reference.thread))
+      throw new ProblemError('dependency_unavailable');
+    if (reference.post) {
+      const post = await readPost(dependencies, reference.thread.id, reference.post.id, context);
+      anchors.push(post.anchor);
+      if (JSON.stringify(post.value) !== JSON.stringify(reference.post))
+        throw new ProblemError('dependency_unavailable');
+    }
+  }
   return {
-    entries: entries.map((entry) => ({ ...entry, ...contexts.get(entry.id) })),
+    entries: entries.map((entry) => {
+      const itemContext = contexts.get(entry.id);
+      if (list === 'posts' && itemContext) {
+        const { reviewContext: _reviewContext, ...postContext } = itemContext;
+        return { ...entry, ...postContext };
+      }
+      return { ...entry, ...itemContext };
+    }),
     anchors,
     ...(context.actor.kind === 'anonymous' && selected.length > 0
       ? {
