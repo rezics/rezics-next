@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from '@tanstack/react-router';
-import { useId, useRef, useState } from 'react';
+import { useId, useRef, useSyncExternalStore, type MouseEvent } from 'react';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
@@ -11,10 +11,17 @@ import { ScreenProfileEntry } from './screen-profile-entry';
 import { isScreenType, screenReaderVisit, type ScreenReaderVisit } from './screen-profile';
 import { screenGroupLabel } from './screen-profile-fields';
 import type { ScreenGroup } from './screen-profile';
-import { loadScreenProfileForReader } from './screen-episode-reader/actions';
-import { screenEpisodeCursor, type ScreenEpisodeOrigin } from './screen-episode-reader/navigation';
+import { browserObservation } from '../../session/observation';
+import { loadScreenProfileFactsForReader, loadScreenProfileForReader } from './screen-episode-reader/actions';
+import {
+  screenEpisodeCursorIntent,
+  screenEpisodeReadingAddress,
+  screenEpisodeReturn,
+  type ScreenEpisodeOrigin,
+} from './screen-episode-reader/navigation';
 import { ScreenEpisodeList } from './screen-episode-reader/view';
-import type { ScreenEpisodeRead } from './screen-episode-reader/read';
+import type { ScreenEpisodeRead, ScreenProfileReaderLoad } from './screen-episode-reader/read';
+import { useScreenEpisodeVisit } from './screen-episode-reader/visit/owner';
 import { ProfileBoundNotes, ProfileLibraryNote, ProfileReaderGroups, ProfileSourceList } from './music-reader-view';
 import type { ProfileBound, ProfileReaderState } from './music-reader';
 
@@ -55,6 +62,7 @@ export function ScreenProfileReader({
   episodeOrigin,
   readerSpoilerLevel = 0,
   episodeVisitKey,
+  episodeVisit,
 }: {
   locale: string;
   release?: Release;
@@ -70,6 +78,7 @@ export function ScreenProfileReader({
   episodeOrigin?: ScreenEpisodeOrigin;
   readerSpoilerLevel?: number;
   episodeVisitKey?: string;
+  episodeVisit?: ReturnType<typeof useScreenEpisodeVisit>;
 }) {
   const Link = link;
   const visit: ScreenReaderVisit = screenReaderVisit({
@@ -95,18 +104,38 @@ export function ScreenProfileReader({
         ) : null}
         <ProfileLibraryNote library={visit.library} locale={locale} kind="screen" />
       </header>
-      {publicRead && !visit.unpublished.episodes ? (
+      {publicRead &&
+      (visit.type === 'schema:TVSeries' || visit.type === 'schema:TVSeason') &&
+      !visit.unpublished.episodes ? (
         <ScreenEpisodeList
           locale={locale}
           {...(release ? { release } : {})}
           {...(episodeRead ? { read: episodeRead } : {})}
           loading={episodeLoading}
           {...(onEpisodeRetry ? { retry: onEpisodeRetry } : {})}
+          {...(episodeVisit ? { visit: episodeVisit } : {})}
           origin={episodeOrigin ?? { pathname: '', searchStr: '' }}
           readerSpoilerLevel={readerSpoilerLevel}
           {...(episodeVisitKey ? { visitKey: episodeVisitKey } : {})}
           link={link}
         />
+      ) : null}
+      {(visit.type === 'schema:TVSeason' || visit.type === 'schema:Episode') &&
+      episodeVisit?.returnHref &&
+      episodeVisit.returnMembershipId ? (
+        <span
+          onClickCapture={(event) =>
+            episodeVisit.onReturnNavigate(
+              episodeVisit.returnHref!,
+              episodeVisit.returnMembershipId!,
+              event as unknown as MouseEvent<HTMLAnchorElement>,
+            )
+          }
+        >
+          <Link href={episodeVisit.returnHref} className={`${buttonVariants({ variant: 'outline' })} ${actionClass}`}>
+            {m.screen_episode_reader_return({}, o)}
+          </Link>
+        </span>
       ) : null}
       {visit.state !== 'ready' && visit.state !== 'empty' ? (
         <p role={visit.state === 'loading' ? 'status' : 'alert'}>{screenStateCopy(visit.state, locale)}</p>
@@ -156,6 +185,13 @@ export function ScreenProfileOverview({
   readerSpoilerLevel?: number;
 }) {
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const observationStore = browserObservation(queryClient);
+  const observation = useSyncExternalStore(
+    observationStore.subscribe,
+    observationStore.getSnapshot,
+    observationStore.getServerSnapshot,
+  );
   const instance = useId();
   const observedSubject = useRef(publicRead.subject);
   const observationGeneration = useRef(0);
@@ -163,25 +199,55 @@ export function ScreenProfileOverview({
     observedSubject.current = publicRead.subject;
     observationGeneration.current += 1;
   }
-  const episodeCursor = screenEpisodeCursor(location.searchStr);
+  const cursorIntent = screenEpisodeCursorIntent(location.searchStr);
+  const episodeCursor = cursorIntent.kind === 'cursor' ? cursorIntent.cursor : undefined;
   const realmKey = new URLSearchParams(location.searchStr).get('realm') ?? '';
+  const origin: ScreenEpisodeOrigin = {
+    pathname: location.pathname,
+    searchStr: location.searchStr,
+    hash: location.hash,
+  };
+  const fullAddress = `${origin.pathname}${origin.searchStr}${origin.hash ?? ''}`;
+  const routeVisit = useRef({ address: fullAddress, generation: 0 });
+  if (routeVisit.current.address !== fullAddress) {
+    routeVisit.current = { address: fullAddress, generation: routeVisit.current.generation + 1 };
+  }
+  const routeGeneration = routeVisit.current.generation;
+  const profileSourceKey = JSON.stringify([
+    publicRead.subject.id,
+    publicRead.subject.type,
+    publicRead.subject.context,
+    context ?? '',
+    screenEpisodeReadingAddress(origin),
+    realmKey,
+    viewerKey ?? '',
+    locale,
+    readerSpoilerLevel,
+    observation.state,
+    observation.state === 'signed-in'
+      ? [observation.observation.subject, observation.observation.id]
+      : observation.state,
+    observationGeneration.current,
+  ]);
+  const pageKey = JSON.stringify([profileSourceKey, fullAddress, routeGeneration]);
+  const observationCurrent = () => observationStore.getSnapshot() === observation;
   const query = useQuery({
     queryKey: [
       'screen-profile-reader',
       instance,
-      publicRead.subject.id,
-      publicRead.subject.type,
-      publicRead.subject.context,
-      context ?? '',
-      realmKey,
-      viewerKey ?? '',
-      locale,
+      profileSourceKey,
+      pageKey,
+      cursorIntent.kind,
       episodeCursor ?? '',
-      readerSpoilerLevel,
-      observationGeneration.current,
     ],
-    queryFn: () =>
-      loadScreenProfileForReader({
+    queryFn: async (): Promise<ScreenProfileReaderLoad> => {
+      if (cursorIntent.kind === 'invalid') {
+        const profile = await loadScreenProfileFactsForReader({
+          data: { id: publicRead.subject.id, ...(context ? { context } : {}) },
+        });
+        return { profile, episodes: { ok: false, reason: 'stale' } };
+      }
+      return loadScreenProfileForReader({
         data: {
           id: publicRead.subject.id,
           expectedType: publicRead.subject.type,
@@ -189,73 +255,47 @@ export function ScreenProfileOverview({
           ...(context ? { context } : {}),
           ...(episodeCursor !== undefined ? { cursor: episodeCursor } : {}),
         },
-      }),
+      });
+    },
     retry: false,
     staleTime: 0,
     gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const profile = query.data?.profile;
+  const loadedProfile = query.data?.profile;
+  const lastGoodProfile = useRef<{ source: string; profile: typeof loadedProfile } | undefined>(undefined);
+  if (lastGoodProfile.current?.source !== profileSourceKey) lastGoodProfile.current = undefined;
+  if (loadedProfile?.ok) lastGoodProfile.current = { source: profileSourceKey, profile: loadedProfile };
+  const profile = loadedProfile?.ok ? loadedProfile : lastGoodProfile.current?.profile ?? loadedProfile;
   const release = profile?.ok ? profile.release : undefined;
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
-  const episodeRead = query.data?.episodes;
-  const [episodeRetryRead, setEpisodeRetryRead] = useState<{ visitKey: string; read: ScreenEpisodeRead }>();
-  const [retryingVisitKey, setRetryingVisitKey] = useState<string>();
-  const retryToken = useRef(0);
-  const episodeVisitKey = [
-    publicRead.subject.id,
-    publicRead.subject.type,
-    publicRead.subject.context,
-    context ?? '',
-    realmKey,
-    viewerKey ?? '',
-    locale,
-    readerSpoilerLevel,
-    episodeCursor ?? '',
+  const episodeRead: ScreenEpisodeRead | undefined =
+    cursorIntent.kind === 'invalid'
+      ? { ok: false, reason: 'stale' }
+      : query.data?.episodes ?? (query.isError ? { ok: false, reason: 'unavailable' } : undefined);
+  const episodeSourceKey = JSON.stringify([
+    profileSourceKey,
     release ? releaseDigest(release) : '',
+  ]);
+  const settledKey = JSON.stringify([
     query.dataUpdatedAt,
-    observationGeneration.current,
-  ].join(':');
-  const currentVisitKey = useRef(episodeVisitKey);
-  currentVisitKey.current = episodeVisitKey;
-  const retryEpisodes = async () => {
-    const token = ++retryToken.current;
-    const visitKey = episodeVisitKey;
-    setRetryingVisitKey(visitKey);
-    if (!release) {
-      void query.refetch();
-      setRetryingVisitKey(undefined);
-      return;
-    }
-    try {
-      const result = await loadScreenProfileForReader({
-        data: {
-          id: publicRead.subject.id,
-          expectedType: publicRead.subject.type,
-          locale,
-          ...(context ? { context } : {}),
-          ...(episodeCursor !== undefined ? { cursor: episodeCursor } : {}),
-        },
-      });
-      if (currentVisitKey.current !== visitKey || retryToken.current !== token) return;
-      if (result.profile.ok && releaseDigest(result.profile.release) !== releaseDigest(release)) {
-        setEpisodeRetryRead(undefined);
-        void query.refetch();
-        return;
-      }
-      setEpisodeRetryRead({
-        visitKey,
-        read: result.episodes ?? { ok: false, reason: 'unavailable' },
-      });
-    } catch {
-      if (currentVisitKey.current === visitKey && retryToken.current === token)
-        setEpisodeRetryRead({ visitKey, read: { ok: false, reason: 'unavailable' } });
-    } finally {
-      if (retryToken.current === token) setRetryingVisitKey(undefined);
-    }
-  };
-  const currentEpisodeRead = episodeRetryRead?.visitKey === episodeVisitKey ? episodeRetryRead.read : episodeRead;
+    query.errorUpdatedAt,
+    query.fetchStatus,
+    query.fetchFailureCount,
+  ]);
+  const episodeVisit = useScreenEpisodeVisit({
+    sourceKey: episodeSourceKey,
+    pageKey,
+    origin,
+    locale,
+    observation,
+    observationCurrent,
+    read: episodeRead,
+    loading: query.isPending || query.isFetching,
+    settledKey,
+    directReturn: screenEpisodeReturn(location.searchStr, locale),
+  });
   return (
     <ScreenProfileReader
       locale={locale}
@@ -263,14 +303,15 @@ export function ScreenProfileOverview({
       {...(release ? { release } : {})}
       {...(bounds ? { bounds } : {})}
       {...(reason ? { reason } : {})}
-      {...(query.isPending ? { loading: true } : {})}
+      {...(query.isPending && !lastGoodProfile.current?.profile?.ok ? { loading: true } : {})}
       onRetry={() => void query.refetch()}
-      {...(currentEpisodeRead ? { episodeRead: currentEpisodeRead } : {})}
-      {...(query.isPending || query.isFetching || retryingVisitKey === episodeVisitKey ? { episodeLoading: true } : {})}
-      onEpisodeRetry={() => void retryEpisodes()}
+      {...(episodeRead ? { episodeRead } : {})}
+      {...(query.isPending || query.isFetching ? { episodeLoading: true } : {})}
+      onEpisodeRetry={() => void query.refetch()}
       episodeOrigin={{ pathname: location.pathname, searchStr: location.searchStr, hash: location.hash }}
       readerSpoilerLevel={readerSpoilerLevel}
-      episodeVisitKey={episodeVisitKey}
+      episodeVisitKey={`${episodeSourceKey}:${pageKey}:${settledKey}`}
+      episodeVisit={episodeVisit}
       link={link}
     />
   );
