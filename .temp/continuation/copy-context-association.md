@@ -1,36 +1,30 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/library/copy-list-context*",
-    "services/kernel/src/library/personal-routes.ts",
-    "services/kernel/src/library/README.md",
-    "services/kernel/test/library/copy-list-context*"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "account",
-    "deletion"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": {
-    "lines": 500,
-    "files": 6
-  },
-  "acceptance": {
-    "tests": [
-      "A FULL Copies page returns only complete, currently disclosed canonical Work identities for explicit edition associations, preserving scope, withheld, missing, unsupported and unavailable distinctions.",
-      "Copies retain their original IDs, source pins and native editing authority across Semantic association movement and unavailable states, without hidden target disclosure or per-copy hydration."
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/library/copy-list-context*',
+      'services/kernel/src/library/personal-routes.ts',
+      'services/kernel/src/library/README.md',
+      'services/kernel/test/library/copy-list-context*',
     ],
-    "failing": true,
-    "workerOwned": true
-  }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'account', 'deletion'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 500, 'files': 6 },
+  'acceptance':
+    {
+      'tests':
+        [
+          'A FULL Copies page returns only complete, currently disclosed canonical Work identities for explicit edition associations, preserving scope, withheld, missing, unsupported and unavailable distinctions.',
+          'Copies retain their original IDs, source pins and native editing authority across Semantic association movement and unavailable states, without hidden target disclosure or per-copy hydration.',
+        ],
+      'failing': true,
+      'workerOwned': true,
+    },
 }
 ---
 

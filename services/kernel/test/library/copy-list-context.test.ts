@@ -15,9 +15,17 @@ test('FULL copies keep native row identity and private metadata with only disclo
   const f = await createCopyListContextFixture();
   try {
     const author = await f.create('schema:Person', {}, { en: 'Public author' });
-    const values = { 'schema:author': author, 'schema:datePublished': date, 'schema:wordCount': { amount: '+123', unit: '1' } };
+    const values = {
+      'schema:author': author,
+      'schema:datePublished': date,
+      'schema:wordCount': { amount: '+123', unit: '1' },
+    };
     const firstWork = await f.create('schema:Book', values, { en: 'Same title' });
-    const secondWork = await f.create('schema:Book', { ...values, 'schema:wordCount': { amount: '+456', unit: '1' } }, { en: 'Same title' });
+    const secondWork = await f.create(
+      'schema:Book',
+      { ...values, 'schema:wordCount': { amount: '+456', unit: '1' } },
+      { en: 'Same title' },
+    );
     const hiddenWork = await f.create('schema:Book', values, { en: 'Hidden title' });
     const first = await f.copy(f.ownerToken, firstWork, 'private note one');
     const second = await f.copy(f.ownerToken, firstWork, 'private note two');
@@ -40,11 +48,14 @@ test('FULL copies keep native row identity and private metadata with only disclo
       kind: 'physical',
       status: 'owned',
       acquiredOn: '2019-06-01',
-      context: { state: 'unsupported', facts: {
-        'schema:author': [{ kind: 'item', id: author, labels: { en: 'Public author' } }],
-        'schema:datePublished': [{ kind: 'time', year: 2024 }],
-        'schema:wordCount': [{ kind: 'quantity', amount: 123, unit: '1' }],
-      } },
+      context: {
+        state: 'unsupported',
+        facts: {
+          'schema:author': [{ kind: 'item', id: author, labels: { en: 'Public author' } }],
+          'schema:datePublished': [{ kind: 'time', year: 2024 }],
+          'schema:wordCount': [{ kind: 'quantity', amount: 123, unit: '1' }],
+        },
+      },
     });
     expect(result.copies.find((copy) => copy.id === second.id)?.subjectId).toBe(firstWork);
     expect(result.copies.find((copy) => copy.id === sibling.id)?.subjectId).toBe(secondWork);
@@ -63,11 +74,9 @@ test('FULL copies keep native row identity and private metadata with only disclo
         throw new ProblemError('dependency_unavailable');
       },
     });
-    const refreshed = await attachCopyListContext(
-      { ...deps, access: unavailableAccess },
-      [unsupported],
-      { revalidate: async () => {} },
-    );
+    const refreshed = await attachCopyListContext({ ...deps, access: unavailableAccess }, [unsupported], {
+      revalidate: async () => {},
+    });
     expect(refreshed[0]).toMatchObject({
       id: first.id,
       subjectId: firstWork,
@@ -96,11 +105,9 @@ test('FULL copies keep native row identity and private metadata with only disclo
         return deps.access.prepare!(actor, action, resource, context);
       },
     });
-    const currentnessMoved = await attachCopyListContext(
-      { ...deps, access: releaseAccess },
-      [unsupported],
-      { revalidate: async () => {} },
-    );
+    const currentnessMoved = await attachCopyListContext({ ...deps, access: releaseAccess }, [unsupported], {
+      revalidate: async () => {},
+    });
     expect(releaseChangedDuringAssembly).toBe(true);
     expect(currentnessMoved[0]).toMatchObject({
       id: first.id,
@@ -134,19 +141,13 @@ test('FULL copies keep native row identity and private metadata with only disclo
         return deps.access.prepare!(actor, action, resource, context);
       },
     });
-    const moved = await attachCopyListContext(
-      { ...deps, access: mergeAccess },
-      [retiredRow!],
-      { revalidate: async () => {} },
-    );
+    const moved = await attachCopyListContext({ ...deps, access: mergeAccess }, [retiredRow!], {
+      revalidate: async () => {},
+    });
     expect(movedDuringAssembly).toBe(true);
     expect(moved[0]).toMatchObject({ subjectId: secondWork, context: { state: 'unavailable' } });
 
-    const removed = await f.send(
-      f.ownerToken,
-      'DELETE',
-      `/v1/copies/${second.id}?revision=${disposedCopy.revision}`,
-    );
+    const removed = await f.send(f.ownerToken, 'DELETE', `/v1/copies/${second.id}?revision=${disposedCopy.revision}`);
     expect(removed.status).toBe(204);
     const remaining = ((await (await f.page(f.ownerToken)).json()).copies as Array<{ id: string }>).map(({ id }) => id);
     expect(remaining).not.toContain(second.id);
@@ -221,9 +222,9 @@ test('raw copy overflow refuses before identity, summary or Semantic reads', asy
   try {
     const deps = await f.deps('editor');
     const copies = Array.from({ length: 101 }, (_, index) => ({ subjectId: `not-read-${index}` }));
-    await expect(
-      attachCopyListContext(deps, copies, { revalidate: async () => {} }),
-    ).rejects.toMatchObject({ code: 'content_too_large' });
+    await expect(attachCopyListContext(deps, copies, { revalidate: async () => {} })).rejects.toMatchObject({
+      code: 'content_too_large',
+    });
   } finally {
     await f.close();
   }

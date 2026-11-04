@@ -168,8 +168,7 @@ export async function attachCopyListContext<T extends ContextCopy>(
     if (!subject.creativeWork) return { ...copy, subject, context: { state: 'scope' } };
 
     const presentation = facts.get(original);
-    if (!presentation || presentation.id !== previous.terminal)
-      return { ...copy, subject, context: unavailable() };
+    if (!presentation || presentation.id !== previous.terminal) return { ...copy, subject, context: unavailable() };
 
     return {
       ...copy,

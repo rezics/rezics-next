@@ -36,7 +36,9 @@ export async function createCopyListContextFixture(options: { db?: GrowthDatabas
           method,
           headers: {
             ...(token === null ? {} : { authorization: `Bearer ${token}` }),
-            ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` }),
+            ...(body === undefined
+              ? {}
+              : { 'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` }),
           },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         }),

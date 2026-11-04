@@ -1,13 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import {
-  assertGrowthAccessPaths,
-  checkGrowth,
-  openGrowthDatabase,
-  seed,
-  type Population,
-} from '../support/growth.ts';
+import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { collectionListFactsPopulation } from './support/collection-list-facts-fixture.ts';
 import { createCopyListContextFixture } from './copy-list-context-fixture.ts';
 

@@ -1253,7 +1253,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         query: t.Object({ ...pageQuery, subjectId: t.Optional(t.String({ format: 'uuid' })) }, closed),
         response: {
           200: t.Object(
-            { copies: t.Array(embedded(copySchema, { ...subjectFields, context: t.Optional(copyListContextSchema) })), next: nullable },
+            {
+              copies: t.Array(embedded(copySchema, { ...subjectFields, context: t.Optional(copyListContextSchema) })),
+              next: nullable,
+            },
             closed,
           ),
           413: problemSchema('content_too_large'),
