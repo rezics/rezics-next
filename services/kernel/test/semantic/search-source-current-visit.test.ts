@@ -73,6 +73,12 @@ const sourced = (property: string, content: unknown) =>
     references: [{ parts: [statement('schema:url', `https://example.org/${content}`)] }],
   });
 
+function statementId(subject: { statements: Record<string, { id: string }[] | undefined> }, property: string): string {
+  const id = subject.statements[property]?.[0]?.id;
+  if (!id) throw new Error(`${property} statement is missing`);
+  return id;
+}
+
 async function created(item: unknown) {
   const target = { route: ROUTE, id: newId(ROUTE) };
   const key = randomUUID();
@@ -113,8 +119,8 @@ test('the mounted source reads current selected nonrelation heads without obsole
       ],
     },
   });
-  const compactId = book.statements['schema:inLanguage'][0]!.id;
-  const dateId = book.statements['schema:datePublished'][0]!.id;
+  const compactId = statementId(book, 'schema:inLanguage');
+  const dateId = statementId(book, 'schema:datePublished');
   const partition = subjectPartition(book.id);
 
   const preferred = await propose(book.id, 'en');
@@ -250,8 +256,8 @@ test('lifecycle, disclosure, qualifier change and unreadied coverage stay distin
       ],
     },
   });
-  const languageId = book.statements['schema:inLanguage'][0]!.id;
-  const dateId = book.statements['schema:datePublished'][0]!.id;
+  const languageId = statementId(book, 'schema:inLanguage');
+  const dateId = statementId(book, 'schema:datePublished');
   const partition = subjectPartition(book.id);
   const route = routeOf(book.id)!;
   const empty = await created({ type: 'schema:Book', labels: { en: 'Ready empty' } });
