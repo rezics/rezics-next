@@ -142,7 +142,6 @@ test('independent publication creation, local corrections, immutable recovery an
     scene++;
     entries = next;
     admitted = true;
-    client.clear();
     await draw();
   };
   const article = (index = 0) => canvas.getAllByRole('article')[index]!;
@@ -1028,25 +1027,19 @@ test('publication creation uses Global Context eligibility independently of the 
   const scope = () => within(canvas.getByRole('article'));
   const reviewButton = () => scope().getByRole('button', { name: m.publication_review() }) as HTMLButtonElement;
   const settled = async () => {
+    await canvas.findByRole('textbox', { name: m.catalogue_create_label() }, { timeout: 5000 });
     await waitFor(
-      () => {
-        const text = canvas.getByRole('article').textContent ?? '';
-        expect(text).not.toContain(m.identity_intake_authority_reading());
-        expect(text).not.toContain(m.catalogue_create_loading());
-      },
+      () => expect(canvas.getByRole('article').textContent).not.toContain(m.identity_intake_authority_reading()),
       { timeout: 5000 },
     );
   };
   const fillDraft = async () => {
-    await waitFor(
-      () => expect(canvas.getByRole('article').textContent).not.toContain(m.catalogue_create_loading()),
-      { timeout: 5000 },
-    );
     const label = await canvas.findByRole('textbox', { name: m.catalogue_create_label() }, { timeout: 5000 });
+    const independent = await canvas.findByRole('checkbox', { name: m.publication_independent() }, { timeout: 5000 });
     await act(async () => {
       await user.clear(label);
       await user.type(label, 'A distinct edition');
-      await user.click(scope().getByRole('checkbox', { name: m.publication_independent() }));
+      await user.click(independent);
     });
   };
   const ready = async () => {
