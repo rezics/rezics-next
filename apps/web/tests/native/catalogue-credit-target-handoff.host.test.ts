@@ -176,3 +176,33 @@ test('a created person returns to the exact work credit draft and is selected ex
   );
   await page.close();
 });
+
+test('a failed work handoff keeps creation from guessing the target', async () => {
+  const page = await fixture.alice.context.newPage();
+  page.setDefaultTimeout(60_000);
+  await fixture.stack.injectKernelFailureOnce({
+    method: 'GET',
+    path: `/v1/subjects/${fixture.movie.id}`,
+    status: 503,
+    body: '{"title":"Work temporarily unavailable","status":503}',
+  });
+  const response = await page.goto(
+    `${fixture.stack.web}/en/catalogue/people?work=${encodeURIComponent(fixture.movie.id)}`,
+    { waitUntil: 'domcontentloaded' },
+  );
+  expect(response?.status()).toBe(200);
+  await page.getByRole('button', { name: 'Retry', exact: true }).waitFor({ state: 'visible' });
+  expect(await page.getByRole('button', { name: 'Create subject', exact: true }).count()).toBe(0);
+  await fixture.stack.syncKernelRequests();
+  expect(
+    fixture.stack
+      .kernelRequests()
+      .some(
+        (request) =>
+          request.method === 'GET' &&
+          request.url.split('?')[0] === `/v1/subjects/${fixture.movie.id}` &&
+          request.responseStatus === 503,
+      ),
+  ).toBe(true);
+  await page.close();
+});

@@ -6,6 +6,7 @@ import { candidateFailure, type CandidateFailure } from '../../subject/candidate
 import { DefinitionReadError, definitionText, fetchGuideRelease } from './definition-guide';
 import { createSubjectRecord } from './create-subject-request';
 import type { CreateResult, CreatedReader, InitialSubject } from './create-subject';
+import type { CreateAuthority } from './identity-intake';
 import { correctionProperty, creationStatement, type StatementInput } from './statement-editor';
 import { peopleBiographyGroups } from './people-biography';
 
@@ -37,6 +38,7 @@ export type PeopleItem = InitialSubject & { statements?: Record<string, Statemen
 export type PeopleCommand = { key: string; item: PeopleItem };
 export type PeopleTransport = {
   load: () => Promise<PeopleRead>;
+  eligibility: () => Promise<CreateAuthority>;
   create: (command: PeopleCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
 };

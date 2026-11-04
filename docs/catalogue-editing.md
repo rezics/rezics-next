@@ -902,6 +902,8 @@ not published, selected or accepted. Creating the identity and adding an optiona
 independent native operations; creation does not add a credit. A later edit, type switch, definition refresh or
 reference copy requires reviewing the current item again. Unknown delivery retries the sealed item and key;
 acknowledged creation retries only the exact-UUID read. The returned ID is read through the ordinary reader.
+Creation controls use the current signed-in viewer's `subject.create` observation on the mounted Global Context;
+guest, refusal and unavailable observation remain distinct from independently useful released profile definitions.
 Drafts survive Type switches and stale-metadata rejection, including fields no longer admitted; withdrawn fields
 keep a visible repair or discard path. An explicit retry keeps Retry focusable with `aria-disabled` while
 pending, then returns focus to Retry on failure or moves it to the profile/form heading on success.

@@ -2,10 +2,11 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import type { PeopleRead } from '../src/features/catalogue/people-profile';
+import type { CreateAuthority } from '../src/features/catalogue/identity-intake';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-test('People correction reload hands off only current keyboard focus intent', async () => {
+test('People correction focus stays current and profile creation keeps authority separate from definitions', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/subjects/person/people' });
@@ -39,7 +40,7 @@ test('People correction reload hands off only current keyboard focus intent', as
   const { peopleProfileFixture } = await import('../src/kernel/fake/catalogue-people-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const testing = createRequire(require.resolve('storybook/test'));
-  const { within } = await import(testing.resolve('@testing-library/dom'));
+  const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
   const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
   const fixture = peopleProfileFixture('ready', 'en', 'person');
@@ -66,21 +67,25 @@ test('People correction reload hands off only current keyboard focus intent', as
       action();
       await new Promise((resolve) => setTimeout(resolve, 15));
     });
-  const show = () =>
+  const show = (
+    selectedFixture = fixture,
+    selectedTransport = transport,
+    id: string | undefined = selectedFixture.id,
+  ) =>
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary
             observed={{ state: 'signed-in', subject: 'viewer', csrfToken: 'token' }}
-            address={fixture.id}
+            address={selectedFixture.id}
           >
             <PeopleProfileEditor
-              id={fixture.id}
+              {...(id ? { id } : {})}
               locale="en"
               session="signed-in"
-              transport={transport}
-              propose={fixture.propose}
-              review={fixture.review}
+              transport={selectedTransport}
+              propose={selectedFixture.propose}
+              review={selectedFixture.review}
               onNavigate={() => {}}
             />
           </CandidateReaderBoundary>
@@ -131,6 +136,47 @@ test('People correction reload hands off only current keyboard focus intent', as
     await settle(() => retired(initial));
     expect(window.document.activeElement).toBe(outside);
     expect(host.textContent).toBe('');
+
+    const createFixture = peopleProfileFixture('ready', 'en', 'create');
+    let authority: CreateAuthority = { state: 'refused', reason: 'permission' };
+    let writes = 0;
+    const createTransport = {
+      ...createFixture.transport,
+      eligibility: async () => authority,
+      create: async (command: Parameters<typeof createFixture.transport.create>[0]) => {
+        writes++;
+        return createFixture.transport.create(command);
+      },
+    };
+    await show(createFixture, createTransport, undefined);
+    await waitFor(() =>
+      expect(within(host).getByRole('alert').textContent).toBe(m.identity_intake_authority_refused_permission()),
+    );
+    const type = within(host).getByRole('combobox', { name: m.catalogue_create_type() }) as HTMLSelectElement;
+    expect(Array.from(type.options).map((option) => option.value)).toEqual(
+      expect.arrayContaining(['schema:Person', 'schema:Organization']),
+    );
+    await act(async () => user.selectOptions(type, 'schema:Person'));
+    const label = within(host).getByRole('textbox', { name: m.catalogue_create_label() });
+    await act(async () => user.type(label, 'Retained profile draft'));
+    expect((within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+
+    authority = { state: 'unknown', reason: 'unavailable' };
+    await act(async () =>
+      user.click(within(host).getByRole('button', { name: m.identity_intake_authority_retry() })),
+    );
+    await waitFor(() =>
+      expect(within(host).getByRole('alert').textContent).toBe(m.identity_intake_authority_unknown()),
+    );
+    expect((within(host).getByRole('combobox', { name: m.catalogue_create_type() }) as HTMLSelectElement).value).toBe(
+      'schema:Person',
+    );
+    expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
+      'Retained profile draft',
+    );
+    expect(writes).toBe(0);
   } finally {
     await act(async () => root.unmount());
     client.clear();

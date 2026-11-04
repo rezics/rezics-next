@@ -9,6 +9,7 @@ import {
   type PeopleTransport,
 } from '../../features/catalogue/people-profile';
 import { readCreatedSubject } from '../../features/catalogue/create-subject-request';
+import { allowedCreateAuthority } from '../../features/catalogue/identity-intake';
 import { proposeFact } from '../../features/catalogue/subject-facts';
 import type { StatementInput, SnakInput } from '../../features/catalogue/statement-editor';
 import { candidateContext, readCandidates, selectCandidate, type Candidate } from '../../subject/candidates';
@@ -220,6 +221,7 @@ export function peopleProfileFixture(scenario: PeopleScenario = 'ready', locale 
   const client = createKernelClient('https://people.test', { fetch: fetcher });
   const transport: PeopleTransport = {
     load: () => readPeopleProfile(client, locale, address),
+    eligibility: async () => allowedCreateAuthority,
     create: (command) =>
       createPeopleProfile(
         client,
