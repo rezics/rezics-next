@@ -1532,16 +1532,19 @@ A ready Subject whose active seek returns the overflow lookahead is the same una
 Expanded Global heads keep the stored `search_selected` body and adoption rank.
 
 - Touches: the existing `B ≤ 256` id batch, partition position, subject/readiness points, current term heads,
-  `search_selected_page` active nonrelation heads with per-Subject `LIMIT S·C+1`, then the existing disclosure,
+  `search_selected_nonrelation_page` active nonrelation heads with per-Subject `LIMIT S·C+1`, then the existing disclosure,
   lifecycle, fence and release points on those returned heads. One cold fold step, when needed, runs after the
   snapshot and is charged on that visit.
-- Bound: physical selected rows `O(B S + C_returned)` with `S ≤ 512` current facts and `C ≤ 32` selected
-  candidates per expanded slot. Obsolete fact/revision count is not a term. Inactive selected rows are excluded
-  by the active index before the row limit. An overflow lookahead is preparing, not a truncated page.
+- Bound: physical selected rows are at most `B·(S·C+1)` including one lookahead per Subject (`B ≤ 256`,
+  `S ≤ 512` current nonrelation facts and `C ≤ 32` selected candidates per expanded slot). The seek's partial
+  index predicate excludes inactive rows and active relations before lookahead. The output is at most `B·S·C`
+  statements on success; UTF-8 bytes scale with those statements and the existing per-value validators. Obsolete
+  fact/revision count and active relation degree are not terms. Ready overflow is unavailable, not a truncated page.
 - Growth check: `test/semantic/growth-search-source-current-visit.test.ts` at 64/512/4096 unrelated Subjects with
-  growing obsolete history on the requested keys; `test/semantic/search-source-current-visit.test.ts` covers compact
-  and expanded heads, retract, competing candidates, lifecycle, rank, qualifier, late commit, Context, disclosure
-  and unreadied coverage. This does not claim a new Search page acceptance.
+  active relation heads on the requested Subject, growing obsolete history on the requested keys, and unrelated
+  Subjects; its native plan asserts the dedicated partial index at every scale. `test/semantic/search-source-current-visit.test.ts`
+  covers compact and expanded heads, retract, competing candidates, lifecycle, rank, qualifier, late commit, Context,
+  disclosure and unreadied coverage. This does not claim a new Search page acceptance.
 
 ### Anchored subject read
 

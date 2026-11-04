@@ -27,7 +27,7 @@ CROSS JOIN LATERAL (
   CROSS JOIN input
   WHERE s.route = requested.route AND s.subject_id = requested.subject_id
     AND s.route >= input.partition_no * 16 AND s.route < (input.partition_no + 1) * 16
-    AND s.active AND NOT s.relation
+    AND s.active AND s.relation IS FALSE
   ORDER BY s.property COLLATE "C", s.slot_id, s.candidate_id
   LIMIT :subject_limit::integer
 ) selected;

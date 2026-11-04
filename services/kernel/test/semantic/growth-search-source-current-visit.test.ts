@@ -104,18 +104,37 @@ function expectCurrentHeadPlan(plans: readonly unknown[]): void {
   const selected = nodes(plans).filter(
     (node) =>
       node['Relation Name'] === 'search_selected' ||
-      /search_selected_(page|value)/.test(String(node['Index Name'] ?? '')),
+      /search_selected_(nonrelation_page|page|value)/.test(String(node['Index Name'] ?? '')),
   );
   expect(selected.length).toBeGreaterThan(0);
+  expect(selected.some((node) => node['Index Name'] === 'search_selected_nonrelation_page')).toBe(true);
   for (const scan of selected) {
     expect(['Index Scan', 'Index Only Scan', 'Bitmap Index Scan', 'Bitmap Heap Scan']).toContain(
       String(scan['Node Type']),
     );
-    if (scan['Index Name']) expect(String(scan['Index Name'])).toMatch(/search_selected_(page|value)/);
+    if (scan['Index Name']) expect(String(scan['Index Name'])).toMatch(/search_selected_(nonrelation_page|page|value)/);
     expect(Number(scan['Rows Removed by Filter'] ?? 0)).toBe(0);
   }
+  const nonrelation = selected.find((node) => node['Index Name'] === 'search_selected_nonrelation_page')!;
+  expect(String(nonrelation['Index Cond'])).toContain('route');
+  expect(String(nonrelation['Index Cond'])).toContain('subject_id');
+  expect(nodes(plans).some((node) => node['Node Type'] === 'Limit')).toBe(true);
   expect(nodes(plans).filter((node) => node['Relation Name'] === 'fact' && node['Node Type'] === 'Seq Scan')).toEqual(
     [],
+  );
+}
+
+async function appendActiveRelationHeads(subject: string, target: string, from: number, to: number): Promise<void> {
+  if (from >= to) return;
+  await db.admin.query(
+    `INSERT INTO semantic.search_selected
+       (route, subject_id, slot_id, candidate_id, property, rank, ordinal, body, release, revision, source,
+        relation, compact, active, log_seq)
+     SELECT $1,$2,gen_random_uuid(),gen_random_uuid(),'schema:author','normal',n,
+       jsonb_build_object('rank','normal','value',jsonb_build_object('type','value','content',$6::text)),
+       $3,1,NULL,true,true,true,n
+     FROM generate_series($4::integer + 1,$5::integer) AS n`,
+    [routeOf(subject), subject, bundledDigest, from, to, target],
   );
 }
 
@@ -207,24 +226,43 @@ test('derived current-head bounds hold as unrelated Subjects and obsolete histor
     { property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' } },
     { property: 'schema:inLanguage', value: 'en', facet: { kind: 'code' } },
   ];
+  let responseBytes = 0;
+  const expectWindow = (value: Awaited<ReturnType<typeof source.read>>) => {
+    expect(value.subjects.map(({ id, statements }) => ({ id, statements }))).toEqual([
+      { id: subject, statements: [expected[0]] },
+      { id: neighbor, statements: [expected[1]] },
+    ]);
+    return Buffer.byteLength(JSON.stringify(value.subjects), 'utf8');
+  };
 
   const report = await checkGrowth(db, {
-    name: 'Search current nonrelation heads stay bounded as obsolete history and unrelated Subjects grow',
+    name: 'Search current nonrelation heads stay bounded as relation heads, obsolete history and unrelated Subjects grow',
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    byteBounds: { responseBytes: 'constant' },
     repetitions: 3,
     grow: async (database, scale, previous) => {
       await appendObsoleteHistory(subject, previous, scale);
       await appendObsoleteHistory(neighbor, previous, scale);
+      await appendActiveRelationHeads(subject, neighbor, previous, scale);
       await seed({ pool: database.pool, admin: database.admin }, unrelated('semantic-search-source-current-visit'), {
         from: previous,
         to: scale,
       });
+      await database.admin.query('ANALYZE semantic.search_selected');
+      const heads = await database.admin.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM semantic.search_selected
+         WHERE route=$1 AND subject_id=$2 AND relation IS TRUE AND active`,
+        [routeOf(subject), subject],
+      );
+      expect(heads.rows[0]?.count).toBe(String(scale));
+      const observed = await capture(database, () => source.read(hotPartition, [subject, neighbor]));
+      expect(expectWindow(observed.value)).toBe(responseBytes);
+      expectCurrentHeadPlan(observed.capture.plans);
     },
     async warmup(database) {
       const measured = await capture(database, () => source.read(hotPartition, [subject, neighbor]));
-      expect(measured.value.subjects.map((row) => row.statements).flat()).toEqual(expect.arrayContaining(expected));
-      expectCurrentHeadPlan(measured.capture.plans);
+      responseBytes = expectWindow(measured.value);
       const selected = costOf(measured.capture).relations['semantic.search_selected'];
       expect(selected?.sequentialScans ?? 0).toBe(0);
     },

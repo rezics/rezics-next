@@ -12197,6 +12197,13 @@ CREATE INDEX search_selected_concept_broader ON semantic.search_selected USING b
 
 
 --
+-- Name: search_selected_nonrelation_page; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_selected_nonrelation_page ON semantic.search_selected USING btree (route, subject_id, property, slot_id, candidate_id) WHERE (active AND (relation IS FALSE));
+
+
+--
 -- Name: search_selected_page; Type: INDEX; Schema: semantic; Owner: -
 --
 
