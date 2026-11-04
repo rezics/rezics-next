@@ -2456,3 +2456,29 @@ revision exists, the normalized digest and the acknowledged native UUID.
   exact citations and omissions. The connected ordinary caller is
   `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
   remains controller-owned.
+
+### Bangumi character source names
+
+The default cross-media selection follows selected anime `subject-characters`
+and `person-characters` endpoints, then keeps each selected `character` JSONL
+row intact through `planCrossMediaSeed`. The shared entity converter reads the
+bounded `Crt` source-name fields and creates ordinary cited `schema:name` and
+`schema:alternateName` assertions on the exact Bangumi Character identity. The
+common `publishShowcase` manifest remains responsible for independent candidate
+acceptance, adoption and anonymous public reads; local plan output alone proves
+neither publication nor Search indexing.
+
+Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level `name` is `und`, `name_cn` is `zh`, and `简体中文名` is `zh-Hans`; within nicknames only the observed full-width comma splits entries and slash sequences stay intact.
+
+- Touches: one selected character record and its source-owned name candidate
+  set; no new source table, page, publisher or native lookup is added.
+- Bound: source rows remain under the existing 1 MiB line cap; infobox parsing
+  is limited to 32 KiB, depth 2, 64 fields, 64 aliases, 4 KiB/500 codepoints per
+  name, 16 diagnostics and at most 83 commands. Structurally malformed alias
+  groups are withheld as a whole; unsupported custom labels are omitted with
+  diagnostics while supported aliases, names and summary remain.
+- Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
+  covers exact language mapping and changed alias removal;
+  `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
+  default selected payload through same-state importer refresh, common
+  publication and an anonymous public read.
