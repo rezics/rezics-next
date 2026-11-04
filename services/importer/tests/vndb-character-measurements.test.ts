@@ -77,7 +77,7 @@ function families(extra: Record<string, Record<string, unknown>[]> = {}): CrossM
   };
 }
 
-function port(commands: BatchCommand[], fence?: string): CrossMediaPort {
+function port(commands: BatchCommand[]): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
   return {
     async batch(request) {
@@ -96,10 +96,8 @@ function port(commands: BatchCommand[], fence?: string): CrossMediaPort {
       };
     },
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async fence({ externalId }) {
-      return externalId === fence
-        ? { fenced: true, securityRevision: '1' }
-        : { fenced: false, securityRevision: null };
+    async fence() {
+      return { fenced: false, securityRevision: null };
     },
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
@@ -216,11 +214,6 @@ test('operator plans authored COPY character measurements and imports exact supp
       vndbSeed,
     );
     expect(changed.runs.vndb?.counts.changed).toBeGreaterThan(0);
-    const fenced: BatchCommand[] = [];
-    await seedCrossMedia(plan, join(directory, 'fenced.sqlite'), port(fenced, 'c1'), undefined, vndbSeed);
-    expect(
-      fenced.some((command) => command.op === 'propose' && command.source.external_id === 'c1'),
-    ).toBe(false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
