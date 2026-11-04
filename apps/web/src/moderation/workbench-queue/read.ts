@@ -50,7 +50,7 @@ export type WorkbenchRead = PrivateReaderRead & {
   realmsNext: string | null;
   boards: WorkbenchDirectoryItem[];
   boardsNext: string | null;
-  directory?: ModerationDirectoryPage;
+  directory?: ModerationDirectoryPage | undefined;
   cases: WorkbenchCase[];
   next: string | null;
   /** Original board reports from this read generation. Catalogue and appeals leave this empty. */

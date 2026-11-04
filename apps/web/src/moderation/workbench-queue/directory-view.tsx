@@ -9,7 +9,7 @@ const control = 'min-h-11 min-w-11 max-w-full whitespace-normal break-words text
 
 /** Only source advice creates a selection control. Exact selected reads remain independent. */
 export function ModerationDirectory({ page, search, onSearch, onRetry, isCurrent }: {
-  page?: ModerationDirectoryPage;
+  page?: ModerationDirectoryPage | undefined;
   search: WorkbenchSearch;
   onSearch: (search: WorkbenchSearch) => void;
   onRetry?: (event?: MouseEvent<HTMLButtonElement>) => void;

@@ -16,7 +16,11 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { readWorkbench, prepareWorkbenchRead } = await import('../src/moderation/workbench-queue/read');
+const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
+const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
+const { sessionQuery } = await import('../src/session/query');
 const { workbenchSearch, workbenchReadKey, workbenchQueueHref } = await import('../src/moderation/workbench-queue/scope');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
 const { moderationDirectoryPage } = await import('../src/moderation/workbench-queue/directory');
@@ -107,4 +111,40 @@ test('consumer bounds reject oversized, duplicate and unsupported advice and dro
   ]) expect(moderationDirectoryPage(invalid).state).toBe('unavailable');
   const result = moderationDirectoryPage({ ...page, reporter: 'private', count: 99 });
   expect(result).not.toHaveProperty('reporter'); expect(result).not.toHaveProperty('count');
+});
+
+test('private continuation recovery keeps the frontier, restores keyboard focus and retires on session replacement', async () => {
+  const cache = new QueryClient();
+  const session = { state: 'signed-in', subject: 'directory-reader', csrfToken: null };
+  cache.setQueryData(sessionQuery.queryKey, session);
+  const readerOrigin = { subject: session.subject, csrfFingerprint: await privateReaderFingerprint(null) };
+  const input = workbenchSearch({ directoryCursor: 'original-frontier' });
+  const calls: string[] = [];
+  let attempts = 0;
+  const read = async (selected: typeof input) => {
+    calls.push(selected.directoryCursor!);
+    const page = await readWorkbench(source(attempts++ < 2
+      ? { state: 'unavailable', items: [], next: null } : directory()), selected);
+    return { ...page, generation: crypto.randomUUID(), readerOrigin };
+  };
+  const initial = await prepareWorkbenchRead(cache, input, read, new AbortController().signal);
+  const host = document.createElement('main'); document.body.replaceChildren(host); root = createRoot(host);
+  await act(() => root!.render(<QueryClientProvider client={cache}><WorkbenchPage page={initial} search={input}
+    read={read} onSearch={() => { throw new Error('Recovery must retain the original search'); }} /></QueryClientProvider>));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const retry = host.querySelector<HTMLButtonElement>('[data-workbench-retry]')!;
+    retry.focus();
+    await act(async () => {
+      retry.dispatchEvent(new browser.MouseEvent('click', { bubbles: true, detail: 0 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(document.activeElement).toBe(attempt === 0
+      ? host.querySelector('[data-workbench-retry]') : host.querySelector('article'));
+  }
+  expect(calls).toEqual(Array(3).fill('original-frontier'));
+  expect(host.textContent).toContain('Direct board');
+  await act(async () => cache.setQueryData(sessionQuery.queryKey, { ...session, subject: 'replacement-reader' }));
+  expect(host.textContent).not.toContain('Direct board');
+  expect(host.querySelector('[data-moderation-scope]')).toBeNull();
+  await act(() => root!.unmount()); root = undefined; cache.clear();
 });
