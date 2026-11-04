@@ -7,15 +7,7 @@ import { homeFeedDestination, homeFeedRealmDestination, homeFeedTitle } from '..
 
 type SpaceSummary = Extract<FeedItem['summary'], { address: string }>;
 
-function HomeSpaceCarrierContext({
-  item,
-  summary,
-  locale,
-}: {
-  item: FeedItem;
-  summary: SpaceSummary;
-  locale: string;
-}) {
+function HomeSpaceCarrierContext({ item, summary, locale }: { item: FeedItem; summary: SpaceSummary; locale: string }) {
   const options = { locale: locale as Locale };
   if (!('realm' in summary) || summary.realm === undefined)
     return (
@@ -40,11 +32,7 @@ function HomeSpaceCarrierContext({
         : realm.title;
   const href = homeFeedRealmDestination(item, locale);
   return (
-    <p
-      className="text-muted-foreground"
-      data-home-carrier-state={state}
-      data-home-carrier-id={realm.id}
-    >
+    <p className="text-muted-foreground" data-home-carrier-state={state} data-home-carrier-id={realm.id}>
       <bdi>{m.space_realm_heading({}, options)}:</bdi>{' '}
       {href ? (
         <a
