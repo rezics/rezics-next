@@ -21,6 +21,7 @@ import {
 import {
   collectionPageIsFiltered,
   collectionPositionScope,
+  collectionPositionScopeFromAddress,
   collectionReadingPageKey,
 } from './collection-public-reading/position';
 import type { CollectionPositionScope } from './collection-public-reading/position';
@@ -2483,7 +2484,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
   const locale = getLocale();
   const pageKey =
     suppliedPageKey ?? collectionReadingPageKey(currentHref, currentHref ?? '/', 0, members);
-  const positionScope = suppliedPositionScope ?? 'first';
+  const positionScope = suppliedPositionScope ?? collectionPositionScopeFromAddress(currentHref);
   const { admitReferenceReturn, missingOccurrence } = useCollectionComparisonReturn(
     members,
     currentHref,
