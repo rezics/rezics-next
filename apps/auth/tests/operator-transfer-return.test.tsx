@@ -226,3 +226,22 @@ test('a released source reply after retirement cannot publish acknowledgement, r
   expect(page.calls.filter(({ path }) => path === '/account-operations/execute')).toHaveLength(1);
   expect(page.calls.filter(({ path }) => path === '/account-operations/approve')).toHaveLength(1);
 });
+
+test('a valid replacement unknown descriptor cannot downgrade an already known acknowledgement', async () => {
+  const page = await mount();
+  await settle(hide);
+  const replacement = {
+    ...saved,
+    phase: 'execute' as const,
+    request: { ...saved.request, sourceOperationKey: 'replacement-key' },
+  };
+  storeTransferAttempt(replacement);
+  await settle(show);
+  await page.resolve(1, reply({ kind: 'readiness' }));
+  await page.resolve(2, matching());
+  const summary = page.host.querySelector('section[aria-labelledby="transfer-return-heading"]')!;
+  expect(summary.textContent).toContain(m.auth_transfer_recovery_acknowledged());
+  expect(summary.textContent).toContain(m.auth_transfer_recovery_source_unknown());
+  expect(restoreTransferAttempt()).toEqual(replacement);
+  expect(page.calls.some(({ path }) => path.startsWith('/account-operations/'))).toBe(false);
+});

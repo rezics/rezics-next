@@ -7,12 +7,16 @@ export type TransferReturnEntry = Exclude<TransferRecoveryKind, 'none' | 'source
 export function rememberTransferReturn(
   entries: TransferReturnEntry[],
   kind: TransferRecoveryKind | 'review',
+  localOutcome = false,
 ): TransferReturnEntry[] {
   if (kind === 'none') return entries;
   const next = kind === 'source-acknowledged-conflict' ? 'source-acknowledged' : kind;
   // Missing/replaced storage is not new evidence about an observed acknowledgement.
   if (entries.length && next === 'unreadable') return entries;
-  if (next === 'saved-step' && entries.includes('source-acknowledged')) return entries;
+  if (!localOutcome && entries.includes('source-acknowledged')) {
+    if (next === 'source-unknown') return entries.includes(next) ? entries : ['source-unknown', 'source-acknowledged'];
+    if (next === 'saved-step' || next === 'destination-accepted') return entries;
+  }
   if (next === 'source-unknown' && entries.includes(next)) return entries;
   if (entries.at(-1) === next) return entries;
   const unknown = entries.includes('source-unknown');

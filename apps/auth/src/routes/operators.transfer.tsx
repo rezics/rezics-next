@@ -158,9 +158,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   const unresolvedSource = useRef(false);
   const historyRef = useRef<TransferReturnEntry[]>([]);
   const historyFocus = useRef<HTMLHeadingElement>(null);
-  function remember(kind: TransferRecoveryKind) {
+  function remember(kind: TransferRecoveryKind, localOutcome = false) {
     if (kind === 'source-unknown') unresolvedSource.current = true;
-    const next = rememberTransferReturn(historyRef.current, kind);
+    const next = rememberTransferReturn(historyRef.current, kind, localOutcome);
     if (next !== historyRef.current) {
       historyRef.current = next;
       setHistory(next);
@@ -226,10 +226,10 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     nativeReady,
     recovery,
   };
-  function updateRecovery(value: TransferRecoveryKind) {
+  function updateRecovery(value: TransferRecoveryKind, localOutcome = false) {
     recoveryKind.current = value;
     setRecovery(value);
-    remember(value);
+    remember(value, localOutcome);
   }
   const protectedWork = () => {
     const value = state.current;
@@ -279,7 +279,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     const clear = () => {
       updateRecovery(retained);
       if (discardUnsent) {
-        const next = rememberTransferReturn(historyRef.current, 'review');
+        const next = rememberTransferReturn(historyRef.current, 'review', true);
         historyRef.current = next;
         setHistory(next);
       }
@@ -695,7 +695,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     setAttemptReviewed(true);
     setResult(null);
     setCurrent(null);
-    updateRecovery(transferRecoveryKind(value));
+    updateRecovery(transferRecoveryKind(value), true);
     setRecoveryReviewed(false);
     setNativeAdvice(null);
     setConfirmed(false);
@@ -837,7 +837,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
             showFailure(outcome.readback);
           } else offerReadRetry(() => readCurrent(liveAttempt.current ?? value));
         }
-        updateRecovery(transferRecoveryKind(liveAttempt.current ?? value, outcome));
+        updateRecovery(transferRecoveryKind(liveAttempt.current ?? value, outcome), true);
       }
     });
   }
