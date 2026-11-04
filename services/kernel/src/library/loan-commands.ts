@@ -1,6 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
-import { shareAccount } from '../access/account-share.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { authoritativeTimeValue, type CommandAttempt, type CommandTransaction } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -123,7 +122,6 @@ function requireActor(actor: Actor, action: string): AccountActor {
 async function admitAccount(client: Pick<PoolClient, 'query'>, owner: AccountActor): Promise<void> {
   const route = routeOf(owner.accountId);
   if (route === null) throw new GrantDeniedError();
-  await shareAccount(client, owner.accountId);
   const current = await readAccount(client, route, owner.accountId);
   if (
     !current ||
