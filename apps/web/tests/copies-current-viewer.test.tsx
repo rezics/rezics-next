@@ -471,7 +471,9 @@ test('The actual Copies route retires retained private rows and editor state on 
       if (twice) node.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     });
   const retainedSubmit = () => {
-    const props = Object.entries(form()).find(([key]) => key.startsWith('__reactProps$'))![1] as {
+    const node = form();
+    const key = Object.getOwnPropertyNames(node).find((key) => key.startsWith('__reactProps$'))!;
+    const props = Reflect.get(node, key) as {
       onSubmit: (event: { preventDefault(): void }) => Promise<void>;
     };
     return () => props.onSubmit({ preventDefault() {} });
