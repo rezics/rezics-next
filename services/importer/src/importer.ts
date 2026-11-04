@@ -933,7 +933,6 @@ export class Importer {
     const acknowledgedEffects = this.acknowledge(owner, request, result);
     this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     const bound = bindings.claim(owner);
-    if (owner.external_id === 'v1') console.error('showcase-credit bootstrap result:', bound);
     return bound?.state === 'bound' ? bound.subject : null;
   }
 
@@ -1910,7 +1909,6 @@ export class Importer {
         !('outcome' in conversion && conversion.outcome === 'ignored')
       ) {
         subject = await this.bootstrap(registration, staged, conversion, signal, write);
-        if (!subject && owner.external_id === 'v1') console.error('showcase-credit bootstrap returned no subject');
         if (!subject) return null;
         await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
       }
@@ -1927,13 +1925,6 @@ export class Importer {
         };
         conversionContext = context;
         conversion = this.convert(registration, staged, context);
-        if (owner.external_id === 'v1')
-          console.error('showcase-credit v1 conversion:', {
-            proposals: conversion.proposals.map((command) => command.op === 'propose' ? command.statement.property.id : command.op),
-            candidates: candidates.length,
-            omissions,
-            vocabularyRows: vocabulary?.rows.length ?? 0,
-          });
         this.retainDiagnostics(run, staged, conversion, 'application');
         const intents =
           'mediaImportIntents' in conversion ? (conversion.mediaImportIntents as MediaImportRequest[]) : [];
@@ -2080,7 +2071,6 @@ export class Importer {
         throw new Error('Converter did not produce bound proposals');
       commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
     }
-    if (owner.external_id === 'v1') console.error('showcase-credit v1 command plan:', commands.length);
     if (!commands.length && !omissions.length && !deferredCover) {
       const kind = store.classify(run, row.recordKey, { commands: [] });
       if (conversion && 'outcome' in conversion && conversion.outcome === 'ignored')
@@ -2102,21 +2092,13 @@ export class Importer {
       this.acknowledged(row.recordKey);
       return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
     }
-    if (owner.external_id === 'v1') console.error('showcase-credit v1 preparing store plan');
-    let preparedKind: Kind;
-    try {
-      preparedKind = store.prepare(run, row.recordKey, {
+    return {
+      kind: store.prepare(run, row.recordKey, {
         commands,
         omissions,
         ...(deferredCover ? { deferredCover: true } : {}),
-      });
-    } catch (error) {
-      if (owner.external_id === 'v1') console.error('showcase-credit v1 store plan failed:', error);
-      throw error;
-    }
-    if (owner.external_id === 'v1') console.error('showcase-credit v1 prepared store plan:', preparedKind);
-    return {
-      kind: preparedKind,
+        ...(conversion?.sourceVocabulary === undefined ? {} : { sourceVocabulary: conversion.sourceVocabulary }),
+      }),
       deferredCover,
       ...(observedConversion ? { conversion: observedConversion } : {}),
     };
@@ -2404,7 +2386,6 @@ export class Importer {
               if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
             return planned;
           } catch (error) {
-            console.error('showcase-credit staged record failed:', error);
             if (error instanceof Interrupted) throw error;
             if (
               error instanceof ObservationConflictError ||

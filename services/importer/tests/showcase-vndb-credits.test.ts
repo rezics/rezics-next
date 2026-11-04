@@ -124,7 +124,6 @@ test('the selected-family seed qualifies staff and voice credits without alias i
   ]);
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-credits-'));
-  let failed = false;
   try {
     const result = await seedCrossMedia(
       plan,
@@ -202,16 +201,7 @@ test('the selected-family seed qualifies staff and voice credits without alias i
       'scenario',
     ]);
     expect(result.vndbCreditDiagnostics).toEqual([]);
-  } catch (error) {
-    failed = true;
-    console.error(`showcase-credit debug state: ${join(directory, 'state.sqlite')}`);
-    const commandCounts = commands.reduce<Record<string, number>>((counts, command) => {
-      counts[command.op] = (counts[command.op] ?? 0) + 1;
-      return counts;
-    }, {});
-    console.error(`showcase-credit command counts: ${JSON.stringify(commandCounts)}`);
-    throw error;
   } finally {
-    if (!failed) await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);

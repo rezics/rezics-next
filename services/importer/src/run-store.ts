@@ -330,6 +330,59 @@ export type AggregateOperation = Readonly<{
 function fail(): never {
   throw new TypeError('Invalid run-store input');
 }
+
+function sourceVocabularyOriginMatches(
+  command: BatchCommand,
+  recordKey: string,
+  recordRevision: string,
+  request: SourceVocabularyRequest | undefined,
+): boolean {
+  if (!request || command.op !== 'propose' || command.source.field_group !== 'facts') return false;
+  return request.rows.some((row) => {
+    const origin = row.origin;
+    if (
+      !origin ||
+      origin.externalId !== recordKey ||
+      origin.revision !== recordRevision ||
+      typeof origin.digest !== 'string' ||
+      !/^[0-9a-f]{64}$/u.test(origin.digest) ||
+      command.source.digest !== origin.digest ||
+      typeof origin.converterRevision !== 'string' ||
+      command.source.converter_revision !== origin.converterRevision ||
+      typeof origin.url !== 'string' ||
+      typeof row.path !== 'string'
+    )
+      return false;
+    let sourceUrl: string;
+    try {
+      const parsed = new URL(origin.url);
+      parsed.hash = row.path;
+      sourceUrl = parsed.href;
+    } catch {
+      return false;
+    }
+    return command.statement.references?.some((reference) => {
+      let citedUrl = false;
+      let citedRevision = false;
+      for (const part of reference.parts) {
+        if (
+          part.property.id === 'schema:url' &&
+          part.value.type === 'value' &&
+          part.value.content === sourceUrl
+        )
+          citedUrl = true;
+        if (
+          part.property.id === 'schema:version' &&
+          part.value.type === 'value' &&
+          part.value.content === recordRevision
+        )
+          citedRevision = true;
+      }
+      return citedUrl && citedRevision;
+    }) ?? false;
+  });
+}
+
 function exact(
   value: unknown,
   required: readonly string[],
@@ -1719,7 +1772,12 @@ export class RunStore<Projection = BatchStatement[]> {
   prepare(
     run: Run,
     key: string,
-    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
+    input: {
+      commands: BatchCommand[];
+      omissions?: Omission[];
+      deferredCover?: boolean;
+      sourceVocabulary?: SourceVocabularyRequest;
+    },
   ): Kind {
     return this.plan(run, key, input, true).kind;
   }
@@ -1727,18 +1785,28 @@ export class RunStore<Projection = BatchStatement[]> {
   prepareWithOmissions(
     run: Run,
     key: string,
-    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
+    input: {
+      commands: BatchCommand[];
+      omissions?: Omission[];
+      deferredCover?: boolean;
+      sourceVocabulary?: SourceVocabularyRequest;
+    },
   ): { kind: Kind; omissions: Omission[] } {
     return this.plan(run, key, input, true);
   }
   private plan(
     run: Run,
     key: string,
-    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
+    input: {
+      commands: BatchCommand[];
+      omissions?: Omission[];
+      deferredCover?: boolean;
+      sourceVocabulary?: SourceVocabularyRequest;
+    },
     multi: boolean,
   ): { kind: Kind; omissions: Omission[] } {
     keyId(key);
-    exact(input, ['commands'], ['omissions', 'deferredCover']);
+    exact(input, ['commands'], ['omissions', 'deferredCover', 'sourceVocabulary']);
     if (input.deferredCover !== undefined && typeof input.deferredCover !== 'boolean') fail();
     if (!Array.isArray(input.commands) || input.commands.length > (multi ? 300 : 100)) fail();
     const request: ImportBatchRequest = { commands: input.commands };
@@ -1810,9 +1878,10 @@ export class RunStore<Projection = BatchStatement[]> {
         if (
           c.source.source !== run.source ||
           c.source.external_id !== key ||
-          c.source.digest !== row.digest ||
-          c.source.record_revision !== row.recordRevision ||
-          c.source.converter_revision !== row.converter_revision
+          (c.source.digest !== row.digest ||
+            c.source.record_revision !== row.recordRevision ||
+            c.source.converter_revision !== row.converter_revision) &&
+            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary)
         )
           fail();
       }

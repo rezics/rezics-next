@@ -708,6 +708,8 @@ not additional check requests.
   Concept facts; keep the existing coarse VN staff edge only when its precise role binding is unavailable, and always
   require a bound character for a voice credit. The seed returns only finite selected-role requirements to the common
   publisher and rereads exact current bindings supplied by its local config; it does not create taxonomy releases.
+  Source-row digest and converter provenance pass through the ordinary journal only when each proposal matches that
+  request's exact table path and VN revision.
   The real-data public VN/person/character walkthrough remains the final M1 proof.
 - `production operator imports VNDB staff preferred and additional source names through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-names.test.ts`.
