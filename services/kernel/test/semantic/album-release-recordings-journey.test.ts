@@ -68,7 +68,7 @@ async function adopted(holder: CreatedSubject, input: Proposed, key?: string) {
       discoveryKey(),
     ),
   );
-  const target = typeof input.value.content === 'string' ? input.value.content : undefined;
+  const target = input.value.type === 'value' && typeof input.value.content === 'string' ? input.value.content : undefined;
   ok(
     await fixture.request(
       'acceptor',
@@ -229,9 +229,8 @@ test('a reader follows an album through two released editions and ordered record
   const page = ok(await fixture.request('anonymous', 'POST', '/v1/pages:read', { target: { subject: cd.id } }));
   expect(page.subject).toBe(cd.id);
   expect(page.viewer).toEqual({ type: 'schema:MusicRelease', id: cd.id });
-  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(
-    (page as { actions?: { status?: string } }).actions?.status,
-  );
+  const actionStatus = (page as { actions?: { status: string } }).actions?.status ?? 'missing';
+  expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(actionStatus);
   expect(Object.keys(page.reads as object).length).toBeLessThanOrEqual(16);
   const editorPage = ok(await fixture.request('editor', 'POST', '/v1/pages:read', { target: { subject: cd.id } }));
   expect(editorPage.viewer).toEqual(page.viewer);
