@@ -46,6 +46,22 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
       ).toBe(200);
       const watched = await f.thread();
       expect((await f.call(owner, 'PUT', `/v1/threads/${watched.id}/watch`)).status).toBe(204);
+      const missingBoards = [newId(0x7865), newId(0x7865)];
+      const missingBoardWatchIds = missingBoards.map(() => newId(ownerRoute));
+      await f.db.admin.query(
+        `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
+         SELECT $1,$2,board,watch,true,1,clock_timestamp()+ordinal*interval '1 day'
+         FROM unnest($3::uuid[],$4::uuid[]) WITH ORDINALITY n(board,watch,ordinal)`,
+        [ownerRoute, owner, missingBoards, missingBoardWatchIds],
+      );
+      const missingThreads = [newId(0x7865), newId(0x7865)];
+      const missingThreadWatchIds = missingThreads.map(() => newId(ownerRoute));
+      await f.db.admin.query(
+        `INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
+         SELECT $1,$2,thread,watch,clock_timestamp()+ordinal*interval '1 day'
+         FROM unnest($3::uuid[],$4::uuid[]) WITH ORDINALITY n(thread,watch,ordinal)`,
+        [ownerRoute, owner, missingThreads, missingThreadWatchIds],
+      );
       const retryReader = f.accounts.principal;
       let retryTarget: string | undefined;
       let retryCursor = '';
@@ -222,16 +238,18 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
           const resources = Array.from({ length: count }, () => newId(0x7865));
           const recipients = Array.from({ length: count }, () => newId(0x7654));
           const recipientWatches = Array.from({ length: count }, () => newId(0x7654));
-          await db.admin.query(
-            `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
+          if (step !== 'board-list' && step !== 'board-remove')
+            await db.admin.query(
+              `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
           SELECT $1,$2,board,watch,true,1,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`,
-            [ownerRoute, owner, resources, ownIds],
-          );
-          await db.admin.query(
-            `INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
+              [ownerRoute, owner, resources, ownIds],
+            );
+          if (step !== 'thread-list' && step !== 'thread-remove')
+            await db.admin.query(
+              `INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
           SELECT $1,$2,thread,watch,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(thread,watch)`,
-            [ownerRoute, owner, resources, ownIds],
-          );
+              [ownerRoute, owner, resources, ownIds],
+            );
           await db.admin.query(
             `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
           SELECT $1,$2,board,watch,false,2,clock_timestamp() FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`,

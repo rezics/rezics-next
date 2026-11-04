@@ -351,6 +351,7 @@ test('inventory retries a reused source identity and the exact same cursor after
 
 test('inventory finishes current target disclosure after later rows hydrate', async () => {
   const reader = f.accounts.actor;
+  const accountRoute = routeOf(reader)!;
   const route = routeOf(f.boardId)!;
   const secondaryBoard = newId(route);
   const space = newId(route);
@@ -500,7 +501,7 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   );
   await f.db.admin.query(
     'DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2 AND thread_id=ANY($3::uuid[])',
-    [route, reader, [realmThread.id, later.id, revokedThread.id, removalThread.id]],
+    [accountRoute, reader, [realmThread.id, later.id, revokedThread.id, removalThread.id]],
   );
 });
 
