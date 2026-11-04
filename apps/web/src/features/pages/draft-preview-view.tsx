@@ -28,11 +28,13 @@ export function DraftPreviewPanel({
   locale,
   lease,
   read,
+  focusHandoff,
 }: {
   profile: PresentationProfile;
   locale: string;
   lease: CurationAdmissionLease;
   read: DraftPreviewRead;
+  focusHandoff?: Set<string>;
 }) {
   const id = useId();
   const queryClient = useQueryClient();
@@ -46,12 +48,18 @@ export function DraftPreviewPanel({
   const [pending, setPending] = useState(false);
   const sequence = useRef(0);
   const mounted = useRef(false);
+  const sectionRef = useRef<HTMLElement>(null);
+  const captureButton = useRef<HTMLButtonElement>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
+  const restoreCaptureFocus = useRef(false);
   const owner = { lease, locale, read };
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
   const previousOwner = useRef(owner);
 
   function retire() {
+    const document = sectionRef.current?.ownerDocument;
+    if (document && outputRef.current?.contains(document.activeElement)) restoreCaptureFocus.current = true;
     sequence.current++;
     setCapture(null);
     setOutput(null);
@@ -64,6 +72,26 @@ export function DraftPreviewPanel({
       sequence.current++;
     };
   }, []);
+  useLayoutEffect(() => {
+    const section = sectionRef.current;
+    const document = section?.ownerDocument;
+    if (!section || !document) return;
+    if (focusHandoff?.has(lease.reader)) {
+      focusHandoff.delete(lease.reader);
+      const active = document.activeElement;
+      if (active === document.body || !active?.isConnected) captureButton.current?.focus();
+    }
+    return () => {
+      if (section.contains(document.activeElement)) focusHandoff?.add(lease.reader);
+    };
+  }, [focusHandoff, lease.reader]);
+  useLayoutEffect(() => {
+    if (!restoreCaptureFocus.current) return;
+    restoreCaptureFocus.current = false;
+    const document = sectionRef.current?.ownerDocument;
+    const active = document?.activeElement;
+    if (document && (active === document.body || !active?.isConnected)) captureButton.current?.focus();
+  }, [capture, output, pending]);
   useLayoutEffect(() => {
     if (!sameOwner(previousOwner.current, owner)) retire();
     previousOwner.current = owner;
@@ -105,6 +133,8 @@ export function DraftPreviewPanel({
 
   async function execute(captured: Capture) {
     if (!lease.isCurrent()) return;
+    const document = sectionRef.current?.ownerDocument;
+    if (document && outputRef.current?.contains(document.activeElement)) restoreCaptureFocus.current = true;
     const serial = ++sequence.current;
     setPending(true);
     setOutput(null);
@@ -158,6 +188,7 @@ export function DraftPreviewPanel({
   };
   return (
     <section
+      ref={sectionRef}
       aria-labelledby={`${id}-title`}
       className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
     >
@@ -231,7 +262,7 @@ export function DraftPreviewPanel({
           )}
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button type="submit" className={control} disabled={!lease.isCurrent()}>
+          <Button ref={captureButton} type="submit" className={control} disabled={!lease.isCurrent()}>
             {m.draft_preview_capture({}, options)}
           </Button>
           {busy && (
@@ -240,6 +271,7 @@ export function DraftPreviewPanel({
               variant="outline"
               className={control}
               onClick={() => {
+                restoreCaptureFocus.current = true;
                 sequence.current++;
                 setPending(false);
                 setOutput({ ok: false, reason: 'interrupted' });
@@ -249,7 +281,16 @@ export function DraftPreviewPanel({
             </Button>
           )}
           {active && !busy && (
-            <Button type="button" variant="outline" className={control} onClick={() => void execute(active)}>
+            <Button
+              type="button"
+              variant="outline"
+              className={control}
+              onClick={(event) => {
+                if (sectionRef.current?.ownerDocument.activeElement === event.currentTarget)
+                  restoreCaptureFocus.current = true;
+                void execute(active);
+              }}
+            >
               {m.draft_preview_retry({}, options)}
             </Button>
           )}
@@ -265,32 +306,34 @@ export function DraftPreviewPanel({
         </div>
       )}
       {busy && <p role="status">{m.curation_loading({}, options)}</p>}
-      {result && !result.ok && (
-        <div role="alert" className="space-y-2">
-          <p>{failures[result.reason]({}, options)}</p>
-          {result.reason === 'redirect' && (
-            <Button
-              type="button"
-              variant="outline"
-              className={control}
-              onClick={() => {
-                retire();
-                setKind('account');
-                setAddress(result.handle);
-                setRealm('');
-              }}
-            >
-              {m.draft_preview_correct({ handle: result.handle }, options)}
-            </Button>
-          )}
-        </div>
-      )}
-      {active && result?.ok && (
-        <div className="min-w-0 space-y-3">
-          <p role="status">{m.draft_preview_success({}, options)}</p>
-          <PublishedPresentationPage result={result} />
-        </div>
-      )}
+      <div ref={outputRef}>
+        {result && !result.ok && (
+          <div role="alert" className="space-y-2">
+            <p>{failures[result.reason]({}, options)}</p>
+            {result.reason === 'redirect' && (
+              <Button
+                type="button"
+                variant="outline"
+                className={control}
+                onClick={() => {
+                  retire();
+                  setKind('account');
+                  setAddress(result.handle);
+                  setRealm('');
+                }}
+              >
+                {m.draft_preview_correct({ handle: result.handle }, options)}
+              </Button>
+            )}
+          </div>
+        )}
+        {active && result?.ok && (
+          <div className="min-w-0 space-y-3">
+            <p role="status">{m.draft_preview_success({}, options)}</p>
+            <PublishedPresentationPage result={result} />
+          </div>
+        )}
+      </div>
     </section>
   );
 }

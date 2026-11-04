@@ -61,6 +61,7 @@ import {
   selectionKey,
   resolveCorrection,
   currentCorrection,
+  type PresentationDraft,
   type CorrectionTarget,
 } from './curate-view-editor-state';
 import type { PageEditorData } from './editor-config';
@@ -253,6 +254,8 @@ function ActualPresentationViewEditor({
     lease?.kind === 'initial' && initialRead.current?.lease === lease ? initialRead.current.result : null;
   const [freshResult, setFreshResult] = useState<FreshAdmissionResult | null>(null);
   const retainedPublication = useRef<RetainedPublication | null>(null);
+  const retainedDrafts = useRef(new Map<string, PresentationDraft>());
+  const previewFocusHandoff = useRef(new Set<string>());
   const readRequest = useRef<AdmissionReadRequest | null>(null);
 
   const readCurrent = (expectedReader: string, version: number, invocationTransport: CurationEditorTransport) => {
@@ -386,6 +389,8 @@ function ActualPresentationViewEditor({
       lease={lease}
       transport={transport}
       retained={retained}
+      retainedDrafts={retainedDrafts.current}
+      previewFocusHandoff={previewFocusHandoff.current}
       preview={preview}
     />
   );
@@ -533,6 +538,8 @@ function AdmittedPresentationViewEditor({
   lease,
   transport,
   retained,
+  retainedDrafts,
+  previewFocusHandoff,
   preview,
 }: {
   initial: Extract<CurationRead, { ok: true }>;
@@ -542,11 +549,15 @@ function AdmittedPresentationViewEditor({
   lease?: CurationAdmissionLease;
   transport: CurationEditorTransport;
   retained: RetainedPublication;
+  retainedDrafts?: Map<string, PresentationDraft>;
+  previewFocusHandoff?: Set<string>;
   preview?: ReactNode;
 }) {
   const formId = useId();
   const [current, setCurrent] = useState<CurationRead>(initial);
-  const [draft, setDraft] = useState(() => (initial.ok ? presentationDraft(initial) : null));
+  const [draft, setDraft] = useState(
+    () => retainedDrafts?.get(reader) ?? (initial.ok ? presentationDraft(initial) : null),
+  );
   const [adviceLease, setAdviceLease] = useState<CurationAdviceLease | null>(() => ({
     reader,
     locale,
@@ -609,6 +620,11 @@ function AdmittedPresentationViewEditor({
       publication.retire(currentVisit);
     };
   }, [epoch, publication, retained, lease]);
+  useLayoutEffect(() => {
+    if (!retainedDrafts) return;
+    if (draft) retainedDrafts.set(reader, draft);
+    else retainedDrafts.delete(reader);
+  }, [draft, reader, retainedDrafts]);
   const publicationState = useSyncExternalStore(
     publication.subscribe,
     publication.getSnapshot,
@@ -1184,7 +1200,13 @@ function AdmittedPresentationViewEditor({
         </div>
       )}
       {lease && transport.previewDraft && (
-        <DraftPreviewPanel profile={profile} locale={locale} lease={lease} read={transport.previewDraft} />
+        <DraftPreviewPanel
+          profile={profile}
+          locale={locale}
+          lease={lease}
+          read={transport.previewDraft}
+          focusHandoff={previewFocusHandoff}
+        />
       )}
       {preview}
       <div className={editorRecoveryClass}>
