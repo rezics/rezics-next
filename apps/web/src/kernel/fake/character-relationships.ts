@@ -119,8 +119,7 @@ export function characterRelationshipsFixture(
     role('wd:Q95074'),
     ...(scenario === 'age' ? [age('+18')] : []),
   ]);
-  const relatedProperty =
-    scenario === 'identity' || scenario === 'withheld' ? identityProperty : relationshipProperty;
+  const relatedProperty = scenario === 'identity' || scenario === 'withheld' ? identityProperty : relationshipProperty;
   const relatedStatement: Candidate['statement'] = {
     ...snak(relatedProperty, relatedCharacterId, 'wikibase-item'),
     id: statementRel,

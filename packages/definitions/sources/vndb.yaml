@@ -1492,11 +1492,7 @@ tables:
         meaning: >-
           Directed identity association to another Character endpoint identified by this source key; not a merge,
           redirect, class instance, combined biography or the appearance role code main.
-        citations:
-          [
-            'https://vndb.org/d14#3',
-            'https://api.vndb.org/kana#post-character',
-          ]
+        citations: ['https://vndb.org/d14#3', 'https://api.vndb.org/kana#post-character']
         qualifiers:
           - status: existing
             'on': wd:Q95074

@@ -105,11 +105,11 @@ test('bundled Character Type admits identity, appearance age and character relat
     ...old.properties[appearanceProperty]!,
     qualifiers: old.properties[appearanceProperty]!.qualifiers.filter((id) => id !== appearanceAgeProperty),
   };
-  expect(unavailableConfigurations(old).map((item) => item.id).sort()).toEqual([
-    'age-at-appearance',
-    'character-relationship',
-    'main-character-linkage',
-  ]);
+  expect(
+    unavailableConfigurations(old)
+      .map((item) => item.id)
+      .sort(),
+  ).toEqual(['age-at-appearance', 'character-relationship', 'main-character-linkage']);
 });
 
 test('directed relationship, age-by-work, role, spoiler, vanished, unreadable and correction stay on the selected slot', async () => {
@@ -283,7 +283,9 @@ test('admitted identity stays distinct from the protagonist role, and unsupporte
   if (!roleRead.ok || !roleRead.stream) throw new Error('Expected appearance stream');
   expect(roleRead.stream.kind).toBe('appearance');
   expect(roleRead.stream.property).toBe(appearanceProperty);
-  expect(roleRead.rows[0]?.statement?.qualifiers.some((part) => part.property.id === appearanceRoleProperty)).toBe(true);
+  expect(roleRead.rows[0]?.statement?.qualifiers.some((part) => part.property.id === appearanceRoleProperty)).toBe(
+    true,
+  );
   expect(roleRead.rows[0]?.statement?.property.id).not.toBe(identityProperty);
 
   const unsupported = characterRelationshipsFixture('unreleased');

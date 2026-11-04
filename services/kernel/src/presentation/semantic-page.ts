@@ -105,9 +105,7 @@ export function characterWorkIdentityOverlay(
   const unavailable: CharacterWorkIdentityOverlay['unavailable'] = [];
   const ageAdmitted =
     !!appearance?.qualifiers.includes(appearanceAgeProperty) ||
-    !!appearance?.qualifiers.some(
-      (id) => release.properties[id]?.datatype === 'quantity' && id !== spoilerProperty,
-    );
+    !!appearance?.qualifiers.some((id) => release.properties[id]?.datatype === 'quantity' && id !== spoilerProperty);
   if (!ageAdmitted) unavailable.push({ id: 'age-at-appearance', admitted: false });
   const identity = release.properties[identityProperty];
   const identityAdmitted =
