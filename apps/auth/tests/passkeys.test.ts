@@ -279,7 +279,12 @@ async function addVirtualAuthenticator(cdp: CDPSession): Promise<Authenticator> 
 // An IP address cannot be a relying party ID, so the pages are opened at localhost.
 async function open(
   path: string,
-  options: BrowserContextOptions & { webauthn?: boolean; signedIn?: boolean; pendingOperation?: unknown; autofill?: boolean } = {},
+  options: BrowserContextOptions & {
+    webauthn?: boolean;
+    signedIn?: boolean;
+    pendingOperation?: unknown;
+    autofill?: boolean;
+  } = {},
 ): Promise<{ page: Page; origin: string; authenticator: Authenticator | null }> {
   const { webauthn = true, signedIn = true, pendingOperation, autofill = true, ...contextOptions } = options;
   const port = await site();
@@ -303,9 +308,10 @@ async function open(
     const cdp = await context.newCDPSession(page);
     await cdp.send('WebAuthn.enable');
     authenticator = await addVirtualAuthenticator(cdp);
-    if (!autofill) await page.addInitScript(() => {
-      Object.defineProperty(PublicKeyCredential, 'isConditionalMediationAvailable', { value: async () => false });
-    });
+    if (!autofill)
+      await page.addInitScript(() => {
+        Object.defineProperty(PublicKeyCredential, 'isConditionalMediationAvailable', { value: async () => false });
+      });
   } else {
     await page.addInitScript(() => {
       Reflect.deleteProperty(window, 'PublicKeyCredential');
@@ -670,8 +676,12 @@ test(
         expect(await page.getByRole('button', { name: /passkey/i }).count(), path).toBe(0);
         expect(await page.getByRole('heading', { name: /passkeys/i }).count(), path).toBe(path === '/security' ? 1 : 0);
         if (path === '/login')
-          await page.getByRole('status').filter({ hasText: /passkey/i }).waitFor();
-        if (path !== '/security') expect(await page.getByText(/passkey/i).count(), path).toBe(path === '/login' ? 1 : 0);
+          await page
+            .getByRole('status')
+            .filter({ hasText: /passkey/i })
+            .waitFor();
+        if (path !== '/security')
+          expect(await page.getByText(/passkey/i).count(), path).toBe(path === '/login' ? 1 : 0);
         if (path !== '/security') {
           expect(await page.locator('input[type=email]').getAttribute('autocomplete')).toBe('username');
           // The password form is the whole page.

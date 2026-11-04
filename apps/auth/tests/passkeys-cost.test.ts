@@ -160,9 +160,10 @@ async function open(path: string): Promise<{ page: Page }> {
   ]);
   const page = await context.newPage();
   // Count the explicit button ceremony; autofill has its own journey in passkeys.test.ts.
-  if (path.startsWith('/login')) await page.addInitScript(() => {
-    Object.defineProperty(PublicKeyCredential, 'isConditionalMediationAvailable', { value: async () => false });
-  });
+  if (path.startsWith('/login'))
+    await page.addInitScript(() => {
+      Object.defineProperty(PublicKeyCredential, 'isConditionalMediationAvailable', { value: async () => false });
+    });
   page.setDefaultTimeout(15_000);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
@@ -233,7 +234,11 @@ test(
           page.waitForURL((url) => url.pathname === '/authorize'),
           page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click(),
         ]);
-        expect(authRequests(), `${count} passkeys`).toEqual(['POST /signin/page', 'POST /signin/passkey/options', 'POST /signin/passkey']);
+        expect(authRequests(), `${count} passkeys`).toEqual([
+          'POST /signin/page',
+          'POST /signin/passkey/options',
+          'POST /signin/passkey',
+        ]);
       } finally {
         await page.context().close();
       }
@@ -281,7 +286,12 @@ test(
         expect(await page.getByRole('list', { name: 'Passkeys', exact: true }).getByRole('listitem').count()).toBe(
           count,
         );
-        expect(authRequests().sort(), `${count} passkeys`).toEqual(['GET /clients', 'GET /consents', 'GET /security-page', 'POST /account-identity']);
+        expect(authRequests().sort(), `${count} passkeys`).toEqual([
+          'GET /clients',
+          'GET /consents',
+          'GET /security-page',
+          'POST /account-identity',
+        ]);
       } finally {
         await page.context().close();
       }
@@ -307,8 +317,13 @@ test(
           page.waitForResponse((response) => new URL(response.url()).pathname === '/passkeys/register'),
           page.getByRole('button', { name: 'Add a passkey', exact: true }).click(),
         ]);
-        await page.getByRole('list', { name: 'Passkeys', exact: true }).getByRole('listitem').nth(count)
-          .getByRole('button').and(page.locator(':enabled')).waitFor();
+        await page
+          .getByRole('list', { name: 'Passkeys', exact: true })
+          .getByRole('listitem')
+          .nth(count)
+          .getByRole('button')
+          .and(page.locator(':enabled'))
+          .waitFor();
         expect(authRequests(before), `${count} passkeys`).toEqual([
           'POST /passkeys/register/options',
           'POST /passkeys/register',
