@@ -88,6 +88,9 @@ export async function suggestSubjects(
   const searchParams = new URL(request.url).searchParams;
   const filters = searchParams.getAll('filter');
   if (filters.length > 1) throw problem(400, 'invalid_request', 'Use one complete search filter');
+  const digests = searchParams.getAll('digest');
+  if (digests.length > 1 || (digests.length === 1 && !digests[0]))
+    throw problem(400, 'invalid_request', 'Use one definitions release');
   const languagesParam = searchParams.getAll('language');
   const parameters = validateSuggestQuery({
     q: query,
@@ -100,6 +103,10 @@ export async function suggestSubjects(
     readSubjectSuggestions(kernelClient(locale), parameters, viewerCredential(request), request.signal),
     readRelease().catch(() => undefined),
   ]);
+  if (digests.length && (!release || release.digest !== digests[0])) {
+    if (!release) throw problem(503, 'dependency_unavailable', 'Definitions unavailable');
+    throw problem(409, 'search_restart_required', 'Definitions changed');
+  }
   const types: SuggestionResult['types'] = {};
   for (const subject of result.subjects)
     if (release && Object.hasOwn(release.types, subject.type))
@@ -128,7 +135,18 @@ export async function suggestionResponse(
     if (stale) throw problem(401, 'invalid_credentials', 'Sign in again');
     if (carriesSession(request) && !viewerCredential(request))
       throw problem(503, 'dependency_unavailable', 'Session unavailable');
-    const query = new URL(request.url).searchParams.get('q') ?? '';
+    const params = new URL(request.url).searchParams;
+    const conceptIds = params.getAll('concept');
+    if (conceptIds.length) {
+      if (conceptIds.length !== 1) throw problem(400, 'invalid_request', 'Use one Concept identity');
+      const digests = params.getAll('digest');
+      if (digests.length !== 1 || !digests[0]) throw problem(400, 'invalid_request', 'Use one definitions release');
+      const { readConditionConcept } = await import('./condition-concept-read');
+      return Response.json(await readConditionConcept(request, conceptIds[0]!, digests[0]), {
+        headers: { 'cache-control': 'private, no-store' },
+      });
+    }
+    const query = params.get('q') ?? '';
     return Response.json(await read(query, request), { headers: { 'cache-control': 'private, no-store' } });
   } catch (error) {
     if (isPlatformClosedError(error))

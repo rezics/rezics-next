@@ -34,6 +34,8 @@ import {
 import { conditionDraftNodeAt, createConditionEditFocus } from './condition-edit-focus';
 import { createRequestResourceConditionExtension } from './resource-condition-editor';
 import type { RequestResourceInput } from './resource-condition-model';
+import { conditionConceptProperty, type ConditionConceptLookup } from './condition-concept-model';
+import { ConditionConceptPicker } from './condition-concept-picker';
 import {
   conditionTreeCanSubmit,
   createConditionDraftNode,
@@ -53,6 +55,7 @@ type EditorContext = {
   metadata: ConditionMetadata;
   locale: string;
   options: MessageOptions;
+  disabled: boolean;
   issues: readonly ConditionIssue[];
   values: Record<string, Choice[]>;
   announce(message: string, pointer: string): void;
@@ -63,6 +66,7 @@ type EditorContext = {
   canSelectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   selectSavedFilter(path: ConditionTreePath, id: string, mode: SavedFilterEditMode): boolean;
   extension?: ConditionExtension | undefined;
+  conceptLookup?: ConditionConceptLookup | undefined;
 };
 /** A consumer can compose additional shared grammar leaves without a second tree editor or evaluator. */
 export type ConditionExtension = {
@@ -109,6 +113,7 @@ export function ConditionEditor({
   languages,
   onLanguages,
   extension,
+  conceptLookup,
   requestResources,
   embedded = false,
 }: {
@@ -122,6 +127,7 @@ export function ConditionEditor({
   languages?: string[] | undefined;
   onLanguages?(languages: string[]): void;
   extension?: ConditionExtension;
+  conceptLookup?: ConditionConceptLookup;
   /** Optional native labels for request-only resource IDs; labels are display data and never resolve IDs. */
   requestResources?: RequestResourceInput | false;
   embedded?: boolean;
@@ -237,6 +243,7 @@ export function ConditionEditor({
         metadata,
         locale,
         options,
+        disabled,
         issues,
         values,
         announce,
@@ -248,6 +255,7 @@ export function ConditionEditor({
         canSelectSavedFilter,
         selectSavedFilter,
         extension: activeExtension,
+        conceptLookup,
       }
     : undefined;
   return (
@@ -731,13 +739,26 @@ function NodeEditor({
             </>
           ) : (
             'in' in value.statement && (
-              <ValueFields
-                context={context}
-                pointer={`${pointer}/statement/in`}
-                values={value.statement.in}
-                choices={context.values[property ?? '']}
-                onChange={(selected) => replaceStatement({ in: selected })}
-              />
+              <>
+                <ValueFields
+                  context={context}
+                  pointer={`${pointer}/statement/in`}
+                  values={value.statement.in}
+                  choices={context.values[property ?? '']}
+                  onChange={(selected) => replaceStatement({ in: selected })}
+                />
+                {context.conceptLookup &&
+                  (value.statement.concept || conditionConceptProperty(definition)) && (
+                    <ConditionConceptPicker
+                      key={`${context.conceptLookup.key}:${pointer}:${property}`}
+                      value={value}
+                      lookup={context.conceptLookup}
+                      locale={context.locale}
+                      disabled={context.disabled}
+                      onChange={(next) => onChange(next)}
+                    />
+                  )}
+              </>
             )
           )}
           {value.statement.qualifiers?.map((qualifier, index) => (

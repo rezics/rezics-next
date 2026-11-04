@@ -74,6 +74,7 @@ import { sessionCsrfToken } from '../session/query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
 import {
   conditionAdmission,
+  conditionConceptSuggestionFilter,
   conditionMetadata,
   conditionSearchState,
   type ConditionMetadata,
@@ -679,6 +680,29 @@ export function SearchPage({
   const editing =
     JSON.stringify([draft.condition, editedState.languages]) !==
     JSON.stringify([committedState.condition, committedState.languages]);
+  const conceptFilter = data?.conditionMetadata
+    ? conditionConceptSuggestionFilter(data.conditionMetadata)
+    : undefined;
+  const conceptRequiresReader = !!data?.queryState && searchRequiresCurrentReader(data.queryState);
+  const conceptLookup = {
+    enabled: !!conceptFilter && !!data?.conditionMetadata?.digest && !conceptRequiresReader,
+    ...(conceptFilter ? { filter: conceptFilter } : {}),
+    ...(data?.conditionMetadata?.digest ? { releaseDigest: data.conditionMetadata.digest } : {}),
+    key: JSON.stringify([
+      locale,
+      session,
+      data?.conditionMetadata?.digest,
+      committedState,
+      draft.condition,
+    ]),
+    ...(!conceptFilter || !data?.conditionMetadata?.digest
+      ? { blocked: 'metadata' as const }
+      : committedState.resourceScope
+        ? { blocked: 'scope' as const }
+        : conceptRequiresReader
+          ? { blocked: 'private' as const }
+          : {}),
+  };
   const number = new Intl.NumberFormat(locale);
   const label = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, locale).text.trim() || fallback;
@@ -1201,6 +1225,7 @@ export function SearchPage({
         value={draft.condition}
         onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
         metadata={data?.conditionMetadata}
+        conceptLookup={conceptLookup}
         locale={locale}
         issues={issues}
         values={Object.fromEntries(
