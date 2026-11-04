@@ -176,8 +176,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     });
     expect(grant.status).toBe(201);
 
-    const loadPlan = () =>
-      planCrossMediaSeed(new CrossMediaDumpFiles(bangumiDirectory, vndbDirectory));
+    const loadPlan = () => planCrossMediaSeed(new CrossMediaDumpFiles(bangumiDirectory, vndbDirectory));
     const plan = await loadPlan();
     expect(plan.members).toContainEqual(
       expect.objectContaining({ source: 'bangumi', key: 'person:8101', kind: 'person', membership: 'referenced' }),
@@ -192,11 +191,10 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
         const record = Object.fromEntries(
           Object.entries(input.record as Record<string, unknown>).filter(([key]) => key !== 'summary'),
         );
-        const converted = convertCrossMediaEntity(
-          { ...input, record },
-          context,
-          { converterRevision: 'cross-media-entities@3', sourceKind: 'bangumi' },
-        );
+        const converted = convertCrossMediaEntity({ ...input, record }, context, {
+          converterRevision: 'cross-media-entities@3',
+          sourceKind: 'bangumi',
+        });
         return { ...converted, normalized: converted.normalizedRecord, coverAssets: [], mediaImportIntents: [] };
       },
     };
@@ -207,9 +205,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
         const result = await runtime.importTransport.batch(request);
         if (
           loseFirstCreate &&
-          request.commands.some(
-            (command) => command.op === 'create' && command.source.external_id === 'person:8101',
-          )
+          request.commands.some((command) => command.op === 'create' && command.source.external_id === 'person:8101')
         ) {
           loseFirstCreate = false;
           throw new Error('simulated response loss after the native commit');
@@ -224,9 +220,12 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     });
     try {
       const oldRecord: SourceRecord = { source: 'bangumi', key: 'person:8101', revision: null, payload: personOne };
-      await legacyImporter.runRecords(legacyRegistration, (async function* () {
-        yield oldRecord;
-      })());
+      await legacyImporter.runRecords(
+        legacyRegistration,
+        (async function* () {
+          yield oldRecord;
+        })(),
+      );
     } finally {
       await legacyImporter.close();
     }
@@ -272,7 +271,9 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       'person:8101',
       'person:8102',
     ]);
-    expect(biographyCommands.every((command) => command.source.converter_revision === 'cross-media-entities@4')).toBe(true);
+    expect(biographyCommands.every((command) => command.source.converter_revision === 'cross-media-entities@4')).toBe(
+      true,
+    );
     expect(
       captured.some(
         (command) =>
@@ -359,9 +360,13 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       expect(new TextDecoder().decode(storedDocument.response.bytes)).toContain(expected);
       const current = await editor.http(`/v1/subjects/${id}?context=${globalContext}`);
       expect(current.status).toBe(200);
-      const statement = (current.body.subject as { statements: Record<string, { value: { content: unknown }; references: unknown[] }[]> }).statements['schema:abstract']?.[0];
+      const statement = (
+        current.body.subject as { statements: Record<string, { value: { content: unknown }; references: unknown[] }[]> }
+      ).statements['schema:abstract']?.[0];
       expect(statement?.value.content).toEqual(content);
-      expect(JSON.stringify(statement?.references)).toContain(`https://bgm.tv/person/${id === personId ? '8101' : '8102'}`);
+      expect(JSON.stringify(statement?.references)).toContain(
+        `https://bgm.tv/person/${id === personId ? '8101' : '8102'}`,
+      );
       const documentId = content.id ?? content.document;
       if (!documentId) throw new Error('Missing public document reference');
       const document = await editor.http(`/v1/documents/${documentId}`);
@@ -373,7 +378,9 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
     const reopened = await runSeed();
     expect(reopened.runs.bangumi?.status).toBe('committed');
     expect(readSubjectId(reopened, 'person:8101')).toBe(personId);
-    expect((await candidates(editor, personId, 'schema:abstract')).map((candidate) => candidate.id)).toEqual(acceptedIds);
+    expect((await candidates(editor, personId, 'schema:abstract')).map((candidate) => candidate.id)).toEqual(
+      acceptedIds,
+    );
 
     const changedBiography = { ...personOne, summary: '新しい紹介：別の作品を発表した。' };
     await writeBangumi(bangumiDirectory, [changedBiography, organization, emptyPerson, absentPerson]);

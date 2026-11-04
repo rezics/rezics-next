@@ -1,9 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  crossMediaAliases,
-  planCrossMediaSeed,
-  type CrossMediaTables,
-} from '../src/cross-media-seed.ts';
+import { crossMediaAliases, planCrossMediaSeed, type CrossMediaTables } from '../src/cross-media-seed.ts';
 import { converter_revision as crossMediaRevision } from '../../../packages/conversion/src/cross-media-entities.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
@@ -61,7 +57,9 @@ test("cross-media seed preserves a credited person's raw biography for the curre
   const biographyCommand = converted.proposals.find((command) => command.source.field_group === 'summary');
   expect(registration.converter_revision).toBe('cross-media-entities@4');
   expect(converted.normalized).toMatchObject({ summary: biography });
-  expect(biographyCommand?.op === 'propose' ? biographyCommand.statement.property.id : undefined).toBe('schema:abstract');
+  expect(biographyCommand?.op === 'propose' ? biographyCommand.statement.property.id : undefined).toBe(
+    'schema:abstract',
+  );
   expect(biographyCommand?.source.digest).toBe(converted.digest);
 
   const foreign = createSourceRegistration('vndb', {

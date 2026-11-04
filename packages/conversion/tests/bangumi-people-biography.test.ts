@@ -70,7 +70,9 @@ test('authored Bangumi person summaries preserve profile, document rights and re
   const literalDocument = content(literalProposal) as typeof biographyContent;
   expect(literalDocument.document.doc.content[0]?.type).toBe('paragraph');
   expect(literalDocument.document.doc.content[0]?.content?.[0]?.type).toBe('text');
-  expect(literalDocument.document.doc.content[0]?.content?.[0]?.text).toBe('<script>alert(1)</script> **source prose**');
+  expect(literalDocument.document.doc.content[0]?.content?.[0]?.text).toBe(
+    '<script>alert(1)</script> **source prose**',
+  );
   expect(checkBatchWrite({ commands: [proposal] }, bundledRelease)).toEqual([]);
 
   const personBootstrap = convert(biography, 1, false).proposals[0];
@@ -89,8 +91,14 @@ test('authored Bangumi person summaries preserve profile, document rights and re
       command.op === 'propose' && command.statement.property.id === 'wdt:P6298',
   );
   expect(identifier?.op === 'propose' ? content(identifier) : undefined).toBe('8101');
-  expect(person.proposals.some((command) => command.op === 'propose' && command.source.field_group === 'facts')).toBe(true);
-  expect(person.proposals.filter((command) => command.source.field_group === 'facts').every((command) => !('rights' in command))).toBe(true);
+  expect(person.proposals.some((command) => command.op === 'propose' && command.source.field_group === 'facts')).toBe(
+    true,
+  );
+  expect(
+    person.proposals
+      .filter((command) => command.source.field_group === 'facts')
+      .every((command) => !('rights' in command)),
+  ).toBe(true);
 
   const changed = convert('新しい伝記。');
   expect(changed.digest).not.toBe(person.digest);
@@ -100,7 +108,9 @@ test('authored Bangumi person summaries preserve profile, document rights and re
 
   const historical = {
     ...bundledRelease,
-    properties: Object.fromEntries(Object.entries(bundledRelease.properties).filter(([id]) => id !== 'schema:abstract')),
+    properties: Object.fromEntries(
+      Object.entries(bundledRelease.properties).filter(([id]) => id !== 'schema:abstract'),
+    ),
   };
   const facts = person.proposals.filter((command) => command.source.field_group === 'facts');
   expect(checkBatchWrite({ commands: facts }, historical)).toEqual([]);
