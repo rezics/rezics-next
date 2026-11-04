@@ -1812,7 +1812,9 @@ export async function seedCrossMedia(
               intent.credit.via.url === bangumiRecordUrl(source.externalId) &&
               intent.credit.license === 'LicenseRef-unknown' &&
               intent.provenance.references.some((reference) =>
-                reference.parts.some((part) => part.value === source.sourceUrl),
+                reference.parts.some(
+                  (part) => part.value.type === 'value' && part.value.content === source.sourceUrl,
+                ),
               ),
             'Bangumi cover intent does not match its admitted source evidence',
           );
@@ -1821,7 +1823,7 @@ export async function seedCrossMedia(
             containerId: input.subject,
             mediaImportIntents: input.mediaImportIntents,
             signal: input.signal,
-            deferPending: input.deferPending,
+            ...(input.deferPending === undefined ? {} : { deferPending: input.deferPending }),
           });
           const recordKey = `${source.sourceAlias}\0${source.externalId}`;
           if (resolution.outcome === 'fenced') {

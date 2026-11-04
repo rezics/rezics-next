@@ -470,8 +470,8 @@ function admittedCoverMedia(
       sourceRevision: record.sourceRevision,
       archiveDigest: receipt.archiveDigest,
       containerId: record.subjectId,
-      mediaId: outcome.mediaId,
-      sourceUrl: typeof imageUrl === 'string' ? imageUrl : undefined,
+      ...(outcome.mediaId ? { mediaId: outcome.mediaId } : {}),
+      ...(typeof imageUrl === 'string' ? { sourceUrl: imageUrl } : {}),
     }) ||
     receipt.endpoint !== outcome.endpoint ||
     receipt.responseDigest !== outcome.responseDigest ||
@@ -482,6 +482,7 @@ function admittedCoverMedia(
     assertion.source.digest !== record.semanticDigest ||
     assertion.source.converter_revision !== record.converterRevision ||
     assertion.source.field_group !== 'cover' ||
+    assertion.statement.value.type !== 'value' ||
     assertion.statement.value.content !== outcome.mediaId ||
     outcome.provenance?.source !== record.sourceAlias ||
     outcome.provenance.external_id !== record.sourceKey ||
@@ -497,10 +498,10 @@ function admittedCoverMedia(
     !assertion.citations.includes(record.sourceUri) ||
     !assertion.citations.includes(outcome.sourceUrl!) ||
     !outcome.provenance.references.some((reference) =>
-      reference.parts.some((part) => part.value === record.sourceUri),
+      reference.parts.some((part) => part.value.type === 'value' && part.value.content === record.sourceUri),
     ) ||
     !outcome.provenance.references.some((reference) =>
-      reference.parts.some((part) => part.value === outcome.sourceUrl),
+      reference.parts.some((part) => part.value.type === 'value' && part.value.content === outcome.sourceUrl),
     )
   )
     return undefined;

@@ -302,7 +302,7 @@ export function showcaseMediaContext(input: {
       sourceRevision: row.revision ?? 'unversioned',
       archiveDigest: receipt.archiveDigest,
       containerId: outcome.containerId,
-      mediaId: outcome.mediaId,
+      ...(outcome.mediaId ? { mediaId: outcome.mediaId } : {}),
       sourceUrl,
     }) ||
     receipt.endpoint !== outcome.endpoint ||

@@ -103,10 +103,16 @@ function cachedSource(
       ['available', 'absent'].includes(source.sourceStatus),
     'Invalid sealed Bangumi cover source',
   );
-  ensure(typeof source.responseDigest === 'string' && /^[0-9a-f]{64}$/u.test(source.responseDigest));
-  ensure(source.etag === undefined || (source.etag.length <= 256 && /^[\x20-\x7e]*$/u.test(source.etag)));
+  ensure(
+    typeof source.responseDigest === 'string' && /^[0-9a-f]{64}$/u.test(source.responseDigest),
+    'Invalid sealed Bangumi response digest',
+  );
+  ensure(
+    source.etag === undefined || (source.etag.length <= 256 && /^[\x20-\x7e]*$/u.test(source.etag)),
+    'Invalid sealed Bangumi ETag',
+  );
   if (source.sourceStatus === 'available') {
-    ensure(typeof source.sourceUrl === 'string');
+    ensure(typeof source.sourceUrl === 'string', 'Missing sealed Bangumi cover URL');
     safeSourceUrl(source.sourceUrl, ['lain.bgm.tv']);
   }
   return source;
@@ -149,15 +155,17 @@ async function lookupCover(
         subject.type === Number((row.payload as { type?: unknown }).type),
       'Bangumi subject identity did not match',
     );
-    const images = subject.images === undefined || subject.images === null ? undefined : object(subject.images);
-    ensure(subject.images === undefined || subject.images === null || images, 'Invalid Bangumi image schema');
-    if (images === undefined)
+    const imagesPayload = subject.images;
+    const responseEtag = etagValue(response.headers.get('etag'));
+    if (imagesPayload === undefined || imagesPayload === null)
       return {
         ...base,
         sourceStatus: 'absent',
         responseDigest,
-        ...(etagValue(response.headers.get('etag')) ? { etag: etagValue(response.headers.get('etag')) } : {}),
+        ...(responseEtag ? { etag: responseEtag } : {}),
       };
+    const images = object(imagesPayload);
+    ensure(images !== null, 'Invalid Bangumi image schema');
     for (const size of ['large', 'common', 'medium', 'small', 'grid'])
       ensure(typeof images[size] === 'string', 'Invalid Bangumi image schema');
     const sourceUrl = safeSourceUrl(images.large, ['lain.bgm.tv']);
@@ -166,7 +174,7 @@ async function lookupCover(
       sourceStatus: 'available',
       sourceUrl,
       responseDigest,
-      ...(etagValue(response.headers.get('etag')) ? { etag: etagValue(response.headers.get('etag')) } : {}),
+      ...(responseEtag ? { etag: responseEtag } : {}),
     };
   } catch {
     return { ...base, sourceStatus: 'unavailable', code: 'source-payload-invalid' };

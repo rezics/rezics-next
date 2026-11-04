@@ -56,7 +56,7 @@ test('default selected Bangumi media intent resumes its journalled reservation t
   let sealedKey = '';
   let mediaRequest: MediaImportRequest | undefined;
   try {
-    const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       expect(request.url).toBe('https://api.bgm.tv/v0/subjects/101');
       expect(request.method).toBe('GET');
@@ -67,7 +67,7 @@ test('default selected Bangumi media intent resumes its journalled reservation t
         status: 200,
         headers: { etag: '"subject-101-v1"', 'content-type': 'application/json' },
       });
-    };
+    }) as typeof globalThis.fetch;
     const firstPlan = await acquireBangumiCoverSources(sourcePlan, { journal, fetch, sleep: async () => {} });
     const resumedPlan = await acquireBangumiCoverSources(sourcePlan, { journal, fetch, sleep: async () => {} });
     expect(firstPlan.records.bangumi[0]!.payload).toMatchObject({ images: { large: sourceUrl } });
@@ -109,19 +109,31 @@ test('default selected Bangumi media intent resumes its journalled reservation t
         statusReads += 1;
         expect(id).toBe(mediaId);
         const request = mediaRequest!;
-        const body: MediaImportStatus = {
-          media: {
-            id,
-            containerId: subjectId,
-            purpose: 'cover',
-            state: terminal,
-            byteCount: terminal === 'available' ? 32 : null,
-            mediaType: terminal === 'available' ? 'image/png' : null,
-            sha256: terminal === 'available' ? 'a'.repeat(64) : null,
-            credit: request.credit,
-            provenance: request.provenance,
-          },
-        };
+        const media: MediaImportStatus['media'] =
+          terminal === 'available'
+            ? {
+                id,
+                containerId: subjectId,
+                purpose: 'cover',
+                state: 'available',
+                byteCount: 32,
+                mediaType: 'image/png',
+                sha256: 'a'.repeat(64),
+                credit: request.credit,
+                provenance: request.provenance,
+              }
+            : {
+                id,
+                containerId: subjectId,
+                purpose: 'cover',
+                state: 'reserved',
+                byteCount: null,
+                mediaType: null,
+                sha256: null,
+                credit: request.credit,
+                provenance: request.provenance,
+              };
+        const body: MediaImportStatus = { media };
         return { status: 200, body };
       },
     } as unknown as CrossMediaPort;
