@@ -116,7 +116,7 @@ export type Settings = {
   terminationGraceMs: number;
   /** How long a worker may write nothing before it counts as never started; START_GRACE_MS by default. */
   startGraceMs?: number;
-  /** How long a running worker may go without run-log output; 40 minutes by default. */
+  /** How long a running worker may go without log, worktree or process-group CPU activity; 40 minutes by default. */
   silenceMs?: number;
   /** Tool-blocker retry delays by sightings of the same fingerprint; TOOL_RETRY_BACKOFF_MS by default. */
   toolRetryBackoffMs?: readonly number[];

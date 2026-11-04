@@ -476,7 +476,7 @@ protocol or representation meaning; they are not operator limits.
 | Setting                                               | Default                     | Purpose                                                                                         |
 | ----------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------- |
 | `terminationGraceMs`                                  | `1500`                      | Grace between termination signals when stopping an owned worker (ms).                           |
-| `silenceMs`                                           | `2400000`                   | Maximum running-worker log silence before recovery (ms).                                        |
+| `silenceMs`                                           | `2400000`                   | Maximum running-worker inactivity before recovery (ms). Log growth, worktree HEAD, worktree file mtimes (skipping `node_modules` and `.temp`), and process-group CPU all count as activity. |
 | `promotionParallelism`                                | `4`                         | Concurrent promotion checks.                                                                    |
 | `integration.batchSize`                               | `4`                         | Dev landings sharing one integration candidate.                                                 |
 | `integration.devLandingChecks`                        | `true`                      | Run configured dev landing checks.                                                              |
@@ -1492,6 +1492,8 @@ Specification conflicts, tool failures and exhausted quota are attempt facts, pa
 native CLI failure, and stored on the attempt. A usage-limit refusal with a fresh reading that shows allowance left
 is retried on the same pool; a spent window, a stale reading, or three refusals within an hour routes the retry to a
 different allowed pool. A provider capacity refusal continues after a short pause, however often it repeats.
+
+A running worker is stalled only when none of these move for `silenceMs` (40 minutes): run-log growth, the worktree branch HEAD, newest mtime of tracked or untracked worktree files (skipping `node_modules` and `.temp`), and CPU time of the worker's process group. Grok and Cursor write their log only on exit, so log silence alone is not a stall. Check-wait time is still subtracted from idle time.
 
 Every other tool failure, including a CLI that fails before a session, a silent worker and a check-host transport
 failure, resumes the same session after a backoff by its fingerprint: the failure's first line with worktree paths,

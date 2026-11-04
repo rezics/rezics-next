@@ -9,6 +9,7 @@ import {
   refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
+import { spawnSync } from 'node:child_process';
 import {
   closeSync,
   constants,
@@ -16,6 +17,7 @@ import {
   fstatSync,
   lstatSync,
   openSync,
+  readdirSync,
   readFileSync,
   readSync,
   statSync,
@@ -26,6 +28,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import type { GateOutcome, GateOutcomeSink, LandingQueue, ManagerInbox, AttemptRef } from './contracts.ts';
 import {
   liveGroups,
+  processGroupCpuTicks,
   readWorkerExit,
   sameProcess,
   stopProcessesUnder,
@@ -261,9 +264,56 @@ export const REPEATED_USAGE_LIMIT_EXHAUSTION_MS = defaultPolicy.worker.usageLimi
 /** A waiting attempt gets its first resume plus two retries when the CLI cannot start. */
 /** A worker whose CLI writes nothing this long never started a session: it is stopped, and its exit retries it. */
 export const START_GRACE_MS = defaultPolicy.worker.startGraceMs;
-/** A running worker with no run-log activity for this long is stopped and retried. */
+/** A running worker with no log, worktree or process-group CPU activity for this long is stopped and retried. */
 export const SILENCE_WINDOW_MS = defaults.silenceMs;
 /** Run-log activity is checked at most once a minute when the filesystem watcher is unavailable. */
+const SKIP_WORKTREE_ACTIVITY = new Set(['node_modules', '.temp']);
+const WORKTREE_SAMPLE_TIMEOUT_MS = 1000;
+
+function gitSample(worktree: string, args: string[]): string | undefined {
+  try {
+    const result = spawnSync('git', args, { cwd: worktree, encoding: 'utf8', timeout: WORKTREE_SAMPLE_TIMEOUT_MS });
+    if (result.status !== 0) return undefined;
+    const text = result.stdout.trim();
+    return text || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Newest file or directory mtime under the worktree, skipping `node_modules` and `.temp` at every level. */
+export function newestWorktreeMtime(root: string): number {
+  let newest = 0;
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop()!;
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (SKIP_WORKTREE_ACTIVITY.has(name)) continue;
+      const path = join(dir, name);
+      try {
+        const st = lstatSync(path);
+        if (st.mtimeMs > newest) newest = st.mtimeMs;
+        if (st.isDirectory()) stack.push(path);
+      } catch {
+        /* vanished between readdir and lstat */
+      }
+    }
+  }
+  return newest;
+}
+
+function worktreeHeadSample(worktree: string): { head?: string; committedAt?: number } {
+  const head = gitSample(worktree, ['rev-parse', 'HEAD']);
+  const committed = gitSample(worktree, ['log', '-1', '--format=%ct']);
+  const seconds = committed && /^\d+$/.test(committed) ? Number(committed) : undefined;
+  return { ...(head ? { head } : {}), ...(seconds !== undefined ? { committedAt: seconds * 1000 } : {}) };
+}
 
 /** Hold both train lanes while checking and repairing a landing with no queued request. */
 function acquireIdleTrainLeases(stateDirectory: string, policy = defaultPolicy): DirectoryLease[] | undefined {
@@ -775,25 +825,50 @@ export class WorkerJob implements GateOutcomeSink {
     let silenceStopping: Promise<void> | undefined;
     const activity = workerActivityBaseline(store, ref);
     let { lastLogSize, lastLogMtime, lastLogActivityAt, checkWaitAtLastLogActivity } = activity;
+    let lastHead: string | undefined;
+    let lastNewestMtime = 0;
+    let lastCpu: bigint | undefined;
+    let sampledWork = false;
     const checkSilence = () => {
       if (silenceStopping || silenceFailure) return;
       try {
         store.assertCurrent(ref);
         const attempt = store.attempt(ref);
         if (attempt.state !== 'running') return;
+        const now = Date.now();
+        const noteNow = () => {
+          lastLogActivityAt = now;
+          checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
+        };
         const stat = statSync(ref.logPath, { throwIfNoEntry: false });
         const size = stat?.size ?? 0;
         const mtime = stat?.mtimeMs ?? 0;
         if (size !== lastLogSize || mtime !== lastLogMtime) {
           lastLogSize = size;
           lastLogMtime = mtime;
-          lastLogActivityAt = Date.now();
-          checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
+          noteNow();
         }
+        const headSample = worktreeHeadSample(task.worktree);
+        const newest = newestWorktreeMtime(task.worktree);
+        const cpu = processGroupCpuTicks(attempt.process ?? null);
+        if (sampledWork) {
+          if (headSample.head !== undefined && lastHead !== undefined && headSample.head !== lastHead) noteNow();
+          if (newest > lastNewestMtime) noteNow();
+          if (cpu !== undefined && lastCpu !== undefined && cpu > lastCpu) noteNow();
+        } else {
+          sampledWork = true;
+          if (newest > activity.startedAt)
+            lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, newest));
+          if (headSample.committedAt !== undefined && headSample.committedAt > activity.startedAt)
+            lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, headSample.committedAt));
+        }
+        if (headSample.head !== undefined) lastHead = headSample.head;
+        if (newest > lastNewestMtime) lastNewestMtime = newest;
+        if (cpu !== undefined) lastCpu = cpu;
         // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
         // a local or remote check does not look silent while the command is running.
         const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
-        if (Date.now() - lastLogActivityAt - waitedMs < silenceMs) return;
+        if (now - lastLogActivityAt - waitedMs < silenceMs) return;
         const minutes = Math.max(1, Math.ceil(silenceMs / 60_000));
         silenceFailure = `stalled: no output for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
         store.updateAttempt(ref, (current) => {
