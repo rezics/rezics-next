@@ -33,7 +33,7 @@ test('creator offer stories retain every fixture once and inherit shared viewpor
     'LongTitle',
   ]);
   expect(story).toContain("render('long-title')");
-  expect(story).toContain("view.queryByRole('link', { name: delistedCreatorOfferFixture.title })");
+  expect(story).toContain("within(delistedRow).queryByRole('link')");
   expect(story).not.toMatch(/viewport|maxWidth|width\??:/);
 });
 
@@ -161,13 +161,16 @@ test('seller rows localize separate currencies and retain unknown delisted histo
           creatorOfferFixture,
           delistedCreatorOfferFixture,
           { ...creatorOfferFixture, id: 'euro', currency: 'eur', unitAmountMinor: 675 },
+          { ...delistedCreatorOfferFixture, id: 'unknown-unit', currency: 'usd', unitAmountMinor: 35, moneyUnit: undefined },
         ],
         next: 'signed+next/=',
       },
     }),
   );
   for (const price of ['$12.00', '€6.75', '¥800']) expect(html).toContain(price);
-  expect(html).not.toContain('1200');
+  expect(html).toContain('recorded amount 1200 USD minor units (exponent 2)');
+  expect(html).toContain('recorded amount 800 JPY minor units (exponent 0)');
+  expect(html).toContain('Recorded amount 35 USD; unit meaning is unknown.');
   expect(html).toContain(`href="/en/offers/${creatorOfferFixture.id}"`);
   expect(html).not.toContain(`href="/en/offers/${delistedCreatorOfferFixture.id}"`);
   expect(html).toContain('Unknown benefit mapping');

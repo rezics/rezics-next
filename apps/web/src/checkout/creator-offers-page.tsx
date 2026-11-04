@@ -523,7 +523,6 @@ export function CreatorOffersPage({
                               offer.unitAmountMinor,
                               recordedMoneyUnit(offer),
                             ) ?? m.creator_offers_amount_unavailable()}{' '}
-                            <span className="text-sm">{offer.currency.toUpperCase()}</span>
                           </p>
                           <p>
                             {recordedTaxBehavior(offer) === 'exclusive'
