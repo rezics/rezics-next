@@ -1,18 +1,20 @@
 import type { KernelClient } from '@rezics/client';
 import { pageText } from '../pages/shared';
 import { originalLanguage } from '../../subject/language';
+import { candidateContext } from '../../subject/candidates';
 import { subjectHref } from '../../subject/subject-href';
 import type { SourceDefinitions } from './subject-sources';
 import { readSubjectRevisionDetail, type RevisionDetailPort } from './subject-changes-detail';
 
 /** Metadata comes from the generated native listing, never from a second history store. */
 type NativePage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['revisions']['get']>>['data']>;
-type NativeSubjectResponse = Awaited<ReturnType<ReturnType<KernelClient['subjects']>['get']>>;
+type NativeViewerActionsResponse = Awaited<ReturnType<KernelClient['viewerActions']['post']>>;
 export type RevisionRow = Pick<NativePage['revisions'][number], 'revision' | 'kind'>;
 export type CurrentOperation = 'subject.propose' | 'subject.terms';
 export type CurrentOperationsRead =
   | { state: 'available'; operations: CurrentOperation[] }
-  | { state: 'preparing' | 'unavailable' };
+  | { state: 'preparing' }
+  | { state: 'unavailable' };
 export type ChangesFailure = {
   kind: 'missing' | 'denied' | 'invalid' | 'conflict' | 'preparing' | 'unavailable';
   scope?: 'subject';
@@ -153,20 +155,30 @@ export function changesFailure(status: number, error?: unknown): ChangesFailure 
   };
 }
 
-function currentOperationsRead(result: NativeSubjectResponse | null, id: string): CurrentOperationsRead {
+function currentOperationsRead(
+  result: NativeViewerActionsResponse | null,
+  id: string,
+  type: string,
+): CurrentOperationsRead {
   if (!result) return { state: 'unavailable' };
   if (result.status === 503 && problemCode(result.error?.value) === 'semantic_not_ready')
     return { state: 'preparing' };
-  if (result.status !== 200 || !result.data || result.data.subject.id !== id)
+  if (result.status !== 200 || !result.data || result.data.resources.length !== 2) return { state: 'unavailable' };
+  const context = result.data.resources.filter(
+    (resource) => resource.type === 'semantic.context' && resource.id === candidateContext,
+  );
+  const subject = result.data.resources.filter((resource) => resource.type === type && resource.id === id);
+  if (context.length !== 1 || subject.length !== 1 || 'error' in context[0]! || 'error' in subject[0]!)
     return { state: 'unavailable' };
-  const component = result.data.viewerActions;
-  if (!component || component.state === 'unavailable') return { state: 'unavailable' };
+  const component = context[0]!.viewerActions;
+  if (component.length > 64 || component.reduce((count, entry) => count + entry.operations.length, 0) > 256)
+    return { state: 'unavailable' };
   const supported = new Set<CurrentOperation>(['subject.propose', 'subject.terms']);
   return {
     state: 'available',
     operations: [
       ...new Set(
-        component.actions
+        component
           .filter((entry) => entry.action === 'statement:propose')
           .flatMap((entry) => entry.operations)
           .filter((operation): operation is CurrentOperation => supported.has(operation as CurrentOperation)),
@@ -195,17 +207,12 @@ export async function readSubjectChanges(
       ...(options.authorization ? { authorization: options.authorization } : {}),
       ...(options.session ? { 'rezics-session-token': options.session } : {}),
     };
-    const [current, currentActions, revisions, definitions] = await Promise.all([
+    const [current, revisions, definitions] = await Promise.all([
       // Navigation returns to the actual PUBLIC reading, with no privileged fallback.
       client.subjects({ id }).get({
         fetch: { redirect: 'manual', cache: 'no-store' },
         ...(options.session ? { headers: { 'rezics-session-token': options.session } } : {}),
       }),
-      client.subjects({ id }).get({
-        query: { includeViewerActions: true },
-        headers,
-        fetch: { cache: 'no-store', redirect: 'manual' },
-      }).catch(() => null),
       client
         .subjects({ id })
         .revisions.get({
@@ -224,7 +231,18 @@ export async function readSubjectChanges(
       };
     }
     if (current.data.subject.id !== id) return { kind: 'unavailable', scope: 'subject' };
-    const currentOperations = currentOperationsRead(currentActions, id);
+    const currentActions = await client.viewerActions
+      .post(
+        {
+          resources: [
+            { type: 'semantic.context', id: candidateContext },
+            { type: current.data.subject.type, id },
+          ],
+        },
+        { headers, fetch: { cache: 'no-store', redirect: 'manual' } },
+      )
+      .catch(() => null);
+    const currentOperations = currentOperationsRead(currentActions, id, current.data.subject.type);
     if (!revisions) return { kind: 'unavailable', currentOperations };
     if (revisions.status !== 200 || !revisions.data)
       return { ...changesFailure(revisions.status, revisions.error?.value), currentOperations };
@@ -263,19 +281,11 @@ export async function readSubjectChange(
 ): Promise<DetailRead> {
   if (!uuid.test(id) || !Number.isSafeInteger(revision) || revision < 1) return { kind: 'invalid' };
   try {
-    const [current, currentActions, detail] = await Promise.all([
+    const [current, detail] = await Promise.all([
       client.subjects({ id }).get({
         fetch: { cache: 'no-store', redirect: 'manual' },
         ...(options.session ? { headers: { 'rezics-session-token': options.session } } : {}),
       }),
-      client.subjects({ id }).get({
-        query: { includeViewerActions: true },
-        headers: {
-          ...(options.authorization ? { authorization: options.authorization } : {}),
-          ...(options.session ? { 'rezics-session-token': options.session } : {}),
-        },
-        fetch: { cache: 'no-store', redirect: 'manual' },
-      }).catch(() => null),
       port(client, { id, revision, ...options, locale: options.locale ?? 'en' }).catch((): DetailRead => ({
         kind: 'unavailable',
       })),
@@ -283,9 +293,29 @@ export async function readSubjectChange(
     if ([401, 403, 404].includes(current.status) || (current.status === 200 && !current.data))
       return { ...changesFailure(current.status, current.error?.value), scope: 'subject' };
     if (current.status === 200 && current.data?.subject.id !== id) return { kind: 'unavailable', scope: 'subject' };
+    const currentActions =
+      current.status === 200 && current.data?.subject.id === id
+        ? await client.viewerActions
+            .post(
+              {
+                resources: [
+                  { type: 'semantic.context', id: candidateContext },
+                  { type: current.data.subject.type, id },
+                ],
+              },
+              {
+                headers: {
+                  ...(options.authorization ? { authorization: options.authorization } : {}),
+                  ...(options.session ? { 'rezics-session-token': options.session } : {}),
+                },
+                fetch: { cache: 'no-store', redirect: 'manual' },
+              },
+            )
+            .catch(() => null)
+        : null;
     const currentOperations =
       current.status === 200 && current.data?.subject.id === id
-        ? currentOperationsRead(currentActions, id)
+        ? currentOperationsRead(currentActions, id, current.data.subject.type)
         : current.status === 503 && problemCode(current.error?.value) === 'semantic_not_ready'
           ? { state: 'preparing' as const }
           : { state: 'unavailable' as const };

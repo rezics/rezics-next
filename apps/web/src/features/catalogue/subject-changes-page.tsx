@@ -187,10 +187,11 @@ function CurrentCorrectionAction({
   if (currentOperations.state === 'preparing')
     return <p role="status">{m.changes_correction_preparing({}, o)}</p>;
   const address = correctionAddress(detail);
-  const operation = address?.kind === 'terms' ? 'subject.terms' : address ? 'subject.propose' : undefined;
-  if (operation && !currentOperations.operations.includes(operation))
+  if (!address) return <p role="status">{m.changes_correction_unavailable({}, o)}</p>;
+  const operation = address.kind === 'terms' ? 'subject.terms' : 'subject.propose';
+  if (!currentOperations.operations.includes(operation))
     return <p role="status">{m.changes_correction_denied({}, o)}</p>;
-  const href = address && operation ? currentCorrectionHref(pageHref, address) : undefined;
+  const href = currentCorrectionHref(pageHref, address);
   if (!href || !onCorrectCurrent) return <p role="status">{m.changes_correction_unavailable({}, o)}</p>;
   return (
     <Link

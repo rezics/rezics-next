@@ -3,7 +3,7 @@ import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../../features/pages/curate-actions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore, type ReactElement } from 'react';
 import { createFileRoute, Link, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
@@ -107,7 +107,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
   component: candidateSession(CorrectionRoute),
 });
 
-function CorrectionRoute() {
+function CorrectionRoute(): ReactElement {
   const queryClient = useQueryClient();
   const { id } = Route.useLoaderData();
   const { property, statement, reviewProperty, candidate, context, returnTo, reviewInvalid } = Route.useSearch();

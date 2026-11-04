@@ -61,9 +61,9 @@ test('the served Changes route explains native terms and recorded adoption indep
   await explain(page, fixture.termsRevision);
   await pageExpect(changes.getByRole('link', { name: m.changes_correct_terms() })).toBeVisible();
   await stack.injectKernelFailureOnce({
-    method: 'GET',
-    path: `/v1/subjects/${id}`,
-    search: '?includeViewerActions=true',
+    method: 'POST',
+    path: '/v1/viewerActions',
+    bodyIncludes: id,
     status: 503,
     body: JSON.stringify({
       type: 'https://rezics.com/problems/overloaded',

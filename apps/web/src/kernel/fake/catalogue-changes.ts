@@ -34,6 +34,7 @@ export function catalogueChangesFixture(
     path: string;
     cursor: string | null;
     includeViewerActions: boolean;
+    resources: { type: string; id: string }[] | null;
     authorization: string | null;
     session: string | null;
     cache: RequestCache;
@@ -43,10 +44,16 @@ export function catalogueChangesFixture(
     fetch: (async (input, init) => {
       const request = input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
+      const isViewerActions = url.pathname === '/v1/viewerActions';
+      const body =
+        request.method === 'POST'
+          ? ((await request.clone().json().catch(() => null)) as { resources?: { type: string; id: string }[] } | null)
+          : null;
       calls.push({
         path: url.pathname,
         cursor: url.searchParams.get('cursor'),
-        includeViewerActions: url.searchParams.get('includeViewerActions') === 'true',
+        includeViewerActions: isViewerActions,
+        resources: body?.resources ?? null,
         authorization: request.headers.get('authorization'),
         session: request.headers.get('rezics-session-token'),
         cache: request.cache,
@@ -59,18 +66,18 @@ export function catalogueChangesFixture(
         });
       if (url.pathname === `/v1/subjects/${id}`) {
         if (subjectStatus !== 200) return json({ code: 'not_found' }, subjectStatus);
-        if (url.searchParams.get('includeViewerActions') !== 'true') return json(read);
+        return json(read);
+      }
+      if (isViewerActions) {
         if (actionOutcome === 'preparing') return json({ code: 'semantic_not_ready' }, 503);
         if (actionOutcome === 'unavailable') return json({ code: 'overloaded' }, 503);
-        if (actionOutcome === 'component-unavailable')
-          return json({ ...read, viewerActions: { state: 'unavailable' } });
-        return json({
-          ...read,
-          viewerActions: {
-            state: 'available',
-            actions: [{ action: 'statement:propose', operations: actionOperations }],
-          },
-        });
+        const subject = { type: read.subject.type, id, viewerActions: [] };
+        const context = {
+          type: 'semantic.context',
+          id: '00000000-0000-8000-8000-000000000000',
+          viewerActions: [{ action: 'statement:propose', operations: actionOperations }],
+        };
+        return json({ resources: actionOutcome === 'component-unavailable' ? [subject] : [context, subject] });
       }
       const detailPath = `/v1/subjects/${id}/revisions/`;
       if (url.pathname.startsWith(detailPath))

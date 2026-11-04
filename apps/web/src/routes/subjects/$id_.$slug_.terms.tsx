@@ -15,5 +15,5 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/terms')({
 function TermsRoute() {
   const { id } = Route.useParams();
   const { returnToChanges } = Route.useSearch();
-  return <SubjectTermsSession id={id} locale={getLocale()} returnToChanges={returnToChanges} />;
+  return <SubjectTermsSession id={id} locale={getLocale()} returnToChanges={returnToChanges === true} />;
 }

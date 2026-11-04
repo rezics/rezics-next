@@ -48,14 +48,18 @@ test('a reader follows paginated native subject revisions to a safe change expla
   expect(listings[1]).toMatchObject({ authorization: 'Bearer story', session: 'changes-session' });
   expect(
     fixture.calls
-      .filter((call) => call.path === `/v1/subjects/${fixture.id}` && !call.includeViewerActions)
+      .filter((call) => call.path === `/v1/subjects/${fixture.id}`)
       .every((call) => call.authorization === null),
   ).toBe(true);
-  expect(
-    fixture.calls
-      .filter((call) => call.path === `/v1/subjects/${fixture.id}` && call.includeViewerActions)
-      .every((call) => call.authorization === 'Bearer story'),
-  ).toBe(true);
+  const actionReads = fixture.calls.filter((call) => call.includeViewerActions);
+  expect(actionReads).toHaveLength(4);
+  expect(actionReads.every((call) => call.path === '/v1/viewerActions' && call.authorization === 'Bearer story')).toBe(
+    true,
+  );
+  expect(actionReads[0]?.resources).toEqual([
+    { type: 'semantic.context', id: '00000000-0000-8000-8000-000000000000' },
+    { type: fixture.read.subject.type, id: fixture.id },
+  ]);
   // Until the generated producer DTO is integrated, runtime detail is honestly unavailable.
   expect(await fixture.transport.detail(2)).toMatchObject({
     kind: 'unavailable',
@@ -289,7 +293,7 @@ test('actual native safe revision detail is rendered through the existing browse
   });
   expect(
     fixture.calls
-      .filter((call) => call.path === `/v1/subjects/${fixture.id}` && !call.includeViewerActions)
+      .filter((call) => call.path === `/v1/subjects/${fixture.id}`)
       .every((call) => call.authorization === null),
   ).toBe(true);
 
