@@ -9,28 +9,30 @@ import type { Actor } from '../request/access.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AnchoredPosition, BoardView, ReadContext } from './model.ts';
 import type { ContentCommandDependencies } from './commands.ts';
-import {
-  ContentNotFoundError,
-  readBoard,
-  readBoardPageActionEvidence,
-  type ContentReadDependencies,
-} from './reads.ts';
+import { ContentNotFoundError, readBoard, readBoardPageActionEvidence, type ContentReadDependencies } from './reads.ts';
 import type { SubjectThreadContext } from './subject-threads-context.ts';
 import readSelectedBoard from './subject-entry-board.sql';
 
 export type BoardEntryAdvice = 'allowed' | 'denied' | 'sign-in' | 'unavailable';
-export type SubjectThreadEntryRequest = Readonly<{
+type SubjectThreadEntryRequestBase = Readonly<{
   subjectId: string;
   placeId: string;
   kind: SubjectThreadContext['kind'];
-  selectedBoardId?: string;
 }>;
+export type SubjectThreadEntryRequest =
+  | (SubjectThreadEntryRequestBase & Readonly<{ selectedBoardId?: undefined }>)
+  | (SubjectThreadEntryRequestBase & Readonly<{ selectedBoardId: string }>);
+type SelectedEntryRequest = SubjectThreadEntryRequestBase & Readonly<{ selectedBoardId: string }>;
 export type SubjectThreadEntry =
-  | Readonly<{ state: 'not_selected'; request: SubjectThreadEntryRequest }>
-  | Readonly<{ state: 'concealed' | 'unavailable'; request: SubjectThreadEntryRequest }>
+  | Readonly<{
+      state: 'not_selected';
+      request: SubjectThreadEntryRequestBase & Readonly<{ selectedBoardId?: undefined }>;
+    }>
+  | Readonly<{ state: 'concealed'; request: SelectedEntryRequest }>
+  | Readonly<{ state: 'unavailable'; request: SelectedEntryRequest }>
   | Readonly<{
       state: 'current';
-      request: SubjectThreadEntryRequest;
+      request: SelectedEntryRequest;
       board: BoardView;
       actions: Readonly<{ createThread: BoardEntryAdvice }>;
       observations: Readonly<{
@@ -195,8 +197,10 @@ async function readSelectedBoardSource(
 
 function request(
   context: SubjectThreadContext,
-  selectedBoardId: string | undefined,
-): SubjectThreadEntryRequest {
+  selectedBoardId: undefined,
+): SubjectThreadEntryRequestBase & Readonly<{ selectedBoardId?: undefined }>;
+function request(context: SubjectThreadContext, selectedBoardId: string): SelectedEntryRequest;
+function request(context: SubjectThreadContext, selectedBoardId: string | undefined): SubjectThreadEntryRequest {
   return {
     subjectId: context.subject.id,
     placeId: context.place.id,
@@ -205,11 +209,8 @@ function request(
   };
 }
 
-function unavailableEntry(
-  state: 'concealed' | 'unavailable',
-  request: SubjectThreadEntryRequest,
-): SubjectThreadEntry {
-  return { state, request };
+function unavailableEntry(state: 'concealed' | 'unavailable', request: SelectedEntryRequest): SubjectThreadEntry {
+  return state === 'concealed' ? { state: 'concealed', request } : { state: 'unavailable', request };
 }
 
 async function observe(
@@ -217,7 +218,13 @@ async function observe(
   boardId: string,
   subjectContext: SubjectThreadContext,
   context: ReadContext,
-): Promise<Readonly<{ observation: PreparedObservation | null; state?: 'concealed' | 'unavailable'; anchors: readonly AnchoredPosition[] }>> {
+): Promise<
+  Readonly<{
+    observation: PreparedObservation | null;
+    state?: 'concealed' | 'unavailable';
+    anchors: readonly AnchoredPosition[];
+  }>
+> {
   const anchors: AnchoredPosition[] = [];
   try {
     const selected = await readBoard(dependencies, boardId, context);
@@ -226,7 +233,10 @@ async function observe(
     const source = await readSelectedBoardSource(dependencies, boardId, context);
     if (!source) return { observation: null, state: 'concealed', anchors };
     anchors.push(source.anchor);
-    if (!samePosition(selected.anchor, source.anchor) || !exactSelection(selected.value, source, subjectContext, boardId))
+    if (
+      !samePosition(selected.anchor, source.anchor) ||
+      !exactSelection(selected.value, source, subjectContext, boardId)
+    )
       return { observation: null, state: 'concealed', anchors };
     const participation = await participationAdvice(dependencies, context.actor, selected.value, context.deadline);
     const action = await readBoardPageActionEvidence(dependencies, boardId, selected.value, [], context);
@@ -268,16 +278,27 @@ export async function prepareSubjectThreadEntry(
   selectedBoardId: string | undefined,
   context: ReadContext,
 ): Promise<Readonly<{ initial: SubjectThreadEntry; finish(): Promise<EntryFinish> }>> {
-  const selectedRequest = request(subjectContext, selectedBoardId);
   if (selectedBoardId === undefined) {
+    const selectedRequest = request(subjectContext, undefined);
     const initial: SubjectThreadEntry = { state: 'not_selected', request: selectedRequest };
-    return { initial, async finish() { return { entry: initial, anchors: [] }; } };
+    return {
+      initial,
+      async finish() {
+        return { entry: initial, anchors: [] };
+      },
+    };
   }
 
+  const selectedRequest = request(subjectContext, selectedBoardId);
   const initialRead = await observe(dependencies, selectedBoardId, subjectContext, context);
   if (!initialRead.observation) {
     const initial = unavailableEntry(initialRead.state ?? 'unavailable', selectedRequest);
-    return { initial, async finish() { return { entry: initial, anchors: initialRead.anchors }; } };
+    return {
+      initial,
+      async finish() {
+        return { entry: initial, anchors: initialRead.anchors };
+      },
+    };
   }
   const initialObservation = initialRead.observation;
   const initial: SubjectThreadEntry = {

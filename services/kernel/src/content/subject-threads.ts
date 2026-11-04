@@ -41,8 +41,8 @@ export type SubjectThreadPage = {
 };
 export type SubjectThreadDependencies = SubjectThreadCardDependencies &
   Pick<ContentCommandDependencies, 'realmParticipation'> & {
-  /** Trusted service configuration, independent of authentication's wall clock. */
-  cursorNow?: () => number;
+    /** Trusted service configuration, independent of authentication's wall clock. */
+    cursorNow?: () => number;
   };
 
 type SubjectThreadKey = { lastActivityAt: string; threadId: string };
