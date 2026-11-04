@@ -30,11 +30,13 @@ const windowState = (status: number): Story => {
 export const Preparing: Story = windowState(202);
 export const Withheld: Story = windowState(403);
 export const Unavailable: Story = windowState(503);
+const { next: _next, ...terminal } = literaryGrainExample().windows[0]!;
+const { status: _status, ...loading } = literaryGrainExample().windows[0]!;
 export const Empty: Story = {
-  args: { windows: [{ ...literaryGrainExample().windows[0]!, rows: [], next: undefined, complete: true }] },
+  args: { windows: [{ ...terminal, rows: [], complete: true }] },
 };
 export const Unsupported: Story = { args: { descriptorState: 'unsupported', definitions: undefined } };
-export const Loading: Story = { args: { windows: [{ ...literaryGrainExample().windows[0]!, status: undefined }] } };
+export const Loading: Story = { args: { windows: [loading] } };
 export const LongJapanese: Story = {
   args: {
     ...literaryGrainExample('schema:Book'),

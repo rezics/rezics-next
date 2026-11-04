@@ -44,7 +44,7 @@ function DisclosedValue({
   const target =
     snak.value.type === 'value' && snak.property.data_type === 'wikibase-item' ? snak.value.content : undefined;
   // A public id without this response's disclosed summary is never a navigation grant.
-  if (typeof target === 'string' && (!Object.hasOwn(related, target) || related[target]?.id !== target))
+  if (typeof target === 'string' && !Object.hasOwn(related, target))
     return <span>{m.literary_grain_withheld({}, { locale: locale as never })}</span>;
   return <CandidateValue snak={snak} related={related} locale={locale} link={link} />;
 }
@@ -173,11 +173,13 @@ export function LiteraryNativeWindow({
       )}
       {state === 'ready' && window.withheld && <LiteraryStatus state="withheld" locale={locale} />}
       <nav className="flex flex-wrap gap-x-4">
-        {nextHref && (state === 'ready' || state === 'sparse' || state === 'withheld' || state === 'preparing') && (
-          <a href={nextHref} className={action}>
-            {m.subject_section_more({ label: title.text }, o)}
-          </a>
-        )}
+        {nextHref &&
+          native.status === 200 &&
+          (state === 'ready' || state === 'sparse' || state === 'withheld' || state === 'preparing') && (
+            <a href={nextHref} className={action}>
+              {m.subject_section_more({ label: title.text }, o)}
+            </a>
+          )}
         {restartHref && state !== 'empty' && (
           <a href={restartHref} className={action}>
             {m.subject_relation_restart({}, o)}

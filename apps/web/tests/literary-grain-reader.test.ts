@@ -54,7 +54,10 @@ test('preparation, sparse continuation, terminal empty, withholding and currentn
   expect(project({ status: 202 }).state).toBe('preparing');
   expect(project({ rows: [], caughtUp: false }).state).toBe('preparing');
   expect(project({ rows: [] }).state).toBe('sparse');
-  expect(project({ rows: [], next: undefined, complete: true }).state).toBe('empty');
+  const { next: _next, ...terminal } = native;
+  expect(literaryWindow({ ...terminal, rows: [], complete: true }, literaryIds.series, 'en', defaultReader).state).toBe(
+    'empty',
+  );
   for (const status of [401, 403]) expect(project({ status }).state).toBe('withheld');
   for (const status of [409, 410, 503]) expect(project({ status }).state).toBe('unavailable');
   expect(project({ limit: 0 }).state).toBe('unavailable');

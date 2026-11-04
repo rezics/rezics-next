@@ -162,6 +162,7 @@ export function LiteraryReaderEntry({
       editionHref={editionHref ?? undefined}
       factsHref={factsHref ?? undefined}
       retired={retired}
+      recoveryHref={returnTo}
       scopeText={m.literary_grain_scope({}, o)}
       grainLabel={
         type.text ? (
