@@ -108,17 +108,24 @@ test('ordinary Wikidata acquisition retains complete values through independent 
           ).status,
         ).toBe(200);
       }
-      expect(
-        (
-          await editor.http(`/v1/subjects/${id}:adopt`, {
-            context: GLOBAL_CONTEXT,
-            property,
-            mode: 'replace',
-            expected_head: listing.adoption?.head ?? null,
-            selection: listing.candidates.map((c) => ({ candidate: c.id, rank: 'normal' })),
-          })
-        ).status,
-      ).toBe(200);
+      // These released properties are single-valued. Read each partial date
+      // after its own adoption rather than selecting incompatible alternatives together.
+      for (const candidate of listing.candidates) {
+        const current = await page(property);
+        expect(
+          (
+            await editor.http(`/v1/subjects/${id}:adopt`, {
+              context: GLOBAL_CONTEXT,
+              property,
+              mode: 'replace',
+              expected_head: current.adoption?.head ?? null,
+              selection: [{ candidate: candidate.id, rank: 'normal' }],
+            })
+          ).status,
+        ).toBe(200);
+        expect((await publicRead()).subject.statements[property]).toEqual([candidate.statement]);
+      }
+      retained.set(property, [listing.candidates.at(-1)!]);
     }
     expect((await page('schema:wordCount')).candidates).toEqual([]);
     const selected = (await publicRead()).subject.statements;
