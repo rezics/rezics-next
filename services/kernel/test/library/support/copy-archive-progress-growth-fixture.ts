@@ -10,11 +10,13 @@ import {
 import { admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthReport } from '../../support/growth.ts';
 import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
+import { ACCOUNT_ROLE_BITS } from '../../../src/history/contracts.ts';
+import { bindCommandHistoryEvidence } from '../../../src/history/record.ts';
 import { createCopyArchive } from '../../../src/library/copy-archive.ts';
 import { exportSectionsV2, LIBRARY_EXPORT_FORMAT } from '../../../src/library/library-export-format.ts';
 import { createSessionCommands } from '../../../src/library/sessions.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
-import type { Access, AccountActor, ActionCatalogue } from '../../../src/request/access.ts';
+import type { Access, AccountActor, ActionCatalogue, ActionMetadata } from '../../../src/request/access.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';
 import { activateRelease, activeRelease, bootstrapRelease, publishRelease } from '../../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../../src/semantic/subject.ts';
@@ -27,8 +29,8 @@ export const CLEANUP_CHILD_BUDGET = 100;
 export const entryKey = () => randomUUID();
 const additionalUnits = ['volume', 'page', 'minute', 'episode', 'percent', 'plot-key.v2', 'edition.v1'] as const;
 const clientId = 'archive-progress-growth';
-const own = { anonymous: false, authority: 'own-account' as const };
-const actions: ActionCatalogue = new Map([
+const own: ActionMetadata = { anonymous: false, authority: 'own-account' };
+const actions: ActionCatalogue = new Map<string, ActionMetadata>([
   ['subject:read', { anonymous: true }],
   ['copy:list', own],
   ['progress_session:list', own],
@@ -233,14 +235,31 @@ export async function createCopyArchiveProgressGrowthFixture() {
     continuation: await identity(),
   };
   const requestKey = entryKey();
+  const target = subjectTarget(routeKey, applyOwner.actor.accountId, requestKey);
   const created = await createSubject(db.pool, {
     actor: applyOwner.actor,
-    target: subjectTarget(routeKey, applyOwner.actor.accountId, requestKey),
+    target,
     idempotencyKey: requestKey,
     digest: createHash('sha256').update(requestKey).digest(),
     item: { type: 'ex:Parent', labels: { en: 'Archive progress growth subject' } },
     release: { digest: goodDigest, release: goodRelease },
-    authorize: async () => true,
+    authorization: {
+      action: 'subject:create',
+      resource: target,
+      denied: () => new Error('subject create denied'),
+      async authorize(tx) {
+        const accountRoute = routeOf(applyOwner.actor.accountId);
+        if (accountRoute === null) throw new Error('subject create owner is missing a route');
+        bindCommandHistoryEvidence(tx, [
+          {
+            accountRoute,
+            accountId: applyOwner.actor.accountId,
+            roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
+          },
+        ]);
+        return 'execute';
+      },
+    },
     clock,
   });
   const subjectId = created.subject.id;
