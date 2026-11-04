@@ -51,6 +51,7 @@ export async function prepareReporterHistoryVisit(
   );
   return {
     ...response,
+    result: response.readerBinding.retired ? { state: 'denied' } : response.result,
     query,
     locale,
     generation: crypto.randomUUID(),

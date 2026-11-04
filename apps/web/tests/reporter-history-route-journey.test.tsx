@@ -78,7 +78,7 @@ test('served operands, exact own status and recovery form one fresh private rout
         nativeSourceFingerprint: 'native-session',
         page: {
           state: capturedMode,
-          selectedReportId: query.reportId === id ? id : null,
+          selectedReportId: capturedMode === 'ready' && query.reportId === id ? id : null,
           retry: { cursor: query.cursor ?? null },
           nextCursor: capturedMode === 'preparing' || query.cursor ? null : cursor,
           viewer: { kind: 'reporter' },
@@ -204,6 +204,7 @@ test('served operands, exact own status and recovery form one fresh private rout
     await follow(back);
     expect(history.location.href).toBe(selectedAddress);
     expect(reads.at(-1)).toEqual({ cursor, reportId: otherId });
+    expect(window.document.activeElement).toBe(host.querySelector('[aria-pressed="true"]'));
     const beforeBack = statuses.length;
     await act(async () => {
       history.back();
@@ -222,6 +223,17 @@ test('served operands, exact own status and recovery form one fresh private rout
     expect(reads).toHaveLength(beforeReload + 1);
     expect(reads.at(-1)).toEqual({ cursor, reportId: otherId });
 
+    await act(async () => {
+      await router.navigate({
+        href: `/moderation/reports/${otherId}?historyReportId=${reportId}&historyCursor=bad&returnTo=https%3A%2F%2Fevil.test`,
+      });
+    });
+    const safeReturn = new URL(host.querySelector<HTMLAnchorElement>('a')!.href);
+    expect(safeReturn.pathname).toBe('/en/moderation/reports');
+    expect(safeReturn.search).toBe('');
+    await act(async () => {
+      await router.navigate({ href: selectedAddress });
+    });
     mode = 'preparing';
     await click('Refresh');
     expect(host.textContent).toContain('report history is being prepared');
