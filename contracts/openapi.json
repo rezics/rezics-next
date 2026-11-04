@@ -409837,6 +409837,9 @@
                   "work": {
                     "format": "uuid",
                     "type": "string"
+                  },
+                  "prepareShare": {
+                    "type": "boolean"
                   }
                 },
                 "required": [],
@@ -414870,6 +414873,157 @@
                         "as_of"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "properties": {
+                        "viewer": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "anonymous"
+                            },
+                            {
+                              "type": "string",
+                              "const": "signed-in"
+                            }
+                          ]
+                        },
+                        "action": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "allowed"
+                            },
+                            {
+                              "type": "string",
+                              "const": "disabled"
+                            },
+                            {
+                              "type": "string",
+                              "const": "unavailable"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "const": "ready"
+                            },
+                            {
+                              "type": "string",
+                              "const": "private_context"
+                            },
+                            {
+                              "type": "string",
+                              "const": "unsupported"
+                            },
+                            {
+                              "type": "string",
+                              "const": "oversized"
+                            },
+                            {
+                              "type": "string",
+                              "const": "unavailable"
+                            }
+                          ]
+                        },
+                        "document": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "maxLength": 512,
+                                  "type": "string"
+                                },
+                                "filter": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 16384,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "languages": {
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "maxLength": 35,
+                                    "type": "string"
+                                  }
+                                },
+                                "sort": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "filter",
+                                "languages",
+                                "sort"
+                              ]
+                            }
+                          ]
+                        },
+                        "parameters": {
+                          "anyOf": [
+                            {
+                              "maxLength": 8192,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "selections": {
+                          "maxItems": 128,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "maxLength": 256,
+                                "type": "string"
+                              },
+                              "language": {
+                                "maxLength": 35,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "viewer",
+                        "action",
+                        "reason",
+                        "document",
+                        "parameters",
+                        "selections"
+                      ]
                     }
                   ]
                 }
