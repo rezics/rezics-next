@@ -357,17 +357,56 @@ export async function writeOwnRating(
   units: number | null,
   idempotencyKey: string,
 ): Promise<boolean> {
-  const vote = client.subjects({ id }).ratings({ questionId: QUESTION }).vote;
-  const headers = { authorization, 'idempotency-key': idempotencyKey };
   try {
     if (units !== null) {
       const question = await readRatingQuestion(client);
       if (!question || !validRatingUnits(units, question.scale)) return false;
     }
-    const result = units === null ? await vote.delete(undefined, { headers }) : await vote.put({ units }, { headers });
-    return units === null ? result.status === 204 : result.status === 200;
+    return (
+      (await writeRatingVote(client, { subjectId: id, questionId: QUESTION, authorization, units, idempotencyKey })) ===
+      'successful'
+    );
   } catch {
     return false;
+  }
+}
+
+/** Shared native transport for the existing vote writer. A bound call never rereads an unbound question. */
+export async function writeRatingVote(
+  client: KernelClient,
+  input: {
+    subjectId: string;
+    questionId: string;
+    authorization: string;
+    units: number | null;
+    idempotencyKey: string;
+    observation?: {
+      subjectId: string;
+      question: {
+        id: string;
+        revision: number;
+        grain: string;
+        meaning: string;
+        scale: { min: number; max: number; displayStep: number };
+      };
+    };
+  },
+): Promise<'successful' | 'rejected' | 'uncertain'> {
+  const vote = client.subjects({ id: input.subjectId }).ratings({ questionId: input.questionId }).vote;
+  const headers = {
+    authorization: input.authorization,
+    'idempotency-key': input.idempotencyKey,
+    ...(input.observation ? { 'x-rating-observation': JSON.stringify(input.observation) } : {}),
+  };
+  try {
+    const result =
+      input.units === null
+        ? await vote.delete(undefined, { headers })
+        : await vote.put({ units: input.units }, { headers });
+    if (!result.error && result.status === (input.units === null ? 204 : 200)) return 'successful';
+    return [400, 401, 403, 404, 409, 422].includes(result.status) ? 'rejected' : 'uncertain';
+  } catch {
+    return 'uncertain';
   }
 }
 

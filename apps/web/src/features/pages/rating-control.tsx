@@ -78,6 +78,8 @@ export function RatingControlView({
   failure,
   onSet,
   onClear,
+  nativeFallback = true,
+  hideValue = false,
 }: {
   question: RatingQuestion;
   subjectId: string;
@@ -88,13 +90,15 @@ export function RatingControlView({
   failure: string | null;
   onSet: (units: number) => void;
   onClear: () => void;
+  nativeFallback?: boolean;
+  hideValue?: boolean;
 }) {
   const options = { locale: locale as never };
   const formId = useId();
   const labelId = `${formId}-label`;
   const [draft, setDraft] = useState<number | null>(state.kind === 'ready' ? state.units : null);
   const editing = useRef(false);
-  const fallback = (
+  const fallback = nativeFallback ? (
     <NoScriptForm
       question={question}
       subjectId={subjectId}
@@ -102,7 +106,7 @@ export function RatingControlView({
       locale={locale}
       value={state.kind === 'ready' ? state.units : null}
     />
-  );
+  ) : null;
 
   useEffect(() => {
     if (!editing.current && !pending) setDraft(state.kind === 'ready' ? state.units : null);
@@ -136,7 +140,7 @@ export function RatingControlView({
       </div>
     );
 
-  const value = draft;
+  const value = hideValue ? null : draft;
   const scale = question.scale;
   const sliderValue =
     value ?? scale.min + Math.floor((scale.max - scale.min) / scale.displayStep / 2) * scale.displayStep;
@@ -197,7 +201,8 @@ export function RatingControlView({
         <Slider.Root
           className="[&>div]:min-h-11 **:data-[slot=slider-thumb]:size-5 **:data-[slot=slider-thumb]:ring-2 **:data-[slot=slider-thumb]:ring-primary"
           data-slot="slider"
-          disabled={pending}
+          disabled={nativeFallback && pending}
+          aria-disabled={pending}
           locale={locale}
           name="units"
           thumbAlignment="edge"
@@ -205,7 +210,7 @@ export function RatingControlView({
           min={question.scale.min}
           onValueChange={(next) => {
             const units = Array.isArray(next) ? next[0] : next;
-            if (typeof units === 'number') {
+            if (!pending && typeof units === 'number') {
               editing.current = true;
               setDraft(
                 Math.min(
@@ -243,10 +248,11 @@ export function RatingControlView({
         <div className="flex flex-wrap gap-2">
           <Button
             className={actionClassName}
-            disabled={pending || value === null || value === state.units}
+            disabled={nativeFallback && (pending || value === null || value === state.units)}
+            aria-disabled={pending || value === null || value === state.units}
             onClick={() => {
               editing.current = false;
-              if (value !== null) onSet(value);
+              if (!pending && value !== null && value !== state.units) onSet(value);
             }}
             type="button"
           >
@@ -254,8 +260,10 @@ export function RatingControlView({
           </Button>
           <Button
             className={actionClassName}
-            disabled={pending || state.units === null}
+            disabled={nativeFallback && (pending || state.units === null)}
+            aria-disabled={pending || state.units === null}
             onClick={() => {
+              if (pending || state.units === null) return;
               editing.current = false;
               setDraft(null);
               onClear();

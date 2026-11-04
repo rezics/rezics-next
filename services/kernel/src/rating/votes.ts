@@ -46,6 +46,13 @@ import voteCountedTargetSet from './vote-counted-target-set.sql';
 import voteRead from './vote-read.sql';
 import voteUpdate from './vote-update.sql';
 
+import {
+  assertVoteObservation,
+  parseVoteObservation,
+  requireVoteObservationProvider,
+  type VoteObservation,
+} from './vote-observation.ts';
+
 export const VOTE_SCOPE = 'rating:vote';
 
 export type RatingQuestion = RatingQuestionScale & {
@@ -75,6 +82,7 @@ export type PutVoteInput = {
   targetId: string;
   units: number | null;
   guard?: VoteReviewGuard;
+  observation?: VoteObservation;
 };
 export type PutVoteOutcome = {
   vote: Vote | null;
@@ -272,6 +280,15 @@ export function createVoteCommands(config: Dependencies) {
       throw new VoteInvalidError('vote');
     if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
 
+    let observation: VoteObservation | undefined;
+    if (input.observation !== undefined) {
+      try {
+        observation = parseVoteObservation(JSON.stringify(input.observation));
+      } catch {
+        throw new VoteInvalidError('observation');
+      }
+      requireVoteObservationProvider(input.questionId);
+    }
     let guard: VoteReviewGuard | undefined;
     if (input.guard !== undefined) {
       try {
@@ -280,7 +297,13 @@ export function createVoteCommands(config: Dependencies) {
         throw new VoteInvalidError('guard');
       }
     }
-    input = { questionId: input.questionId, targetId: input.targetId, units: input.units, ...(guard ? { guard } : {}) };
+    input = {
+      questionId: input.questionId,
+      targetId: input.targetId,
+      units: input.units,
+      ...(guard ? { guard } : {}),
+      ...(observation ? { observation } : {}),
+    };
     const initial = guard ? null : await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
 
     try {
@@ -295,6 +318,7 @@ export function createVoteCommands(config: Dependencies) {
             targetId: input.targetId,
             units: input.units,
             ...(guard ? { guard } : {}),
+            ...(observation ? { observation } : {}),
           },
           // Current question provenance is checked again on each native attempt,
           // before ownAccountPrepared permits receipt disclosure or execution.
@@ -307,6 +331,7 @@ export function createVoteCommands(config: Dependencies) {
               guard ? { questionId: input.questionId, targetId: input.targetId } : input,
               deadline,
             );
+            if (observation) assertVoteObservation(observation, current.question, current.target.subjectId);
             if (initial && current.target.subjectId !== initial.target.subjectId)
               throw new IdentityRatingAdmissionPendingError(input.targetId, 'source-pending');
             let epochs: readonly VoteReviewEpoch[] = [];
@@ -327,7 +352,8 @@ export function createVoteCommands(config: Dependencies) {
           },
         },
         async (tx, command, prepared) => {
-          const { question, target: resolved } = initial ?? prepared;
+          const { question, target: resolved } = observation ? prepared : (initial ?? prepared);
+          if (observation) assertVoteObservation(observation, question, resolved.subjectId);
           if (guard) {
             if (
               question.revision !== guard.question.revision ||

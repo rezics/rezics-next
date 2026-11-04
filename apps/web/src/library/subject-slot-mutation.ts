@@ -25,6 +25,8 @@ export async function applySubjectLibraryMutation(
           return { result: 'unavailable' };
         const removed = await removePersonalLibraryEntry(client, request, sessionEnv, {
           subjectId: input.subjectId,
+          ...(input.expectedReader === undefined ? {} : { expectedReader: input.expectedReader }),
+          ...(input.expectedCredential === undefined ? {} : { expectedCredential: input.expectedCredential }),
           revision: input.revision,
           ...(input.incarnationId === undefined ? {} : { incarnationId: input.incarnationId }),
           idempotencyKey: input.idempotencyKey,
@@ -45,6 +47,8 @@ export async function applySubjectLibraryMutation(
       if (!input.state || libraryEntryStateWrite(input.state) === undefined) return { result: 'unavailable' };
       const saved = await changePersonalLibraryEntry(client, request, sessionEnv, {
         subjectId: input.subjectId,
+        ...(input.expectedReader === undefined ? {} : { expectedReader: input.expectedReader }),
+        ...(input.expectedCredential === undefined ? {} : { expectedCredential: input.expectedCredential }),
         state: input.state,
         ...(input.revision === undefined ? {} : { revision: input.revision }),
         ...(input.incarnationId === undefined ? {} : { incarnationId: input.incarnationId }),

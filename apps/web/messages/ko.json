@@ -7934,5 +7934,10 @@
   "recording_reader_contributions": "연주자 및 기타 기여자",
   "recording_reader_associations": "관계",
   "recording_reader_continue": "전체 관계 보기에서 계속",
-  "recording_reader_return": "출처 페이지로 돌아가기"
+  "recording_reader_return": "출처 페이지로 돌아가기",
+  "discovery_score_unknown": "사용 가능한 평가 작업을 확인하는 중…",
+  "discovery_score_signed_out": "이 대상을 평가하려면 로그인하세요.",
+  "discovery_score_unsupported": "이 대상은 이 평가 질문을 지원하지 않습니다.",
+  "discovery_score_concealed": "이 사용자에게 평가 작업이 공개되지 않았습니다.",
+  "discovery_score_unavailable": "평가 작업을 사용할 수 없습니다."
 }

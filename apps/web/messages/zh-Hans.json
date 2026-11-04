@@ -7934,5 +7934,10 @@
   "recording_reader_contributions": "演奏者及其他贡献者",
   "recording_reader_associations": "关联",
   "recording_reader_continue": "在完整关系视图中继续",
-  "recording_reader_return": "返回来源页面"
+  "recording_reader_return": "返回来源页面",
+  "discovery_score_unknown": "正在检查可用的评分操作…",
+  "discovery_score_signed_out": "登录后即可为此对象评分。",
+  "discovery_score_unsupported": "此对象不支持这项评分问题。",
+  "discovery_score_concealed": "此用户无法使用评分操作。",
+  "discovery_score_unavailable": "评分操作暂时不可用。"
 }

@@ -7934,5 +7934,10 @@
   "recording_reader_contributions": "Intérpretes y demás colaboradores",
   "recording_reader_associations": "Relaciones",
   "recording_reader_continue": "Continuar en la vista completa de relaciones",
-  "recording_reader_return": "Volver a la página de origen"
+  "recording_reader_return": "Volver a la página de origen",
+  "discovery_score_unknown": "Comprobando las acciones de puntuación disponibles…",
+  "discovery_score_signed_out": "Inicia sesión para puntuar este sujeto.",
+  "discovery_score_unsupported": "Este sujeto no admite esta pregunta de puntuación.",
+  "discovery_score_concealed": "Las acciones de puntuación no están habilitadas para este lector.",
+  "discovery_score_unavailable": "Las acciones de puntuación no están disponibles."
 }

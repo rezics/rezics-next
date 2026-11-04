@@ -7934,5 +7934,10 @@
   "recording_reader_contributions": "Interprètes et autres contributeurs",
   "recording_reader_associations": "Relations",
   "recording_reader_continue": "Continuer dans la vue complète des relations",
-  "recording_reader_return": "Revenir à la page d’origine"
+  "recording_reader_return": "Revenir à la page d’origine",
+  "discovery_score_unknown": "Vérification des actions de notation disponibles…",
+  "discovery_score_signed_out": "Connectez-vous pour noter ce sujet.",
+  "discovery_score_unsupported": "Ce sujet ne prend pas en charge cette question de notation.",
+  "discovery_score_concealed": "Les actions de notation ne sont pas accessibles à ce lecteur.",
+  "discovery_score_unavailable": "Les actions de notation sont indisponibles."
 }

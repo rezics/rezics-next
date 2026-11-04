@@ -7934,5 +7934,10 @@
   "recording_reader_contributions": "Mitwirkende und Interpretinnen und Interpreten",
   "recording_reader_associations": "Verknüpfungen",
   "recording_reader_continue": "In der vollständigen Relationsansicht fortfahren",
-  "recording_reader_return": "Zur Ausgangsseite zurück"
+  "recording_reader_return": "Zur Ausgangsseite zurück",
+  "discovery_score_unknown": "Verfügbare Bewertungsaktionen werden geprüft…",
+  "discovery_score_signed_out": "Melde dich an, um dieses Subjekt zu bewerten.",
+  "discovery_score_unsupported": "Dieses Subjekt unterstützt diese Bewertungsfrage nicht.",
+  "discovery_score_concealed": "Bewertungsaktionen sind für diesen Nutzer nicht freigegeben.",
+  "discovery_score_unavailable": "Bewertungsaktionen sind nicht verfügbar."
 }

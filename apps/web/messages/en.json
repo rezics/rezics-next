@@ -8009,5 +8009,10 @@
   "recording_reader_contributions": "Performers and other contributors",
   "recording_reader_associations": "Associations",
   "recording_reader_continue": "Continue in the full Relations view",
-  "recording_reader_return": "Return to the source page"
+  "recording_reader_return": "Return to the source page",
+  "discovery_score_unknown": "Checking available score actions…",
+  "discovery_score_signed_out": "Sign in to rate this Subject.",
+  "discovery_score_unsupported": "This Subject does not support this rating question.",
+  "discovery_score_concealed": "Score actions are not exposed to this reader.",
+  "discovery_score_unavailable": "Score actions are unavailable."
 }

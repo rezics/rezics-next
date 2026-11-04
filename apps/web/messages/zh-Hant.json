@@ -7934,5 +7934,10 @@
   "recording_reader_contributions": "演奏者及其他貢獻者",
   "recording_reader_associations": "關聯",
   "recording_reader_continue": "在完整關係檢視中繼續",
-  "recording_reader_return": "返回來源頁面"
+  "recording_reader_return": "返回來源頁面",
+  "discovery_score_unknown": "正在檢查可用的評分操作…",
+  "discovery_score_signed_out": "登入後即可為此對象評分。",
+  "discovery_score_unsupported": "此對象不支援這項評分問題。",
+  "discovery_score_concealed": "此使用者無法使用評分操作。",
+  "discovery_score_unavailable": "評分操作暫時無法使用。"
 }

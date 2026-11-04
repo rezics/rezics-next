@@ -32,25 +32,66 @@ and routes.
 Decision: The controlled Search entry interface keeps admitted facts unchanged during commands, treats a lost or
 unavailable native reply as uncertain, and coalesces successful or uncertain overlapping writes into one page refresh.
 
-`discovery-personal-state.ts` provides the page lifetime and a shared native-identity command registry;
-`discovery-personal-actions.ts` constructs the existing Library entry commands, including incarnation and revision;
-`discovery-personal-controls.tsx` renders the controlled entry form. These are reusable building blocks, not yet wired
-to the live Search host. No component loads a Subject, manufactures writable profile evidence or grants permission.
-The host must supply released profile choices, separate operation exposure, current session authority and a native
-current-reader command adapter. The existing boolean rating adapter is insufficient for explicit question-bound writes;
-score controls must wait for the guarded native adapter rather than use that adapter as a substitute.
+The general mixed Search host now mounts the controlled entry form and native score view. Release-search and
+concept-browse retain their own hosts. Collection, Review, Space and Account actions stay with their native owners.
+The public loader remains public: a mounted signed-in reader obtains a private, no-store POST assembly, never a
+private query-cache entry, URL parameter or public summary field. Share, reload and Back assemble current server facts.
 
-The host supplies immutable admitted targets and an imperative current observation. That observation must disappear
-on session or exposure retirement, and change with the viewer, credential, locale, request, page, registry, generation,
-row identity, resolved Subject, entry revision or question. An observed retirement is terminal even if old props return.
-Retiring the displayed private facts after a command retains this separate authority observation only until the single
-refresh settles; it does not authorize another dispatch. The registry persists across page incarnations, refuses
-competing writes without queuing them, and separates entry and vote identities. Refresh waits for every already
-dispatched command on the retiring page, so a second command cannot complete behind its refreshed facts.
+Decision: Capability metadata exceeding one shared 1 MiB/1,024-chunk transport allowance withholds inline writes;
+only the immutable standard Global question enables score writes, and conditional providers remain unavailable.
 
-The controlled seam admits at most 100 ordered targets, 16,384 UTF-8 bytes of original `{rowKey,subjectId}` inputs and
-65,536 bytes of target evidence. It adds zero native reads before a command and at most one post-command page read.
-`readDiscoveryMutationPage` uses the existing page endpoint and its final admission lifecycle with cancellation and no
-automatic rating restart. The host must still account for the future bounded capability read, native commands and
-complete endpoint costs before enabling this interface. Production wiring, question-bound score commands, focus on
-result disappearance/restart and native acceptance remain continuation work.
+A single page-level capability projection uses the current authenticated release and operation exposure, separately
+from entry existence. Released states preserve their labels and order; missing profiles are unsupported, concealed
+operations are concealed, and failed metadata is unavailable. Unknown session, signed-out session, unsupported,
+concealed and unavailable outcomes have separate messages in all eight locales. No Subject is loaded for a row.
+The private envelope carries each original row's resolved Subject from the already prepared native identity batch.
+
+`discovery-personal-state.ts` owns immutable admitted observations independently of suppressed display state.
+`discovery-personal-actions.ts` builds native entry commands with revision/incarnation and explicit question-bound
+score commands, including zero and absence. The reusable native score transport uses the existing vote PUT/DELETE
+port; its optional observation header is verified by that writer on every prepared native attempt, before receipt
+disclosure and execution. Conditional providers fail at `atomic_guard_unavailable` before any unlocked preflight.
+Both native BFF adapters prepare the session and compare its reader and CSRF credential after the session await;
+the native server still authorizes every command. The Library adapter's unavailable reply is conservatively uncertain.
+
+Every action binds viewer, credential, locale, complete row, original/resolved Subject, question revision/scale,
+request/page owner, registry/generation and capability/exposure observations. Observed retirement is terminal,
+including an A → B → A cache transition. The registry persists for the QueryClient across page incarnations and
+serializes each native entry or question/vote identity without queues. Independent entry/vote writes already sent
+settle before one refresh. Pending, rejected, uncertain, successful and retired states remain distinct. Rejection
+retains facts/drafts; success or uncertainty suppresses the entire private assembly without altering its observation,
+then refreshes once. Late writes and reads cannot publish or roll back into another reader, request or locale.
+
+The host preserves query, filters, ordering, expanded contexts and URL. Pending controls retain their DOM focus;
+refresh adopts authoritative drafts for every duplicate. On disappearance it focuses the next surviving row, then
+the restart action or result region, with preventScroll and the captured scroll position. Cancellation retains focus
+when its control survives and uses the same fallback when it disappears. A focus moved outside the result region
+is respected. Obsolete reads are aborted; native writes already dispatched are awaited rather than retried.
+
+### Finite work per page assembly and command settlement
+
+Let `P(L)` be the installed retained native page cost in
+[the discovery query contract](../../../../services/kernel/src/search/discovery-query.md#complete-page-work-and-retained-state), with
+`L <= 100`, `R <= min(600, 6L + 3)`, three raw windows, `H <= L` mixed hits, `S <= H` Subjects and eight kind rows.
+It includes both ordered raw presentation batches, both public-figure batches, one private prepare/read/final-check
+lifecycle and the retained finish/close guards. Duplicates, rejection and empty lookahead consume the original raw
+allowance. There is no added per-row read, pool checkout or retry.
+
+Each private web assembly performs at most three session preparations (initial, after capabilities, after the native
+page), three metadata GETs (active release, exact release, exposure) sharing 1,048,576 bytes and 1,024 stream chunks,
+and one `P(L)`. Capability projection visits at most `S` kinds. The combined serialized private rows and capabilities
+must fit 65,536 UTF-8 bytes; ordered original inputs retain the native 100/16,384-byte bounds. The controlled target
+snapshot independently enforces 100 originals/16,384 input bytes/65,536 evidence bytes, including repeated question
+observations. An oversized snapshot withholds all private facts and controls, retaining admitted public hits.
+
+A public initial load plus private bootstrap plus one mutation reconciliation therefore costs at most three `P(L)`,
+six metadata GETs/2 MiB/2,048 chunks and six session preparations, plus the existing one session/exposure observer.
+No native command hydrates a row. Each user entry action sends at most one native write, one conflict reload and
+one removal undo-credential lookup through the existing owner adapter; each score action sends one native vote
+write and no unbound question read. With `U <= S` distinct native identities, pending work is at most `2U <= 200`
+independent entry/vote commands; each has its native finite command/transaction bounds. Competing duplicates and
+retired actions add zero writes. Known rejection permits a new explicit user action, never an automatic retry.
+Successful/uncertain overlapping settlement adds exactly one private assembly. Empty/final pages use the same
+final authority check. A false viewer check retires the whole page without restart retry; ordinary producer failure
+retains the independently admitted public page. Cleanup aborts at most one assembly and disposes one page/registry
+subscription per incarnation; it starts no replacement read or continuation protocol.

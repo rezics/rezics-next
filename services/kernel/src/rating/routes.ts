@@ -36,6 +36,8 @@ import {
   RatingQuestionRetiredError,
   VoteInvalidError,
   VOTE_SCOPE,
+  VoteReviewStaleError,
+  VoteReviewUnavailableError,
   type Vote,
 } from './votes.ts';
 import {
@@ -82,7 +84,20 @@ type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; routeKe
 type ReadDependencies = Pick<Dependencies, 'pool'> & { access: Access };
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
+import { parseVoteObservation } from './vote-observation.ts';
+
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+const voteHeaders = t.Object({
+  ...headers.properties,
+  'x-rating-observation': t.Optional(t.String({ maxLength: 2048 })),
+});
+function voteObservation(value: string | undefined) {
+  try {
+    return parseVoteObservation(value);
+  } catch {
+    throw new ProblemError('invalid_request');
+  }
+}
 const bearer = [{ bearerAuth: [] }];
 const writeRate = defineRateLimit({ family: 'write', units: 1 });
 const failures = {
@@ -179,6 +194,8 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (error) {
+    if (error instanceof VoteReviewStaleError) throw new ProblemError('conflict');
+    if (error instanceof VoteReviewUnavailableError) throw new ProblemError('overloaded', { detail: error.reason });
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
     if (
       error instanceof LibraryNotFoundError ||
@@ -397,7 +414,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/ratings/:questionId/vote',
       {
         params: t.Object({ id, questionId: id }, closed),
-        headers,
+        headers: voteHeaders,
         body: RatingVoteInputSchema,
         response: {
           200: withHeaders(RatingVoteResponseSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
@@ -412,7 +429,12 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           command(() =>
             votes().putVoteOutcome(
               actor,
-              { questionId: params.questionId, targetId: params.id, units: body.units },
+              {
+                questionId: params.questionId,
+                targetId: params.id,
+                units: body.units,
+                observation: voteObservation(headers['x-rating-observation']),
+              },
               key,
             ),
           ),
@@ -426,7 +448,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/subjects/:id/ratings/:questionId/vote',
       {
         params: t.Object({ id, questionId: id }, closed),
-        headers,
+        headers: voteHeaders,
         response: {
           204: withHeaders(t.Void(), { [SESSION_HEADER]: t.Optional(t.String()) }),
           ...failures,
@@ -438,7 +460,16 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
           command(() =>
-            votes().putVoteOutcome(actor, { questionId: params.questionId, targetId: params.id, units: null }, key),
+            votes().putVoteOutcome(
+              actor,
+              {
+                questionId: params.questionId,
+                targetId: params.id,
+                units: null,
+                observation: voteObservation(headers['x-rating-observation']),
+              },
+              key,
+            ),
           ),
         );
         if (result.component) session.record(result.component);

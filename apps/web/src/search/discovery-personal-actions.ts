@@ -77,3 +77,42 @@ export function changeDiscoveryEntry(input: {
     return discoveryEntryOutcome(await input.write(command));
   });
 }
+
+export type DiscoveryVoteCapability =
+  | { state: 'ready'; set: boolean; clear: boolean }
+  | { state: 'unknown' | 'signed-out' | 'unsupported' | 'concealed' | 'unavailable' };
+export type DiscoveryVoteInput = {
+  subjectId: string;
+  question: NonNullable<DiscoveryPersonalTarget['question']>;
+  units: number | null;
+  idempotencyKey: string;
+};
+export function changeDiscoveryVote(input: {
+  page: DiscoveryPersonalPage;
+  rowKey: string;
+  capability: DiscoveryVoteCapability;
+  units: number | null;
+  write: (command: DiscoveryVoteInput) => Promise<DiscoveryCommandResult>;
+}) {
+  const capability = structuredClone(input.capability);
+  const units = input.units;
+  return input.page.execute(input.rowKey, 'vote', async (target, idempotencyKey) => {
+    const q = target.question;
+    if (
+      capability.state !== 'ready' ||
+      !q ||
+      target.vote.state === 'unavailable' ||
+      target.vote.questionId !== q.id ||
+      target.vote.questionRevision !== q.revision ||
+      (units === null
+        ? !capability.clear || target.vote.state !== 'present'
+        : !capability.set ||
+          !Number.isSafeInteger(units) ||
+          units < q.scale.min ||
+          units > q.scale.max ||
+          (units - q.scale.min) % q.scale.displayStep !== 0)
+    )
+      return 'rejected';
+    return input.write({ subjectId: target.subjectId, question: q, units, idempotencyKey });
+  });
+}

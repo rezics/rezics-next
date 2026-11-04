@@ -49,6 +49,7 @@ import {
 import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
 import { ResultKindNavigation } from './result-kind-navigation';
+import { useDiscoveryPersonalResults } from './discovery-personal-host';
 import { DiscoveryResults } from './discovery-results';
 import { realmCatalogueSubjectHref } from './realm-catalogue-handoff';
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
@@ -584,6 +585,18 @@ export function SearchPage({
   const router = useRouter({ warn: false });
   const typeControlId = useId();
   const locale = localeProp ?? getLocale();
+  const personal = useDiscoveryPersonalResults({
+    source: data?.discovery,
+    request: data?.queryState ? discoveryRequest(data.queryState, requestLanguages(locale)) : undefined,
+    locale,
+    returnTo: searchHref ?? discoverySearchHref(locale, data?.queryState ?? { query, facets: {} }),
+    enabled:
+      !!data?.discovery &&
+      !!data.queryState &&
+      !filtersOnly &&
+      !(data.discovery.status === 'restart' && searchRequiresCurrentReader(data.queryState)),
+  });
+  if (data?.discovery && personal.state) data = { ...data, discovery: personal.state };
   const options = messageOptions(locale);
   const type = data?.type;
   const result = data?.result;
@@ -778,6 +791,7 @@ export function SearchPage({
     committedState,
     retryFocus,
     searchHref,
+    personal,
   );
   const navigate = (href: string, removingCondition = false) => {
     setDraft((previous) => ({ ...previous, attempted: true }));
@@ -1192,6 +1206,7 @@ function renderResults(
   retryState = data?.queryState,
   retryFocus?: ReturnType<typeof useSearchRetryFocus>,
   currentSearchHref?: string | undefined,
+  personal?: ReturnType<typeof useDiscoveryPersonalResults>,
 ) {
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
@@ -1258,7 +1273,10 @@ function renderResults(
       )}
       <section
         id="search-results"
-        ref={retryFocus?.regionRef}
+        ref={(element) => {
+          if (retryFocus) retryFocus.regionRef.current = element;
+          if (personal) personal.regionRef.current = element;
+        }}
         tabIndex={-1}
         aria-label={m.search_results({}, options)}
         data-search-results
@@ -1275,6 +1293,7 @@ function renderResults(
         ) : data?.discovery ? (
           <DiscoveryResults
             state={data.discovery}
+            renderPersonal={personal?.renderPersonal}
             locale={locale}
             yearProperties={data.yearProperties}
             subjectHrefFor={subjectHrefFor}

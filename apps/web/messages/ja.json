@@ -7934,5 +7934,10 @@
   "recording_reader_contributions": "演奏者とその他の貢献者",
   "recording_reader_associations": "関連項目",
   "recording_reader_continue": "すべての関連項目を表示",
-  "recording_reader_return": "元のページに戻る"
+  "recording_reader_return": "元のページに戻る",
+  "discovery_score_unknown": "利用可能な評価操作を確認しています…",
+  "discovery_score_signed_out": "この対象を評価するにはログインしてください。",
+  "discovery_score_unsupported": "この対象はこの評価項目に対応していません。",
+  "discovery_score_concealed": "この閲覧者には評価操作が公開されていません。",
+  "discovery_score_unavailable": "評価操作を利用できません。"
 }
