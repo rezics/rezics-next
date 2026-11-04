@@ -5,10 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision } from '@rezics/conversion/cross-media-entities';
-import {
-  vndbCharacterBloodTypeSchemeUri,
-  vndbCharacterBloodTypeTaxonomy,
-} from '@rezics/conversion/vndb-vocabulary';
+import { vndbCharacterBloodTypeSchemeUri, vndbCharacterBloodTypeTaxonomy } from '@rezics/conversion/vndb-vocabulary';
 import {
   CrossMediaDumpFiles,
   planCrossMediaSeed,
@@ -26,7 +23,26 @@ const charsHeader =
   'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription';
 
 function charsCopy(id: string, bloodt: string, gender: string, spoilGender: string, height: string, weight: string) {
-  return [id, '\\N', bloodt, '\\N', '\\N', '\\N', gender, spoilGender, '\\N', '0', '\\N', '\\N', '\\N', '\\N', height, weight, '\\N', '\\N'].join('\t');
+  return [
+    id,
+    '\\N',
+    bloodt,
+    '\\N',
+    '\\N',
+    '\\N',
+    gender,
+    spoilGender,
+    '\\N',
+    '0',
+    '\\N',
+    '\\N',
+    '\\N',
+    '\\N',
+    height,
+    weight,
+    '\\N',
+    '\\N',
+  ].join('\t');
 }
 
 async function authoredTables(directory: string): Promise<CrossMediaTables> {
@@ -71,7 +87,7 @@ async function authoredTables(directory: string): Promise<CrossMediaTables> {
         yield* copy.rows(provider, table);
         return;
       }
-      yield* (rows[`${provider}/${table}`] ?? []);
+      yield* rows[`${provider}/${table}`] ?? [];
     },
   };
 }
@@ -159,13 +175,24 @@ test('selected COPY characters retain identity and measurements while verified b
         recordConcurrency: 1,
       },
     });
-    expect(first.vocabularyGaps.some((gap) => gap.path === '/chars/bloodt' && gap.reason === 'missing_concept')).toBe(true);
-    expect(first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c2' && row.reason === 'source_unknown')).toBe(true);
-    expect(first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c1' && row.field === 'gender')).toBe(true);
-    expect(first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c1' && row.field === 'spoil_gender')).toBe(true);
+    expect(first.vocabularyGaps.some((gap) => gap.path === '/chars/bloodt' && gap.reason === 'missing_concept')).toBe(
+      true,
+    );
+    expect(
+      first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c2' && row.reason === 'source_unknown'),
+    ).toBe(true);
+    expect(first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c1' && row.field === 'gender')).toBe(
+      true,
+    );
+    expect(
+      first.vndbCharacterProfileOmissions.some((row) => row.externalId === 'c1' && row.field === 'spoil_gender'),
+    ).toBe(true);
     expect(
       commands.some(
-        (command) => command.op === 'propose' && command.source.external_id === 'c1' && command.statement.property.id === 'wdt:P1853',
+        (command) =>
+          command.op === 'propose' &&
+          command.source.external_id === 'c1' &&
+          command.statement.property.id === 'wdt:P1853',
       ),
     ).toBe(false);
     const refreshed = await seedShowcaseVndbReleases({
@@ -182,7 +209,10 @@ test('selected COPY characters retain identity and measurements while verified b
     });
     expect(refreshed.runs.vndb?.counts.unchanged).toBeGreaterThan(0);
     const blood = commands.find(
-      (command) => command.op === 'propose' && command.source.external_id === 'c1' && command.statement.property.id === 'wdt:P1853',
+      (command) =>
+        command.op === 'propose' &&
+        command.source.external_id === 'c1' &&
+        command.statement.property.id === 'wdt:P1853',
     );
     if (blood?.op !== 'propose') throw new Error('Missing blood-type candidate');
     expect(blood.source.record_revision).toBe('unversioned');
@@ -190,9 +220,9 @@ test('selected COPY characters retain identity and measurements while verified b
     expect(blood.statement.value).toEqual({ type: 'value', content: conceptId });
     expect(JSON.stringify(blood.statement.references)).toContain('https://vndb.org/c1');
     expect(JSON.stringify(blood.statement.references)).toContain('/chars/bloodt');
-    expect(commands.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:gender')).toBe(
-      false,
-    );
+    expect(
+      commands.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:gender'),
+    ).toBe(false);
     expect(
       commands.some(
         (command) =>
@@ -202,9 +232,14 @@ test('selected COPY characters retain identity and measurements while verified b
           JSON.stringify(command.statement.value).includes('157'),
       ),
     ).toBe(true);
-    expect(commands.some((command) => command.op === 'propose' && command.source.external_id === 'c2' && command.statement.property.id === 'wdt:P1853')).toBe(
-      false,
-    );
+    expect(
+      commands.some(
+        (command) =>
+          command.op === 'propose' &&
+          command.source.external_id === 'c2' &&
+          command.statement.property.id === 'wdt:P1853',
+      ),
+    ).toBe(false);
     expect(refreshed.vndbCharacterProfileRequirements).toEqual([
       expect.objectContaining({ taxonomy: vndbCharacterBloodTypeTaxonomy, code: 'a' }),
     ]);

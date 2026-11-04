@@ -272,7 +272,8 @@ export type CrossMediaPlan = {
   coverSources?: readonly BangumiCoverSource[];
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
-  chars: 'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription',
+  chars:
+    'id\timage\tbloodt\tcup_size\tsex\tspoil_sex\tgender\tspoil_gender\tmain\tmain_spoil\ts_bust\ts_waist\ts_hip\tbirthday\theight\tweight\tage\tdescription',
   producers_relations: 'id\tpid\trelation',
   releases_media: 'id\tmedium\tqty',
   releases_platforms: 'id\tplatform',
@@ -2614,9 +2615,13 @@ export async function runCrossMediaSeedCli(
   const defaultProfileBindingsPath = resolve('.temp/cross-media-seed/vndb-character-profile-bindings.json');
   const profileBindingsPath =
     explicitProfileBindingsPath ?? (existsSync(defaultProfileBindingsPath) ? defaultProfileBindingsPath : undefined);
-  const seedFiles = [characterBindingsPath, tagBindingsPath, creditBindingsPath, vocabularyPath, profileBindingsPath].filter(
-    (path): path is string => path !== undefined,
-  );
+  const seedFiles = [
+    characterBindingsPath,
+    tagBindingsPath,
+    creditBindingsPath,
+    vocabularyPath,
+    profileBindingsPath,
+  ].filter((path): path is string => path !== undefined);
   const showcaseConflictPaths = [statePath, resultPath, ...seedFiles].flatMap((path) => [
     path,
     path + '-wal',
@@ -2659,10 +2664,7 @@ export async function runCrossMediaSeedCli(
   ensure(!showcasePath || !showcaseConflictPaths.includes(showcasePath), 'Showcase state must not overlap seed files');
   await mkdir(dirname(statePath), { recursive: true });
   const importPort = createImportTransport({ origin: api, tokenProvider });
-  const characterProfileBindings = await readVndbCharacterProfileBindings(
-    importPort,
-    vndbCharacterProfileReferences,
-  );
+  const characterProfileBindings = await readVndbCharacterProfileBindings(importPort, vndbCharacterProfileReferences);
   const journal = showcasePath ? new ShowcaseJournal(showcasePath) : undefined;
   const port = journal ? captureShowcaseCommands(importPort, journal) : importPort;
   const publicClient = showcasePath ? createPublicBulkClient({ origin: api }) : undefined;

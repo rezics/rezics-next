@@ -3,26 +3,24 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  planCrossMediaSeed,
-  type CrossMediaTables,
-} from '../../../importer/src/cross-media-seed.ts';
+import { planCrossMediaSeed, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
 import {
   parseVndbCharacterProfileReferences,
   readVndbCharacterProfileBindings,
 } from '../../../importer/src/vndb-character-profile.ts';
 import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
-import {
-  vndbCharacterBloodTypeConceptUri,
-  vndbCharacterBloodTypeSchemeUri,
-} from '@rezics/conversion/vndb-vocabulary';
+import { vndbCharacterBloodTypeConceptUri, vndbCharacterBloodTypeSchemeUri } from '@rezics/conversion/vndb-vocabulary';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
 const globalContext = GLOBAL_CONTEXT;
-const authored = { source: 'authored-vndb-character-profile', converter_revision: 'authored@1', field_group: 'facts' as const };
+const authored = {
+  source: 'authored-vndb-character-profile',
+  converter_revision: 'authored@1',
+  field_group: 'facts' as const,
+};
 const centimetre = 'http://www.wikidata.org/entity/Q174728';
 
 function tables(): CrossMediaTables {
@@ -34,7 +32,13 @@ function tables(): CrossMediaTables {
       { id: 'v3', lang: 'ja', official: 't', title: 'Fate/stay night', latin: null },
     ],
     entry_meta: ['v1', 'v2', 'v3'].map((id) => ({ id, revision: '1', lastmod: '2026-11-04 00:00:00+00' })),
-    chars_vns: ['c1', 'c2', 'c3'].map((id, index) => ({ id, vid: 'v1', rid: null, role: index ? 'side' : 'main', spoil: '0' })),
+    chars_vns: ['c1', 'c2', 'c3'].map((id, index) => ({
+      id,
+      vid: 'v1',
+      rid: null,
+      role: index ? 'side' : 'main',
+      spoil: '0',
+    })),
     chars: [
       { id: 'c1', bloodt: 'a', gender: 'm', spoil_gender: 'f', height: '157', weight: '48' },
       { id: 'c2', bloodt: 'unknown', gender: 'o', spoil_gender: 'a', height: '0', weight: null },
@@ -53,7 +57,7 @@ function tables(): CrossMediaTables {
           ];
         return;
       }
-      yield* (vndb[table] ?? []);
+      yield* vndb[table] ?? [];
     },
   };
 }
@@ -95,29 +99,43 @@ test('selected VNDB Character keeps verified blood type through independent revi
     const digest = (value: string) => Buffer.from(value).toString('hex').padEnd(64, '0').slice(0, 64);
     async function create(externalId: string, type: string, label: string) {
       const result = await runtime.importTransport.batch({
-        commands: [{
-          op: 'create',
-          key: `profile-${externalId}`,
-          source: { ...authored, external_id: externalId, record_revision: 'unversioned', digest: digest(externalId) },
-          subject: { type, labels: { en: label } },
-        }],
+        commands: [
+          {
+            op: 'create',
+            key: `profile-${externalId}`,
+            source: {
+              ...authored,
+              external_id: externalId,
+              record_revision: 'unversioned',
+              digest: digest(externalId),
+            },
+            subject: { type, labels: { en: label } },
+          },
+        ],
       });
       expect(result.results[0]?.status).toBe(201);
       return (result.results[0] as { value: { id: string } }).value.id;
     }
     async function propose(externalId: string, subject: string, property: string, content: string) {
       const result = await runtime.importTransport.batch({
-        commands: [{
-          op: 'propose',
-          key: `profile-${externalId}-${property}`,
-          source: { ...authored, external_id: externalId, record_revision: 'unversioned', digest: digest(externalId) },
-          subject,
-          statement: {
-            property: { id: property },
-            value: { type: 'value', content },
-            references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content } }] }],
+        commands: [
+          {
+            op: 'propose',
+            key: `profile-${externalId}-${property}`,
+            source: {
+              ...authored,
+              external_id: externalId,
+              record_revision: 'unversioned',
+              digest: digest(externalId),
+            },
+            subject,
+            statement: {
+              property: { id: property },
+              value: { type: 'value', content },
+              references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content } }] }],
+            },
           },
-        }],
+        ],
       });
       expect(result.results[0]?.status).toBe(201);
     }
@@ -164,7 +182,10 @@ test('selected VNDB Character keeps verified blood type through independent revi
       await acceptAdopt(subject, property);
     const references = parseVndbCharacterProfileReferences({
       schemeId,
-      concepts: [{ code: 'a', id: typeAId }, { code: 'b', id: typeBId }],
+      concepts: [
+        { code: 'a', id: typeAId },
+        { code: 'b', id: typeBId },
+      ],
     });
     const currentBindings = () => readVndbCharacterProfileBindings(runtime.importTransport, references);
     const bindingSet = await currentBindings();
@@ -223,8 +244,14 @@ test('selected VNDB Character keeps verified blood type through independent revi
     expect(heroine.subject.statements['wdt:P1853']?.[0]?.value.content).toBe(typeAId);
     expect(JSON.stringify(heroine.subject.statements['wdt:P1853']?.[0]?.references)).toContain('https://vndb.org/c1');
     expect(JSON.stringify(heroine.subject.statements['wdt:P1853']?.[0]?.references)).toContain('/chars/bloodt');
-    expect(heroine.subject.statements['schema:height']?.[0]?.value.content).toEqual({ amount: '+157', unit: centimetre });
-    expect(heroine.subject.statements['schema:name']?.[0]?.value.content).toEqual({ language: 'ja', text: 'Authored heroine' });
+    expect(heroine.subject.statements['schema:height']?.[0]?.value.content).toEqual({
+      amount: '+157',
+      unit: centimetre,
+    });
+    expect(heroine.subject.statements['schema:name']?.[0]?.value.content).toEqual({
+      language: 'ja',
+      text: 'Authored heroine',
+    });
     const same = await seed(await currentBindings());
     expect(subjectId(same, 'c1')).toBe(heroineId);
     expect(same.runs.vndb?.counts.unchanged).toBeGreaterThan(0);

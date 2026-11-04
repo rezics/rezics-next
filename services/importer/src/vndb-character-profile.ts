@@ -5,10 +5,7 @@ import {
   type VndbCharacterBloodTypeCode,
 } from '@rezics/conversion/cross-media-entities';
 import type { NativeIdentity, SourceVocabularyBindings } from '@rezics/conversion/source-vocabulary';
-import {
-  vndbCharacterBloodTypeSchemeUri,
-  vndbCharacterBloodTypeTaxonomy,
-} from '@rezics/conversion/vndb-vocabulary';
+import { vndbCharacterBloodTypeSchemeUri, vndbCharacterBloodTypeTaxonomy } from '@rezics/conversion/vndb-vocabulary';
 import type { ImporterOptions } from './importer.ts';
 import type { CrossMediaPlan, CrossMediaPort } from './cross-media-seed.ts';
 
@@ -35,7 +32,12 @@ export type VndbCharacterProfileRequirement = Readonly<{
 export type VndbCharacterProfileOmission = Readonly<{
   externalId: string;
   field: 'bloodt' | 'gender' | 'spoil_gender';
-  reason: 'missing_source_value' | 'source_unknown' | 'unknown_source_code' | 'invalid_source_value' | 'native_gender_variant_not_admitted';
+  reason:
+    | 'missing_source_value'
+    | 'source_unknown'
+    | 'unknown_source_code'
+    | 'invalid_source_value'
+    | 'native_gender_variant_not_admitted';
 }>;
 
 type BloodTypeRow = Readonly<{
@@ -83,10 +85,7 @@ export function parseVndbCharacterProfileReferences(value: unknown): VndbCharact
 function hasAdoptedContent(read: unknown, property: string, expected: string): boolean {
   if (!object(read) || !object(read.subject) || !object(read.subject.statements)) return false;
   const rows = read.subject.statements[property];
-  return (
-    Array.isArray(rows) &&
-    rows.some((row) => object(row) && object(row.value) && row.value.content === expected)
-  );
+  return Array.isArray(rows) && rows.some((row) => object(row) && object(row.value) && row.value.content === expected);
 }
 
 /** Verify exact current public type, URI and scheme associations before a code can be proposed. */

@@ -1122,8 +1122,7 @@ function projectedProfileSourceCell(value: unknown, pointer: string): ProfileSou
     exactKeys(cell, ['status', 'reason', 'digest'], pointer);
     const reason = own(cell, 'reason', `${pointer}/reason`);
     const digest = own(cell, 'digest', `${pointer}/digest`);
-    const validReason =
-      reason === 'value_limit' || reason === 'invalid_source_value' ? reason : fail(pointer);
+    const validReason = reason === 'value_limit' || reason === 'invalid_source_value' ? reason : fail(pointer);
     const validDigest = typeof digest === 'string' && /^[0-9a-f]{64}$/u.test(digest) ? digest : fail(pointer);
     return { status, reason: validReason, digest: validDigest };
   }
@@ -1161,7 +1160,10 @@ function bloodTypeProfile(cell: ProfileSourceCell): Record<string, unknown> {
   };
 }
 
-function retainedCharacterProfile(raw: object, diagnostics: ConversionDiagnostic[]): Record<string, unknown> | undefined {
+function retainedCharacterProfile(
+  raw: object,
+  diagnostics: ConversionDiagnostic[],
+): Record<string, unknown> | undefined {
   const value = own(raw, 'characterProfile', '/characterProfile');
   if (value === undefined) return;
   const profile = object(value, '/characterProfile');
@@ -1175,7 +1177,11 @@ function retainedCharacterProfile(raw: object, diagnostics: ConversionDiagnostic
   );
   const bloodProjection = bloodTypeProfile(bloodCell);
   exactKeys(blood, Object.keys(bloodProjection), '/characterProfile/bloodt');
-  if (Object.keys(bloodProjection).some((key) => !isDeepStrictEqual(own(blood, key, `/characterProfile/bloodt/${key}`), bloodProjection[key])))
+  if (
+    Object.keys(bloodProjection).some(
+      (key) => !isDeepStrictEqual(own(blood, key, `/characterProfile/bloodt/${key}`), bloodProjection[key]),
+    )
+  )
     fail('/characterProfile/bloodt');
   const gender = (field: 'gender' | 'spoil_gender', variant: 'actual' | 'spoiler') => {
     const pointer = `/characterProfile/${field}`;
@@ -1186,8 +1192,15 @@ function retainedCharacterProfile(raw: object, diagnostics: ConversionDiagnostic
       own(source, 'omissionReason', `${pointer}/omissionReason`) !== 'native_gender_variant_not_admitted'
     )
       fail(pointer);
-    const sourceValue = projectedProfileSourceCell(own(source, 'sourceValue', `${pointer}/sourceValue`), `${pointer}/sourceValue`);
-    if (sourceValue.status !== 'missing' && sourceValue.status !== 'null' && !(sourceValue.status === 'value' && sourceValue.value === ''))
+    const sourceValue = projectedProfileSourceCell(
+      own(source, 'sourceValue', `${pointer}/sourceValue`),
+      `${pointer}/sourceValue`,
+    );
+    if (
+      sourceValue.status !== 'missing' &&
+      sourceValue.status !== 'null' &&
+      !(sourceValue.status === 'value' && sourceValue.value === '')
+    )
       diagnostics.push({ pointer: `/${field}`, code: 'native_gender_variant_not_admitted' });
     return { sourceVariant: variant, sourceValue, omissionReason: 'native_gender_variant_not_admitted' };
   };
@@ -1199,11 +1212,7 @@ function retainedCharacterProfile(raw: object, diagnostics: ConversionDiagnostic
   };
 }
 
-function projectVndbCharacterProfile(
-  raw: object,
-  normalized: Normalized,
-  diagnostics: ConversionDiagnostic[],
-): void {
+function projectVndbCharacterProfile(raw: object, normalized: Normalized, diagnostics: ConversionDiagnostic[]): void {
   const retained = retainedCharacterProfile(raw, diagnostics);
   if (retained) {
     normalized.characterProfile = retained;
