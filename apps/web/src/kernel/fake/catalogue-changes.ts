@@ -47,7 +47,10 @@ export function catalogueChangesFixture(
       const isViewerActions = url.pathname === '/v1/viewerActions';
       const body =
         request.method === 'POST'
-          ? ((await request.clone().json().catch(() => null)) as { resources?: { type: string; id: string }[] } | null)
+          ? ((await request
+              .clone()
+              .json()
+              .catch(() => null)) as { resources?: { type: string; id: string }[] } | null)
           : null;
       calls.push({
         path: url.pathname,

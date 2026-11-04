@@ -80,7 +80,9 @@ test('current operation reads distinguish confirmed denial, unavailable hydratio
 
   fixture.setActionOutcome('component-unavailable');
   const missingComponent = await fixture.transport.list();
-  expect(missingComponent.kind === 'ready' && missingComponent.page.currentOperations).toEqual({ state: 'unavailable' });
+  expect(missingComponent.kind === 'ready' && missingComponent.page.currentOperations).toEqual({
+    state: 'unavailable',
+  });
 
   fixture.setActionOutcome('preparing');
   const preparing = await fixture.transport.list();
@@ -115,34 +117,38 @@ test('current correction handoffs use only the exact Subject and safe current fi
     return renderToStaticMarkup(createElement(RouterProvider, { router }));
   };
   const terms = await renderExplanation({
-      detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] } },
+    detail: {
+      id: fixture.id,
       revision: 2,
-      locale: 'en',
-      pageHref: base,
-      currentOperations,
-      onCorrectCurrent: () => true,
-    });
+      summary: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] },
+    },
+    revision: 2,
+    locale: 'en',
+    pageHref: base,
+    currentOperations,
+    onCorrectCurrent: () => true,
+  });
   expect(terms).toContain(m.changes_correct_terms());
   expect(terms).toContain(`${base}/terms?returnTo=changes`);
   expect(terms).not.toContain('revision=2');
 
   const fact = await renderExplanation({
-      detail: {
-        id: fixture.id,
-        revision: 5,
-        summary: {
-          kind: 'candidate',
-          candidate: crypto.randomUUID(),
-          property: 'schema:url',
-          context: fixture.read.subject.context,
-        },
-      },
+    detail: {
+      id: fixture.id,
       revision: 5,
-      locale: 'en',
-      pageHref: base,
-      currentOperations,
-      onCorrectCurrent: () => true,
-    });
+      summary: {
+        kind: 'candidate',
+        candidate: crypto.randomUUID(),
+        property: 'schema:url',
+        context: fixture.read.subject.context,
+      },
+    },
+    revision: 5,
+    locale: 'en',
+    pageHref: base,
+    currentOperations,
+    onCorrectCurrent: () => true,
+  });
   expect(fact).toContain(m.changes_correct_current());
   expect(fact).toContain(`${base}/edit?property=schema%3Aurl&amp;returnTo=changes`);
   expect(fact).not.toContain('candidate=');
@@ -155,13 +161,13 @@ test('current correction handoffs use only the exact Subject and safe current fi
   ];
   for (const [operations, expected] of actionStates) {
     const html = await renderExplanation({
-        detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [] } },
-        revision: 2,
-        locale: 'en',
-        pageHref: base,
-        currentOperations: operations,
-        onCorrectCurrent: () => true,
-      });
+      detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [] } },
+      revision: 2,
+      locale: 'en',
+      pageHref: base,
+      currentOperations: operations,
+      onCorrectCurrent: () => true,
+    });
     expect(html).toContain(expected);
     expect(html).not.toContain(m.changes_correct_terms());
   }

@@ -68,7 +68,7 @@ function Failure({ failure, locale }: { failure: ChangesFailure; locale: string 
               ? m.changes_conflict({}, o)
               : failure.kind === 'preparing'
                 ? m.changes_preparing({}, o)
-              : m.changes_unavailable({}, o)}
+                : m.changes_unavailable({}, o)}
     </p>
   );
 }
@@ -134,12 +134,7 @@ function CurrentReviewLink({
 
 function currentCorrectionHref(pageHref: string | undefined, address: CurrentCorrectionAddress) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (
-    !pageHref?.startsWith('/') ||
-    pageHref.startsWith('//') ||
-    pageHref.includes('\\') ||
-    !uuid.test(address.subject)
-  )
+  if (!pageHref?.startsWith('/') || pageHref.startsWith('//') || pageHref.includes('\\') || !uuid.test(address.subject))
     return undefined;
   const base = pageHref.replace(/\/$/, '');
   if (address.kind === 'terms') return `${base}/terms?returnTo=changes`;
@@ -184,8 +179,7 @@ function CurrentCorrectionAction({
   const o = { locale: locale as never };
   if (!currentOperations || currentOperations.state === 'unavailable')
     return <p role="status">{m.changes_correction_unavailable({}, o)}</p>;
-  if (currentOperations.state === 'preparing')
-    return <p role="status">{m.changes_correction_preparing({}, o)}</p>;
+  if (currentOperations.state === 'preparing') return <p role="status">{m.changes_correction_preparing({}, o)}</p>;
   const address = correctionAddress(detail);
   if (!address) return <p role="status">{m.changes_correction_unavailable({}, o)}</p>;
   const operation = address.kind === 'terms' ? 'subject.terms' : 'subject.propose';

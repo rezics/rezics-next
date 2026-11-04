@@ -58,12 +58,14 @@ export type ChangeDetail = {
   /** Localized, emitted definition labels. Missing labels remain neutral. */
   propertyLabel?: ReturnType<typeof pageText>;
 };
-export type DetailRead = ChangesFailure | {
-  kind: 'ready';
-  detail: ChangeDetail;
-  currentOperations?: CurrentOperationsRead;
-  session?: string;
-};
+export type DetailRead =
+  | ChangesFailure
+  | {
+      kind: 'ready';
+      detail: ChangeDetail;
+      currentOperations?: CurrentOperationsRead;
+      session?: string;
+    };
 export type ChangesTransport = {
   list: (cursor?: string, session?: string) => Promise<ChangesRead>;
   detail: (revision: number, session?: string) => Promise<DetailRead>;
@@ -149,9 +151,9 @@ export function changesFailure(status: number, error?: unknown): ChangesFailure 
             ? 'invalid'
             : status === 409
               ? 'conflict'
-            : status === 503 && problemCode(error) === 'semantic_not_ready'
-              ? 'preparing'
-              : 'unavailable',
+              : status === 503 && problemCode(error) === 'semantic_not_ready'
+                ? 'preparing'
+                : 'unavailable',
   };
 }
 
@@ -161,8 +163,7 @@ function currentOperationsRead(
   type: string,
 ): CurrentOperationsRead {
   if (!result) return { state: 'unavailable' };
-  if (result.status === 503 && problemCode(result.error?.value) === 'semantic_not_ready')
-    return { state: 'preparing' };
+  if (result.status === 503 && problemCode(result.error?.value) === 'semantic_not_ready') return { state: 'preparing' };
   if (result.status !== 200 || !result.data || result.data.resources.length !== 2) return { state: 'unavailable' };
   const context = result.data.resources.filter(
     (resource) => resource.type === 'semantic.context' && resource.id === candidateContext,

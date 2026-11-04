@@ -48,8 +48,7 @@ test('the complete Subject history family keeps independent headings, bounded su
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { SubjectChanges, SubjectChangesPage } =
-    await import('../src/features/catalogue/subject-changes-page');
+  const { SubjectChanges, SubjectChangesPage } = await import('../src/features/catalogue/subject-changes-page');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { catalogueChangesFixture, changesCursor, changesLastCursor } =
     await import('../src/kernel/fake/catalogue-changes');
@@ -548,9 +547,7 @@ test('the complete Subject history family keeps independent headings, bounded su
       expect(page.querySelector('dl')?.getAttribute('aria-label')).toBe(m.changes_fields({}, o));
       expect(page.querySelector('dl')?.querySelectorAll('dt')).toHaveLength(3);
       authoredControls(page, m.changes_current({}, o));
-      expect([...page.querySelectorAll('dl dt')].every((term) => term.nextElementSibling?.tagName === 'DD')).toBe(
-        true,
-      );
+      expect([...page.querySelectorAll('dl dt')].every((term) => term.nextElementSibling?.tagName === 'DD')).toBe(true);
     }
     await show(state);
     const stableId = associations()[0];

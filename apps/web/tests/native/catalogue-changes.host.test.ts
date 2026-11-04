@@ -95,7 +95,9 @@ test('the served Changes route explains native terms and recorded adoption indep
   await stack.refreshKernelRequests();
   const termsPatch = stack
     .kernelRequests()
-    .filter((request) => !request.fixtureRequest && request.method === 'PATCH' && request.url === `/v1/subjects/${id}/terms`)
+    .filter(
+      (request) => !request.fixtureRequest && request.method === 'PATCH' && request.url === `/v1/subjects/${id}/terms`,
+    )
     .at(-1);
   expect(termsPatch?.ifMatch).toBe(`"${beforeCorrection.subject.revision}"`);
   const correctedResponse = await stack.kernel(`/v1/subjects/${id}`);
@@ -104,10 +106,9 @@ test('the served Changes route explains native terms and recorded adoption indep
   expect(corrected.subject.labels.en).toBe(revisedName);
   await page.getByRole('link', { name: m.changes_return_to_changes() }).click();
   await hydrate(page);
-  await pageExpect(changes.getByRole('button', { name: new RegExp(`Revision ${fixture.termsRevision}(?!\\d)`) })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  await pageExpect(
+    changes.getByRole('button', { name: new RegExp(`Revision ${fixture.termsRevision}(?!\\d)`) }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await pageExpect(changes.getByText(m.changes_terms())).toBeVisible();
   await pageExpect(changes.getByRole('link', { name: m.changes_current(), exact: true })).toBeVisible();
 
