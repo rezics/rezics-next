@@ -909,14 +909,30 @@ for (const [result, message] of [
     expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
     await fillDetails('   ');
     expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
-    await fillDetails('x'.repeat(4096));
+    const originalBody = 'x'.repeat(4096);
+    await fillDetails(originalBody);
     expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(false);
     await click(button(m.report_submit(), dialog()));
     const original = calls[0]!;
     await settle(0, result);
+    if (result instanceof Error) {
+      const recovery = window.document.querySelector<HTMLElement>('[data-slot="report-recovery"]');
+      expect(recovery?.textContent).toContain(m.report_illegal());
+      expect(recovery?.textContent).toContain(m.editorial_retry());
+      expect(recovery?.textContent).toContain(m.report_cancel());
+      expect(recovery?.textContent).not.toContain(originalBody);
+      await click(button(m.editorial_retry(), recovery!));
+      expect(calls).toHaveLength(2);
+      expect(calls[1]!.data).toEqual(original.data);
+      expect(calls[1]!.headers.get('x-csrf-token')).toBe('csrf-one');
+      await settle(1, { ok: true, reportId: 'retried-uncertain-report' });
+      expect(window.document.querySelector('[data-slot="report-recovery"]')).toBeNull();
+      expect(statusLink()?.getAttribute('href')).toContain('/moderation/reports/retried-uncertain-report');
+      return;
+    }
     expect(window.document.querySelector('[role="alert"]')?.textContent).toBe(message());
     expect(dialog().textContent).not.toContain('UNTRUSTED');
-    expect(detailField().value).toBe('x'.repeat(4096));
+    expect(detailField().value).toBe(originalBody);
     expect(radio(m.report_illegal()).getAttribute('aria-checked')).toBe('true');
     expect(button(m.report_submit(), dialog()).hasAttribute('disabled')).toBe(true);
     await paint({ target: { ...props.target }, verification: { ...props.verification } });
@@ -931,6 +947,25 @@ for (const [result, message] of [
     await settle(1, { ok: true, reportId: 'retried-original-command' });
   });
 }
+
+test('an uncertain report can be discarded without retrying its private body', async () => {
+  await openReport();
+  const api = makeTurnstile();
+  await loadLatestScript(api);
+  const widget = activeWidget(api);
+  await click(radio(m.report_other()));
+  await fillDetails('Keep this body private during recovery');
+  await verify(widget);
+  await click(button(m.report_submit(), dialog()));
+  await settle(0, new Error('connection lost'));
+  const recovery = window.document.querySelector<HTMLElement>('[data-slot="report-recovery"]');
+  expect(recovery?.textContent).toContain(m.editorial_retry());
+  expect(recovery?.textContent).toContain(m.report_cancel());
+  expect(recovery?.textContent).not.toContain('Keep this body private during recovery');
+  await click(button(m.report_cancel(), recovery!));
+  expect(window.document.querySelector('[data-slot="report-recovery"]')).toBeNull();
+  expect(calls).toHaveLength(1);
+});
 
 for (const outcome of ['success', 'refusal', 'rejection'] as const) {
   test(`an old ${outcome} cannot unlock, reset, close or focus a fresh pending report`, async () => {
