@@ -178,6 +178,7 @@ export function DiscoveryResults({
   state,
   locale,
   yearProperties = [],
+  factDefinitions,
   restartHref,
   subjectHrefFor,
   renderPersonal,
@@ -186,6 +187,7 @@ export function DiscoveryResults({
   state: DiscoveryState;
   locale: string;
   yearProperties?: string[];
+  factDefinitions?: import('./work-context/facts').ResultFactDefinitions | undefined;
   restartHref?: string | undefined;
   subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
 }) {
@@ -277,6 +279,7 @@ export function DiscoveryResults({
                 locale={locale}
                 hitTypes={kinds}
                 yearProperties={yearProperties}
+                factDefinitions={factDefinitions}
                 subjectHrefFor={subjectHrefFor}
               />
               {viewerRows.get(discoveryKey(hit)) ? (

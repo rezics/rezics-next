@@ -24,6 +24,7 @@ import { m } from '../paraglide/messages.js';
 import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 import { pickResultAliases } from './result-aliases';
 import { hitCalendarDate, releaseDateText } from './release-search-date';
+import { resultDateFact, resultFactLabel, type ResultFactDefinitions } from './work-context/facts';
 
 type NativeHit = Extract<
   NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
@@ -64,12 +65,14 @@ export function SubjectMeta({
   type,
   year,
   date,
+  dateLabel,
   locale,
   className,
 }: {
   type: { text: string; lang?: string | undefined };
   year: number | undefined;
   date?: CalendarDate | undefined;
+  dateLabel?: { text: string; lang?: string | undefined } | undefined;
   locale: string;
   className?: string;
 }) {
@@ -81,7 +84,12 @@ export function SubjectMeta({
       <MetaLine
         items={[
           type.text ? <span lang={type.lang}>{type.text}</span> : null,
-          dateText ? <span data-slot={recordedDate?.month === undefined ? 'year' : 'date'}>{dateText}</span> : null,
+          dateText ? (
+            <span>
+              {dateLabel?.text ? <span lang={dateLabel.lang}>{dateLabel.text}: </span> : null}
+              <span data-slot={recordedDate?.month === undefined ? 'year' : 'date'}>{dateText}</span>
+            </span>
+          ) : null,
         ]}
       />
     </span>
@@ -97,6 +105,7 @@ type ResultPresentation = {
   locale: string;
   hitTypes: Record<string, Record<string, string>>;
   yearProperties: readonly string[];
+  factDefinitions?: ResultFactDefinitions | undefined;
   subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
   /** Optional adapter for an already available release presentation; it performs no reads. */
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
@@ -108,6 +117,7 @@ export function ResultRow({
   locale,
   hitTypes,
   yearProperties,
+  factDefinitions,
   listPresentationFor,
   subjectHrefFor,
 }: ResultPresentation & { hit: ResultHit }) {
@@ -117,7 +127,9 @@ export function ResultRow({
     subjectHrefFor?.({ id: hit.id, label: title }) ?? subjectHref({ id: hit.id, label: title }, locale).href;
   const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
   const description = localizedLabel(hit.descriptions ?? {}, locale);
-  const date = hitCalendarDate(hit.facts, yearProperties);
+  const dateFact = resultDateFact(hit.facts, yearProperties);
+  const date = dateFact?.date;
+  const dateLabel = dateFact && resultFactLabel(dateFact.property, factDefinitions, locale);
   const subject = coverSubject(hit.id, title, hit.summary, hit.type);
   const releasedPresentation =
     parseListPresentation(hit.listPresentation) ?? parseListPresentation(listPresentationFor?.(subject.types));
@@ -130,6 +142,7 @@ export function ResultRow({
       (hit.facts?.[property] ?? []).slice(0, 3).flatMap((value) =>
         listKeyFacts({ [property]: [value] }, [property], yearProperties, locale).map((formatted) => ({
           ...formatted,
+          propertyLabel: resultFactLabel(property, factDefinitions, locale),
           ...(value.kind === 'item' ? { id: value.id } : {}),
         })),
       ),
@@ -181,7 +194,7 @@ export function ResultRow({
               data-content-item-slot="metadata"
               className="mt-2 flex min-w-0 flex-col gap-1 text-sm text-muted-foreground"
             >
-              <SubjectMeta type={typeName} year={date?.year} date={date} locale={locale} />
+              <SubjectMeta type={typeName} year={date?.year} date={date} dateLabel={dateLabel} locale={locale} />
               {aliases?.length ? (
                 <p data-slot="search-result-aliases" lang={aliasLanguage} dir="auto" className="line-clamp-2">
                   {aliases.join(' · ')}
@@ -202,6 +215,10 @@ export function ResultRow({
                             : undefined
                         }
                       >
+                        {facts.findIndex((value) => value.property === fact.property) === index &&
+                        fact.propertyLabel.text ? (
+                          <span lang={fact.propertyLabel.lang}>{fact.propertyLabel.text}: </span>
+                        ) : null}
                         {fact.id ? (
                           <a
                             className={cn(

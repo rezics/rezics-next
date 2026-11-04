@@ -1301,6 +1301,7 @@ function renderResults(
             renderPersonal={personal?.renderPersonal}
             locale={locale}
             yearProperties={data.yearProperties}
+            factDefinitions={data.conditionMetadata?.properties}
             subjectHrefFor={subjectHrefFor}
             restartHref={
               data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
@@ -1319,6 +1320,7 @@ function renderResults(
               locale={locale}
               hitTypes={data?.hitTypes ?? {}}
               yearProperties={data?.yearProperties ?? []}
+              factDefinitions={data?.conditionMetadata?.properties}
               subjectHrefFor={subjectHrefFor}
             />
           </>

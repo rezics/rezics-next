@@ -21,6 +21,32 @@ public titles, descriptions, excerpts, reviewed-Subject context, Space address a
 private membership or facts, review votes, and Realm rank figures are not accepted by the closed public summary schemas.
 Missing current summaries or addresses make the whole page unavailable rather than producing a partial row or preview.
 
+## Work discriminators
+
+Decision: Label supplied facts with the existing released property's localized name, preserving its exact item target
+and date precision; absent role metadata never makes a contributor an author or an unqualified date a release event.
+
+Search already supplies figures, aliases, descriptions, four selected fact properties (three values each), release
+list presentation, and Character/Person context. The result family keeps those features and its four-visible-fact cap.
+The existing definition metadata supplies property names without another request. A name is limited to 96 code points;
+each property is named once in the fact preview, and the selected date keeps its own property name and precision.
+The exact localized Subject title link remains the destination for additional facts. There are no new response fields,
+sorts, context caches, private overlays or per-hit reads. Search's existing reader and request retirement still governs
+the entire page, including these labels.
+
+The **qualified work-context seam is unavailable** on the current native contract. `search/hits.ts:Fact` carries only
+item, calendar date, quantity and code values. It cannot distinguish empty from withheld credits, represent explicit
+unknown/no-value dates, or carry detailed roles, credited-as wording, directed associations or overflow destinations.
+`discovery-http.ts` exposes only Character/Person `contexts`; Web cannot treat those as work credits or synthesize
+new wire fields. Native facts remain useful without claiming that missing context is empty or concealed.
+
+Search owns the producer handoff through its existing bounded discovery page, with Semantic retaining fact meaning:
+publish the smallest qualified creator/release projection with exact property/role, disclosed target identity and labels,
+directed work-versus-release association, original date precision/value state, explicit empty/withheld/unavailable state,
+and an admitted destination for overflow. Keep native order, match identity and currentness, with finite row/page budgets.
+The receiver must then add the qualified multi-kind navigation/return and retirement acceptance; it must not hydrate
+Subjects to work around this missing native projection.
+
 The retained default Search path now includes ready Collection, review and Space producers in the shared kind
 directory and current-page guard. Collection, review and Space rows use the closed public variants above; private
 Library overlays and owner-specific richer card contexts remain a separate current-reader seam. These source changes
