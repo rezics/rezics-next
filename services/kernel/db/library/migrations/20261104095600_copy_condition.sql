@@ -1,3 +1,4 @@
+-- migrate:up
 ALTER TABLE library.copy
   ADD COLUMN media_condition jsonb,
   ADD COLUMN packaging_condition jsonb;
@@ -39,3 +40,12 @@ COMMENT ON COLUMN library.copy.media_condition IS
   'Private physical media observation with its exact accepting profile pin; SQL NULL means not recorded.';
 COMMENT ON COLUMN library.copy.packaging_condition IS
   'Private physical packaging observation with its exact accepting profile pin; SQL NULL means not recorded.';
+
+-- migrate:down
+ALTER TABLE library.copy
+  DROP CONSTRAINT copy_media_condition_check,
+  DROP CONSTRAINT copy_packaging_condition_check;
+DROP FUNCTION library.copy_condition_observation_valid(jsonb);
+ALTER TABLE library.copy
+  DROP COLUMN media_condition,
+  DROP COLUMN packaging_condition;
