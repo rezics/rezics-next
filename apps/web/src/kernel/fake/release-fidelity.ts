@@ -161,7 +161,14 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
           '00000000-0000-4000-8000-00000000a114',
           'schema:datePublished',
           'time',
-          { type: 'value', content: { time: '+2004-00-00T00:00:00Z', precision: 9 } },
+          {
+            type: 'value',
+            content: {
+              time: '+2004-00-00T00:00:00Z',
+              precision: 9,
+              calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+            },
+          },
           digest,
         ),
       ];
@@ -171,7 +178,14 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
           '00000000-0000-4000-8000-00000000a114',
           'schema:datePublished',
           'time',
-          { type: 'value', content: { time: '+2004-10-15T00:00:00Z', precision: 11 } },
+          {
+            type: 'value',
+            content: {
+              time: '+2004-10-15T00:00:00Z',
+              precision: 11,
+              calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+            },
+          },
           digest,
         ),
       ];
@@ -189,25 +203,28 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
     const count = Math.min(RELEASE_ASSOCIATION_LIMIT, Math.max(0, population - start));
     const relations = Array.from({ length: count }, (_, offset) => {
       const index = start + offset;
-      const id = relatedId(index);
-      const concealed = index % 11 === 10;
+      const id = relatedId(index === 21 ? 20 : index);
+      const concealed = index % 11 === 10 && index !== 21;
       const label = concealed
         ? undefined
-        : { value: index === 0 ? 'English hardcover' : `Edition ${index}`, language: 'en' };
+        : {
+            value: index === 0 ? 'English hardcover' : index >= 20 ? 'Repeated hardcover' : `Edition ${index}`,
+            language: 'en',
+          };
       return {
         statement: statement(
           `00000000-0000-4000-8000-${(0xa200 + index).toString(16).padStart(12, '0')}`,
           property,
           'wikibase-item',
           { type: 'value', content: id },
-          index === 1 ? 'sha256:historical' : digest,
+          index === 1 || index === 20 ? 'sha256:historical' : digest,
           {
             qualifiers:
-              index === 0
+              index === 0 || index === 20
                 ? [
                     {
                       property: { id: 'schema:sameAs', data_type: 'url' as const },
-                      value: { type: 'value' as const, content: 'anidb:rel:9999' },
+                      value: { type: 'value' as const, content: index === 0 ? 'anidb:rel:9999' : 'anidb:rel:0020' },
                     },
                   ]
                 : [],
@@ -266,19 +283,46 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
         if (active === 'detail-unavailable') return json({}, 503);
         const listed = [...Array(population).keys()].some((index) => relatedId(index) === id);
         if (!listed) return json({}, 404);
+        const detailLabel =
+          id === releaseAlt ? 'English hardcover' : id === relatedId(20) ? 'Repeated hardcover' : 'Related edition';
         return json({
           subject: {
             ...structuredClone(publicRead.subject),
             id,
             type: 'bf:Instance',
-            labels: { en: id === releaseAlt ? 'English hardcover' : 'Related edition' },
+            labels: { en: detailLabel },
             statements: {
               'schema:inLanguage': [
                 statement(
                   '00000000-0000-4000-8000-00000000a115',
                   'schema:inLanguage',
                   'string',
-                  { type: 'value', content: id === releaseAlt ? 'en' : 'ja' },
+                  { type: 'value', content: id === releaseAlt ? 'en' : 'fr' },
+                  digest,
+                ),
+              ],
+              'schema:datePublished': [
+                statement(
+                  '00000000-0000-4000-8000-00000000a116',
+                  'schema:datePublished',
+                  'time',
+                  {
+                    type: 'value',
+                    content: {
+                      time: id === releaseAlt ? '+2014-05-00T00:00:00Z' : '+2019-11-00T00:00:00Z',
+                      precision: 10,
+                      calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+                    },
+                  },
+                  digest,
+                ),
+              ],
+              'schema:isbn': [
+                statement(
+                  '00000000-0000-4000-8000-00000000a117',
+                  'schema:isbn',
+                  'external-id',
+                  { type: 'value', content: id === releaseAlt ? '978-0-00-000000-0' : '978-1-11-000020-0' },
                   digest,
                 ),
               ],

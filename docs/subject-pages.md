@@ -518,6 +518,8 @@ Decision: companion files follow the existing nested `$id_.$slug_.release.tsx` /
 Decision: related destinations open the exact disclosed ordinary Subject in the same locale and carry one validated
 `fileSource` identity back to the reader anchor; only the admitted correction entry opens the existing `/file` profile.
 
+Decision: selected release detail and its correction-return receipt stay local to the admitted release visit; after reload or in a new tab, the current release is the fallback and the lost selection is explained without claiming restoration.
+
 Decision: VNDB release completeness uses scheme URI `https://rezics.com/schemes/vndb/release-types` because the
 importer does not declare a scheme URI for `releases_vn.rtype`; development status keeps `https://vndb.org/development-status`.
 
