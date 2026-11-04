@@ -687,6 +687,35 @@ END $$;
 
 
 --
+-- Name: copy_condition_observation_valid(jsonb); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.copy_condition_observation_valid(value jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    AS $_$
+  SELECT CASE
+    WHEN value IS NULL THEN true
+    WHEN jsonb_typeof(value) <> 'object' THEN false
+    ELSE value ?& ARRAY['value', 'pin', 'kindId']
+      AND value - ARRAY['value', 'pin', 'kindId'] = '{}'::jsonb
+      AND jsonb_typeof(value->'kindId') = 'string'
+      AND value->>'kindId' ~ '^[a-z][a-z0-9_.-]{0,63}$'
+      AND (
+        value->'value' = 'null'::jsonb
+        OR (
+          jsonb_typeof(value->'value') = 'string'
+          AND value->>'value' = ANY (ARRAY[
+            'unknown', 'mint', 'near_mint', 'very_good_plus',
+            'very_good', 'good', 'fair', 'poor'
+          ]::text[])
+        )
+      )
+      AND COALESCE(library.library_profile_pin_valid(value->'pin'), false)
+  END;
+$_$;
+
+
+--
 -- Name: fence_profile_migration_writer(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -3146,19 +3175,37 @@ CREATE TABLE library.copy (
     partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
     kind_profile_pin jsonb,
     status_profile_pin jsonb,
+    media_condition jsonb,
+    packaging_condition jsonb,
     CONSTRAINT copy_check CHECK ((route = ((get_byte(uuid_send(copy_id), 10) * 256) + get_byte(uuid_send(copy_id), 11)))),
     CONSTRAINT copy_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT copy_kind_profile_pin_check CHECK (((kind_profile_pin IS NULL) OR library.library_profile_pin_valid(kind_profile_pin))),
     CONSTRAINT copy_library_profile_kind_check CHECK (((library_profile_pin IS NULL) OR ((kind IS NOT NULL) AND (char_length(kind) > 0)))),
     CONSTRAINT copy_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT copy_location_check CHECK (((location IS NULL) OR (char_length(location) <= 200))),
+    CONSTRAINT copy_media_condition_check CHECK (library.copy_condition_observation_valid(media_condition)),
     CONSTRAINT copy_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
+    CONSTRAINT copy_packaging_condition_check CHECK (library.copy_condition_observation_valid(packaging_condition)),
     CONSTRAINT copy_retention_episode CHECK ((((deletion_id IS NULL) AND (deleted_at IS NULL) AND (restore_until IS NULL)) OR ((deletion_id IS NOT NULL) AND (deleted_at IS NOT NULL) AND (restore_until IS NOT NULL) AND (restore_until = (deleted_at + '720:00:00'::interval))))),
     CONSTRAINT copy_revision_check CHECK ((revision >= 1)),
     CONSTRAINT copy_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT copy_source_check CHECK (((source IS NULL) OR (char_length(source) <= 200))),
     CONSTRAINT copy_status_profile_pin_check CHECK (((status_profile_pin IS NULL) OR library.library_profile_pin_valid(status_profile_pin)))
 );
+
+
+--
+-- Name: COLUMN copy.media_condition; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.copy.media_condition IS 'Private physical media observation with its exact accepting profile pin; SQL NULL means not recorded.';
+
+
+--
+-- Name: COLUMN copy.packaging_condition; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.copy.packaging_condition IS 'Private physical packaging observation with its exact accepting profile pin; SQL NULL means not recorded.';
 
 
 --
