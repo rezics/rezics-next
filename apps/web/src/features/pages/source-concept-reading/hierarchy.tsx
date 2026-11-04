@@ -35,7 +35,9 @@ export function HierarchyLinks({
             >
               {row.label}
             </a>
-            <p className="text-sm text-muted-foreground">{m.concept_visit_inverse_evidence({}, { locale: locale as never })}</p>
+            <p className="text-sm text-muted-foreground">
+              {m.concept_visit_inverse_evidence({}, { locale: locale as never })}
+            </p>
           </li>
         );
       })}

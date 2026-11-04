@@ -358,8 +358,10 @@ export async function readSourceConcept(
           headers: headersOf(authorization, session),
         });
         if (page.status === 200 && page.data && 'links' in page.data) {
-          if (page.data.links.length > CONCEPT_PAGE_CAP ||
-            new TextEncoder().encode(JSON.stringify(page.data)).byteLength > conceptEvidenceBounds.bytes)
+          if (
+            page.data.links.length > CONCEPT_PAGE_CAP ||
+            new TextEncoder().encode(JSON.stringify(page.data)).byteLength > conceptEvidenceBounds.bytes
+          )
             return { ok: false, reason: 'unavailable', oversized: true };
           session = tokenOf(page) ?? session;
           narrower = {

@@ -29,7 +29,13 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   const { state } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
   const preferences = useQuery({
-    ...subjectReaderQuery(id, locale, { reader: expectedReader, admission: work.generation, view: 'concepts', cacheEpoch: 0, isCurrent: work.active }),
+    ...subjectReaderQuery(id, locale, {
+      reader: expectedReader,
+      admission: work.generation,
+      view: 'concepts',
+      cacheEpoch: 0,
+      isCurrent: work.active,
+    }),
     enabled: state === 'signed-in',
   });
   if (state === 'unknown') return <p>{m.concept_explore_loading({}, { locale: locale as never })}</p>;
