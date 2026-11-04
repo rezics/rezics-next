@@ -9,7 +9,9 @@ function card(activity: unknown) {
   if (activity === undefined) Reflect.deleteProperty(item.summary, 'conversationActivity');
   else Object.assign(item.summary, { conversationActivity: activity });
   const presentation = homeFeedItemPresentation(item, 'en');
-  return { html: renderToStaticMarkup(<>{presentation.metadata}</>), href: homeFeedDestination(item, 'en') };
+  const metadata = renderToStaticMarkup(<>{presentation.metadata}</>);
+  const start = metadata.search(/<(?:p|div) data-slot="conversation-activity"/);
+  return { html: start < 0 ? '' : metadata.slice(start), href: homeFeedDestination(item, 'en') };
 }
 
 test('Home keeps absent activity distinct from withheld after a current card', () => {
@@ -41,7 +43,7 @@ test('Home distinguishes exact zero, lower-bound activity and withheld retry wit
   });
   expect(lowerBound.html).toContain('Replies: 10,000+');
   expect(lowerBound.html).toContain('aria-label="At least 10,000 replies"');
-  expect(lowerBound.html).toContain('<time datetime="2026-11-04T00:00:00.000Z"');
+  expect(lowerBound.html).toContain('<time dateTime="2026-11-04T00:00:00.000Z"');
 
   const withheld = card({ state: 'withheld' });
   expect(withheld.html).toContain('role="status"');
