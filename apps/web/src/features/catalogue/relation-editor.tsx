@@ -490,10 +490,9 @@ function RelationEditorLive({
   const visibleNow = useRef(visible);
   visibleNow.current = visible;
   const publicRead = result?.public ?? current?.public;
-  const allows = (operation: 'propose' | 'accept' | 'reject' | 'adopt') =>
+  const hasOperation = (operation: 'propose' | 'accept' | 'reject' | 'adopt') =>
     current?.viewer === 'signed-in' &&
-    current.authority?.disclosure === 'available' &&
-    current.authority.actions.state === 'available' &&
+    current.authority?.actions.state === 'available' &&
     current.authority.actions.context === candidateContext &&
     current.authority.actions.operations.includes(
       operation === 'propose'
@@ -502,6 +501,8 @@ function RelationEditorLive({
           ? 'subject.adopt'
           : `subject.${operation}_candidate`,
     );
+  const allows = (operation: 'propose' | 'accept' | 'reject' | 'adopt') =>
+    current?.authority?.disclosure === 'available' && hasOperation(operation);
   const concealed = failure?.reason === 'denied' && !current;
   const uncertain = failure?.reason === 'unavailable' && !!request.current;
   const nativeFrozen = busy || targetChecking || !!confirmation || uncertain || failure?.reason === 'stale';
@@ -1472,7 +1473,7 @@ function RelationEditorLive({
               </div>
             ) : current.authority.disclosure === 'unreadable' ? (
               <p role="status">{m.relation_participants_unreadable({}, options)}</p>
-            ) : !allows('propose') ? (
+            ) : !hasOperation('propose') ? (
               <p role="status">{m.relation_actions_read_only({}, options)}</p>
             ) : null}
             {!fields?.length ? (
@@ -1870,10 +1871,7 @@ function RelationEditorLive({
                               !draftSlot() ||
                               (!draft.references.length && !(field.disclosure === 'sourceOrConsent' && ownConsent)) ||
                               proposed ||
-                              !(
-                                current.authority?.actions.state === 'available' &&
-                                current.authority.actions.operations.includes('subject.propose')
-                              )
+                              !hasOperation('propose')
                             }
                             onClick={() => void prepareProposal()}
                           >
@@ -2134,9 +2132,7 @@ function RelationEditorLive({
         )
       )}
       {proposed && <p role="status">{m.relation_proposed({}, options)}</p>}
-      {composition && proposedId && (
-        <p className="break-all text-sm">{m.work_parts_candidate({ candidate: proposedId }, options)}</p>
-      )}
+      {proposedId && <p className="break-all text-sm">{m.work_parts_candidate({ candidate: proposedId }, options)}</p>}
       {confirmation && !concealed && (
         <ContentItemFrame
           as="div"
