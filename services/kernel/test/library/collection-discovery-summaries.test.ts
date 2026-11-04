@@ -116,7 +116,11 @@ test('a withdrawal and new public episode between candidate and disclosure requi
   const a = await published();
   const id = a.collection.id;
   const episodes = createCollectionPublicationEpisodes(deps());
-  await episodes.begin(actor, { collectionId: id, revision: a.collection.revision, visibility: 'public' }, randomUUID());
+  await episodes.begin(
+    actor,
+    { collectionId: id, revision: a.collection.revision, visibility: 'public' },
+    randomUUID(),
+  );
   const detail = await f.send('GET', `/v1/collections/${id}`);
   expect(detail.status).toBe(200);
   const revision = (await detail.json()).collection.revision;
