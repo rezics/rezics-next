@@ -5,7 +5,7 @@ import { useMemo, type ReactNode } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
-import { readEditorialWorkspace, changeEditorialWorkspace } from './editorial-context-actions';
+import { readEditorialCreation, readEditorialWorkspace, changeEditorialWorkspace } from './editorial-context-actions';
 import { readEditorialSettingsChoices } from './context-settings-actions';
 import { EditorialContextWorkspace } from './editorial-context-view';
 import type { EditorialTransport } from './editorial-context';
@@ -30,6 +30,11 @@ function EditorialContextSessionLive({
   const transport = useMemo<EditorialTransport>(
     () => ({
       read: (address) => readEditorialWorkspace({ data: editorRequest(address, editorWork), headers: csrfHeaders() }),
+      creation: (session) =>
+        readEditorialCreation({
+          data: editorRequest(session ? { session } : {}, editorWork),
+          headers: csrfHeaders(),
+        }),
       submit: (command) =>
         changeEditorialWorkspace({ data: editorRequest(command, editorWork), headers: csrfHeaders() }),
       settings: {

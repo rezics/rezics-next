@@ -141,7 +141,7 @@ const { readConsent, changeConsent, refreshConsentPublic } =
   await import('../src/features/catalogue/statement-consent-actions');
 const { changeOwnContribution, rereadOwnContribution } =
   await import('../src/features/catalogue/contribution-lifecycle-actions');
-const { changeEditorialWorkspace, readEditorialWorkspace } =
+const { changeEditorialWorkspace, readEditorialCreation, readEditorialWorkspace } =
   await import('../src/features/catalogue/editorial-context-actions');
 const { submitCorrection } = await import('../src/features/catalogue/statement-editor-actions');
 const { submitFactCorrection } = await import('../src/features/catalogue/subject-facts-actions');
@@ -194,6 +194,7 @@ const Editorial = candidateSession(function Editorial({ id, locale }: { id?: str
     locale,
     transport: {
       read: (address) => readEditorialWorkspace({ data: editorRequest(address, work), headers }),
+      creation: (session) => readEditorialCreation({ data: editorRequest(session ? { session } : {}, work), headers }),
       submit: (command) => changeEditorialWorkspace({ data: editorRequest(command, work), headers }),
     },
   });
@@ -1093,13 +1094,15 @@ test('catalogue editors retain only their original live reader, exact address an
     await input('input[data-editorial-control]', 'Fresh private context');
     await ui.click(m.editorial_create());
     await ui.until(() => ui.host.textContent!.includes(m.editorial_created()));
-    const editorialCreates = editorial.calls.filter((call) => call.method === 'POST');
+    const editorialCreates = editorial.calls.filter((call) => call.path === '/v1/contexts' && call.method === 'POST');
     expect(editorialCreates).toHaveLength(2);
     expect(editorialCreates[1]!.body).toEqual({ labels: { en: 'Fresh private context' } });
     expect(editorialCreates[1]!.headers.get('idempotency-key')).not.toBe(
       editorialCreates[0]!.headers.get('idempotency-key'),
     );
-    expect(editorial.calls.at(-1)!.method).toBe('GET');
+    expect(editorial.calls.some((call) => call.path === `/v1/contexts/${editorial.id}` && call.method === 'GET')).toBe(
+      true,
+    );
 
     // Retiring an open lifecycle dialog must not restore old focus or run its controls.
     const dialogLifecycle = contributionFixture();

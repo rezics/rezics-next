@@ -1,7 +1,9 @@
 import { createKernelClient } from '@rezics/client';
+import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { contextFixture } from './context-curation';
 import { candidateContext } from '../../subject/candidates';
 import {
+  readEditorialCreationActions,
   readEditorialContext,
   submitEditorialContext,
   type EditorialTransport,
@@ -13,7 +15,10 @@ export type EditorialScenario =
   | 'global'
   | 'loading'
   | 'missing'
+  | 'deleted'
+  | 'unretained'
   | 'unavailable'
+  | 'unavailable-actions'
   | 'denied'
   | 'invalid'
   | 'conflict'
@@ -25,7 +30,7 @@ export function editorialContextFixture(scenario: EditorialScenario = 'ready', l
   const review = contextFixture('inherited', locale);
   let context = structuredClone(review.context);
   if (scenario === 'global') context = { ...context, id: candidateContext, kind: 'global' };
-  let deleted = false;
+  let deleted = scenario === 'deleted' || scenario === 'unretained';
   let readUnavailable = scenario === 'unavailable';
   let uncertain = scenario === 'uncertain';
   let refusal: number | undefined =
@@ -43,11 +48,50 @@ export function editorialContextFixture(scenario: EditorialScenario = 'ready', l
     const body = await request.clone().text();
     const parsed: unknown = body ? JSON.parse(body) : undefined;
     calls.push({ path, method: request.method, headers: request.headers, body: parsed });
+    if (request.method === 'POST' && path === '/v1/viewerActions') {
+      if (scenario === 'unavailable-actions') return json({ code: 'overloaded' }, 503);
+      const refs = (parsed as { resources?: { type: string; id: string }[] }).resources ?? [];
+      return json({
+        resources: refs.map(({ type, id }) => {
+          if (type !== 'semantic.context') return { type, id, error: 'not_found' };
+          const actions =
+            id === PAGE_GLOBAL_CONTEXT
+              ? [{ action: 'context:create', operations: ['context.create'] }]
+              : id !== context.id || (deleted && scenario === 'expired')
+                ? null
+                : deleted && scenario === 'unretained'
+                  ? [{ action: 'context:read', operations: ['context.get'] }]
+                  : deleted
+                    ? [
+                        { action: 'context:read', operations: ['context.get'] },
+                        { action: 'context:restore', operations: ['context.restore'] },
+                      ]
+                    : [
+                        { action: 'context:read', operations: ['context.get'] },
+                        { action: 'context:delete', operations: ['context.delete'] },
+                      ];
+          return actions ? { type, id, viewerActions: actions } : { type, id, error: 'not_found' };
+        }),
+      });
+    }
     if (request.method === 'GET') {
       if (scenario === 'loading') return new Promise<Response>(() => {});
       if (readUnavailable) {
         readUnavailable = false;
         return json({ code: 'overloaded' }, 503);
+      }
+      if (path.endsWith('/lifecycle')) {
+        if (scenario === 'missing' || (deleted && scenario === 'expired')) return json({ code: 'not_found' }, 404);
+        return json({
+          context: {
+            id: context.id,
+            kind: context.kind,
+            labels: context.labels,
+            state: deleted ? 'deleted' : 'active',
+            deletedAt: deleted ? '2026-01-01T00:00:00.000000Z' : null,
+            purgeAfter: deleted && scenario !== 'unretained' ? '2026-01-31T00:00:00.000000Z' : null,
+          },
+        });
       }
       if (scenario === 'missing' || deleted) return json({ code: 'not_found' }, 404);
       return json({ context });
@@ -90,6 +134,7 @@ export function editorialContextFixture(scenario: EditorialScenario = 'ready', l
   const client = createKernelClient('https://editorial.test', { fetch: fetcher });
   const transport: EditorialTransport = {
     read: (address) => readEditorialContext(client, 'Bearer fixture', address),
+    creation: (session) => readEditorialCreationActions(client, 'Bearer fixture', session),
     submit: (command) => submitEditorialContext(client, 'Bearer fixture', command),
   };
   return {

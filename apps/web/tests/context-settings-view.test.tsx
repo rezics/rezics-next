@@ -198,6 +198,7 @@ test('both surfaces review multilingual labels, post the selected settings ID an
       locale="en"
       transport={{
         read: editorial.transport.read,
+        creation: editorial.transport.creation,
         submit: async (command) => {
           sent.push(command);
           return editorial.transport.submit(command);
@@ -220,7 +221,10 @@ test('both surfaces review multilingual labels, post the selected settings ID an
     await act(async () => userEvent.click(button(catalogue.host, m.editorial_create({}, o))));
     await until(() => sent.length === 1);
     expect(sent[0]).toMatchObject({ operation: 'create', labels: { en: 'Shelf' }, settings: 'inherit-readers' });
-    expect(editorial.calls[0]!.body).toEqual({ labels: { en: 'Shelf' }, settings: 'inherit-readers' });
+    expect(editorial.calls.find((call) => call.path === '/v1/contexts' && call.method === 'POST')!.body).toEqual({
+      labels: { en: 'Shelf' },
+      settings: 'inherit-readers',
+    });
   } finally {
     await catalogue.dispose();
   }

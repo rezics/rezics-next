@@ -24,6 +24,8 @@ import {
   type SettingsPreview,
   type SettingsRead,
 } from './context-settings';
+import { admits, lifecycleOperation } from '../contexts/model';
+import type { Actions, Result } from '../contexts/model';
 import { CapturedSettings, ContextLabelRows, SettingsPicker, SettingsReview } from './context-settings-view';
 
 const actionControlClass =
@@ -52,6 +54,7 @@ function EditorialContextWorkspaceLive({
   const fieldId = useId();
   const [currentId, setCurrentId] = useState(id);
   const [reading, setReading] = useState<EditorialRead>();
+  const [creation, setCreation] = useState<Result<Actions>>();
   const [rows, setRows] = useState<LabelRow[]>(() => [emptyLabelRow(locale)]);
   const [selected, setSelected] = useState<string | null>(null);
   const [inventory, setInventory] = useState<SettingsRead | undefined>();
@@ -64,17 +67,22 @@ function EditorialContextWorkspaceLive({
   const [failure, setFailure] = useState<EditorialFailure>();
   const [confirmation, setConfirmation] = useState<'delete' | 'restore'>();
   const [notice, setNotice] = useState<EditorialCommand['operation']>();
-  const [knownDeleted, setKnownDeleted] = useState(false);
   const [restoreBlocked, setRestoreBlocked] = useState(false);
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
   const mounted = useRef(true);
-  const active = reading?.ok ? reading.context : undefined;
-  const action = knownDeleted ? 'restore' : 'delete';
-  const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
+  const creationRead = useRef(0);
+  const active = reading?.ok ? (reading.context ?? undefined) : undefined;
+  const nativeLifecycle = reading?.ok ? reading.lifecycle : null;
+  const displayedContext = active ?? (nativeLifecycle?.state === 'deleted' ? nativeLifecycle : undefined);
+  const action = reading?.ok ? lifecycleOperation(reading) : null;
+  const eligibleAttempt = !!action && !restoreBlocked && !!reading?.ok && admits(reading.actions, action);
+  const createAllowed = !!creation && admits(creation, 'create');
+  const settingsReady =
+    selected === null || (inventory?.kind === 'ready' && !!policyPreview(inventory.snapshot, selected).settings);
   // A control admits only the observation that rendered it. Replay belongs to the
   // unresolved command instead, so later session/read observations cannot re-key it.
-  const observed = { pending, restoreBlocked };
+  const observed = { pending, restoreBlocked, reading, creation };
   const observation = useRef<typeof observed | undefined>(undefined);
   observation.current = observed;
   function admitted() {
@@ -82,6 +90,20 @@ function EditorialContextWorkspaceLive({
   }
   function retireControls() {
     observation.current = undefined;
+  }
+
+  async function refreshCreation() {
+    const request = ++creationRead.current;
+    setCreation(undefined);
+    try {
+      const next = await transport.creation(session.current);
+      if (request !== creationRead.current || !lifetime.active() || !mounted.current) return;
+      session.current = next.session ?? session.current;
+      setCreation(next);
+    } catch {
+      if (request === creationRead.current && lifetime.active() && mounted.current)
+        setCreation({ kind: 'unavailable' });
+    }
   }
 
   async function refresh(target = currentId) {
@@ -93,16 +115,14 @@ function EditorialContextWorkspaceLive({
     // Do not retain private labels or review payloads across a failed current read.
     setReading(undefined);
     setConfirmation(undefined);
+    if (!pending) setFailure(undefined);
     try {
       const next = await transport.read({ id: target, ...(session.current ? { session: session.current } : {}) });
       if (!lifetime.active()) return;
       if (!mounted.current) return;
       session.current = next.session ?? session.current;
       setReading(next);
-      if (next.ok) {
-        setKnownDeleted(false);
-        setRestoreBlocked(false);
-      }
+      if (next.ok) setRestoreBlocked(false);
     } catch {
       if (!lifetime.active()) return;
       if (mounted.current) setReading({ ok: false, reason: 'unavailable' });
@@ -115,8 +135,10 @@ function EditorialContextWorkspaceLive({
   useEffect(() => {
     mounted.current = true;
     if (id) void refresh(id);
+    else void refreshCreation();
     return () => {
       mounted.current = false;
+      creationRead.current++;
     };
     // Route/session identity remounts this private workspace. Mutations own subsequent reads.
   }, [id, transport]);
@@ -124,9 +146,14 @@ function EditorialContextWorkspaceLive({
     if (!transport.settings || inventory) return;
     let cancelled = false;
     setInventory({ kind: 'loading' });
-    void transport.settings.choices(session.current).then((latest) => {
-      if (!cancelled && mounted.current && lifetime.active()) setInventory(latest);
-    });
+    void transport.settings
+      .choices(session.current)
+      .then((latest) => {
+        if (!cancelled && mounted.current && lifetime.active()) setInventory(latest);
+      })
+      .catch(() => {
+        if (!cancelled && mounted.current && lifetime.active()) setInventory({ kind: 'unavailable' });
+      });
     return () => {
       cancelled = true;
     };
@@ -136,9 +163,14 @@ function EditorialContextWorkspaceLive({
     if (!transport.settings || !digest) return;
     let cancelled = false;
     setCaptured({ kind: 'loading' });
-    void transport.settings.captured(digest, session.current).then((latest) => {
-      if (!cancelled && mounted.current && lifetime.active()) setCaptured(latest);
-    });
+    void transport.settings
+      .captured(digest, session.current)
+      .then((latest) => {
+        if (!cancelled && mounted.current && lifetime.active()) setCaptured(latest);
+      })
+      .catch(() => {
+        if (!cancelled && mounted.current && lifetime.active()) setCaptured({ kind: 'unavailable' });
+      });
     return () => {
       cancelled = true;
     };
@@ -147,7 +179,7 @@ function EditorialContextWorkspaceLive({
   function submit(operation: EditorialCommand['operation']) {
     if (!admitted() || pending) return;
     if (operation === 'create') {
-      if (currentId || !labelsFromDraft(rows)) return;
+      if (currentId || !createAllowed || !settingsReady || !labelsFromDraft(rows)) return;
       void confirmCreate();
       return;
     }
@@ -171,15 +203,45 @@ function EditorialContextWorkspaceLive({
     if (!admitted() || pending || currentId) return;
     const labels = labelsFromDraft(rows);
     if (!labels) return;
-    let settings = selected ?? undefined;
-    const snapshot = inventory?.kind === 'ready' ? inventory.snapshot : null;
-    if (selected && transport.settings) {
-      const latest = await transport.settings.choices(session.current);
+    running.current = true;
+    setBusy(true);
+    setFailure(undefined);
+    try {
+      const latestActions = await transport.creation(session.current);
       if (!lifetime.active() || !mounted.current) return;
-      if (latest.kind === 'ready') {
+      session.current = latestActions.session ?? session.current;
+      setCreation(latestActions);
+      if (latestActions.kind !== 'ready') {
+        setFailure({ ok: false, reason: latestActions.kind === 'unavailable' ? 'unavailable' : 'denied' });
+        return;
+      }
+      if (!admits(latestActions, 'create')) {
+        setFailure({ ok: false, reason: 'denied' });
+        return;
+      }
+
+      let settings = selected ?? undefined;
+      const snapshot = inventory?.kind === 'ready' ? inventory.snapshot : null;
+      if (selected) {
+        if (!transport.settings) {
+          setFailure({ ok: false, reason: 'unavailable' });
+          return;
+        }
+        let latest: SettingsRead;
+        try {
+          latest = await transport.settings.choices(session.current);
+        } catch {
+          latest = { kind: 'unavailable' };
+        }
+        if (!lifetime.active() || !mounted.current) return;
+        session.current = latest.session ?? session.current;
+        setInventory(latest);
+        if (latest.kind !== 'ready') {
+          setFailure({ ok: false, reason: latest.kind === 'denied' ? 'denied' : 'unavailable' });
+          return;
+        }
         const next = policyPreview(latest.snapshot, selected);
         const previous = snapshot ? policyPreview(snapshot, selected) : next;
-        setInventory(latest);
         if (!next.settings) {
           setFailure({ ok: false, reason: 'invalid' });
           return;
@@ -191,35 +253,32 @@ function EditorialContextWorkspaceLive({
         settings = next.settings;
         preview.current = next;
       } else {
-        setInventory(latest);
-        preview.current = {
-          settings: selected,
-          release: snapshot?.digest ?? '',
-          defaults: snapshot?.contexts[selected]?.defaults ?? {},
-        };
+        preview.current = snapshot ? policyPreview(snapshot, null) : { settings: null, release: '', defaults: {} };
       }
-    } else {
-      preview.current = snapshot
-        ? policyPreview(snapshot, selected)
-        : { settings: selected, release: '', defaults: {} };
-    }
-    let command: EditorialCommand;
-    try {
-      command = editorialCommand({
-        operation: 'create',
-        key: crypto.randomUUID(),
-        ...(session.current ? { session: session.current } : {}),
-        labels,
-        ...(settings ? { settings } : {}),
-      });
+      let command: EditorialCommand;
+      try {
+        command = editorialCommand({
+          operation: 'create',
+          key: crypto.randomUUID(),
+          ...(session.current ? { session: session.current } : {}),
+          labels,
+          ...(settings ? { settings } : {}),
+        });
+      } catch {
+        setFailure({ ok: false, reason: 'invalid' });
+        return;
+      }
+      setChanged(false);
+      setPending(command);
+      await execute(command);
     } catch {
-      setFailure({ ok: false, reason: 'invalid' });
-      return;
+      if (lifetime.active() && mounted.current) setFailure({ ok: false, reason: 'unavailable' });
+    } finally {
+      if (running.current && lifetime.active() && mounted.current) {
+        running.current = false;
+        setBusy(false);
+      }
     }
-    if (!admitted()) return;
-    setChanged(false);
-    setPending(command);
-    void execute(command);
   }
   function retry(command: EditorialCommand) {
     if (!lifetime.active() || !mounted.current || running.current) return;
@@ -248,7 +307,6 @@ function EditorialContextWorkspaceLive({
       // Drop all cached Context content before the ordinary reread. No cascade or cleanup claim.
       setReading(undefined);
       setCurrentId(result.id);
-      setKnownDeleted(result.operation === 'delete');
       setNotice(result.operation);
       setPending(undefined);
       setRows([emptyLabelRow(locale)]);
@@ -299,7 +357,9 @@ function EditorialContextWorkspaceLive({
       <ContentItemFrame as="div" className="min-w-0 space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6" data-editorial-panel>
         <header className="space-y-2">
           <ContentItemHeading level={2} className="text-2xl font-semibold">
-            {active ? pickText(active.labels, locale).text || m.context_unnamed({}, o) : m.editorial_title({}, o)}
+            {displayedContext
+              ? pickText(displayedContext.labels, locale).text || m.context_unnamed({}, o)
+              : m.editorial_title({}, o)}
           </ContentItemHeading>
           <p className="text-sm text-muted-foreground">{m.editorial_intro({}, o)}</p>
         </header>
@@ -309,12 +369,12 @@ function EditorialContextWorkspaceLive({
           aria-label={m.editorial_title({}, o)}
           aria-describedby={`${fieldId}-result`}
           tabIndex={-1}
-          hidden={!(busy || notice || knownDeleted || failure || (reading && !reading.ok))}
+          hidden={!(busy || notice || nativeLifecycle?.state === 'deleted' || failure || (reading && !reading.ok))}
           data-editorial-result
         >
           <div id={`${fieldId}-result`} className="space-y-6">
             {busy && <p role="status">{m.candidate_loading({}, o)}</p>}
-            {notice && (notice !== 'delete' || !knownDeleted) && (
+            {notice && !(notice === 'delete' && nativeLifecycle?.state === 'deleted') && (
               <p role="status">
                 {notice === 'delete'
                   ? m.editorial_deleted({}, o)
@@ -323,9 +383,23 @@ function EditorialContextWorkspaceLive({
                     : m.editorial_created({}, o)}
               </p>
             )}
-            {knownDeleted && !active && (
-              <div role="status">
+            {nativeLifecycle?.state === 'deleted' && !active && (
+              <div role="status" className="space-y-2">
                 <Tombstone shape="row" reason="deleted" labels={{ deleted: m.editorial_deleted({}, o) }} />
+                <p>{m.ctxw_deleted_help({}, o)}</p>
+                {nativeLifecycle.deletedAt ? (
+                  <p>
+                    {m.ctxw_deleted_at({}, o)}{' '}
+                    <time dateTime={nativeLifecycle.deletedAt}>{nativeLifecycle.deletedAt}</time>
+                  </p>
+                ) : null}
+                {nativeLifecycle.purgeAfter ? (
+                  <p>
+                    {m.ctxw_purge_after({}, o)}{' '}
+                    <time dateTime={nativeLifecycle.purgeAfter}>{nativeLifecycle.purgeAfter}</time>
+                  </p>
+                ) : null}
+                <p>{m.ctxw_restore_help({}, o)}</p>
               </div>
             )}
             {failure && <p role="alert">{errorText(failure.reason)}</p>}
@@ -373,9 +447,14 @@ function EditorialContextWorkspaceLive({
                 }}
                 onReload={() => {
                   if (!transport.settings) return;
-                  void transport.settings.choices(session.current).then((latest) => {
-                    if (mounted.current && lifetime.active()) setInventory(latest);
-                  });
+                  void transport.settings
+                    .choices(session.current)
+                    .then((latest) => {
+                      if (mounted.current && lifetime.active()) setInventory(latest);
+                    })
+                    .catch(() => {
+                      if (mounted.current && lifetime.active()) setInventory({ kind: 'unavailable' });
+                    });
                 }}
               />
             ) : null}
@@ -392,12 +471,31 @@ function EditorialContextWorkspaceLive({
                 changed={changed}
               />
             ) : null}
+            {creation === undefined ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
+            {creation && (creation.kind === 'denied' || creation.kind === 'signed-out') ? (
+              <p role="status">{m.ctxw_denied({}, o)}</p>
+            ) : null}
+            {creation && creation.kind !== 'ready' && creation.kind !== 'denied' && creation.kind !== 'signed-out' ? (
+              <div className="space-y-2">
+                <p role="status">{m.ctxw_actions_unavailable({}, o)}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionControlClass}
+                  disabled={busy || !!pending}
+                  onClick={() => void refreshCreation()}
+                >
+                  {m.candidate_reload({}, o)}
+                </Button>
+              </div>
+            ) : null}
+            {creation?.kind === 'ready' && !createAllowed ? <p role="status">{m.ctxw_denied({}, o)}</p> : null}
             {!pending && (
               <Button
                 type="submit"
                 className={actionControlClass}
                 data-editorial-control
-                disabled={busy || !labelsFromDraft(rows)}
+                disabled={busy || !createAllowed || !settingsReady || !labelsFromDraft(rows)}
               >
                 {m.editorial_create({}, o)}
               </Button>
@@ -447,6 +545,39 @@ function EditorialContextWorkspaceLive({
         {(currentId || pending) && (
           <div className="min-w-0 space-y-3" data-content-item-slot="state">
             {currentId && <p className="text-sm text-muted-foreground">{m.editorial_authority({}, o)}</p>}
+            {currentId && reading?.ok && reading.lifecycleUnavailable ? (
+              <p role="status">{m.ctxw_lifecycle_unavailable({}, o)}</p>
+            ) : null}
+            {currentId && reading?.ok && reading.actions.kind !== 'ready' ? (
+              <p role="status">
+                {reading.actions.kind === 'denied' || reading.actions.kind === 'signed-out'
+                  ? m.ctxw_denied({}, o)
+                  : m.ctxw_actions_unavailable({}, o)}
+              </p>
+            ) : null}
+            {currentId &&
+            !pending &&
+            ((reading && !reading.ok && reading.reason === 'unavailable') ||
+              (reading?.ok && (reading.lifecycleUnavailable || reading.actions.kind === 'unavailable'))) ? (
+              <Button
+                type="button"
+                variant="outline"
+                className={actionControlClass}
+                disabled={busy}
+                onClick={() => void refresh()}
+              >
+                {m.ctxw_reread({}, o)}
+              </Button>
+            ) : null}
+            {currentId &&
+            reading?.ok &&
+            !reading.lifecycleUnavailable &&
+            reading.actions.kind === 'ready' &&
+            !eligibleAttempt &&
+            !restoreBlocked &&
+            (nativeLifecycle?.state === 'deleted' || (active?.kind === 'community' && action)) ? (
+              <p role="status">{m.ctxw_no_action({}, o)}</p>
+            ) : null}
             {confirmation && (
               <p>
                 {confirmation === 'delete' ? m.editorial_confirm_delete({}, o) : m.editorial_confirm_restore({}, o)}
@@ -455,6 +586,17 @@ function EditorialContextWorkspaceLive({
             <div className="flex flex-wrap gap-3" data-editorial-action-row>
               {pending ? (
                 <>
+                  {uncertain && currentId ? (
+                    <Button
+                      variant="outline"
+                      className={actionControlClass}
+                      data-editorial-control
+                      disabled={busy}
+                      onClick={() => void refresh()}
+                    >
+                      {m.ctxw_reread({}, o)}
+                    </Button>
+                  ) : null}
                   {!restoreBlocked && (
                     <Button
                       className={actionControlClass}

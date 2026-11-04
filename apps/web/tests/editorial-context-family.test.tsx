@@ -7,6 +7,9 @@ import { editorialContextFixture } from '../src/kernel/fake/editorial-context';
 import { contextFixture } from '../src/kernel/fake/context-curation';
 import type { EditorialTransport } from '../src/features/catalogue/editorial-context';
 
+const editorialNativeCalls = (calls: ReturnType<typeof editorialContextFixture>['calls']) =>
+  calls.filter((call) => call.path !== '/v1/viewerActions' && !call.path.endsWith('/lifecycle'));
+
 // One actual-component regression, deliberately separate from the native campaign.
 test('Editorial Context family retains supplied comparison, independent controls and exact deliberate lifecycle recovery', async () => {
   const { Window } = await import(
@@ -258,13 +261,22 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(window.document.activeElement).toBe(fields[1]);
     await act(async () => userEvent.type(fields[1]!, longName));
     expect((fields[3] as HTMLInputElement).value).toBe('');
-    expect(first.calls).toHaveLength(0);
+    expect(editorialNativeCalls(first.calls)).toHaveLength(0);
     await click(m.editorial_create({}, o), workspaces[0]);
     await until(() => !!workspaces[0]!.querySelector('a'));
     expect(workspaces[0]!.querySelector('h2')!.textContent).toBe(longName);
-    expect(second.calls).toHaveLength(0);
-    expect(first.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
-    expect(first.calls[0]!.body).toEqual({ labels: { en: longName } });
+    expect(editorialNativeCalls(second.calls)).toHaveLength(0);
+    expect(editorialNativeCalls(first.calls).map((call) => call.method)).toEqual(['POST', 'GET']);
+    expect(editorialNativeCalls(first.calls)[0]!.body).toEqual({ labels: { en: longName } });
+
+    await render(null);
+    const unavailableCreation = editorialContextFixture('unavailable-actions');
+    await render(<EditorialContextWorkspace locale="en" transport={unavailableCreation.transport} />);
+    await act(async () => userEvent.type(host.querySelector('input')!, 'Keep this private draft'));
+    await until(() => host.textContent!.includes(m.ctxw_actions_unavailable({}, o)));
+    expect((host.querySelector('input') as HTMLInputElement).value).toBe('Keep this private draft');
+    expect(button(m.editorial_create({}, o)).disabled).toBe(true);
+    expect(editorialNativeCalls(unavailableCreation.calls)).toHaveLength(0);
 
     // A queued confirmation stays retired after a mounted current reread.
     await render(null);
@@ -272,6 +284,7 @@ test('Editorial Context family retains supplied comparison, independent controls
     const sent: Parameters<EditorialTransport['submit']>[0][] = [];
     const queuedTransport: EditorialTransport = {
       read: queued.transport.read,
+      creation: queued.transport.creation,
       submit: async (command) => {
         sent.push(command);
         const result = await queued.transport.submit(command);
@@ -289,7 +302,7 @@ test('Editorial Context family retains supplied comparison, independent controls
     await click(m.candidate_reload({}, o));
     await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
     await act(async () => oldConfirm());
-    expect(queued.calls.map((call) => call.method)).toEqual(['GET', 'GET']);
+    expect(editorialNativeCalls(queued.calls).map((call) => call.method)).toEqual(['GET', 'GET']);
     await click(m.editorial_delete({}, o));
     await click(m.contribution_confirm({}, o));
     const oldRetry = retained(button(m.editorial_retry({}, o)), 'onClick');
@@ -319,13 +332,13 @@ test('Editorial Context family retains supplied comparison, independent controls
     await act(async () => retained(host.querySelector('select')!, 'onChange')({ target: { value: 'ja' } }));
     await act(async () => retained(host.querySelector('input')!, 'onChange')({ target: { value: 'Current' } }));
     await act(async () => oldDraft({ preventDefault() {} }));
-    expect(draft.calls).toHaveLength(0);
+    expect(editorialNativeCalls(draft.calls)).toHaveLength(0);
     const createCurrent = retained(host.querySelector('form')!, 'onSubmit');
     await act(async () => createCurrent({ preventDefault() {} }));
     await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
     await act(async () => createCurrent({ preventDefault() {} }));
-    expect(draft.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
-    expect(draft.calls[0]!.body).toEqual({ labels: { ja: 'Current' } });
+    expect(editorialNativeCalls(draft.calls).map((call) => call.method)).toEqual(['POST', 'GET']);
+    expect(editorialNativeCalls(draft.calls)[0]!.body).toEqual({ labels: { ja: 'Current' } });
 
     // A deliberate delete confirmation keeps confirm/cancel adjacency, then removes review content.
     await render(null);
@@ -341,7 +354,7 @@ test('Editorial Context family retains supplied comparison, independent controls
       </EditorialContextWorkspace>,
     );
     await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
-    expect(lifecycle.calls).toHaveLength(1);
+    expect(editorialNativeCalls(lifecycle.calls)).toHaveLength(1);
     await click(m.editorial_delete({}, o));
     expect(host.textContent).toContain(m.editorial_authority({}, o));
     expect(host.textContent).toContain(m.editorial_confirm_delete({}, o));
@@ -352,7 +365,7 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(window.document.activeElement).toBe(button(m.candidate_cancel({}, o)));
     await act(async () => userEvent.tab({ shift: true }));
     expect(window.document.activeElement).toBe(confirm);
-    expect(lifecycle.calls).toHaveLength(1);
+    expect(editorialNativeCalls(lifecycle.calls)).toHaveLength(1);
     await act(async () => userEvent.keyboard('{Enter}'));
     await until(
       () =>
@@ -376,29 +389,38 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(document.activeElement).toBe(
       restoreConfirm.isConnected ? restoreConfirm : host.querySelector('[data-editorial-result]'),
     );
-    expect(lifecycle.calls.map((call) => call.method)).toEqual(['GET', 'DELETE', 'GET', 'POST', 'GET']);
+    expect(editorialNativeCalls(lifecycle.calls).map((call) => call.method)).toEqual([
+      'GET',
+      'DELETE',
+      'GET',
+      'POST',
+      'GET',
+    ]);
     expect(host.querySelector('[data-review-entry]')).not.toBeNull();
     expect(
-      lifecycle.calls.slice(1).every((call) => call.headers.get('rezics-session-token') === 'editorial-session'),
+      editorialNativeCalls(lifecycle.calls)
+        .slice(1)
+        .every((call) => call.headers.get('rezics-session-token') === 'editorial-session'),
     ).toBe(true);
 
-    for (const scenario of ['global', 'missing', 'unavailable', 'loading'] as const) {
+    for (const scenario of ['global', 'missing', 'unavailable', 'unretained', 'loading'] as const) {
       await render(null);
       const sample = editorialContextFixture(scenario);
       await render(<EditorialContextWorkspace id={sample.id} locale="en" transport={sample.transport} />);
       if (scenario === 'loading') expect(host.querySelector('section')!.getAttribute('aria-busy')).toBe('true');
-      else
-        await until(
-          () => sample.calls.length === 1 && host.querySelector('section')!.getAttribute('aria-busy') === 'false',
-        );
+      else await until(() => host.querySelector('section')!.getAttribute('aria-busy') === 'false');
       expect(buttons(host, m.editorial_restore({}, o))).toHaveLength(0);
       expect(buttons(host, m.editorial_delete({}, o))).toHaveLength(0);
       if (scenario === 'global') expect(host.textContent).toContain(m.editorial_global({}, o));
+      if (scenario === 'unretained') {
+        expect(host.textContent).toContain(m.editorial_deleted({}, o));
+        expect(host.textContent).toContain(m.ctxw_no_action({}, o));
+      }
       if (scenario === 'unavailable') {
         expect(host.textContent).toContain(m.editorial_unavailable({}, o));
         await click(m.candidate_reload({}, o));
         await until(() => buttons(host, m.editorial_delete({}, o)).length === 1);
-        expect(sample.calls).toHaveLength(2);
+        expect(editorialNativeCalls(sample.calls)).toHaveLength(2);
       }
     }
     for (const scenario of ['denied', 'expired'] as const) {
@@ -411,14 +433,14 @@ test('Editorial Context family retains supplied comparison, independent controls
       if (scenario === 'denied') {
         await until(() => host.textContent!.includes(m.editorial_denied({}, o)));
         expect(buttons(host, m.editorial_restore({}, o))).toHaveLength(0);
-        expect(sample.calls.map((call) => call.method)).toEqual(['GET', 'DELETE']);
+        expect(editorialNativeCalls(sample.calls).map((call) => call.method)).toEqual(['GET', 'DELETE']);
       } else {
         await until(() => buttons(host, m.editorial_restore({}, o)).length === 1);
         await click(m.editorial_restore({}, o));
         await click(m.contribution_confirm({}, o));
         await until(() => host.textContent!.includes(m.editorial_conflict({}, o)));
         expect(host.querySelector('[data-review-entry], a[href^="/exact-review"]')).toBeNull();
-        expect(sample.calls.map((call) => call.method)).toEqual(['GET', 'DELETE', 'GET', 'POST']);
+        expect(editorialNativeCalls(sample.calls).map((call) => call.method)).toEqual(['GET', 'DELETE', 'GET', 'POST']);
       }
     }
     for (const scenario of ['invalid', 'conflict'] as const) {
@@ -432,7 +454,7 @@ test('Editorial Context family retains supplied comparison, independent controls
         scenario === 'invalid' ? m.editorial_invalid({}, o) : m.editorial_conflict({}, o),
       );
       expect(host.querySelector('input')!.value).toBe(longName);
-      expect(sample.calls.map((call) => call.method)).toEqual(['POST']);
+      expect(editorialNativeCalls(sample.calls).map((call) => call.method)).toEqual(['POST']);
     }
     await render(null);
     const uncertain = editorialContextFixture('uncertain');
@@ -456,9 +478,10 @@ test('Editorial Context family retains supplied comparison, independent controls
     expect(document.activeElement).toBe(
       retryCreate.isConnected ? retryCreate : host.querySelector('[data-editorial-result]'),
     );
-    expect(uncertain.calls[0]!.body).toEqual(uncertain.calls[1]!.body);
-    expect([...uncertain.calls[0]!.headers]).toEqual([...uncertain.calls[1]!.headers]);
-    expect(uncertain.calls.map((call) => call.method)).toEqual(['POST', 'POST', 'GET']);
+    const uncertainWrites = editorialNativeCalls(uncertain.calls).filter((call) => call.method === 'POST');
+    expect(uncertainWrites[0]!.body).toEqual(uncertainWrites[1]!.body);
+    expect([...uncertainWrites[0]!.headers]).toEqual([...uncertainWrites[1]!.headers]);
+    expect(editorialNativeCalls(uncertain.calls).map((call) => call.method)).toEqual(['POST', 'POST', 'GET']);
 
     // Native creation is settled even when its ordinary read is unavailable; only current keyboard intent orients.
     for (const intent of [
@@ -480,6 +503,7 @@ test('Editorial Context family retains supplied comparison, independent controls
           await sample.transport.read(address);
           throw new Error('Follow-up read unavailable');
         },
+        creation: sample.transport.creation,
         submit: async (command) => {
           const result = await sample.transport.submit(command);
           await gate;
@@ -500,7 +524,7 @@ test('Editorial Context family retains supplied comparison, independent controls
         button(m.editorial_create({}, o)).focus();
         await act(async () => userEvent.keyboard('{Enter}'));
       }
-      await until(() => sample.calls.length === 1);
+      await until(() => editorialNativeCalls(sample.calls).some((call) => call.method === 'POST'));
       if (intent === 'moved away and back') {
         const outside = document.createElement('button');
         document.body.append(outside);
@@ -524,7 +548,7 @@ test('Editorial Context family retains supplied comparison, independent controls
         expect(boundary!.textContent).toContain(m.editorial_created({}, o));
         expect(boundary!.textContent).toContain(m.editorial_unavailable({}, o));
         expect(host.querySelector('input')).toBeNull();
-        expect(sample.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
+        expect(editorialNativeCalls(sample.calls).map((call) => call.method)).toEqual(['POST', 'GET']);
       } else expect(host.textContent).not.toContain(m.editorial_created({}, o));
     }
 
@@ -547,6 +571,7 @@ test('Editorial Context family retains supplied comparison, independent controls
             })
           : existing.transport.read(address);
       },
+      creation: existing.transport.creation,
       submit: (command) => {
         commands.push(command);
         return new Promise((resolve) => {
@@ -832,6 +857,7 @@ test('Editorial Context family retains supplied comparison, independent controls
     let result!: Awaited<ReturnType<EditorialTransport['submit']>>;
     const transport: EditorialTransport = {
       read: retired.transport.read,
+      creation: retired.transport.creation,
       submit: async (command) => {
         result = await retired.transport.submit(command);
         return new Promise((resolve) => {
@@ -851,7 +877,7 @@ test('Editorial Context family retains supplied comparison, independent controls
     await render(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11'));
     await act(async () => deliver(result));
     await flush();
-    expect(retired.calls.map((call) => call.method)).toEqual(['POST']);
+    expect(editorialNativeCalls(retired.calls).map((call) => call.method)).toEqual(['POST']);
     expect(host.querySelector('input')!.value).toBe('');
     expect(host.textContent).not.toContain(m.editorial_created({}, o));
   } finally {
