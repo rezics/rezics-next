@@ -109,7 +109,8 @@ const changeResponse = t.Object(
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const forbidden = problemSchema('forbidden');
 const invalid = problemSchema('invalid_request');
-const conflict = problemSchema('conflict', 'idempotency_conflict');
+const conflict = problemSchema('conflict');
+const idempotencyConflict = problemSchema('idempotency_conflict');
 const unavailable = problemSchema(
   'semantic_not_ready',
   'overloaded',
@@ -262,6 +263,7 @@ export function yearlyCompletionGoalRoutes(
           401: unauthorized,
           403: forbidden,
           409: conflict,
+          422: idempotencyConflict,
           410: problemSchema('command_result_erased'),
           503: unavailable,
         },

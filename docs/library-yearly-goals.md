@@ -13,7 +13,8 @@ The current target revision is a separate fence from the reported-year summary g
 active value to null and increments its revision; the row remains as a tombstone. Recreating a target therefore cannot
 make an earlier revision current again. A set or clear is an owner-scoped Library command with the existing immutable
 command receipt. Retrying an uncertain request uses the same idempotency key and body to resolve its original result.
-A stale expected revision returns a conflict and never overwrites the current value.
+A stale expected revision returns `409 conflict` and never overwrites the current value. Reusing an idempotency key with
+different input returns `422 idempotency_conflict`.
 
 `GET /v1/libraryYearlyCompletionGoal?year=2026` reads the selected year's target and composes it with the existing
 reported-year summary. The query accepts exactly one `year`, without leading zeroes or additional query parameters.
@@ -81,7 +82,8 @@ shape:
 its positive decimal-string revision. Set and clear both use this endpoint; `target: null` clears, and clear requires a
 non-null expected revision. Extra fields, fractional or coercive values, unsupported metric names, and out-of-range
 years or targets are invalid. A successful response reports the accepted year, metric, nullable target and new revision.
-Unauthorized, forbidden, stale/conflicting, erased-receipt and unavailable dependency outcomes remain distinct.
+Unauthorized, forbidden, stale-revision (`409`), reused-key (`422`), erased-receipt and unavailable dependency outcomes
+remain distinct.
 
 The API reads only the target row and the already-installed reported-year summary. It does not scan sessions, recount
 entries, create another summary projection, invent finish dates, or change Entry state. Owner retirement and erasure
