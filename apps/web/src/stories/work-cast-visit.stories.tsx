@@ -22,7 +22,14 @@ const secondCharacter = id(21);
 const role = id(30);
 const castNode = 'cast';
 
-type Scenario = 'qualified' | 'two-characters' | 'spoiler' | 'unavailable-target' | 'unavailable-credit' | 'changed';
+type Scenario =
+  | 'qualified'
+  | 'two-characters'
+  | 'spoiler'
+  | 'unavailable-target'
+  | 'unavailable-credit'
+  | 'changed'
+  | 'retired-context';
 
 function summary(subject: string, label: string, type: string, language = 'en') {
   return { id: subject, type, types: [type], label: { value: label, language }, cover: null };
@@ -105,7 +112,7 @@ function Visit({ scenario = 'qualified', visitor = 'Signed Out' }: { scenario?: 
   const selected = scenario === 'changed' ? id(99) : id(40);
   const returnState = workCastVisitReturn(
     workCastVisitReturnFragment({
-      context: PAGE_GLOBAL_CONTEXT,
+      context: scenario === 'retired-context' ? id(98) : PAGE_GLOBAL_CONTEXT,
       node: castNode,
       presentation: 'character',
       statement: selected,
@@ -194,6 +201,16 @@ export const CurrentTargetReturn: Story = {
 export const ChangedRowAfterReturn: Story = {
   args: { scenario: 'changed' },
   globals: { locale: 'zh-Hant', viewport: { value: 'phone390' }, theme: 'light' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent(m.work_cast_window_changed());
+    await expect(canvas.getByRole('link', { name: m.subject_relation_restart() })).toHaveAttribute('href', expect.stringContaining('node=cast'));
+  },
+};
+export const RetiredContextReading: Story = {
+  name: 'Retired reading after Context changes',
+  args: { scenario: 'retired-context' },
+  globals: { locale: 'ja', viewport: { value: 'phone390' }, theme: 'dark' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status')).toHaveTextContent(m.work_cast_window_changed());
