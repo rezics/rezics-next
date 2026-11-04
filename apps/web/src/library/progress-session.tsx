@@ -612,7 +612,10 @@ function ProgressSessionReturnControls({
         to="/library/progress"
         search={context ? context.indexSearch : {}}
         {...(context
-          ? { state: progressIndexSelectionLocationState(context, session.startedAt) as never }
+          ? {
+              state: (previous: Record<string, unknown>) =>
+                ({ ...previous, ...progressIndexSelectionLocationState(context, session.startedAt) }) as never,
+            }
           : {})}
         className={buttonClass}
       >
