@@ -1,3 +1,5 @@
+import type { CollectionComparisonDefinitions } from './collection-comparison/model';
+import { useCollectionComparisonReturn } from './collection-comparison/return';
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
 import { CollectionFilteredStatus } from './bulk-filtered-status-view';
 import { collectionTextIssue } from './collection-text-input';
@@ -2206,6 +2208,8 @@ function CollectionPageLifetime({
             <CollectionReadMembers<ReadMember>
               members={(page.memberState ?? 'ready') !== 'ready' ? [] : (page.filteredMembers ?? page.members)}
               layout={layout}
+              currentHref={currentHref}
+              onReferenceNavigate={() => setSelectedIds(new Set())}
               viewerProjection={viewerProjection}
               {...(personalActionAllowed
                 ? {
@@ -2222,6 +2226,7 @@ function CollectionPageLifetime({
               presentationKind={page.presentationKind}
               typeRatios={page.typeRatios}
               listPresentations={page.listPresentations}
+              comparisonDefinitions={page.comparisonDefinitions}
               onCopy={(member) => {
                 if (member.subject)
                   void copyLink(
@@ -2241,6 +2246,7 @@ function CollectionPageLifetime({
               members={members}
               typeRatios={page.typeRatios}
               listPresentations={page.listPresentations}
+              comparisonDefinitions={page.comparisonDefinitions}
               editing={editing && owner}
               firstPage={page.firstPage}
               busy={pending || draftFrozen || transfer !== null}
@@ -2403,6 +2409,9 @@ export function CollectionReadMembers<Member extends ReadMember>({
   presentationKind,
   typeRatios,
   listPresentations,
+  comparisonDefinitions,
+  currentHref,
+  onReferenceNavigate,
   viewerProjection,
   viewerActionHref,
   onCopy,
@@ -2412,11 +2421,15 @@ export function CollectionReadMembers<Member extends ReadMember>({
   presentationKind?: string | null | undefined;
   typeRatios?: Readonly<Record<string, string>> | undefined;
   listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
+  currentHref?: string | undefined;
+  onReferenceNavigate?: (() => void) | undefined;
   viewerProjection?: CollectionViewerProjection;
   viewerActionHref?: (member: Member) => string | undefined;
   onCopy: (member: Member) => void | Promise<void>;
 }) {
   const locale = getLocale();
+  useCollectionComparisonReturn(members, currentHref);
   const items = members.map((member, index) => {
     const subject = member.subject;
     const key = member.id ?? `${subject?.id ?? 'unavailable'}:${index}`;
@@ -2436,10 +2449,17 @@ export function CollectionReadMembers<Member extends ReadMember>({
     const rowDetails = (
       <div
         id={member.id || member.viewerRowKey ? `collection-member-${member.id ?? member.viewerRowKey}` : undefined}
+        tabIndex={-1}
         data-collection-member-id={member.id}
         className="space-y-1"
       >
-        <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+        <CollectionMemberDetails
+          member={member}
+          listPresentations={listPresentations}
+          comparisonDefinitions={comparisonDefinitions}
+          currentHref={currentHref}
+          onReferenceNavigate={onReferenceNavigate}
+        />
         {member.note ? (
           <CollectionNoteReader
             key={member.id ?? member.note}

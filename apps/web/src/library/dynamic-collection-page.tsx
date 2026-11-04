@@ -252,6 +252,8 @@ function DynamicCollectionPageLifetime({
             members={current.members}
             typeRatios={current.typeRatios}
             listPresentations={current.listPresentations}
+            comparisonDefinitions={current.comparisonDefinitions}
+            currentHref={collectionPageAddress(locale, current.id, current.cursor ?? '', search)}
             onCopy={({ subject }) => {
               if (!subject) return;
               const title = displayLibraryTitle(subject.label, locale).text;

@@ -1,3 +1,4 @@
+import type { CollectionComparisonDefinitions } from './collection-comparison/model';
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
 import type { CollectionListPresentations, CollectionPresentationData } from './collection-presentation';
@@ -74,6 +75,7 @@ export type DynamicCollectionPage = CollectionPresentationData & {
   following?: boolean | null;
   typeRatios?: Record<string, string>;
   listPresentations?: CollectionListPresentations;
+  comparisonDefinitions?: CollectionComparisonDefinitions;
 };
 
 export function dynamicCollectionTitle(

@@ -1,3 +1,4 @@
+import type { CollectionComparisonDefinitions } from './collection-comparison/model';
 import { collectionTextIssue } from './collection-text-input';
 import { CollectionTextInputHelp, collectionTextInputAttributes } from './collection-text-input-field';
 import { ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
@@ -110,9 +111,11 @@ export function CollectionSubjectList({
   onCopy,
   typeRatios,
   listPresentations,
+  comparisonDefinitions,
 }: {
   typeRatios?: Readonly<Record<string, string>> | undefined;
   listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
   subjects: readonly (LibrarySubject | null)[];
   onCopy?: (subject: LibrarySubject) => void | Promise<void>;
 }) {
@@ -155,7 +158,11 @@ export function CollectionSubjectList({
                 )}
               </ContentItemHeading>
               <ListRowControl data-content-item-slot="metadata">
-                <CollectionMemberDetails member={{ subject }} listPresentations={listPresentations} />
+                <CollectionMemberDetails
+                  member={{ subject }}
+                  listPresentations={listPresentations}
+                  comparisonDefinitions={comparisonDefinitions}
+                />
               </ListRowControl>
             </div>
             {subject && onCopy ? (
@@ -264,9 +271,11 @@ export function CollectionMemberList({
   onCopy,
   typeRatios,
   listPresentations,
+  comparisonDefinitions,
 }: {
   typeRatios?: Readonly<Record<string, string>> | undefined;
   listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
   members: readonly CollectionMember[];
   editing: boolean;
   firstPage: boolean;
@@ -377,7 +386,11 @@ export function CollectionMemberList({
                 )}
               </ContentItemHeading>
               <ListRowControl data-content-item-slot="metadata">
-                <CollectionMemberDetails member={member} listPresentations={listPresentations} />
+                <CollectionMemberDetails
+                  member={member}
+                  listPresentations={listPresentations}
+                  comparisonDefinitions={comparisonDefinitions}
+                />
               </ListRowControl>
             </div>
             {editing && member.subject ? (
