@@ -1,5 +1,4 @@
 import type { Database } from 'bun:sqlite';
-import { isDeepStrictEqual } from 'node:util';
 import type { BatchCommand, BatchStatement, Source } from '@rezics/definitions/bulk';
 import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
 import {
@@ -53,6 +52,14 @@ export type ReviewedCatalogueResult = {
 
 function ensure(value: unknown, message = 'Reviewed catalogue input or current binding is invalid'): asserts value {
   if (!value) throw new TypeError(message);
+}
+/** Public transport snapshots may use null-prototype records; JSON provenance is unchanged. */
+function sameJson(left: unknown, right: unknown): boolean {
+  try {
+    return sourceDigest(left) === sourceDigest(right);
+  } catch {
+    return false;
+  }
 }
 /** Reversible exact tuple encoding ONLY for platform-authored seed owners. */
 export function reviewedCatalogueOwner(schemeURI: string, literalMember: string): Owner {
@@ -155,7 +162,7 @@ function slot(property: string, content: string) {
   return { property, ...(property === 'schema:sameAs' ? {} : { target: content }), context: globalContext, limit: 100 };
 }
 function currentSource(source: unknown, seed: Seed): boolean {
-  return isDeepStrictEqual(source, envelope(seed));
+  return sameJson(source, envelope(seed));
 }
 async function select(
   port: ReviewedCataloguePort,
@@ -280,7 +287,7 @@ export async function seedReviewedCatalogue(input: {
               entry.row.digest === sourceDigest(seed) &&
               entry.row.converter_revision === reviewedCatalogueRevision &&
               entry.row.recordRevision === 'unversioned' &&
-              isDeepStrictEqual(
+              sameJson(
                 entry.projection,
                 seed.facts.map((f) => statement(f)),
               ),
@@ -299,7 +306,7 @@ export async function seedReviewedCatalogue(input: {
         { command: meta.command, idempotencyKey: meta.key },
         input.signal,
       );
-      ensure(isDeepStrictEqual(ack.record, seed.metadata));
+      ensure(sameJson(ack.record, seed.metadata));
       const create: BatchCommand = {
         op: 'create',
         source: envelope(seed),
