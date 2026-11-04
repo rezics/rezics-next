@@ -71,7 +71,7 @@ test('People correction focus stays current and profile creation keeps authority
   const show = (
     selectedFixture = fixture,
     selectedTransport = transport,
-    id: string | undefined = selectedFixture.id,
+    id: string | null = selectedFixture.id,
   ) =>
     act(async () =>
       root.render(
@@ -150,7 +150,7 @@ test('People correction focus stays current and profile creation keeps authority
         return createFixture.transport.create(command);
       },
     };
-    await show(createFixture, createTransport, undefined);
+    await show(createFixture, createTransport, null);
     await waitFor(() =>
       expect(within(host).getByRole('alert').textContent).toBe(m.identity_intake_authority_refused_permission()),
     );
