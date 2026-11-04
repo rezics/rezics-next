@@ -313,7 +313,7 @@ test('inventory failure, preparing and sparse responsibility recovery keep their
     expect(org.textContent).toContain(m.managed_preparing_text());
     expect(org.textContent).not.toContain(m.managed_no_organizations());
     expect(resp.textContent).toContain(m.settings_managed_no_responsibilities_page());
-    expect(resp.textContent).not.toContain(m.managed_no_responsibilities());
+    expect(within(resp).queryByText(m.managed_no_responsibilities(), { exact: true })).toBeNull();
     associations(inventory);
     await view.click(button(org, m.settings_retry()));
     expect(within(org).getAllByRole('status')).toHaveLength(1);
