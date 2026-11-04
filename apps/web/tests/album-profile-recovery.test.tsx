@@ -29,6 +29,8 @@ test('Album recovery retires every current surface and retains private drafts an
       ].map((key) => [key, Reflect.get(window, key)]),
     ),
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -566,6 +568,8 @@ test('Album create uses current parent eligibility, keeps drafts when observatio
       ].map((key) => [key, Reflect.get(window, key)]),
     ),
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
