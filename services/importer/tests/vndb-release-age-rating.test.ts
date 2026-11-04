@@ -5,12 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { SourceRecord } from '@rezics/conversion';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { convertCrossMediaEntity, converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { CrossMediaDumpFiles, crossMediaAliases, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { Importer } from '../src/importer.ts';
 import type { ImportTransport, SourceRegistration } from '../src/import-contract.ts';
-import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { importVndbReleaseFidelity, planVndbReleaseFidelity, readVndbReleaseBindings } from '../src/vndb-release-fidelity.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
@@ -126,8 +125,12 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
       converter_revision: previousRevision,
       convert(input, context) {
         const { minage: _omitted, ...record } = input.record as Record<string, unknown>;
-        const result = current.convert({ ...input, record }, context);
-        return { ...result, converter_revision: previousRevision, digest: sourceDigest(result.normalized) };
+        const result = convertCrossMediaEntity(
+          { ...input, record },
+          context,
+          { converterRevision: previousRevision, sourceKind: 'vndb' },
+        );
+        return { ...result, normalized: result.normalizedRecord };
       },
     };
     const oldImporter = new Importer({ path, transport: transport(commands, ids, receipts) });
