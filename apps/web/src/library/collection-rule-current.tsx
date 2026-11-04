@@ -21,14 +21,16 @@ export function CollectionRuleCurrent({
   page,
   collectionId,
   navigate,
+  resultsHref,
   seed,
 }: {
   page: RulePage;
   collectionId: string | null;
   navigate?: (id: string) => void;
+  resultsHref?: string | undefined;
   seed?: FilterDocument;
 }) {
-  const owner = useCollectionOwnerCurrent(JSON.stringify(['rule', collectionId]), true);
+  const owner = useCollectionOwnerCurrent(JSON.stringify(['rule', collectionId, resultsHref]), true);
   // A retired loader object cannot seed a returning viewer/address lifetime.
   const history = useRef({ generation: owner.generation, seen: new Set<string>(), retired: new Set<string>() });
   if (history.current.generation !== owner.generation) {
@@ -53,6 +55,7 @@ export function CollectionRuleCurrent({
       page={valid ? page : { state: page.state === 'unavailable' ? 'unavailable' : 'denied' }}
       viewerId={owner.subject}
       collectionId={collectionId}
+      resultsHref={resultsHref}
       admitted={operations}
       csrfToken={owner.csrfToken}
       isCurrent={owner.isCurrent}

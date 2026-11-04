@@ -6,6 +6,7 @@ import {
   type CollectionListPresentations,
 } from './collection-presentation';
 import { notFound } from '@tanstack/react-router';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';
@@ -75,7 +76,12 @@ export type CollectionPageResult = (EditableCollectionPage | DynamicCollectionPa
 export type DynamicMembersResult = Pick<
   DynamicCollectionPage,
   'members' | 'next' | 'preparing' | 'retryAfterMs' | 'unavailable' | 'cursorRestarted'
-> & { filterStatus?: DynamicCollectionPage['filterStatus'] } & CollectionReadResult;
+> & {
+  filterStatus?: DynamicCollectionPage['filterStatus'];
+  /** A current production observation replaces the shell and its definition-bound filter controls together. */
+  page?: DynamicCollectionPage;
+  access?: 'denied' | 'closed';
+} & CollectionReadResult;
 
 export function collectionResultMatches(
   result: CollectionReadResult & { id?: string },
@@ -188,10 +194,14 @@ export async function loadDynamicMembers(
   headers: { headers: { authorization: string } } | Record<string, never> = {},
   filter?: FilterDocument,
 ): Promise<DynamicMembersResult> {
-  const result = await collectionMembersReader(client, id, headers, filter)(cursor);
+  const read = collectionMembersReader(client, id, headers, filter);
+  const first = await read(cursor);
+  const restarted = isStaleCursorResult(first);
+  const result = restarted ? await read() : first;
   const status = resultStatus(result);
   if (filter && (status === 400 || status === 422)) {
     return {
+      cursorRestarted: restarted,
       members: [],
       next: null,
       preparing: false,
@@ -203,6 +213,7 @@ export async function loadDynamicMembers(
   const finalStatus = resultStatus(result);
   if (finalStatus === 202)
     return {
+      cursorRestarted: restarted,
       members: [],
       next: null,
       preparing: true,
@@ -212,6 +223,7 @@ export async function loadDynamicMembers(
     };
   if (finalStatus === 503)
     return {
+      cursorRestarted: restarted,
       members: [],
       next: null,
       preparing: false,
@@ -223,6 +235,7 @@ export async function loadDynamicMembers(
     readLibraryResult(result as Parameters<typeof readLibraryResult>[0]),
   );
   return {
+    cursorRestarted: restarted,
     members: page.members.map((member) => ({
       subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
       ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
@@ -362,6 +375,11 @@ export async function loadEditableCollectionPage(
     query: libraryFullQuery(),
     ...headers,
   });
+  if (
+    [401, 403].includes(resultStatus(collectionResult) ?? 0) &&
+    !isPlatformClosedProblem(resultStatus(collectionResult), record(record(collectionResult).error).value)
+  )
+    throw notFound();
   const collectionEnvelope = readLibraryResult(collectionResult);
   // Keep the existing dynamic compatibility boundary; no new Source operation is called here.
   const collection = generatedClientDTO<CuratedCollectionRead | DynamicCollectionRead>(collectionEnvelope.collection);
@@ -393,18 +411,23 @@ export async function loadEditableCollectionPage(
   };
   const readAddress = collectionMembersReader(client, input.id, memberHeaders, input.filter);
   const readMembers = async (cursor?: string) => {
-    if (filterState.status === 'failed') return { status: 200, data: { members: [], next: null } };
+    if (input.filterIgnored?.length || filterState.status === 'failed')
+      return { status: 200, data: { members: [], next: null } };
     let result: unknown;
     try {
       result = await readAddress(cursor);
     } catch (error) {
+      if (isPlatformClosedError(error)) throw error;
       const status = resultStatus(error);
       // Keep the authorized Collection shell when only its Members read failed.
       // Credentials and concealment errors still propagate through the route boundary.
+      if (status === 401 || status === 403) throw notFound();
       if (status === undefined || status >= 500) return { status: status ?? 500 };
       throw error;
     }
     const status = resultStatus(result);
+    if ((status === 401 || status === 403) && !isPlatformClosedProblem(status, record(record(result).error).value))
+      throw notFound();
     if (input.filter && (status === 400 || status === 422)) {
       filterState.status = 'unsupported';
       return { status: 200, data: { members: [], next: null } };
@@ -482,7 +505,7 @@ export async function loadEditableCollectionPage(
         ...filterFields,
       };
     }
-    if (status === 503) {
+    if (status !== undefined && status >= 500) {
       return {
         id: collection.id,
         title: dynamicCollectionTitle(collection, getLocale()),

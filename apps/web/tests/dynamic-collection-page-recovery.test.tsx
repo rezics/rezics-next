@@ -1,6 +1,7 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import type { DynamicMembersResult } from '../src/library/collection-load';
 import type { DynamicCollectionPage as Page } from '../src/library/dynamic-collection';
 import { m } from '../src/paraglide/messages.js';
 
@@ -90,7 +91,7 @@ async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
   return {
     host,
     read,
-    async render(data: Page, search?: Search) {
+    async render(data: Page, search?: Search, reader?: (id: string, cursor?: string) => Promise<DynamicMembersResult>) {
       await act(async () => {
         root.render(
           <QueryClientProvider client={client}>
@@ -98,7 +99,7 @@ async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
               <DynamicCollectionPage
                 page={data}
                 {...(search ? { search } : {})}
-                {...(!data.preparing ? { readMembers: read } : {})}
+                {...(reader ? { readMembers: reader } : !data.preparing ? { readMembers: read } : {})}
               />
             </RouterContextProvider>
           </QueryClientProvider>,
@@ -295,7 +296,9 @@ test('Unavailable, preparing and filter failure feedback never becomes ready emp
     }
     await h.render(page({ cursor, next, filterIgnored: ['f.unavailable'] }));
     expect(h.host.textContent).toContain(m.collection_filter_ignored({ filter: 'f.unavailable' }));
-    expect(h.host.textContent).toContain(m.library_dynamic_page_reader_empty());
+    expect(h.host.textContent).not.toContain(m.library_dynamic_page_reader_empty());
+    expect(h.host.textContent).toContain(m.collection_filter_address_rejected());
+    expect(memberNavigation(h.host)).toBeNull();
     expect(h.read).not.toHaveBeenCalled();
   } finally {
     await h.close();
@@ -307,6 +310,14 @@ test('All eight locale variants supply named recovery and page-local absence', a
   try {
     for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const) {
       const messages = await Bun.file(new URL(`../messages/${locale}.json`, import.meta.url)).json();
+      for (const key of [
+        'library_dynamic_retry_unavailable',
+        'library_dynamic_retry_unavailable_help',
+        'library_dynamic_retry_preparing_help',
+        'library_dynamic_retry_pending',
+        'library_dynamic_retry_ready',
+      ])
+        expect(messages[key].trim().length).toBeGreaterThan(0);
       expect(messages.library_dynamic_page_reader_empty.trim().length).toBeGreaterThan(0);
       expect(messages.library_dynamic_page_reader_first_page.trim().length).toBeGreaterThan(0);
       setLocale(locale, { reload: false });
@@ -318,5 +329,89 @@ test('All eight locale variants supply named recovery and page-local absence', a
     }
   } finally {
     await h.close();
+  }
+});
+
+test('A failed preparing read can retry its exact saved/filter/cursor reader and pauses after bounded exhaustion', async () => {
+  const h = await mount();
+  const timers = new Map<number, () => void>();
+  let sequence = -1;
+  const nativeSet = globalThis.setTimeout;
+  const nativeClear = globalThis.clearTimeout;
+  const set = spyOn(globalThis, 'setTimeout').mockImplementation(((run, delay, ...args) => {
+    if (typeof delay !== 'number' || delay < 1000 || delay > 30_000) return nativeSet(run, delay, ...args);
+    const key = sequence--;
+    timers.set(key, () => run(...args));
+    return key;
+  }) as typeof setTimeout);
+  const clear = spyOn(globalThis, 'clearTimeout').mockImplementation(((id) => {
+    if (!timers.delete(Number(id))) nativeClear(id);
+  }) as typeof clearTimeout);
+  const calls: Array<[string, string | undefined, string]> = [];
+  let response: DynamicMembersResult | Error = new Error('Preparing read failed');
+  const reader = async (id: string, cursor?: string): Promise<DynamicMembersResult> => {
+    calls.push([id, cursor, JSON.stringify(filter)]);
+    if (response instanceof Error) throw response;
+    return response;
+  };
+  const fire = () =>
+    act(async () => {
+      expect(timers.size).toBe(1);
+      const [key, run] = [...timers][0]!;
+      timers.delete(key);
+      run();
+    });
+  const click = (label: string) =>
+    act(async () => {
+      const button = [...h.host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (node) => node.textContent === label,
+      )!;
+      expect(button).toBeDefined();
+      button.focus();
+      button.click();
+      button.click(); // The synchronous lock admits one request.
+    });
+  const original = page({ builtinKind: undefined, preparing: true, filter, cursor, filterStatus: 'preparing' });
+  try {
+    await h.render(original, { 'f.schema:keywords': ['concept-b'] }, reader);
+    await fire();
+    expect(h.host.textContent).toContain(m.library_dynamic_unavailable());
+    expect(h.host.textContent).not.toContain(m.collection_filter_preparing());
+    expect(timers.size).toBe(0);
+    expect(h.host.textContent).toContain(m.library_dynamic_retry_unavailable());
+    // Callback replacement at the same observation cannot retarget the captured recovery request.
+    const foreignReader = mock(async (): Promise<DynamicMembersResult> => {
+      throw new Error('Wrong reader');
+    });
+    await h.render(original, { 'f.schema:keywords': ['concept-b'] }, foreignReader);
+    response = { members: [], next: null, preparing: true, retryAfterMs: 1000, unavailable: false };
+    await click(m.library_dynamic_retry_unavailable());
+    await fire();
+    await fire();
+    expect(calls).toHaveLength(4);
+    expect(timers.size).toBe(0);
+    expect(h.host.textContent).toContain(m.library_dynamic_try_later());
+    response = {
+      members: [subject('current', 'Current result')],
+      next: null,
+      preparing: false,
+      retryAfterMs: 1000,
+      unavailable: false,
+    };
+    await click(m.library_collection_reload());
+    expect(calls).toHaveLength(5);
+    expect(
+      calls.every((call) => JSON.stringify(call) === JSON.stringify([original.id, cursor, JSON.stringify(filter)])),
+    ).toBe(true);
+    expect(foreignReader).not.toHaveBeenCalled();
+    expect(h.host.textContent).toContain('Current result');
+    expect(h.host.textContent).not.toContain(m.library_dynamic_unavailable());
+    expect(h.host.textContent).not.toContain(m.library_dynamic_try_later());
+    expect(timers.size).toBe(0);
+    expect(document.activeElement?.textContent).toBe(m.library_dynamic_retry_ready());
+  } finally {
+    await h.close();
+    set.mockRestore();
+    clear.mockRestore();
   }
 });

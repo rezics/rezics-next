@@ -152,6 +152,8 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       : {};
     const result = {
       ...page,
+      // Provenance binds caller operands. The admitted native filter is derived within this request.
+      ...(page.provenance ? { provenance: { ...page.provenance, request: collectionRequestVariant(data) } } : {}),
       filterActive: data.filterActive,
       typeRatios,
       listPresentations,
@@ -225,39 +227,12 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<DynamicMembersResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    let filter;
-    let filterStatus: 'failed' | undefined;
-    const configuredFilters = (env as { COLLECTION_FILTERS?: boolean | string }).COLLECTION_FILTERS;
-    const filtersOn =
-      configuredFilters === undefined
-        ? import.meta.env.DEV
-        : configuredFilters === true || configuredFilters === 'true';
-    if (!filtersOn && hasActiveFilter(data.search)) filterStatus = 'failed';
-    if (filtersOn && data.search) {
-      try {
-        const type = typeof data.search.type === 'string' ? data.search.type : 'schema:Book';
-        const admission = readCollectionFilterAddress(data.search, await readRelease(), type);
-        filter = admission.filter;
-        filterStatus = admission.filterStatus;
-      } catch {
-        if (hasActiveFilter(data.search)) filterStatus = 'failed';
-      }
-    }
-    const page = await loadEditableCollectionPage(
-      kernelClient(),
-      getRequest(),
-      env as Partial<SessionEnv>,
-      {
-        id: data.id,
-        ...(data.search ? { search: data.search } : {}),
-        ...(data.cursor ? { cursor: data.cursor } : {}),
-        ...(filter ? { filter } : {}),
-        ...(filterStatus ? { filterStatus } : {}),
-      },
-      data.credentialMode,
-    );
+    // Consume the same composed read as the route. A changed definition release must replace its controls,
+    // admitted predicate, presentation and viewer actions, rather than merging new members into an old shell.
+    const page = await readCollectionPage({ data });
     if (!('preparing' in page)) throw notFound();
     return {
+      page,
       ...(page.provenance
         ? { provenance: { ...page.provenance, request: collectionRequestVariant(data, 'members') } }
         : {}),
@@ -266,7 +241,7 @@ export const readDynamicCollectionMembers = createServerFn({ method: 'GET' })
       preparing: page.preparing,
       retryAfterMs: page.retryAfterMs,
       unavailable: page.unavailable,
-      ...(page.filterStatus ? { filterStatus: page.filterStatus } : {}),
+      filterStatus: page.filterStatus,
       ...(page.cursorRestarted ? { cursorRestarted: true as const } : {}),
     };
   });

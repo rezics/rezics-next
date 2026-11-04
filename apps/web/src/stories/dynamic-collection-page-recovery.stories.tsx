@@ -188,7 +188,41 @@ function notReady(change: Partial<Page>, message: () => string) {
     },
   } satisfies Story;
 }
-export const Unavailable: Story = notReady({ unavailable: true }, m.library_dynamic_unavailable);
+export const Unavailable: Story = {
+  name: 'Unavailable saved results, explicit same-page recovery',
+  render: () => {
+    const supplied = page({ builtinKind: undefined, unavailable: true, filter, cursor });
+    return (
+      <PatternStory path={`/collections/${encodeURIComponent(id)}`}>
+        <main className="mx-auto w-full min-w-0 max-w-4xl p-4">
+          <DynamicCollectionPage
+            page={supplied}
+            search={search}
+            readMembers={async () => ({
+              members: [],
+              next: null,
+              preparing: false,
+              unavailable: false,
+              retryAfterMs: 1000,
+            })}
+          />
+        </main>
+      </PatternStory>
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    expect(await view.findByText(m.library_dynamic_unavailable())).toBeVisible();
+    const retry = view.getByRole('button', { name: m.library_dynamic_retry_unavailable() });
+    retry.focus();
+    expect(retry).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(await view.findByText(m.library_dynamic_retry_ready())).toBeVisible();
+    expect(view.getByText(m.library_dynamic_page_reader_empty())).toBeVisible();
+    expect(view.queryByText(m.library_dynamic_unavailable())).toBeNull();
+    noGlobalEmpty(canvasElement);
+  },
+};
 export const Preparing: Story = notReady({ preparing: true }, m.library_dynamic_preparing);
 export const FilterUnsupported: Story = notReady({ filterStatus: 'unsupported' }, m.collection_filter_unsupported);
 export const FilterFailed: Story = notReady({ filterStatus: 'failed' }, m.collection_filter_failed);
@@ -197,12 +231,13 @@ export const FilterPreparing: Story = notReady(
   m.collection_filter_preparing,
 );
 export const IgnoredFilter: Story = {
-  name: 'Ignored filter feedback with page-local absence',
+  name: 'Ignored filter needs correction before results',
   render: () => render({ cursor, next, filterIgnored: ['f.unavailable'] }),
   play: async (context) => {
-    await localEmpty(true)(context);
-    expect(
-      within(context.canvasElement).getByText(m.collection_filter_ignored({ filter: 'f.unavailable' })),
-    ).toBeVisible();
+    const view = within(context.canvasElement);
+    expect(await view.findByText(m.collection_filter_address_rejected())).toBeVisible();
+    expect(view.getByRole('link', { name: m.collection_filter_clear() })).toBeVisible();
+    expect(view.queryByText(m.library_dynamic_page_reader_empty())).toBeNull();
+    expect(view.getByText(m.collection_filter_ignored({ filter: 'f.unavailable' }))).toBeVisible();
   },
 };
