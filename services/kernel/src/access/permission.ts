@@ -83,6 +83,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createKindAudienceOriginal, type KindOriginalProducer } from './kind-audience-original.ts';
 import { kindOriginalFormulaPlan } from './kind-audience-formula.ts';
 import { readExposure, GLOBAL_CONTEXT } from './gates/catalogue.ts';
+import { compileNativePolicyCatalogue, decideNativePermission, type NativePermissionProjection } from './policy-core.ts';
 // Only the Kind original invocation needs a Source-eight-axis declaration for
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
 const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
@@ -278,6 +279,7 @@ function preparedFormula(
     route: resource.route,
     resource_ids: [...ids],
     include_explicit: includeExplicit && !facts.anonymous && facts.scope,
+    policy_core: action === 'collection:read',
     include_global: isGlobalReachAction(action),
     action,
     own_account: facts.ownAccount,
@@ -357,7 +359,8 @@ async function checkPreparedPermission(
     const floor = facts.admitsAnonymous && domainEligible;
     // Scope caps only the independent authenticated grant branch. Other token
     // scopes neither supply the requested scope nor poison a verified public floor.
-    if (!floor && (facts.anonymous || !facts.scope)) return { allowed: false, explicit: false };
+    if (!floor && (facts.anonymous || !facts.scope) && action !== 'collection:read')
+      return { allowed: false, explicit: false };
     requireAccessDeadline(facts.deadline);
     if (facts.binding !== bind(actor, action, resource, page)) return { allowed: false, explicit: false };
     const stillValid = () => {
@@ -385,10 +388,60 @@ async function checkPreparedPermission(
       new Set(rows.map((row) => row.resourceId)).size !== ids.length ||
       rows.some(
         (row) =>
-          typeof row.resourceId !== 'string' || !ids.includes(row.resourceId) || typeof row.allowed !== 'boolean',
+          typeof row.resourceId !== 'string' ||
+          !ids.includes(row.resourceId) ||
+          (action === 'collection:read' ? typeof row.live !== 'boolean' : typeof row.allowed !== 'boolean'),
       )
     )
       return { allowed: false, explicit: false };
+    if (action === 'collection:read') {
+      const resourceType = page?.resourceType ?? policyCatalogue.actionByName[action]?.resourceTypes[0] ?? '';
+      const hasPrincipal = facts.principalId !== null;
+      const canEvaluateExplicit = includeExplicit && !facts.anonymous && facts.scope;
+      const project = (row: (typeof rows)[number]) => row as unknown as NativePermissionProjection;
+      const ordinary = rows.map((row) =>
+        decideNativePermission(
+          policyCatalogue,
+          {
+            action,
+            resourceType,
+            anonymous: facts.anonymous,
+            hasPrincipal,
+            authenticatedBenefit: facts.buyerEvidence !== undefined,
+            scope: facts.scope,
+            floor,
+            mode: 'ordinary',
+          },
+          project(row),
+        ),
+      );
+      const explicit = canEvaluateExplicit
+        ? rows.map((row) =>
+            decideNativePermission(
+              policyCatalogue,
+              {
+                action,
+                resourceType,
+                anonymous: facts.anonymous,
+                hasPrincipal,
+                authenticatedBenefit: facts.buyerEvidence !== undefined,
+                scope: facts.scope,
+                floor: false,
+                mode: 'explicit',
+              },
+              project(row),
+            ),
+          )
+        : [];
+      const decisions = Object.freeze(
+        Object.fromEntries(rows.map((row, index) => [row.resourceId!, ordinary[index]?.decision === 'allow'])),
+      );
+      return {
+        allowed: ordinary.every((decision) => decision.decision === 'allow'),
+        explicit: canEvaluateExplicit && explicit.every((decision) => decision.decision === 'allow'),
+        decisions,
+      };
+    }
     const allowed = rows.every((row) => row.allowed === true);
     if (allowed)
       setGovernanceReach(
@@ -509,6 +562,7 @@ export function createAccess(config: PermissionConfig): Access {
   // Copy metadata so later mutation of the caller's map cannot expand a mounted catalogue.
   const actions = new Map([...config.actions].map(([action, metadata]) => [action, { ...metadata }]));
   const catalogue = resolveResourceRoles(actions, config.resourceRoles);
+  const policyCatalogue = compileNativePolicyCatalogue(actions, catalogue);
   const standingAccounts = config.standingAccounts ?? new WeakMap<AccountActor, PermissionAccount>();
   const standingScopes = Object.freeze([...actions.keys()]);
   async function preparePermission(
@@ -1105,6 +1159,7 @@ export function createAccess(config: PermissionConfig): Access {
                 include_explicit: scope,
                 include_public: !gate && actions.get(action)!.anonymous,
                 include_global: isGlobalReachAction(action),
+                policy_core: false,
                 action,
                 own_account: ownAccount,
                 actor_id: identity.kind === 'account' ? identity.accountId : '',

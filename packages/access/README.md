@@ -21,6 +21,53 @@ Route declarations keep `^[a-z][a-z_]{0,62}$`. Native opening and gate-action in
 `^[a-z][a-z_-]{0,62}$`. Both reject `any`, `open` and `close`; these separate profiles preserve their installed
 admitted sets.
 
+## Permission policy core
+
+Decision: Kernel derives compiled declarations from its existing action and resource-role registrations; the pure
+catalogue accepts at most 1 MiB of identifier data, temporal integers are capped at 32 decimal characters, and
+explanations contain fixed operand codes capped at 32 nodes and 4 KiB.
+
+`@rezics/access` also exports `compilePolicyCatalogue`, `describeRequiredOperands`, `decidePolicy` and
+`qualifyTemporalEvidence`. The compiler copies and sorts ordinary action, role and resource-type data. It rejects
+malformed or duplicate declarations, unknown role actions or resource types, unresolved type roles, unsupported
+profiles and catalogue inputs over their bounds before any facts are acquired. The compiled arrays and lookup records
+are frozen, so mutating a registration after compilation cannot change a decision.
+
+```ts
+const compiled = compilePolicyCatalogue({ actions, roles, resourceTypes });
+if (!compiled.ok) return compiled.errors;
+const required = describeRequiredOperands(compiled.catalogue, request);
+const decision = decidePolicy(compiled.catalogue, request, qualifiedFacts);
+```
+
+`PolicyFact` is `true`, `false` or `null`. `false` is complete negative evidence; `null` is missing or unavailable
+evidence. Strong conjunction and disjunction preserve a decisive known operand without turning an unknown required
+ceiling into permission. Invalid requests return `invalid`; unresolved required evidence returns `unavailable`.
+Explanations use stable operand names and mark decisive operands. They carry no ACL identifiers, membership witness,
+account state or grant reason.
+
+The current data caps reuse the registered read limits: at most 100 resource types, 64 actions per type, 6,400
+action/type pairs, four resource-role references per action, 25,600 role references and 1 MiB of aggregate identifier
+data. A decision visits a fixed operand set. Explanations are limited to 32 nodes and 4 KiB. Temporal qualification
+uses at most 2,000 half-open `[from, until)` intervals with integer-microsecond values of at most 32 decimal
+characters; incomplete evidence remains unknown.
+
+The Kernel adapter compiles the live native registrations once when it creates Access. Its first migrated consumer is
+the `collection:read` point/page profile: the existing permission statement projects local and exact Global primitive
+facts at its qualified snapshot; the core combines standing, assignment, scope, actor/principal grants, denials and
+the verified public floor. Explicit advice uses the same evaluator with the floor and resource-role grant operands
+excluded. A public floor is independent of scope. The exact `globalReach` bit is projected from Kernel's registered
+list; unregistered actions have no alternate Global path. Own-account and authenticated buyer facts retain their
+existing native action-specific sources, and other action paths remain on their established evaluator until their
+own consumer is migrated.
+
+This package does not acquire facts, read time, verify native eligibility, mint preparation evidence, record a
+governance audit or authorize a writer. Kernel still owns current identity and membership checks, the authoritative
+instant and repeatable-read snapshot, deadlines, capability binding, source completeness, denial storage and audit.
+The native read cost includes the existing preparation and membership/assignment reads, the one bounded formula
+statement, existing before/after validity checks, and the Collection disclosure gates. The pure evaluation adds no
+query, per-row read, clock read, runtime ledger or retry.
+
 ## Full-call bounds
 
 The core adds no I/O, request cache, per-row permission check or history scan. Kernel retains these fixed deployment

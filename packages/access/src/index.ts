@@ -7,3 +7,40 @@ export {
 } from './exposure-contract.ts';
 export { decideExposure, type ExposureDecision, type ExposureDecisionInput } from './exposure.ts';
 export { compileExposureCatalogue, type ExposureCatalogue, type ExposureOperation } from './exposure-catalogue.ts';
+export { compilePolicyCatalogue } from './policy-catalogue.ts';
+export { decidePolicy, describeRequiredOperands, qualifyTemporalEvidence } from './policy-evaluate.ts';
+export {
+  MAX_POLICY_ACTIONS,
+  MAX_POLICY_ACTIONS_PER_RESOURCE_TYPE,
+  MAX_POLICY_ACTION_TYPE_REFERENCES,
+  MAX_POLICY_CATALOGUE_BYTES,
+  MAX_POLICY_EXPLANATION_BYTES,
+  MAX_POLICY_EXPLANATION_NODES,
+  MAX_POLICY_RESOURCE_TYPES,
+  MAX_POLICY_ROLE_REFERENCES_PER_ACTION,
+  MAX_POLICY_TEMPORAL_INTERVALS,
+  MAX_POLICY_TEMPORAL_INTEGER_CHARS,
+  MAX_POLICY_TYPE_ROLE_REFERENCES,
+  type PolicyAction,
+  type PolicyActionDeclaration,
+  type PolicyCatalogue,
+  type PolicyCatalogueError,
+  type PolicyCatalogueInput,
+  type PolicyCatalogueResult,
+  type PolicyDecision,
+  type PolicyFact,
+  type PolicyFacts,
+  type PolicyGlobalFacts,
+  type PolicyMode,
+  type PolicyOperand,
+  type PolicyOperandName,
+  type PolicyRequest,
+  type PolicyResourceType,
+  type PolicyResourceTypeDeclaration,
+  type PolicyRole,
+  type PolicyRoleDeclaration,
+  type PolicySubjectFacts,
+  type RequiredPolicyOperand,
+  type TemporalEvidence,
+  type TemporalInterval,
+} from './policy-contract.ts';

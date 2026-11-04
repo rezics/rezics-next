@@ -15,6 +15,32 @@ Extraction supplies no baseline allowance and no old/new allow-OR. Source compat
 
 Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
 
+## Pure policy core consumer
+
+Decision: Kernel derives the compiled policy from its existing mounted actions and resolved resource roles; catalogue
+identifier data is capped at 1 MiB, temporal integers at 32 decimal characters, and internal explanations at 32 nodes
+and 4 KiB.
+
+`services/kernel/src/access/policy-core.ts` imports the public `@rezics/access` entry and projects the live
+`ActionCatalogue`, resolved resource roles/types and exact `globalReach` registration. `permission.ts` calls this
+adapter only for the `collection:read` point/page check. Its existing `permission-check.sql` statement now returns
+qualified local and optional Global primitive grants, denials, assignment validity and deadline validity; it does not
+return a final Collection allow. The adapter evaluates every target at the same native snapshot and uses the same
+core for ordinary and explicit advice. The ordinary formula retains the verified public floor independently of
+scope. Explicit advice excludes that floor and resource-role grants.
+
+Kernel retains actor/principal authentication, account standing, temporal membership and assignment acquisition,
+floor verification, source completeness, `AuthoritativeTime`, deadlines, weak-map preparation and capability binding,
+still-valid checks, audit obligations and private disclosure. A core result is not prepared evidence. Missing query
+operands evaluate unavailable and fail closed; complete negative rows evaluate deny. Public responses still receive
+the existing concealed/not-found mapping and never receive operand explanations.
+
+This cutover adds no query or per-row acquisition. The real Collection read cost remains preparation and current
+membership/assignment reads, one bounded final formula statement, native validity checks and Collection's existing
+`readEligibility`, `disclose` and `grantCapable` gates. `packages/access/README.md` documents the public API and limits.
+The admitted import edges are `services/kernel/src/access/policy-core.ts -> @rezics/access` (public entry) and
+`services/kernel/src/access/permission.ts -> ./policy-core.ts` (same Kernel Access adapter).
+
 ## Fixed Global viewer-action bindings
 
 Mounted resource-authority metadata may declare `x-authority-resource-id` only as the canonical
