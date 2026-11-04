@@ -269,7 +269,7 @@ silently truncating them. The main caps are:
   links; at most 162 commands (1 identifier + 64 names + 64 alternate names +
   32 URLs + 1 original language). A VideoGameRelease title projection reuses
   those title/alias/byte caps and at most 129 commands (1 identifier + 64 names
-  + 64 Romanized alternate names).
+  - 64 Romanized alternate names).
 - Open Library: 2 MiB projection, at most 64 entries per collection and 64
   combined author/work relations, at most 1 MiB of unlicensed prose retained as
   metadata, and at most 100 commands.

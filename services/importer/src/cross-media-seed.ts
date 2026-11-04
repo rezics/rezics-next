@@ -145,8 +145,7 @@ export function collectSelectedReleaseTitles(
     unique.push(row);
   }
   unique.sort(
-    (a, b) =>
-      compareCopyText(a.lang, b.lang) || compareCopyText(a.title, b.title) || compareCopyText(a.latin, b.latin),
+    (a, b) => compareCopyText(a.lang, b.lang) || compareCopyText(a.title, b.title) || compareCopyText(a.latin, b.latin),
   );
   return {
     titles: unique.slice(0, RELEASE_TITLE_CAP),

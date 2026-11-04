@@ -7,11 +7,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import { convertCrossMediaEntity } from '@rezics/conversion/cross-media-entities';
 import { VNDB_DUMP_TABLES } from '../../../scripts/datasets/fetch-dumps.ts';
-import {
-  collectSelectedReleaseTitles,
-  CrossMediaDumpFiles,
-  type CrossMediaPort,
-} from '../src/cross-media-seed.ts';
+import { collectSelectedReleaseTitles, CrossMediaDumpFiles, type CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from '../tests/transport-driver.ts';
 import { importVndbReleaseFidelity, planVndbReleaseFidelity } from '../src/vndb-release-fidelity.ts';
 

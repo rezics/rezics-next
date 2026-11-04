@@ -109,7 +109,9 @@ test('production operator imports authored VNDB release titles through ordinary 
         const latest = await editor.http(
           `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
         );
-        const current = (latest.body as { candidates: Candidate[] }).candidates.find((item) => item.id === candidate.id)!;
+        const current = (latest.body as { candidates: Candidate[] }).candidates.find(
+          (item) => item.id === candidate.id,
+        )!;
         const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
           context: globalContext,
           expected_head: current.head,
@@ -190,7 +192,9 @@ test('production operator imports authored VNDB release titles through ordinary 
     );
     expect(
       (names.body as { candidates: Candidate[] }).candidates.some(
-        (item) => JSON.stringify(item.statement.value.content) === JSON.stringify({ language: 'en', text: 'Harbor Soft Revised' }),
+        (item) =>
+          JSON.stringify(item.statement.value.content) ===
+          JSON.stringify({ language: 'en', text: 'Harbor Soft Revised' }),
       ),
     ).toBe(true);
     const fence = await editor.http('/v1/sourceFences:takedown', {
@@ -212,7 +216,9 @@ test('production operator imports authored VNDB release titles through ordinary 
     );
     expect(
       (fenced.body as { candidates: Candidate[] }).candidates.some(
-        (item) => JSON.stringify(item.statement.value.content) === JSON.stringify({ language: 'en', text: 'Harbor Soft Hidden' }),
+        (item) =>
+          JSON.stringify(item.statement.value.content) ===
+          JSON.stringify({ language: 'en', text: 'Harbor Soft Hidden' }),
       ),
     ).toBe(false);
     const current = await editor.http(`/v1/subjects/${releaseId}?context=${globalContext}`);

@@ -1,11 +1,7 @@
 import { expect, test } from 'bun:test';
 import { checkBatchWrite } from '@rezics/definitions/bulk';
 import { ConversionError } from '../src/index.ts';
-import {
-  converter_revision,
-  convertCrossMediaEntity,
-  vndbReleaseNameLimits,
-} from '../src/cross-media-entities.ts';
+import { converter_revision, convertCrossMediaEntity, vndbReleaseNameLimits } from '../src/cross-media-entities.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000004';
 
@@ -66,9 +62,11 @@ test('authored multilingual release titles keep language, latin and a stable lab
     { language: 'ja', text: '港別題' },
   ]);
   expect(names(bound, 'schema:alternateName')).toEqual([{ language: 'ja-Latn', text: 'Minato no Daimei' }]);
-  expect(bound.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:inLanguage')).toBe(
-    false,
-  );
+  expect(
+    bound.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:inLanguage',
+    ),
+  ).toBe(false);
   expect(authored.diagnostics).toEqual([]);
 });
 
@@ -87,17 +85,22 @@ test('legacy scalar release title stays an untagged name', () => {
 test('nullable and unadmitted latin keep the primary title', () => {
   const absent = convertCrossMediaEntity(record([title('ja', '港')]));
   const empty = convertCrossMediaEntity(record([title('ja', '港', '')]));
-  expect(absent.normalizedRecord.releases_titles).toEqual([{ id: 'r1', lang: 'ja', mtl: false, title: '港', latin: null }]);
+  expect(absent.normalizedRecord.releases_titles).toEqual([
+    { id: 'r1', lang: 'ja', mtl: false, title: '港', latin: null },
+  ]);
   expect((empty.normalizedRecord.releases_titles as { latin: string | null }[])[0]?.latin).toBe('');
   expect(empty.digest).not.toBe(absent.digest);
   expect(empty.diagnostics).toEqual([{ pointer: '/releases_titles/0/latin', code: 'unadmitted_empty_latin' }]);
-  if (absent.proposals[0]?.op !== 'create' || empty.proposals[0]?.op !== 'create') throw new Error('Expected bootstrap');
+  if (absent.proposals[0]?.op !== 'create' || empty.proposals[0]?.op !== 'create')
+    throw new Error('Expected bootstrap');
   expect(absent.proposals[0].subject.labels).toEqual({ ja: '港' });
   expect(empty.proposals[0].subject.labels).toEqual({ ja: '港' });
   expect(empty.proposals[0].subject).not.toHaveProperty('aliases');
   const blank = convertCrossMediaEntity(record([title('ja', '港', ' ')]));
   expect(blank.diagnostics).toEqual([{ pointer: '/releases_titles/0/latin', code: 'unadmitted_latin' }]);
-  expect(names(convertCrossMediaEntity(record([title('ja', '港', ' ')]), { subjectId }), 'schema:alternateName')).toEqual([]);
+  expect(
+    names(convertCrossMediaEntity(record([title('ja', '港', ' ')]), { subjectId }), 'schema:alternateName'),
+  ).toEqual([]);
 });
 
 test('invalid language, malformed rows and bound edges stay at addressable paths', () => {
@@ -107,7 +110,10 @@ test('invalid language, malformed rows and bound edges stay at addressable paths
   expect(skipped.proposals[0].subject.labels).toEqual({ en: 'Harbor' });
   expectInvalid(record([title('en', 'Harbor', null, false, 'r9')]), '/releases_titles/0/id');
   expectInvalid(record([title('en', 'Harbor'), title('en', 'Harbor')]), '/releases_titles/1');
-  expectInvalid(record(Array.from({ length: vndbReleaseNameLimits.maxTitles + 1 }, (_, i) => title('en', `T${i}`))), '/releases_titles');
+  expectInvalid(
+    record(Array.from({ length: vndbReleaseNameLimits.maxTitles + 1 }, (_, i) => title('en', `T${i}`))),
+    '/releases_titles',
+  );
   expectInvalid(record([{ id: 'r1', lang: 'en', mtl: 'yes', title: 'Harbor', latin: null }]), '/releases_titles/0/mtl');
   expectInvalid(record([title('en', '')]), '/releases_titles/0/title');
   expect(vndbReleaseNameLimits.maxCommands).toBe(129);

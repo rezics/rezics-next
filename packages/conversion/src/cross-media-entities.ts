@@ -515,10 +515,7 @@ function projectReleaseTitles(
   return { titles, names: [...uniqueNames.values()], alternateNames, labels, aliases, diagnostics };
 }
 
-function project(
-  kind: EntityKind,
-  input: ConversionInput,
-): Projected {
+function project(kind: EntityKind, input: ConversionInput): Projected {
   const raw = object(input.record, '');
   const idField = kind.startsWith('vndb')
     ? 'id'
