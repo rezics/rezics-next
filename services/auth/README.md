@@ -1088,6 +1088,34 @@ cancellation. Awaiting, substituted or malformed continuations cannot execute.
 Stale sessions require another step-up; approval expiry and current native checks
 still apply. An unknown execution result is not final workflow/readback evidence.
 
+`POST /account-management/operators/transfer-review` is the bounded same-origin
+page read for Transfer. It accepts exactly `{ kind: "readiness" }`,
+`{ kind: "source", subjectAccountId }`, or
+`{ kind: "destination", request }`. A normal human session may learn only that
+the exact transfer management profile is needed; it receives no source relation.
+An admitted source review uses the existing `readOperatorTransferState` source
+authority and returns its exact tuple/version with source action entry advice.
+A destination review treats the source tuple as supplied file data, checks the
+proposed destination with the same `account:manage` action/resource as
+transfer-acceptance, and returns only its action advice. It never reads the
+source-private relation. Every response is closed, `private, no-store`, and
+revalidates the same Auth human/profile after native I/O. The read performs no
+approval, execution, receipt lookup or command lock.
+
+Whole-call cost is finite: readiness performs one bounded Auth session/profile
+proof. A selected review checks that proof and creates the server-only native
+Access token before the source call, then rechecks the same proof afterward.
+Access authenticates the token once. Source review runs the existing relation
+reader's two bounded snapshots (subject and current-operator homes/accounts,
+slot/version, actor floor and assignment), with one released `account:manage`
+preparation and one final action check. Destination review runs two bounded
+actor/destination snapshots (their homes/accounts and current actor floor, plus
+at most one principal and assignment), with one released preparation and one
+final check. It does not read a source account or relation. No lists, profile
+fanout, writes, pool preflight or generated client publication are involved.
+
+Decision: destination review displays the source tuple only as handoff-file data and does not make an optional source-native read; acceptance needs only destination admission.
+
 `POST /account-management/operators/relation` is the private native source for the
 existing transfer page. Its exact JSON body is `{ subjectAccountId: string }`;
 success contains only `{ previous: { operatorAccountId, subjectAccountId,

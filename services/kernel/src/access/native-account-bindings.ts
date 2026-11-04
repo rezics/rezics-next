@@ -1,5 +1,6 @@
 import { createOperatorOpeningPageAccess, type OperatorOpeningPageAccess } from './operator-opening-page-source.ts';
 import { createOrganizationDeletionAccess, type OrganizationDeletionAccess } from './organization-deletion-source.ts';
+import { createOperatorTransferPageAccess, type OperatorTransferPageAccess } from './operator-transfer-page-source.ts';
 import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
 import { createAccountProfileAccess, type AccountProfileAccess } from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
@@ -94,7 +95,7 @@ export type NativeAccountBindingsConfig = {
 };
 
 export type NativeAccountBindings = {
-  trustedAccess: TrustedAccessPorts & AutomatedOperatorAccess;
+  trustedAccess: TrustedAccessPorts & AutomatedOperatorAccess & OperatorTransferPageAccess;
   workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
   lifecycle: ReturnType<typeof createLifecycleCommands>;
   internalLifecycle: ReturnType<typeof createLifecycleInternals>;
@@ -261,7 +262,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     AutomatedOperatorAccess &
     AccountProfileAccess &
     OrganizationDeletionAccess &
-    OperatorOpeningPageAccess = {
+    OperatorOpeningPageAccess &
+    OperatorTransferPageAccess = {
     ...createOperatorOpeningPageAccess({
       pool,
       access,
@@ -277,6 +279,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       access,
       accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
     }),
+    ...createOperatorTransferPageAccess({ pool, access }),
     readNativeCreationContext: creationContext,
     readOriginalLifecycleResult: (input) =>
       readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),
