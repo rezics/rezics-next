@@ -1,4 +1,5 @@
 import { slug } from '@rezics/definitions/slug';
+import { parseHistoryReturnToken } from './revision-return/history-return';
 
 const memoryKey = '__rezicsThreadSlugs';
 
@@ -23,6 +24,7 @@ export function threadLocation(
   thread: { id: string; title?: string | null },
   cursor?: string,
   post?: string,
+  historyReturn?: { token?: string; revisionId?: string },
 ): string {
   // With no title projection, use the ID route so its normal reader can canonicalize after reading.
   const route =
@@ -33,13 +35,30 @@ export function threadLocation(
   const search: string[] = [];
   if (cursor !== undefined) search.push(`cursor=${encodeURIComponent(cursor)}`);
   if (post !== undefined) search.push(`post=${encodeURIComponent(post)}`);
+  const token = parseHistoryReturnToken(historyReturn?.token);
+  const revisionId = historyReturn?.revisionId;
+  if (token && revisionId && revisionId.length <= 128) {
+    search.push(`historyReturn=${encodeURIComponent(token)}`);
+    search.push(`historyRevision=${encodeURIComponent(revisionId)}`);
+  }
   return `${path}${search.length ? `?${search.join('&')}` : ''}${post === undefined ? '' : `#post-${encodeURIComponent(post)}`}`;
 }
 
-export function threadSearch(search: Record<string, unknown>): { cursor?: string; post?: string } {
+export function threadSearch(search: Record<string, unknown>): {
+  cursor?: string;
+  post?: string;
+  historyReturn?: string;
+  historyRevision?: string;
+} {
   return {
-    ...(typeof search.cursor === 'string' ? { cursor: search.cursor } : {}),
+    ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
     ...(typeof search.post === 'string' && search.post.length <= 128 ? { post: search.post } : {}),
+    ...(parseHistoryReturnToken(search.historyReturn)
+      ? { historyReturn: parseHistoryReturnToken(search.historyReturn)! }
+      : {}),
+    ...(typeof search.historyRevision === 'string' && search.historyRevision.length <= 128
+      ? { historyRevision: search.historyRevision }
+      : {}),
   };
 }
 

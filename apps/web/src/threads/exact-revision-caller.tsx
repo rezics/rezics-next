@@ -6,6 +6,10 @@ import { EditionCreateEntry } from '../content-editions/edition-create-entry';
 import { ExactRevisionView } from './exact-revision-view';
 import type { ExactRevisionIdentity, ExactRevisionState } from './exact-revision';
 import {
+  resolveHistoryReturnTarget,
+  retireHistoryReturnReceiptOnDeparture,
+} from './revision-return/history-return';
+import {
   createHistoricalReadBinding,
   historicalActualMatches,
   historicalBindingCurrent,
@@ -219,6 +223,7 @@ export function ExactRevisionCaller({
   credentialMode,
   loading,
   onRetry,
+  historyReturnToken,
 }: {
   visit: ExactRevisionVisit;
   identity: ExactRevisionIdentity;
@@ -226,10 +231,24 @@ export function ExactRevisionCaller({
   credentialMode: ReadCredentialMode;
   loading: boolean;
   onRetry: () => void;
+  historyReturnToken?: string;
 }) {
   const queryClient = useQueryClient();
   const source = historicalReaderSource(queryClient);
   useSyncExternalStore(source.subscribe, source.revision, source.revision);
+  const returnRouteKey = `${historyReturnToken ?? ''}:${identity.postId}:${identity.revisionId}:${locale}`;
+  const currentReturnRoute = useRef(returnRouteKey);
+  currentReturnRoute.current = returnRouteKey;
+  const returnEffectGeneration = useRef(0);
+  useLayoutEffect(() => {
+    const generation = ++returnEffectGeneration.current;
+    return () => {
+      queueMicrotask(() => {
+        if (returnEffectGeneration.current !== generation && currentReturnRoute.current === returnRouteKey) return;
+        retireHistoryReturnReceiptOnDeparture(historyReturnToken);
+      });
+    };
+  }, [historyReturnToken, returnRouteKey]);
   const owner = useRef<object | null>(null);
   owner.current ??= {};
   const active = useRef<{
@@ -301,11 +320,19 @@ export function ExactRevisionCaller({
 
   const ready =
     page.state === 'ready' && admissionMatches && ownsConnection(visit, generation) && !retiredVisits.has(visit);
+  const historyReturn = resolveHistoryReturnTarget(
+    historyReturnToken,
+    identity,
+    locale,
+    credentialMode,
+    source,
+  );
   return (
     <>
       <ExactRevisionView
         identity={identity}
         page={page}
+        historyReturn={historyReturn}
         onRetry={retry}
         readingIdentity={visit}
         isReadingCurrent={() =>

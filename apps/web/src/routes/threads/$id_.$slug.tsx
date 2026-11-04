@@ -5,7 +5,7 @@ import { erasePost, restorePost as restorePostAction, revisePost, type WriteFail
 import type { ThreadSubject } from '../../threads/subjects';
 import type { VoteCitation } from '../../threads/post-writes';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
-import { exactRevisionHref } from '../../threads/exact-revision-href';
+import { exactRevisionHref, exactRevisionRoute } from '../../threads/exact-revision-href';
 import { PostHistory } from '../../threads/post-history';
 import { FeedActionBar, feedFeedbackEntries } from '../../features/feed/action-bar';
 import { Byline } from '../../threads/byline';
@@ -101,7 +101,10 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     if ('redirect' in page) {
       rememberThreadSlug(page.redirect.id, page.redirect.title);
       caller.assertReadCurrent();
-      const href = threadLocation(getLocale(), page.redirect, deps.cursor, deps.post);
+      const href = threadLocation(getLocale(), page.redirect, deps.cursor, deps.post, {
+        token: deps.historyReturn,
+        revisionId: deps.historyRevision,
+      });
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
       throw redirect({ href, statusCode: 301 });
@@ -111,7 +114,10 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     rememberThreadSlug(page.thread.id, title);
     caller.assertReadCurrent();
     if (!sameThreadSlug(params.slug, title)) {
-      const href = threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor, deps.post);
+      const href = threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor, deps.post, {
+        token: deps.historyReturn,
+        revisionId: deps.historyRevision,
+      });
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
       throw redirect({ href, statusCode: 301 });
@@ -1127,6 +1133,10 @@ export function ThreadReadingPost({
               <PostHistory
                 postId={post.id}
                 readAuthority={historyScope}
+                returnOrigin={{ pathname: location.pathname, search: new URL(location.publicHref, 'https://rezics.invalid').search }}
+                navigateToExactRevision={(identity, historyReturn) => {
+                  void router.navigate(exactRevisionRoute(identity, historyReturn));
+                }}
                 {...(viewerId ? { viewerId } : {})}
                 review={review}
                 className="contents"

@@ -11,18 +11,22 @@ import { NativeDocumentImage } from './document-media';
 import type { ExactRevisionIdentity, ExactRevisionState } from './exact-revision';
 import { revisionDocumentImage } from './exact-revision-media';
 import { RevisionProvenance } from './revision-provenance-view';
+import { HistoryReturnLink } from './revision-return/history-return-link';
+import type { HistoryReturnTarget } from './revision-return/history-return';
 import { threadLocation } from './thread-href';
 
 /** Immutable document reading region; shadcn provides controls, but no revision/provenance reader. */
 export function ExactRevisionView({
   identity,
   page,
+  historyReturn,
   onRetry,
   readingIdentity,
   isReadingCurrent,
 }: {
   identity: ExactRevisionIdentity;
   page: ExactRevisionState;
+  historyReturn?: HistoryReturnTarget;
   onRetry?: () => void;
   readingIdentity?: unknown;
   isReadingCurrent?: () => boolean;
@@ -35,7 +39,7 @@ export function ExactRevisionView({
   ) {
     page = { state: 'unavailable', status: 404 };
   }
-  const returnHref =
+  const fallbackHref =
     page.state === 'ready' ? threadLocation(locale, page.thread, undefined, page.revision.id) : undefined;
   return (
     <ContentItemFrame
@@ -45,14 +49,27 @@ export function ExactRevisionView({
       aria-busy={page.state === 'loading'}
     >
       <header className="space-y-3">
-        {page.state === 'ready' ? (
-          <a
-            href={returnHref}
+        {historyReturn ? (
+          <HistoryReturnLink
+            target={historyReturn}
+            revisionId={identity.revisionId}
             className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            {m.exact_revision_back()}
-          </a>
-        ) : null}
+          />
+        ) : fallbackHref ? (
+          <div className="min-w-0 space-y-2">
+            <p className="text-sm text-muted-foreground">{m.revision_return_unavailable()}</p>
+            <a
+              href={fallbackHref}
+              className="inline-flex min-h-11 max-w-full items-center rounded-sm text-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {m.exact_revision_back()}
+            </a>
+          </div>
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.revision_return_unavailable()}
+          </p>
+        )}
         <PageHeading>{m.exact_revision_heading()}</PageHeading>
         <p className="text-sm text-muted-foreground">{m.exact_revision_read_only()}</p>
       </header>

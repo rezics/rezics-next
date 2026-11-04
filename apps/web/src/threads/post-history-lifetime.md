@@ -141,15 +141,23 @@ Recorded ratings and differing own current votes remain distinct in the selected
 
 ## Focus and exact-address return
 
-Decision: start with collapsed rows and open immutable destinations in a new tab, retaining this tab's admitted
-history, selected revision, focus and scroll position without navigation storage or a return URL.
+Decision: keep exact-address and copy links receipt-free in new tabs; the explicit same-tab action carries one
+opaque tab-local receipt and re-admits only the current bounded history page before restoring its exact selection.
 
-Every exact link retains the canonical localized post/revision path, and deliberately opens a separate tab with
-`noopener noreferrer`. The reader returns by closing that tab or switching to the original tab. The exact
-reader's existing return-to-thread link and authorization rules remain unchanged. No private text, author name,
-credential or cursor is added to an exact address. Copy uses the installed CopyDiscussionLink helper in copy-only
-mode because the row already supplies the explicit new-tab link. Its failed-copy field remains selectable; it
-contains only the canonical path resolved against the current origin.
+Every revision heading retains the canonical localized post/revision path and opens a separate tab with
+`noopener noreferrer`. Copy uses the installed CopyDiscussionLink helper in copy-only mode. The selected inspector
+also offers an explicit same-tab action. It creates one opaque receipt from that admitted page at activation and
+navigates to the same immutable post/revision address with only the receipt token. The receipt stays in one
+in-memory slot; it contains the safe thread route, post/revision identity, source generation, reader/page
+generation and the native cursor needed to request that exact history slice. It grants no disclosure and carries
+no body, author snapshot, session value or cursor in the exact URL.
+
+The exact reader continues its fresh current read. A current receipt provides a direct return to the thread route
+even while exact bytes are unavailable. Clicking it consumes a one-shot command and requests the recorded history
+cursor through the existing native history reader. Only a successful response matching the same post and revision
+restores selection; a withdrawn or missing revision offers a fresh first-page restart. Failed reads retry their
+same cursor. Reloads, new tabs, stale account/source generations and changed routes have no active receipt and
+show only the existing safely admitted thread fallback, when available. No cursor chain or browser storage is used.
 
 Each row has a normal expand/collapse button. Up/Down and Home/End move focus between those buttons without
 selecting or reading; Enter and Space use native button activation. The loaded-only select and explicit Inspect

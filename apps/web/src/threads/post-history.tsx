@@ -14,6 +14,15 @@ import { historySessionReady, PostHistoryLifetime, postHistorySessionSource } fr
 
 import { HistoryCurrentContext } from './post-history-current-context';
 import { RevisionHistoryNavigation } from './revision-history-navigation';
+import {
+  consumeHistoryReturnCommand,
+  createHistoryReturnReceipt,
+  historyReturnTargetCurrent,
+  parseHistoryReturnIntent,
+  retireHistoryReturnReceipt,
+  type HistoryReturnIntent,
+  type HistoryReturnTarget,
+} from './revision-return/history-return';
 export { RevisionEntry } from './revision-history-entry';
 
 type ContinuationIntent = { connection: number; element: HTMLButtonElement };
@@ -22,6 +31,9 @@ type ContinuationBoundary = { connection: number; revisionId: string | null; int
 type PostHistoryProps = {
   postId: string;
   threadId?: string;
+  /** Router-owned origin for the real thread route; standalone examples may use the browser location. */
+  returnOrigin?: { pathname: string; search: string };
+  navigateToExactRevision?: (identity: { postId: string; revisionId: string }, historyReturn: string) => void;
   exposure?: unknown;
   viewerId?: string;
   readAuthority?: object;
@@ -35,7 +47,7 @@ const serverRevision = () => 0;
 
 /** A disclosure belongs to its original caller and actual browser session cache lifetime. */
 export function PostHistory(props: PostHistoryProps) {
-  const { postId, threadId, exposure, viewerId, readAuthority } = props;
+  const { postId, threadId, exposure, viewerId, readAuthority, returnOrigin } = props;
   const client = useContext(QueryClientContext);
   const source = client && typeof window !== 'undefined' ? postHistorySessionSource(client) : undefined;
   const observation = source?.read();
@@ -72,6 +84,10 @@ export function PostHistory(props: PostHistoryProps) {
     previous.current = lifetime;
   }
   useLayoutEffect(lifetime.connect, [lifetime]);
+  const pathname = returnOrigin?.pathname ?? (typeof window === 'undefined' ? '' : window.location.pathname);
+  const locationSearch = returnOrigin?.search ?? (typeof window === 'undefined' ? '' : window.location.search);
+  const parsedReturnIntent = useMemo(() => parseHistoryReturnIntent(locationSearch), [locationSearch]);
+  const returnIntent = parsedReturnIntent?.postId === postId ? parsedReturnIntent : undefined;
   return (
     <HistoryDisclosure
       key={lifetime.id}
@@ -81,6 +97,9 @@ export function PostHistory(props: PostHistoryProps) {
       locale={locale}
       credentialMode={credentialMode}
       ready={() => historySessionReady(source, viewerId)}
+      pathname={pathname}
+      locationSearch={locationSearch}
+      returnIntent={returnIntent}
     />
   );
 }
@@ -97,19 +116,37 @@ function HistoryDisclosure({
   locale,
   credentialMode,
   ready,
+  pathname,
+  locationSearch,
+  returnIntent,
+  navigateToExactRevision,
 }: PostHistoryProps & {
   lifetime: PostHistoryLifetime;
   source: HistoricalReaderSource | undefined;
   locale: string;
   credentialMode: 'anonymous' | 'session';
   ready: () => boolean;
+  pathname: string;
+  locationSearch: string;
+  returnIntent: HistoryReturnIntent | undefined;
+  navigateToExactRevision: PostHistoryProps['navigateToExactRevision'];
 }) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [continuationStatus, setContinuationStatus] = useState<string | null>(null);
   const [additionStatus, setAdditionStatus] = useState<string | null>(null);
+  const [returnState, setReturnState] = useState<'none' | 'loading' | 'failed' | 'lost' | 'missing' | 'restored'>('none');
+  const [returnSelection, setReturnSelection] = useState<{
+    postId: string;
+    revisionId: string;
+    pageGeneration: number;
+    focusOwned: () => boolean;
+  }>();
   const keyboardActivation = useRef<HTMLButtonElement | undefined>(undefined);
   const continuationIntent = useRef<ContinuationIntent | undefined>(undefined);
   const continuationBoundary = useRef<ContinuationBoundary | undefined>(undefined);
+  const returnAttempt = useRef<{ target: HistoryReturnTarget; revisionId: string }>();
+  const returnFocusOwned = useRef(false);
+  const startedReturn = useRef<string>();
   const {
     open,
     loading,
@@ -132,6 +169,44 @@ function HistoryDisclosure({
   const retryContext = context?.retry.state === 'same_cursor';
   const retryPage = !available || pageFailed || retryContext;
   const showHistoryAction = available ? next !== null || pageFailed || retryContext : loaded;
+  const revisionIds = useMemo(() => revisions.map(({ revision }) => revision.revisionId), [revisions]);
+
+  function openExactRevision(postId: string, revisionId: string) {
+    if (
+      !navigateToExactRevision ||
+      !available ||
+      !loaded ||
+      loading ||
+      !lifetime.ownsPage(connection, pageGeneration) ||
+      !revisions.some((entry) => entry.revision.id === postId && entry.revision.revisionId === revisionId)
+    )
+      return;
+    const token = createHistoryReturnReceipt({
+      postId,
+      revisionId,
+      locale,
+      credentialMode,
+      source,
+      readerId: lifetime.id,
+      pageGeneration,
+      historyCursor: admittedCursor,
+      revisionIds,
+      pathname,
+      search: locationSearch,
+    });
+    if (!token) return;
+    navigateToExactRevision({ postId, revisionId }, token);
+  }
+
+  useLayoutEffect(() => {
+    return () => {
+      const pending = returnAttempt.current;
+      if (!pending) return;
+      queueMicrotask(() => {
+        if (!lifetime.current()) retireHistoryReturnReceipt(pending.target.token);
+      });
+    };
+  }, [lifetime]);
 
   useLayoutEffect(() => {
     const cancel = () => {
@@ -148,6 +223,23 @@ function HistoryDisclosure({
       window.removeEventListener('blur', cancel);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!returnIntent) return;
+    const cancelFocus = () => {
+      returnFocusOwned.current = false;
+    };
+    document.addEventListener('pointerdown', cancelFocus, true);
+    document.addEventListener('focusin', cancelFocus, true);
+    document.addEventListener('keydown', cancelFocus, true);
+    window.addEventListener('blur', cancelFocus);
+    return () => {
+      document.removeEventListener('pointerdown', cancelFocus, true);
+      document.removeEventListener('focusin', cancelFocus, true);
+      document.removeEventListener('keydown', cancelFocus, true);
+      window.removeEventListener('blur', cancelFocus);
+    };
+  }, [returnIntent?.revisionId, returnIntent?.token]);
 
   useLayoutEffect(() => {
     const pending = continuationBoundary.current;
@@ -175,6 +267,30 @@ function HistoryDisclosure({
   }, [connection, continuationStatus, lifetime, regionId, revisions]);
 
   async function load(cursor?: string, keyboardElement?: HTMLButtonElement) {
+    const pendingReturn = returnAttempt.current;
+    const returning =
+      pendingReturn?.target.historyCursor === cursor &&
+      historyReturnTargetCurrent(
+        pendingReturn.target,
+        postId,
+        pendingReturn.revisionId,
+        locale,
+        credentialMode,
+        source,
+        pathname,
+        locationSearch,
+      );
+    if (pendingReturn && !returning) {
+      retireHistoryReturnReceipt(pendingReturn.target.token);
+      returnAttempt.current = undefined;
+      returnFocusOwned.current = false;
+      setReturnSelection(undefined);
+      setReturnState('lost');
+      return;
+    }
+    setReturnSelection(undefined);
+    if (returning) setReturnState('loading');
+    else if (returnState !== 'none') setReturnState('none');
     continuationIntent.current = undefined;
     continuationBoundary.current = undefined;
     setContinuationStatus(null);
@@ -193,6 +309,12 @@ function HistoryDisclosure({
       if (!lifetime.owns(request) || !historicalBindingCurrent(source, request.binding)) return;
       if (!ready()) {
         lifetime.resetDisclosure(connection);
+        if (returning && pendingReturn) {
+          retireHistoryReturnReceipt(pendingReturn.target.token);
+          returnAttempt.current = undefined;
+          returnFocusOwned.current = false;
+          setReturnState('lost');
+        }
         return;
       }
       const result = await readPostHistory({
@@ -221,15 +343,23 @@ function HistoryDisclosure({
         !lifetime.acceptReader(request, result.provenance.actualReader)
       ) {
         if (lifetime.owns(request)) lifetime.resetDisclosure(connection);
+        if (returning && pendingReturn) {
+          retireHistoryReturnReceipt(pendingReturn.target.token);
+          returnAttempt.current = undefined;
+          returnFocusOwned.current = false;
+          setReturnState('lost');
+        }
         return;
       }
       if (!result.data.available) {
         lifetime.failPage(request);
+        if (returning) setReturnState('failed');
         return;
       }
       const page = result.data;
       if (threadId && page.context && page.context.conversation.id !== threadId) {
         lifetime.failPage(request);
+        if (returning) setReturnState('failed');
         return;
       }
       if (cursor !== undefined && page.revisions.length > 0 && lifetime.snapshot().open) {
@@ -258,14 +388,78 @@ function HistoryDisclosure({
         );
       }
       lifetime.acceptPage(request, page);
+      if (returning && pendingReturn) {
+        const index = page.revisions.findIndex(
+          (revision) => revision.id === postId && revision.revisionId === pendingReturn.revisionId,
+        );
+        returnAttempt.current = undefined;
+        if (index < 0) {
+          retireHistoryReturnReceipt(pendingReturn.target.token);
+          returnFocusOwned.current = false;
+          setReturnState('missing');
+        } else {
+          retireHistoryReturnReceipt(pendingReturn.target.token);
+          setReturnSelection({
+            postId,
+            revisionId: pendingReturn.revisionId,
+            pageGeneration: request.read,
+            focusOwned: () => returnFocusOwned.current,
+          });
+          setReturnState('restored');
+        }
+      }
     } catch {
       lifetime.failPage(request);
+      if (returning) setReturnState('failed');
     } finally {
       if (intent && continuationIntent.current === intent && continuationBoundary.current?.intent !== intent) {
         continuationIntent.current = undefined;
       }
       lifetime.finish(request);
     }
+  }
+
+  useLayoutEffect(() => {
+    if (!returnIntent) return;
+    const key = `${returnIntent.token}:${returnIntent.revisionId}`;
+    if (startedReturn.current === key) return;
+    startedReturn.current = key;
+    const command = consumeHistoryReturnCommand({
+      intent: returnIntent,
+      locale,
+      credentialMode,
+      source,
+      pathname,
+      search: locationSearch,
+    });
+    if (!command) {
+      setReturnState('lost');
+      return;
+    }
+    returnAttempt.current = { target: command.target, revisionId: returnIntent.revisionId };
+    returnFocusOwned.current = command.focusRequested;
+    setReturnState('loading');
+    lifetime.update(connection, (view) => ({ ...view, open: true }));
+    void load(command.target.historyCursor);
+  }, [
+    connection,
+    credentialMode,
+    lifetime,
+    locale,
+    locationSearch,
+    pathname,
+    returnIntent?.revisionId,
+    returnIntent?.token,
+    source,
+  ]);
+
+  function restartHistory() {
+    returnAttempt.current = undefined;
+    returnFocusOwned.current = false;
+    setReturnSelection(undefined);
+    setReturnState('none');
+    lifetime.update(connection, (view) => ({ ...view, open: true }));
+    void load();
   }
 
   function toggle() {
@@ -338,7 +532,39 @@ function HistoryDisclosure({
                 ? continuationBoundary.current.revisionId
                 : undefined
             }
+            {...(navigateToExactRevision ? { openExactRevision } : {})}
+            {...(returnSelection?.pageGeneration === pageGeneration ? { returnSelection } : {})}
           />
+        ) : null}
+        {returnState === 'loading' ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.revision_return_loading()}
+          </p>
+        ) : null}
+        {returnState === 'restored' ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.revision_return_restored()}
+          </p>
+        ) : null}
+        {returnState === 'failed' ? (
+          <p role="alert" className="text-sm text-muted-foreground">
+            {m.revision_return_failed()}
+          </p>
+        ) : null}
+        {returnState === 'missing' ? (
+          <div className="space-y-2">
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.revision_return_missing()}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+              onClick={restartHistory}
+            >
+              {m.revision_return_restart()}
+            </Button>
+          </div>
         ) : null}
         {available && open && additionStatus ? (
           <p role="status" className="sr-only">
@@ -388,16 +614,41 @@ function HistoryDisclosure({
               const button = event?.currentTarget;
               const keyboard = event?.detail === 0 && keyboardActivation.current === button;
               keyboardActivation.current = undefined;
+              if (returnState === 'lost' || returnState === 'missing') {
+                restartHistory();
+                return;
+              }
               void load(
                 retryContext ? admittedCursor : retryPage ? failedCursor : (next ?? undefined),
                 keyboard ? button : undefined,
               );
             }}
           >
-            {retryPage ? m.exact_revision_retry() : m.thread_history_more()}
+            {returnState === 'failed'
+              ? m.revision_return_retry()
+              : returnState === 'lost' || returnState === 'missing'
+                ? m.revision_return_restart()
+                : retryPage
+                  ? m.exact_revision_retry()
+                  : m.thread_history_more()}
           </Button>
         ) : null}
       </section>
+      {returnState === 'lost' ? (
+        <div className="mt-2 min-w-0 space-y-2 [overflow-wrap:anywhere]">
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.revision_return_lost()}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+            onClick={restartHistory}
+          >
+            {m.revision_return_restart()}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

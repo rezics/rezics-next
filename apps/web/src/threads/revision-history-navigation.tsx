@@ -8,6 +8,12 @@ import { RevisionSummaryRow } from './revision-history-entry';
 import { projectRevisionSummaries } from './revision-history-summary';
 
 type FocusIntent = { index: number; source: Element | null };
+type ReturnSelection = {
+  postId: string;
+  revisionId: string;
+  pageGeneration: number;
+  focusOwned: () => boolean;
+};
 
 type RevisionHistoryNavigationProps = {
   entries: HistoryView['revisions'];
@@ -23,6 +29,8 @@ type RevisionHistoryNavigationProps = {
   /** The existing disclosure, rather than a matching identity tuple, admits local callbacks. */
   isCurrent: () => boolean;
   boundaryRevisionId?: string | null | undefined;
+  openExactRevision?: ((postId: string, revisionId: string) => void) | undefined;
+  returnSelection?: ReturnSelection | undefined;
 };
 
 const navigationAction =
@@ -47,6 +55,8 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
     hasMore,
     isCurrent,
     boundaryRevisionId,
+    openExactRevision,
+    returnSelection,
   } = props;
   const locale = getLocale();
   const prefix = `history-inspection-${useId().replaceAll(':', '')}`;
@@ -55,6 +65,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
   const [selected, setSelected] = useState<number | null>(null);
   const [destination, setDestination] = useState('');
   const focusIntent = useRef<FocusIntent | null>(null);
+  const handledReturn = useRef<string>();
   const live = useRef(false);
   const current = useRef({ active, isCurrent, length: entries.length, selected });
   current.current = { active, isCurrent, length: entries.length, selected };
@@ -73,6 +84,30 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
   useLayoutEffect(() => {
     if (!active) focusIntent.current = null;
   }, [active]);
+
+  useLayoutEffect(() => {
+    if (!returnSelection || !active || !isCurrent()) return;
+    const key = `${returnSelection.pageGeneration}:${returnSelection.postId}:${returnSelection.revisionId}`;
+    if (handledReturn.current === key) return;
+    handledReturn.current = key;
+    const index = entries.findIndex(
+      ({ revision }) => revision.id === returnSelection.postId && revision.revisionId === returnSelection.revisionId,
+    );
+    if (index < 0) return;
+    setSelected(index);
+    setDestination(String(index));
+    if (returnSelection.focusOwned() && document.activeElement === document.body) {
+      document.getElementById(`${prefix}-inspect-${index}-heading`)?.focus();
+    }
+  }, [
+    active,
+    entries,
+    isCurrent,
+    prefix,
+    returnSelection?.pageGeneration,
+    returnSelection?.postId,
+    returnSelection?.revisionId,
+  ]);
 
   useLayoutEffect(() => {
     const intent = focusIntent.current;
@@ -240,7 +275,10 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
               }
               now={now}
               review={review}
-              focusBoundary={boundaryRevisionId === summary.revisionId}
+              focusBoundary={
+                boundaryRevisionId === summary.revisionId || returnSelection?.revisionId === summary.revisionId
+              }
+              {...(openExactRevision ? { openExactRevision } : {})}
               onInspect={() => inspect(summary.index)}
               onCollapse={() => collapse(summary.index)}
               onNavigate={() => {
