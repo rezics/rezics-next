@@ -65,6 +65,7 @@ test('native kind forms own each field once; hydration retains choices and recov
   const current = { reply: false, mention: true, weekly_digest: false };
   const initialPage = settingsPage(initial, 7);
   const currentPage = settingsPage(current, 9);
+  const receiptPage = settingsPage(current, 8);
   const calls: NotificationChange[] = [];
   let refuseCurrentRead = false;
   const io = {
@@ -72,6 +73,7 @@ test('native kind forms own each field once; hydration retains choices and recov
       calls.push(input);
       if (calls.length === 1) return { ok: false as const, reason: 'invalid' as const };
       if (calls.length === 3) throw new Error('response lost');
+      if (calls.length === 4) return { ok: true as const, version: 8, notifications: current, page: receiptPage };
       if (calls.length === 6) return { ok: false as const, reason: 'conflict' as const, page: currentPage };
       return { ok: true as const, version: 9, notifications: current, page: currentPage };
     },
@@ -156,19 +158,26 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Retry original save');
     expect(calls[3]).toBe(calls[2]);
     expect(calls[3]!.notifications).toBeNull();
+    expect(host.textContent).toContain('The original save was confirmed');
     expect(host.textContent).toContain('This sign-in does not have access to read notification settings');
     expect(host.querySelector('[data-response-status="403"]')).not.toBeNull();
     expect(
-      [...host.querySelectorAll('button')].find(
+      [...host.querySelectorAll('button')].some(
         (button) => button.textContent === 'Retry original save' && !button.closest('[hidden]'),
-      )?.disabled,
-    ).toBe(true);
+      ),
+    ).toBe(false);
     refuseCurrentRead = false;
     await click('Reload');
     expect(host.textContent).toContain('Review current settings');
     expect(host.textContent).toContain('Restore defaults');
-    await click('Retry original save');
-    expect(calls[4]).toBe(calls[2]);
+    expect(calls).toHaveLength(4);
+    expect(
+      [...host.querySelectorAll('button')].some(
+        (button) => button.textContent === 'Retry original save' && !button.closest('[hidden]'),
+      ),
+    ).toBe(false);
+    await click('Use current values');
+    await click('Restore defaults');
     expect(calls[4]!.notifications).toBeNull();
     expect(host.textContent).toContain('Saved');
     await click('Restore defaults');
