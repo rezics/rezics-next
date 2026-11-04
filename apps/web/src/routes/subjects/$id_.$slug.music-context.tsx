@@ -1,6 +1,9 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { MusicContextSession } from '../../features/catalogue/music-context-profile/session';
-import { musicContextRouteSearch, type MusicContextAddress } from '../../features/catalogue/music-context-profile/navigation';
+import {
+  musicContextRouteSearch,
+  type MusicContextAddress,
+} from '../../features/catalogue/music-context-profile/navigation';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
