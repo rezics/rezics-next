@@ -39,12 +39,30 @@ function CatalogueFileCreateSessionLive({ locale, initial }: { locale: string; i
     [locale],
   );
   const host = useCreationHost<CatalogueFileCreateFact, ReturnType<typeof catalogueFileCreateHolders>>({
-    initial, locale, scope: 'catalogue-file-create', types: catalogueFileCreateTypes,
-    load: () => loadCatalogueFileCreate({ data: true }), failure: <p>{m.catalogue_file_create_unavailable({}, { locale: locale as never })}</p>,
+    initial,
+    locale,
+    scope: 'catalogue-file-create',
+    types: catalogueFileCreateTypes,
+    load: () => loadCatalogueFileCreate({ data: true }),
+    failure: <p>{m.catalogue_file_create_unavailable({}, { locale: locale as never })}</p>,
   });
-  const { work, reading, currentRead, release, pending, factsByType, setFactsByType,
-    prepared, retainedTypes, activeTypes, types, metadata, metadataRevision, activeTypeIds,
-    refreshMetadata } = host;
+  const {
+    work,
+    reading,
+    currentRead,
+    release,
+    pending,
+    factsByType,
+    setFactsByType,
+    prepared,
+    retainedTypes,
+    activeTypes,
+    types,
+    metadata,
+    metadataRevision,
+    activeTypeIds,
+    refreshMetadata,
+  } = host;
 
   const transport = useMemo(
     () => ({

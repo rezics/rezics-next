@@ -40,12 +40,30 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
     [locale],
   );
   const host = useCreationHost<MusicContextCreateFact, ReturnType<typeof musicContextCreateHolders>>({
-    initial, locale, scope: 'music-context-create', types: musicContextCreateTypes,
-    load: () => loadMusicContextCreate({ data: true }), failure: <p>{m.music_context_create_unavailable({}, { locale: locale as never })}</p>,
+    initial,
+    locale,
+    scope: 'music-context-create',
+    types: musicContextCreateTypes,
+    load: () => loadMusicContextCreate({ data: true }),
+    failure: <p>{m.music_context_create_unavailable({}, { locale: locale as never })}</p>,
   });
-  const { work, reading, currentRead, release, pending, factsByType, setFactsByType,
-    prepared, retainedTypes, activeTypes, types, metadata, metadataRevision, activeTypeIds,
-    refreshMetadata } = host;
+  const {
+    work,
+    reading,
+    currentRead,
+    release,
+    pending,
+    factsByType,
+    setFactsByType,
+    prepared,
+    retainedTypes,
+    activeTypes,
+    types,
+    metadata,
+    metadataRevision,
+    activeTypeIds,
+    refreshMetadata,
+  } = host;
 
   const transport = useMemo(
     () => ({

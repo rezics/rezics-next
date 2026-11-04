@@ -19,7 +19,7 @@ export function StatementSummary({
   locale,
   notice,
 }: {
-  statement: StatementInput;
+  statement: Omit<StatementInput, 'rank'> & { rank?: StatementInput['rank'] | 'deprecated' };
   read: StatementFieldsRead;
   locale: string;
   notice?: ReactNode;
@@ -79,10 +79,13 @@ export function StatementSummary({
           </li>
         ))}
       </ol>
-      <p>{statement.rank === 'preferred' ? m.candidate_rank_preferred({}, o)
-        : statement.rank === 'deprecated' ? m.changes_rank_deprecated({}, o)
-        : m.candidate_rank_normal({}, o)}</p>
+      <p>
+        {statement.rank === 'preferred'
+          ? m.candidate_rank_preferred({}, o)
+          : statement.rank === 'deprecated'
+            ? m.changes_rank_deprecated({}, o)
+            : m.candidate_rank_normal({}, o)}
+      </p>
     </div>
   );
 }
-
