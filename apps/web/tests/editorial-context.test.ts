@@ -30,7 +30,10 @@ describe('Create or retire an editorial Context through its current native owner
       lifecycle: { id: fixture.id, state: 'deleted', purgeAfter: expect.any(String) },
       actions: {
         kind: 'ready',
-        value: [{ action: 'context:restore', operations: ['context.restore'] }],
+        value: [
+          { action: 'context:read', operations: ['context.get'] },
+          { action: 'context:restore', operations: ['context.restore'] },
+        ],
       },
     });
     const restored = await fixture.transport.submit({
@@ -111,7 +114,7 @@ describe('Create or retire an editorial Context through its current native owner
       ok: true,
       context: null,
       lifecycle: { state: 'deleted' },
-      actions: { kind: 'ready', value: [{ action: 'context:restore' }] },
+      actions: { kind: 'ready', value: [{ action: 'context:read' }, { action: 'context:restore' }] },
     });
     expect(fixture.calls.filter((call) => call.path.endsWith(fixture.id) && call.method === 'DELETE')).toHaveLength(1);
     const replay = await fixture.transport.submit(command);

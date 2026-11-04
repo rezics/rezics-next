@@ -555,7 +555,7 @@ test('Editorial Context family retains supplied comparison, independent controls
     await render(null);
     const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
       await import('@tanstack/react-router');
-    const draft = editorialContextFixture();
+    const routeDraft = editorialContextFixture();
     const existing = editorialContextFixture();
     const commands: Parameters<EditorialTransport['submit']>[0][] = [];
     let finishCommand!: (value: Awaited<ReturnType<EditorialTransport['submit']>>) => void;
@@ -588,7 +588,7 @@ test('Editorial Context family retains supplied comparison, independent controls
       component: () => (
         <div>
           <Link to="/next">Next</Link>
-          <EditorialContextWorkspace locale="en" transport={draft.transport} />
+          <EditorialContextWorkspace locale="en" transport={routeDraft.transport} />
         </div>
       ),
     });

@@ -231,6 +231,7 @@ test('both surfaces review multilingual labels, post the selected settings ID an
 });
 
 test('acknowledged create shows the returned policy when it differs from the reviewed preview', async () => {
+  let settingsReads = 0;
   const panel = await mount(
     <ContextCreateView
       locale="en"
@@ -250,7 +251,9 @@ test('acknowledged create shows the returned policy when it differs from the rev
       })}
       reload={noop}
       settings={{ kind: 'ready', snapshot }}
-      loadSettings={async () => ({ kind: 'unavailable' })}
+      loadSettings={async () =>
+        settingsReads++ === 0 ? { kind: 'ready', snapshot } : { kind: 'unavailable' }
+      }
     />,
   );
   try {
