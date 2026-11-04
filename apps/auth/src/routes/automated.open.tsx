@@ -1,5 +1,6 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import {
@@ -33,6 +34,13 @@ import {
   type OpeningMetadata,
   type OpeningOutcome,
 } from '../operator-session-opening';
+import {
+  appendOpeningReturnEntry,
+  openingMayStillBeRunning,
+  type OpeningReturnEntry,
+  type OpeningReturnPhase,
+} from '../operator-opening-return';
+import { OpeningCurrentSessionView, OpeningReturnHistoryView } from '../operator-opening-return-view';
 
 export const Route = createFileRoute('/automated/open')({
   head: () => ({ meta: [{ title: `${m.auth_opening_heading()} · REZICS` }] }),
@@ -52,15 +60,45 @@ function message(kind: string) {
 export function OperatorSessionOpeningPage() {
   const { history } = useRouter();
   const [page, setPage] = useState<{ key: number; isCurrent: () => boolean } | null>(null);
+  const [entries, setEntries] = useState<OpeningReturnEntry[]>([]);
+  const retireReview = useRef<(() => void) | null>(null);
+  const historyFocus = useRef<HTMLElement | null>(null);
+  const bindRetirement = useCallback((retire: (() => void) | null) => {
+    retireReview.current = retire;
+  }, []);
+  const recordHistory = useCallback((phase: OpeningReturnPhase) => {
+    setEntries((current) => appendOpeningReturnEntry(current, phase));
+  }, []);
+  const focusAfterDismissal = useCallback(() => {
+    const target =
+      document.getElementById('opening-current-state-heading') ??
+      document.getElementById('opening-authenticate') ??
+      document.getElementById('opening-confirmation') ??
+      document.getElementById('opening-safe-exit') ??
+      document.getElementById('opening-account-management') ??
+      document.getElementById('opening-return-container');
+    target?.focus();
+  }, []);
+  const dismissHistory = useCallback(() => {
+    flushSync(() => setEntries([]));
+    focusAfterDismissal();
+  }, [focusAfterDismissal]);
+
+  useLayoutEffect(() => {
+    if (entries.length) historyFocus.current?.focus();
+  }, [entries]);
+
   useLayoutEffect(() => {
     let generation = 0;
     let active = false;
     const leave = () => {
       active = false;
       generation++;
+      retireReview.current?.();
       setPage(null);
     };
     const enter = () => {
+      retireReview.current?.();
       const key = ++generation;
       active = true;
       setPage({ key, isCurrent: () => active && generation === key });
@@ -72,18 +110,33 @@ export function OperatorSessionOpeningPage() {
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted && window.location.pathname === '/automated/open') enter();
     };
-    window.addEventListener('pagehide', leave);
+    const pagehide = () => flushSync(leave);
+    window.addEventListener('pagehide', pagehide);
     window.addEventListener('pageshow', restore);
     enter();
     return () => {
       active = false;
       generation++;
       unsubscribe();
-      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pagehide', pagehide);
       window.removeEventListener('pageshow', restore);
     };
   }, [history]);
-  return page ? <OpeningReview key={page.key} isCurrent={page.isCurrent} /> : null;
+  return (
+    <AuthPage heading={m.auth_opening_heading()}>
+      <div id="opening-return-container" className="space-y-5" tabIndex={-1}>
+        <OpeningReturnHistoryView entries={entries} focusRef={historyFocus} dismiss={dismissHistory} />
+        {page ? (
+          <OpeningReview
+            key={page.key}
+            isCurrent={page.isCurrent}
+            bindRetirement={bindRetirement}
+            recordHistory={recordHistory}
+          />
+        ) : null}
+      </div>
+    </AuthPage>
+  );
 }
 
 function OpeningDeparture({
@@ -91,13 +144,16 @@ function OpeningDeparture({
   validate,
   retire,
   focus,
+  uncertain,
 }: {
   work: () => boolean;
   validate: () => Promise<void>;
   retire: () => void;
   focus: () => void;
+  uncertain: () => boolean;
 }) {
   const previous = useRef<HTMLElement | null>(null);
+  const leaving = useRef(false);
   const blocker = useBlocker({
     shouldBlockFn: async ({ next }) => {
       // Replacing this route remains a new journey, as does cached-page return.
@@ -113,6 +169,7 @@ function OpeningDeparture({
     if (blocker.status === 'blocked' && !work()) blocker.proceed();
   });
   const stay = () => {
+    leaving.current = false;
     if (blocker.status === 'blocked') blocker.reset();
   };
   return (
@@ -125,7 +182,11 @@ function OpeningDeparture({
       <AlertDialogContent
         finalFocus={() => {
           const target = previous.current;
-          if (target?.isConnected && target.matches('input:not(:disabled),button:not(:disabled),[tabindex]'))
+          if (
+            !leaving.current &&
+            target?.isConnected &&
+            target.matches('input:not(:disabled),button:not(:disabled),[tabindex]')
+          )
             target.focus();
           else focus();
           return false;
@@ -133,13 +194,15 @@ function OpeningDeparture({
       >
         <AlertDialogTitle>{m.auth_opening_departure_heading()}</AlertDialogTitle>
         <AlertDialogDescription>
-          {m.auth_organization_departure_description()} {m.auth_account_operation_leave_notice()}
+          {m.auth_organization_departure_description()}{' '}
+          {uncertain() ? m.auth_opening_departure_uncertain() : m.auth_account_operation_leave_notice()}
         </AlertDialogDescription>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
               if (blocker.status !== 'blocked') return;
+              leaving.current = true;
               retire();
               blocker.proceed();
             }}
@@ -152,7 +215,15 @@ function OpeningDeparture({
   );
 }
 
-function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean }) {
+function OpeningReview({
+  isCurrent: pageIsCurrent,
+  bindRetirement,
+  recordHistory,
+}: {
+  isCurrent: () => boolean;
+  bindRetirement: (retire: (() => void) | null) => void;
+  recordHistory: (phase: OpeningReturnPhase) => void;
+}) {
   const [accountId, setAccountId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [operatorId, setOperatorId] = useState('');
@@ -163,22 +234,31 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
   const [status, setStatus] = useState('');
   const [terminal, setTerminal] = useState(false);
   const [outcome, setOutcome] = useState<OpeningOutcome | null>(null);
+  const [outcomeSource, setOutcomeSource] = useState<'opening-response' | 'session-readback' | null>(null);
   const live = useRef(true);
   const bypassDeparture = useRef(false);
   const authority = useRef<ManagementSession | null>(null);
+  const progress = useRef<OpeningReturnPhase | null>(null);
   const isCurrent = () => live.current && pageIsCurrent();
   const lock = useRef(false);
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
+  const markProgress = (phase: OpeningReturnPhase) => {
+    progress.current = phase;
+    if (phase === 'acknowledged' || phase === 'unconfirmed' || phase === 'refused') recordHistory(phase);
+  };
 
   const work = () =>
     isCurrent() &&
     !bypassDeparture.current &&
-    outcome?.kind !== 'opened' &&
-    Boolean(subjectId.trim() || operatorId.trim() || attempt);
+    (openingMayStillBeRunning(progress.current) ||
+      (outcome?.kind !== 'opened' && Boolean(subjectId.trim() || operatorId.trim() || attempt)));
   function retire() {
+    if (!live.current) return;
     // Retire callbacks before clearing private review; submitted recovery stays untouched.
     live.current = false;
+    if (progress.current) recordHistory(progress.current);
+    authority.current = null;
     setAccountId('');
     setSubjectId('');
     setOperatorId('');
@@ -188,8 +268,13 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
     setBusy(false);
     setTerminal(false);
     setOutcome(null);
+    setOutcomeSource(null);
     setStatus('refused');
   }
+  useLayoutEffect(() => {
+    bindRetirement(retire);
+    return () => bindRetirement(null);
+  });
   async function validateCaller() {
     const owner = authority.current;
     const submitted = () => {
@@ -233,6 +318,7 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
     const result = await readOpenedSession(saved);
     if (!isCurrent()) return;
     setOutcome(result);
+    setOutcomeSource(result.kind === 'opened' ? 'session-readback' : null);
     setStatus(result.kind === 'opened' ? '' : 'unknown');
   }
 
@@ -271,10 +357,12 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
       if (saved) {
         setAttempt(saved);
         if (state.kind === 'pending' && state.value.phase === 'submitted') {
+          markProgress('unconfirmed');
           setTerminal(true);
           await reconcile(saved);
           return;
         }
+        markProgress('review');
         const human = await loadManagementSession();
         if (!isCurrent()) return;
         if (human.kind === 'unavailable') {
@@ -294,8 +382,10 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
         const read = await loadOpeningMetadata(saved);
         if (!isCurrent()) return;
         if (read.kind === 'ready') setMetadata(read.metadata);
-        else if (read.kind === 'refused') retire();
-        else setStatus(read.kind);
+        else if (read.kind === 'refused') {
+          markProgress('refused');
+          retire();
+        } else setStatus(read.kind);
         return;
       }
       const human = await loadManagementSession();
@@ -337,6 +427,7 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
       setStatus('refused');
       return;
     }
+    markProgress('review');
     setAttempt(next);
     await restore(next);
   }
@@ -349,12 +440,14 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
       setStatus('unavailable');
       return;
     }
+    markProgress('review');
     bypassDeparture.current = true;
     window.location.assign(managementOperationStepUpUrl('opening'));
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!isCurrent() || lock.current || !attempt || !metadata || !confirmed || terminal) return;
+    markProgress('preflight');
     lock.current = true;
     setBusy(true);
     setConfirmed(false);
@@ -364,6 +457,7 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
       const current = await loadOpeningMetadata(attempt);
       if (!isCurrent()) return;
       if (current.kind === 'refused') {
+        markProgress('refused');
         retire();
         return;
       }
@@ -373,18 +467,21 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
         return;
       }
       if (!sameOpeningPage(reviewed, current.metadata)) {
+        markProgress('refused');
         retire();
         return;
       }
-      const result = await submitOperatorOpening(attempt, isCurrent);
+      const result = await submitOperatorOpening(attempt, isCurrent, markProgress);
       if (!isCurrent()) return;
       if (result.kind === 'refused') {
+        markProgress('refused');
         retire();
         return;
       }
       const state = pendingManagementOperationStepUpState();
       setTerminal(state.kind === 'pending' && state.value.phase === 'submitted');
       setOutcome(result);
+      setOutcomeSource(result.kind === 'opened' ? 'opening-response' : null);
       setStatus(result.kind === 'opened' ? '' : result.kind);
     } finally {
       if (isCurrent()) {
@@ -394,13 +491,20 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
     }
   }
   return (
-    <AuthPage heading={m.auth_opening_heading()}>
+    <>
       <OpeningDeparture
         work={work}
         validate={validateCaller}
         retire={retire}
+        uncertain={() => openingMayStillBeRunning(progress.current)}
         focus={() => {
-          const target = confirmation.current ?? feedback.current ?? document.getElementById('opening-subject');
+          const target =
+            document.getElementById('opening-return-history') ??
+            document.getElementById('opening-current-state-heading') ??
+            document.getElementById('opening-authenticate') ??
+            confirmation.current ??
+            feedback.current ??
+            document.getElementById('opening-safe-exit');
           target?.focus();
         }}
       />
@@ -416,7 +520,7 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
             <Button variant="outline" disabled={busy} onClick={() => void restore(attempt)}>
               {m.auth_account_identity_retry()}
             </Button>
-            <a className="underline underline-offset-4" href={websiteHref('/accounts')}>
+            <a id="opening-account-management" className="underline underline-offset-4" href={websiteHref('/accounts')}>
               {m.auth_opening_account_management()}
             </a>
           </div>
@@ -450,7 +554,7 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
         ) : null}
         {metadata && !terminal ? (
           <form className="auth-login-form" method="post" action="/operator-sessions/open" onSubmit={submit}>
-            <h2 ref={confirmation} tabIndex={-1}>
+            <h2 id="opening-confirmation" ref={confirmation} tabIndex={-1}>
               {m.auth_opening_confirmation()}
             </h2>
             <section aria-labelledby="opening-consequences">
@@ -505,7 +609,7 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
           </form>
         ) : null}
         {attempt && status === 'step-up' && !terminal ? (
-          <Button disabled={busy} onClick={() => stepUp()}>
+          <Button id="opening-authenticate" disabled={busy} onClick={() => stepUp()}>
             {m.auth_opening_authenticate()}
           </Button>
         ) : null}
@@ -530,30 +634,19 @@ function OpeningReview({ isCurrent: pageIsCurrent }: { isCurrent: () => boolean 
             >
               {m.auth_opening_readback()}
             </Button>
-            <Button variant="outline" disabled={busy} onClick={() => stepUp(true)}>
+            <Button id="opening-restart" variant="outline" disabled={busy} onClick={() => stepUp(true)}>
               {m.auth_opening_restart()}
             </Button>
           </>
         ) : null}
-        {outcome?.kind === 'opened' ? (
-          <div role="status" className="space-y-3">
-            <div>
-              <h2>{m.auth_opening_current()}</h2>
-              <dl>
-                <dt>{m.auth_opening_subject()}</dt>
-                <dd>{outcome.session.account_id}</dd>
-                <dt>{m.auth_opening_method()}</dt>
-                <dd>{outcome.session.amr.join(', ')}</dd>
-                <dt>{m.auth_opening_scopes()}</dt>
-                <dd>{outcome.session.scope.join(', ') || m.auth_opening_no_scopes()}</dd>
-              </dl>
-            </div>
-            <a className="underline underline-offset-4" href={websiteHref('/')}>
-              {m.auth_opening_continue()}
-            </a>
-          </div>
+        {outcome?.kind === 'opened' && outcomeSource ? (
+          <OpeningCurrentSessionView
+            session={outcome.session}
+            source={outcomeSource}
+            continueHref={websiteHref('/')}
+          />
         ) : null}
       </div>
-    </AuthPage>
+    </>
   );
 }

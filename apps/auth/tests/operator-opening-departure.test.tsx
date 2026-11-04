@@ -118,14 +118,18 @@ test('Stay keeps the confirmed tuple and key; submitted departure returns throug
   await p.click('Stay');
   expect(p.unload()).toBe(true);
   await p.navigate();
+  expect(document.querySelector('[role=alertdialog]')?.textContent).toContain(
+    'The server may continue processing this opening after you leave',
+  );
   await p.click('Leave');
   await flush(() => p.calls[1]!.resolve(new Response(null, { status: 503 })));
   expect(readPendingManagementOperationStepUp()).toEqual(saved);
   Object.assign(p.session, { account_id: subject, amr: ['operator'] });
   await p.navigate('/automated/open');
-  expect(p.host.querySelector('[role=status]')!.textContent).toContain(subject);
+  expect(p.host.querySelector('#opening-current-state-heading')?.parentElement?.textContent).toContain(subject);
+  expect(p.host.querySelector('#opening-return-heading')?.textContent).toContain('outcome remains unconfirmed');
   expect(p.calls).toHaveLength(2);
-  expect(p.unload()).toBe(false);
+  expect(p.unload()).toBe(true);
 });
 test('Leave retires pending approval without starting issuance', async () => {
   const p = await setup();
@@ -134,6 +138,7 @@ test('Leave retires pending approval without starting issuance', async () => {
   await flush(() => send(p.host));
   await p.navigate();
   await p.click('Leave');
+  expect(p.host.querySelector('#opening-return-heading')?.textContent).toContain('Preflight or approval was underway');
   await flush(() => p.calls[0]!.resolve(approval()));
   expect(p.calls).toHaveLength(1);
 });
@@ -163,5 +168,51 @@ test('deliberate fresh-human authentication bypasses unload warnings and retains
     });
   } finally {
     assign.mockRestore();
+  }
+});
+
+test('a fresh restart uses a new key and never retries the unknown opening', async () => {
+  const p = await setup();
+  const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
+  try {
+    await p.review();
+    await flush(() => p.input('confirm').click());
+    await flush(() => send(p.host));
+    await flush(() => p.calls[0]!.resolve(approval()));
+    const previous = readPendingManagementOperationStepUp();
+    expect(previous).not.toBeNull();
+    await flush(() => p.calls[1]!.resolve(new Response(null, { status: 503 })));
+    await p.click('Sign in again for a new opening');
+    const restarted = readPendingManagementOperationStepUp();
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(restarted).toMatchObject({ kind: 'opening', phase: 'awaiting', operation: previous!.operation });
+    expect(restarted?.operationKey).not.toBe(previous?.operationKey);
+    expect(p.calls).toHaveLength(2);
+  } finally {
+    assign.mockRestore();
+  }
+});
+
+test('blocked continuation storage keeps current-session Retry read-only', async () => {
+  const p = await setup();
+  await p.review();
+  await flush(() => p.input('confirm').click());
+  await flush(() => send(p.host));
+  await flush(() => p.calls[0]!.resolve(approval()));
+  const saved = readPendingManagementOperationStepUp();
+  await flush(() => p.calls[1]!.resolve(new Response(null, { status: 503 })));
+  const blocked = spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+    throw new Error('storage blocked');
+  });
+  try {
+    await p.click('Sign in again for a new opening');
+    expect(p.host.textContent).toContain('Current authorized account details are unavailable');
+    expect(p.calls).toHaveLength(2);
+    expect(readPendingManagementOperationStepUp()).toEqual(saved);
+    await p.click('Check current session');
+    expect(p.calls).toHaveLength(2);
+    expect(readPendingManagementOperationStepUp()).toEqual(saved);
+  } finally {
+    blocked.mockRestore();
   }
 });

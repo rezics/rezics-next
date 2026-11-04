@@ -295,23 +295,31 @@ export async function readOpenedSession(input: OpeningInput): Promise<OpeningOut
 export async function submitOperatorOpening(
   input: OpeningInput,
   isCurrent: () => boolean = () => true,
+  onPhase?: (phase: 'approval' | 'possibly-sent' | 'acknowledged' | 'unconfirmed' | 'refused') => void,
 ): Promise<OpeningOutcome> {
   if (!isOpeningInput(input)) return { kind: 'refused' };
+  onPhase?.('approval');
   const approved = await approveManagementOperation(input, 'opening', isCurrent);
   if (!isCurrent()) return { kind: 'unavailable' };
   if (approved.kind !== 'approved') return approved;
   const snapshot = approved.input;
   if (!isOpeningInput(snapshot)) return { kind: 'refused' };
   if (!markManagementOpeningSubmitted(snapshot)) return { kind: 'unavailable' };
+  onPhase?.('possibly-sent');
   const result = await authPost('/operator-sessions/open', { ...snapshot, reference: approved.reference });
+  if (!isCurrent()) return { kind: 'unavailable' };
   if (!result.ok) {
     if (
       [400, 401, 403, 409, 413, 415].includes(result.status) &&
       ['account_operation_denied', 'step_up_required'].includes(result.code)
-    )
+    ) {
+      onPhase?.('refused');
       return { kind: 'refused' };
+    }
+    onPhase?.('unconfirmed');
     return { kind: 'unknown' };
   }
   const session = openedSession(result.body, snapshot);
+  onPhase?.(session ? 'acknowledged' : 'unconfirmed');
   return session ? { kind: 'opened', session } : { kind: 'unknown' };
 }
