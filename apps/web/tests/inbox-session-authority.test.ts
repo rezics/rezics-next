@@ -822,7 +822,7 @@ test('refreshing a successful continuation retires older pages and preserves an 
     ]);
     expect(view.client.getQueryData(retiredKey)).toBeUndefined();
     expect(view.commands).toHaveLength(1);
-    await view.click(m.inbox_seen_retry());
+    await view.click(m.inbox_retry());
     expect(view.commands[1]!.data).toEqual(original);
     await act(async () => view.commands[1]!.work.reject(new Error('response lost again')));
     await tick();
