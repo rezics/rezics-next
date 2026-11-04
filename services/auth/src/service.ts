@@ -2017,7 +2017,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       const securityRead = url.pathname === '/security-page';
       const respond = (data: unknown, status = 200) => {
         const response = json(data, status);
-        if (inventoryRead || identityRead || signInPageRead || securityRead) response.headers.set('cache-control', 'private, no-store');
+        if (inventoryRead || identityRead || signInPageRead || securityRead)
+          response.headers.set('cache-control', 'private, no-store');
         return response;
       };
       const deadline = Date.now() + 3000;

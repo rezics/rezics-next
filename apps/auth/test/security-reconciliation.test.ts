@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
+import { securityEnvelope } from '../tests/security-page-fixture';
 
 // Presentation acceptance through the actual page/BFF and existing native HTTP DTOs.
 // This fixture does not claim native credential/floor or revocation-writer proof.
@@ -38,6 +39,7 @@ const native = Bun.serve({
       if (denied) return json({ error: 'authentication_denied' }, 403);
       if (path === '/session') return json({ account_id: actor });
       if (unavailable) return json({ error: 'unavailable' }, 503);
+      if (path === '/security-page') return json(securityEnvelope(actor, sessions, passkeys));
       if (path === '/sessions') return json({ sessions });
       if (path === '/passkeys') return json({ passkeys });
     }
@@ -156,7 +158,7 @@ test('Recover uncertain credential and session actions with current native readb
   }
 }, 180_000);
 
-test('unchanged readback allows only an explicitly confirmed exact-target retry; acknowledgement still needs a current read', async () => {
+test('unchanged readback allows only an explicitly confirmed exact-target retry; acknowledgement refreshes native advice', async () => {
   const page = await open();
   try {
     mode = 'lost-unchanged';
@@ -169,12 +171,11 @@ test('unchanged readback allows only an explicitly confirmed exact-target retry;
     mode = 'accepted';
     page.once('dialog', (dialog) => dialog.accept());
     await retry(page).click();
-    await page.getByText('Auth accepted the action.', { exact: false }).waitFor();
+    await page.getByText('The selected item is absent from the current security inventory.', { exact: true }).waitFor();
     expect(writes).toHaveLength(2);
     expect(writes[1]!.body).toEqual({ session_id: 'other' });
-    expect(await page.getByRole('button', { name: 'Sign out Unknown device', exact: true }).count()).toBe(2);
-    await check(page).click();
-    await page.getByText('The selected item is absent from the current security inventory.', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'Sign out Unknown device', exact: true }).count()).toBe(1);
+    expect(await retry(page).count()).toBe(0);
   } finally {
     await page.context().close();
   }
