@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from 'bun:test';
+import { afterAll, expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import {
   createBrowserHistory,
@@ -11,6 +11,13 @@ import { button, creationFixture, dom, fill, flush, open, send } from './creatio
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 
 creationFixture();
+const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true, writable: true });
+afterAll(() => {
+  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
+const { m } = await import('../src/paraglide/messages.js');
 const { Route } = await import('../src/routes/recovery');
 const transition = (type: string) =>
   window.dispatchEvent(Object.assign(new dom.Event(type), { persisted: true }) as unknown as Event);
@@ -87,8 +94,8 @@ test('cached completion drops credentials, aborts reads, rejects late writes and
       ),
     );
     expect(page.host.textContent).not.toContain('other@example.test');
-    expect(button(page.host, 'Retry')).not.toBeNull();
-    await flush(() => button(page.host, 'Retry')!.click());
+    expect(button(page.host, m.auth_login_retry())).toBeDefined();
+    await flush(() => button(page.host, m.auth_login_retry())!.click());
     await flush(() =>
       finish(Response.json(recoveryPage('complete', { minPasswordLength: 8, maxPasswordLength: 128 }))),
     );
