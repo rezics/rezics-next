@@ -28,6 +28,8 @@ import type { AnchoredPosition } from './model.ts';
 import type { ViewerActionResources } from '../access/viewer-actions.ts';
 import { ItemViewSchema, ErasedPlaceholderSchema, ThreadViewSchema } from './schemas.ts';
 import { routeOf } from '../route/route.ts';
+import { createConversationActivityBatch } from './conversation-activity.ts';
+import { ReadingPageActivitySchema, selectReadingPageActivity } from './reading-page-activity.ts';
 
 const closed = { additionalProperties: false } as const;
 export const READING_PAGE_REPLY_LIMIT = 20;
@@ -144,6 +146,7 @@ export const ReadingPageResponseSchema = t.Object(
     ]),
     query: t.Object({ cursor: t.Union([t.String(), t.Null()]), limit: t.Literal(READING_PAGE_REPLY_LIMIT) }, closed),
     thread: ThreadViewSchema,
+    conversationActivity: ReadingPageActivitySchema,
     replies: t.Object(
       {
         items: t.Array(ReadingEntrySchema, { maxItems: READING_PAGE_REPLY_LIMIT }),
@@ -1320,6 +1323,17 @@ export async function readContentReadingPage(
   if (!firstBoard.value) throw new ContentNotFoundError();
   const selected = await readReplyPage(dependencies, threadId, actor, deadline, firstThread.value.firstPost.id, cursor);
   const thread = firstThread.value;
+  const activity = await selectReadingPageActivity(
+    createConversationActivityBatch(dependencies.pool),
+    {
+      threadId: thread.id,
+      boardId: thread.boardId,
+      threadSecurityRevision: thread.securityRevision,
+      boardSecurityRevision: firstBoard.value.securityRevision,
+      realmId: firstBoard.value.realmId,
+    },
+    deadline,
+  );
   const replies = selected.replies;
   requireSelectedLimit(thread, replies);
   const identityIds = authorIds(thread.firstPost, replies);
@@ -1376,6 +1390,12 @@ export async function readContentReadingPage(
       reply: { state: actionRuntime && catalogueReady ? ('sign_in_required' as const) : ('unavailable' as const) },
     },
     watch: { state: 'unavailable' as const, retryable: true as const },
+    conversationActivity: {
+      state: 'current' as const,
+      cohort: 'public' as const,
+      count: { kind: 'lower-bound' as const, value: Number.MAX_SAFE_INTEGER },
+      lastActivityAt: '9999-12-31T23:59:59.999999Z',
+    },
     slowMode: { state: 'unavailable' as const, retryable: true as const },
     currentness: {
       source: 'current' as const,
@@ -1502,6 +1522,7 @@ export async function readContentReadingPage(
       watch = { state: 'unavailable', retryable: true };
     }
   }
+  const confirmedActivity = await activity.confirm();
   const finalThread = await (actor.kind === 'account'
     ? withThreadReadAdmission(
         async () => {
@@ -1571,6 +1592,7 @@ export async function readContentReadingPage(
       actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
     query: { cursor: cursor ?? null, limit: READING_PAGE_REPLY_LIMIT as typeof READING_PAGE_REPLY_LIMIT },
     thread: displayThread,
+    conversationActivity: confirmedActivity.value,
     replies: { items: countedReplies.map(safeEntry), next: selected.page.nextCursor },
     authors: { state: authorState, retryable: authorState === 'unavailable', items: authors },
     actions: {
@@ -1596,6 +1618,12 @@ export async function readContentReadingPage(
   if (responseBytes(output) > READING_PAGE_RESPONSE_BYTES) throw new ProblemError('content_too_large');
   return {
     value: output,
-    anchors: [finalThread.anchor, finalSelection.page.anchor, finalBoard.anchor, ...(watchAnchor ? [watchAnchor] : [])],
+    anchors: [
+      finalThread.anchor,
+      finalSelection.page.anchor,
+      finalBoard.anchor,
+      ...confirmedActivity.anchors,
+      ...(watchAnchor ? [watchAnchor] : []),
+    ],
   };
 }
