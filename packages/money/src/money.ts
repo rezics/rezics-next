@@ -159,18 +159,26 @@ export function decimalParts(amountMinor: unknown, exponent: number): MoneyResul
   });
 }
 
-function knownValue(value: RecordedMoneyValue): MoneyResult<RecordedMoneyValue> {
+type KnownRecordedMoneyValue = Readonly<{
+  amountMinor: number;
+  unit: Extract<RecordedMoneyUnitReading, { kind: 'known' }>;
+}>;
+
+function knownValue(value: RecordedMoneyValue): MoneyResult<KnownRecordedMoneyValue> {
   const unit = value.unit;
   if (unit.kind !== 'known') return error('unknown-unit');
   if (!isUnitDescriptor(unit.unit)) return error('unknown-unit');
   if (!isSafeMinorAmount(value.amountMinor)) return error('unsafe-integer');
-  return Object.freeze({ ok: true, value });
+  return Object.freeze({
+    ok: true,
+    value: Object.freeze({ amountMinor: value.amountMinor, unit }),
+  });
 }
 
 function compatiblePair(
   left: RecordedMoneyValue,
   right: RecordedMoneyValue,
-): MoneyResult<Readonly<{ left: RecordedMoneyValue; right: RecordedMoneyValue }>> {
+): MoneyResult<Readonly<{ left: KnownRecordedMoneyValue; right: KnownRecordedMoneyValue }>> {
   const a = knownValue(left);
   if (!a.ok) return a;
   const b = knownValue(right);
