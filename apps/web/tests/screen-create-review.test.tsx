@@ -3,7 +3,10 @@ import { createRequire } from 'node:module';
 import { act, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Release } from '@rezics/definitions';
+import type { CreateResult, CreatedReader } from '../src/features/catalogue/create-subject';
+import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { ScreenCommand } from '../src/features/catalogue/screen-profile';
+import type { ScreenTransport } from '../src/features/catalogue/screen-profile-view';
 import recorded from '../src/kernel/recorded/definitions-release.json';
 import * as start from '../.storybook/react-start';
 
@@ -389,5 +392,313 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
     }
+  }
+}, 45_000);
+
+const seriesParent = '00000000-0000-4000-8000-000000000301';
+
+async function mountScreenCreate(options: {
+  eligibility: () => Promise<CreateAuthority>;
+  session?: 'signed-in' | 'signed-out';
+  subject?: string;
+  series?: boolean;
+  create?: ScreenTransport['create'];
+  read?: ScreenTransport['read'];
+}) {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en/catalogue/screen' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { ScreenProfile } = await import('../src/features/catalogue/screen-profile-view');
+  const { screenProfileFixture } = await import('../src/kernel/fake/catalogue-screen-profile');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+  const testing = createRequire(require.resolve('storybook/test'));
+  const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
+  const previousLocale = getLocale();
+  setLocale('en', { reload: false });
+  const fixture = screenProfileFixture();
+  const commands: ScreenCommand[] = [];
+  const reads: string[] = [];
+  const transport: ScreenTransport = {
+    ...fixture.transport,
+    eligibility: options.eligibility,
+    ...(options.series
+      ? {
+          load: async () => {
+            const result = await fixture.transport.load();
+            if (!result.ok) return result;
+            const series = structuredClone(fixture.facts.date.publicRead);
+            series.subject.id = seriesParent;
+            series.subject.type = 'schema:TVSeries';
+            series.subject.labels = { en: 'Parent series' };
+            return { ...result, seriesId: seriesParent, series };
+          },
+        }
+      : {}),
+    create: async (command) => {
+      commands.push(structuredClone(command));
+      return options.create ? options.create(command) : fixture.transport.create(command);
+    },
+    read: async (id) => {
+      reads.push(id);
+      return options.read ? options.read(id) : fixture.transport.read(id);
+    },
+  };
+  const host = window.document.createElement('main') as unknown as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const user = userEvent.setup({ document: window.document, delay: null });
+  let session = options.session ?? 'signed-in';
+  let subject = options.subject ?? 'alice';
+  const render = async (next: { session?: 'signed-in' | 'signed-out'; subject?: string } = {}) => {
+    if (next.session !== undefined) session = next.session;
+    if (next.subject !== undefined) subject = next.subject;
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <CandidateReaderBoundary
+            address={`screen-eligibility-${subject || 'guest'}`}
+            observed={
+              session === 'signed-in'
+                ? { state: 'signed-in', subject, csrfToken: `csrf-${subject}` }
+                : { state: 'signed-out', csrfToken: null }
+            }
+          >
+            <ScreenProfile
+              locale="en"
+              session={session}
+              search={async () => []}
+              onNavigate={() => {}}
+              transport={transport}
+            />
+          </CandidateReaderBoundary>
+        </QueryClientProvider>,
+      ),
+    );
+  };
+  await render();
+  const canvas = () => within(host);
+  return {
+    host,
+    canvas,
+    user,
+    m,
+    waitFor,
+    act,
+    commands,
+    reads,
+    fixture,
+    render,
+    async chooseMovie() {
+      await waitFor(() => expect(canvas().getByRole('combobox', { name: m.catalogue_create_type() })).toBeDefined());
+      await act(async () =>
+        user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Movie'),
+      );
+    },
+    async submit() {
+      const retry = canvas().queryByRole('button', { name: m.correction_retry() });
+      if (retry) return act(async () => user.click(retry));
+      await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
+    },
+    async close() {
+      await act(async () => root.unmount());
+      setLocale(previousLocale, { reload: false });
+      await window.happyDOM.abort();
+      for (const [key, descriptor] of saved)
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+    },
+  };
+}
+
+test('refused, unknown and guest Screen eligibility keep admitted types and series context without creating', async () => {
+  const guest = await mountScreenCreate({
+    eligibility: async () => allowedCreateAuthority,
+    session: 'signed-out',
+    series: true,
+  });
+  try {
+    await guest.waitFor(() => expect(guest.host.textContent).toContain(guest.m.identity_intake_authority_guest()));
+    expect(guest.host.textContent).toContain(guest.m.screen_episode_from_series());
+    expect(guest.canvas().getByRole('textbox', { name: guest.m.catalogue_create_label() })).toBeDefined();
+    expect(guest.host.textContent).toContain('Parent series');
+    expect(
+      (guest.canvas().getByRole('button', { name: guest.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(guest.commands).toHaveLength(0);
+  } finally {
+    await guest.close();
+  }
+
+  let observation: CreateAuthority = { state: 'refused', reason: 'permission' };
+  const page = await mountScreenCreate({ eligibility: async () => observation, series: true });
+  try {
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
+    );
+    expect(page.host.textContent).toContain(page.m.screen_episode_from_series());
+    expect(page.host.textContent).toContain('Parent series');
+    expect(page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() })).toBeDefined();
+    await page.act(async () =>
+      page.user.type(page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }), 'Kept episode'),
+    );
+    expect(
+      (page.canvas().getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(page.host.querySelector('[data-screen-create-review]')).toBeNull();
+    expect(page.commands).toHaveLength(0);
+
+    observation = { state: 'unknown', reason: 'unavailable' };
+    await page.act(async () =>
+      page.user.click(page.canvas().getByRole('button', { name: page.m.identity_intake_authority_retry() })),
+    );
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('alert').textContent).toContain(page.m.identity_intake_authority_unknown()),
+    );
+    expect(
+      (page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }) as HTMLInputElement).value,
+    ).toBe('Kept episode');
+    expect(page.host.textContent).toContain('Parent series');
+    expect(
+      (page.canvas().getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(page.commands).toHaveLength(0);
+  } finally {
+    await page.close();
+  }
+}, 45_000);
+
+test('fresh Screen create rechecks eligibility; uncertain retry keeps the exact command; ACK retries only the read', async () => {
+  const { catalogueCreatedId } = await import('../src/kernel/fake/catalogue-create');
+  let observation: CreateAuthority = allowedCreateAuthority;
+  let lost = true;
+  let createdReads = 0;
+  const page = await mountScreenCreate({
+    eligibility: async () => observation,
+    create: async (command) => {
+      if (lost) {
+        lost = false;
+        return { ok: false, reason: 'unavailable' };
+      }
+      return { ok: true, id: catalogueCreatedId, reader: { state: 'unavailable' } } satisfies Extract<
+        CreateResult,
+        { ok: true }
+      >;
+    },
+    read: async (id) => {
+      createdReads += 1;
+      expect(id).toBe(catalogueCreatedId);
+      return {
+        state: 'ready',
+        href: `/en/subjects/${id}/recovered`,
+        identity: { id, type: 'schema:Movie', label: 'Eligible film' },
+      } satisfies CreatedReader;
+    },
+  });
+  try {
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
+    await page.chooseMovie();
+    await page.act(async () =>
+      page.user.type(page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }), 'Eligible film'),
+    );
+    await page.submit();
+    await page.waitFor(() => expect(page.host.querySelector('[data-screen-create-review]')).not.toBeNull());
+    observation = { state: 'refused', reason: 'permission' };
+    await page.submit();
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
+    );
+    expect(page.commands).toHaveLength(0);
+
+    observation = allowedCreateAuthority;
+    await page.act(async () =>
+      page.user.click(page.canvas().getByRole('button', { name: page.m.identity_intake_authority_retry() })),
+    );
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
+    await page.submit();
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('button', { name: page.m.catalogue_create_retry() })).toBeDefined(),
+    );
+    expect(page.commands).toHaveLength(1);
+    observation = { state: 'refused', reason: 'permission' };
+    await page.submit();
+    await page.waitFor(() => expect(page.host.textContent).toContain(catalogueCreatedId));
+    expect(page.commands).toHaveLength(2);
+    expect(page.commands[1]!.key).toBe(page.commands[0]!.key);
+    expect(page.commands[1]!.item).toEqual(page.commands[0]!.item);
+    expect(page.commands[0]!.item.type).toBe('schema:Movie');
+    expect(page.host.textContent).toContain(page.m.catalogue_create_reader_unavailable());
+    await page.act(async () =>
+      page.user.click(page.canvas().getByRole('button', { name: page.m.catalogue_create_retry() })),
+    );
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('link', { name: page.m.catalogue_create_open() }).getAttribute('href')).toBe(
+        `/en/subjects/${catalogueCreatedId}/recovered`,
+      ),
+    );
+    expect(page.commands).toHaveLength(2);
+    expect(createdReads).toBe(1);
+  } finally {
+    await page.close();
+  }
+}, 45_000);
+
+test('viewer replacement drops a late allowed Screen observation', async () => {
+  let pending: ((value: CreateAuthority) => void) | undefined;
+  let calls = 0;
+  const page = await mountScreenCreate({
+    eligibility: () => {
+      calls += 1;
+      if (calls === 1) return new Promise<CreateAuthority>((resolve) => (pending = resolve));
+      return Promise.resolve({ state: 'refused', reason: 'permission' });
+    },
+  });
+  try {
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_reading()));
+    expect(page.canvas().getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
+    await page.render({ subject: 'bob' });
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
+    );
+    pending?.(allowedCreateAuthority);
+    await page.act(async () => undefined);
+    expect(page.canvas().getByRole('alert').textContent).toContain(
+      page.m.identity_intake_authority_refused_permission(),
+    );
+    expect(
+      (page.canvas().getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(page.commands).toHaveLength(0);
+  } finally {
+    await page.close();
   }
 }, 45_000);
