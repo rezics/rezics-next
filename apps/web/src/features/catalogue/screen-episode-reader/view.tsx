@@ -35,7 +35,7 @@ function EvidencePart({
 }: {
   entry: ScreenEpisodeEntry;
   part: Snak;
-  release?: Release;
+  release?: Release | undefined;
   locale: string;
   link: PageLink;
 }) {
@@ -58,7 +58,7 @@ function MembershipEvidence({
   link,
 }: {
   entry: ScreenEpisodeEntry;
-  release?: Release;
+  release?: Release | undefined;
   locale: string;
   link: PageLink;
 }) {
