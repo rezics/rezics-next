@@ -9,6 +9,12 @@ an Open Library entitlement, installation or DRM licence is not a local lending 
 Decision: loan dates are complete Gregorian `YYYY-MM-DD` values; the server supplies one UTC calendar day per
 response, and a due date is inclusive through that day.
 
+Copy acquisition/disposal days and Loan dates use the public `isCalendarDate` rule from `@rezics/filter` for
+Gregorian validity. Each caller keeps the exact ten-character `YYYY-MM-DD` shape and years 0001–9999 boundary;
+the package's partial dates and astronomical years do not widen these inputs. Valid text is preserved without
+trimming or reserialization, and trailing newlines are invalid. Copy dates remain nullable, Web empty fields become
+null, and omitted native updates leave the stored day unchanged.
+
 Years range from 0001 through 9999. Impossible calendar days, partial dates, instants and normalized overflow dates
 are invalid. Stored dates are compared as dates and are never passed through browser timezone formatting. An absent
 due date is undated. A date equal to the response boundary is due; an earlier date is overdue. Return takes precedence

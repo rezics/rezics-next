@@ -235,8 +235,8 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
     status: 'owned' as const,
     location: 'L'.repeat(200),
     source: 'S'.repeat(200),
-    acquiredOn: '2024-02-29',
-    disposedOn: '2024-03-01',
+    acquiredOn: '0001-01-01',
+    disposedOn: '2000-02-29',
     note: 'n'.repeat(1000),
   };
   tick();
@@ -245,8 +245,8 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
     status: 'owned',
     location: valid.location,
     source: valid.source,
-    acquiredOn: '2024-02-29',
-    disposedOn: '2024-03-01',
+    acquiredOn: '0001-01-01',
+    disposedOn: '2000-02-29',
     note: valid.note,
     revision: 1,
   });
@@ -268,6 +268,15 @@ test('invalid fields, unknown subjects and unreadable subjects change nothing', 
   ];
   for (const input of rejected) {
     await expect(commands.createCopy(owner, input, key())).rejects.toBeInstanceOf(CopyInvalidError);
+  }
+  for (const field of ['acquiredOn', 'disposedOn']) {
+    for (const day of ['0000-01-01', '1900-02-29', '2030', '2030-01', '2030-01-01\n', '2030-01-01T00:00:00Z']) {
+      const error = { name: 'CopyInvalidError', field };
+      await expect(commands.createCopy(owner, { ...valid, [field]: day }, key())).rejects.toMatchObject(error);
+      await expect(
+        commands.updateCopy(owner, created.value.id, { revision: 1, [field]: day }, key()),
+      ).rejects.toMatchObject(error);
+    }
   }
   const beforeUnsupported = await native.inspect(owner.accountId);
   const unsupported = await refusal(() => commands.createCopy(owner, { ...valid, status: 'borrowed' }, key()));
