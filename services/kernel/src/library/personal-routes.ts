@@ -1572,6 +1572,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                         ...presentation,
                         statusEditing:
                           editing.state === 'supported' ? { ...editing, statuses: [...editing.statuses] } : editing,
+                        conditionEditing:
+                          presentation.conditionEditing.state === 'supported'
+                            ? { ...presentation.conditionEditing, choices: [...presentation.conditionEditing.choices] }
+                            : presentation.conditionEditing,
                       },
                     };
                     if (query.view !== 'FULL') return { copy: value };

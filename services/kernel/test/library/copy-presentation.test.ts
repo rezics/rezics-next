@@ -57,7 +57,7 @@ const notRecordedConditions = {
   mediaCondition: { state: 'not_recorded' },
   packagingCondition: { state: 'not_recorded' },
   conditionEditing: expect.objectContaining({ state: 'unavailable' }),
-};
+} as const;
 
 test('exact accepted labels survive a current rename while current native status choices use their own actual language', () => {
   const current: LibraryProfile = {

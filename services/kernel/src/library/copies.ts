@@ -218,8 +218,10 @@ function parseUpdate(input: unknown): CopyPatch {
 
 function conditionFields(input: CopyConditionPatch): CopyConditionPatch {
   const fields: { mediaCondition?: CopyConditionPatch['mediaCondition']; packagingCondition?: CopyConditionPatch['packagingCondition'] } = {};
-  if (Object.hasOwn(input, 'mediaCondition')) fields.mediaCondition = input.mediaCondition;
-  if (Object.hasOwn(input, 'packagingCondition')) fields.packagingCondition = input.packagingCondition;
+  if (Object.hasOwn(input, 'mediaCondition') && input.mediaCondition !== undefined)
+    fields.mediaCondition = input.mediaCondition;
+  if (Object.hasOwn(input, 'packagingCondition') && input.packagingCondition !== undefined)
+    fields.packagingCondition = input.packagingCondition;
   return fields;
 }
 
@@ -231,7 +233,7 @@ function merged(current: Copy, patch: CopyPatch): CopyChanges {
     acquiredOn: patch.acquiredOn === undefined ? current.acquiredOn : patch.acquiredOn,
     disposedOn: patch.disposedOn === undefined ? current.disposedOn : patch.disposedOn,
     note: patch.note === undefined ? current.note : patch.note,
-    conditionFacts: current.conditionFacts,
+    ...(current.conditionFacts === undefined ? {} : { conditionFacts: current.conditionFacts }),
   };
 }
 
@@ -433,12 +435,16 @@ export function createCopyCommands(config: Dependencies) {
             pin: source.pin,
           });
         }
+        const nextChanges = {
+          ...changes,
+          ...(conditionFacts === undefined ? {} : { conditionFacts }),
+        };
         const copy = await store.updateCopy(
           tx,
           route,
           copyId,
           patch.revision,
-          { ...changes, conditionFacts },
+          nextChanges,
           {
             transactionId: command.transactionId,
             time: authoritativeTimeValue(command.time),

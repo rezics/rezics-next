@@ -43,8 +43,8 @@ type EntryResult = Omit<NonNullable<Awaited<ReturnType<typeof entryRead.run>>>, 
 };
 type CopyResult = Omit<
   NonNullable<Awaited<ReturnType<typeof copyRead.run>>>,
-  'status' | 'kind' | 'libraryProfilePin'
-> & { status: string; kind?: string | null };
+  'status' | 'kind' | 'libraryProfilePin' | 'mediaCondition' | 'packagingCondition'
+> & { status: string; kind?: string | null; mediaCondition?: unknown; packagingCondition?: unknown };
 type CopyAcceptance = Readonly<{ pin: LibraryProfilePin; kind: string; statusSupplied?: boolean }>;
 
 const ENTRY_STATES = new Set<string>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
