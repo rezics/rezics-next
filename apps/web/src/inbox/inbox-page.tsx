@@ -922,7 +922,7 @@ export function ViewerInboxPage({
                   }
                   onClick={retryLoadedSeen}
                 >
-                  {m.inbox_seen_retry()}
+                  {seenNeedsAccess ? m.inbox_seen_retry() : m.inbox_retry()}
                 </Button>
               </fieldset>
             ) : null}
