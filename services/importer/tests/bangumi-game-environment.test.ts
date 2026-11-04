@@ -202,8 +202,12 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
     });
     expect(withheld.runs.bangumi?.status).toBe('committed');
     expect(identities.get(String(targetId))).toBe(firstId);
-    const remaining = environmentCommands(sent.slice(before));
-    expect(remaining.map((command) => proposedValue(command))).toEqual([unity]);
+    const later = sent.slice(before);
+    expect(environmentCommands(later)).toEqual([]);
+    const retracted = later.filter((command) => command.op === 'retract' && command.source.field_group === 'facts');
+    expect(retracted).toHaveLength(2);
+    expect(JSON.stringify(retracted)).toMatch(/平台|%E5%B9%B3%E5%8F%B0/);
+    expect(JSON.stringify(retracted)).not.toMatch(/游戏引擎|%E6%B8%B8%E6%88%8F%E5%BC%95%E6%93%8E/);
     const lookup = createShowcaseBangumiGameEnvironmentLookup({
       sourceAlias: 'bangumi',
       bindings,
