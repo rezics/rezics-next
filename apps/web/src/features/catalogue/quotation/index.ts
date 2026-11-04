@@ -1,10 +1,11 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
+import { checkDocument } from '@rezics/document';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import { typeExtends, QUOTATION_PAGE_CAP } from '../../pages/graph-browser';
 import { spoilerLevel, webUrl } from '../../pages/shared';
-import { readAuthoredBody, type AuthoredBody } from '../authored-field';
+import { readAuthoredBody, type AuthoredBody, type AuthoredDocument } from '../authored-field';
 
 export const quotationRequested = {
   type: 'schema:Quotation',
@@ -66,6 +67,15 @@ export type QuotationRow = {
   contexts: QuotationContext[];
   statements: QuotationText[];
 };
+export type QuotationViewer = { kind: 'anonymous' } | { kind: 'account' };
+export type QuotationActionState = 'allowed' | 'denied' | 'unavailable' | 'unsupported' | 'absent' | 'withheld';
+export type QuotationAction = { action: string; operationId: string; state: QuotationActionState };
+export type QuotationPage = {
+  subject?: string | undefined;
+  reads: Record<string, { status: number; body?: unknown }>;
+  viewer?: QuotationViewer | undefined;
+  actions?: QuotationAction[] | undefined;
+};
 export type QuotationRead =
   | CandidateFailure
   | {
@@ -78,6 +88,8 @@ export type QuotationRead =
       observation: string;
       unsupportedCount: number;
       session?: string | undefined;
+      viewer?: QuotationViewer | undefined;
+      actions?: QuotationAction[] | undefined;
     };
 
 type Definitions = Pick<Release, 'types' | 'properties'>;
@@ -242,8 +254,33 @@ function textState(statement: Statement, property: string): QuotationText['statu
   return 'current';
 }
 
+function pageDocumentBody(documents: unknown, subjectId: string, statement: Statement): AuthoredBody {
+  const content: unknown = statement.value.type === 'value' ? statement.value.content : null;
+  if (
+    !isRecord(documents) ||
+    !isRecord(content) ||
+    typeof content.document !== 'string' ||
+    typeof content.digest !== 'string' ||
+    typeof content.language !== 'string'
+  )
+    return candidateFailure(503);
+  const document = documents[statement.id];
+  if (
+    !isRecord(document) ||
+    document.id !== content.document ||
+    document.subjectId !== subjectId ||
+    document.candidateId !== statement.id ||
+    document.digest !== content.digest ||
+    document.language !== content.language ||
+    document.availability !== 'available' ||
+    !checkDocument(document.body)
+  )
+    return candidateFailure(503);
+  return { ok: true, document: document as AuthoredDocument };
+}
+
 async function quotationText(
-  client: KernelClient,
+  client: KernelClient | undefined,
   authorization: string | undefined,
   release: Definitions,
   subject: SubjectRead,
@@ -251,6 +288,7 @@ async function quotationText(
   property: string,
   locale: string,
   session?: string,
+  documents?: unknown,
 ): Promise<QuotationText> {
   const missing = {
     property,
@@ -276,7 +314,12 @@ async function quotationText(
   const definition = release.properties[property];
   if (!definition) return { ...exact, status: 'unsupported' };
   if (definition.datatype === 'document') {
-    const body = await readAuthoredBody(client, subject.subject.id, statement, authorization, session);
+    const body =
+      documents !== undefined
+        ? pageDocumentBody(documents, subject.subject.id, statement)
+        : client
+          ? await readAuthoredBody(client, subject.subject.id, statement, authorization, session)
+          : candidateFailure(503);
     if (!body.ok) return { ...exact, status: body.reason === 'stale' ? 'stale' : 'unavailable', body };
     return {
       ...exact,
@@ -307,12 +350,13 @@ function observationOf(subject: SubjectRead['subject']) {
 }
 
 async function quotationRow(
-  client: KernelClient,
+  client: KernelClient | undefined,
   authorization: string | undefined,
   release: Definitions,
   subject: SubjectRead,
   locale: string,
   session?: string,
+  documents?: unknown,
 ): Promise<QuotationRow> {
   const type = subject.subject.type;
   const textProperty = quotationProperty(release, type, quotationRequested.text);
@@ -337,7 +381,17 @@ async function quotationRow(
     (statement) => statement.property.id === textProperty,
   );
   const text = selected.length === 1 ? selected[0] : undefined;
-  const details = await quotationText(client, authorization, release, subject, text, textProperty, locale, session);
+  const details = await quotationText(
+    client,
+    authorization,
+    release,
+    subject,
+    text,
+    textProperty,
+    locale,
+    session,
+    documents,
+  );
   const contexts = [
     ...contextsFor(subject, release, 'speaker', quotationRequested.speaker, locale),
     ...contextsFor(subject, release, 'credited', quotationRequested.credited, locale),
@@ -475,6 +529,77 @@ export async function readQuotationPage(
   } catch {
     return candidateFailure(503);
   }
+}
+
+function subjectFromPage(page: QuotationPage): SubjectRead | undefined {
+  if (typeof page.subject !== 'string') return;
+  for (const result of Object.values(page.reads)) {
+    if (result.status !== 200 || !isRecord(result.body) || !isRecord(result.body.subject)) continue;
+    const subject = result.body.subject as SubjectRead['subject'];
+    if (subject.id !== page.subject || !isRecord(result.body.related)) continue;
+    return {
+      subject,
+      related: result.body.related as SubjectRead['related'],
+      account: ('account' in result.body ? (result.body.account as SubjectRead['account']) : null) ?? null,
+      summary: ('summary' in result.body ? (result.body.summary as SubjectRead['summary']) : null) ?? null,
+    };
+  }
+}
+
+function documentsFromPage(page: QuotationPage, publicRead: SubjectRead): unknown {
+  for (const result of Object.values(page.reads)) {
+    if (result.status !== 200 || !isRecord(result.body) || !isRecord(result.body.subject)) continue;
+    if ((result.body.subject as { id?: string }).id !== publicRead.subject.id) continue;
+    return result.body.documents;
+  }
+}
+
+/** Project an ordinary pages:read quotation envelope without further HTTP hydration. */
+export async function projectQuotationFromPage(
+  release: Definitions,
+  page: QuotationPage,
+  locale: string,
+): Promise<QuotationRead> {
+  const publicRead = subjectFromPage(page);
+  if (!publicRead) return candidateFailure(503);
+  const observation = observationOf(publicRead.subject);
+  const authority = {
+    ...(page.viewer ? { viewer: page.viewer } : {}),
+    ...(page.actions ? { actions: page.actions } : {}),
+  };
+  if (!quotationTypeAdmitted(release) || !typeExtends(release, publicRead.subject.type, quotationRequested.type)) {
+    return {
+      ok: true,
+      public: publicRead,
+      admitted: false,
+      rows: [],
+      selected: null,
+      next: null,
+      observation,
+      unsupportedCount: 0,
+      ...authority,
+    };
+  }
+  const selected = await quotationRow(
+    undefined,
+    undefined,
+    release,
+    publicRead,
+    locale,
+    undefined,
+    documentsFromPage(page, publicRead),
+  );
+  return {
+    ok: true,
+    public: publicRead,
+    admitted: true,
+    rows: [selected],
+    selected,
+    next: null,
+    observation,
+    unsupportedCount: 0,
+    ...authority,
+  };
 }
 
 export function quotationWorkOrCharacter(release: Definitions, type: string) {

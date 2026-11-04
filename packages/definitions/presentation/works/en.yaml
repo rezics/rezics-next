@@ -2,6 +2,9 @@ types:
   schema:MusicAlbum: album
   schema:MusicRelease: music release
   schema:MusicRecording: recording
+
+  schema:Quotation: quotation
+
 properties:
   schema:releaseOf: release of
   schema:catalogNumber: catalogue number
@@ -9,15 +12,31 @@ properties:
   schema:track: track
   schema:byArtist: artist
   wdt:P642: of
+
+  schema:text: text
+  schema:spokenByCharacter: speaker
+  schema:about: work
+  schema:creator: credited creator
+  schema:actor: performing voice
+
 inverseProperties:
   schema:releaseOf: Album releases
   schema:recordLabel: Labelled releases
   schema:track: Releases containing this recording
   schema:byArtist: Recordings by this artist
+
+  schema:spokenByCharacter: Spoken quotations
+  schema:about: Quotations
+  schema:creator: Quotations credited to
+  schema:actor: Quotations voiced
+
 typeDescriptions:
   schema:MusicAlbum: 'A music album work grouping tracks, independent of a particular physical copy or distributed edition.'
   schema:MusicRelease: 'A specific published edition of a music album, with its catalogue number, format, date and ordered recordings. Distinct from the album work, a personal copy, a playback file or a recording.'
   schema:MusicRecording: 'An identified recorded performance of a musical work, such as one song take. Distinct from the album grouping, a published edition, a playback file or a personal copy.'
+
+  schema:Quotation: 'An authored quotation of a work, with its speaker, credited creator and cited source kept distinct.'
+
 propertyDescriptions:
   schema:releaseOf: 'The music album work this published edition realizes; the edition is never a new name for that album.'
   schema:catalogNumber: 'The catalogue number assigned to this edition by its issuing label, stored as source text.'
@@ -25,3 +44,10 @@ propertyDescriptions:
   schema:track: 'An identified recording on this edition. Position, credited name, role, date and listing-occurrence distinguish repeated uses of the same recording.'
   schema:byArtist: 'A person or organization credited as the performing artist of this recording, with credited-as, order and detailed role.'
   wdt:P642: 'The listing-occurrence Concept that keeps two associations to the same recording in separate slots. It is not a published disc or side medium.'
+
+  schema:text: 'The exact authored quotation document. Supply a document value rather than a relation label or a different text field.'
+  schema:spokenByCharacter: 'The fictional character who speaks this quotation. This is not a credited creator or a voice actor.'
+  schema:about: 'The creative work this quotation cites. Exact work or part identity is required; a substring match is not a relationship.'
+  schema:creator: 'A person or organization credited for this quotation, kept separate from the fictional speaker.'
+  schema:actor: 'An optional performing voice. A speaker never implies a voice actor without a qualified source assertion.'
+
