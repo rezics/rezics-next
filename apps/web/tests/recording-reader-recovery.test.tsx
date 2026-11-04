@@ -84,7 +84,7 @@ function labeledRelease(release: Release, label: string): Release {
 }
 
 async function tick() {
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 40));
 }
 
 function currentAddress(returnTo: string) {

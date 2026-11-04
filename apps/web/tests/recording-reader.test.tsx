@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { albumFixture, albumId, artistId, roleId } from '../src/kernel/fake/catalogue-album-profile';
+import { albumFixture, albumId, artistId, roleId, seriesId } from '../src/kernel/fake/catalogue-album-profile';
 import { RecordingReader } from '../src/features/catalogue/recording-reader/view';
 import { recordingReaderVisit, recordingType } from '../src/features/catalogue/recording-reader/model';
 import { connectionReturnHref, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
@@ -12,6 +12,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 function fixture(admitted: boolean) {
   const value = albumFixture('ready', 'en');
   value.publicRead.subject.type = recordingType;
+  if (!admitted) delete value.release.types[recordingType];
   if (admitted) {
     const album = value.release.types['schema:MusicAlbum'];
     if (!album) throw new Error('The fixture release has no album definition');
@@ -80,7 +81,8 @@ test('admitted credits retain exact targets, qualifiers, partial dates and retur
   expect(html).toContain('Performer');
   expect(html).toContain('2024');
   const contribution = value.publicRead.subject.statements['schema:contributor']![0]!;
-  const contributionMarkup = html.slice(html.indexOf(`data-statement="${contribution.id}"`)).split('</li>', 1)[0]!;
+  const start = html.indexOf(`data-recording-statement="${contribution.id}"`);
+  const contributionMarkup = html.slice(start, html.indexOf('</ul>', start));
   expect(contributionMarkup).toContain('Performer');
   expect(contributionMarkup).toContain('The Harbour Ensemble');
   expect(contributionMarkup).toContain('1');
@@ -142,7 +144,7 @@ test('invalid recording grain is not described as a failed release or offered a 
     releaseDigest: value.publicRead.subject.release,
   });
   const html = renderToStaticMarkup(
-    createElement(RecordingReader, { visit, read: value.publicRead, release: value.release, locale: 'en', retryAvailable: true }),
+    createElement(RecordingReader, { visit, read: value.publicRead, release: value.release, locale: 'en' }),
   );
 
   expect(visit.state).toBe('invalid');
