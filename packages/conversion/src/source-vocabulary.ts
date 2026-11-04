@@ -685,7 +685,7 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
       property: { id: property },
       value: { type: 'value', content: target?.id ?? content },
       ...(terms.length ? { qualifiers: terms.map((term) => textQualifier(term.property, term.content)) } : {}),
-      references: references ? [...references] : [reference],
+      references: [reference, ...(references ?? [])],
     };
     const proposalDigest = JSON.stringify([rowSource, statement, metadata.license, metadata.attribution]);
     const key = commandKey([

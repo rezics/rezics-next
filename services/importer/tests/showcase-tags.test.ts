@@ -307,6 +307,15 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
         ),
       ),
     ).toBe(true);
+    expect(weight.statement.references).toContainEqual({
+      parts: [
+        {
+          property: { id: 'schema:url' },
+          value: { type: 'value', content: `${vndbTagsRatingEndpoint}#/tags/g311/rating` },
+        },
+        { property: { id: 'schema:version' }, value: { type: 'value', content: 'unversioned' } },
+      ],
+    });
     expect(referenceValue(weight, 'rezics:sourceSnapshot')).toBe(
       `unversioned:sha256:${createHash('sha256').update(kanaResponse(1.25, 1)).digest('hex')}`,
     );
