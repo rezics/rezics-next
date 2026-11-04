@@ -1203,7 +1203,7 @@ without a native alternate-name statement.
 
 The production cross-media planner now streams the acquired `chars_names` and
 `chars_alias` COPY tables and joins only exact selected character IDs from
-`chars_vns`. `cross-media-entities@7` preserves localized `schema:name` facts,
+`chars_vns`. `cross-media-entities@8` preserves localized `schema:name` facts,
 unqualified Romanized alternate names and alias alternate names with their
 exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
 whole alias. Qualified text does not enter bootstrap labels or aliases, and
@@ -1241,8 +1241,8 @@ extractor. Exact `中文名` and scalar or bullet-list `别名` values become
 citation after the source identity is bound. Existing top-level `name` and
 `name_cn` labels remain unchanged; name facts do not assert work language.
 Repeated keys are considered independently, exact property/language/text tuples
-deduplicate, and other names remain distinct. Only the pinned template and these
-two fields are consumed. Unsupported keys and forms produce bounded diagnostics
+deduplicate, and other names remain distinct. The name mapper consumes only the
+pinned template and these two fields. Unsupported keys and forms produce bounded diagnostics
 without source prose. The original infobox stays in the existing bounded source
 projection and digest.
 
@@ -1258,6 +1258,30 @@ projection and digest.
   `services/kernel/test/imports/bangumi-subject-names.test.ts` authors the
   ordinary production-caller review, adoption, reopen and facts-fence journey;
   its native execution remains controller-owned.
+
+## Bangumi TVAnime official websites
+
+Decision: accept one literal HTTP(S) URL per `官方网站` field occurrence; exact URL duplicates coalesce, while different addresses remain separate candidates for independent review under the single-valued released property. Do not normalize hostnames or split lists.
+
+Ordinary Bangumi registration and the selected-family seed share the bounded
+TVAnime reader. Only the exact type-2 `{{Infobox animanga/TVAnime` profile is
+eligible. A supported value becomes a `schema:url` proposal whose source
+citation remains the exact Bangumi subject record. Path, query and fragment
+spelling are retained. The record URL does not become the work's website. The
+existing journal and common publisher keep ordinary import proposal-only,
+separate candidate acceptance/adoption and current public-read verification.
+Unsupported values produce bounded field pointers; omitted or changed source
+values do not retract adopted work statements.
+
+- Touches: one selected TVAnime record, up to 64 distinct website candidates
+  and 16 bounded omission diagnostics.
+- Bound: 65,536 infobox characters, 64 parsed fields, 1,500 characters per URL,
+  the existing import batch/journal limits, and no destination requests.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  covers ordinary and selected-family proposals, source changes and omission;
+  `services/kernel/test/imports/bangumi-official-websites.test.ts` covers
+  independently authorized adoption, a public viewer read and current fencing.
+  The real-data M1 walkthrough remains separate evidence.
 
 ## Default Bangumi anime Episodes
 

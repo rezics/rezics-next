@@ -363,7 +363,7 @@ exact `0` is never a measured zero.
 
 ### VNDB release titles
 
-`cross-media-entities@7` projects admitted `releases_titles` rows onto
+`cross-media-entities@8` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -385,7 +385,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@7` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@8` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -464,7 +464,7 @@ Decision: platform and medium projections advance the converter from `@6` to `@7
 
 ### VNDB character names and aliases
 
-`cross-media-entities@7` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@8` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -808,14 +808,15 @@ The caller owns current native trust; dictionary syntax is no proof of authority
 The production Importer/CLI obtains the dictionary through its existing
 `identifierLookup`, after explicit reviewed seeding. Normalization and digesting
 remain pure; the source-only digest includes the ordered metadata tags and excludes
-bindings. Supported records visit twelve top-level fields and produce at most eight
+bindings. Supported records visit twelve top-level fields and produce at most 92
 commands and one cover intent; byte caps remain unchanged. The new keyword adds one bounded citation and one qualifier.
 
 ## Bangumi TVAnime subject names
 
-`bangumi@6` consumes only `中文名` and `别名` from the exact pinned
-`{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
-Bangumi converter and selected-family registrations share this pure extraction.
+`bangumi@7` consumes only `中文名`, `别名` and `官方网站` from the exact
+pinned `{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The
+ordinary Bangumi converter and selected-family registrations share one bounded
+infobox reader.
 The existing top-level `name` and `name_cn` bootstrap labels keep their current
 meanings; infobox names become cited native name facts after subject binding and
 do not set `inLanguage`. The complete infobox remains in the existing bounded
@@ -824,7 +825,26 @@ projection and digest for raw change detection.
 The scalar `中文名` is `zh`. Scalar and bullet-list `别名` values are `und`,
 because the pinned template defines no alias-language syntax. Equal property,
 language and exact-text tuples deduplicate; other spellings remain separate.
-Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
-omissions, with no source prose copied into diagnostics. Parsing scans at most 64
-field occurrences, retains at most 24 distinct name values, and emits at most 16
+Only a literal HTTP(S) `官方网站` value becomes a cited `schema:url` fact.
+Paths, query strings and fragments are preserved as written. The record URL is
+the source citation, not the official-site value. The released URL property is
+single-valued, so exact duplicate values coalesce and distinct addresses remain
+separate review candidates. No hostname normalization, list splitting, site
+fetch or template execution occurs. Nested templates, links, unknown keys and
+other unconsumed TVAnime fields are bounded omissions, with no source prose
+copied into diagnostics. Parsing scans at most 64 field occurrences, retains at
+most 24 distinct names and 64 distinct website values, and emits at most 16
 omission diagnostics.
+
+Decision: accept one literal URL per field occurrence; exact duplicates
+coalesce, while different addresses remain separate candidates because the
+released property is single-valued. Do not normalize hostnames or split lists.
+
+- Touches: one selected type-2 source record, up to 24 names and 64 literal
+  website candidates, each cited to that exact Bangumi subject record.
+- Bound: 65,536 infobox characters, 64 parsed fields, 1,500 characters per
+  URL, 16 structured omissions and at most 92 commands for one converted record.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  follows ordinary and selected-family conversion, changed input and bounded
+  omissions; `services/kernel/test/imports/bangumi-official-websites.test.ts`
+  covers separate review/adoption, anonymous current reads and a source fence.

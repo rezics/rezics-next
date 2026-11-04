@@ -7,6 +7,123 @@ export function isBangumiTVAnimeTemplateHead(line: string): boolean {
   return line.trim() === bangumiTVAnimeTemplateHead;
 }
 
+export type BangumiTVAnimeField = Readonly<{
+  key: string;
+  pointer: string;
+  value: string;
+  continuations: readonly string[];
+}>;
+export type BangumiTVAnimeInfoboxDiagnostic = Readonly<{ pointer: string; code: string }>;
+export type BangumiTVAnimeInfobox = Readonly<{
+  fields: readonly BangumiTVAnimeField[];
+  diagnostics: readonly BangumiTVAnimeInfoboxDiagnostic[];
+}>;
+
+const infoboxFieldLimit = 64;
+const infoboxDiagnosticLimit = 16;
+const horizontalSpace = /^[\t ]+|[\t ]+$/gu;
+
+function* sourceLines(text: string): Generator<{ line: string; number: number }> {
+  let start = 0;
+  let number = 0;
+  while (start <= text.length) {
+    const newline = text.indexOf('\n', start);
+    const end = newline === -1 ? text.length : newline;
+    let line = text.slice(start, end);
+    if (line.endsWith('\r')) line = line.slice(0, -1);
+    yield { line, number };
+    number++;
+    if (newline === -1) return;
+    start = newline + 1;
+  }
+}
+
+function cleanHorizontal(value: string): string {
+  return value.replace(horizontalSpace, '');
+}
+
+/** One bounded reader for the pinned TVAnime template used by names and work facts. */
+export function parseBangumiTVAnimeInfobox(infobox: string): BangumiTVAnimeInfobox {
+  const fields: { key: string; pointer: string; value: string; continuations: string[] }[] = [];
+  const diagnostics: BangumiTVAnimeInfoboxDiagnostic[] = [];
+  let overflow = false;
+  let fieldOverflow = false;
+  const omit = (pointer: string, code: string) => {
+    if (code === 'additional_infobox_omissions') {
+      if (!overflow) diagnostics.push({ pointer: '/infobox', code });
+      overflow = true;
+    } else if (diagnostics.length < infoboxDiagnosticLimit - 1) diagnostics.push({ pointer, code });
+    else if (!overflow) {
+      diagnostics.push({ pointer: '/infobox', code: 'additional_infobox_omissions' });
+      overflow = true;
+    }
+  };
+
+  const iterator = sourceLines(infobox);
+  let header: string | undefined;
+  let candidate = iterator.next();
+  while (!candidate.done) {
+    if (candidate.value.line.trim()) {
+      header = candidate.value.line;
+      break;
+    }
+    candidate = iterator.next();
+  }
+  if (!header || !isBangumiTVAnimeTemplateHead(header)) {
+    omit('/infobox', 'unsupported_infobox_template');
+    return { fields, diagnostics };
+  }
+
+  let active: { key: string; pointer: string; value: string; continuations: string[] } | undefined;
+  let fieldCount = 0;
+  let closed = false;
+  let trailing = false;
+  for (let next = iterator.next(); !next.done; next = iterator.next()) {
+    const row = next.value;
+    const line = cleanHorizontal(row.line);
+    if (!line) continue;
+    if (line === '}}') {
+      active = undefined;
+      closed = true;
+      continue;
+    }
+    if (closed) {
+      trailing = true;
+      continue;
+    }
+    if (line.startsWith('|')) {
+      fieldCount++;
+      if (fieldCount > infoboxFieldLimit) {
+        active = undefined;
+        if (!fieldOverflow) omit('/infobox', 'infobox_field_limit');
+        fieldOverflow = true;
+        continue;
+      }
+      const pointer = `/infobox/fields/${fieldCount - 1}`;
+      const equals = line.indexOf('=', 1);
+      if (equals < 0) {
+        active = undefined;
+        omit(pointer, 'unsupported_infobox_structure');
+        continue;
+      }
+      const key = cleanHorizontal(line.slice(1, equals));
+      if (!key) {
+        active = undefined;
+        omit(pointer, 'unsupported_infobox_structure');
+        continue;
+      }
+      active = { key, pointer, value: cleanHorizontal(line.slice(equals + 1)), continuations: [] };
+      fields.push(active);
+      continue;
+    }
+    if (!active) omit(`/infobox/lines/${row.number}`, 'unsupported_infobox_structure');
+    else active.continuations.push(line);
+  }
+  if (!closed) omit('/infobox', 'unsupported_infobox_structure');
+  if (trailing) omit('/infobox', 'unsupported_infobox_structure');
+  return { fields, diagnostics };
+}
+
 /** Existing 1/2/4 class bindings. Type 2 stays TVSeries even when the platform names a film. */
 export const bangumiLaunchTypes = {
   1: 'schema:Book',

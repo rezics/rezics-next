@@ -9,7 +9,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
-import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
+import { extractBangumiSubjectProfile } from './bangumi-subject-names.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -22,12 +22,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@6';
+export const converter_revision = 'bangumi@7';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Twelve projected top-level fields; at most eight commands, one cover intent,
+// Twelve projected top-level fields; at most 92 commands, one cover intent,
 // and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
@@ -157,7 +157,7 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
 
 function retainedFieldDiagnostics(
   record: NormalizedRecord,
-  nameDiagnostics: readonly { pointer: string; code: string }[],
+  infoboxDiagnostics: readonly { pointer: string; code: string }[],
 ): { pointer: string; code: string }[] {
   const citedDate =
     (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
@@ -176,7 +176,7 @@ function retainedFieldDiagnostics(
               ? 'unsupported_infobox_mapping'
               : `catalogue_has_no_${field}_property`,
     }));
-  return [...retained, ...nameDiagnostics];
+  return [...retained, ...infoboxDiagnostics];
 }
 
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
@@ -268,10 +268,11 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     value: { type: 'value', content },
     references: references(),
   });
-  const extractedNames = extractBangumiSubjectNames(record);
+  const extractedProfile = extractBangumiSubjectProfile(record);
   const facts = [
     fact('wdt:P5732', input.external_id),
-    ...extractedNames.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
+    ...extractedProfile.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
+    ...extractedProfile.officialWebsites.map((website) => fact('schema:url', website.url)),
   ];
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
@@ -335,7 +336,9 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
         'language' in content &&
         'text' in content
           ? `name:${property}:${String(content.language)}:${String(content.text)}`
-          : `fact:${index}`;
+          : property === 'schema:url' && typeof content === 'string'
+            ? `official-website:${content}`
+            : `fact:${index}`;
       proposals.push(propose(statement, 'facts', field));
     }
     if (record.type === 3 || record.type === 6) {
@@ -398,7 +401,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     normalizedRecord: record,
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
-    diagnostics: retainedFieldDiagnostics(record, extractedNames.diagnostics),
+    diagnostics: retainedFieldDiagnostics(record, extractedProfile.diagnostics),
     coverAssets,
     mediaImportIntents,
     sourceMetadata,

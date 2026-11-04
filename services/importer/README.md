@@ -1620,7 +1620,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@7` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@8` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2103,7 +2103,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@7`.
+selected release payload and convert them through `cross-media-entities@8`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2282,8 +2282,8 @@ The result carries provider and native type bindings, source keys, source and co
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
-Both use one pure TVAnime name extractor and the existing journal, source
+`cross-media-entities@8` revision while the ordinary caller uses `bangumi@7`.
+Both use one bounded TVAnime infobox reader and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
 exact Bangumi subject alias and key, unversioned record state where no provider
@@ -2299,3 +2299,24 @@ revision exists, the normalized digest and the acknowledged native UUID.
   exact citations and omissions. The connected ordinary caller is
   `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
   remains controller-owned.
+
+### Bangumi TVAnime official websites
+
+The ordinary source registration and selected-family seed use the shared pure
+conversion to propose only literal HTTP(S) values from `官方网站` on the exact
+pinned TVAnime template. Each proposal cites the Bangumi subject record; that
+citation remains distinct from the proposed work URL. Paths, queries and
+fragments remain unchanged. Exact duplicate values coalesce, while distinct
+addresses remain separate candidates for independent review under the released
+single-valued `schema:url` property. The default seed's common publisher retains
+its existing sealed intent, separate accept/adopt calls and current public read.
+
+- Touches: one selected Bangumi TVAnime record, at most 64 distinct website
+  candidates and 16 bounded field omissions.
+- Bound: the existing 65,536-character infobox and 64-field caps, 1,500
+  characters per URL, current import batch and journal limits, and no remote
+  destination requests.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  checks ordinary and selected-family proposals, refresh and unsupported input;
+  `services/kernel/test/imports/bangumi-official-websites.test.ts` checks exact
+  independent review/adoption, anonymous current read and the source fence.

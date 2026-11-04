@@ -1,4 +1,4 @@
-import { isBangumiTVAnimeTemplateHead } from './bangumi-subject-profile.ts';
+import { parseBangumiTVAnimeInfobox } from './bangumi-subject-profile.ts';
 
 export type BangumiSubjectName = Readonly<{
   property: 'schema:name' | 'schema:alternateName';
@@ -10,27 +10,17 @@ export type BangumiNameExtraction = Readonly<{
   names: readonly BangumiSubjectName[];
   diagnostics: readonly BangumiNameDiagnostic[];
 }>;
+export type BangumiOfficialWebsite = Readonly<{ url: string; pointer: string }>;
+export type BangumiSubjectExtraction = Readonly<{
+  names: readonly BangumiSubjectName[];
+  officialWebsites: readonly BangumiOfficialWebsite[];
+  diagnostics: readonly BangumiNameDiagnostic[];
+}>;
 
 const nameLimit = 24;
-const fieldLimit = 64;
 const diagnosticLimit = 16;
 const textLimit = 500;
 const horizontalSpace = /^[\t ]+|[\t ]+$/gu;
-
-function* sourceLines(text: string): Generator<{ line: string; number: number }> {
-  let start = 0;
-  let number = 0;
-  while (start <= text.length) {
-    const newline = text.indexOf('\n', start);
-    const end = newline === -1 ? text.length : newline;
-    let line = text.slice(start, end);
-    if (line.endsWith('\r')) line = line.slice(0, -1);
-    yield { line, number };
-    number++;
-    if (newline === -1) return;
-    start = newline + 1;
-  }
-}
 
 function cleanHorizontal(value: string): string {
   return value.replace(horizontalSpace, '');
@@ -51,24 +41,63 @@ function compareNames(left: BangumiSubjectName, right: BangumiSubjectName): numb
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+function officialWebsiteUrl(value: string): string | undefined {
+  if (
+    value.length > 1500 ||
+    !value.isWellFormed() ||
+    !/^https?:\/\/[^\s]+$/u.test(value) ||
+    /[\u0000-\u0020\u007f-\u009f\\]/u.test(value) ||
+    /%(?![0-9a-f]{2})/iu.test(value) ||
+    value.includes('{{') ||
+    value.includes('}}') ||
+    value.includes('[[') ||
+    value.includes(']]') ||
+    value.includes('|')
+  )
+    return;
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password
+    )
+      return;
+  } catch {
+    return;
+  }
+  return value;
+}
+
 /**
  * Extract only the two admitted TVAnime name fields. Unknown fields and wiki
  * structures remain bounded omissions; source spelling inside plain values is kept.
  */
-export function extractBangumiSubjectNames(record: {
+export function extractBangumiSubjectProfile(record: {
   readonly type: number;
   readonly name: string;
   readonly name_cn?: string;
   readonly infobox?: string;
-}): BangumiNameExtraction {
+}): BangumiSubjectExtraction {
   const names: BangumiSubjectName[] = [];
   const seen = new Set<string>();
+  const officialWebsites: BangumiOfficialWebsite[] = [];
+  const seenWebsites = new Set<string>();
   const diagnostics: BangumiNameDiagnostic[] = [];
+  const seenDiagnostics = new Set<string>();
   let diagnosticOverflow = false;
   let nameOverflow = false;
-  let fieldOverflow = false;
 
   const omit = (pointer: string, code: string) => {
+    const key = `${pointer}\u0000${code}`;
+    if (seenDiagnostics.has(key)) return;
+    seenDiagnostics.add(key);
+    if (code === 'additional_infobox_omissions') {
+      if (!diagnosticOverflow) diagnostics.push({ pointer: '/infobox', code });
+      diagnosticOverflow = true;
+      return;
+    }
     if (diagnostics.length < diagnosticLimit - 1) diagnostics.push({ pointer, code });
     else if (!diagnosticOverflow) {
       diagnostics.push({ pointer: '/infobox', code: 'additional_infobox_omissions' });
@@ -100,118 +129,63 @@ export function extractBangumiSubjectNames(record: {
 
   add('schema:name', 'und', record.name, '/name');
   if (record.name_cn?.trim()) add('schema:name', 'zh', record.name_cn, '/name_cn');
-  if (record.type !== 2 || record.infobox === undefined) return { names: names.sort(compareNames), diagnostics };
+  if (record.type !== 2 || record.infobox === undefined)
+    return { names: names.sort(compareNames), officialWebsites, diagnostics };
 
-  const infobox = record.infobox;
-  const iterator = sourceLines(infobox);
-  let header: { line: string; number: number } | undefined;
-  let candidate = iterator.next();
-  while (!candidate.done) {
-    if (candidate.value.line.trim()) {
-      header = candidate.value;
-      break;
+  const infobox = parseBangumiTVAnimeInfobox(record.infobox);
+  for (const diagnostic of infobox.diagnostics) omit(diagnostic.pointer, diagnostic.code);
+  for (const field of infobox.fields) {
+    if (field.key === '中文名') {
+      if (field.value) add('schema:name', 'zh', field.value, field.pointer, true);
+      for (const _continuation of field.continuations) omit(field.pointer, 'unsupported_infobox_name_form');
+      continue;
     }
-    candidate = iterator.next();
+    if (field.key === '别名') {
+      const hasInlineValue = Boolean(field.value);
+      let hasListValue = false;
+      let hasContinuationValue = false;
+      if (hasInlineValue) add('schema:alternateName', 'und', field.value, field.pointer, true);
+      for (const continuation of field.continuations) {
+        if (continuation.startsWith('*')) {
+          if (continuation.startsWith('**') || continuation === '*') {
+            omit(field.pointer, 'unsupported_infobox_name_form');
+            continue;
+          }
+          hasListValue = true;
+          add('schema:alternateName', 'und', continuation.slice(1), field.pointer, true);
+        } else if (!hasContinuationValue && !hasListValue && !hasInlineValue) {
+          hasContinuationValue = true;
+          add('schema:alternateName', 'und', continuation, field.pointer, true);
+        } else omit(field.pointer, 'unsupported_infobox_name_form');
+      }
+      if (hasInlineValue && hasListValue) omit(field.pointer, 'unsupported_infobox_name_form');
+      continue;
+    }
+    if (field.key === '官方网站') {
+      if (field.value) {
+        const url = officialWebsiteUrl(field.value);
+        if (url === undefined) omit(field.pointer, 'unsupported_infobox_website_form');
+        else if (!seenWebsites.has(url)) {
+          seenWebsites.add(url);
+          officialWebsites.push({ url, pointer: field.pointer });
+        }
+      }
+      if (field.continuations.length) omit(field.pointer, 'unsupported_infobox_website_form');
+      continue;
+    }
+    omit(field.pointer, 'unsupported_infobox_key');
   }
-  if (!header || !isBangumiTVAnimeTemplateHead(header.line)) {
-    omit('/infobox', 'unsupported_infobox_template');
-    return { names: names.sort(compareNames), diagnostics };
-  }
-
-  let fields = 0;
-  let closed = false;
-  let trailing = false;
-  let active:
-    | {
-        key: string;
-        pointer: string;
-        hasInlineValue: boolean;
-        hasListValue: boolean;
-        hasContinuationValue: boolean;
-      }
-    | undefined;
-
-  const finishField = (field: typeof active) => {
-    if (!field) return;
-    if ((field.key === '中文名' || field.key === '别名') && field.hasInlineValue && field.hasListValue) {
-      omit(field.pointer, 'unsupported_infobox_name_form');
-    }
-  };
-
-  for (let next = iterator.next(); !next.done; next = iterator.next()) {
-    const row = next.value;
-    const line = cleanHorizontal(row.line);
-    if (!line) continue;
-    if (line === '}}') {
-      finishField(active);
-      active = undefined;
-      closed = true;
-      continue;
-    }
-    if (closed) {
-      if (line.trim()) trailing = true;
-      continue;
-    }
-    if (line.startsWith('|')) {
-      finishField(active);
-      fields++;
-      if (fields > fieldLimit) {
-        active = undefined;
-        if (!fieldOverflow) omit('/infobox', 'infobox_field_limit');
-        fieldOverflow = true;
-        continue;
-      }
-      const equals = line.indexOf('=', 1);
-      const pointer = `/infobox/fields/${fields - 1}`;
-      if (equals < 0) {
-        active = undefined;
-        omit(pointer, 'unsupported_infobox_structure');
-        continue;
-      }
-      const key = cleanHorizontal(line.slice(1, equals));
-      if (!key) {
-        active = undefined;
-        omit(pointer, 'unsupported_infobox_structure');
-        continue;
-      }
-      const value = cleanHorizontal(line.slice(equals + 1));
-      active = {
-        key,
-        pointer,
-        hasInlineValue: Boolean(value),
-        hasListValue: false,
-        hasContinuationValue: false,
-      };
-      if (key === '中文名' && value) add('schema:name', 'zh', value, pointer, true);
-      else if (key === '别名' && value) add('schema:alternateName', 'und', value, pointer, true);
-      else if (key !== '中文名' && key !== '别名') omit(pointer, 'unsupported_infobox_key');
-      continue;
-    }
-    if (!active) {
-      omit(`/infobox/lines/${row.number}`, 'unsupported_infobox_structure');
-      continue;
-    }
-    if (active.key !== '中文名' && active.key !== '别名') continue;
-    const continuation = cleanHorizontal(line);
-    if (continuation.startsWith('*')) {
-      if (active.key !== '别名' || continuation.startsWith('**') || continuation === '*') {
-        omit(active.pointer, 'unsupported_infobox_name_form');
-        continue;
-      }
-      active.hasListValue = true;
-      add('schema:alternateName', 'und', continuation.slice(1), active.pointer, true);
-      continue;
-    }
-    if (active.key === '别名' && !active.hasContinuationValue && !active.hasListValue && !active.hasInlineValue) {
-      active.hasContinuationValue = true;
-      add('schema:alternateName', 'und', continuation, active.pointer, true);
-    } else {
-      omit(active.pointer, 'unsupported_infobox_name_form');
-    }
-  }
-  finishField(active);
-  if (!closed) omit('/infobox', 'unsupported_infobox_structure');
-  if (trailing) omit('/infobox', 'unsupported_infobox_structure');
   if (nameOverflow) omit('/infobox', 'infobox_name_limit');
-  return { names: names.sort(compareNames), diagnostics };
+  return { names: names.sort(compareNames), officialWebsites, diagnostics };
+}
+
+/** Backward-compatible name projection over the shared, bounded TVAnime parser. */
+export function extractBangumiSubjectNames(record: {
+  readonly type: number;
+  readonly name: string;
+  readonly name_cn?: string;
+  readonly infobox?: string;
+}): BangumiNameExtraction {
+  const extraction = extractBangumiSubjectProfile(record);
+  return { names: extraction.names, diagnostics: extraction.diagnostics };
 }
