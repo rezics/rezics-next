@@ -148,7 +148,7 @@ test('ordinary and selected-family Game callers propose a stated range, withhold
       },
       source: { source: 'bangumi', external_id: '91041', record_revision: 'unversioned', converter_revision: 'bangumi@9' },
     });
-    expect(JSON.stringify(proposed[0]!.statement.value.content)).not.toContain('lowerBound');
+    expect(JSON.stringify(proposed[0]!.statement.value)).not.toContain('lowerBound');
     expect(commands.filter((command) => command.op === 'create')).toHaveLength(created);
 
     const afterCorrection = commands.length;
