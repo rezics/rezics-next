@@ -9286,5 +9286,9 @@
   "work_tags_more_in_read": "Diese Vorschau zeigt die ersten 24 zugelassenen Aussagen. Öffne Details für den Rest dieser Ansicht oder den Relationsleser der Eigenschaft für weitere Seiten.",
   "work_tags_page_boundary": "Dies ist eine bereitgestellte Seite, kein vollständiger Schlagwortkatalog. Details zeigt ihre Fakten und Belege; der Relationsleser verwaltet weitere Seiten und deren Verfügbarkeit.",
   "work_tags_details": "Fakten und Schlagwortbelege in Details öffnen",
-  "work_tags_relation_reader": "{role} weiterlesen"
+  "work_tags_relation_reader": "{role} weiterlesen",
+  "quotation_authoring": "Zitat bearbeiten öffnen",
+  "quotation_body_missing": "Es ist kein Zitattext erfasst.",
+  "quotation_language": "Sprache des Zitats",
+  "quotation_language_choice": "{number}. {language}"
 }

@@ -9286,5 +9286,9 @@
   "work_tags_more_in_read": "Cet aperçu montre les 24 premières assertions admises. Ouvrez les détails pour le reste de cette lecture ou poursuivez dans le lecteur de relations de la propriété.",
   "work_tags_page_boundary": "Il s’agit d’une page fournie, pas du catalogue complet des tags. Les détails présentent ses faits et éléments ; le lecteur de relations gère les pages suivantes et leur disponibilité.",
   "work_tags_details": "Ouvrir les faits et les éléments des tags dans les détails",
-  "work_tags_relation_reader": "Poursuivre : {role}"
+  "work_tags_relation_reader": "Poursuivre : {role}",
+  "quotation_authoring": "Ouvrir la rédaction de la citation",
+  "quotation_body_missing": "Aucun texte de citation n’est enregistré.",
+  "quotation_language": "Langue de la citation",
+  "quotation_language_choice": "{number}. {language}"
 }

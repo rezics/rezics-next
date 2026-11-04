@@ -1,3 +1,7 @@
+import { useRef, type ReactNode } from 'react';
+import { languageName } from '../../subject/language';
+import { correctionProposalAvailability } from '../catalogue/statement-editor';
+import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import { useQuotationVisit } from './quotation-reading/visit';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -6,7 +10,7 @@ import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type {
-  QuotationAction,
+  QuotationAssertion,
   QuotationContext,
   QuotationPart,
   QuotationRead,
@@ -74,40 +78,44 @@ function correctionControl(
   title: string,
 ) {
   const o = option(locale);
-  const propose = read.actions?.find((action: QuotationAction) => action.action === 'statement:propose');
+  const advised = read.actions?.find(
+    (action) => action.action === 'statement:propose' && action.operationId === 'subject.propose',
+  );
+  const state = read.viewerActions
+    ? correctionProposalAvailability(read.viewerActions)
+    : (advised?.state ?? 'unavailable');
   const href = `${catalogueEntries.authored({ id: selected.id, title: title || m.quotation_title({}, o), locale }).href}?${new URLSearchParams({ returnTo: origin })}`;
-  if (!propose || propose.state === 'allowed')
-    return (
-      <a className={linkClass} href={href}>
-        {m.quotation_correct({}, o)}
-      </a>
-    );
-  const status =
-    propose.state === 'denied'
-      ? m.quotation_denied({}, o)
-      : propose.state === 'unavailable'
-        ? m.quotation_unavailable({}, o)
-        : propose.state === 'withheld'
-          ? m.quotation_concealed_context({}, o)
-          : m.quotation_unsupported({}, o);
   return (
-    <p role="status" data-action-state={propose.state}>
-      {status}
-    </p>
+    <div className="space-y-2">
+      <a className={linkClass} href={href}>
+        {state === 'allowed' ? m.quotation_correct({}, o) : m.quotation_authoring({}, o)}
+      </a>
+      {state !== 'allowed' && (
+        <p role="status" data-action-state={state}>
+          {state === 'denied'
+            ? m.quotation_denied({}, o)
+            : state === 'withheld'
+              ? m.quotation_concealed_context({}, o)
+              : state === 'unsupported'
+                ? m.quotation_unsupported({}, o)
+                : m.quotation_unavailable({}, o)}
+        </p>
+      )}
+    </div>
   );
 }
 
 function textStatus(text: QuotationText, locale: string) {
   const o = option(locale);
   if (text.status === 'current') return undefined;
-  if (text.status === 'missing') return m.quotation_unknown_context({}, o);
+  if (text.status === 'missing') return m.quotation_body_missing({}, o);
   if (text.status === 'withheld') return m.quotation_concealed_context({}, o);
   if (text.status === 'stale') return m.quotation_stale({}, o);
   if (text.status === 'unsupported') return m.quotation_unsupported({}, o);
   return m.quotation_unavailable({}, o);
 }
 
-function SourcePart({ part, locale }: { part: QuotationPart; locale: string }) {
+function SourcePart({ part, locale, returnTo }: { part: QuotationPart; locale: string; returnTo: string }) {
   const status = partStatus(part, locale);
   const value = part.value ?? part.id;
   const internalHref =
@@ -125,7 +133,7 @@ function SourcePart({ part, locale }: { part: QuotationPart; locale: string }) {
           {value}
         </a>
       ) : internalHref ? (
-        <a className={linkClass} href={internalHref}>
+        <a className={linkClass} href={`${internalHref}?${new URLSearchParams({ returnTo })}`}>
           {value}
         </a>
       ) : (
@@ -135,55 +143,99 @@ function SourcePart({ part, locale }: { part: QuotationPart; locale: string }) {
   );
 }
 
-function QuotationStatement({ text, locale }: { text: QuotationText; locale: string }) {
+function AssertionGate({
+  spoiler,
+  locale,
+  children,
+}: {
+  spoiler?: boolean | undefined;
+  locale: string;
+  children: ReactNode;
+}) {
   const o = option(locale);
-  const unavailable = textStatus(text, locale);
-  const document = text.body?.ok ? text.body.document : undefined;
-  const content =
-    document?.availability === 'available' && document.body ? (
-      <div lang={document.language} className="max-w-prose">
-        <DocumentBody document={document.body} locale={locale} />
-      </div>
-    ) : text.text !== undefined ? (
-      <p lang={text.language} className="max-w-prose whitespace-pre-wrap">
-        {text.text}
-      </p>
-    ) : null;
+  return spoiler ? (
+    <SpoilerGate label={m.thread_reveal_spoiler({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+      {children}
+    </SpoilerGate>
+  ) : (
+    children
+  );
+}
+
+/** The exact address and original metadata travel with the assertion, inside its own disclosure. */
+function Inspection({
+  assertion,
+  locale,
+  returnTo,
+}: {
+  assertion?: QuotationAssertion | undefined;
+  locale: string;
+  returnTo: string;
+}) {
+  if (!assertion) return null;
+  const o = option(locale);
   return (
-    <section
-      className="min-w-0 space-y-3 rounded-md border p-4 [overflow-wrap:anywhere]"
-      data-statement-id={text.statementId}
-      aria-label={`${m.quotation_text({}, o)}${text.language ? ` (${text.language})` : ''}`}
-    >
-      <h3 className="font-medium">{m.quotation_text({}, o)}</h3>
-      {unavailable ? (
-        <p role="status">{unavailable}</p>
-      ) : text.spoiler ? (
-        <SpoilerGate label={m.thread_reveal_spoiler({}, o)}>{content}</SpoilerGate>
-      ) : (
-        content
-      )}
-      {text.qualifiers.length > 0 && (
-        <dl className="grid min-w-0 gap-2 text-sm sm:grid-cols-[minmax(8rem,auto)_1fr]">
-          {text.qualifiers.map((part) => (
-            <div key={`${text.statementId}:${part.property}`} className="contents">
-              <dt className="font-medium">{part.label}</dt>
-              <dd className="min-w-0 break-words">
-                {partStatus(part, locale) ?? part.value ?? part.id ?? m.quotation_unknown_context({}, o)}
-              </dd>
-            </div>
-          ))}
+    <>
+      <ValueExplanationEntry
+        id={assertion.holder}
+        property={assertion.statement.property.id}
+        statement={assertion.statement.id}
+        context={assertion.context}
+        title=""
+        locale={locale}
+        returnTo={returnTo}
+      />
+      <details>
+        <summary className={linkClass}>{m.catalogue_technical_details({}, o)}</summary>
+        <dl className="break-all">
+          <dt>{m.concept_visit_holder({}, o)}</dt>
+          <dd>{assertion.holder}</dd>
+          <dt>{m.concept_visit_property({}, o)}</dt>
+          <dd>{assertion.statement.property.id}</dd>
+          <dt>{m.settings_verification_statement({}, o)}</dt>
+          <dd>{assertion.statement.id}</dd>
+          <dt>{m.own_drafts_revision({}, o)}</dt>
+          <dd>{assertion.revision}</dd>
+          <dt>{m.prq_context({}, o)}</dt>
+          <dd>{assertion.context}</dd>
+          <dt>{m.concept_explore_source_release({}, o)}</dt>
+          <dd>{assertion.release}</dd>
         </dl>
+      </details>
+    </>
+  );
+}
+
+function Evidence({
+  qualifiers,
+  references,
+  locale,
+  returnTo,
+}: {
+  qualifiers: QuotationPart[];
+  references: QuotationText['references'];
+  locale: string;
+  returnTo: string;
+}) {
+  const o = option(locale);
+  return (
+    <div className="space-y-3">
+      {qualifiers.length > 0 && (
+        <ul className="space-y-2 text-sm">
+          {qualifiers.map((part, index) => (
+            <SourcePart key={index} part={part} locale={locale} returnTo={returnTo} />
+          ))}
+        </ul>
       )}
       <section aria-label={m.quotation_source({}, o)} className="space-y-2">
         <h4 className="text-sm font-medium">{m.quotation_source({}, o)}</h4>
-        {text.references.length === 0 ? (
+        {references.length === 0 ? (
           <p className="text-sm text-muted-foreground">{m.quotation_unknown_context({}, o)}</p>
         ) : (
           <ul className="space-y-2">
-            {text.references.map((reference) => (
+            {references.map((reference, index) => (
               <li
-                key={`${reference.statementId}:${reference.hash}`}
+                key={`${reference.hash}:${index}`}
                 className="min-w-0 break-words"
                 data-source-reference-hash={reference.hash}
                 data-statement-id={reference.statementId}
@@ -193,12 +245,12 @@ function QuotationStatement({ text, locale }: { text: QuotationText; locale: str
                 </p>
                 {reference.parts.length ? (
                   <ul className="space-y-1">
-                    {reference.parts.map((part) => (
-                      <SourcePart key={`${reference.hash}:${part.property}`} part={part} locale={locale} />
+                    {reference.parts.map((part, index) => (
+                      <SourcePart key={index} part={part} locale={locale} returnTo={returnTo} />
                     ))}
                   </ul>
                 ) : (
-                  <p role="status" className="text-sm">
+                  <p role="status">
                     {reference.status === 'withheld'
                       ? m.quotation_concealed_context({}, o)
                       : reference.status === 'unknown'
@@ -211,7 +263,132 @@ function QuotationStatement({ text, locale }: { text: QuotationText; locale: str
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function QuotationStatement({ text, locale, returnTo }: { text: QuotationText; locale: string; returnTo: string }) {
+  const o = option(locale);
+  const unavailable = textStatus(text, locale);
+  const document = text.body?.ok ? text.body.document : undefined;
+  return (
+    <section
+      className="min-w-0 space-y-3 rounded-md border p-4 [overflow-wrap:anywhere]"
+      aria-label={`${m.quotation_text({}, o)}${text.language ? ` (${text.language})` : ''}`}
+    >
+      <h3 className="font-medium">{m.quotation_text({}, o)}</h3>
+      <AssertionGate spoiler={text.spoiler} locale={locale}>
+        <div className="space-y-3" data-statement-id={text.statementId}>
+          {unavailable ? (
+            <p role="status">{unavailable}</p>
+          ) : document?.availability === 'available' && document.body ? (
+            <div lang={document.language} className="max-w-prose">
+              <DocumentBody document={document.body} locale={locale} />
+            </div>
+          ) : text.text !== undefined ? (
+            <p lang={text.language} className="max-w-prose whitespace-pre-wrap">
+              {text.text}
+            </p>
+          ) : null}
+          <Evidence qualifiers={text.qualifiers} references={text.references} locale={locale} returnTo={returnTo} />
+          <Inspection assertion={text.assertion} locale={locale} returnTo={returnTo} />
+        </div>
+      </AssertionGate>
     </section>
+  );
+}
+
+function ContextAssertion({
+  context,
+  locale,
+  returnTo,
+}: {
+  context: QuotationContext;
+  locale: string;
+  returnTo: string;
+}) {
+  return (
+    <li className="min-w-0 break-words">
+      <span className="me-2 font-medium">{contextRole(context.kind, locale)}:</span>
+      <AssertionGate spoiler={context.spoiler} locale={locale}>
+        <div className="space-y-2" data-statement-id={context.statementId}>
+          {context.status === 'current' && context.id && context.label ? (
+            <a
+              className={linkClass}
+              href={`${subjectHref({ id: context.id, label: context.label }, locale).href}?${new URLSearchParams({ returnTo })}`}
+            >
+              {contextText(context, locale)}
+            </a>
+          ) : (
+            contextText(context, locale)
+          )}
+          {context.status !== 'concealed' && context.status !== 'restricted' && (
+            <>
+              {context.assertion && (
+                <Evidence
+                  qualifiers={context.qualifiers ?? []}
+                  references={context.references ?? []}
+                  locale={locale}
+                  returnTo={returnTo}
+                />
+              )}
+              <Inspection assertion={context.assertion} locale={locale} returnTo={returnTo} />
+            </>
+          )}
+        </div>
+      </AssertionGate>
+    </li>
+  );
+}
+
+function SelectedText({
+  selected,
+  locale,
+  returnTo,
+  chosen,
+  choose,
+}: {
+  selected: QuotationRow;
+  locale: string;
+  returnTo: string;
+  chosen?: string | undefined;
+  choose: (id?: string) => void;
+}) {
+  const o = option(locale);
+  const text =
+    selected.statements.find((text) => text.statementId === chosen) ??
+    selected.statements.find((text) => text.language === locale) ??
+    selected.statements[0];
+  return (
+    <>
+      {selected.statements.length > 1 && (
+        <label className="block space-y-2">
+          <span>{m.quotation_language({}, o)}</span>
+          <select
+            className="block min-h-11 max-w-full rounded border bg-background p-2"
+            value={text?.statementId ?? ''}
+            onChange={(event) => choose(event.target.value)}
+          >
+            {selected.statements.map((statement, index) => (
+              <option key={statement.statementId ?? index} value={statement.statementId ?? ''}>
+                {m.quotation_language_choice(
+                  {
+                    number: index + 1,
+                    language: statement.language
+                      ? (languageName(statement.language, locale) ?? statement.language)
+                      : m.quotation_unknown_context({}, o),
+                  },
+                  o,
+                )}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {text && (
+        <QuotationStatement key={text.statementId ?? text.property} text={text} locale={locale} returnTo={returnTo} />
+      )}
+    </>
   );
 }
 
@@ -328,7 +505,7 @@ function QuotationVisitView({
               data-source-observation={selected.observation}
             >
               <h2 ref={selectedRef} tabIndex={-1} className="font-semibold">
-                {m.quotation_selected({ id: selected.id }, o)}
+                {m.quotation_selected({ id: String(read.rows.findIndex((row) => row.id === selected.id) + 1) }, o)}
               </h2>
               {selected.statements.length === 0 && <p role="status">{m.quotation_unavailable({}, o)}</p>}
               {selected.statements.some((text) => text.status === 'unavailable') && (
@@ -336,32 +513,21 @@ function QuotationVisitView({
                   {m.quotation_retry({}, o)}
                 </Button>
               )}
-              {selected.statements.map((statement) => (
-                <QuotationStatement
-                  key={statement.statementId ?? statement.property}
-                  text={statement}
-                  locale={locale}
-                />
-              ))}
+              <SelectedText
+                selected={selected}
+                locale={locale}
+                returnTo={visit.returnHref}
+                chosen={visit.text}
+                choose={visit.chooseText}
+              />
               <ul className="space-y-2">
                 {selected.contexts.map((context, index) => (
-                  <li
+                  <ContextAssertion
                     key={`${context.kind}:${context.statementId ?? index}:${context.property ?? ''}`}
-                    data-statement-id={context.statementId}
-                    className="min-w-0 break-words"
-                  >
-                    <span className="me-2 font-medium">{contextRole(context.kind, locale)}:</span>
-                    {context.status === 'current' && context.id && context.label ? (
-                      <a
-                        className={linkClass}
-                        href={`${subjectHref({ id: context.id, label: context.label }, locale).href}?${new URLSearchParams({ returnTo: visit.returnHref })}`}
-                      >
-                        {contextText(context, locale)}
-                      </a>
-                    ) : (
-                      contextText(context, locale)
-                    )}
-                  </li>
+                    context={context}
+                    locale={locale}
+                    returnTo={visit.returnHref}
+                  />
                 ))}
               </ul>
               {correctionControl(read, selected, locale, visit.returnHref, title.text)}
@@ -386,5 +552,8 @@ function QuotationVisitView({
 }
 
 export function QuotationView(props: Parameters<typeof QuotationVisitView>[0]) {
-  return <QuotationVisitView key={`${props.id}:${props.locale}`} {...props} />;
+  const source = useRef({ initial: props.initial, generation: 0 });
+  if (source.current.initial !== props.initial)
+    source.current = { initial: props.initial, generation: source.current.generation + 1 };
+  return <QuotationVisitView key={`${props.id}:${props.locale}:${source.current.generation}`} {...props} />;
 }

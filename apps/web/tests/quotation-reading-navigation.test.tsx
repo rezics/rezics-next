@@ -58,6 +58,7 @@ function page(ids = [first], selected = ids[0], next: string | null = null): Quo
     observation: 'work:1',
     unsupportedCount: 0,
     session: 'private-session',
+    actions: [{ action: 'statement:propose', operationId: 'subject.propose', state: 'allowed' }],
   };
 }
 

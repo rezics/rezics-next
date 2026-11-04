@@ -9286,5 +9286,9 @@
   "work_tags_more_in_read": "표시 가능한 주장 중 처음 24개를 보여 줍니다. 이 읽기의 나머지는 상세 정보에서, 다음 페이지는 속성의 관계 리더에서 확인하세요.",
   "work_tags_page_boundary": "제공된 한 페이지이며 전체 태그 목록이 아닙니다. 상세 정보에는 이 읽기의 사실과 근거가 있으며, 이후 페이지와 이용 가능 여부는 관계 리더가 담당합니다.",
   "work_tags_details": "상세 정보에서 사실과 태그 근거 열기",
-  "work_tags_relation_reader": "{role} 계속 읽기"
+  "work_tags_relation_reader": "{role} 계속 읽기",
+  "quotation_authoring": "인용문 작성 열기",
+  "quotation_body_missing": "기록된 인용문 본문이 없습니다.",
+  "quotation_language": "인용문 언어",
+  "quotation_language_choice": "{number}. {language}"
 }

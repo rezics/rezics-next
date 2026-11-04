@@ -9289,5 +9289,9 @@
   "work_tags_more_in_read": "表示できる主張の先頭24件を表示しています。この読み取りの残りは詳細へ、続きのページはプロパティの関連リーダーへ進んでください。",
   "work_tags_page_boundary": "これは提供されたページであり、タグ全体ではありません。詳細ではこの読み取りの事実と根拠を確認できます。続きのページと利用可否は関連リーダーが扱います。",
   "work_tags_details": "詳細で事実とタグの根拠を開く",
-  "work_tags_relation_reader": "{role} の続きを読む"
+  "work_tags_relation_reader": "{role} の続きを読む",
+  "quotation_authoring": "引用の編集を開く",
+  "quotation_body_missing": "引用の本文は記録されていません。",
+  "quotation_language": "引用の言語",
+  "quotation_language_choice": "{number}. {language}"
 }

@@ -9289,5 +9289,9 @@
   "work_tags_more_in_read": "此預覽顯示前 24 筆可見陳述。開啟詳細資料可檢視本次閱讀的其餘內容，或前往該屬性的原生關聯閱讀器繼續瀏覽。",
   "work_tags_page_boundary": "這是已提供的頁面，不代表完整標籤目錄。詳細資料保留此次閱讀的事實與證據；後續頁面及其可用狀態由關聯閱讀器提供。",
   "work_tags_details": "在詳細資料開啟事實與標籤證據",
-  "work_tags_relation_reader": "繼續閱讀：{role}"
+  "work_tags_relation_reader": "繼續閱讀：{role}",
+  "quotation_authoring": "開啟引文編輯",
+  "quotation_body_missing": "尚未記錄引文內文。",
+  "quotation_language": "引文語言",
+  "quotation_language_choice": "{number}. {language}"
 }

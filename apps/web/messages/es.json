@@ -9286,5 +9286,9 @@
   "work_tags_more_in_read": "Esta vista muestra las primeras 24 afirmaciones admitidas. Abre Detalles para el resto de esta lectura o continúa en el lector de relaciones de la propiedad.",
   "work_tags_page_boundary": "Esta es una página proporcionada, no el catálogo completo de etiquetas. Detalles conserva sus hechos y pruebas; el lector de relaciones gestiona las páginas siguientes y su disponibilidad.",
   "work_tags_details": "Abrir hechos y pruebas de etiquetas en Detalles",
-  "work_tags_relation_reader": "Continuar leyendo {role}"
+  "work_tags_relation_reader": "Continuar leyendo {role}",
+  "quotation_authoring": "Abrir la edición de citas",
+  "quotation_body_missing": "No se ha registrado el texto de la cita.",
+  "quotation_language": "Idioma de la cita",
+  "quotation_language_choice": "{number}. {language}"
 }
