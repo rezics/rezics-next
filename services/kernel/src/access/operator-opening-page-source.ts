@@ -45,32 +45,47 @@ export function createOperatorOpeningPageAccess(deps: {
         if (
           human.client_id !== profile.client_id ||
           JSON.stringify(human.scope) !== JSON.stringify(profile.scope) ||
-          human.amr.length !== 1 || !['pwd', 'pop'].includes(human.amr[0]!)
-        ) throw new AuthBindingDeniedError();
+          human.amr.length !== 1 ||
+          !['pwd', 'pop'].includes(human.amr[0]!)
+        )
+          throw new AuthBindingDeniedError();
         const context = { pool: deps.pool, deadline };
         const actor = await deps.access.authenticate(await deps.accessTokenForProof(human), context);
-        if (actor.kind !== 'account' || actor.accountId !== human.account_id ||
-          actor.clientId !== human.client_id || actor.authnEpoch !== human.authn_epoch ||
-          actor.requestedBy !== null || JSON.stringify(actor.scopes) !== JSON.stringify(human.scope))
+        if (
+          actor.kind !== 'account' ||
+          actor.accountId !== human.account_id ||
+          actor.clientId !== human.client_id ||
+          actor.authnEpoch !== human.authn_epoch ||
+          actor.requestedBy !== null ||
+          JSON.stringify(actor.scopes) !== JSON.stringify(human.scope)
+        )
           throw new AuthBindingDeniedError();
         const before = await readOperatorTransferState(deps, actor, { subjectAccountId }, context);
         if (!before || before.previous.operatorAccountId !== operatorAccountId) return null;
         const route = routeOf(operatorAccountId);
         if (route === null) throw new AuthBindingDeniedError();
-        const operator = await withConnection(deps.pool, client =>
-          readAccount(deadlineClient(client, deadline), route, operatorAccountId));
+        const operator = await withConnection(deps.pool, (client) =>
+          readAccount(deadlineClient(client, deadline), route, operatorAccountId),
+        );
         const current = await readOperatorTransferState(deps, actor, { subjectAccountId }, context);
         if (JSON.stringify(before) !== JSON.stringify(current)) throw new ManagementSourceRefusedError('stale');
-        if (!operator || !['actor', 'organization'].includes(operator.kind) ||
-          operator.state !== 'active' || operator.fenced || operator.operatorAccountId !== null)
+        if (
+          !operator ||
+          !['actor', 'organization'].includes(operator.kind) ||
+          operator.state !== 'active' ||
+          operator.fenced ||
+          operator.operatorAccountId !== null
+        )
           throw new ManagementSourceRefusedError('denied');
         requireAccessDeadline(deadline);
         return {
-          stage: 'current', viewer: { accountId: human.account_id },
+          stage: 'current',
+          viewer: { accountId: human.account_id },
           subject: { id: subjectAccountId, kind: 'actor' },
           operator: { id: operatorAccountId, kind: operator.kind as 'actor' | 'organization' },
           relation: { reservationId: before.previous.reservationId, version: before.expectedVersion },
-          disclosure: 'unavailable', allowedActions: ['opening'],
+          disclosure: 'unavailable',
+          allowedActions: ['opening'],
         };
       });
     },
