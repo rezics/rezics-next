@@ -69,7 +69,10 @@ test('Content media admission stays separate from current public actor observati
   const client = await pool.connect();
   try {
     const before = await readPublicIdentityObservations(client, [id]);
-    const admitted = await readAvatarSummaries(client, [before[0]!.avatarMediaId!]);
+    const observed = before[0];
+    if (!observed || !('avatarMediaId' in observed) || observed.avatarMediaId === null)
+      throw new Error('Active avatar reference was not admitted');
+    const admitted = await readAvatarSummaries(client, [observed.avatarMediaId]);
     expect(admitted.get(avatar)).toMatchObject({ media: avatar });
     await commands.updateAccount(await context(id), {
       accountId: id,
