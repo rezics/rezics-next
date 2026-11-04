@@ -143,7 +143,7 @@ test('sparse release windows continue, cursor refusal restarts, and withheld rea
     refuse = true;
     await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.game_reader_window_restart());
-    expect(mounted.host.textContent).toContain('Harbour Studio');
+    expect(mounted.host.textContent).toContain('+2024-05');
     refuse = false;
     fixture.respond(fixture.last);
     // The section restart and general refresh both request a first page; use the first matching control.
@@ -153,7 +153,7 @@ test('sparse release windows continue, cursor refusal restarts, and withheld rea
     fixture.fail(404);
     await mounted.click(m.game_reader_refresh());
     expect(mounted.host.textContent).toContain(m.game_reader_withheld());
-    expect(mounted.host.textContent).not.toContain('Harbour Studio');
+    expect(mounted.host.textContent).not.toContain('+2024-05');
     expect(mounted.host.querySelector('a')).toBeNull();
   } finally {
     await mounted.close();
