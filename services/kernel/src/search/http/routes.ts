@@ -8,6 +8,7 @@ import { DiscoveryPageSchema, discoveryHttpPage, type DiscoveryHttpPage } from '
 import { chooseLabel } from '../../semantic/language.ts';
 import { compileKinds } from '../query.ts';
 import { readSubjectSummaries, summaryAuthorization, type SubjectSummary } from '../../semantic/summaries.ts';
+import { createNativeSuggestionWorkContextReader } from '../suggestion-context-native.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../../semantic/http/summaries.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
 import { relatedReadEligibility } from '../../semantic/eligibility.ts';
@@ -44,12 +45,104 @@ export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> &
 };
 
 const object = { additionalProperties: false } as const;
+const contextLabel = t.Object(
+  { value: t.String({ minLength: 1, maxLength: 256 }), language: t.String({ minLength: 1, maxLength: 35 }) },
+  object,
+);
+const contextDate = t.Union([
+  t.Object(
+    {
+      state: t.Literal('value'),
+      property: t.String({ minLength: 1, maxLength: 128 }),
+      value: t.String({ pattern: '^\\d{4}$' }),
+      precision: t.Literal('year'),
+    },
+    object,
+  ),
+  t.Object(
+    {
+      state: t.Literal('value'),
+      property: t.String({ minLength: 1, maxLength: 128 }),
+      value: t.String({ pattern: '^\\d{4}-(0[1-9]|1[0-2])$' }),
+      precision: t.Literal('month'),
+    },
+    object,
+  ),
+  t.Object(
+    {
+      state: t.Literal('value'),
+      property: t.String({ minLength: 1, maxLength: 128 }),
+      value: t.String({ pattern: '^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$' }),
+      precision: t.Literal('day'),
+    },
+    object,
+  ),
+  t.Object(
+    {
+      state: t.Union([
+        t.Literal('unknown'),
+        t.Literal('no_value'),
+        t.Literal('withheld'),
+        t.Literal('unavailable'),
+        t.Literal('not_applicable'),
+      ]),
+      property: t.String({ minLength: 1, maxLength: 128 }),
+    },
+    object,
+  ),
+]);
+const workContext = t.Union([
+  t.Object(
+    {
+      subjectId: t.String({ format: 'uuid' }),
+      status: t.Literal('available'),
+      creator: t.Object(
+        {
+          id: t.String({ format: 'uuid' }),
+          label: contextLabel,
+          property: t.String({ minLength: 1, maxLength: 128 }),
+          role: contextLabel,
+        },
+        object,
+      ),
+      relation: t.Optional(
+        t.Object(
+          {
+            kind: t.Union([t.Literal('work'), t.Literal('release')]),
+            id: t.String({ format: 'uuid' }),
+            label: contextLabel,
+            date: t.Optional(contextDate),
+          },
+          object,
+        ),
+      ),
+      overflow: t.Optional(
+        t.Boolean(),
+      ),
+    },
+    object,
+  ),
+  t.Object(
+    {
+      subjectId: t.String({ format: 'uuid' }),
+      status: t.Union([
+        t.Literal('absent'),
+        t.Literal('not_applicable'),
+        t.Literal('empty'),
+        t.Literal('withheld'),
+        t.Literal('unavailable'),
+      ]),
+    },
+    object,
+  ),
+]);
 const result = t.Object(
   {
     id: t.String({ format: 'uuid' }),
     type: t.String(),
     labels: t.Record(t.String(), t.String()),
     summary: t.Union([SubjectSummarySchema, t.Null()]),
+    workContext: t.Optional(workContext),
   },
   object,
 );
@@ -215,7 +308,10 @@ const facetResponse = t.Object(
   },
   object,
 );
-const suggestResponse = t.Object({ subjects: t.Array(result), as_of: t.String({ format: 'date-time' }) }, object);
+const suggestResponse = t.Object(
+  { subjects: t.Array(result, { maxItems: 10 }), as_of: t.String({ format: 'date-time' }) },
+  object,
+);
 const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
 const unavailable = problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded');
 const resource = { route: 0, id: GLOBAL_CONTEXT };
@@ -792,11 +888,15 @@ export function searchRoutes<App>(
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           const scopeAccess = routeAccess();
+          const suggestionWorkContext = scopeAccess
+            ? createNativeSuggestionWorkContextReader({ pool, access: scopeAccess, actor, routeKey })
+            : undefined;
           let completed: Static<typeof suggestResponse> | undefined;
           await search.suggest(query.q, query.limit, query.languages, {
             deadline: job.deadline,
             ...(filter === undefined ? {} : { filter }),
             ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
+            ...(suggestionWorkContext ? { suggestionWorkContext } : {}),
             async complete(page) {
               completed = await fill(page, authorize, query.languages);
             },

@@ -53,6 +53,19 @@ const controlFocus =
 const compactSearch = '(max-width: 1023px)';
 const retryableSuggestions = ['error', 'unavailable', 'preparing', 'restart'];
 
+function formatSuggestionDate(value: string, precision: 'year' | 'month' | 'day', locale: string): string {
+  const [year, month, day] = value.split('-');
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(Number(year), Number(month ?? '01') - 1, Number(day ?? '01'));
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    ...(precision === 'year' ? {} : { month: 'short' as const }),
+    ...(precision === 'day' ? { day: 'numeric' as const } : {}),
+    timeZone: 'UTC',
+  }).format(date);
+}
+
 type HeaderSuggestionOwner = {
   sessionKey: string | null;
   locale: string;
@@ -449,6 +462,9 @@ export function HeaderSearchView({
                 const label = localizedLabel(suggestion.labels, locale);
                 const subject = coverSubject(suggestion.id, label.text, suggestion.summary, suggestion.type);
                 const href = subjectHref({ id: suggestion.id, label: label.text }, locale).href;
+                const workContext = suggestion.workContext?.status === 'available' ? suggestion.workContext : undefined;
+                const relation = workContext?.relation;
+                const relationDate = relation?.date?.state === 'value' ? relation.date : undefined;
                 return (
                   <li
                     key={suggestion.id}
@@ -503,6 +519,38 @@ export function HeaderSearchView({
                         <span className="truncate text-sm font-medium" lang={label.lang}>
                           {label.text}
                         </span>
+                        {workContext && (
+                          <span
+                            data-suggestion-work-context
+                            className="min-w-0 whitespace-normal text-xs leading-tight text-muted-foreground [overflow-wrap:anywhere]"
+                          >
+                            <bdi lang={workContext.creator.role.language} dir="auto">
+                              {workContext.creator.role.value}
+                            </bdi>
+                            <span aria-hidden="true"> · </span>
+                            <bdi lang={workContext.creator.label.language} dir="auto">
+                              {workContext.creator.label.value}
+                            </bdi>
+                          </span>
+                        )}
+                        {relation && (
+                          <span
+                            data-suggestion-work-relation
+                            className="min-w-0 whitespace-normal text-xs leading-tight text-muted-foreground [overflow-wrap:anywhere]"
+                          >
+                            <bdi lang={relation.label.language} dir="auto">
+                              {relation.label.value}
+                            </bdi>
+                            {relationDate && (
+                              <>
+                                <span aria-hidden="true"> · </span>
+                                <time lang={locale} dir="auto" dateTime={relationDate.value}>
+                                  {formatSuggestionDate(relationDate.value, relationDate.precision, locale)}
+                                </time>
+                              </>
+                            )}
+                          </span>
+                        )}
                         <SubjectMeta
                           type={localizedLabel(result?.types?.[suggestion.type] ?? {}, locale)}
                           year={hitYear(suggestion.facts)}
