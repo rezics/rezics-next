@@ -53,7 +53,7 @@ export async function readBoardPinAdviceRequest(
     const wire = nativeBoardPinAdvice(client.boards({ id: query.boardId }));
     if (!wire) return { state: 'unavailable' };
     await prepareSession(request, sessionEnv);
-    return inspectBoardPinAdvice({ ...query, ...input }, wire, viewerCredential(request));
+    return inspectBoardPinAdvice({ ...query, ...input }, wire, viewerCredential(request) ?? undefined);
   } catch {
     return { state: 'unavailable' };
   }
