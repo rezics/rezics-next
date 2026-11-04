@@ -427,7 +427,9 @@ test('Statement consent composes the complete family with isolated confirmation,
       expect(host.textContent).not.toContain(m.statement_consent_empty());
       await keyboardClick(button(host, m.statement_consent_continue()));
       await until(() => !!host.querySelector('[data-consent-part="recovery"]'));
-      expect(window.document.activeElement).toBe(host.querySelector('[data-consent-part="recovery"]'));
+      expect(window.document.activeElement).toBe(
+        host.querySelector('[data-consent-part="recovery"]')?.parentElement,
+      );
       expect(host.querySelector('[data-consent-part="assertion"], [data-consent-part="public"]')).toBeNull();
       expect(host.textContent).not.toContain(m.statement_consent_empty());
       await keyboardClick(button(host, m.statement_consent_retry_page()));
