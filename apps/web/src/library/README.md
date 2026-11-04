@@ -109,3 +109,35 @@ generated Search operation still lacks exact Collection scope, so review reports
 leaves exact operands inspectable, and offers a deliberate retry. It does not substitute Global values or hydrate
 values one chip at a time. Search retains the missing native Collection-value binding; Commerce retains accepted
 rule execution, admission and native outcome proof.
+
+# Identifying work context
+
+Personal and label shelves place supplied creator/release facts beneath the title in list, grid and table.
+A creator keeps its released property label (for example Director); no item relation is renamed Author.
+Only released list-presentation properties with item/time datatypes appear. Item names and localized destinations
+come from the producer's disclosed item facts; empty labels have no destination. Gregorian year/month/day facts
+use the shared precision-preserving date formatter. Missing facts, missing release metadata and unsupported facts
+retain the existing type-only fallback. Context is distinct from Entry state, progress, dates and personal score;
+it neither enables score sorting nor interprets a semantic fact as a vote.
+
+Decision: keep identifying context beside the mandatory title, independent of optional personal columns, and show
+only supplied facts admitted by the released list presentation.
+
+The adapter binds context to the original subject key, disclosed subject identity, revision, incarnation and, on a
+label shelf, exact assignment and label IDs. A changed binding or locale refuses old context. Reader/source
+replacement remains owned by the existing private-page lifetimes; context follows their currentness and links
+refuse activation from a retired visit. There is no delayed identifying-fact request that could revive an old Entry.
+The table keeps unlinkable tombstones and does not turn its content-capable title fallback into a creator claim.
+
+One existing FULL page supplies context: 20 personal rows by default, at most 100 raw rows, at most four released
+properties and three values each per row, with at most four displayed values. Continuations repeat that bounded
+page read. This adds no Subject requests, pagination, sorting, commands or private-context cache.
+
+The named unavailable seam is `suppliedShelfFacts`. Kernel's personal FULL list already attaches bounded list facts
+through `attachCollectionListFacts`, but the installed generated personal client has no facts field. The local
+optional adapter consumes that existing producer payload using the generated Collection fact union. Commerce must
+publish its existing personal facts schema in the generated client. FULL label assignments currently supply neither
+facts nor an identifying-context schema: Commerce must add the same optional four-property/three-value facts field
+to `/v1/libraryLabelAssignments?labelId=…&view=FULL`, using the existing bounded attachment with final assignment,
+Entry and reader revalidation. Semantic retains role meaning, accepted source qualification and item disclosure.
+Until those native fields arrive, no alternate endpoint fills the label shelf gap.

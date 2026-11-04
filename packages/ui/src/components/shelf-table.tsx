@@ -57,6 +57,8 @@ export interface ShelfTableRow extends ShelfSelectionProps {
   href: string;
   title: string;
   titleLang?: string;
+  /** Compact identifying context, separate from the title link and personal columns. */
+  titleContext?: ReactNode;
   cover: Omit<CoverProps, 'size'>;
   selectLabel?: string;
   creator?: ReactNode;
@@ -164,7 +166,8 @@ export function ShelfTable({
                       <Cover {...row.cover} size="fill" ratio={coverRatio(row.cover.subject.types)} decorative />
                     </div>
                   ) : id === 'title' ? (
-                    <a
+                    <>
+                    {row.href ? <a
                       className="font-medium hover:underline"
                       href={row.href}
                       lang={row.titleLang}
@@ -178,7 +181,9 @@ export function ShelfTable({
                       }
                     >
                       {row.title}
-                    </a>
+                    </a> : <span>{row.title}</span>}
+                    {row.titleContext}
+                    </>
                   ) : (
                     row[id]
                   )}

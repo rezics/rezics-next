@@ -29,6 +29,8 @@ import {
   type LibrarySubject,
 } from './reads';
 
+import { prepareShelfWorkContext, type ShelfFacts, type ShelfWorkContext } from './shelf-work-context/context';
+
 export type LibraryEntryStateRead = string;
 
 export function libraryEntryStateLabel(state: LibraryEntryStateRead, locale?: string): string {
@@ -36,6 +38,8 @@ export function libraryEntryStateLabel(state: LibraryEntryStateRead, locale?: st
 }
 
 export type PersonalLibraryEntry = {
+  facts?: ShelfFacts;
+  workContext?: ShelfWorkContext | null;
   subjectId: string;
   state: LibraryEntryStateRead;
   revision: number;
@@ -149,6 +153,7 @@ export type LibraryRestoreResult =
   | { ok: false; reason: 'stale' | 'expired' | 'closed' | 'unavailable' | 'signed-out' };
 
 type RawEntry = {
+  facts?: ShelfFacts;
   subjectId: string;
   state: LibraryEntryStateRead;
   revision: number;
@@ -173,6 +178,8 @@ function presentEntry(entry: RawEntry): ReloadedLibraryEntry {
     ...(entry.finishedAt === undefined ? {} : { finishedAt: entry.finishedAt }),
     activeProgressSession: entry.activeProgressSession ?? null,
     subject: subjectOf(entry.subject),
+    ...(entry.subject && entry.facts ? { facts: entry.facts } : {}),
+    workContext: null,
   };
 }
 
@@ -269,6 +276,7 @@ export function presentLibraryStateLabels(
       const stateOptions = release && type ? libraryStateOptions(release, type, locale) : [];
       return {
         ...entry,
+        workContext: prepareShelfWorkContext(entry, release, locale),
         stateLabel: stateLabel ?? other,
         stateOptions,
       };
