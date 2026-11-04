@@ -68,6 +68,7 @@ function ConsentRequest({
     });
   const decision = useRef<ReturnType<typeof createConsentDecision> | null>(null);
   const alert = useRef<HTMLDivElement>(null);
+  const readRetry = useRef<HTMLButtonElement>(null);
   const focusAfterRead = useRef(false);
   const returnFocus = useRef<HTMLElement | null>(null);
   const router = useRouter();
@@ -152,13 +153,14 @@ function ConsentRequest({
 
   useLayoutEffect(() => {
     if (state === 'loading' || focusAfterRead.current) {
-      focusSummary();
+      if (state === 'failed' && focusAfterRead.current) readRetry.current?.focus();
+      else focusSummary();
       if (state !== 'loading') focusAfterRead.current = false;
     } else if (document.activeElement === document.body) focusSummary();
   }, [state, consent]);
 
   useEffect(() => {
-    if (message) alert.current?.focus();
+    if (message && document.activeElement !== readRetry.current) alert.current?.focus();
   }, [message]);
 
   const returnTo = `/consent?${new URLSearchParams({ client_id: clientId, scope }).toString()}`;
@@ -178,7 +180,7 @@ function ConsentRequest({
           state === 'failed' ||
           state === 'not-found' ||
           state === 'signed-out') ? (
-          <Button type="button" variant="outline" onClick={retry}>
+          <Button ref={readRetry} type="button" variant="outline" onClick={retry}>
             {m.auth_consent_review_current()}
           </Button>
         ) : null}

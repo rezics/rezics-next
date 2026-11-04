@@ -121,7 +121,7 @@ test('mounted history survives loss of current review, replacement, new acknowle
     await answer(200, { malformed: true });
     privateGone();
     expect(host.querySelector('[role=alert]')).not.toBeNull();
-    expect(document.activeElement).toBe(host.querySelector('[role=alert]'));
+    expect(document.activeElement).toBe(button('Review current permissions'));
     await retry();
     const replacement = {
       ...body,
