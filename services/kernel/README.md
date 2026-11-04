@@ -976,7 +976,7 @@ Every module README keeps one such table, checked by `test/support/growth-cost-t
 
 ## Native growth capture memory
 
-Each capture has hard caps of 20,000 evidence entries and 32 MiB of charged bytes shared by foreground and background
+Each capture has hard caps of 20,000 evidence entries and 128 MiB of charged bytes shared by foreground and background
 evidence. Entries count statement text, retained statement error messages, native notice envelopes and plan nodes
 visited by the bounded plan walker. Statement and error strings use their UTF-8 byte size; native plan notices are
 charged at eight times their UTF-8 size to account for parsed-object expansion. A native notice is limited to 1 MiB,
