@@ -9300,5 +9300,16 @@
   "work_franchise_preview_more": "In diesem Datenstrom können weitere Einträge verfügbar sein. Unter Verbindungen fortfahren.",
   "work_franchise_stream_unsupported": "Die veröffentlichten Definitionen unterstützen diese Beziehungsrichtung nicht.",
   "work_franchise_stream_refused": "Diese Beziehungsabfrage wurde abgelehnt.",
-  "work_franchise_stream_concealed": "Es werden keine Beziehungsdaten offengelegt."
+  "work_franchise_stream_concealed": "Es werden keine Beziehungsdaten offengelegt.",
+  "library_copy_editor_edit_description": "Bearbeite dieses Exemplar und kehre mit Speichern oder Abbrechen zum Bestand zurück.",
+  "library_copy_editor_create_description": "Wähle eine Ausgabe sowie eine verfügbare Art und einen Status. Weitere Angaben sind unten möglich.",
+  "library_copy_editor_optional_title": "Optionale Angaben zum Exemplar",
+  "library_copy_editor_optional_description": "Ort, Quelle, Datumsangaben und Notizen sind optional. Beim Zuklappen bleiben die Eingaben erhalten.",
+  "library_copy_editor_dates_hint": "Gib Kalenderdaten ein oder lasse die Datumsfelder leer.",
+  "library_copy_editor_correct_fields": "Korrigiere diese Felder vor dem Speichern. Deine Eingaben wurden beibehalten.",
+  "library_copy_editor_character_count": "{count} / {limit} Zeichen",
+  "library_copy_editor_pending": "Der Befehl für das Exemplar wird verarbeitet. Lass den Editor geöffnet, bis das Ergebnis bestätigt ist.",
+  "library_copy_editor_uncertain": "Das Ergebnis ist unbestätigt. Beim Wiederholen wird die ursprüngliche Anfrage mit den ursprünglichen Werten gesendet. Spätere Änderungen sind nicht enthalten.",
+  "library_copy_editor_retry_save": "Ursprüngliches Speichern wiederholen",
+  "library_copy_editor_retry_delete": "Ursprüngliches Löschen wiederholen"
 }

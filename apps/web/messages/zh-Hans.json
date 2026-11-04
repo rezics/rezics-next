@@ -9300,5 +9300,16 @@
   "work_franchise_preview_more": "此关系流可能还有更多内容。可在“关联”中继续查看。",
   "work_franchise_stream_unsupported": "已发布的定义不支持此关系方向。",
   "work_franchise_stream_refused": "此关系的读取请求已被拒绝。",
-  "work_franchise_stream_concealed": "此关系的读取内容未披露。"
+  "work_franchise_stream_concealed": "此关系的读取内容未披露。",
+  "library_copy_editor_edit_description": "编辑此副本，保存或取消后返回库存。",
+  "library_copy_editor_create_description": "选择版本及可用的副本类型与状态，也可在下方填写选填资料。",
+  "library_copy_editor_optional_title": "副本选填资料",
+  "library_copy_editor_optional_description": "位置、来源、日期及备注均可留空。收起字段仍会保留已输入的内容。",
+  "library_copy_editor_dates_hint": "请使用日历日期，两个日期均可留空。",
+  "library_copy_editor_correct_fields": "请修正以下字段后再保存，已输入的内容均已保留。",
+  "library_copy_editor_character_count": "{count} / {limit} 个字符",
+  "library_copy_editor_pending": "副本操作正在处理中。请保持编辑器打开，直到结果确认。",
+  "library_copy_editor_uncertain": "操作结果尚未确认。重试会发送原始请求及原始内容，之后的编辑不会包含在此次重试中。",
+  "library_copy_editor_retry_save": "重试原始保存",
+  "library_copy_editor_retry_delete": "重试原始删除"
 }

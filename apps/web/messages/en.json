@@ -9396,5 +9396,16 @@
   "work_franchise_preview_more": "More may be available in this stream. Continue in Connections.",
   "work_franchise_stream_unsupported": "This relationship direction is not supported by the released definitions.",
   "work_franchise_stream_refused": "This relationship reading was refused.",
-  "work_franchise_stream_concealed": "No relationship reading is disclosed."
+  "work_franchise_stream_concealed": "No relationship reading is disclosed.",
+  "library_copy_editor_edit_description": "Edit this Copy, then save or cancel to return to your inventory.",
+  "library_copy_editor_create_description": "Choose an edition and its available kind and status. Optional details can be added below.",
+  "library_copy_editor_optional_title": "Optional Copy details",
+  "library_copy_editor_optional_description": "Location, source, dates and notes are optional. Hiding these fields keeps their entered values.",
+  "library_copy_editor_dates_hint": "Use calendar dates, or leave either date blank.",
+  "library_copy_editor_correct_fields": "Correct these fields before saving. Your entered values have been kept.",
+  "library_copy_editor_character_count": "{count} / {limit} characters",
+  "library_copy_editor_pending": "The Copy command is pending. Keep this editor open until its result is confirmed.",
+  "library_copy_editor_uncertain": "The result is unconfirmed. Retry sends the original request, including its original values; later edits are not part of that retry.",
+  "library_copy_editor_retry_save": "Retry original save",
+  "library_copy_editor_retry_delete": "Retry original deletion"
 }

@@ -9300,5 +9300,16 @@
   "work_franchise_preview_more": "이 관계에 더 많은 항목이 있을 수 있습니다. 연결에서 계속 확인하세요.",
   "work_franchise_stream_unsupported": "공개된 정의에서 이 관계 방향을 지원하지 않습니다.",
   "work_franchise_stream_refused": "이 관계의 읽기 요청이 거부되었습니다.",
-  "work_franchise_stream_concealed": "공개된 관계 정보가 없습니다."
+  "work_franchise_stream_concealed": "공개된 관계 정보가 없습니다.",
+  "library_copy_editor_edit_description": "이 소장본을 편집한 뒤 저장하거나 취소하여 목록으로 돌아갑니다.",
+  "library_copy_editor_create_description": "판본과 사용 가능한 소장본 종류 및 상태를 선택하세요. 아래에서 선택 정보를 입력할 수도 있습니다.",
+  "library_copy_editor_optional_title": "소장본 선택 정보",
+  "library_copy_editor_optional_description": "위치, 출처, 날짜, 메모는 선택 사항입니다. 항목을 접어도 입력한 값은 유지됩니다.",
+  "library_copy_editor_dates_hint": "날짜를 입력하거나 비워 두세요.",
+  "library_copy_editor_correct_fields": "저장하기 전에 다음 항목을 수정하세요. 입력한 값은 유지되었습니다.",
+  "library_copy_editor_character_count": "{count} / {limit}자",
+  "library_copy_editor_pending": "소장본 명령을 처리 중입니다. 결과가 확인될 때까지 편집기를 열어 두세요.",
+  "library_copy_editor_uncertain": "결과가 확인되지 않았습니다. 재시도하면 원래 값을 포함한 원래 요청이 전송됩니다. 이후 수정한 내용은 재시도에 포함되지 않습니다.",
+  "library_copy_editor_retry_save": "원래 저장 재시도",
+  "library_copy_editor_retry_delete": "원래 삭제 재시도"
 }

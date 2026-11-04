@@ -9,7 +9,8 @@ export type CopyProfile = {
   kinds: (Pick<ReleasedCopyKind, 'condition'> & {
     id: string;
     label: string;
-    statuses: { id: string; label: string }[];
+    labelLanguage?: string;
+    statuses: { id: string; label: string; labelLanguage?: string }[];
   })[];
 };
 
@@ -20,16 +21,20 @@ export type CopySubjectResult =
 /** Serialize only the choices and localized labels needed by this subject, never the definitions release. */
 export function resolveCopyProfile(release: Release, type: string, locale: string): CopyProfile {
   return {
-    kinds: (libraryProfile(release, type)?.copies?.kinds ?? []).map((kind) => ({
-      id: kind.id,
-      // Preserve explicit admission only; a physical label or ID supplies no capability.
-      ...(kind.condition === undefined ? {} : { condition: kind.condition }),
-      label: libraryCopyKindLabel(release, type, kind.id, locale)?.text ?? m.library_other(),
-      statuses: kind.statuses.map(({ id }) => ({
-        id,
-        label: libraryCopyStatusLabel(release, type, kind.id, id, locale)?.text ?? m.library_other(),
-      })),
-    })),
+    kinds: (libraryProfile(release, type)?.copies?.kinds ?? []).map((kind) => {
+      const label = libraryCopyKindLabel(release, type, kind.id, locale);
+      return {
+        id: kind.id,
+        // Preserve explicit admission only; a physical label or ID supplies no capability.
+        ...(kind.condition === undefined ? {} : { condition: kind.condition }),
+        label: label?.text ?? m.library_other(),
+        ...(label ? { labelLanguage: label.lang } : {}),
+        statuses: kind.statuses.map(({ id }) => {
+          const label = libraryCopyStatusLabel(release, type, kind.id, id, locale);
+          return { id, label: label?.text ?? m.library_other(), ...(label ? { labelLanguage: label.lang } : {}) };
+        }),
+      };
+    }),
   };
 }
 

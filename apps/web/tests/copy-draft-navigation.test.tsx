@@ -44,7 +44,6 @@ mock.module('../src/kernel/exposure', () => ({
   operationIsAdmitted: () => false,
   useOperation: () => false,
 }));
-mock.module('@rezics/ui/hooks/use-mobile', () => ({ useIsMobile: () => false }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 const DialogContent = forwardRef<HTMLDivElement, { children: ReactNode }>(({ children }, ref) => (
   <div ref={ref} role="alertdialog">
@@ -372,6 +371,33 @@ test('an uncertain update cannot enter conflict review and retries its original 
   await click(m.library_copy_save());
   expect(update.mock.calls[1]![0]).toEqual(update.mock.calls[0]![0]);
   expect(detail).not.toHaveBeenCalled();
+});
+
+test('delete cancellation restores its live control and a dirty close needs an explicit discard without sending', async () => {
+  await mount('edit');
+  await click(m.library_copy_more());
+  await changeInput(m.library_copy_source(), 'Kept source');
+  const originalKey = form().dataset.idempotencyKey;
+  const deleteControl = button(m.library_copy_delete());
+  await click(m.library_copy_delete());
+  expect(window.document.activeElement).toBe(
+    button(m.library_copy_cancel(), form().querySelector('[role="alertdialog"]')!),
+  );
+  await act(async () =>
+    form().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+  );
+  expect(window.document.activeElement).toBe(deleteControl);
+  expect(form().querySelector('[role="alertdialog"]')).toBeNull();
+  expect(form().dataset.idempotencyKey).toBe(originalKey);
+  await click(m.library_copy_cancel());
+  await click(m.library_copy_draft_navigation_stay());
+  expect(field(m.library_copy_source()).value).toBe('Kept source');
+  expect(form().dataset.idempotencyKey).toBe(originalKey);
+  await click(m.library_copy_cancel());
+  await click(m.library_copy_draft_navigation_discard());
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(update).not.toHaveBeenCalled();
+  expect(deletion).not.toHaveBeenCalled();
 });
 
 test('read-only conflict review works without command headers and ignores a response after editor closure', async () => {

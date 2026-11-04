@@ -50,6 +50,41 @@ unavailable reader and recovery without score preparation or vote reads; chronol
 
 # Copy reading context
 
+## Copy editor
+
+The production inventory editor uses the public `ResponsiveDialog` for both the phone drawer and desktop dialog.
+Its one form stays mounted across the existing 768px presentation boundary. The shared component restores the
+same connected control and its text selection where the installed control supports selection; composition remains
+on that control rather than being recreated from draft state. Copy code owns the draft, departure decision and
+immutable native command. Inline creation stays a normal page form with the same departure protection.
+
+Decision: optional Copy details stay collapsed until requested; invalid submission opens them and focuses the first
+invalid control, while disclosure and presentation changes retain the mounted fields and exact entered values.
+
+Location and source keep the existing 200 Unicode-character limit; notes keep the existing 1,000-character limit.
+The editor shows a character count and adjacent correction text without truncating input. A correction summary
+links to each invalid control. The native calendar-date inputs retain their existing blank/date meanings; no date
+ordering or money policy is added. Available kind and status choices retain released order, localized labels and
+fallback language. Unavailable edition/profile/detail reads use the existing retry or return path.
+
+The final action row stays reachable in the form's scroll surface, including the keyboard-sized viewport and bottom
+safe area. Pending and uncertain commands announce their state. An explicit retry sends the captured command with
+its original credential, key, kind, revision and fields; later visible edits never rewrite that command. Conflicts
+only adopt a newly read revision after explicit review and the existing draft-discard decision. Delete cancellation
+returns to the original connected delete control, and save/delete/readback still use the existing native writer and
+inventory address/occurrence rules.
+
+Shell close, Escape, backdrop, drawer dismissal and browser navigation use `CopyDraftNavigation`. Dirty drafts need
+a deliberate discard; pending or uncertain commands keep the editor open. A completed shell close can return focus
+only to the current connected inventory launcher. Replacement native reads and retired private lifetimes remove the
+old form; stable presentation grants no read or dispatch authority. Shell completion from an older editor cannot
+close a newer editor.
+
+Duplication audit findings 7/8 belong to this `packages/ui` journey: `use-is-mobile` remains a re-export of
+`use-mobile`, `use-dialog-behavior` remains removed, and Copy no longer imports its own responsive hook, Dialog or
+BottomSheet. The package's existing `./*` export supplies `@rezics/ui/responsive-dialog`; filter and selection-review
+consumers retain their public contract. Base UI remains the interaction foundation, with no Copy policy in UI.
+
 Each FULL copy row carries its own bounded native context from the same page request. Commerce continues to own copy revisions, profile meaning, private source/location/acquisition-date/note fields and allowed actions. Web renders `available`, `unsupported`, `scope`, `withheld`, `missing` and `unavailable` as distinct states. It shows selected property-keyed facts for `unsupported`, but only `available` supplies Work links. Qualified `schema:datePublished` values retain their recorded calendar precision; `schema:author` remains an author fact, `acquiredOn` remains private acquisition metadata, and a profile release digest is never an edition fact. Context does not change copy readability or authority, and the page does not hydrate Subjects per row. Work destinations return to the same localized inventory address using only its subject filter and opaque cursor.
 
 Decision: Render every native context state separately; only available Work identities are linked, while unsupported property-keyed facts remain visible without asserting a Work or edition association.
