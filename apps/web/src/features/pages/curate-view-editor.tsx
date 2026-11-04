@@ -1205,7 +1205,7 @@ function AdmittedPresentationViewEditor({
           locale={locale}
           lease={lease}
           read={transport.previewDraft}
-          focusHandoff={previewFocusHandoff}
+          {...(previewFocusHandoff ? { focusHandoff: previewFocusHandoff } : {})}
         />
       )}
       {preview}
