@@ -15,9 +15,6 @@ const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
 const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
 const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
 const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
-const receiptTrace: string[] = [];
-const callbackTrace: string[] = [];
-let nextScreenInstance = 0;
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -120,13 +117,11 @@ type RefreshPlan = (input: {
 }) => Promise<unknown>;
 const Context = createContext<Harness | null>(null);
 function RatingsScreen() {
-  const instance = useRef(++nextScreenInstance);
   const value = useContext(Context)!;
   const heading = useRef<HTMLHeadingElement>(null);
   const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const receipt = useOwnVotesReturnReceipt(historyKey, value.cursor, 'en');
   const [outcome, setOutcome] = useState<OwnVotesReturnOutcome | null>(null);
-  receiptTrace.push(`${instance.current}:${historyKey}:${receipt?.phase ?? 'none'}:${outcome?.kind ?? 'none'}`);
   const owner = (): OwnVotesReturnOwner => ({
     visitKey: 'journey',
     responseVersion: 0,
@@ -135,18 +130,12 @@ function RatingsScreen() {
     locale: 'en',
     source: 'rating.own_votes_page/v1',
     eligible: () => true,
-    canRead: () => {
-      callbackTrace.push('canRead');
-      return true;
-    },
+    canRead: () => true,
     validateResult: (result) => {
-      callbackTrace.push('validate');
       if (!result || typeof result !== 'object' || !('data' in result) || !('isSuccess' in result) || result.isSuccess !== true)
         return null;
       const read = result.data as OwnVotesRead;
-      const valid = read.state === 'ready' && read.subject === viewer && read.cursor === value.cursor;
-      callbackTrace.push(`valid:${valid}`);
-      return valid ? read : null;
+      return read.state === 'ready' && read.subject === viewer && read.cursor === value.cursor ? read : null;
     },
   });
   const returnVisit = useOwnVotesReturn({
@@ -157,10 +146,7 @@ function RatingsScreen() {
     isCurrent: () => true,
     refresh: value.refresh,
     receipt,
-    onResolved: (next) => {
-      callbackTrace.push(`resolved:${next.kind}`);
-      setOutcome(next);
-    },
+    onResolved: (next) => setOutcome(next),
     onFocus: (next) => {
       if (next.kind === 'found') {
         const row = Array.from(document.querySelectorAll<HTMLElement>('[data-own-vote-target]')).find(
@@ -218,12 +204,6 @@ async function setup(
 ) {
   const history = createMemoryHistory({ initialEntries: ['/library/ratings'] });
   const router = createRouter({ routeTree, history });
-  const routeTrace: string[] = [];
-  router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
-    const key = (location: typeof toLocation | undefined) =>
-      location && typeof location.state.key === 'string' ? location.state.key : 'none';
-    routeTrace.push(`${fromLocation?.pathname ?? 'none'}:${key(fromLocation)}>${toLocation.pathname}:${key(toLocation)}`);
-  });
   await router.load();
   const outside = window.document.createElement('button');
   outside.textContent = 'Other page control';
@@ -293,7 +273,6 @@ async function setup(
     outside,
     window,
     router,
-    routeTrace,
     calls,
     refreshCount,
     refreshCursors,
@@ -369,11 +348,8 @@ test('mounted journey keeps zero and original key, confirms exact readback, open
     );
     expect(view.host.textContent).toContain('Subject reader');
     await back(view);
-    if (view.refreshCount.value !== 1)
-      throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, location: view.router.state.location }));
     expect(view.refreshCount.value).toBe(1);
-    if (!view.host.querySelector('[data-own-vote-return-status]'))
-      throw new Error(JSON.stringify({ routeTrace: view.routeTrace, receiptTrace, callbackTrace, text: view.host.textContent }));
+    expect(view.host.querySelector('[data-own-vote-return-status]')).not.toBeNull();
     expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
     expect(view.window.document.activeElement).toBe(
       view.host.querySelector(`[data-own-vote-target="${target}"][data-own-vote-question="${question}"] button`),
@@ -409,8 +385,7 @@ test('failed return stays unavailable until the user retries the same page', asy
     await back(view);
     await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
     expect(view.refreshCount.value).toBe(1);
-    if (!view.host.textContent?.includes(m.library_my_ratings_unavailable()))
-      throw new Error(JSON.stringify({ attempts, routeTrace: view.routeTrace, receiptTrace, callbackTrace, text: view.host.textContent }));
+    expect(view.host.textContent).toContain(m.library_my_ratings_unavailable());
     expect(view.host.textContent).toContain(m.library_my_ratings_unavailable());
     expect(view.host.textContent).not.toContain(m.library_my_ratings_sparse());
     await click(view, button(view, m.library_my_ratings_retry_page()));
