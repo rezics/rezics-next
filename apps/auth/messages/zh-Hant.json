@@ -517,5 +517,13 @@
   "auth_account_delete_recovery_refresh": "重新整理刪除審核",
   "auth_account_delete_recovery_refreshing": "正在更新目前的刪除條件…",
   "auth_account_delete_recovery_repeat": "再次確認同一項刪除",
-  "auth_account_delete_recovery_title": "刪除結果仍未明確"
+  "auth_account_delete_recovery_title": "刪除結果仍未明確",
+  "auth_organization_delete_recovery_heading": "刪除結果未知",
+  "auth_organization_delete_recovery_fence": "先前請求的結果尚未確定，目前無法再次發起刪除。重新整理審核資訊不會核准、重複執行或確定先前請求的結果。",
+  "auth_organization_delete_recovery_pending": "正在讀取目前的審核資訊。先前的刪除結果仍然未知。",
+  "auth_organization_delete_recovery_authentication": "請登入以讀取目前的審核資訊。此處無法顯示組織的私密資訊。登入不會確定先前的刪除結果，也不會再次執行刪除。",
+  "auth_organization_delete_recovery_refused": "找不到該組織，或目前的審核請求遭到拒絕。私密資訊與刪除操作均無法使用。這無法說明先前的請求發生了什麼。",
+  "auth_organization_delete_recovery_changed": "帳號、組織或請求已變更。私密資訊與刪除操作已收起。先前的刪除結果仍然未知。",
+  "auth_organization_delete_recovery_unavailable": "目前無法取得審核資訊。瀏覽器逾時不會取消伺服器上的工作，也無法確定先前的刪除結果。你可以主動再次檢查。",
+  "auth_organization_delete_recovery_departure": "離開後，先前的刪除結果仍然未知。離開頁面或遺失瀏覽器儲存資料都無法取消已傳送到伺服器的工作。"
 }

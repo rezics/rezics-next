@@ -517,5 +517,13 @@
   "auth_account_delete_recovery_refresh": "Actualiser la vérification de suppression",
   "auth_account_delete_recovery_refreshing": "Actualisation des conditions actuelles de suppression…",
   "auth_account_delete_recovery_repeat": "Confirmer à nouveau la même suppression",
-  "auth_account_delete_recovery_title": "Le résultat de la suppression reste inconnu"
+  "auth_account_delete_recovery_title": "Le résultat de la suppression reste inconnu",
+  "auth_organization_delete_recovery_heading": "Résultat de la suppression inconnu",
+  "auth_organization_delete_recovery_fence": "Aucune autre suppression n’est disponible tant que cette demande reste sans résultat connu. Actualiser les informations de vérification ne peut ni l’approuver, ni la répéter, ni en déterminer le résultat.",
+  "auth_organization_delete_recovery_pending": "Lecture des informations de vérification actuelles. Le résultat de la suppression précédente reste inconnu.",
+  "auth_organization_delete_recovery_authentication": "Connectez-vous pour lire les informations de vérification actuelles. Aucune information privée sur l’organisation n’est disponible ici. La connexion ne résout ni ne répète la suppression précédente.",
+  "auth_organization_delete_recovery_refused": "L’organisation est introuvable ou la vérification est actuellement refusée. Les informations privées et les commandes de suppression ne sont pas disponibles. Cela ne permet pas de connaître le résultat de la demande précédente.",
+  "auth_organization_delete_recovery_changed": "Le compte, l’organisation ou la demande a changé. Les informations privées et les commandes de suppression ont été retirées. Le résultat de la suppression précédente reste inconnu.",
+  "auth_organization_delete_recovery_unavailable": "Les informations de vérification actuelles sont indisponibles. Un délai dépassé dans le navigateur n’annule pas le travail du serveur et ne détermine pas le résultat de la suppression précédente. Vous pouvez vérifier à nouveau volontairement.",
+  "auth_organization_delete_recovery_departure": "Si vous quittez cette page, le résultat de la suppression précédente restera inconnu. Quitter la page ou perdre les données du navigateur n’annule pas le travail déjà envoyé au serveur."
 }

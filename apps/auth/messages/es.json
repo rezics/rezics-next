@@ -517,5 +517,13 @@
   "auth_account_delete_recovery_refresh": "Actualizar la revisión de eliminación",
   "auth_account_delete_recovery_refreshing": "Actualizando las condiciones actuales para eliminar…",
   "auth_account_delete_recovery_repeat": "Confirmar de nuevo la misma eliminación",
-  "auth_account_delete_recovery_title": "El resultado de la eliminación sigue siendo desconocido"
+  "auth_account_delete_recovery_title": "El resultado de la eliminación sigue siendo desconocido",
+  "auth_organization_delete_recovery_heading": "Resultado de eliminación desconocido",
+  "auth_organization_delete_recovery_fence": "No se puede iniciar otra eliminación mientras esta solicitud anterior siga sin resolverse. Actualizar la información de revisión no la aprueba, repite ni resuelve.",
+  "auth_organization_delete_recovery_pending": "Leyendo la información de revisión actual. El resultado de la eliminación anterior sigue siendo desconocido.",
+  "auth_organization_delete_recovery_authentication": "Inicia sesión para leer la información de revisión actual. Aquí no hay información privada de la organización. Iniciar sesión no resuelve ni repite la eliminación anterior.",
+  "auth_organization_delete_recovery_refused": "La organización no está disponible o se ha denegado la revisión. La información privada y los controles de eliminación no están disponibles. Esto no indica qué ocurrió con la solicitud anterior.",
+  "auth_organization_delete_recovery_changed": "La cuenta, la organización o la solicitud ha cambiado. Se han retirado la información privada y los controles de eliminación. El resultado de la eliminación anterior sigue siendo desconocido.",
+  "auth_organization_delete_recovery_unavailable": "La información de revisión actual no está disponible. Un tiempo de espera agotado en el navegador no cancela el trabajo del servidor ni determina el resultado de la eliminación anterior. Puedes volver a comprobarlo de forma deliberada.",
+  "auth_organization_delete_recovery_departure": "Si sales, el resultado de la eliminación anterior seguirá siendo desconocido. Salir o perder el almacenamiento del navegador no cancela el trabajo ya enviado al servidor."
 }

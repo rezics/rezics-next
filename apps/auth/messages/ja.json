@@ -517,5 +517,13 @@
   "auth_account_delete_recovery_refresh": "削除のレビューを更新",
   "auth_account_delete_recovery_refreshing": "現在の削除条件を確認しています…",
   "auth_account_delete_recovery_repeat": "同じ削除リクエストをもう一度確認",
-  "auth_account_delete_recovery_title": "削除結果はまだ不明です"
+  "auth_account_delete_recovery_title": "削除結果はまだ不明です",
+  "auth_organization_delete_recovery_heading": "削除の結果は不明です",
+  "auth_organization_delete_recovery_fence": "先ほどのリクエストの結果が不明な間は、別の削除を開始できません。確認情報を更新しても、削除の承認や再実行は行われず、先ほどの結果も確定しません。",
+  "auth_organization_delete_recovery_pending": "現在の確認情報を読み込んでいます。先ほどの削除の結果は引き続き不明です。",
+  "auth_organization_delete_recovery_authentication": "現在の確認情報を読むにはログインしてください。ここでは組織の非公開情報を表示できません。ログインしても、先ほどの削除の結果は確定せず、削除が再実行されることもありません。",
+  "auth_organization_delete_recovery_refused": "組織が見つからないか、現在は確認が拒否されています。非公開情報や削除操作は利用できません。これだけでは、先ほどのリクエストがどうなったかは分かりません。",
+  "auth_organization_delete_recovery_changed": "アカウント、組織、またはリクエストが変わりました。非公開情報と削除操作の表示を終了しました。先ほどの削除の結果は引き続き不明です。",
+  "auth_organization_delete_recovery_unavailable": "現在の確認情報を取得できません。ブラウザーのタイムアウトはサーバーでの処理を取り消さず、先ほどの削除の結果も確定しません。必要に応じて、もう一度確認できます。",
+  "auth_organization_delete_recovery_departure": "このページを離れても、先ほどの削除の結果は不明なままです。ページを離れたり、ブラウザーの保存データが失われたりしても、サーバーに送信済みの処理は取り消せません。"
 }

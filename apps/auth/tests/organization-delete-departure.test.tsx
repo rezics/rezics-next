@@ -149,6 +149,56 @@ test('lost authority releases an open prompt without sending a native command', 
   expect(page.unload()).toBe(false);
 });
 
+for (const kind of [
+  'ready',
+  'denied',
+  'hidden',
+  'missing',
+  'signed-out',
+  'changed',
+  'unavailable',
+  'authentication-required',
+] as const)
+  test(`unknown deletion keeps departure protection after ${kind} readback`, async () => {
+    let result = ready(first);
+    const page = await setup(async () => result);
+    await flush(() => {
+      fill(page.input, '@first');
+      send(page.host);
+    });
+    await flush(() => page.calls[0]!.resolve(approval()));
+    await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+    const saved = readOrganizationDeleteUnknown(first);
+    result =
+      kind === 'ready'
+        ? ready(first)
+        : kind === 'authentication-required'
+          ? { kind, humanAccountId: human, action: 'authenticate' }
+          : { kind };
+    await page.choose('Check current organization');
+    expect(page.calls).toHaveLength(2);
+    expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
+    expect(page.host.querySelector('form')).toBeNull();
+    expect(page.host.textContent).not.toContain('@first');
+    expect(page.host.textContent).not.toContain(human);
+    expect(page.host.textContent).toContain('The deletion result is unknown');
+    expect(page.host.textContent).not.toContain('Organization deletion committed');
+    expect(page.host.querySelector('[role="status"]')!.textContent).not.toBe('');
+    if (kind === 'authentication-required' || kind === 'signed-out')
+      expect(page.host.querySelector('a[href="/login"]')).not.toBeNull();
+    expect(page.unload()).toBe(true);
+    await page.navigate();
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    await page.choose('Stay');
+    expect(document.activeElement?.id).toBe('organization-delete-recovery-heading');
+    expect(page.unload()).toBe(true);
+    await page.navigate();
+    await page.choose('Leave');
+    expect(page.router.history.location.pathname).toBe('/away');
+    expect(page.unload()).toBe(false);
+    expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
+  });
+
 test('step-up navigation bypasses the departure warning and keeps its continuation', async () => {
   const page = await setup();
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});

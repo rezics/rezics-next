@@ -517,5 +517,13 @@
   "auth_account_delete_recovery_refresh": "Prüfung zur Kontolöschung aktualisieren",
   "auth_account_delete_recovery_refreshing": "Aktuelle Löschfreigabe wird geprüft…",
   "auth_account_delete_recovery_repeat": "Dieselbe Löschung erneut bestätigen",
-  "auth_account_delete_recovery_title": "Ergebnis der Kontolöschung weiterhin unbekannt"
+  "auth_account_delete_recovery_title": "Ergebnis der Kontolöschung weiterhin unbekannt",
+  "auth_organization_delete_recovery_heading": "Ergebnis der Löschung unbekannt",
+  "auth_organization_delete_recovery_fence": "Solange diese frühere Anfrage ungeklärt ist, ist keine weitere Löschung verfügbar. Das Aktualisieren der Prüfinformationen kann sie weder genehmigen noch wiederholen oder klären.",
+  "auth_organization_delete_recovery_pending": "Aktuelle Prüfinformationen werden gelesen. Das Ergebnis der früheren Löschung bleibt unbekannt.",
+  "auth_organization_delete_recovery_authentication": "Melde dich an, um aktuelle Prüfinformationen zu lesen. Hier sind keine privaten Organisationsdaten verfügbar. Die Anmeldung klärt oder wiederholt die frühere Löschung nicht.",
+  "auth_organization_delete_recovery_refused": "Die Organisation fehlt oder die Prüfung wird derzeit verweigert. Private Daten und Löschfunktionen sind nicht verfügbar. Daraus lässt sich das Ergebnis der früheren Anfrage nicht ableiten.",
+  "auth_organization_delete_recovery_changed": "Das Konto, die Organisation oder die Anfrage hat sich geändert. Private Daten und Löschfunktionen wurden entfernt. Das Ergebnis der früheren Löschung bleibt unbekannt.",
+  "auth_organization_delete_recovery_unavailable": "Aktuelle Prüfinformationen sind nicht verfügbar. Eine Zeitüberschreitung im Browser beendet keine Serverarbeit und klärt das frühere Löschergebnis nicht. Du kannst erneut bewusst prüfen.",
+  "auth_organization_delete_recovery_departure": "Wenn du gehst, bleibt das Ergebnis der früheren Löschung unbekannt. Weder das Verlassen noch der Verlust des Browserspeichers kann bereits gesendete Serverarbeit abbrechen."
 }

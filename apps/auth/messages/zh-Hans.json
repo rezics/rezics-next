@@ -517,5 +517,13 @@
   "auth_account_delete_recovery_refresh": "刷新删除审核",
   "auth_account_delete_recovery_refreshing": "正在刷新当前删除条件…",
   "auth_account_delete_recovery_repeat": "再次确认同一项删除",
-  "auth_account_delete_recovery_title": "删除结果仍然未知"
+  "auth_account_delete_recovery_title": "删除结果仍然未知",
+  "auth_organization_delete_recovery_heading": "删除结果未知",
+  "auth_organization_delete_recovery_fence": "先前请求的结果尚未确定，暂时不能再次发起删除。刷新审核信息不会批准、重复执行或确定先前请求的结果。",
+  "auth_organization_delete_recovery_pending": "正在读取当前审核信息。先前的删除结果仍然未知。",
+  "auth_organization_delete_recovery_authentication": "请登录以读取当前审核信息。此处无法显示组织的私密信息。登录不会确定先前的删除结果，也不会再次执行删除。",
+  "auth_organization_delete_recovery_refused": "找不到该组织，或当前审核请求被拒绝。私密信息和删除操作均不可用。这不能说明先前的请求发生了什么。",
+  "auth_organization_delete_recovery_changed": "账号、组织或请求已更改。私密信息和删除操作已收起。先前的删除结果仍然未知。",
+  "auth_organization_delete_recovery_unavailable": "当前审核信息暂不可用。浏览器超时不会取消服务器上的工作，也不能确定先前的删除结果。你可以主动再次检查。",
+  "auth_organization_delete_recovery_departure": "离开后，先前的删除结果仍然未知。离开页面或丢失浏览器存储都不能取消已发送到服务器的工作。"
 }

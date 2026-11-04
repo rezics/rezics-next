@@ -1,4 +1,10 @@
 import { NewOrganizationPage } from '../../../routes/organizations.new';
+import { useRef, useState } from 'react';
+import {
+  OrganizationDeletionRecovery,
+  OrganizationDeletionDeparturePrompt,
+} from '../../../organization-deletion-recovery';
+import type { OrganizationDeletionLoad } from '../../../organization-deletion';
 import { m } from '../../../paraglide/messages.js';
 import { AuthStory, authLocale, reviewParameters, session, button, fill, waitFor } from '../story';
 
@@ -128,5 +134,81 @@ export const DeleteUnknown = {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     button(canvasElement, m.auth_organization_delete_heading())!.click();
     await waitFor(() => canvasElement.textContent?.includes(m.auth_organization_delete_unknown()));
+  },
+};
+
+// Presentation states share the real recovery section, without writing storage or commands.
+function RecoveryStory({
+  advice,
+  reading = false,
+  departure = false,
+}: {
+  advice: OrganizationDeletionLoad;
+  reading?: boolean;
+  departure?: boolean;
+}) {
+  const [pending, setPending] = useState(reading);
+  const [open, setOpen] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  return (
+    <AuthStory>
+      <main className="auth-login-form min-w-0 p-6">
+        <OrganizationDeletionRecovery
+          advice={advice}
+          pending={pending}
+          readback={() => setPending(true)}
+          headingRef={heading}
+        />
+        {departure ? (
+          <button type="button" onClick={() => setOpen(true)}>
+            {m.auth_account_operation_return()}
+          </button>
+        ) : null}
+        <OrganizationDeletionDeparturePrompt
+          open={open}
+          unknown
+          stay={() => setOpen(false)}
+          leave={() => setOpen(false)}
+          focus={() => heading.current?.focus()}
+        />
+      </main>
+    </AuthStory>
+  );
+}
+const readableAdvice: OrganizationDeletionLoad = {
+  kind: 'ready',
+  target: {
+    humanAccountId: deletionHuman,
+    organizationId: deletionOrganization,
+    handle: 'reading-group',
+    displayName: 'International reading group — 世界の読書会・跨地區閱讀與共同出版組織',
+  },
+};
+export const DeleteUnknownReadable = {
+  parameters: deletionParameters,
+  render: () => <RecoveryStory advice={readableAdvice} />,
+};
+export const DeleteUnknownRefused = {
+  parameters: deletionParameters,
+  render: () => <RecoveryStory advice={{ kind: 'denied' }} />,
+};
+export const DeleteUnknownUnavailable = {
+  parameters: deletionParameters,
+  render: () => <RecoveryStory advice={{ kind: 'unavailable' }} />,
+};
+export const DeleteUnknownAuthenticationRequired = {
+  parameters: deletionParameters,
+  render: () => <RecoveryStory advice={{ kind: 'authentication-required', humanAccountId: deletionHuman }} />,
+};
+export const DeleteUnknownReading = {
+  parameters: deletionParameters,
+  render: () => <RecoveryStory advice={readableAdvice} reading />,
+};
+export const DeleteUnknownDeparture = {
+  parameters: deletionParameters,
+  render: () => <RecoveryStory advice={{ kind: 'denied' }} departure />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    button(canvasElement, m.auth_account_operation_return())!.click();
+    await waitFor(() => document.querySelector('[role="alertdialog"]'));
   },
 };

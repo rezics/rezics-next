@@ -3,18 +3,15 @@ import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from '
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from '@rezics/ui/shadcn/alert-dialog';
 import { AuthButton as Button } from '../button';
 import { ErrorAlert } from '../alert';
 import { AuthPage } from '../frame';
+import { OrganizationDeletionRecovery, OrganizationDeletionDeparturePrompt } from '../organization-deletion-recovery';
+import {
+  organizationDeletionAttempt,
+  warnOrganizationDeletionAttempt,
+  type OrganizationDeletionAttempt,
+} from '../organization-deletion-attempt';
 import { m } from '../paraglide/messages.js';
 import { readPrivacyContact } from '../privacy-contact';
 import { forgetOperationKey, operationKeyFor } from '../account-operations';
@@ -58,10 +55,12 @@ function OrganizationDeleteDeparture({
   shouldWarn,
   leave,
   focus,
+  unknown,
 }: {
   shouldWarn: () => boolean;
   leave: () => void;
   focus: () => void;
+  unknown: boolean;
 }) {
   const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
   useLayoutEffect(() => {
@@ -71,36 +70,17 @@ function OrganizationDeleteDeparture({
     if (blocker.status === 'blocked') blocker.reset();
   };
   return (
-    <AlertDialog
+    <OrganizationDeletionDeparturePrompt
       open={blocker.status === 'blocked'}
-      onOpenChange={(open) => {
-        if (!open) stay();
+      unknown={unknown}
+      stay={stay}
+      focus={focus}
+      leave={() => {
+        if (blocker.status !== 'blocked') return;
+        leave();
+        blocker.proceed();
       }}
-    >
-      <AlertDialogContent
-        finalFocus={() => {
-          focus();
-          return false;
-        }}
-      >
-        <AlertDialogTitle>{m.auth_organization_delete_departure_heading()}</AlertDialogTitle>
-        <AlertDialogDescription>
-          {m.auth_organization_delete_departure_description()} {m.auth_account_operation_leave_notice()}
-        </AlertDialogDescription>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={stay}>{m.auth_organization_departure_stay()}</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => {
-              if (blocker.status !== 'blocked') return;
-              leave();
-              blocker.proceed();
-            }}
-          >
-            {m.auth_organization_departure_leave()}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    />
   );
 }
 
@@ -129,6 +109,8 @@ export function OrganizationDeleteContent({
   const [message, setMessage] = useState('');
   const [outcome, setOutcome] = useState<'form' | 'accepted' | 'unknown'>('form');
   const submitting = useRef<object | null>(null);
+  const attempt = useRef<OrganizationDeletionAttempt | null>(null);
+  const recoveryHeading = useRef<HTMLHeadingElement>(null);
   const review = useRef<
     | (OrganizationDeletionReview & {
         selected?: string | undefined;
@@ -156,15 +138,13 @@ export function OrganizationDeleteContent({
       Boolean(state.confirmation.trim()) ||
       state.pending ||
       submitting.current !== null ||
-      state.outcome === 'unknown' ||
       continuation.kind === 'pending';
     return Boolean(
       !bypassDeparture.current &&
-      current?.active &&
-      current.source === state.organizationId &&
-      current.reader === state.read &&
-      hasAuthority &&
-      unfinished,
+      current?.source === state.organizationId &&
+      current?.reader === state.read &&
+      (warnOrganizationDeletionAttempt(attempt.current, current?.selected) ||
+        (current?.active && hasAuthority && unfinished)),
     );
   }, []);
 
@@ -188,6 +168,7 @@ export function OrganizationDeleteContent({
 
   function leaveReview() {
     bypassDeparture.current = true;
+    if (attempt.current) attempt.current.mounted = false;
     if (review.current) review.current.active = false;
     selectedId.current = undefined;
     resetReview();
@@ -235,6 +216,12 @@ export function OrganizationDeleteContent({
     const selected = organizationId ?? saved?.organizationId;
     selectedId.current = selected;
     const uncertain = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
+    attempt.current = selected
+      ? organizationDeletionAttempt(
+          uncertain.kind === 'pending' ? uncertain.value : { organizationId: selected },
+          uncertain.kind !== 'absent',
+        )
+      : null;
     const current = {
       selected,
       operationKey:
@@ -256,7 +243,7 @@ export function OrganizationDeleteContent({
     };
     review.current = current;
     if (continuation.kind === 'invalid' || (saved && organizationId && saved.organizationId !== organizationId)) {
-      clearOrganizationDeleteStepUp();
+      if (continuation.kind === 'invalid') clearOrganizationDeleteStepUp();
       setMessage(m.auth_organization_delete_changed());
     }
     if (uncertain.kind !== 'absent') setOutcome('unknown');
@@ -264,6 +251,9 @@ export function OrganizationDeleteContent({
     const retire = () => {
       if (review.current) review.current.active = false;
       resetReview();
+      const retained = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
+      if (attempt.current && retained.kind !== 'absent') attempt.current.unresolved = true;
+      if (attempt.current?.unresolved) setOutcome('unknown');
       setLoaded({ kind: 'unavailable' });
     };
     const restore = (event: PageTransitionEvent) => {
@@ -272,6 +262,7 @@ export function OrganizationDeleteContent({
     window.addEventListener('pagehide', retire);
     window.addEventListener('pageshow', restore);
     return () => {
+      if (attempt.current) attempt.current.mounted = false;
       if (review.current) review.current.active = false;
       window.removeEventListener('pagehide', retire);
       window.removeEventListener('pageshow', restore);
@@ -391,12 +382,18 @@ export function OrganizationDeleteContent({
         setMessage(m.auth_organization_delete_changed());
         return;
       }
+      attempt.current = organizationDeletionAttempt({
+        organizationId: target.organizationId,
+        humanAccountId: target.humanAccountId,
+        operationKey: key,
+      });
       const result = await executeOrganizationDeletion(target, key, read, current);
       // Navigation cannot apply an earlier target's result to the new selection.
       if (!current.isCurrent()) return;
       if (result.ok) {
         forgetOperationKey(operation, target.humanAccountId);
         clearReviewContinuation(current);
+        if (attempt.current) attempt.current.unresolved = false;
         setOutcome('accepted');
         setConfirmation('');
         return;
@@ -410,8 +407,11 @@ export function OrganizationDeleteContent({
         // No new approval or execution after ambiguity; only current readback
         // follows while the original command identity remains stored.
         clearReviewContinuation(current);
+        const retained = readOrganizationDeleteUnknown(target.organizationId);
+        if (retained.kind === 'pending') attempt.current = organizationDeletionAttempt(retained.value, true);
+        else if (attempt.current) attempt.current.unresolved = true;
         setOutcome('unknown');
-        setMessage(m.auth_organization_delete_unknown());
+        setMessage('');
       } else if (result.reason === 'changed') {
         invalidateReview(current);
         clearReviewContinuation(current);
@@ -439,6 +439,8 @@ export function OrganizationDeleteContent({
       previous.selected !== currentOrganizationId ||
       previous.source !== organizationId ||
       previous.reader !== read ||
+      !attempt.current?.mounted ||
+      !attempt.current.unresolved ||
       submitting.current
     )
       return;
@@ -460,13 +462,7 @@ export function OrganizationDeleteContent({
       // A missing/denied read is not proof of deletion; a readable target is not
       // proof that an earlier command failed. Preserve the unknown command state.
       setLoaded(result);
-      setMessage(
-        result.kind === 'ready'
-          ? m.auth_organization_delete_still_readable()
-          : result.kind === 'denied' || result.kind === 'hidden' || result.kind === 'missing'
-            ? m.auth_organization_delete_read_denied()
-            : m.auth_account_operation_unavailable(),
-      );
+      setMessage('');
     } finally {
       if (current.isCurrent() && submitting.current === operationToken) {
         submitting.current = null;
@@ -479,11 +475,20 @@ export function OrganizationDeleteContent({
     ? m.auth_account_delete_privacy_contact({ contact: privacyContact }).split(privacyContact)
     : [];
   const departure = router ? (
-    <OrganizationDeleteDeparture shouldWarn={shouldWarn} leave={leaveReview} focus={() => input.current?.focus()} />
+    <OrganizationDeleteDeparture
+      shouldWarn={shouldWarn}
+      leave={leaveReview}
+      unknown={outcome === 'unknown'}
+      focus={() => {
+        if (bypassDeparture.current) return;
+        if (attempt.current?.unresolved) recoveryHeading.current?.focus();
+        else if (review.current?.isCurrent()) input.current?.focus();
+      }}
+    />
   ) : null;
 
   return (
-    <AuthPage heading={m.auth_organization_delete_heading()}>
+    <AuthPage heading={m.auth_organization_delete_heading()} returnToSecurity={outcome !== 'accepted'}>
       {departure}
       <div className="auth-login-form">
         <p>{m.auth_organization_delete_effect()}</p>
@@ -508,21 +513,12 @@ export function OrganizationDeleteContent({
             <AlertDescription>{m.auth_organization_delete_accepted()}</AlertDescription>
           </Alert>
         ) : outcome === 'unknown' ? (
-          <>
-            <p>{m.auth_organization_delete_unknown()}</p>
-            {selectedId.current ? (
-              <Button
-                type="button"
-                disabled={pending}
-                aria-busy={pending}
-                onClick={() => void readback(selectedId.current!)}
-              >
-                {m.auth_organization_delete_readback()}
-              </Button>
-            ) : (
-              <p>{m.auth_account_operation_unavailable()}</p>
-            )}
-          </>
+          <OrganizationDeletionRecovery
+            advice={loaded}
+            pending={pending || loaded === null}
+            headingRef={recoveryHeading}
+            readback={selectedId.current ? () => void readback(selectedId.current!) : undefined}
+          />
         ) : !loaded ? (
           <p role="status">{m.auth_inventory_loading()}</p>
         ) : loaded.kind === 'signed-out' ? (

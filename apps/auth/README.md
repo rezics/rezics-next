@@ -315,7 +315,13 @@ Departure and selection changes retire private reviews, pending browser stages, 
 already dispatched native work continues. Decision: cached-page recovery is explicit Retry with fresh confirmation,
 retaining the initiating human and any original uncertainty identity. Decision: warn on nonblank confirmation or a
 pending or uncertain deletion; Stay preserves the exact in-memory review, while Leave retires callbacks without
-cancelling or replaying native work. Authority changes release an open prompt immediately.
+cancelling or replaying native work. Authority loss releases an unsent draft warning, but every readback result
+(including authentication-required advice) preserves an unresolved attempt’s departure protection independently
+of current private authority. Recovery shows current advice without private labels or another command. Stay focuses
+the recovery heading; Leave retires browser work without clearing its exact stored uncertainty fence. Storage loss
+does not settle the in-memory attempt. Readback is deliberate, single-flight and uses the existing bounded native
+page reader; it cannot settle the command or produce an authentication-and-delete continuation.
+Decision: even readable recovery advice omits private labels; it reports current readability only.
 
 ## Create organization
 

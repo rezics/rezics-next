@@ -517,5 +517,13 @@
   "auth_account_delete_recovery_refresh": "Refresh deletion review",
   "auth_account_delete_recovery_refreshing": "Refreshing current deletion advice…",
   "auth_account_delete_recovery_repeat": "Confirm the same deletion again",
-  "auth_account_delete_recovery_title": "Deletion outcome is still unknown"
+  "auth_account_delete_recovery_title": "Deletion outcome is still unknown",
+  "auth_organization_delete_recovery_heading": "Deletion outcome unknown",
+  "auth_organization_delete_recovery_fence": "Another deletion is unavailable while this earlier request remains unresolved. Refreshing review information cannot approve, repeat or settle it.",
+  "auth_organization_delete_recovery_pending": "Reading current review information. The earlier deletion outcome remains unknown.",
+  "auth_organization_delete_recovery_authentication": "Sign in to read current review information. No private organization information is available here. Signing in does not settle or repeat the earlier deletion.",
+  "auth_organization_delete_recovery_refused": "The organization is missing or review is currently refused. Private information and deletion controls are unavailable. This does not tell us what happened to the earlier request.",
+  "auth_organization_delete_recovery_changed": "The account, organization or request changed. Private information and deletion controls have been retired. The earlier deletion outcome remains unknown.",
+  "auth_organization_delete_recovery_unavailable": "Current review information is unavailable. A browser timeout does not cancel server work or establish the earlier deletion outcome. You may deliberately check again.",
+  "auth_organization_delete_recovery_departure": "The earlier deletion outcome will remain unknown if you leave. Leaving or losing browser storage cannot cancel work already sent to the server."
 }
