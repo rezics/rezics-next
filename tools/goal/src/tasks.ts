@@ -33,7 +33,7 @@ import { readPool, withObservedExhaustion, type PoolReader } from './usage.ts';
 import { awaitHostCapacity, launch, startsFirst, workerPrompt, type RunningWorker } from './launch.ts';
 import { rebaseOnto } from './merge-train.ts';
 import { completeRebaseConflictContext } from './conflict-progress.ts';
-import { sameProcess, terminateProcessGroup } from './process.ts';
+import { hasLiveProcessUnder, inspectProcessIdentity, sameProcess, terminateProcessGroup } from './process.ts';
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerStore } from './store.ts';
@@ -79,6 +79,31 @@ function priorRebaseConflict(store: WorkerStore, taskId: string, attempt: number
 
 function sameBriefText(left: string, right: string): boolean {
   return normalizedBriefText(left) === normalizedBriefText(right);
+}
+
+function recordedRunPidsGone(stateDirectory: string, taskId: string, attempt: number): boolean {
+  let files: string[];
+  try {
+    files = readdirSync(join(stateDirectory, 'runs', taskId)).filter((name) => /^\d+\.jsonl\.pid$/.test(name));
+  } catch {
+    return false;
+  }
+  if (!files.includes(`${attempt}.jsonl.pid`)) return false;
+  return files.every((file) => {
+    let value: string;
+    try {
+      value = readFileSync(join(stateDirectory, 'runs', taskId, file), 'utf8').trim();
+    } catch {
+      return false;
+    }
+    const pid = Number(value);
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(pid) || pid < 1) return false;
+    try {
+      return inspectProcessIdentity(pid) === null;
+    } catch {
+      return false;
+    }
+  });
 }
 
 function applyRetryPriorityTransition(
@@ -352,9 +377,9 @@ export class WorkerTasks {
         : this.settings.integrationBranch;
   }
   /**
-   * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A
-   * stabilize dependency of a dev task counts only after stabilize has been merged into dev: released earlier, the
-   * dependent started without the fix it waited for.
+   * A task's dependencies are met once each integrated and its commit is on the branch the task bases on. A stopped
+   * or cancelled predecessor without a landing is dropped. A stabilize dependency of a dev task counts only after
+   * stabilize has been merged into dev: released earlier, the dependent started without the fix it waited for.
    */
   dependenciesMet(task: Pick<Task, 'brief'>, tasks?: readonly Task[]): boolean {
     const byId = tasks ? new Map(tasks.map((candidate) => [candidate.id, candidate])) : undefined;
@@ -367,6 +392,7 @@ export class WorkerTasks {
             const value = this.store.dependency(id);
             return value && { state: value.state, target: value.target, commit: value.task_commit };
           })();
+      if (['stopped', 'cancelled'].includes(dependency?.state ?? '')) return true;
       if (!dependency || !['integrated', 'merged'].includes(dependency.state)) return false;
       if (dependency.target === task.brief.target) return true;
       const commit = dependency.commit;
@@ -500,6 +526,47 @@ export class WorkerTasks {
       throw new Error(
         `Cannot start the local acceptance retry while prior check custody is unresolved (check ${unresolved.join(', ')}): no supported worker-check teardown-intent/receipt API is available; no check was cancelled.`,
       );
+  }
+  private unknownTerminationAbsent(task: Task, ref: { taskId: string; attempt: number }): boolean {
+    const intent = this.store.attempt(ref).terminationIntent;
+    return (
+      intent?.state === 'unknown' &&
+      intent.processIdentity === 'unknown' &&
+      intent.process === null &&
+      recordedRunPidsGone(this.settings.stateDirectory, task.id, ref.attempt) &&
+      hasLiveProcessUnder(task.worktree) === false
+    );
+  }
+  private async settleUnknownTermination(taskId: string): Promise<void> {
+    const lease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      undefined,
+      this.settings.policy?.leases,
+    );
+    let settlementLease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
+    try {
+      const task = this.store.task(taskId);
+      if (!task.currentAttempt) return;
+      const ref = { taskId, attempt: task.currentAttempt };
+      const attempt = this.store.attempt(ref);
+      if (attempt.terminationIntent?.state !== 'unknown') return;
+      settlementLease = acquireDirectoryLeaseWaiting(
+        `${attempt.logPath}.settle`,
+        undefined,
+        this.settings.policy?.leases,
+      );
+      const current = this.store.task(taskId);
+      if (current.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(current.state)) return;
+      if (!this.unknownTerminationAbsent(current, ref)) return;
+      const pool = this.settings.pools.find((candidate) => candidate.name === attempt.pool);
+      this.store.closeTerminated(ref, pool ? this.reader(pool) : null, pool?.configDirectory, () => {
+        const rechecked = this.store.task(taskId);
+        return rechecked.currentAttempt === ref.attempt && this.unknownTerminationAbsent(rechecked, ref);
+      });
+    } finally {
+      settlementLease?.release();
+      lease.release();
+    }
   }
   setUrgentGrant(managerId: string, enabled: boolean, actor: AuthenticatedManager): void {
     setUrgentGrant(this.store.db, this.settings.integration.supermanager, managerId, enabled, actor);
@@ -664,6 +731,7 @@ export class WorkerTasks {
             'stopped',
             'cancelled-dependency-reported',
             'cancelled-dependency-notice',
+            'dropped-dependency-notice',
           ].includes(entry.kind),
       );
     if (event) refuse(event);
@@ -2130,7 +2198,11 @@ export class WorkerTasks {
     if (!task.currentAttempt) return;
     const ref = { taskId, attempt: task.currentAttempt };
     const intent = this.store.attempt(ref).terminationIntent;
-    if (!intent || intent.processIdentity === 'unknown') return;
+    if (!intent) return;
+    if (intent.processIdentity === 'unknown') {
+      await this.settleUnknownTermination(taskId);
+      return;
+    }
     if (intent.settledAt) return;
     if (intent.operation === 'cancel') await this.cancel(taskId);
     else await this.stop(taskId);
@@ -2156,9 +2228,9 @@ export class WorkerTasks {
         managerId,
         taskId,
         kind: 'instruction' as const,
-        summary: `Cancelled dependency ${taskId} is holding tasks ${heldTasks.join(', ')}; decide whether the dependency is still needed.`,
+        summary: `Cancelled predecessor ${taskId} ended without landing; held tasks ${heldTasks.join(', ')} no longer wait for it.`,
       };
-      this.store.notifyCancelledDependency({ taskId, attempt: dependency.currentAttempt }, event, (notice) =>
+      this.store.notifyDroppedDependency({ taskId, attempt: dependency.currentAttempt }, event, (notice) =>
         inbox.deliver(notice),
       );
     }

@@ -214,13 +214,22 @@ test.each(['stop', 'cancel'] as const)(
   },
 );
 
-test('a stop with unknown process identity remains explicit and fences replacement', async () => {
+test('unknown process identity remains unsettled while a live process is in the worktree', async () => {
   const h = harness('#!/usr/bin/env bun\n');
+  let live: ReturnType<typeof spawn> | undefined;
   try {
     const task = h.tasks.dispatch(h.briefFile),
       worker = await h.tasks.retry(task.id),
       ref = worker.attempt;
     await worker.exited;
+    live = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      cwd: task.worktree,
+      stdio: 'ignore',
+    });
+    await new Promise<void>((resolve, reject) => {
+      live!.once('spawn', resolve);
+      live!.once('error', reject);
+    });
     h.store.updateAttempt(ref, (value) => {
       value.process = null;
     });
@@ -231,6 +240,11 @@ test('a stop with unknown process identity remains explicit and fences replaceme
     expect(h.store.record(ref)).toBeUndefined();
     expect(() => h.tasks.queueRetry(task.id)).toThrow(StaleAttemptError);
   } finally {
+    if (live && live.exitCode === null && live.signalCode === null) {
+      const exited = new Promise<void>((resolve) => live!.once('exit', () => resolve()));
+      live.kill('SIGTERM');
+      await exited;
+    }
     await h.disposeAsync();
   }
 });

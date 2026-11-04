@@ -1262,36 +1262,39 @@ export class WorkerJob implements GateOutcomeSink {
     }
     return released;
   }
-  /** Surface pre-existing held tasks with cancelled dependencies once, across host sweeps. */
-  private reportCancelledDependencies(): void {
+  /** Tell each owner once when a held task's predecessor ended without landing. */
+  private reportDroppedDependencies(): void {
     const store = this.tasks.store;
     const tasks = store.activeTasks();
+    const notices = new Map<
+      string,
+      { dependencyId: string; state: 'cancelled' | 'stopped'; managerId: string; taskId: string }
+    >();
     for (const task of tasks) {
       if (task.state !== 'held') continue;
-      const cancelled = task.brief.after.filter((id) => store.taskState(id) === 'cancelled');
-      if (!cancelled.length) continue;
-      const event = {
-        managerId: task.brief.manager,
-        taskId: task.id,
-        kind: 'instruction' as const,
-        summary: `Held task ${task.id} has cancelled dependencies ${cancelled.join(', ')}; decide whether they are still needed.`,
-      };
+      for (const dependencyId of task.brief.after) {
+        const state = store.taskState(dependencyId);
+        if (state !== 'cancelled' && state !== 'stopped') continue;
+        const key = `${dependencyId}:${task.brief.manager}`;
+        notices.set(key, { dependencyId, state, managerId: task.brief.manager, taskId: task.id });
+      }
+    }
+    for (const notice of notices.values()) {
       try {
-        store.write({ taskId: task.id, attempt: task.currentAttempt }, () => {
-          const alreadyReported = store
-            .events(task.id)
-            .some((record) => record.kind === 'cancelled-dependency-reported');
-          if (alreadyReported) return;
-          store.event({ taskId: task.id, attempt: task.currentAttempt }, 'cancelled-dependency-reported', {
-            cancelled,
-            event,
-          });
-          this.inbox.deliver(event);
-        });
+        const predecessor = store.task(notice.dependencyId);
+        store.notifyDroppedDependency(
+          { taskId: predecessor.id, attempt: predecessor.currentAttempt },
+          {
+            managerId: notice.managerId,
+            taskId: predecessor.id,
+            kind: 'instruction',
+            summary:
+              `Predecessor ${predecessor.id} ended ${notice.state} without landing; held task ${notice.taskId} no longer waits for it.`,
+          },
+          (event) => this.inbox.deliver(event),
+        );
       } catch (error) {
-        // A task held after a stop keeps its stopped attempt current, which the attempt fence refuses; skipping its
-        // notice must not fail every command and host sweep (all of them stopped on one such task on 2026-10-30).
-        this.recoveryFailed(task.id, 'cancelled-dependency notice', error);
+        this.recoveryFailed(notice.dependencyId, 'dropped dependency notice', error);
       }
     }
   }
@@ -1303,7 +1306,7 @@ export class WorkerJob implements GateOutcomeSink {
       if (!task.currentAttempt) continue;
       const ref = { taskId: task.id, attempt: task.currentAttempt };
       const intent = store.attempt(ref).terminationIntent;
-      if (!intent || intent.processIdentity === 'unknown') continue;
+      if (!intent) continue;
       if (intent.settledAt) continue;
       try {
         await this.tasks.resumeTermination(task.id);
@@ -1317,7 +1320,7 @@ export class WorkerJob implements GateOutcomeSink {
         throw error;
       }
     }
-    this.reportCancelledDependencies();
+    this.reportDroppedDependencies();
     // The same recovery sweep also observes detached custody after a model exit or cancellation.
     if (adoptRunning) {
       try {

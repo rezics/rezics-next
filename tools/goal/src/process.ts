@@ -93,6 +93,33 @@ function matches(current: ProcessIdentity | null, identity: ProcessIdentity): bo
 export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): boolean {
   return matches(processIdentity(identity.pid, procRoot), identity);
 }
+/** Whether a live process is inside a directory; null means /proc did not prove absence. */
+export function hasLiveProcessUnder(directory: string, procRoot = '/proc'): boolean | null {
+  const root = resolve(directory);
+  let entries: string[];
+  try {
+    entries = readdirSync(procRoot);
+  } catch {
+    return null;
+  }
+  for (const name of entries) {
+    if (!/^\d+$/.test(name)) continue;
+    let cwd: string;
+    try {
+      cwd = readlinkSync(`${procRoot}/${name}/cwd`).replace(/ \(deleted\)$/, '');
+    } catch (error) {
+      if (['ENOENT', 'ESRCH'].includes((error as NodeJS.ErrnoException).code ?? '')) continue;
+      return null;
+    }
+    if (cwd !== root && !cwd.startsWith(`${root}/`)) continue;
+    try {
+      if (inspectProcessIdentity(Number(name), procRoot)) return true;
+    } catch {
+      return null;
+    }
+  }
+  return false;
+}
 export function groupMembers(group: number, procRoot = '/proc'): ProcessIdentity[] {
   return readdirSync(procRoot)
     .filter((name) => /^\d+$/.test(name))

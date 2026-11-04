@@ -2109,7 +2109,7 @@ and integration-commit policy used to release held work.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
 
-For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. `status <task>` shows `terminationRequest` as requested, unknown or complete; missing process identity stays unknown and is never reported as physical termination. Host recovery resumes that same request and records its terminal result once. A stop abandons any retry already queued for that attempt; a later explicit retry queues a new one.
+For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. `status <task>` shows `terminationRequest` as requested, unknown or complete; missing process identity stays unknown. Host recovery may settle that request only after every recorded run PID is gone and a fresh scan finds no live process whose working directory is inside the task's worktree. It records the requested terminal result once. A stop abandons any retry already queued for that attempt; a later explicit retry queues a new one.
 The request fences worker settlement and replacement until its disposition is committed (`settledAt`). Physical
 confirmation alone does not authorize a retry. Recovery leaves a later explicit retry of a settled stop queued.
 
@@ -2122,12 +2122,11 @@ Product work integrating into dev can be retried at any generation: `retry <task
 `--expected-attempt 0`, also starts a never-started task, and `--brief` also amends a retry that is still waiting to
 start, which keeps its place in that order and its options. Other work refuses a second retry while one is pending;
 before its first start it is amended with `amend` or, for verification, registered with the proof start below.
-`cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. Tasks held
-after it remain held because cancellation does not satisfy `after`; each manager that owns those held tasks receives one
-instruction naming the held tasks and cancelled dependency. During host recovery, a held task with a cancelled
-dependency that predates this notification is reported once to its manager. The manager decides whether to revise the
-dependency.
-Cancellation notices use the committed cancelled generation without reopening ordinary worker writes; genuinely stale command generations still refuse.
+`cancel <task>` stops a running task, marks it cancelled, and removes it from its Goal's completion scope. A predecessor
+that ends cancelled or stopped without landing is dropped from dependent `after` gates: the host releases held tasks and
+notifies each owner with the predecessor ID. Continuation overlap admission ignores these ended tasks. Cancellation
+notices use the committed terminal generation without reopening ordinary worker writes; genuinely stale command
+generations still refuse.
 A held amendment keeps its old live attempt's ownership until settlement, even if its dependencies integrate first.
 The next host sweep can then release it under the task lease and start the amended contract from the updated base.
 An unstarted held task can use `retry --brief` on the same task id to replace the brief and dependency edges while keeping attempt 0, its branch, worktree and uncommitted files. The host creates its first attempt once the new dependencies are merged.
@@ -2261,7 +2260,8 @@ delivered after the manager stops. Manager events are attributed through `GOAL_M
 priority authorization requires the persisted provider session identity described above, so a worker-supplied
 `GOAL_MANAGER` cannot grant or consume critical priority. Workers get fresh session identities.
 Brief front matter can use `after: [task-id, ...]` to hold dispatch until each named task has integrated or merged;
-unknown task ids are refused, and already integrated or merged dependencies are ready immediately. For a Goal that uses
+unknown task ids are refused, and already integrated or merged dependencies are ready immediately. A dependency that
+ends cancelled or stopped without landing is dropped and releases its held dependents. For a Goal that uses
 `after`, once an integration leaves no ready, running, landing, held or integrated tasks, the control plane delivers one
 waking `goal-idle` event to its manager; replayed integration outcomes do not deliver it again. The host releases held
 tasks under their task lease and starts them from the updated target branch. A pending attempt whose launcher was
