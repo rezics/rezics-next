@@ -927,7 +927,7 @@ export function createCollectionReads(
         facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     } catch (error) {
       // Operand/size violations are errors, never a truncated or successful private result.
-      if (error instanceof RangeError || error instanceof TypeError) throw error;
+      if (error instanceof RangeError) throw error;
       facts = { state: 'unavailable', reason: 'currentness', retryable: true };
     }
     // This must follow the last foreign action and Semantic finalization, even for unavailable facts.

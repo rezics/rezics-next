@@ -86,7 +86,7 @@ test("mounted FULL wire preserves duplicate original occurrences and independent
     "GET",
     `${path}?view=FULL`,
     undefined,
-    "editor",
+    "reader",
   );
   expect(response.status).toBe(200);
   const page = response.body as {
