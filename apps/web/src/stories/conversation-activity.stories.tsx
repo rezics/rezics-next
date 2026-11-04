@@ -26,18 +26,13 @@ function subjectCard(state: State): CommunityNativeCard {
   return {
     author: { displayName: 'Mira Okabe', handle: 'mira' },
     presentation: { state: 'current', language: 'en', spoiler: false },
-    comments:
-      comments.state === 'withheld'
-        ? comments
-        : { ...comments, source: { epoch: 1, position: '16' } },
+    comments: comments.state === 'withheld' ? comments : { ...comments, source: { epoch: 1, position: '16' } },
     media: [],
   };
 }
 
 function ConversationActivityCards({ state }: { state: State }) {
-  const feedItem = homeFeedStoryPage('en', true, 'mixed').feedItems.find(
-    (item) => item.key.owner === 'content',
-  )!;
+  const feedItem = homeFeedStoryPage('en', true, 'mixed').feedItems.find((item) => item.key.owner === 'content')!;
   Object.assign(feedItem.summary, { conversationActivity: activity(state) });
   const items = [feedItem] as FeedItem[];
   const destination = `/en/threads/${encodeURIComponent(threadId)}/thread`;

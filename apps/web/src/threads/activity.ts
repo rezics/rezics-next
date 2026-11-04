@@ -35,8 +35,7 @@ export function conversationActivity(value: unknown): ConversationActivityDispla
     (value.cohort !== undefined && value.cohort !== 'public') ||
     !Number.isSafeInteger(count) ||
     (count as number) < 0 ||
-    (lastActivityAt !== null &&
-      (typeof lastActivityAt !== 'string' || !Number.isFinite(Date.parse(lastActivityAt))))
+    (lastActivityAt !== null && (typeof lastActivityAt !== 'string' || !Number.isFinite(Date.parse(lastActivityAt))))
   )
     return { state: 'withheld' };
   return { state: 'current', count: { kind, value: count as number }, lastActivityAt: lastActivityAt as string | null };

@@ -74,7 +74,11 @@ export function homeFeedItemPresentation(
             ) : null}
           </p>
         ) : activity?.state === 'withheld' ? (
-          <div data-slot="conversation-activity" role="status" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+          <div
+            data-slot="conversation-activity"
+            role="status"
+            className="flex flex-wrap gap-x-3 text-sm text-muted-foreground"
+          >
             <span>{m.board_thread_activity_unavailable({}, options)}</span>
             {href ? (
               <a href={href} className="text-primary underline underline-offset-4">
