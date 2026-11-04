@@ -116,7 +116,7 @@ export function CharacterIdentityVisit({
         {rows.length ? (
           <CoverList
             items={rows}
-            value={{ ...value, subject: value.subject ?? undefined }}
+            value={value}
             label={current.stream.label}
             itemVisit={(item) => {
               const visit = visitFor(item);

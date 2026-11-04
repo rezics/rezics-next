@@ -27,7 +27,7 @@ function pageForCharacter(): SubjectPageData {
     content: [{ type: 'SubjectHeader', props: { id: 'identity' } }],
   };
   page.document = document;
-  const plan = planReads(platformRegistry, document, { subject: source, context: page.context });
+  const plan = planReads(platformRegistry, document, { subject: source, context: page.context! });
   page.reads = Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: reading }]));
   return page;
 }

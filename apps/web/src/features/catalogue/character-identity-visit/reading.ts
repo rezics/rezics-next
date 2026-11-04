@@ -9,12 +9,12 @@ function displayable(item: Item): boolean {
 }
 
 function publicCard(item: Item): Item {
+  const publicItem = Object.fromEntries(
+    Object.entries(item).filter(([field]) => !['qualified', 'credit', 'supportSlot'].includes(field)),
+  ) as Item;
   return {
-    ...item,
+    ...publicItem,
     notes: [...item.notes, ...(item.qualified ?? []).map((note) => note.text)],
-    qualified: undefined,
-    credit: undefined,
-    supportSlot: undefined,
     gated: false,
   };
 }

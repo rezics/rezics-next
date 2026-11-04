@@ -275,6 +275,7 @@ function ConnectionsReading({
           const current = visit.sections[group];
           const busy = snapshot.pending.has(group);
           const section = current?.section;
+          const characterCurrent = current?.section.ok ? { ...current, section: current.section } : undefined;
           const listed = section?.ok
             ? current?.stream.direction === 'in'
               ? holderItems(section.body, 12, value.locale, value.reader.spoilerLevel)
@@ -345,9 +346,9 @@ function ConnectionsReading({
                   {character && group === 'relations' ? (
                     <div className="min-w-0" key={`${group}:${current?.stream.key}`}>
                       <CharacterIdentityVisit
-                        current={current!}
+                        current={characterCurrent!}
                         items={listed.items}
-                        value={{ ...rowValue, subject: rowValue.subject ?? undefined }}
+                        value={rowValue}
                         more={Boolean(next)}
                         identityAvailable={choices.some((stream) => stream.property === identityProperty)}
                       />
