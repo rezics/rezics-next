@@ -131,6 +131,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: `https://site.test/en/collections/${card.id}` });
+  window.document.head.innerHTML = `<link rel="canonical" href="https://site.test/en/collections/${card.id}">`;
   const globals = {
     window,
     document: window.document,
@@ -157,7 +158,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
-  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { QueryClient, QueryClientProvider, useQuery } = await import('@tanstack/react-query');
   const { createRouter, createRootRoute, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
   const { sessionQuery } = await import('../src/session/query');
@@ -206,6 +207,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
     );
   const input = async (element: HTMLInputElement, value: string) =>
     act(async () => {
+      element.focus();
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(element, value);
       element.dispatchEvent(new window.Event('input', { bubbles: true }) as unknown as Event);
     });
@@ -250,11 +252,17 @@ test('current native actions govern create/add/reorder; review precedes sending 
     { id: members[0]!.subject!.id, title: 'Disclosed work', types: ['work'], typeLabel: 'Work', cover: null },
   ]);
   try {
-    await render(<NewCollectionForm csrfToken="original-csrf" types={[]} sender={sender} />);
+    await render(
+      <NewCollectionForm csrfToken="original-csrf" types={[{ id: 'work', label: 'Work' }]} sender={sender} />,
+    );
     await input(host.querySelector('input[name=title]')!, 'Reviewed title');
     const visibility = host.querySelector('select')!;
     // The first select is the Type; visibility uses the existing radio group.
     expect(visibility.value).toBe('');
+    await act(async () => {
+      visibility.value = 'work';
+      visibility.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
+    });
     await click(
       [...host.querySelectorAll('[role=radio]')].find(
         (node) => node.getAttribute('value') === 'public' || node.getAttribute('id')?.endsWith('public'),
@@ -267,14 +275,19 @@ test('current native actions govern create/add/reorder; review precedes sending 
         .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
     });
     expect(calls).toHaveLength(1);
+    expect(calls[0]!.data.presentationKind).toBe('work');
     await click(button(m.library_publication_retry()));
     expect(calls).toHaveLength(2);
     expect(calls[1]).toEqual(calls[0]);
-    const show = (value: EditableCollectionPage) => {
-      acknowledged = value;
-      return render(
+    function PageHost() {
+      const { data: value } = useQuery({
+        queryKey: ['collection-journey'],
+        queryFn: async () => acknowledged,
+        initialData: acknowledged,
+      });
+      return (
         <CollectionPage
-          queryKey={['collection-journey', value.viewerActions]}
+          queryKey={['collection-journey']}
           cursor={undefined}
           page={value}
           refreshPage={async () => {
@@ -282,8 +295,15 @@ test('current native actions govern create/add/reorder; review precedes sending 
             return acknowledged;
           }}
           readEditorPage={async () => acknowledged}
-        />,
+        />
       );
+    }
+    const show = async (value: EditableCollectionPage) => {
+      acknowledged = value;
+      await act(async () => {
+        client.setQueryData(['collection-journey'], value);
+      });
+      await render(<PageHost />);
     };
     await show({ ...page, viewerActions: { state: 'ready', actions: [] } });
     expect(button(m.library_collection_add_items())).toBeUndefined();
