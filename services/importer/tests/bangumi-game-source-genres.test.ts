@@ -40,6 +40,11 @@ test('ordinary Game conversion preserves the exact infobox literal and withholds
     pointer: '/infobox/游戏类型/16',
     code: 'game_genre_occurrence_limit',
   });
+  for (const value of ['a'.repeat(65_537), '界'.repeat(21_846)]) {
+    const oversized = bangumiGameSourceGenres({ type: 4, infobox: `{{Infobox Game\n|游戏类型=${value}\n}}` });
+    expect(oversized.requirements).toHaveLength(0);
+    expect(oversized.diagnostics).toContainEqual({ pointer: '/infobox', code: 'infobox_value_limit' });
+  }
 
   const profile = parseBangumiGameGenreBindings({
     schemeId,

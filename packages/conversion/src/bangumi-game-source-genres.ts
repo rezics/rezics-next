@@ -12,6 +12,8 @@ export const bangumiGameSourceGenreScheme = 'https://rezics.com/schemes/bangumi/
 export const bangumiGameSourceGenreKey = '游戏类型';
 export const bangumiGameSourceGenreOccurrenceLimit = 16;
 const diagnosticLimit = 16;
+const infoboxCharacterLimit = 65_536;
+const infoboxByteLimit = 65_536;
 const sourceValueLimit = 200;
 const sourceValueBytes = 1024;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -56,6 +58,15 @@ export function bangumiGameSourceGenres(record: {
 }, scan?: BangumiGameInfoboxScan): BangumiGameSourceGenreMapping {
   if (record.type !== 4 || record.infobox === undefined)
     return { handledInfobox: false, requirements: [], diagnostics: [] };
+  if (
+    record.infobox.length > infoboxCharacterLimit ||
+    Buffer.byteLength(record.infobox, 'utf8') > infoboxByteLimit
+  )
+    return {
+      handledInfobox: true,
+      requirements: [],
+      diagnostics: [{ pointer: '/infobox', code: 'infobox_value_limit' }],
+    };
   const parsed = scan
     ? {
         matched: scan.handledInfobox,
