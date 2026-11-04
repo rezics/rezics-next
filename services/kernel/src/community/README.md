@@ -308,6 +308,43 @@ offer, and Realm claims still use their separate current claim reader; neither p
 receiver preserves its existing presentation, lifetime and mutation ownership without adding another frontend or
 Search dependency.
 
+#### Recent discussions in the Board shelf
+
+Decision: each original admitted Board receives at most three newest ordinary thread candidates, without pins or
+refilling concealed candidates; join advice remains exclusively the personal viewer-actions batch.
+
+`realm-board-home.ts` extends only the closed Home/shelf row with `recent`; the generic `BoardRecord` and ordinary
+Board directory stay unchanged. `recent.state: 'current'` contains reading-only `thread`, exact `target` and native
+`comments`, plus `complete` for the original raw prefix. An empty complete prefix means no admitted recent discussions;
+it grants no posting authority. An erased Board has unavailable recent context. Withheld Boards remain absent in
+their original shelf positions. Unknown activity is `comments.state: 'unavailable'`, never an invented zero.
+The existing conversation producer supplies public exact/lower-bound counts and source heads. No posts are counted
+by this consumer, and no protected cohort is relabelled as public. Source changes return the ordinary retry problem.
+
+The native observation retains the original Board and thread/opening lifecycle witnesses through presentation,
+publication and other foreign hydration. Final admission reopens the exact original keys with fresh native Access
+decisions, compares private thread/post/revision fingerprints and placement epochs, confirms activity's original
+generation/cohort/source head, then finishes the shelf's original Board/Realm observation. Empty and sparse prefixes
+take the same parent observation; a changed opening cannot acquire fresh advice around old content.
+
+The three-thread decision adds at most20 indexed `(route,board_id,created_at,thread_id)` LIMIT4 seeks (80 raw rows),
+two exact disclosure rounds per selected Board, and one initial plus one final activity batch for at most60 keys,
+within its existing100-key cap. Each disclosure reads up to three thread, opening-post and revision metadata keys,
+up to three admitted revision bodies and the existing Board/Realm keys; native Access preparation, partition batches,
+transaction controls and bounded citation disclosure are included in those existing producer costs. Connections are
+released between authorities. There are no pin reads, author hydration, reactions, full opening-page reads, history
+walks or output-driven refill. Source memory includes both rounds' bounded bodies, private fingerprints and activity
+witnesses; response memory includes at most60 native opening bodies with their existing document/reference limits,
+60 titles (at most1024 scalars each), targets and count/source tuples, including serialization copies. This adds the
+derived sum of the existing body/citation/Access bounds to the Home Cost below; it makes no measured growth claim.
+
+Both mounted operations (`realm.home` and `realm.boardShelf`) use `RealmHomeBoardPageSchema`, including the closed
+recent projection, through the existing registrations and dependencies. Publication's sole receiver must deliver
+the official package-root-derived callable before Web extends its Home transport; the older handwritten envelope
+does not authorize another substitute ABI. Web's agreed `RealmCommunityBoards` seam retains its existing shelf,
+focus, continuation and navigation slots. Client publication, browser receiving/join retirement and rendered journey
+acceptance remain follow-on work; this native source alone does not complete the connected product outcome.
+
 ### Cost
 
 - **Touches:** Initial home reads Realm identity/Access, mints a released native time and reads one exact container
