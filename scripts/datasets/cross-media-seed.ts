@@ -1,5 +1,9 @@
 import { runCrossMediaSeedCli } from '../../services/importer/src/cross-media-seed.ts';
-import { join, resolve } from 'node:path';
+import { mkdir } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
+import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
+import { createImportTransport } from '../../services/importer/src/import-client.ts';
+import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { fetchCrossMediaDumps } from './fetch-dumps.ts';
 
 function requiredEnvironment(name: string, env: NodeJS.ProcessEnv): string {
@@ -27,6 +31,19 @@ export async function runDevelopmentSeed(
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
   const showcase = join(root, '.temp', 'cross-media-seed', 'showcase.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
+  const catalogueState = join(root, '.temp', 'cross-media-seed', 'reviewed-vocabulary.sqlite');
+  await mkdir(dirname(catalogueState), { recursive: true });
+  const tokenProvider = await createAccountTokenProvider({
+    accountKeyPath: accountKey,
+    account,
+    client,
+    authOrigin: auth,
+    scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
+  });
+  const reviewedCatalogue = await seedReviewedCatalogue({
+    path: catalogueState,
+    port: createImportTransport({ origin: api, tokenProvider }),
+  });
   await (options.runSeed ?? runCrossMediaSeedCli)([
     '--bangumi',
     dumps.bangumi,
@@ -48,7 +65,7 @@ export async function runDevelopmentSeed(
     account,
     '--client',
     client,
-  ]);
+  ], { episodeCatalogueSubjects: reviewedCatalogue.subjects });
 }
 
 if (import.meta.main) {

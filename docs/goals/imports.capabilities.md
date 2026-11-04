@@ -1217,3 +1217,25 @@ The local task reuses Accounts' development persona and private seed wiring, the
 - Touches: at most 768 source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 review candidates per page, and 256 bounded omissions.
 - Bound: publication reads only the selected family, its current bindings and exact subject/property pages. It does not scan all pending candidates or alter ordinary importer behavior.
 - Growth check: the focused importer journal scenario is `services/importer/tests/showcase-publication.test.ts`. The native API scenario is `services/kernel/test/imports/showcase-publication.test.ts`; it remains deferred to integration, with no native pass claimed here.
+
+## Default Bangumi anime Episodes
+
+The explicit local `seed:dev` step runs the existing reviewed-catalogue publisher first and passes its acknowledged
+native subject IDs to the default cross-media seed. Only selected type-2 anime parents contribute Episode rows. Each
+admitted row retains `episode:<id>`, source citation, direct Episode metadata, and its exact `episode.subject_id`
+parent relation. Current disclosed public reads verify the existing episode-type scheme and Concepts before kind
+admission; retracted or unavailable bindings withhold only the kind statement. The importer composes the Episode
+adapter with any caller vocabulary hooks and keeps each adapter's diagnostics.
+
+Decision: the local showcase imports one `BATCH_LIMIT` Episode window per selected franchise and reports every
+additional selected source key as an explicit omission.
+
+- Touches: selected anime Episodes and parent edges, the existing reviewed type scheme and seven Concepts, current
+  public source-kind bindings, and the bounded seed result.
+- Bound: one delivery window per selected franchise; overflow gaps carry exact `episode:<id>` keys and stop at the
+  fixed 4,096 omission-diagnostic limit. Binding reads are fixed at one scheme plus seven Concepts, with no label or
+  catalogue scan.
+- Growth check: importer `showcase-bangumi-episodes.test.ts` pins selected identity, withholding, hook composition and
+  overflow. Kernel `showcase-bangumi-episodes.test.ts` pins independent acceptance/adoption, exact public parent/kind
+  reads, binding retraction and resumable identity. Existing episode ordinal/date/duration/summary scenarios remain
+  the mapper proof; no separate mapper matrix is added.
