@@ -86,6 +86,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     if (
       fragment !== '#connections' &&
       fragment !== '#manga-reader' &&
+      fragment !== '#literary-reader' &&
       !(subject?.[2] === 'sources' && fragment === '#subject-sources-heading')
     )
       return;

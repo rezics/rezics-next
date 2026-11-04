@@ -50,6 +50,9 @@ export type ProfileRelationPage = {
 /** A relation node in the current composition, including its failed or withheld read state. */
 export type ProfileRelationWindow = ProfileRelationPage & {
   node: string;
+  /** The exact native composition read bound, before any reader projection. */
+  limit?: number;
+  caughtUp?: boolean;
   status?: number;
   valid: boolean;
   count?: Count;
@@ -123,6 +126,10 @@ export function profileRelationWindows(page: {
         : undefined;
     pages.push({
       node: typeof node.props.id === 'string' ? node.props.id : '',
+      limit: planned.limit,
+      ...(body && isRecord(body.freshness) && typeof body.freshness.caught_up === 'boolean'
+        ? { caughtUp: body.freshness.caught_up }
+        : {}),
       property,
       direction,
       rows: admittedRows,
