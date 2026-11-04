@@ -36,7 +36,7 @@ function indexed(coverage: DocumentTextCoverage, texts: readonly string[]): Subj
     descriptions: [],
     statements: [],
     documentText: {
-      selection: { subject: subjectId, partition, securityRevision: 4, references },
+      selection: { subject: subjectId, observation: 'native-subject-observation-1', references },
       coverage,
       documents: texts.map((text, index) => ({
         reference: references[index]!,
@@ -62,6 +62,7 @@ describe('subject document text index projection', () => {
     const value = indexedSubject(indexed('complete', ['a phrase in English', 'un mot en français']));
 
     expect(value.document_text_coverage).toBe('complete');
+    expect(value.document_text_observation).toBe('native-subject-observation-1');
     expect(value.document_texts?.map(({ text, language }) => [text, language])).toEqual([
       ['a phrase in English', 'en'],
       ['un mot en français', 'fr'],

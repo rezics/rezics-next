@@ -105,6 +105,10 @@
       "document_text_coverage": {
         "type": "keyword"
       },
+      "document_text_observation": {
+        "type": "keyword",
+        "ignore_above": 2048
+      },
       "document_texts": {
         "type": "nested",
         "properties": {

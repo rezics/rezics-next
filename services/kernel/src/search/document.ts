@@ -43,6 +43,8 @@ export type SubjectDocument = {
   rating_prior_epoch?: number | null;
   /** Coverage remains explicit when a bounded native projection is incomplete or unavailable. */
   document_text_coverage?: 'complete' | 'partial' | 'unsupported' | 'preparing' | 'unavailable';
+  /** Opaque current native Subject observation chosen by the page reference selector. */
+  document_text_observation?: string;
   /** Nested documents keep phrases inside one document and one actual language. */
   document_texts?: {
     candidate: string;
@@ -131,15 +133,16 @@ function subjectFacts(statements: readonly IndexedStatement[], calendarFormat?: 
 
 function documentTextFields(subject: IndexedSubject, partition: number): Pick<
   SubjectDocument,
-  'document_text_coverage' | 'document_texts'
+  'document_text_coverage' | 'document_text_observation' | 'document_texts'
 > {
   const projection = subject.documentText;
   if (!projection) return {};
   const { selection } = projection;
   if (
     selection.subject !== subject.id ||
-    selection.partition !== partition ||
-    selection.securityRevision !== subject.securityRevision ||
+    !selection.observation ||
+    selection.observation.length > 2048 ||
+    subjectPartition(selection.subject) !== partition ||
     selection.references.length > DOCUMENT_TEXT_COST.documents ||
     projection.documents.length > DOCUMENT_TEXT_COST.documents
   )
@@ -184,6 +187,7 @@ function documentTextFields(subject: IndexedSubject, partition: number): Pick<
     throw new TypeError('Document text projection exceeds its retained bounds');
   return {
     document_text_coverage: projection.coverage,
+    document_text_observation: selection.observation,
     ...(documents.length === 0 ? {} : { document_texts: documents }),
   };
 }

@@ -2106,8 +2106,9 @@ bodies; block/media recipes remain explicitly unsupported until their owner admi
 
 `document-text.ts` supplies the bounded consumer and final excerpt verification seam. It does not activate a search
 field, change a generation, or implement a Content publisher. A missing native public producer is `unavailable`.
-`SubjectDocument` now has an optional nested `document_texts` projection and explicit `document_text_coverage`; each
-value retains its own document and language. The current production source does not populate or query these fields.
+`SubjectDocument` now has an optional nested `document_texts` projection, `document_text_coverage` and the selected
+native `document_text_observation`; each value retains its own document and language. The current production source
+does not populate or query these fields.
 The producer must admit public text rights independently of Subject visibility; an authenticated document read alone
 is insufficient. It must enforce the 2 MiB native source-byte ceiling before fetching/materializing, retain the
 Subject observation/reference identity, and revalidate both native selection and document rights after assembly.
