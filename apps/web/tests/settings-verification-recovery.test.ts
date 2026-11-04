@@ -281,12 +281,12 @@ test('empty and failed reads never settle an unknown original command, and retir
   );
   expect(html).toContain('Original statement');
   expect(html).toContain('Later draft');
-  expect(html).toMatch(
-    new RegExp(`<button[^>]*disabled=""[^>]*>${m.settings_verification_retry_original()}</button>`),
-  );
-  expect(html).toMatch(
-    new RegExp(`<button(?![^>]*disabled)[^>]*>${m.settings_verification_read_current()}</button>`),
-  );
+  const buttons = html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g) ?? [];
+  const originalRetry = buttons.find((button) => button.includes(m.settings_verification_retry_original()));
+  const currentRead = buttons.find((button) => button.includes(m.settings_verification_read_current()));
+  expect(originalRetry).toContain('disabled=""');
+  expect(currentRead).toBeDefined();
+  expect(currentRead).not.toContain('disabled=""');
   await controller.reload();
   expect(controller.snapshot()).toMatchObject({ readStatus: 'success', phase: 'uncertain', current: empty });
   expect(controller.snapshot().attempt).toBe(original);
