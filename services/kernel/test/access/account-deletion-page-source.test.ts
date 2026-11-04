@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { managementOperationProfile } from '@rezics/auth-contract';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 import { createPool } from '../../src/database/pool.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import type { Access } from '../../src/request/access.ts';
@@ -26,7 +26,7 @@ async function person() {
   const signed = await f.request('/signin', {
     email: `${name}@ordinary.test`,
     password,
-    ...managementOperationProfile('delete'),
+    ...{ client_id: AUTH_PAGE_OPERATION_CLIENT_ID, scope: [...AUTH_PAGE_OPERATION_SCOPES.delete] },
   });
   expect(signed.status).toBe(200);
   return { ...ordinary, exact: cookies(signed) };

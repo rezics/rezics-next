@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { managementOperationProfile, type SessionProof } from '@rezics/auth-contract';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES, type SessionProof } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { readNativeAccountIdentity } from './account-identity.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
@@ -53,7 +53,7 @@ export function accountDeletionPageTransport(
         { headers: request.headers, fresh: false },
         async (human): Promise<AccountDeletionPage> => {
           await service.internal.accessTokenForProof(human);
-          const profile = managementOperationProfile('delete');
+          const profile = { client_id: AUTH_PAGE_OPERATION_CLIENT_ID, scope: [...AUTH_PAGE_OPERATION_SCOPES.delete] };
           if (human.client_id !== profile.client_id || JSON.stringify(human.scope) !== JSON.stringify(profile.scope))
             return { kind: 'authentication-required', accountId: human.account_id };
           if (!access) return { kind: 'unavailable' };

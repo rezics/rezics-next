@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { managementOperationProfile, type SessionProof } from '@rezics/auth-contract';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES, type SessionProof } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { AuthService } from '../src/index.ts';
 import { accountDeletionPageTransport, ACCOUNT_DELETION_PAGE_PATH } from '../src/account-deletion-page.ts';
@@ -7,7 +7,7 @@ import { accountDeletionPageTransport, ACCOUNT_DELETION_PAGE_PATH } from '../src
 const issuer = 'https://deletion.auth.test';
 const proof = {
   account_id: '00000000-0000-8000-8000-123400000001',
-  ...managementOperationProfile('delete'),
+  ...{ client_id: AUTH_PAGE_OPERATION_CLIENT_ID, scope: [...AUTH_PAGE_OPERATION_SCOPES.delete] },
   amr: ['pwd'],
   authn_epoch: 1,
 } as SessionProof;

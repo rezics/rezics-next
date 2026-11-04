@@ -1,5 +1,10 @@
 import type { Pool } from 'pg';
-import { managementOperationProfile, type AuthSessionPort, type SessionProof } from '@rezics/auth-contract';
+import {
+  AUTH_PAGE_OPERATION_CLIENT_ID,
+  AUTH_PAGE_OPERATION_SCOPES,
+  type AuthSessionPort,
+  type SessionProof,
+} from '@rezics/auth-contract';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -30,7 +35,7 @@ export function createAccountDeletionPageAccess(deps: {
     async readAccountDeletionAdvice({ human, deadline }) {
       return within(deadline, async () => {
         requireAccessDeadline(deadline);
-        const profile = managementOperationProfile('delete');
+        const profile = { client_id: AUTH_PAGE_OPERATION_CLIENT_ID, scope: [...AUTH_PAGE_OPERATION_SCOPES.delete] };
         const route = routeOf(human.account_id);
         if (
           route === null ||
