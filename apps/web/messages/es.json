@@ -5163,6 +5163,8 @@
   "settings_verification_leave_title": "¿Salir de la verificación del agente?",
   "settings_watches_leave_title": "¿Salir de la recuperación de la eliminación de suscripciones?",
   "settings_watches_leave_description": "Se descartará la información local para reintentar esta eliminación. Una eliminación ya enviada podría completarse.",
+  "settings_shelf_leave_title": "¿Salir de los valores predeterminados de vista de Biblioteca?",
+  "settings_shelf_leave_description": "Se descartarán las opciones de vista de Biblioteca sin guardar y la información de recuperación conservada. Un comando ya enviado aún podría completarse.",
   "settings_all_drafts_leave_title": "¿Salir de estos ajustes?",
   "settings_other_drafts_leave_description": "Se descartarán los borradores locales y las claves de recuperación de esta página. Los comandos ya enviados pueden completarse.",
   "settings_account_rename_heading": "Cambiar tu nombre de usuario",

@@ -5163,6 +5163,8 @@
   "settings_verification_leave_title": "Quitter la vérification de l’agent ?",
   "settings_watches_leave_title": "Quitter la récupération de la suppression d’abonnement ?",
   "settings_watches_leave_description": "Les informations locales permettant de réessayer cette suppression seront abandonnées. Une suppression déjà envoyée peut encore aboutir.",
+  "settings_shelf_leave_title": "Quitter les paramètres d’affichage par défaut de la bibliothèque ?",
+  "settings_shelf_leave_description": "Les choix d’affichage non enregistrés et les informations de récupération conservées seront abandonnés. Une commande déjà envoyée peut encore aboutir.",
   "settings_all_drafts_leave_title": "Quitter ces paramètres ?",
   "settings_other_drafts_leave_description": "Les brouillons locaux et les clés de récupération conservés sur cette page seront supprimés. Les commandes déjà envoyées peuvent encore aboutir.",
   "settings_account_rename_heading": "Changer votre identifiant",

@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useRouter } from '@tanstack/react-router';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -41,28 +40,19 @@ export function ShelfTypeDefaults({
   readTypes?: (cursor?: string) => Promise<ShelfTypesCurrentRead>;
 }) {
   const locale = getLocale();
-  const router = useRouter({ warn: false });
   const [selected, setSelected] = useState('');
   const [page, setPage] = useState<ShelfTypesView>();
   const [busy, setBusy] = useState(false);
   const [cursor, setCursor] = useState<string>();
-  const lifetime = useRef({ active: true, retired: false, revision: 0 });
-  useEffect(() => {
+  const lifetime = useRef({ active: true, revision: 0 });
+  useLayoutEffect(() => {
     const owner = lifetime.current;
     owner.active = true;
-    const release = router?.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
-      if (fromLocation?.pathname === toLocation.pathname) return;
-      owner.retired = true;
-      owner.revision++;
-      setPage(undefined);
-      setSelected('');
-    });
     return () => {
       owner.active = false;
-      release?.();
     };
-  }, [router, locale, subject]);
-  const current = () => lifetime.current.active && !lifetime.current.retired && isCurrent();
+  }, []);
+  const current = () => lifetime.current.active && isCurrent();
   async function read(next?: string) {
     if (!current() || !subject || busy) return;
     const revision = ++lifetime.current.revision;

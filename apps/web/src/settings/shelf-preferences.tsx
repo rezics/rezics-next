@@ -33,6 +33,7 @@ import {
 import { useSettingsCurrent, useSettingsReadCurrent, useSettingsSessionOwner } from './settings-session-owner';
 import { ShelfTypeDefaults } from './shelf-type-defaults/editor';
 import type { ShelfTypesCurrentRead } from '../library/shelf-types-read';
+import { useSettingsNavigationDraft } from './reading-navigation';
 
 const personalColumn = {
   cover: 'cover',
@@ -243,6 +244,9 @@ export class ShelfPreferenceDraftRecovery {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
+  needsNavigationDecision = () =>
+    this.state.pending !== null ||
+    Object.keys(patchFor(this.state.known.shelf, this.state.draft, this.state.dirty)).length > 0;
 
   private update(patch: Partial<ShelfState>) {
     this.state = { ...this.state, ...patch };
@@ -553,6 +557,13 @@ export function ShelfPreferencesCard({
       }),
   );
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
+  const needsNavigationDecision = readCurrent() && controller.needsNavigationDecision();
+  useSettingsNavigationDraft(
+    'shelf',
+    needsNavigationDecision,
+    () => readCurrent() && controller.needsNavigationDecision(),
+    controller,
+  );
   const advice = state.advice;
   const shelfAdvice = advice?.shelfAdvice;
   const ownerMayChange = ownerMayChangeShelf(advice);

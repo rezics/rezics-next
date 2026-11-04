@@ -5383,6 +5383,8 @@
   "settings_verification_leave_title": "Leave agent verification?",
   "settings_watches_leave_title": "Leave watch removal recovery?",
   "settings_watches_leave_description": "The local retry information for this removal will be discarded. A removal already sent may still complete.",
+  "settings_shelf_leave_title": "Leave Library view defaults?",
+  "settings_shelf_leave_description": "Unsaved Library view choices and any retained recovery information will be discarded. A command already sent may still finish.",
   "settings_all_drafts_leave_title": "Leave these settings?",
   "settings_other_drafts_leave_description": "Local drafts and recovery keys kept on this page will be discarded. Commands already sent may still finish.",
   "erasure_details": "Technical status details",

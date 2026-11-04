@@ -318,7 +318,7 @@ test('verification latest matching status cannot resolve UNKNOWN; acknowledged e
 
 test('all Settings kinds share one destination decision; Leave settles once and native signout bypasses every kind', async () => {
   const navigation = new SettingsNavigationDrafts();
-  const kinds = ['reading', 'profile', 'notifications', 'collection-privacy', 'verification'] as const;
+  const kinds = ['reading', 'profile', 'notifications', 'collection-privacy', 'verification', 'shelf'] as const;
   const removes = kinds.map((kind) => navigation.register({ kind, needsDecision: () => true }));
   expect([...navigation.kinds()]).toEqual([...kinds]);
   expect(navigation.block('/settings', '/settings')).toBe(false);

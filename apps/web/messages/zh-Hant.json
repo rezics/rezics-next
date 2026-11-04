@@ -5163,6 +5163,8 @@
   "settings_verification_leave_title": "離開代理身分驗證？",
   "settings_watches_leave_title": "離開訂閱移除復原？",
   "settings_watches_leave_description": "將捨棄此次移除的本機重試資訊。已送出的移除操作仍可能完成。",
+  "settings_shelf_leave_title": "離開書庫檢視預設值設定？",
+  "settings_shelf_leave_description": "尚未儲存的書庫檢視選項和保留的復原資訊將被捨棄。已送出的命令仍可能完成。",
   "settings_all_drafts_leave_title": "離開這些設定？",
   "settings_other_drafts_leave_description": "此頁面保留的本機草稿和復原金鑰將遺失。已送出的命令仍可能完成。",
   "settings_account_rename_heading": "變更使用者名稱",
