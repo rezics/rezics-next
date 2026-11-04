@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
@@ -11,6 +11,15 @@ import { SearchInputRecovery } from '../src/search/search-input-recovery';
 import type { SearchPageData } from '../src/search/search';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@rezics/ui/bottom-sheet', () => ({
+  BottomSheet: ({ children, title }: { children: ReactNode; title: ReactNode }) =>
+    createElement(
+      'div',
+      { role: 'dialog', 'data-slot': 'drawer' },
+      createElement('h2', { 'data-slot': 'drawer-title' }, title),
+      children,
+    ),
+}));
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
