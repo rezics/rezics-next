@@ -424,7 +424,9 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(article().textContent).toContain(m.correction_citation_hint());
     expect(invalidAmount.value).toBe('+240');
     expect(invalidPrecision.value).toBe('10');
-    expect(article().textContent).toContain('Supplied publisher');
+    expect(
+      (scope().getByRole('combobox', { name: publisherLabel }) as HTMLInputElement).value,
+    ).toBe('Supplied publisher');
     await associations(0);
 
     await replace(invalidAmount, '+241');
