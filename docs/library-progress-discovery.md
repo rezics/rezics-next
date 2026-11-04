@@ -95,6 +95,13 @@ The Kernel route is mounted, but the installed `@rezics/client` does not yet exp
 subject-only reader and returns an explicit unavailable state for owner-wide or typed-filter reads; it does not make a
 raw HTTP request or invent a client declaration. The continuation brief tracks that integration.
 
+Publication must include the mounted route in `packages/client/src/kernel/library/progress-routes.d.ts` and the
+`ClientKernel` route graph exported through the package root. The runtime Eden proxy alone is not a published typed
+contract. Once published, Web derives its query and successful response types from
+`KernelClient['progressSessionDiscovery']['get']`, using that method for owner-wide and typed-filter reads while
+retaining `progressSessions.get` for exact Subject-only reads. A missing publication remains dependency unavailable,
+including on continuation; it cannot become an empty owner or filtered result.
+
 The page renders the API's retained session meaning, quantities, state, and action availability. It links each row to
 its exact native editor route and uses existing creation admission for new sessions. It does not group repeats, fetch
 details in a per-row loop, or duplicate editor and recovery logic.
@@ -106,3 +113,8 @@ address and stale-response behavior is covered in `apps/web/tests/progress-addre
 `apps/web/tests/progress-index-current-origin.test.tsx`; recorded page states live in
 `apps/web/src/stories/library-progress-discovery.stories.tsx`. Owner-wide Web reads depend on the Content-owned
 generated client publication and must use the installed method before rendered acceptance is recorded.
+
+Native source, emitted route declaration, public root/callable typing, and native/rendered acceptance are separate
+verification boundaries. Focused address and current-origin tests preserve the unavailable publication seam and
+existing page behavior; they do not establish a successful owner-wide native journey. Native histories at 64, 512,
+and 4096 sessions and complete caller costs remain controller acceptance, with seeded rendered review owned by Web.
