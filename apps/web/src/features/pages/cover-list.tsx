@@ -108,7 +108,7 @@ function ItemCard({
       notes={notes}
       qualified={item.qualified ?? []}
       value={value}
-      openInNewTab={exactEdition}
+      openInNewTab={exactEdition || !!inspect}
       inspection={
         inspect ? (
           <Button variant="outline" className="mt-2" onClick={(event) => inspect(event.currentTarget)}>
