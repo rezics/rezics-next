@@ -2875,3 +2875,26 @@ projections, so this delivery claims no page/index acceptance.
 ### Bangumi Game first publication date
 
 [Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
+
+### Bangumi Game web destinations
+
+Ordinary Game imports preserve exact unqualified values from the pinned
+`{{Infobox Game` fields `website` and `链接` as separate `schema:url` and
+`wdt:P973` proposals. Occurrence citations retain the source field pointer; the
+Bangumi subject URL remains provenance only. Unsafe, malformed or qualified
+destinations are withheld without suppressing independent valid facts. The
+conversion and selected-family callers share the honest `bangumi@13` revision
+and existing native review, adoption, refresh, journal and current-read APIs.
+
+Decision: preserve admitted URL bytes; withhold labelled destinations until a
+released source contract can preserve their platform, region or edition meaning.
+No destination is fetched or followed, and none grants mutation authority.
+
+- Touches: at most 16 candidates across the two destination fields for one
+  source-selected Game, with independent native adoption.
+- Bound: existing projection, infobox, journal and 64 KiB command-envelope
+  limits; overflow is an explicit bounded omission.
+- Growth check: `tests/bangumi-game-web-destinations.test.ts` covers ordinary
+  registration and malformed, dangerous, qualified and overflow cases. The
+  selected-family native lifecycle is `test/imports/bangumi-game-web-destinations.test.ts`;
+  execution and public-page acceptance remain controller-owned.

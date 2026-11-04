@@ -1259,3 +1259,33 @@ bind this source field.
   covers exact literals and current binding omissions; the selected-family
   native scenario is `services/kernel/test/imports/bangumi-game-source-genres.test.ts`.
   Fixtures are authored examples, not observed source-dump records.
+
+## Bangumi Game web destinations
+
+Decision: preserve admitted URL bytes and withhold labelled destinations until a
+released source contract can preserve their platform, region or edition meaning.
+
+Only exact type-4 `{{Infobox Game` occurrences for `website` and `链接` are
+considered. `website` proposes `schema:url`; `链接` proposes `wdt:P973`. Fully
+parsed unqualified URLs retain their exact spelling, including query and
+fragment bytes, and cite the Bangumi subject record. Credentials, controls,
+unsupported schemes, malformed mixed structures and labelled qualifiers are
+withheld. A bad occurrence does not suppress a valid sibling or unrelated
+names, dates, player counts, appearances, performer credits or covers. The two
+properties remain independent when they contain the same URL.
+
+Ordinary conversion uses `bangumi@13`; selected-family imports use the existing
+combined `cross-media-entities@11+bangumi@13` registration and journal. Each
+occurrence keeps its exact field pointer in bounded evidence. A conversion
+offers at most 16 destination candidates across both fields; overflow produces
+an explicit bounded omission. No links are fetched or followed.
+
+- Touches: one Game record, its `website` and `链接` facts, exact occurrence
+  evidence, and existing review/adoption/current-read APIs.
+- Bound: 65,536 infobox bytes and characters, depth 2, 64 fields, 4,096 bytes
+  per selected field, 16 candidates and at most 16 sanitized omissions.
+- Growth check: importer `tests/bangumi-game-web-destinations.test.ts` covers
+  distinct properties, exact citations, unsafe and qualified omissions, a
+  malformed mixed field and overflow. The same-UUID native scenario is
+  `services/kernel/test/imports/bangumi-game-web-destinations.test.ts`; its
+  source-shaped fixture makes no claim of live source observation.

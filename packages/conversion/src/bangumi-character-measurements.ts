@@ -43,7 +43,7 @@ export type BangumiCharacterMeasurementProjection = Readonly<{
   diagnostics: readonly Readonly<{ pointer: string; code: string }>[];
 }>;
 
-type Line = Readonly<{ text: string; start: number; end: number }>;
+export type BangumiInfoboxLine = Readonly<{ text: string; start: number; end: number }>;
 type Occurrence = {
   field: PhysicalField;
   pointer: string;
@@ -74,7 +74,7 @@ const unitRows = [
   { unit: gram, names: ['g', '克', '公克'] },
 ] as const;
 
-function* lines(source: string): Generator<Line> {
+export function* bangumiInfoboxLines(source: string): Generator<BangumiInfoboxLine> {
   let start = 0;
   while (start <= source.length) {
     const newline = source.indexOf('\n', start);
@@ -130,7 +130,10 @@ function diagnosticsSink() {
   };
 }
 
-function braces(line: string, depth: number): { depth: number; exceeded: boolean; invalid: boolean } {
+export function bangumiInfoboxBraceTransition(
+  line: string,
+  depth: number,
+): { depth: number; exceeded: boolean; invalid: boolean } {
   let nextDepth = depth;
   for (let i = 0; i < line.length; i++) {
     if (line.startsWith('{{', i)) {
@@ -146,6 +149,9 @@ function braces(line: string, depth: number): { depth: number; exceeded: boolean
   }
   return { depth: nextDepth, exceeded: false, invalid: false };
 }
+
+const lines = bangumiInfoboxLines;
+const braces = bangumiInfoboxBraceTransition;
 
 function fieldForProperty(field: MeasurementField): 'schema:height' | 'schema:weight' {
   return field === 'height' ? 'schema:height' : 'schema:weight';
@@ -200,7 +206,7 @@ export function projectBangumiCharacterMeasurements(infobox: unknown): BangumiCh
   }
 
   const iterator = lines(infobox);
-  let first: IteratorResult<Line>;
+  let first: IteratorResult<BangumiInfoboxLine>;
   do {
     first = iterator.next();
   } while (!first.done && !first.value.text.trim());

@@ -1470,9 +1470,9 @@ The local task reuses Accounts' development persona and private seed wiring, the
 
 Decision: accept one literal HTTP(S) `官方网站` value per field occurrence. Exact URL duplicates coalesce; distinct addresses remain separate candidates under the single-valued released property. Do not normalize hosts or split lists.
 
-The ordinary converter advances from the integrated `bangumi@11` Game-name
-mapping to `bangumi@12`, preserving current TVAnime and Book names, original-run
-facts, Game player-count and work-evidence mappings.
+The official-website mapping was introduced in `bangumi@12`; current
+`bangumi@13` also preserves Game destinations, TVAnime and Book names,
+original-run facts, Game player-count and work-evidence mappings.
 Ordinary registration and selected-family seeding share the bounded profile
 extractor. Only the exact type-2 `{{Infobox animanga/TVAnime` profile is
 eligible. Each supported URL becomes a cited `schema:url` proposal whose
@@ -1681,3 +1681,25 @@ unrelated adopted facts.
 ## Bangumi Game first publication date
 
 [Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
+
+## Bangumi Game web destinations
+
+Decision: preserve admitted URL bytes and withhold labelled destinations until a
+released source contract can preserve their platform, region or edition meaning.
+
+Ordinary conversion uses `bangumi@13`; selected-family registration uses the
+combined `cross-media-entities@11+bangumi@13` revision. Exact Game-template
+`website` and `链接` occurrences propose separate `schema:url` and `wdt:P973`
+facts with the Bangumi record citation. Unsafe, malformed and labelled values
+remain unavailable while independent valid facts proceed. The existing journal,
+acknowledged UUID, review/adoption and public current-read seams are reused.
+
+- Touches: one type-4 Game and at most 16 destination candidates across both
+  fields; no fetcher or new publisher.
+- Bound: 65,536 source bytes and characters, depth 2, 64 fields, 4,096 bytes per
+  selected field, 16 candidates and at most 16 sanitized omissions.
+- Growth check: importer `bangumi-game-web-destinations.test.ts` covers
+  conversion, citations, unsafe and qualified omissions, malformed mixed input
+  and overflow. Kernel `bangumi-game-web-destinations.test.ts` authors the
+  same-UUID native review/adoption/current-read journey; no live source
+  observation is claimed.
