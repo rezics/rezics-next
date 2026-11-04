@@ -1,5 +1,6 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
+import { Field } from '@rezics/ui/shadcn/field';
 import {
   useCallback,
   useEffect,
@@ -369,10 +370,12 @@ function SignupRefusal({
 }) {
   return (
     <div className="auth-login-form">
-      <ErrorAlert tabIndex={-1} id="signup-refusal">
-        <p>{message}</p>
-        <SignupAuthLinks query={query} follow={follow} />
-      </ErrorAlert>
+      <div tabIndex={-1} id="signup-refusal">
+        <ErrorAlert>
+          <p>{message}</p>
+          <SignupAuthLinks query={query} follow={follow} />
+        </ErrorAlert>
+      </div>
     </div>
   );
 }
@@ -393,34 +396,36 @@ function SignupUncertainty({
   retryDisabled?: boolean;
 }) {
   return (
-    <ErrorAlert tabIndex={-1} id={uncertainPanelId}>
-      <h2>{m.auth_signup_uncertain_title()}</h2>
-      <p>{m.auth_signup_uncertain_body()}</p>
-      <dl>
-        <div>
-          <dt>{m.auth_signup_handle()}</dt>
-          <dd>{phase.attempt.handle}</dd>
-        </div>
-        <div>
-          <dt>{m.auth_signup_email()}</dt>
-          <dd>{phase.attempt.email}</dd>
-        </div>
-      </dl>
-      {phase.verificationFailed ? (
-        <p>{m.auth_signup_retry_verification_failed()}</p>
-      ) : phase.failure.kind === 'conflict' || phase.failure.kind === 'handle-unavailable' ? (
-        <p>{m.auth_signup_retry_refused()}</p>
-      ) : (
-        <p>{phase.failure.message}</p>
-      )}
-      {unavailable ? <p>{m.auth_signup_page_unavailable()}</p> : null}
-      {onRetry ? (
-        <Button type="button" disabled={retryDisabled} onClick={onRetry}>
-          {m.auth_signup_retry_original()}
-        </Button>
-      ) : null}
-      <SignupAuthLinks query={query} follow={follow} />
-    </ErrorAlert>
+    <div id={uncertainPanelId}>
+      <ErrorAlert tabIndex={-1}>
+        <h2>{m.auth_signup_uncertain_title()}</h2>
+        <p>{m.auth_signup_uncertain_body()}</p>
+        <dl>
+          <div>
+            <dt>{m.auth_signup_handle()}</dt>
+            <dd>{phase.attempt.handle}</dd>
+          </div>
+          <div>
+            <dt>{m.auth_signup_email()}</dt>
+            <dd>{phase.attempt.email}</dd>
+          </div>
+        </dl>
+        {phase.verificationFailed ? (
+          <p>{m.auth_signup_retry_verification_failed()}</p>
+        ) : phase.failure.kind === 'conflict' || phase.failure.kind === 'handle-unavailable' ? (
+          <p>{m.auth_signup_retry_refused()}</p>
+        ) : (
+          <p>{phase.failure.message}</p>
+        )}
+        {unavailable ? <p>{m.auth_signup_page_unavailable()}</p> : null}
+        {onRetry ? (
+          <Button type="button" disabled={retryDisabled} onClick={onRetry}>
+            {m.auth_signup_retry_original()}
+          </Button>
+        ) : null}
+        <SignupAuthLinks query={query} follow={follow} />
+      </ErrorAlert>
+    </div>
   );
 }
 
@@ -447,9 +452,13 @@ function SignupForm({
   const [retryClock, setRetryClock] = useState(Date.now());
 
   const values: SignupDraft | null =
-    phase.kind === 'draft' || phase.kind === 'handle-unavailable' || phase.kind === 'dispatched'
+    phase.kind === 'draft'
       ? phase.values
-      : null;
+      : phase.kind === 'handle-unavailable'
+        ? phase.values
+        : phase.kind === 'dispatched'
+          ? phase.values
+          : null;
   const readOnly = phase.kind === 'dispatched';
   const handleCorrectionReady =
     phase.kind === 'handle-unavailable' &&
@@ -603,7 +612,7 @@ function SignupForm({
           </ErrorAlert>
         ) : null}
         {phase.kind === 'uncertain' ? (
-            <div ref={alert} tabIndex={-1}>
+          <div ref={alert} tabIndex={-1}>
             <SignupUncertainty
               phase={phase}
               query={query}
