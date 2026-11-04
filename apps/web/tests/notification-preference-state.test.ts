@@ -338,15 +338,13 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
           { code: 'dependency_unavailable', retryable: true, request_id: `native-${step}` },
           { status: 503, headers: { 'retry-after': '30' } },
         );
-      if (step === 2 || step === 4) return Response.json(receipt);
+      if (step === 2) return Response.json(receipt);
       if (step === 3)
         return Response.json(
           { code: 'platform_closed', retryable: false, request_id: `native-${step}` },
           { status: 403, headers: { 'retry-after': '20' } },
         );
-      const version = step === 5 ? 9 : 10;
-      const notifications = step === 5 ? { ...optional, reply: true, mention: true } : currentNotifications;
-      return Response.json(accountEnvelope(notifications, version));
+      return Response.json(accountEnvelope(currentNotifications, step === 4 ? 10 : 11));
     }, 'POST');
     const confirmed: number[] = [];
     const editor = new NotificationEditor(page, {
@@ -369,7 +367,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     await editor.retry();
     expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET']);
     expect(editor.snapshot()).toMatchObject({
-      phase: 'uncertain',
+      phase: 'failed',
       known: { notifications: optional, version: 7 },
       draft: { ...optional, reply: false, mention: false },
       readReason: 'closed',
@@ -377,8 +375,11 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     });
     expect(editor.snapshot().currentAdvice).toBeNull();
     expect(editor.snapshot().readRetryAt).toBe(now + 20_000);
-    expect(editor.snapshot().commandRetryAt).toBe(Date.parse('2026-10-31T00:00:00Z') + 30_000);
-    expect(editor.snapshot().pending).toBe(pending);
+    expect(editor.snapshot()).toMatchObject({
+      commandRetryAt: 0,
+      pending: null,
+      confirmedReceipt: { attempt: { input: pending!.input }, receipt: { notifications: receiptNotifications, version: 8 } },
+    });
     expect(confirmed).toEqual([]);
     await editor.edit('thread_watch', false, 7);
     await editor.edit('thread_watch', true, 7);
@@ -390,31 +391,22 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     await editor.reload();
     expect(editor.snapshot()).toMatchObject({
       phase: 'review',
-      known: { version: 8 },
-      pending,
-    });
-    await editor.retry();
-    expect(editor.snapshot()).toMatchObject({
-      phase: 'review',
-      pending: null,
       known: { notifications: currentNotifications, version: 10 },
+      pending: null,
+      confirmedReceipt: null,
       draft: { ...currentNotifications, thread_watch: true },
-      intent: { reply: false, mention: false, thread_watch: true },
+      intent: { mention: false, thread_watch: true },
     });
-    for (const index of [1, 4]) {
-      expect(transport.calls[index]!.headers.get('idempotency-key')).toBe(
-        transport.calls[0]!.headers.get('idempotency-key'),
-      );
-      expect(await transport.calls[index]!.clone().text()).toBe(await transport.calls[0]!.clone().text());
-    }
+    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'GET']);
+    expect(transport.calls[1]!.headers.get('idempotency-key')).toBe(transport.calls[0]!.headers.get('idempotency-key'));
+    expect(await transport.calls[1]!.clone().text()).toBe(await transport.calls[0]!.clone().text());
     await editor.edit('thread_watch', false, 9);
-    expect(transport.calls).toHaveLength(6);
     await editor.submit(9);
-    expect(await transport.calls[6]!.json()).toEqual({
+    expect(await transport.calls[4]!.json()).toEqual({
       expectedVersion: 10,
-      notifications: { reply: false, mention: false, thread_watch: false },
+      notifications: { mention: false, thread_watch: false },
     });
-    expect(transport.calls[6]!.headers.get('idempotency-key')).not.toBe(
+    expect(transport.calls[4]!.headers.get('idempotency-key')).not.toBe(
       transport.calls[0]!.headers.get('idempotency-key'),
     );
     expect(transport.calls.map((call) => call.method)).toEqual([
@@ -423,14 +415,13 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       'GET',
       'GET',
       'PATCH',
-      'GET',
-      'PATCH',
     ]);
-    expect(transport.sessionReads()).toBe(7);
-    expect(confirmed).toEqual([8, 10, 10]);
+    expect(transport.sessionReads()).toBe(5);
+    expect(confirmed).toEqual([10, 11]);
     expect(editor.snapshot()).toMatchObject({
       phase: 'saved',
       draft: { ...optional, reply: false, mention: false, thread_watch: false },
+      known: { version: 11 },
     });
   } finally {
     clock.mockRestore();
@@ -493,6 +484,7 @@ test('a shorter current-read refusal keeps the original wait and current advice 
       phase: 'uncertain',
       currentAdvice: null,
       pending,
+      confirmedReceipt: null,
       readReason: 'forbidden',
       readRetryAt: now + 20_000,
       commandRetryAt: commandDeadline,
