@@ -299,7 +299,7 @@ export async function openLocalShowcase(
   }
 }
 
-async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>>) {
+export async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>>, directory = state) {
   const { host, access, kernelPool, keys, kernel } = composition;
   const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
@@ -394,9 +394,9 @@ async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>
     await exposure.open({ ...context, actor }, { ...input, authorization });
   });
   await privateFile(
-    resolve(state, 'seed.env'),
+    resolve(directory, 'seed.env'),
     Object.entries({
-      REZICS_DEV_PERSONA_ACCOUNT_KEY: resolve(state, 'importer.jwk'),
+      REZICS_DEV_PERSONA_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
       REZICS_DEV_PERSONA_ACCOUNT: person.accountId,
       REZICS_DEV_PERSONA_CLIENT: personaClient,
       AUTH_ORIGIN: origins.issuer,
@@ -405,13 +405,18 @@ async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>
       .map(([name, value]) => `${name}=${value}`)
       .join('\n') + '\n',
   );
-  console.log(`Local persona: developer@rezics.test\nPassword: ${keys.password}\nAccount: ${person.accountId}`);
+  return person;
+}
+
+function printPersona(keys: DevelopmentKeys, accountId: string) {
+  console.log(`Local persona: developer@rezics.test\nPassword: ${keys.password}\nAccount: ${accountId}`);
 }
 
 async function serveHost() {
   const composition = await assemble();
   try {
-    await provisionPersona(composition);
+    const person = await provisionPersona(composition);
+    printPersona(composition.keys, person.accountId);
   } catch (error) {
     await composition.stop();
     throw error;
@@ -523,7 +528,8 @@ if (import.meta.main) {
     else if (action === 'persona') {
       const composition = await assemble();
       try {
-        await provisionPersona(composition);
+        const person = await provisionPersona(composition);
+        printPersona(composition.keys, person.accountId);
       } finally {
         await composition.stop();
       }
