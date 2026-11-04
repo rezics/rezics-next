@@ -64,3 +64,9 @@ No partial, stale, limited, expired, cancelled or unfinished stream offers a fil
 same completed bytes. If those bytes are lost, replay starts from the original cursor under the same capture. Cancel,
 unmount and viewer or CSRF replacement clear private state and ignore late results. Private bytes stay in visit
 memory and the local file; they do not enter URLs, persistent browser storage or shared caches.
+
+Decision: offer Cancel only after creation resolves an identity; an uncertain create retains its original key and
+only explicit Retry can resend it. Cancelling immediately stops traversal and clears incomplete bytes. Pending
+cancellation coalesces activations; an uncertain acknowledgement retains the exact command for explicit Retry,
+without a replacement capture. Only an admitted terminal result acknowledges disposition; expiry and native
+refusal remain distinct from cancellation. Restart requires an acknowledged disposition and deliberate action.

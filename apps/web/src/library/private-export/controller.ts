@@ -23,6 +23,7 @@ export type ExportStage =
   | 'coverage'
   | 'preparing'
   | 'capturing'
+  | 'cancelling'
   | 'ready'
   | 'empty'
   | 'save-failed'
@@ -159,6 +160,7 @@ export function createExportJourney(input: {
   }
 
   function enterTerminal(next: ExportStage): ExportJourneySnapshot {
+    generation += 1;
     clearBytes();
     previousDisposition = next;
     stage = next;
@@ -175,7 +177,9 @@ export function createExportJourney(input: {
   }
 
   function expireIfNeeded(): boolean {
-    if (!binding || !expired()) return false;
+    if (previousDisposition === stage || !binding || !expired()) return false;
+    unknown = null;
+    notice = null;
     enterTerminal('expired');
     return true;
   }
@@ -195,7 +199,7 @@ export function createExportJourney(input: {
     if (response.kind === 'denied') return enterTerminal('denied');
     if (response.kind === 'conflict') return enterTerminal('conflict');
     if (response.kind === 'not-found') return enterTerminal('unavailable');
-    if (stage === 'preparing' || stage === 'capturing') return enterTerminal('unavailable');
+    if (stage === 'preparing' || stage === 'capturing' || stage === 'cancelling') return enterTerminal('unavailable');
     busy = false;
     retain();
     return emit();
@@ -206,15 +210,17 @@ export function createExportJourney(input: {
     send: () => Promise<T | ExportFailure | ExportUnknown>,
     retry = false,
   ): Promise<T | undefined> {
-    if (!live() || expireIfNeeded()) return;
-    const response = await send();
-    if (!live()) return;
+    if (!live() || (stop && command.kind !== 'cancel') || expireIfNeeded()) return;
+    const token = generation;
+    const response = await send().catch(() => ({ kind: 'unknown' as const, command }));
+    // A command acknowledgement must not be replaced by an older capture/page observation.
+    if (!live() || token !== generation) return;
     cost.recordCall(command.kind, retry);
     if (expireIfNeeded()) return;
     if (stop && command.kind !== 'cancel') return;
     if (response.kind === 'unknown') {
-      unknown = (response as ExportUnknown).command;
-      notice = response as ExportUnknown;
+      unknown = command;
+      notice = { kind: 'unknown', command };
       busy = false;
       retain();
       emit();
@@ -269,9 +275,10 @@ export function createExportJourney(input: {
         exportId,
         cursor: current,
       };
+      emit();
       const response = await run(command, () => port.page(command), retry);
       retry = false;
-      if (!response || response.kind !== 'page' || !live()) return snapshot();
+      if (!response || response.kind !== 'page' || !live()) return cancelWork ?? snapshot();
       if (stop || token !== generation) return cancelWork ?? snapshot();
       const finished = acceptPage(response.page);
       if (finished) return finished;
@@ -289,15 +296,15 @@ export function createExportJourney(input: {
       emit();
       await Promise.resolve();
     }
+    if (stop && live()) return cancelWork ?? snapshot();
     if (stage !== 'preparing' && stage !== 'capturing') return snapshot();
-    if (stop && live()) return cancelWork ?? cancel();
     if (live() && !assembly.current()) return enterTerminal('unavailable');
     return emit();
   }
 
   async function capture(): Promise<ExportJourneySnapshot> {
     if (!live()) return snapshot();
-    if (unknown) return retryUnknown();
+    if (unknown) return snapshot();
     if (stage !== 'coverage' || busy) return snapshot();
     stop = false;
     busy = true;
@@ -316,6 +323,8 @@ export function createExportJourney(input: {
   async function retryUnknown(): Promise<ExportJourneySnapshot> {
     const command = unknown;
     if (!command || !live()) return snapshot();
+    if (command.kind === 'cancel') return cancel();
+    if (busy || stop) return snapshot();
     if (command.kind === 'create') {
       busy = true;
       stage = 'preparing';
@@ -332,38 +341,47 @@ export function createExportJourney(input: {
       emit();
       return traverse(command.cursor, true);
     }
-    if (command.kind === 'status') return replay();
-    if (command.kind === 'cancel') return cancel();
+    if (command.kind === 'status') return replay(true);
     return snapshot();
   }
 
   async function cancel(): Promise<ExportJourneySnapshot> {
     if (!live()) return snapshot();
-    if (expireIfNeeded()) return snapshot();
-    stop = true;
     if (cancelWork) return cancelWork;
+    if (expireIfNeeded()) return snapshot();
+    const command = unknown?.kind === 'cancel' ? unknown : null;
+    // Creation has no resolved identity yet; only its exact create command may be retried.
+    if (!exportId || (stage !== 'capturing' && !(stage === 'cancelling' && command))) return snapshot();
+    const retry = command !== null;
+    const original = command ?? { kind: 'cancel' as const, exportId };
+    stop = true;
+    generation += 1;
     clearBytes();
-    retain();
-    const id = exportId;
-    if (!id || !live()) return snapshot();
-    cancelWork = (async () => {
-      const command: Extract<ExportCommand, { kind: 'cancel' }> = { kind: 'cancel', exportId: id };
-      const response = await run(command, () => port.cancel(command));
+    stage = 'cancelling';
+    busy = true;
+    notice = null;
+    // Install the in-flight promise before publishing, including to synchronous subscribers.
+    const work = Promise.resolve().then(async () => {
+      const response = await run(original, () => port.cancel(original), retry);
       if (!response || response.kind !== 'cancelled' || !live()) return snapshot();
       if (
         !isExportStatus(response.status) ||
-        response.status.state !== 'cancelled' ||
+        !isTerminalState(response.status.state) ||
         !binding ||
         !sameExportCoverage(binding, response.status)
       )
         return enterTerminal('unavailable');
-      return enterTerminal('cancelled');
-    })();
+      return enterTerminal(response.status.state);
+    });
+    cancelWork = work.finally(() => {
+      cancelWork = null;
+    });
+    emit();
     return cancelWork;
   }
 
   async function download(): Promise<ExportJourneySnapshot> {
-    if (!live()) return snapshot();
+    if (!live() || stop || busy) return snapshot();
     if (expireIfNeeded()) return snapshot();
     const file = assembly.current();
     if (!file) {
@@ -374,9 +392,10 @@ export function createExportJourney(input: {
       }
       return snapshot();
     }
+    const token = generation;
     try {
       const saved = await deliver(file);
-      if (!live()) return snapshot();
+      if (!live() || token !== generation) return snapshot();
       if (expireIfNeeded()) return snapshot();
       if (!saved) {
         stage = 'save-failed';
@@ -389,7 +408,7 @@ export function createExportJourney(input: {
       retain();
       return emit();
     } catch {
-      if (!live()) return snapshot();
+      if (!live() || token !== generation) return snapshot();
       if (expireIfNeeded()) return snapshot();
       stage = 'save-failed';
       notice = null;
@@ -398,8 +417,8 @@ export function createExportJourney(input: {
     }
   }
 
-  async function replay(): Promise<ExportJourneySnapshot> {
-    if (!live() || !exportId || !firstCursor) return snapshot();
+  async function replay(retry = false): Promise<ExportJourneySnapshot> {
+    if (!live() || !exportId || !firstCursor || busy || stop || (unknown && !retry)) return snapshot();
     if (expireIfNeeded()) return snapshot();
     stop = false;
     busy = true;
@@ -408,7 +427,7 @@ export function createExportJourney(input: {
     clearBytes();
     emit();
     const command: Extract<ExportCommand, { kind: 'status' }> = { kind: 'status', exportId };
-    const response = await run(command, () => port.status(command));
+    const response = await run(command, () => port.status(command), retry);
     if (!response || response.kind !== 'status' || !live()) return snapshot();
     const finished = acceptStatus(response.status);
     if (finished) return finished;
@@ -417,6 +436,7 @@ export function createExportJourney(input: {
 
   function restart(): ExportJourneySnapshot {
     if (!live()) return snapshot();
+    if (busy || unknown || previousDisposition !== stage) return snapshot();
     previousDisposition = stage === 'coverage' ? previousDisposition : stage;
     generation += 1;
     stop = false;

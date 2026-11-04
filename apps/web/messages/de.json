@@ -6598,6 +6598,7 @@
   "library_export_retry_save": "Download wiederholen",
   "library_export_cancel": "Diese Erfassung abbrechen",
   "library_export_cancelling": "Wird abgebrochen…",
+  "library_export_cancel_uncertain": "Der Abbruch ist unbestätigt. Es ist keine Datei verfügbar. Wiederhole den ursprünglichen Abbruch dieser Erfassung.",
   "library_export_cancelled": "Diese Erfassung wurde abgebrochen. Es wurde keine Datei gespeichert.",
   "library_export_stale": "Eine spätere Bibliotheksänderung hat diese Erfassung veraltet gemacht. Die ursprüngliche Datei kann aus diesen Seiten nicht fertiggestellt werden.",
   "library_export_stale_restart": "Starte eine neue Erfassung. Die vorherige Erfassung ist veraltet und wird nicht wiederverwendet.",

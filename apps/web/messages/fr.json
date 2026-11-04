@@ -6598,6 +6598,7 @@
   "library_export_retry_save": "Réessayer le téléchargement",
   "library_export_cancel": "Annuler cette capture",
   "library_export_cancelling": "Annulation…",
+  "library_export_cancel_uncertain": "L’annulation n’est pas confirmée. Aucun fichier n’est disponible. Réessayez l’annulation d’origine de cette capture.",
   "library_export_cancelled": "Cette capture a été annulée. Aucun fichier n’a été enregistré.",
   "library_export_stale": "Un changement ultérieur de la bibliothèque a rendu cette capture périmée. Le fichier d’origine ne peut pas être achevé à partir de ces pages.",
   "library_export_stale_restart": "Démarrez une nouvelle capture. La capture précédente est périmée et ne sera pas réutilisée.",

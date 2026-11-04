@@ -915,3 +915,130 @@ test('growth at 16, 128 and 1,024 records stays linear in pages and bounded per 
     expect(terminal.hasArtifact).toBe(false);
   }
 });
+
+test('mounted cancellation retries its uncertain command once and ignores late pages before and after acknowledgement', async () => {
+  const fixture = recordingPort(pagesFor(32));
+  const page = Promise.withResolvers<Awaited<ReturnType<ExportPort['page']>>>();
+  let attempt = Promise.withResolvers<Awaited<ReturnType<ExportPort['cancel']>>>();
+  const commands: ExportCommand[] = [];
+  const port: ExportPort = {
+    ...fixture.port,
+    page: (command) => (fixture.pageCursors.length === 0 ? fixture.port.page(command) : page.promise),
+    cancel(command) {
+      commands.push(command);
+      return attempt.promise;
+    },
+  };
+  await mount(port);
+  await click(m.library_export_capture());
+  await waitFor(m.library_export_progress({ records: 16, pages: 1 }));
+  await click(m.library_export_cancel());
+  expect(host.textContent).toContain(m.library_export_cancelling());
+  expect(document.activeElement?.textContent).toBe(m.library_export_cancelling());
+  expect(button(m.library_export_cancel())).toBeUndefined();
+  expect(commands).toHaveLength(1);
+  await act(async () => attempt.resolve({ kind: 'unknown', command: commands[0]! }));
+  await waitFor(m.library_export_cancel_uncertain());
+  expect(document.activeElement?.textContent).toBe(m.library_export_cancel_uncertain());
+  expect(button(m.library_export_capture())).toBeUndefined();
+  expect(button(m.library_export_download())).toBeUndefined();
+  attempt = Promise.withResolvers();
+  await click(m.library_export_retry_command());
+  expect(commands).toHaveLength(2);
+  expect(commands[1]).toBe(commands[0]);
+  await act(async () => page.resolve({ kind: 'unknown', command: { kind: 'page', exportId, cursor: first } }));
+  expect(host.textContent).toContain(m.library_export_cancelling());
+  await act(async () => attempt.resolve({ kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }) }));
+  await waitFor(m.library_export_cancelled());
+  expect(document.activeElement?.textContent).toBe(m.library_export_cancelled());
+  expect(button(m.library_export_download())).toBeUndefined();
+  expect(fixture.creates).toHaveLength(1);
+  await click(m.library_export_restart());
+  expect(button(m.library_export_capture())).toBeDefined();
+  expect(fixture.creates).toHaveLength(1);
+});
+
+test('in-flight cancel and retry coalesce; late final pages cannot restore cancelled or retired bytes', async () => {
+  for (const retire of [false, true]) {
+    const page = Promise.withResolvers<Awaited<ReturnType<ExportPort['page']>>>();
+    let ack = Promise.withResolvers<Awaited<ReturnType<ExportPort['cancel']>>>();
+    const fixture = recordingPort(pagesFor(1));
+    const commands: ExportCommand[] = [];
+    const current = visit();
+    const journey = createExportJourney({
+      visit: current,
+      port: {
+        ...fixture.port,
+        page: () => page.promise,
+        cancel(command) {
+          commands.push(command);
+          return ack.promise;
+        },
+      },
+    });
+    const capture = journey.capture();
+    await settle();
+    const cancelling = journey.cancel();
+    const duplicate = journey.cancel();
+    await settle();
+    expect(commands).toHaveLength(1);
+    expect(journey.snapshot()).toMatchObject({ stage: 'cancelling', records: 0, hasArtifact: false });
+    ack.resolve({ kind: 'unknown', command: commands[0]! });
+    await Promise.all([cancelling, duplicate]);
+    const key = journey.snapshot().requestKey;
+    expect(journey.restart().requestKey).toBe(key);
+    await journey.replay();
+    ack = Promise.withResolvers();
+    const retry = journey.retryUnknown();
+    const repeated = journey.retryUnknown();
+    await settle();
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
+    if (retire) current.csrfToken = 'replacement';
+    ack.resolve({ kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }) });
+    await Promise.all([retry, repeated]);
+    page.resolve({ kind: 'page', page: pagesFor(1)[0]! });
+    await capture;
+    expect(journey.snapshot()).toMatchObject({
+      stage: retire ? 'coverage' : 'cancelled',
+      records: 0,
+      hasArtifact: false,
+    });
+    expect(journey.snapshot().cost.retainedBytes).toBe(0);
+    expect(fixture.creates).toHaveLength(1);
+    expect(fixture.statuses).toHaveLength(0);
+  }
+});
+
+test('cancellation distinguishes native refusal and expiry; pending create cannot be abandoned', async () => {
+  for (const kind of ['denied', 'unavailable', 'expired'] as const) {
+    const fixture = recordingPort(pagesFor(1));
+    const journey = createExportJourney({
+      visit: visit(),
+      port: {
+        ...fixture.port,
+        page: async (command) => ({ kind: 'unknown', command }),
+        cancel: async () =>
+          kind === 'expired' ? { kind: 'cancelled', status: coverage({ state: 'expired', first: null }) } : { kind },
+      },
+    });
+    await journey.capture();
+    expect((await journey.cancel()).stage).toBe(kind);
+    expect(journey.snapshot().hasArtifact).toBe(false);
+  }
+  const created = Promise.withResolvers<Awaited<ReturnType<ExportPort['create']>>>();
+  const fixture = recordingPort(pagesFor(1), { create: () => created.promise });
+  const journey = createExportJourney({ port: fixture.port, visit: visit() });
+  const capture = journey.capture();
+  const key = journey.snapshot().requestKey;
+  await journey.cancel();
+  expect(journey.restart().requestKey).toBe(key);
+  expect(fixture.cancels).toHaveLength(0);
+  created.resolve({ kind: 'unknown', command: { kind: 'create', key } });
+  await capture;
+  await journey.capture();
+  expect(journey.restart().requestKey).toBe(key);
+  expect(fixture.creates).toEqual([key]);
+  await journey.retryUnknown();
+  expect(fixture.creates).toEqual([key, key]);
+});

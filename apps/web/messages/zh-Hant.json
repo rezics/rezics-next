@@ -6598,6 +6598,7 @@
   "library_export_retry_save": "重試下載",
   "library_export_cancel": "取消此次擷取",
   "library_export_cancelling": "正在取消…",
+  "library_export_cancel_uncertain": "取消尚未確認。沒有可用檔案。請重試此次擷取的原始取消請求。",
   "library_export_cancelled": "此次擷取已取消。未儲存檔案。",
   "library_export_stale": "之後的資料庫變更使此次擷取過時。無法用這些分頁完成原始檔。",
   "library_export_stale_restart": "開始新的擷取。先前擷取已過時，不會被重用。",
