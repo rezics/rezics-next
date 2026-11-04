@@ -9009,5 +9009,15 @@
   "subject_artwork_unsupported": "Für diesen Medienwert ist keine unterstützte Bilddarstellung verfügbar.",
   "subject_artwork_oversized": "Die Bildantwort ist zu groß. Versuche es erneut.",
   "subject_artwork_timeout": "Die Bildanfrage hat zu lange gedauert. Versuche es erneut.",
-  "subject_artwork_alt": "{property} — {title}"
+  "subject_artwork_alt": "{property} — {title}",
+  "profile_reading_conservative": "Öffentliches Lesen verwendet vorsichtige Cover- und Spoiler-Einstellungen.",
+  "profile_reading_signed_out": "Abgemeldet: Es gelten vorsichtige Cover- und Spoiler-Einstellungen.",
+  "profile_reading_loading": "Deine Einstellungen werden geladen. Bis dahin gelten vorsichtige Vorgaben.",
+  "profile_reading_ready": "Deine Leseeinstellungen werden angewendet.",
+  "profile_reading_unavailable": "Deine Einstellungen sind nicht verfügbar. Du kannst mit vorsichtigen Vorgaben weiterlesen.",
+  "profile_reading_rejected": "Diese Einstellungen passen nicht zur aktuellen lesenden Person. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_closed": "Persönliches Lesen ist derzeit geschlossen. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_preparing": "Deine Einstellungen werden vorbereitet. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_retired": "Diese persönliche Lesesitzung ist beendet. Es gelten vorsichtige Vorgaben.",
+  "profile_reading_retry": "Einstellungen erneut lesen"
 }

@@ -9009,5 +9009,15 @@
   "subject_artwork_unsupported": "此媒體值沒有支援的圖片呈現方式。",
   "subject_artwork_oversized": "圖片回應過大，請重試。",
   "subject_artwork_timeout": "圖片請求逾時，請重試。",
-  "subject_artwork_alt": "{title}的{property}"
+  "subject_artwork_alt": "{title}的{property}",
+  "profile_reading_conservative": "公開閱讀使用謹慎的封面與劇透預設值。",
+  "profile_reading_signed_out": "未登入：使用謹慎的封面與劇透預設值。",
+  "profile_reading_loading": "正在讀取你的偏好，暫時使用謹慎的預設值。",
+  "profile_reading_ready": "已套用你的閱讀偏好。",
+  "profile_reading_unavailable": "暫時無法讀取你的偏好。你可以使用謹慎的預設值繼續閱讀。",
+  "profile_reading_rejected": "這些偏好與目前讀者不符，已使用謹慎的預設值。",
+  "profile_reading_closed": "個人閱讀目前已關閉，使用謹慎的預設值。",
+  "profile_reading_preparing": "正在準備你的偏好，暫時使用謹慎的預設值。",
+  "profile_reading_retired": "本次個人閱讀已結束，使用謹慎的預設值。",
+  "profile_reading_retry": "重新讀取閱讀偏好"
 }

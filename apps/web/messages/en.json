@@ -9101,5 +9101,15 @@
   "subject_artwork_unsupported": "This media value has no supported image presentation.",
   "subject_artwork_oversized": "The artwork response is too large. Try again.",
   "subject_artwork_timeout": "The artwork request timed out. Try again.",
-  "subject_artwork_alt": "{property} — {title}"
+  "subject_artwork_alt": "{property} — {title}",
+  "profile_reading_conservative": "Public reading uses cautious cover and spoiler defaults.",
+  "profile_reading_signed_out": "Signed out: cautious cover and spoiler defaults apply.",
+  "profile_reading_loading": "Reading your preferences. Cautious defaults apply for now.",
+  "profile_reading_ready": "Your reading preferences are applied.",
+  "profile_reading_unavailable": "Your preferences are unavailable. You can keep reading with cautious defaults.",
+  "profile_reading_rejected": "These preferences do not match the current reader. Cautious defaults apply.",
+  "profile_reading_closed": "Personal reading is currently closed. Cautious defaults apply.",
+  "profile_reading_preparing": "Your preferences are being prepared. Cautious defaults apply.",
+  "profile_reading_retired": "This personal reading has ended. Cautious defaults apply.",
+  "profile_reading_retry": "Read preferences again"
 }

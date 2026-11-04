@@ -9009,5 +9009,15 @@
   "subject_artwork_unsupported": "Este valor multimedia no tiene una presentación de imagen compatible.",
   "subject_artwork_oversized": "La respuesta de la imagen es demasiado grande. Inténtalo de nuevo.",
   "subject_artwork_timeout": "La solicitud de imagen agotó el tiempo de espera. Inténtalo de nuevo.",
-  "subject_artwork_alt": "{property} — {title}"
+  "subject_artwork_alt": "{property} — {title}",
+  "profile_reading_conservative": "La lectura pública usa opciones prudentes para portadas y destripes.",
+  "profile_reading_signed_out": "Sin sesión: se aplican opciones prudentes para portadas y destripes.",
+  "profile_reading_loading": "Leyendo tus preferencias. Por ahora se aplican opciones prudentes.",
+  "profile_reading_ready": "Se aplican tus preferencias de lectura.",
+  "profile_reading_unavailable": "Tus preferencias no están disponibles. Puedes seguir leyendo con opciones prudentes.",
+  "profile_reading_rejected": "Estas preferencias no corresponden al lector actual. Se aplican opciones prudentes.",
+  "profile_reading_closed": "La lectura personalizada está cerrada por ahora. Se aplican opciones prudentes.",
+  "profile_reading_preparing": "Tus preferencias se están preparando. Se aplican opciones prudentes.",
+  "profile_reading_retired": "Esta lectura personalizada ha terminado. Se aplican opciones prudentes.",
+  "profile_reading_retry": "Volver a leer las preferencias"
 }

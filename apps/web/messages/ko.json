@@ -9009,5 +9009,15 @@
   "subject_artwork_unsupported": "이 미디어 값에는 지원되는 이미지 표시가 없습니다.",
   "subject_artwork_oversized": "이미지 응답이 너무 큽니다. 다시 시도하세요.",
   "subject_artwork_timeout": "이미지 요청 시간이 초과되었습니다. 다시 시도하세요.",
-  "subject_artwork_alt": "{title}의 {property}"
+  "subject_artwork_alt": "{title}의 {property}",
+  "profile_reading_conservative": "공개 읽기에서는 표지와 스포일러에 보수적인 기본 설정을 사용합니다.",
+  "profile_reading_signed_out": "로그아웃 상태: 표지와 스포일러에 보수적인 기본 설정을 사용합니다.",
+  "profile_reading_loading": "읽기 설정을 불러오는 중입니다. 그동안 보수적인 기본 설정을 사용합니다.",
+  "profile_reading_ready": "내 읽기 설정이 적용되었습니다.",
+  "profile_reading_unavailable": "읽기 설정을 불러올 수 없습니다. 보수적인 기본 설정으로 계속 읽을 수 있습니다.",
+  "profile_reading_rejected": "이 설정은 현재 독자와 일치하지 않습니다. 보수적인 기본 설정을 사용합니다.",
+  "profile_reading_closed": "현재 개인 읽기 설정을 사용할 수 없습니다. 보수적인 기본 설정을 사용합니다.",
+  "profile_reading_preparing": "읽기 설정을 준비하고 있습니다. 보수적인 기본 설정을 사용합니다.",
+  "profile_reading_retired": "이 개인 읽기 설정의 적용이 끝났습니다. 보수적인 기본 설정을 사용합니다.",
+  "profile_reading_retry": "읽기 설정 다시 불러오기"
 }

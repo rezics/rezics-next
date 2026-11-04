@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
-import { Cover } from '@rezics/ui/cover';
+import { ProfileReadingCover as Cover } from '../reader-presentation/view';
 import { DocumentValue, readableDocument } from '../../../features/pages/values';
 import type { OverviewValue } from '../../../features/pages/overview';
 import { isRecord } from '../../../features/pages/shared';

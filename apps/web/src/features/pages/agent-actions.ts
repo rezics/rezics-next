@@ -39,12 +39,14 @@ export const readAgentPage = createServerFn({ method: 'GET', strict: false })
 
 export type AgentReaderResult =
   | { kind: 'ready'; accountId: string; reader: Reader }
-  | { kind: 'default'; accountId: string | null; reader: Reader };
+  | { kind: 'default'; accountId: string | null; reader: Reader; reason: 'signed-out' | 'rejected' | 'closed' | 'preparing' | 'unavailable' | 'retired' };
 
 function agentReaderResult(expectedReader: string, page: SettingsPage): AgentReaderResult {
   const accountId = page.signedIn ? (page.accountId ?? null) : null;
-  if (!accountId || accountId !== expectedReader || !('preferences' in page))
-    return { kind: 'default', accountId, reader: defaultReader };
+  if (!page.signedIn) return { kind: 'default', reason: 'signed-out', accountId, reader: defaultReader };
+  if (!accountId || accountId !== expectedReader)
+    return { kind: 'default', reason: 'rejected', accountId, reader: defaultReader };
+  if ('state' in page) return { kind: 'default', reason: page.state, accountId, reader: defaultReader };
   return {
     kind: 'ready',
     accountId,

@@ -1,16 +1,15 @@
 import { PublicAccountState } from '../accounts/public-profile/view';
-import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
+import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { env } from 'cloudflare:workers';
 import { agentPageHead, agentPagePaths } from '../features/pages/agent-page';
 import { canonicalRedirect, keepSearch } from '../subject/subject-href';
 import { agentPath } from '../features/pages/agent';
-import { agentPageQuery, agentReaderQuery } from '../features/pages/agent-queries';
-import { useAgentReaderResult, useAgentReaderScope } from '../features/pages/agent-reader';
+import { agentPageQuery } from '../features/pages/agent-queries';
+import { useProfileReading } from '../accounts/public-profile/reader-presentation/adapter';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { PublicProfilePage } from '../accounts/public-profile/page';
-import { useSession } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
@@ -75,16 +74,13 @@ function AgentRoute() {
   const router = useRouter();
   const { searchStr } = useLocation();
   const { data } = useSuspenseQuery(agentPageQuery(handle, locale, searchStr));
-  const session = useSession();
-  const readerScope = useAgentReaderScope({
+  const reading = useProfileReading({
     handle,
     locale,
     path: { kind: 'overview' },
     enabled: data.kind === 'page',
-    session,
+    owner: data,
   });
-  const readerQuery = useQuery(agentReaderQuery(handle, locale, readerScope));
-  const reader = useAgentReaderResult(readerScope, readerQuery.data, readerQuery.status);
   if (data.kind === 'redirect') {
     throw redirect({ href: data.redirectTo, statusCode: 302, headers: { 'Cache-Control': 'private, no-store' } });
   }
@@ -95,7 +91,7 @@ function AgentRoute() {
       page={data.page}
       locale={locale}
       messages={subjectPageMessages()}
-      reader={reader}
+      reading={reading}
       relations={data.relations}
       {...(data.operator ? { operator: data.operator } : {})}
       link={SubjectLink}

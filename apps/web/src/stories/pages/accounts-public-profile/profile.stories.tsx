@@ -1,3 +1,6 @@
+import { defaultReader } from '../../../subject/reader';
+import type { ProfileReading } from '../../../accounts/public-profile/reader-presentation/adapter';
+import preferences from '../../../kernel/recorded/settings-preferences.json';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { PublicProfilePage } from '../../../accounts/public-profile/page';
@@ -17,8 +20,10 @@ const longBio = 'Readers and librarians share reading notes across languages.\né
   .slice(0, 4096);
 
 function Example({
+  readingState,
   mode = 'human',
 }: {
+  readingState?: 'conservative' | 'loading' | 'ready';
   mode?: 'human' | 'verified' | 'organization' | 'automated' | 'operator' | 'private' | 'empty' | 'denied' | 'long';
 }) {
   const page = profilePage({
@@ -53,6 +58,14 @@ function Example({
       <AppShell>
         <PublicProfilePage
           page={page}
+          {...(readingState ? { reading: {
+            state: readingState,
+            response: readingState,
+            reader: readingState === 'ready'
+              ? { spoilerLevel: preferences.spoilerLevel, suitability: preferences.suitability }
+              : defaultReader,
+            ...(readingState !== 'conservative' ? { retry: () => {} } : {}),
+          } as ProfileReading } : {})}
           locale={locale}
           messages={subjectPageMessages()}
           tabs={subjectTabs(page)}
@@ -86,7 +99,7 @@ const meta = {
     viewport: {
       options: {
         phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '900px' } },
       },
     },
   },
@@ -197,3 +210,7 @@ export const Unavailable: Story = {
     await expect(view.getByRole('alert')).toHaveTextContent(m.public_account_unavailable());
   },
 };
+
+export const ConservativeReading: Story = { render: () => <Example readingState="conservative" /> };
+export const RecoveringReading: Story = { render: () => <Example readingState="loading" /> };
+export const AdmittedReading: Story = { render: () => <Example readingState="ready" /> };

@@ -9009,5 +9009,15 @@
   "subject_artwork_unsupported": "此媒体值没有支持的图片呈现方式。",
   "subject_artwork_oversized": "图片响应过大，请重试。",
   "subject_artwork_timeout": "图片请求超时，请重试。",
-  "subject_artwork_alt": "{title}的{property}"
+  "subject_artwork_alt": "{title}的{property}",
+  "profile_reading_conservative": "公开阅读使用谨慎的封面和剧透默认设置。",
+  "profile_reading_signed_out": "未登录：使用谨慎的封面和剧透默认设置。",
+  "profile_reading_loading": "正在读取你的偏好，暂时使用谨慎的默认设置。",
+  "profile_reading_ready": "已应用你的阅读偏好。",
+  "profile_reading_unavailable": "暂时无法读取你的偏好。你可以使用谨慎的默认设置继续阅读。",
+  "profile_reading_rejected": "这些偏好与当前读者不符，已使用谨慎的默认设置。",
+  "profile_reading_closed": "个人阅读目前已关闭，使用谨慎的默认设置。",
+  "profile_reading_preparing": "正在准备你的偏好，暂时使用谨慎的默认设置。",
+  "profile_reading_retired": "本次个人阅读已结束，使用谨慎的默认设置。",
+  "profile_reading_retry": "重新读取阅读偏好"
 }

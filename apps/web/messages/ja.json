@@ -9009,5 +9009,15 @@
   "subject_artwork_unsupported": "このメディア値には、対応する画像表示がありません。",
   "subject_artwork_oversized": "画像の応答が大きすぎます。もう一度お試しください。",
   "subject_artwork_timeout": "画像のリクエストがタイムアウトしました。もう一度お試しください。",
-  "subject_artwork_alt": "{title}の{property}"
+  "subject_artwork_alt": "{title}の{property}",
+  "profile_reading_conservative": "公開ページでは表紙とネタバレに慎重な初期設定を使います。",
+  "profile_reading_signed_out": "ログアウト中：表紙とネタバレに慎重な初期設定を使います。",
+  "profile_reading_loading": "閲覧設定を読み込み中です。それまでは慎重な初期設定を使います。",
+  "profile_reading_ready": "あなたの閲覧設定を適用しています。",
+  "profile_reading_unavailable": "閲覧設定を取得できません。慎重な初期設定で読み続けられます。",
+  "profile_reading_rejected": "この設定は現在の読者と一致しません。慎重な初期設定を使います。",
+  "profile_reading_closed": "現在、個人の閲覧設定は利用できません。慎重な初期設定を使います。",
+  "profile_reading_preparing": "閲覧設定を準備中です。慎重な初期設定を使います。",
+  "profile_reading_retired": "この閲覧設定の適用は終了しました。慎重な初期設定を使います。",
+  "profile_reading_retry": "閲覧設定を再読み込み"
 }
