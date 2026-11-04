@@ -123,6 +123,11 @@ export function homeFeedStoryPage(
       id: collection.collection.id,
       title: collection.collection.title,
       description: collection.collection.description,
+      curator: { state: 'unavailable', reason: 'native_projection' },
+      presentationKind: null,
+      presentationKindSource: 'pending',
+      cover: null,
+      coverSource: 'pending',
     },
     destination: { kind: 'collection', id: collection.collection.id, title: collection.collection.title },
   };
