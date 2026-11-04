@@ -555,10 +555,9 @@ test('retained exact marker retry and access callbacks cannot read sessions or s
   }
 });
 
-test('successful same-subject CSRF refresh keeps exact marker intent and original whole loaded eligible set', async () => {
+test('same-subject CSRF refresh retires marker custody and fences a retained retry', async () => {
   const view = await screen();
   try {
-    let confirmed = false;
     const pageFor = (cursor?: string) => {
       const ids =
         cursor === fourth
@@ -570,7 +569,7 @@ test('successful same-subject CSRF refresh keeps exact marker intent and origina
               : ['newest'];
       const next = cursor === fourth ? null : cursor === third ? fourth : cursor ? third : continuation;
       return readyInboxPage(
-        ids.map((id) => notice(id, !confirmed || id.startsWith('unloaded') || id === 'later-loaded')),
+        ids.map((id) => notice(id, true)),
         next,
         'alice',
       );
@@ -584,8 +583,7 @@ test('successful same-subject CSRF refresh keeps exact marker intent and origina
     ]);
     const owner = currentInboxViewer(view.client)!;
     await view.click(m.inbox_triage_mark());
-    const original = { ...view.commands[0]!.data };
-    expect(original.through).toBe('older');
+    expect(view.commands[0]!.data.through).toBe('older');
     await act(async () => view.commands[0]!.work.reject(new Error('response lost')));
     await tick();
     expect(view.host.textContent).toContain(m.inbox_seen_unknown());
@@ -599,37 +597,23 @@ test('successful same-subject CSRF refresh keeps exact marker intent and origina
     expect(view.rows().map(([id]) => id)).toEqual(['unloaded-fourth']);
     const exactRetry = view.retain(m.inbox_retry());
     const beforeRefresh = view.commands.length;
-    sessionToken = 'refreshed-token';
-    await view.click(m.inbox_check_access());
+    await act(async () => {
+      view.client.setQueryData(sessionQuery.queryKey, session('alice', 'refreshed-token'));
+      exactRetry();
+    });
     await tick();
     expect(currentInboxViewer(view.client)).toBe(owner);
     expect(view.commands).toHaveLength(beforeRefresh);
-    // Refresh again before React renders, then invoke the actual retained retry closure.
+    expect(view.pageCalls.at(-1)).toEqual({ selection: 'all' });
+    expect(view.rows()).toEqual([['newest', 'true']]);
+    // The credential refresh starts a fresh page episode and retires the original key.
     await act(async () => {
-      view.client.setQueryData(sessionQuery.queryKey, session('alice', 'latest-token'));
       exactRetry();
       exactRetry();
     });
-    expect(view.commands).toHaveLength(2);
-    expect(view.commands.map(({ data }) => data)).toEqual([original, original]);
-    expect(view.commands.map(({ token }) => token)).toEqual(['original-token', 'latest-token']);
+    expect(view.commands).toHaveLength(1);
     expect(currentInboxViewer(view.client)).toBe(owner);
-    confirmed = true;
-    await act(async () => {
-      view.commands[1]!.work.resolve({ signedIn: true });
-    });
-    await tick();
-    await act(async () => {
-      for (const pending of view.countCalls) pending.resolve(count(2));
-    });
-    await tick();
-    // The current page is a later arrival, so a fresh read keeps it unread.
-    expect(view.rows()).toEqual([['unloaded-fourth', 'true']]);
-    expect(view.host.textContent).toContain(m.inbox_triage_marked());
-    await view.click(m.inbox_triage_filter_unread());
-    await tick();
-    expect(view.pageCalls.at(-1)).toEqual({ selection: 'unread' });
-    expect(view.commands).toHaveLength(2);
+    expect(view.host.textContent).not.toContain(m.inbox_seen_unknown());
   } finally {
     await view.close();
   }

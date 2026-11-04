@@ -1,10 +1,9 @@
 import type { NoticeInboxItem } from '@rezics/client';
-import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import { ArrowLeft, Bell, ExternalLink, Flag, Gavel, MessageCircleReply } from 'lucide-react';
-import { initials } from '../threads/initials';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { inboxOpenHref, inboxTargetContext, type InboxSelection } from './inbox-read';
+import { InboxNoticeActorVisual, inboxNoticeActorPresentation } from './inbox-notice-actor';
 
 export function inboxNoticeBackHref(selection: InboxSelection, cursor?: string): string {
   const query = new URLSearchParams({ selection });
@@ -38,12 +37,13 @@ export function InboxNoticeDetailView({
 }) {
   const destination = inboxOpenHref(notice);
   const actor = notice.actor;
-  const actorName =
-    actor.state === 'available'
-      ? actor.displayName.trim() || m.inbox_actor_unknown()
-      : actor.state === 'system'
-        ? m.inbox_actor_moderation()
-        : m.inbox_actor_unknown();
+  const actorPresentation = inboxNoticeActorPresentation({
+    actor,
+    actorId: actor.state === 'available' ? actor.accountId : null,
+    actorName: actor.state === 'available' ? actor.displayName : undefined,
+    kind: notice.kind,
+    reportId: notice.reportId,
+  });
   const context = inboxTargetContext(notice.target);
 
   return (
@@ -61,21 +61,18 @@ export function InboxNoticeDetailView({
         </h1>
         <article className="grid gap-6 rounded-xl border border-border p-5 sm:p-7">
           <div className="flex min-w-0 items-start gap-3">
-            {actor.state === 'available' ? (
-              <Avatar aria-hidden="true" size="default" className="shrink-0">
-                {actor.avatarUrl ? <AvatarImage src={actor.avatarUrl} alt="" /> : null}
-                <AvatarFallback>{initials(actor.displayName)}</AvatarFallback>
-              </Avatar>
-            ) : (
-              <span aria-hidden="true" className="mt-1 shrink-0 text-muted-foreground">
-                {eventKind(notice)}
-              </span>
-            )}
+            <InboxNoticeActorVisual
+              presentation={actorPresentation}
+              size="default"
+              avatarClassName="shrink-0"
+              fallbackClassName="mt-1 shrink-0 text-muted-foreground"
+              fallback={eventKind(notice)}
+            />
             <div className="min-w-0">
-              <p className="font-medium">{actorName}</p>
-              {actor.state === 'available' && actor.handle ? (
-                <p className="break-words text-sm text-muted-foreground">@{actor.handle}</p>
-              ) : actor.state !== 'available' ? (
+              <p className="font-medium">{actorPresentation.label}</p>
+              {actorPresentation.handle ? (
+                <p className="break-words text-sm text-muted-foreground">@{actorPresentation.handle}</p>
+              ) : actorPresentation.unavailable ? (
                 <p className="text-sm text-muted-foreground">{m.inbox_notice_actor_unavailable()}</p>
               ) : null}
             </div>
