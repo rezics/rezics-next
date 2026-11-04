@@ -232,7 +232,14 @@ export async function listModerationHistory(
 
   if (context.request) {
     if (!authorization || context.request.headers.get('authorization') !== authorization) throw missing();
-    const currentActor = await actorOf(deps.access, context.request, { pool: deps.pool, deadline: context.deadline });
+    let currentActor: Actor;
+    try {
+      currentActor = await actorOf(deps.access, context.request, { pool: deps.pool, deadline: context.deadline });
+    } catch (error) {
+      if (error instanceof AuthenticationError || (error instanceof ProblemError && error.code === 'account_suspended'))
+        throw missing();
+      throw error;
+    }
     if (JSON.stringify(currentActor) !== JSON.stringify(context.actor)) throw missing();
   }
   const final = await snapshot(deps.pool, route, context.deadline, checkBoard);

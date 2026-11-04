@@ -20,7 +20,7 @@ type NativePage = {
   nextCursor: string | null;
   viewer: { kind: 'board-moderator' };
 };
-type Result = { status: number; data?: unknown; error?: { value: unknown }; source?: string | null };
+type Result = { status: number; data?: unknown; error?: { value: unknown } | null; source?: string | null };
 export type HistorySource = {
   page: (boardId: string, query: { limit: number; targetKind: HistoryTargetKind; cursor?: string }) => Promise<Result>;
   exact: (id: string) => Promise<Result>;
@@ -98,9 +98,10 @@ function pageValue(value: unknown): value is NativePage {
   });
 }
 function exactValue(value: unknown): value is ModerationDecision {
-  if (!decisionIdentity(value) || !record(value)) return false;
+  if (!record(value)) return false;
   const viewer = value['viewer'];
   const target = value['targetContext'];
+  if (!decisionIdentity(value)) return false;
   if (
     !record(viewer) ||
     typeof viewer['affectedAuthor'] !== 'boolean' ||
