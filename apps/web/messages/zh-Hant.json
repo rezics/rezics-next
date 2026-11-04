@@ -8028,6 +8028,7 @@
   "prq_actions_unavailable": "無法讀取允許的操作。請重新整理此頁面再試。",
   "prq_selection_separate": "選取需要前往獨立的候選審核頁面。",
   "prq_selection_not_allowed": "目前語境不允許選取。",
+<<<<<<< HEAD
   "own_classifications_acknowledged": "原生指令已確認。再次變更前請重新載入此頁。",
   "own_classifications_readback": "讀取目前評估",
   "own_classifications_readback_separate": "目前讀取結果不代表原始請求已獲確認。",
@@ -8104,4 +8105,14 @@
   "search_share_private": "此搜尋含有私密或不可攜的條件。分享前請明確移除這些條件。",
   "search_share_unavailable": "暫時無法分享。搜尋已保留，請重試。",
   "search_share_close": "關閉預覽"
+=======
+  "discovery_collection_curator": "策展者",
+  "discovery_collection_curator_unavailable": "策展者資訊無法使用",
+  "discovery_collection_preview": "內容預覽",
+  "discovery_collection_partial": "部分成員無法顯示。",
+  "discovery_collection_truncated": "這是合集的一部分，開啟合集查看更多。",
+  "discovery_collection_empty": "此合集為空。",
+  "discovery_collection_withheld": "沒有可顯示的成員。",
+  "discovery_collection_preview_unavailable": "內容預覽無法使用。"
+>>>>>>> c9311a6b29 (Squash worker branch changes)
 }

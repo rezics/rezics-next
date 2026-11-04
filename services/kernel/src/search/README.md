@@ -836,6 +836,24 @@ past the normalized bound. See the pinned OpenSearch 3.9.0
 Existing oversized indexed keys require replay into a real new generation before bounded-read readiness; a mapping
 update does not rewrite existing terms.
 
+## Collection comparison and following
+
+The live mixed Collection card carries current native curator attribution, bounded admitted member context and source
+incarnation through Library's [public producer](../library/README.md#collection-comparison-context-and-private-follow-discovery).
+A separate `collectionFollows` envelope carries the requesting actor's native account-home state and exact action advice,
+never index/private card fields. Its rows match the page's Collection identities, native source generation, revision and
+order epoch or published output generation in order. The real closed HTTP schema, generated client and Web receiver
+admit those same shapes. Signed-out and unavailable follow states do not pretend to know the edge.
+
+Cost: the mixed reader admits <=200 current candidate keys in partition-local batches <=100, with a final page <=100
+rows. Each Library summary batch adds <=409600 UTF-8 bytes of public context and <=400 raw member keys; the current
+public guard repeats producer disclosure before cursor publication. Private preparation adds two home snapshots with
+<=100 exact follow-key probes each and two native direction checks per round. The native Search private source token
+is bounded by full UUID, decimal generation/revision and native epoch/output IDs; the envelope is <32768 bytes and
+shares Web's existing 65536-byte private page allowance with viewer facts and capabilities. There are no per-row follow
+GETs, index following projections, new association tables or new mutation owners. These are derived bounds, not growth
+measurements; broader acceptance remains with integration.
+
 ## Cost
 
 - Retained count-free facet pages touch prepared generation/value keys, current contributor/target Source and

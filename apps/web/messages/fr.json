@@ -8028,6 +8028,7 @@
   "prq_actions_unavailable": "Impossible de lire les opérations autorisées. Actualisez cette page pour réessayer.",
   "prq_selection_separate": "La sélection nécessite la visite distincte de révision du candidat.",
   "prq_selection_not_allowed": "La sélection n’est actuellement pas autorisée dans ce contexte.",
+<<<<<<< HEAD
   "own_classifications_acknowledged": "La commande a été confirmée. Rechargez cette page avant une autre modification.",
   "own_classifications_readback": "Lire l’évaluation actuelle",
   "own_classifications_readback_separate": "L’état actuel ne confirme pas la requête initiale.",
@@ -8104,4 +8105,14 @@
   "search_share_private": "Cette recherche contient des conditions privées ou non transférables. Retirez-les explicitement avant de partager.",
   "search_share_unavailable": "Le partage est indisponible. Votre recherche est conservée ; réessayez.",
   "search_share_close": "Fermer l’aperçu"
+=======
+  "discovery_collection_curator": "Sélection de",
+  "discovery_collection_curator_unavailable": "Responsable indisponible",
+  "discovery_collection_preview": "Aperçu du contenu",
+  "discovery_collection_partial": "Certains éléments ne peuvent pas être affichés.",
+  "discovery_collection_truncated": "Aperçu de cette collection. Ouvrez-la pour en voir plus.",
+  "discovery_collection_empty": "Cette collection est vide.",
+  "discovery_collection_withheld": "Aucun élément ne peut être affiché.",
+  "discovery_collection_preview_unavailable": "Aperçu indisponible."
+>>>>>>> c9311a6b29 (Squash worker branch changes)
 }

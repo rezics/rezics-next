@@ -8028,6 +8028,7 @@
   "prq_actions_unavailable": "許可されている操作を取得できませんでした。ページを更新して再試行してください。",
   "prq_selection_separate": "選択には候補の個別レビュー画面での操作が必要です。",
   "prq_selection_not_allowed": "このコンテキストでは現在、選択は許可されていません。",
+<<<<<<< HEAD
   "own_classifications_acknowledged": "操作が確認されました。次の変更の前にこのページを再読み込みしてください。",
   "own_classifications_readback": "現在の評価を確認",
   "own_classifications_readback_separate": "現在の状態を読んでも、元のリクエストの確認にはなりません。",
@@ -8104,4 +8105,14 @@
   "search_share_private": "非公開または移植できない条件があります。共有前に明示的に削除してください。",
   "search_share_unavailable": "共有を利用できません。検索は保持されています。再試行してください。",
   "search_share_close": "プレビューを閉じる"
+=======
+  "discovery_collection_curator": "選者",
+  "discovery_collection_curator_unavailable": "選者の情報は利用できません",
+  "discovery_collection_preview": "内容のプレビュー",
+  "discovery_collection_partial": "表示できない項目があります。",
+  "discovery_collection_truncated": "このコレクションの一部です。開くと続きを確認できます。",
+  "discovery_collection_empty": "このコレクションは空です。",
+  "discovery_collection_withheld": "表示できる項目はありません。",
+  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。"
+>>>>>>> c9311a6b29 (Squash worker branch changes)
 }

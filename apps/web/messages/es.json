@@ -8028,6 +8028,7 @@
   "prq_actions_unavailable": "No se pudieron leer las operaciones permitidas. Actualiza esta página para reintentar.",
   "prq_selection_separate": "La selección requiere la revisión independiente del candidato.",
   "prq_selection_not_allowed": "La selección no está permitida actualmente en este contexto.",
+<<<<<<< HEAD
   "own_classifications_acknowledged": "Se confirmó la operación. Recarga esta página antes de otro cambio.",
   "own_classifications_readback": "Leer la evaluación actual",
   "own_classifications_readback_separate": "El estado actual no confirma la solicitud original.",
@@ -8104,4 +8105,14 @@
   "search_share_private": "Esta búsqueda contiene condiciones privadas o no transferibles. Elimínalas explícitamente antes de compartir.",
   "search_share_unavailable": "No se puede compartir ahora. Tu búsqueda se conserva; vuelve a intentarlo.",
   "search_share_close": "Cerrar vista previa"
+=======
+  "discovery_collection_curator": "Selección de",
+  "discovery_collection_curator_unavailable": "Responsable no disponible",
+  "discovery_collection_preview": "Vista previa del contenido",
+  "discovery_collection_partial": "Algunos elementos no se pueden mostrar.",
+  "discovery_collection_truncated": "Vista previa de esta colección. Ábrela para ver más.",
+  "discovery_collection_empty": "Esta colección está vacía.",
+  "discovery_collection_withheld": "No se pueden mostrar elementos.",
+  "discovery_collection_preview_unavailable": "Vista previa no disponible."
+>>>>>>> c9311a6b29 (Squash worker branch changes)
 }

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { boundWorkContexts } from './work-context.ts';
+=======
+import { readFollowDiscovery } from '../library/follow-discovery.ts';
+>>>>>>> c9311a6b29 (Squash worker branch changes)
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -808,7 +812,25 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
               enriched.viewer.prepared,
               context.deadline,
             ));
-          return { page: enriched.page, viewerCurrent };
+          const targets = enriched.page.hits.flatMap((hit) => {
+            if (hit.summary.kind !== 'collection') return [];
+            const card = hit.summary.value.card;
+            return [
+              {
+                targetId: hit.key.id,
+                targetType: 'collection' as const,
+                source: JSON.stringify([
+                  card.id,
+                  card.sourceGeneration,
+                  card.revision,
+                  card.membershipKind,
+                  card.membershipKind === 'curated' ? card.orderEpoch : card.outputGeneration,
+                ]),
+              },
+            ];
+          });
+          const collectionFollows = await readFollowDiscovery(config, context.actor, targets, context.deadline);
+          return { page: { ...enriched.page, collectionFollows }, viewerCurrent };
         } catch (error) {
           if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });

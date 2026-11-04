@@ -23,6 +23,9 @@ function collectionCard(id: string, title: string, description: string | null) {
     description,
     visibility: 'public' as const,
     revision: 1,
+    sourceGeneration: '1',
+    curator: { state: 'unavailable' as const, reason: 'native_projection' as const },
+    preview: { state: 'unavailable' as const },
     presentationKind: null,
     presentationKindSource: 'owner' as const,
     cover: {

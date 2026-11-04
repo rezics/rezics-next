@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import {
   WorkContextSchema,
   validWorkContext,
@@ -5,6 +6,9 @@ import {
   workContextKind,
   WORK_CONTEXT_LIMITS,
 } from './work-context.ts';
+=======
+import { CollectionCuratorSchema, CollectionPreviewSchema, FollowDiscoverySchema } from './collection-context-http.ts';
+>>>>>>> c9311a6b29 (Squash worker branch changes)
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
@@ -70,10 +74,13 @@ const collectionCard = t.Union([
       description: nullableText,
       visibility: t.Literal('public'),
       revision: t.Integer({ minimum: 0 }),
+      sourceGeneration: t.String({ pattern: '^[0-9]{1,20}$' }),
       presentationKind: t.Union([t.String(), t.Null()]),
       presentationKindSource: t.Union([t.Literal('mixed'), t.Literal('owner')]),
       cover: t.Union([CoverSummarySchema, t.Null()]),
       coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
+      curator: CollectionCuratorSchema,
+      preview: CollectionPreviewSchema,
       membershipKind: t.Literal('curated'),
       memberCount: t.Integer({ minimum: 0 }),
       orderEpoch: t.Integer({ minimum: 0 }),
@@ -91,10 +98,13 @@ const collectionCard = t.Union([
       description: nullableText,
       visibility: t.Literal('public'),
       revision: t.Integer({ minimum: 0 }),
+      sourceGeneration: t.String({ pattern: '^[0-9]{1,20}$' }),
       presentationKind: t.Union([t.String(), t.Null()]),
       presentationKindSource: t.Union([t.Literal('mixed'), t.Literal('owner')]),
       cover: t.Union([CoverSummarySchema, t.Null()]),
       coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
+      curator: CollectionCuratorSchema,
+      preview: CollectionPreviewSchema,
       membershipKind: t.Literal('dynamic'),
       outputGeneration: t.String({ minLength: 1 }),
     },
@@ -274,6 +284,7 @@ export const DiscoveryPageSchema = t.Object(
     next: continuation,
     as_of: t.String({ format: 'date-time' }),
     viewerFacts: t.Optional(viewerFacts),
+    collectionFollows: t.Optional(FollowDiscoverySchema),
   },
   closed,
 );
@@ -324,6 +335,12 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
       card.title !== summary.value.title ||
       card.description !== summary.value.description ||
       card.revision < 0 ||
+      Buffer.byteLength(JSON.stringify({ curator: card.curator, preview: card.preview })) > 4096 ||
+      (card.curator.state === 'available' &&
+        card.curator.destination !== null &&
+        !/^\/@[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(card.curator.destination)) ||
+      (card.preview.state === 'available' &&
+        new Set(card.preview.members.map((member) => member.id)).size !== card.preview.members.length) ||
       card.destination !== `/collections/${key.id}`
     )
       unavailable();
@@ -345,6 +362,31 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
     const identity = JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
     if (identities.has(identity)) unavailable();
     identities.add(identity);
+  }
+  if (page.collectionFollows?.state === 'current') {
+    const collections = page.hits.flatMap((hit) => (hit.summary.kind === 'collection' ? [hit.summary.value.card] : []));
+    const home = routeOf(page.collectionFollows.accountId);
+    if (
+      home === null ||
+      home >>> 4 !== page.collectionFollows.partition ||
+      page.collectionFollows.rows.length !== collections.length ||
+      page.collectionFollows.rows.some((row, index) => {
+        const card = collections[index]!;
+        return (
+          row.targetType !== 'collection' ||
+          row.targetId !== card.id ||
+          row.source !==
+            JSON.stringify([
+              card.id,
+              card.sourceGeneration,
+              card.revision,
+              card.membershipKind,
+              card.membershipKind === 'curated' ? card.orderEpoch : card.outputGeneration,
+            ])
+        );
+      })
+    )
+      unavailable();
   }
   if (page.viewerFacts && page.viewerFacts !== null && page.viewerFacts.state === 'current') {
     const subjects = page.hits.filter((hit) => hit.summary.kind === 'subject');
@@ -375,7 +417,13 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
 /** Close the owner/summary union and snapshot nested owner values before serialization. */
 export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
   admitDiscoveryPage(page);
-  const { viewerFacts: originalViewerFacts, ...publicPage } = page;
+  const { viewerFacts: originalViewerFacts, collectionFollows: originalFollows, ...publicPage } = page;
+  const collectionFollows: DiscoveryHttpPage['collectionFollows'] =
+    originalFollows?.state === 'current'
+      ? { ...originalFollows, rows: originalFollows.rows.map((row) => ({ ...row, actions: { ...row.actions } })) }
+      : originalFollows
+        ? { ...originalFollows }
+        : undefined;
   const viewerFacts: DiscoveryHttpPage['viewerFacts'] =
     originalViewerFacts === undefined || originalViewerFacts === null
       ? originalViewerFacts
@@ -479,6 +527,21 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
               ...value,
               card: {
                 ...value.card,
+                curator: { ...value.card.curator },
+                preview:
+                  value.card.preview.state === 'available'
+                    ? {
+                        ...value.card.preview,
+                        members: value.card.preview.members.map((member) => ({
+                          ...member,
+                          subject: {
+                            ...member.subject,
+                            types: [...member.subject.types],
+                            label: member.subject.label ? { ...member.subject.label } : null,
+                          },
+                        })),
+                      }
+                    : { ...value.card.preview },
                 cover: value.card.cover
                   ? {
                       ...value.card.cover,
@@ -525,5 +588,6 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       };
     }),
     ...(viewerFacts === undefined ? {} : { viewerFacts }),
+    ...(collectionFollows === undefined ? {} : { collectionFollows }),
   };
 }

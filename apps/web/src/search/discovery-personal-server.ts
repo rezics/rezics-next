@@ -44,7 +44,11 @@ export async function readBoundDiscoveryPage(
     return {
       state: {
         status: 'ready',
-        page: { ...state.page, viewerFacts: { state: 'unavailable', reason: 'response_limit', retryable: false } },
+        page: {
+          ...state.page,
+          collectionFollows: { state: 'unavailable', reason: 'native' },
+          viewerFacts: { state: 'unavailable', reason: 'response_limit', retryable: false },
+        },
       },
       capabilities: null,
     };
