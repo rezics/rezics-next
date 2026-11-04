@@ -17,6 +17,12 @@ type Transport<T> = T extends { 'source-classifications': infer Methods } ? Meth
 type Method<T, Verb extends string> = T extends Record<Verb, { post: infer Declaration }> ? Declaration : never;
 type Body<T> = T extends { body: infer Input } ? Input : never;
 type Result<T> = T extends { response: { 200: infer Output } } ? Output : never;
+type RootBody<T> = T extends (...args: infer Args) => unknown ? Args[0] : never;
+type RootResult<T> = T extends (...args: infer _Args) => Promise<infer Reply>
+  ? Reply extends { data: infer Output }
+    ? NonNullable<Output>
+    : never
+  : never;
 type AssertPresent<T> = [T] extends [never] ? false : true;
 type State<T> = T extends { state: infer Value } ? Value : never;
 type RootTransport = Transport<ReturnType<KernelClient['subjects']>>;
@@ -36,12 +42,12 @@ const closure: [
   Assert<Equal<SourceClassificationPutResult, Result<Put>>>,
   Assert<Equal<SourceClassificationClearInput, Body<Clear>>>,
   Assert<Equal<SourceClassificationClearResult, Result<Clear>>>,
-  Assert<Equal<Body<RootRead>, SourceClassificationBatchInput>>,
-  Assert<Equal<Result<RootRead>, SourceClassificationBatch>>,
-  Assert<Equal<Body<RootPut>, SourceClassificationPutInput>>,
-  Assert<Equal<Result<RootPut>, SourceClassificationPutResult>>,
-  Assert<Equal<Body<RootClear>, SourceClassificationClearInput>>,
-  Assert<Equal<Result<RootClear>, SourceClassificationClearResult>>,
+  Assert<Equal<RootBody<RootRead>, SourceClassificationBatchInput>>,
+  Assert<Equal<RootResult<RootRead>, SourceClassificationBatch>>,
+  Assert<Equal<RootBody<RootPut>, SourceClassificationPutInput>>,
+  Assert<Equal<RootResult<RootPut>, SourceClassificationPutResult>>,
+  Assert<Equal<RootBody<RootClear>, SourceClassificationClearInput>>,
+  Assert<Equal<RootResult<RootClear>, SourceClassificationClearResult>>,
   Assert<Equal<State<SourceClassificationPutResult>, 'published' | 'cleared'>>,
   Assert<Equal<State<SourceClassificationClearResult>, 'published' | 'cleared'>>,
 ] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
