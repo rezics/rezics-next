@@ -103,9 +103,10 @@ test('generated selection validates native author, resource, draft visibility an
   const reader = nativeOwnDraftRequests(
     createKernelClient('https://kernel.test', {
       async fetch() {
-        if (finish)
+        if (pause)
           await new Promise<void>((resolve) => {
             finish = resolve;
+            started();
           });
         return response(payload, status, etag);
       },
