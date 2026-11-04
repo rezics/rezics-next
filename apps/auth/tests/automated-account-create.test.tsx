@@ -1,5 +1,15 @@
 import { expect, test } from 'bun:test';
-import { creationFixture, approval, button, fill, flush, leave, open, send } from './creation-page-fixture';
+import {
+  creationFixture,
+  automatedOperatorPage,
+  approval,
+  button,
+  fill,
+  flush,
+  leave,
+  open,
+  send,
+} from './creation-page-fixture';
 import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 import {
   AUTOMATED_PROFILE,
@@ -76,7 +86,13 @@ for (const stage of ['review', 'approval', 'signin'] as const)
     await flush(() =>
       page.calls
         .at(-1)!
-        .resolve(stage === 'review' ? Response.json(operator) : stage === 'approval' ? approval() : Response.json({})),
+        .resolve(
+          stage === 'review'
+            ? automatedOperatorPage(human, operator)
+            : stage === 'approval'
+              ? approval()
+              : Response.json({}),
+        ),
     );
     expect(restoreAutomatedAttempt()).toEqual(replacement);
     expect(page.host.textContent).toContain('new-robot');

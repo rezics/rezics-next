@@ -30,7 +30,19 @@ export type OperatorIdentity = Readonly<{
 export type AutomatedOutcome =
   | { kind: 'complete'; accountId: string }
   | { kind: 'step-up' | 'refused' | 'unknown' | 'unavailable' };
-export type OperatorRead = { kind: 'ready'; operator: OperatorIdentity } | { kind: 'unavailable' };
+export type OperatorRead =
+  | { kind: 'ready'; operator: OperatorIdentity }
+  | { kind: 'step-up' | 'refused' | 'unavailable' };
+export type AutomatedCreationPage = {
+  viewer: { accountId: string };
+  readiness: 'authentication-needed' | 'select-operator' | 'review' | 'refused';
+  operator: OperatorIdentity | null;
+  handleRules: { minLength: 3; maxLength: 64; normalization: 'lowercase'; pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]' };
+  action: 'authenticate' | 'select-operator' | 'confirm' | 'none';
+};
+export type AutomatedPageRead =
+  | { kind: 'ready'; page: AutomatedCreationPage }
+  | { kind: 'refused' | 'signed-out' | 'unavailable' };
 const storageKey = 'rezics.automated-create.attempt';
 export function automatedId(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.exec(value)?.[0] === value;
@@ -72,38 +84,90 @@ export function parseAutomatedOperator(body: unknown, operatorAccountId: string)
   return { kind: 'ready', operator: Object.freeze({ ...body.account }) };
 }
 
-/** Closed response from the selected native command metadata transport. */
-export function parseAutomatedCreationOperator(body: unknown, operatorAccountId: string): OperatorRead {
-  return identity(body) && body.id === operatorAccountId
-    ? { kind: 'ready', operator: Object.freeze({ ...body }) }
-    : { kind: 'unavailable' };
-}
-
-async function readOperator(accountId: string, operatorAccountId: string): Promise<OperatorRead> {
-  const session = await loadManagementSession();
-  if (session.kind !== 'ready' || !automatedSessionMatches(session, accountId)) return { kind: 'unavailable' };
-  const result = await authPost('/account-management/automated/operator', { operatorAccountId });
-  if (!result.ok) return { kind: 'unavailable' };
-  // Session substitution while the selected label was loading cannot change the
-  // immutable initiating human. Auth independently verifies the genuine session.
-  const current = await loadManagementSession();
+/** Close the native page, including advice; a matching browser profile is no grant. */
+export function parseAutomatedCreationPage(
+  body: unknown,
+  accountId: string,
+  operatorAccountId: string | null,
+): AutomatedPageRead {
   if (
-    current.kind !== 'ready' ||
-    !automatedSessionMatches(current, accountId) ||
-    current.authnEpoch !== session.authnEpoch ||
-    current.authTime !== session.authTime ||
-    JSON.stringify(current.amr) !== JSON.stringify(session.amr)
+    !record(body) ||
+    !fields(body, ['viewer', 'readiness', 'operator', 'handleRules', 'action']) ||
+    !record(body.viewer) ||
+    !fields(body.viewer, ['accountId']) ||
+    body.viewer.accountId !== accountId ||
+    !record(body.handleRules) ||
+    !fields(body.handleRules, ['minLength', 'maxLength', 'normalization', 'pattern']) ||
+    body.handleRules.minLength !== 3 ||
+    body.handleRules.maxLength !== 64 ||
+    body.handleRules.normalization !== 'lowercase' ||
+    body.handleRules.pattern !== '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]'
   )
     return { kind: 'unavailable' };
-  return parseAutomatedCreationOperator(result.body, operatorAccountId);
+  const actions = {
+    'authentication-needed': 'authenticate',
+    'select-operator': 'select-operator',
+    review: 'confirm',
+    refused: 'none',
+  };
+  if (
+    typeof body.readiness !== 'string' ||
+    !Object.hasOwn(actions, body.readiness) ||
+    body.action !== actions[body.readiness as keyof typeof actions] ||
+    (body.readiness === 'review'
+      ? !identity(body.operator) || body.operator.id !== operatorAccountId
+      : body.operator !== null) ||
+    (body.readiness === 'select-operator' && operatorAccountId !== null) ||
+    (body.readiness === 'refused' && operatorAccountId === null)
+  )
+    return { kind: 'unavailable' };
+  return { kind: 'ready', page: body as AutomatedCreationPage };
 }
-export async function loadAutomatedOperator(accountId: string, operatorAccountId: string): Promise<OperatorRead> {
-  if (!automatedId(accountId) || !automatedId(operatorAccountId)) return { kind: 'unavailable' };
+export function parseAutomatedCreationOperator(
+  body: unknown,
+  operatorAccountId: string,
+  accountId: string,
+): OperatorRead {
+  const read = parseAutomatedCreationPage(body, accountId, operatorAccountId);
+  if (read.kind !== 'ready') return { kind: 'unavailable' };
+  if (read.page.readiness === 'review' && read.page.operator) return { kind: 'ready', operator: read.page.operator };
+  return { kind: read.page.readiness === 'authentication-needed' ? 'step-up' : 'refused' };
+}
+
+export async function loadAutomatedCreationPage(
+  accountId: string,
+  operatorAccountId: string | null,
+): Promise<AutomatedPageRead> {
+  if (!automatedId(accountId) || (operatorAccountId !== null && !automatedId(operatorAccountId)))
+    return { kind: 'unavailable' };
   try {
-    return await readOperator(accountId, operatorAccountId);
+    const session = await loadManagementSession();
+    if (session.kind !== 'ready') return session;
+    if (session.accountId !== accountId) return { kind: 'refused' };
+    const result = await authPost('/account-management/automated/operator', { operatorAccountId });
+    if (!result.ok)
+      return { kind: result.status === 401 ? 'signed-out' : result.status === 403 ? 'refused' : 'unavailable' };
+    const current = await loadManagementSession();
+    if (
+      current.kind !== 'ready' ||
+      current.accountId !== accountId ||
+      current.clientId !== session.clientId ||
+      JSON.stringify(current.scopes) !== JSON.stringify(session.scopes) ||
+      current.authnEpoch !== session.authnEpoch ||
+      current.authTime !== session.authTime ||
+      JSON.stringify(current.amr) !== JSON.stringify(session.amr)
+    )
+      return { kind: 'unavailable' };
+    return parseAutomatedCreationPage(result.body, accountId, operatorAccountId);
   } catch {
     return { kind: 'unavailable' };
   }
+}
+export async function loadAutomatedOperator(accountId: string, operatorAccountId: string): Promise<OperatorRead> {
+  const read = await loadAutomatedCreationPage(accountId, operatorAccountId);
+  if (read.kind !== 'ready') return { kind: read.kind === 'signed-out' ? 'step-up' : read.kind };
+  if (read.page.readiness === 'review' && read.page.operator) return { kind: 'ready', operator: read.page.operator };
+  return { kind: read.page.readiness === 'authentication-needed' ? 'step-up' : 'refused' };
 }
 
 export function parseAutomatedAttempt(value: unknown): AutomatedAttempt | null {

@@ -1392,16 +1392,41 @@ unchanged. Explicit inline native sign-in selects only that profile and material
 existing current consent; it never approves or creates. Missing registration or
 native ports refuse availability rather than fabricating approval.
 
-Review requires a private server adapter to the actual
-`GET /v1/accounts/{selectedOperatorId}/management` read. It issues a native token
-from the current Auth cookie only on the server, uses configured `KERNEL_ORIGIN`,
-checks the initiating account and returns the selected native identity. Public
-profiles and imported rows are not substitutes. The installed management read also
-requires `account:read`; the creation profile remains exactly `account:manage`.
-When the current session cannot read the target, or runtime configuration is absent,
-review shows target unavailable. No read scope is added to the management ceiling.
-A previously reviewed identity is presentation only: native approval and execution
-recheck actual authority after profile sign-in.
+The same-origin `POST /account-management/automated/operator` now projects one
+closed native page envelope. Its sole body field is `operatorAccountId`, an exact
+UUID selection or null for safe caller/readiness bootstrap. It returns independently
+admitted `viewer.accountId`, `readiness`, `operator`, `handleRules` and `action`.
+The supported readiness/action pairs are authentication-needed/authenticate,
+select-operator/select-operator, review/confirm and refused/none. Only review may
+contain operator identity. The creation handle contract is lowercase, 3–64 ASCII
+letters/digits/underscores/hyphens, with an alphanumeric first and last character.
+
+Ordinary or old sessions observe only their own active unoperated-human context
+and advice to use the installed transfer management profile. Their selected target
+is never read. Exact current management sessions still require both native current
+`account:manage` decisions before returning a selected identity. Missing, inactive,
+fenced, operated, unsupported and unmanageable selections share generic refusal;
+dependency errors and changing observations remain unavailable. Null optional
+labels stay null. No approval reference, creation context, reservation or command
+is acquired, and no proof is consumed. Submit retains its independent authorization.
+The browser loader consumes this envelope without a browser profile prerequisite,
+closes its viewer/selection/action binding and rechecks the initiating session.
+
+Whole-call static bound: Auth admits one current human session; the native adapter
+signs one proof and authenticates once through the existing bounded authentication
+producer. Two native-time passes each mint and release one read time. Safe advice
+performs four human point snapshots total, each one partition-key read and one
+account-key read (eight point queries). Selected review adds four operator snapshots
+(eight further point queries), at most two installed `account:manage` preparations
+and two formula checks. Each preparation/check inherits Access's finite subject,
+assignment and grant bounds; no inventory, directory, extra action or runtime price
+dispatch is added. Auth finally revalidates the same proof once, with all work inside
+the original three-second deadline. Sources hold no connection across preparation.
+The factory exposes both the existing exact operator reader and the page reader;
+Auth host binds the page reader in production and rejects a missing port.
+
+Decision: a null selection bootstraps only admitted caller/readiness advice; an
+ordinary session's non-null selection never causes an operator point read.
 
 The page explicitly confirms the exact operator ID, handle and initiating human.
 It retains one immutable key and business body in session storage across lost

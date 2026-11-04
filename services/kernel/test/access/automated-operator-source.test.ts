@@ -55,7 +55,12 @@ test('Existing credentialless automated creation loads minimal current operator 
   const own = await point(owner, owner.accountId);
   expect(own.status).toBe(200);
   expect(own.headers.get('cache-control')).toBe('private, no-store');
-  expect(await own.json()).toEqual({ id: owner.accountId, kind: 'actor', handle: 'metadata_owner', displayName: null });
+  expect(await own.json()).toMatchObject({
+    viewer: { accountId: owner.accountId },
+    readiness: 'review',
+    action: 'confirm',
+    operator: { id: owner.accountId, kind: 'actor', handle: 'metadata_owner', displayName: null },
+  });
   const org = newId(0x9422);
   const hold = await f.bindings.internalLifecycle.reserveCoordination({
     accountId: owner.accountId,
@@ -72,13 +77,35 @@ test('Existing credentialless automated creation loads minimal current operator 
   await f.bindings.operators.provisionManagementDefaults({ operatorAccountId: org, key: key() });
   const organization = await point(owner, org);
   expect(organization.status).toBe(200);
-  expect(await organization.json()).toEqual({ id: org, kind: 'organization', handle: null, displayName: null });
-  expect((await point(outsider, org)).status).toBe(403);
-  expect((await point(owner, outsider.accountId)).status).toBe(403);
+  expect(await organization.json()).toMatchObject({
+    readiness: 'review',
+    operator: { id: org, kind: 'organization', handle: null, displayName: null },
+  });
+  const refused = await (await point(outsider, org)).json();
+  expect(refused).toMatchObject({ readiness: 'refused', operator: null, action: 'none' });
+  expect(await (await point(owner, outsider.accountId)).json()).toMatchObject({ readiness: 'refused', operator: null });
   expect((await point(owner, owner.accountId, { accountId: outsider.accountId })).status).toBe(400);
   const missing = await point(owner, newId(0x9422));
   expect(missing.status).toBe(200);
-  expect(await missing.json()).toBeNull();
+  expect(await missing.json()).toMatchObject({ readiness: 'refused', operator: null });
+  expect(await (await point(outsider, org)).json()).toEqual(await (await point(outsider, newId(0x9422))).json());
+  // Ordinary real Auth sessions obtain safe advice without resolving any private target.
+  const ordinary = await f.request('/signin', {
+    email: 'metadata_owner@ordinary.test',
+    password,
+    client_id: 'ordinary-test-client',
+    scope: [],
+  });
+  expect(ordinary.status).toBe(200);
+  const ordinaryCaller = { ...owner, headers: cookies(ordinary) };
+  const advice = await (await point(ordinaryCaller, org)).json();
+  expect(advice).toMatchObject({
+    viewer: { accountId: owner.accountId },
+    readiness: 'authentication-needed',
+    operator: null,
+    action: 'authenticate',
+  });
+  expect(await (await point(ordinaryCaller, newId(0x9422))).json()).toEqual(advice);
   const ctx = await context(owner);
   await expect(
     createManagementRead(
@@ -116,7 +143,7 @@ test('Existing credentialless automated creation loads minimal current operator 
       key: key(),
     },
   );
-  expect((await point(owner, owner.accountId)).status).toBe(403);
+  expect(await (await point(owner, owner.accountId)).json()).toMatchObject({ readiness: 'refused', operator: null });
   // A real current floor change invalidates the genuine previously authenticated actor.
   await pool.query(
     'UPDATE access.account SET minimum_authn_epoch=minimum_authn_epoch+1 WHERE route=$1 AND account_id=$2',

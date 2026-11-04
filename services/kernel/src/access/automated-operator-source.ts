@@ -29,6 +29,13 @@ export type AutomatedCreationOperator = Readonly<{
   handle: string | null;
   displayName: string | null;
 }>;
+export type AutomatedCreationPage = Readonly<{
+  viewer: { accountId: string };
+  readiness: 'authentication-needed' | 'select-operator' | 'review' | 'refused';
+  operator: AutomatedCreationOperator | null;
+  handleRules: { minLength: 3; maxLength: 64; normalization: 'lowercase'; pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]' };
+  action: 'authenticate' | 'select-operator' | 'confirm' | 'none';
+}>;
 /** Local trusted composition; a browser selection never supplies the human. */
 export interface AutomatedOperatorAccess {
   readAutomatedCreationOperator(input: {
@@ -36,6 +43,11 @@ export interface AutomatedOperatorAccess {
     operatorAccountId: string;
     deadline: number;
   }): Promise<AutomatedCreationOperator | null>;
+  readAutomatedCreationPage(input: {
+    human: SessionProof;
+    operatorAccountId: string | null;
+    deadline: number;
+  }): Promise<AutomatedCreationPage>;
 }
 
 /** Two current passes of the installed account:manage formula at live native T.
@@ -46,17 +58,21 @@ export interface AutomatedOperatorAccess {
 export async function readAutomatedCreationOperator(
   deps: { pool: Pool; access: Access; clock?: () => Date },
   actor: Actor,
-  selection: { operatorAccountId: string },
+  selection: { operatorAccountId: string | null; genericRefusal?: boolean },
   context: { deadline: number },
 ): Promise<AutomatedCreationOperator | null> {
   const { pool, access } = deps;
   const { deadline } = context;
   const operatorAccountId = selection.operatorAccountId;
-  if (actor.kind !== 'account' || routeOf(actor.accountId) === null || routeOf(operatorAccountId) === null)
+  if (
+    actor.kind !== 'account' ||
+    routeOf(actor.accountId) === null ||
+    (operatorAccountId !== null && routeOf(operatorAccountId) === null)
+  )
     throw new AuthBindingDeniedError();
   const humanId = actor.accountId;
   const authnEpoch = actor.authnEpoch;
-  const target = { route: routeOf(operatorAccountId)!, id: operatorAccountId };
+  const target = operatorAccountId === null ? null : { route: routeOf(operatorAccountId)!, id: operatorAccountId };
   if (!Number.isFinite(deadline)) throw new AccessUnavailableError('deadline');
   async function point<T>(id: string, read: (client: Parameters<Access['authorize']>[0], route: number) => Promise<T>) {
     requireAccessDeadline(deadline);
@@ -79,7 +95,11 @@ export async function readAutomatedCreationOperator(
   }
   const human = () => point(humanId, (client, route) => humanSource.run(client, { route, account_id: humanId }));
   const operator = () =>
-    point(operatorAccountId, (client, route) => operatorSource.run(client, { route, account_id: operatorAccountId }));
+    operatorAccountId === null
+      ? Promise.resolve(null)
+      : point(operatorAccountId, (client, route) =>
+          operatorSource.run(client, { route, account_id: operatorAccountId }),
+        );
   const equal = (before: unknown, final: unknown) => {
     if (JSON.stringify(before) !== JSON.stringify(final)) throw new AccessUnavailableError('contention');
   };
@@ -103,19 +123,22 @@ export async function readAutomatedCreationOperator(
       )
         throw new AuthBindingDeniedError();
       const before = await operator();
-      const row = before.row;
+      const row = before?.row;
       // Native reserveResponsibility eligibility: active, unfenced and no operator.
       // Kind/equality/organization role never confers management permission.
-      const eligible =
+      let eligible =
         row &&
         (row.kind === 'actor' || row.kind === 'organization') &&
         row.state === 'active' &&
         !row.fenced &&
         row.operatorAccountId === null;
-      if (eligible) {
+      if (eligible && target) {
         const check = await accessCheck(access, actor, 'account:manage', target, { pool, deadline, time });
         await withConnection(pool, async (client) => {
-          if (!(await check(deadlineClient(client, deadline), time))) throw new AuthBindingDeniedError();
+          if (!(await check(deadlineClient(client, deadline), time))) {
+            if (!selection.genericRefusal) throw new AuthBindingDeniedError();
+            eligible = false;
+          }
         });
       }
       equal(before, await operator());
@@ -132,10 +155,10 @@ export async function readAutomatedCreationOperator(
       const final = await current();
       equal(before, final);
       requireAccessDeadline(deadline);
-      const row = final.source.row;
+      const row = final.source?.row;
       return final.eligible && row
         ? {
-            id: operatorAccountId,
+            id: operatorAccountId!,
             kind: row.kind as 'actor' | 'organization',
             handle: row.handle,
             displayName: row.displayName,
@@ -157,6 +180,67 @@ export function createAutomatedOperatorAccess(deps: {
   accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
 }): AutomatedOperatorAccess {
   return {
+    async readAutomatedCreationPage({ human, operatorAccountId, deadline }) {
+      requireAccessDeadline(deadline);
+      return within(deadline, async () => {
+        const actor = await deps.access.authenticate(await deps.accessTokenForProof(human), {
+          pool: deps.pool,
+          deadline,
+        });
+        if (
+          actor.kind !== 'account' ||
+          actor.accountId !== human.account_id ||
+          actor.clientId !== human.client_id ||
+          actor.authnEpoch !== human.authn_epoch ||
+          actor.requestedBy !== null ||
+          JSON.stringify(actor.scopes) !== JSON.stringify(human.scope) ||
+          human.amr.length !== 1 ||
+          !['pwd', 'pop'].includes(human.amr[0]!)
+        )
+          throw new AuthBindingDeniedError();
+        const now = (deps.clock ?? accessClock(deps.access))().getTime() / 1000;
+        const authenticated =
+          human.client_id === AUTH_MANAGEMENT_CLIENT_ID &&
+          JSON.stringify(human.scope) === JSON.stringify(AUTH_MANAGEMENT_SCOPES.transfer) &&
+          human.auth_time <= now &&
+          now - human.auth_time <= 600;
+        const operator = await readAutomatedCreationOperator(
+          deps,
+          actor,
+          {
+            operatorAccountId: authenticated ? operatorAccountId : null,
+            genericRefusal: true,
+          },
+          { deadline },
+        );
+        const readiness = !authenticated
+          ? 'authentication-needed'
+          : operatorAccountId === null
+            ? 'select-operator'
+            : operator
+              ? 'review'
+              : 'refused';
+        return {
+          viewer: { accountId: human.account_id },
+          readiness,
+          operator,
+          handleRules: {
+            minLength: 3,
+            maxLength: 64,
+            normalization: 'lowercase',
+            pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]',
+          },
+          action:
+            readiness === 'authentication-needed'
+              ? 'authenticate'
+              : readiness === 'select-operator'
+                ? 'select-operator'
+                : readiness === 'review'
+                  ? 'confirm'
+                  : 'none',
+        };
+      });
+    },
     async readAutomatedCreationOperator({ human, operatorAccountId, deadline }) {
       requireAccessDeadline(deadline);
       return within(deadline, async () => {
