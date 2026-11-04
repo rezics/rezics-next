@@ -39,10 +39,12 @@ type Scenario =
   | 'late';
 
 function makeVoiceRead(read: CharacterRelationshipsRead): CharacterRelationshipsRead {
-  if (!read.ok || !read.rows[0]?.statement) return read;
+  if (!read.ok) return read;
+  const row = read.rows[0];
+  const statement = row?.statement;
+  if (!row || !statement) return read;
   const voice = read.streams.find((stream) => stream.kind === 'voice');
   if (!voice) return read;
-  const row = read.rows[0];
   return {
     ...read,
     stream: voice,
@@ -50,7 +52,7 @@ function makeVoiceRead(read: CharacterRelationshipsRead): CharacterRelationships
       {
         ...row,
         statement: {
-          ...row.statement,
+          ...statement,
           property: { id: 'wdt:P725', data_type: 'wikibase-item' },
           value: { type: 'value', content: voicePersonId },
           qualifiers: [
