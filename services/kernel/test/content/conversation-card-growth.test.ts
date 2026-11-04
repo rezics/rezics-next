@@ -143,9 +143,9 @@ beforeAll(async () => {
     });
   }
   selectedThreadIds = selected.map(({ id }) => id);
-  representedHomePartitions = [
-    ...new Set(selected.slice(-pageSize).map(({ id }) => partitionOf(routeOf(id)!))),
-  ].sort((left, right) => left - right);
+  representedHomePartitions = [...new Set(selected.slice(-pageSize).map(({ id }) => partitionOf(routeOf(id)!)))].sort(
+    (left, right) => left - right,
+  );
 
   const startThread = selected.at(-1)!;
   sourceRoute = routeOf(startThread.id)!;
@@ -362,10 +362,10 @@ async function clearPopulation(axis: Axis, population: Population): Promise<void
     ]);
     await database.admin.query('ANALYZE content.thread, content.post, content.revision, content.subject_thread');
   } else if (axis === 'selected-history') {
-    await database.admin.query('DELETE FROM content.conversation_activity_episode WHERE route=$1 AND post_id=ANY($2::uuid[])', [
-      sourceRoute,
-      population.historyPostIds,
-    ]);
+    await database.admin.query(
+      'DELETE FROM content.conversation_activity_episode WHERE route=$1 AND post_id=ANY($2::uuid[])',
+      [sourceRoute, population.historyPostIds],
+    );
     await database.admin.query('ANALYZE content.conversation_activity_episode');
   } else if (axis === 'account-authority') {
     await database.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND transaction_id=ANY($2::uuid[])', [
@@ -520,47 +520,49 @@ test.serial('complete Home and Subject conversation pages stay bounded across fo
           database,
           () =>
             withJsonMeter(async (stringify) => {
-            const homePage = await readHome();
-            const subjectPage = await readSubject(pageSize);
-            expect(homePage.value.feedItems).toHaveLength(pageSize);
-            expect(subjectPage.value.threads).toHaveLength(pageSize);
-            const expectedKeys = selected.slice(-pageSize).reverse().map(({ id }) => id);
-            const homeThreadKeys = homePage.value.feedItems
-              .filter((item: any) => item.source === 'following' && item.key?.owner === 'content')
-              .map((item: any) => item.key.id);
-            expect(homeThreadKeys).toEqual(expectedKeys);
-            expect(subjectPage.value.threads.map((entry: any) => entry.id)).toEqual(expectedKeys);
-            const currentHome = homePage.value.feedItems.find((item: any) => item.key?.id === selected.at(-1)!.id);
-            const currentSubject = subjectPage.value.threads.find((entry: any) => entry.id === selected.at(-1)!.id);
-            assertCurrentActivity(activityFor(currentHome), 2);
-            expect(currentSubject?.card.comments).toMatchObject({
-              state: 'current',
-              cohort: 'public',
-              count: { kind: 'exact', value: 2 },
-              lastActivityAt: activityAt,
-            });
-            const homeRequestBytes = Buffer.byteLength(
-              `GET https://content.test/v1/feedItems?stream=home&limit=20\nauthorization: Bearer ${world.base.other.bearer}\n`,
-              'utf8',
-            );
-            const subjectPath =
-              `/v1/subjects/${subjectId}/threads?` +
-              new URLSearchParams({ place: realmId, kind: 'discussion', limit: String(pageSize) }).toString();
-            const subjectRequestBytes = Buffer.byteLength(
-              `GET https://content.test${subjectPath}\nauthorization: Bearer ${world.base.author.bearer}\n`,
-              'utf8',
-            );
-            const homeResponseBytes = Buffer.byteLength(homePage.text, 'utf8');
-            const subjectResponseBytes = Buffer.byteLength(subjectPage.text, 'utf8');
-            const activityValues = {
-              home: homePage.value.feedItems.map((item: any) => item.summary?.conversationActivity),
-              subject: subjectPage.value.threads.map((entry: any) => entry.card?.comments),
-            };
-            const homeKeys = homePage.value.feedItems.map((item: any) => `${item.source}:${item.key?.id ?? item.id}`);
-            const subjectKeys = subjectPage.value.threads.map((entry: any) => entry.id);
-            const representedHomes = [
-              ...new Set(
-                [
+              const homePage = await readHome();
+              const subjectPage = await readSubject(pageSize);
+              expect(homePage.value.feedItems).toHaveLength(pageSize);
+              expect(subjectPage.value.threads).toHaveLength(pageSize);
+              const expectedKeys = selected
+                .slice(-pageSize)
+                .reverse()
+                .map(({ id }) => id);
+              const homeThreadKeys = homePage.value.feedItems
+                .filter((item: any) => item.source === 'following' && item.key?.owner === 'content')
+                .map((item: any) => item.key.id);
+              expect(homeThreadKeys).toEqual(expectedKeys);
+              expect(subjectPage.value.threads.map((entry: any) => entry.id)).toEqual(expectedKeys);
+              const currentHome = homePage.value.feedItems.find((item: any) => item.key?.id === selected.at(-1)!.id);
+              const currentSubject = subjectPage.value.threads.find((entry: any) => entry.id === selected.at(-1)!.id);
+              assertCurrentActivity(activityFor(currentHome), 2);
+              expect(currentSubject?.card.comments).toMatchObject({
+                state: 'current',
+                cohort: 'public',
+                count: { kind: 'exact', value: 2 },
+                lastActivityAt: activityAt,
+              });
+              const homeRequestBytes = Buffer.byteLength(
+                `GET https://content.test/v1/feedItems?stream=home&limit=20\nauthorization: Bearer ${world.base.other.bearer}\n`,
+                'utf8',
+              );
+              const subjectPath =
+                `/v1/subjects/${subjectId}/threads?` +
+                new URLSearchParams({ place: realmId, kind: 'discussion', limit: String(pageSize) }).toString();
+              const subjectRequestBytes = Buffer.byteLength(
+                `GET https://content.test${subjectPath}\nauthorization: Bearer ${world.base.author.bearer}\n`,
+                'utf8',
+              );
+              const homeResponseBytes = Buffer.byteLength(homePage.text, 'utf8');
+              const subjectResponseBytes = Buffer.byteLength(subjectPage.text, 'utf8');
+              const activityValues = {
+                home: homePage.value.feedItems.map((item: any) => item.summary?.conversationActivity),
+                subject: subjectPage.value.threads.map((entry: any) => entry.card?.comments),
+              };
+              const homeKeys = homePage.value.feedItems.map((item: any) => `${item.source}:${item.key?.id ?? item.id}`);
+              const subjectKeys = subjectPage.value.threads.map((entry: any) => entry.id);
+              const representedHomes = [
+                ...new Set([
                   ...homePage.value.feedItems
                     .filter((item: any) => item.key?.owner === 'content' && Number.isInteger(item.key.route))
                     .map((item: any) => partitionOf(item.key.route)),
@@ -568,42 +570,41 @@ test.serial('complete Home and Subject conversation pages stay bounded across fo
                     .map((entry: any) => routeOf(entry.id))
                     .filter((route: number | null): route is number => route !== null)
                     .map(partitionOf),
-                ],
-              ),
-            ].sort((left, right) => left - right);
-            expect(new Set(homeKeys).size).toBe(homeKeys.length);
-            expect(new Set(subjectKeys).size).toBe(subjectKeys.length);
-            expect(representedHomes).toEqual(representedHomePartitions);
-            return {
-              homePage,
-              subjectPage,
-              measurement: {
-                homeRequestBytes,
-                subjectRequestBytes,
-                admittedBytes: homeRequestBytes + subjectRequestBytes + homeResponseBytes + subjectResponseBytes,
-                retainedUtf8Bytes: utf8Json({ ids: selectedThreadIds, activityValues }, stringify),
-                materializedUtf8Bytes: utf8Json(
-                  { home: homePage.value.feedItems, subject: subjectPage.value.threads },
-                  stringify,
-                ),
-                serializedUtf8Bytes: homeResponseBytes + subjectResponseBytes,
-                snapshotReads: 0,
-                poolQueries: 0,
-                poolRequestBytes: 0,
-                poolResponseBytes: 0,
-                backendCount: 0,
-                runnerQueries: 0,
-                runnerRows: 0,
-                runnerBlocks: 0,
-                jsonStringifies: 0,
-                jsonSerializedUtf8: 0,
-                jsonParses: 0,
-                jsonParsedUtf8: 0,
-                homeKeys: stringify(homeKeys) ?? '',
-                subjectKeys: stringify(subjectKeys) ?? '',
-                representedHomes: stringify(representedHomes) ?? '',
-              } satisfies PageMeasurement,
-            };
+                ]),
+              ].sort((left, right) => left - right);
+              expect(new Set(homeKeys).size).toBe(homeKeys.length);
+              expect(new Set(subjectKeys).size).toBe(subjectKeys.length);
+              expect(representedHomes).toEqual(representedHomePartitions);
+              return {
+                homePage,
+                subjectPage,
+                measurement: {
+                  homeRequestBytes,
+                  subjectRequestBytes,
+                  admittedBytes: homeRequestBytes + subjectRequestBytes + homeResponseBytes + subjectResponseBytes,
+                  retainedUtf8Bytes: utf8Json({ ids: selectedThreadIds, activityValues }, stringify),
+                  materializedUtf8Bytes: utf8Json(
+                    { home: homePage.value.feedItems, subject: subjectPage.value.threads },
+                    stringify,
+                  ),
+                  serializedUtf8Bytes: homeResponseBytes + subjectResponseBytes,
+                  snapshotReads: 0,
+                  poolQueries: 0,
+                  poolRequestBytes: 0,
+                  poolResponseBytes: 0,
+                  backendCount: 0,
+                  runnerQueries: 0,
+                  runnerRows: 0,
+                  runnerBlocks: 0,
+                  jsonStringifies: 0,
+                  jsonSerializedUtf8: 0,
+                  jsonParses: 0,
+                  jsonParsedUtf8: 0,
+                  homeKeys: stringify(homeKeys) ?? '',
+                  subjectKeys: stringify(subjectKeys) ?? '',
+                  representedHomes: stringify(representedHomes) ?? '',
+                } satisfies PageMeasurement,
+              };
             }),
           { includeBackends: true },
         );
