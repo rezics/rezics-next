@@ -123,6 +123,24 @@ const fake = Bun.serve({
       return new Response(null, { status: 302, headers });
     }
 
+    if (url.pathname === '/registration-page' && request.method === 'GET') {
+      return Response.json(
+        {
+          kind: 'registration',
+          viewer: null,
+          requirements: {
+            handle: { minLength: 3, maxLength: 64 },
+            email: { maxLength: 254 },
+            password: { minLength: 8, maxLength: 128 },
+            verification: { provider: 'turnstile', required: true },
+          },
+          verification: { configured: true },
+          actions: { register: true, continue: false },
+        },
+        { headers },
+      );
+    }
+
     if (url.pathname === '/signin' && request.method === 'POST') {
       if (signInStatus === 200) {
         headers.append('set-cookie', `auth_session=${session}; Path=/; HttpOnly; SameSite=Lax`);

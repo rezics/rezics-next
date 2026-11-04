@@ -250,6 +250,8 @@ export interface WebsiteClientRegistration {
 
 export interface AuthService {
   handler(request: Request): Promise<Response>;
+  /** Password bounds read from the native Better Auth configuration used by the credential writer. */
+  registrationPasswordLimits(): Promise<import('./registration-page.ts').RegistrationPasswordLimits>;
   /** Current native human session only, with the same origin guard as HTTP. */
   security: SecurityInventory;
   verifier: VerifierConfiguration;

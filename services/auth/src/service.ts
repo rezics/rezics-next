@@ -1184,6 +1184,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       algorithms: ['ES256'],
       accessTokenLifetimeSeconds: 300,
     },
+    async registrationPasswordLimits() {
+      const config = (await getContext()).password.config;
+      return { minLength: config.minPasswordLength, maxLength: config.maxPasswordLength };
+    },
     internal: {
       receivingClosure: createAuthReceivingClosureProducer(database, trustedAccess, fenceKindConsentErasure),
       kindConsentParticipant: kindConsent.participant,

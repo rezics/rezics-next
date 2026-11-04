@@ -822,6 +822,7 @@ Better Auth. Host consent UI must show the selected client and scopes explicitly
 | `POST /recovery/start`             | `{ email }`; `200` `{ success: true }` for every well-formed address, without waiting for lookup, Access or delivery. Detached delivery sends at most one link per account per 60 seconds, and only to a current active human                                                                                                                                                                                                                                                                                          |
 | `POST /recovery/complete`          | `{ account_id, token, new_password }`; consumes the epoch-bound proof and invalidates through Access before native reset                                                                                                                                                                                                                                                                                                                                                                                               |
 | `GET /session`                     | Cookie; returns only `SessionProof`, with a database session read and current Access/consent validation                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `GET /registration-page`           | Auth workflow host only; one current-session read plus native registration requirements and available actions, `no-store`; reports registration unavailable when Siteverify is not configured and returns 503 when the read dependency is unavailable. This is page advice, not permission to submit                                                                                                                                                                     |
 | `POST /token`                      | Cookie and `{ requested_by?: string }`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `GET /consent/<client_id>`         | Cookie; returns `{ client_id, display_name, scopes, granted }` for a covered third-party client; 401 for an invalid human session, 404 for unknown, first-party, uncovered or reducing clients                                                                                                                                                                                                                                                                                                                         |
 | `GET /sessions`                    | Cookie; returns `{ sessions: [{ id, client_id, client_display_name, created_at, expires_at, user_agent, current }] }`, only this person's unexpired sessions, newest first, at most 64; IDs are opaque native row IDs, never cookie tokens                                                                                                                                                                                                                                                                             |
@@ -833,8 +834,9 @@ Better Auth. Host consent UI must show the selected client and scopes explicitly
 | `GET /.well-known/jwks.json`       | Public `PublicJwks`, containing only ES256 verification material                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 The website client's OAuth/OIDC routes are listed under "Website client".
-Unrecognized routes, including `/api/auth/*`, signup and raw password recovery,
-are unavailable. `POST /recovery/start` accepts an email and does not disclose
+Unrecognized routes, including `/api/auth/*` and raw password recovery, are
+unavailable. Public signup is exposed only by the account-workflow host.
+`POST /recovery/start` accepts an email and does not disclose
 whether delivery occurred; automated accounts receive no mail. Failure responses
 expose only `authentication_denied`, never credential or Access details.
 After a human's sign-in credential verifies, suspension instead returns 403 with legacy `error: 'account_suspended'` and native `code: 'ACCOUNT_SUSPENDED'` without its reason, a session, cookie or token; unverified credentials retain the generic refusal.
@@ -976,10 +978,12 @@ The returned host exports:
 - `reduceClientScopes` and `resumeClientReduction` for bounded client reductions;
 - `authorizeOperatorOpening` for a replayable native Access opening receipt;
 - `openOperatorSession` for immediate composition of that workflow and Auth issuance;
-- `handler(Request): Promise<Response>`, which adds strict `POST /signup` with
-  `{ key, handle, email, password, turnstile_token }`. It verifies each token with
-  Cloudflare Siteverify before registration work and delegates other routes to the
-  guarded Auth handler. The handler also serves `POST /account-operations/approve`
+- `handler(Request): Promise<Response>`, which adds `GET /registration-page` for
+  current viewer state, native registration requirements and available actions,
+  plus strict `POST /signup` with `{ key, handle, email, password, turnstile_token }`.
+  The read is an observation only; the write remains authoritative. It verifies each
+  token with Cloudflare Siteverify before registration work and delegates other routes
+  to the guarded Auth handler. The handler also serves `POST /account-operations/approve`
   and `/account-operations/execute` when `AuthHostOptions.accountOperations`
   supplies the kernel `approve`, `resolveForCaller` and `admitGroup` ports (see
   "Public HTTP contract"); without them both routes answer 503
@@ -993,6 +997,8 @@ use the same Auth constant; a source-parity test keeps it equal to Access withou
 runtime kernel import. Access owns reserved-name refusals and its audited governance
 exception. Protected handle reservations pass the freshly resolved workflow context
 to Access; public sign-up supplies none. Expected old handles retain lookup validation.
+The page read returns password bounds from Better Auth's native password configuration;
+the signup endpoint and credential writer use that same configuration.
 
 Production uses `await createAuthHost(options)`, exported from `src/index.ts` with
 `AuthHostOptions` and `AuthHostConfigurationError`. Supply the migrated Auth

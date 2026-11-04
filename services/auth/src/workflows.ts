@@ -70,6 +70,7 @@ import type { Pool } from 'pg';
 import type { AuthService } from './index.ts';
 import { redriveNativeErasure } from './erasure-native.ts';
 import { recordRegistrationActivation, type NativeConsumerRuntime } from './erasure-consumers.ts';
+import { readRegistrationPage, REGISTRATION_EMAIL_MAX_LENGTH } from './registration-page.ts';
 
 type Command = { accountId: string; key: string };
 type OperatorSuspension = {
@@ -1938,9 +1939,31 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     resumeClientReduction: (key: string) => resumeRequest(workflowId(`client-reduction:${requestKey(key)}`)),
     async handler(request: Request): Promise<Response> {
       const url = new URL(request.url);
-      if (url.pathname !== '/signup') return auth.handler(request);
+      if (url.pathname !== '/signup' && url.pathname !== '/registration-page') return auth.handler(request);
       const response = (value: unknown, status: number) =>
         Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
+      if (url.pathname === '/registration-page') {
+        if (
+          request.method !== 'GET' ||
+          url.search ||
+          request.headers.get('origin') !== new URL(auth.verifier.issuer).origin ||
+          request.headers.get('sec-fetch-site') === 'cross-site' ||
+          request.headers.has('authorization')
+        )
+          return response({ error: 'unavailable' }, 403);
+        const sessionRequest = new Request(new URL('/session', auth.verifier.issuer), {
+          method: 'GET',
+          headers: new Headers(request.headers),
+        });
+        const page = await readRegistrationPage({
+          readSession: () => auth.handler(sessionRequest),
+          passwordLimits: () => auth.registrationPasswordLimits(),
+          verificationConfigured: Boolean(options.turnstile),
+        });
+        if (page.kind === 'unavailable' && page.reason === 'dependency')
+          return response({ error: 'unavailable' }, 503);
+        return response(page, 200);
+      }
       if (
         request.method !== 'POST' ||
         url.search ||
@@ -1978,15 +2001,16 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         )
           return response({ error: 'registration_denied' }, 400);
         const input = body as Record<string, unknown>;
+        const passwordLimits = await auth.registrationPasswordLimits();
         if (
           ['key', 'handle', 'email', 'password', 'turnstile_token'].some((field) => typeof input[field] !== 'string') ||
           !(input.key as string) ||
           (input.key as string).length > 128 ||
           !isClaimHandle(input.handle) ||
           !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email as string) ||
-          (input.email as string).length > 254 ||
-          (input.password as string).length < 8 ||
-          (input.password as string).length > 128 ||
+          (input.email as string).length > REGISTRATION_EMAIL_MAX_LENGTH ||
+          (input.password as string).length < passwordLimits.minLength ||
+          (input.password as string).length > passwordLimits.maxLength ||
           !(input.turnstile_token as string) ||
           (input.turnstile_token as string).length > 4096
         )

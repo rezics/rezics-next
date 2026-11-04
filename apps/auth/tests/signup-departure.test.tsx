@@ -17,7 +17,17 @@ document.head.appendChild = <T extends Node>(node: T): T => {
 let serial = 0;
 async function setup() {
   const root = createRootRoute({ component: Outlet });
-  const config = { siteKey: 'key', scriptUrl: `https://challenge.test/signup-${++serial}.js` };
+  const config = {
+    kind: 'registration',
+    requirements: {
+      handle: { minLength: 3, maxLength: 64 },
+      email: { maxLength: 254 },
+      password: { minLength: 8, maxLength: 128 },
+      verification: { provider: 'turnstile', required: true },
+    },
+    siteKey: 'key',
+    scriptUrl: `https://challenge.test/signup-${++serial}.js`,
+  } as const;
   const route = Route.update({
     id: '/signup',
     path: '/signup',
