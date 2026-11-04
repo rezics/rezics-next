@@ -99,11 +99,11 @@ test('a reader follows a Character identity and work appearance ages through nat
     ...stripped.properties[appearanceProperty]!,
     qualifiers: stripped.properties[appearanceProperty]!.qualifiers.filter((id) => id !== appearanceAgeProperty),
   };
-  expect(characterWorkIdentityOverlay(stripped, characterWorkType, 'en')?.unavailable.map((item) => item.id).sort()).toEqual([
-    'age-at-appearance',
-    'character-relationship',
-    'main-character-linkage',
-  ]);
+  expect(
+    characterWorkIdentityOverlay(stripped, characterWorkType, 'en')
+      ?.unavailable.map((item) => item.id)
+      .sort(),
+  ).toEqual(['age-at-appearance', 'character-relationship', 'main-character-linkage']);
 
   const alice = await create(characterWorkType, 'Alice');
   const twin = await create(characterWorkType, 'Twin');
@@ -118,10 +118,7 @@ test('a reader follows a Character identity and work appearance ages through nat
       snak(appearanceAgeProperty, { amount: '+16', unit: year }),
     ]),
   );
-  await adopt(
-    autumn,
-    cited(appearanceProperty, alice, [snak(appearanceAgeProperty, { amount: '+18', unit: year })]),
-  );
+  await adopt(autumn, cited(appearanceProperty, alice, [snak(appearanceAgeProperty, { amount: '+18', unit: year })]));
 
   const wrongTarget = await driver.request(
     'editor',
@@ -140,16 +137,17 @@ test('a reader follows a Character identity and work appearance ages through nat
     'POST',
     `/v1/subjects/${spring}/candidates`,
     {
-      statement: cited(appearanceProperty, alice, [
-        snak(appearanceAgeProperty, { amount: '+16', unit: '1' }),
-      ]),
+      statement: cited(appearanceProperty, alice, [snak(appearanceAgeProperty, { amount: '+16', unit: '1' })]),
     },
     key(),
   );
   expect(wrongQualifier.status).toBe(400);
 
   const appearances = await waitLinks(alice, appearanceProperty);
-  const rows = appearances.body.links as { subject: string; assertion?: { qualifiers: { property: { id: string }; value: { content: unknown } }[] } }[];
+  const rows = appearances.body.links as {
+    subject: string;
+    assertion?: { qualifiers: { property: { id: string }; value: { content: unknown } }[] };
+  }[];
   expect(rows).toHaveLength(2);
   const ages = Object.fromEntries(
     rows.map((row) => {
@@ -252,7 +250,9 @@ test('a reader follows a Character identity and work appearance ages through nat
   );
   const refreshed = await waitLinks(alice, appearanceProperty);
   const springAge = (refreshed.body.links as typeof rows).find((row) => row.subject === spring);
-  expect(springAge?.assertion?.qualifiers.find((part) => part.property.id === appearanceAgeProperty)?.value.content).toEqual({
+  expect(
+    springAge?.assertion?.qualifiers.find((part) => part.property.id === appearanceAgeProperty)?.value.content,
+  ).toEqual({
     amount: '+17',
     unit: year,
   });
