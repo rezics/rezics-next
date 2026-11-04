@@ -17,6 +17,7 @@ import {
   requestMusicReleaseAddress,
   type MusicReleaseAddress,
   type MusicReleaseRead,
+  type MusicReleasePending,
   type MusicReleaseTransport,
   type MusicReleaseWindowIntent,
 } from './model';
@@ -342,6 +343,7 @@ export function MusicReleaseWindow({
       {failure ? (
         <div role="alert" className="space-y-2">
           <p>{page ? m.music_release_window_unavailable({}, o) : m.music_release_unavailable({}, o)}</p>
+          <MusicReleasePendingWindow pending={navigation.current.pending} page={page} locale={locale} />
           <button
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${action}`}
@@ -549,5 +551,50 @@ function MusicReleaseWindowIdentity({
         <dd>{previousCount}</dd>
       </div>
     </dl>
+  );
+}
+
+/** Name the deliberate failed operation when its requested stream differs from the visible accepted window. */
+function MusicReleasePendingWindow({
+  pending,
+  page,
+  locale,
+}: {
+  pending: MusicReleasePending | undefined;
+  page: Ready | undefined;
+  locale: string;
+}) {
+  const o = { locale: locale as never };
+  if (!pending) return null;
+  const requested = page?.streams.find((stream) => stream.key === pending.address.stream);
+  return (
+    <div
+      className="min-w-0 space-y-3 rounded-lg border border-border p-3 [overflow-wrap:anywhere]"
+      data-slot="music-release-pending"
+    >
+      <h3 className="font-semibold">{m.music_release_pending_request({}, o)}</h3>
+      <p>
+        {pending.intent === 'previous'
+          ? m.music_release_retry_previous({}, o)
+          : pending.intent === 'next'
+            ? m.music_release_retry_next({}, o)
+            : m.music_release_retry_start({}, o)}
+      </p>
+      {requested ? (
+        <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-sm text-muted-foreground">{m.work_parts_relation({}, o)}</dt>
+            <dd lang={requested.label.lang ?? undefined}>{requested.label.text || requested.property}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-muted-foreground">{m.music_release_direction({}, o)}</dt>
+            <dd>
+              {requested.direction === 'forward' ? m.music_release_forward({}, o) : m.music_release_inverse({}, o)}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
+      <p className="text-sm text-muted-foreground">{m.music_release_retry_scope({}, o)}</p>
+    </div>
   );
 }

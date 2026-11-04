@@ -9837,5 +9837,12 @@
   "music_release_current_release": "Versión actual de definiciones",
   "music_release_context": "Context seleccionado",
   "music_release_rank": "Rango nativo",
-  "music_release_revision": "Revisión de la afirmación"
+  "music_release_revision": "Revisión de la afirmación",
+  "music_release_assertion_target": "Valor afirmado",
+  "music_release_destination": "Destino divulgado",
+  "music_release_pending_request": "Ventana solicitada",
+  "music_release_retry_previous": "Reintentar volverá a leer exactamente la ventana anterior.",
+  "music_release_retry_next": "Reintentar solicitará exactamente la ventana siguiente.",
+  "music_release_retry_start": "Reintentar solicitará la primera ventana de la relación seleccionada.",
+  "music_release_retry_scope": "La ventana visible conserva su relación y sus apariciones hasta que otra solicitud tenga éxito."
 }

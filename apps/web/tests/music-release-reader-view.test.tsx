@@ -54,9 +54,9 @@ async function ui() {
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(['session'], { state: 'signed-out' });
-  const render = async (props: Parameters<typeof MusicReleaseReader>[0]) => {
+  const render = async (props: Parameters<typeof MusicReleaseReader>[0], provider = client) => {
     await act(async () => {
-      root.render(createElement(QueryClientProvider, { client }, createElement(MusicReleaseReader, props)));
+      root.render(createElement(QueryClientProvider, { client: provider }, createElement(MusicReleaseReader, props)));
     });
   };
   const renderOverview = async (props: Parameters<typeof MusicReleaseOverview>[0]) => {
@@ -182,6 +182,7 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     fixture.fail(503);
     await mounted.click(m.album_tracks_previous());
     expect(mounted.host.textContent).toContain(m.music_release_window_unavailable());
+    expect(mounted.host.textContent).toContain(m.music_release_retry_previous());
     fixture.fail(0);
     await mounted.click(m.album_tracks_retry());
     expect(addresses.at(-1)).toEqual(addresses.at(-2));
@@ -189,7 +190,22 @@ test('select one repeated occurrence, inspect its evidence and return, retry Nex
     expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(3);
     expect(mounted.host.querySelector('[data-slot="music-release-inspection"]')).toBeNull();
     expect(mounted.host.querySelectorAll('button')[0]?.disabled).toBe(false);
-    await mounted.click(m.work_parts_restart());
+    await mounted.select(1);
+    const removedOrigin = Array.from(inspection().querySelectorAll('a')).find(
+      (node) => node.textContent === m.album_tracks_open(),
+    )!;
+    removedOrigin.focus();
+    removedOrigin.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    const restart = Array.from(mounted.host.querySelectorAll('button')).find(
+      (node) => node.textContent === m.work_parts_restart(),
+    )!;
+    await act(async () => {
+      restart.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    });
+    expect(removedOrigin.isConnected).toBe(false);
+    (document.activeElement as HTMLElement).blur();
+    window.dispatchEvent(new Event('focus'));
+    expect(document.activeElement?.textContent).toBe(m.music_release_title());
     expect(addresses.at(-1)?.cursor).toBeUndefined();
     const previousButton = Array.from(mounted.host.querySelectorAll('button')).find(
       (node) => node.textContent === m.album_tracks_previous(),
@@ -338,6 +354,75 @@ test('production entry explicitly reloads the current Subject before reading a f
     expect(mounted.host.textContent).toContain(m.music_release_invalid());
     expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(0);
   } finally {
+    await mounted.close();
+  }
+});
+
+test('a replacement during failed or retired recovery cannot silently admit the old body or its pending request', async () => {
+  const mounted = await ui();
+  const replacement = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  replacement.setQueryData(['session'], { state: 'signed-out' });
+  try {
+    const fixture = musicReleaseExample();
+    let finish!: () => void;
+    let attempts = 0;
+    const addresses: MusicReleaseAddress[] = [];
+    let props: Parameters<typeof MusicReleaseReader>[0] = {
+      ...musicAddress,
+      locale: 'en',
+      source: {},
+      reader: null,
+      initial: await fixture.read(),
+      transport: async (address) => {
+        addresses.push(address);
+        return fixture.read(address);
+      },
+      recoverCurrentPage: async () => {
+        attempts++;
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      },
+    };
+    await mounted.render(props);
+    await mounted.select(1);
+    await mounted.render(props, replacement);
+    await mounted.render(props);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(0);
+    await mounted.click(m.music_release_recover());
+    expect(attempts).toBe(1);
+    const busy = Array.from(mounted.host.querySelectorAll('button')).find((node) => node.disabled)!;
+    expect(busy).toBeDefined();
+    await act(async () => {
+      busy.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    });
+    expect(attempts).toBe(1);
+    await act(async () => {
+      mounted.client.setQueryData(['exposure', 'viewer'], { allowed: [] });
+      mounted.client.setQueryData(['exposure', 'viewer'], { allowed: [] });
+    });
+    props = { ...props, source: {} };
+    await mounted.render(props);
+    await act(async () => {
+      finish();
+    });
+    expect(addresses).toEqual([]);
+    expect(mounted.host.textContent).toContain(m.music_release_recovery_failed());
+    expect(mounted.host.querySelector('[data-slot="music-release-inspection"]')).toBeNull();
+    props = {
+      ...props,
+      recoverCurrentPage: async () => {
+        props = { ...props, source: {} };
+        await mounted.render(props);
+      },
+    };
+    await mounted.render(props);
+    // Recovery must load fresh transport data, even though the old initial example is still passed.
+    await mounted.click(m.music_release_recover());
+    expect(addresses).toEqual([musicAddress]);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(3);
+  } finally {
+    replacement.clear();
     await mounted.close();
   }
 });

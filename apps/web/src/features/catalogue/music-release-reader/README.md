@@ -34,7 +34,9 @@ controls; selecting a recording never selects another occurrence sharing its tar
 property/direction, holder, assertion, source qualifiers, separate reference groups, rank, revision and pinned accepting
 release using the existing value renderer. Earlier accepting meaning remains separate from current configuration.
 Only a disclosed summary supplies a recording destination. The exact holder supplies the existing membership editor.
-The list keeps supplied order and slot qualifiers, without treating a listing slot as a medium.
+The list keeps supplied order, position and slot qualifiers, without treating a listing slot as a medium.
+An unavailable request names whether retry rereads Previous, continues Next or starts the requested stream; the
+accepted stream remains labelled separately so a failed stream switch cannot relabel the visible occurrences.
 
 Next and Previous replace the single accepted body. Previous rereads the exact prior Subject/Context/stream/direction
 and opaque cursor, retaining at most eight prior addresses. An unavailable operation keeps the accepted window,
