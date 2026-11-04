@@ -10,6 +10,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { disclosedRelationStatement, linkProjection } from '../../src/semantic/links.ts';
 import { createReleasedRelationDirectionResolver } from '../../src/semantic/released-relation-direction.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -22,6 +23,7 @@ const realAccess = await createRealAccess(admin, accounts, actions);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(13)]]) };
 const kernel = createKernel({
   pool,
+  receiptKeys: testReceiptKeys(),
   access: realAccess.access,
   tokens,
   routeKey: new Uint8Array(32).fill(14),
