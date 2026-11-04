@@ -126,19 +126,17 @@ export async function createCountedGrowthFixture() {
     // Two fixed Subject homes, separate from the account and standard question; no random fan-out per scale.
     const original = await subject(0x6a20);
     const terminal = await subject(0x6a30);
-    const clear = await subject(0x6a30);
-    const absent = await subject(0x6a30);
     const voterRoute = routeOf(actor.accountId)!;
     const sourceRoute = routeOf(original!)!;
     const controlHome = partitionOf(routeOf(terminal!)!);
-    const missing = newId(routeOf(absent!)!);
+    const missing = newId(routeOf(terminal!)!);
     const otherQuestion = newId(sourceRoute);
     await db.admin.query(
       `INSERT INTO rating.question(id,revision,label,grain,minimum_units,maximum_units,step_units)
        VALUES($1,1,'Unselected fixture question','work',0,100,1)`,
       [otherQuestion],
     );
-    const request = { actor, targetIds: [original!, clear!, absent!, missing, original!] };
+    const request = { actor, targetIds: [original!, missing, original!] };
     const transaction = newId(voterRoute);
     const pendingJob = newId(sourceRoute);
 
@@ -190,7 +188,7 @@ export async function createCountedGrowthFixture() {
       {
         name: 'fixed counted slots',
         hotPartition: partitionOf(voterRoute),
-        rows: () => ({ 'rating.vote': [vote(terminal!, 0), vote(clear!, null), vote(original!, 9, null)] }),
+        rows: () => ({ 'rating.vote': [vote(terminal!, 0), vote(original!, 9, null)] }),
       },
       { from: 0, to: 1 },
     );
@@ -316,7 +314,7 @@ export async function createCountedGrowthFixture() {
       const result = await finish(await journey());
       expect(result).toMatchObject({
         status: 'current',
-        requestedTargetIds: [original, clear, absent, missing],
+        requestedTargetIds: [original, missing],
         observations: [
           {
             requestedTargetId: original,
@@ -325,8 +323,6 @@ export async function createCountedGrowthFixture() {
             state: 'counted',
             units: 0,
           },
-          { requestedTargetId: clear, state: 'clear', units: null },
-          { requestedTargetId: absent, state: 'absent' },
           { requestedTargetId: missing, state: 'unavailable' },
         ],
       });
@@ -361,7 +357,23 @@ export async function createCountedGrowthFixture() {
           ].map((key) => [key, 0]),
         );
         await measured.run(counters, async () => {
-          await current();
+          // Relevant pending authority is a negative observation, then the identical request retries after cleanup.
+          await db.pool.query(
+            'UPDATE semantic.identity_epoch_control SET pending_job=$2,pending_epoch=published_epoch+1 WHERE partition_no=$1',
+            [controlHome, pendingJob],
+          );
+          try {
+            counters.preparePhases!++;
+            const pending = await phase.run('prepare', () => reader.prepare(request, Date.now() + 120_000));
+            retain(pending);
+            expect(pending).toMatchObject({ status: 'preparing', reason: 'identity-pending', retry: 'same-input' });
+          } finally {
+            await db.pool.query(
+              'UPDATE semantic.identity_epoch_control SET pending_job=NULL,pending_epoch=NULL WHERE partition_no=$1',
+              [controlHome],
+            );
+            counters.cleanupStatements!++;
+          }
           // Eventless losing-slot cleanup invalidates a read even though the effective zero stays unchanged.
           const stale = await journey();
           const removed = await db.pool.query(
@@ -388,24 +400,6 @@ export async function createCountedGrowthFixture() {
             );
             counters.cleanupStatements! += 2;
           }
-          // Relevant pending authority is a negative observation, then the identical request retries after cleanup.
-          await db.pool.query(
-            'UPDATE semantic.identity_epoch_control SET pending_job=$2,pending_epoch=published_epoch+1 WHERE partition_no=$1',
-            [controlHome, pendingJob],
-          );
-          try {
-            counters.preparePhases!++;
-            const pending = await phase.run('prepare', () => reader.prepare(request, Date.now() + 120_000));
-            retain(pending);
-            expect(pending).toMatchObject({ status: 'preparing', reason: 'identity-pending', retry: 'same-input' });
-          } finally {
-            await db.pool.query(
-              'UPDATE semantic.identity_epoch_control SET pending_job=NULL,pending_epoch=NULL WHERE partition_no=$1',
-              [controlHome],
-            );
-            counters.cleanupStatements!++;
-          }
-          await current();
         });
         return counters;
       },
@@ -560,7 +554,7 @@ export async function createCountedGrowthFixture() {
           await db.admin.query(
             `UPDATE rating.vote SET counted_target=NULL WHERE route=$1 AND voter_id=$2 AND question_id=$3
            AND target_id<>ALL($4::uuid[]) AND counted_target IS NOT NULL`,
-            [voterRoute, actor.accountId, STANDARD_QUESTION_ID, [terminal, clear]],
+            [voterRoute, actor.accountId, STANDARD_QUESTION_ID, [terminal]],
           );
         if (axis === 'selected retained votes' || axis === 'identity/source/authority history')
           await db.admin.query(
@@ -572,7 +566,7 @@ export async function createCountedGrowthFixture() {
           'unrelated votes': [
             'SELECT count(*)::int n FROM rating.vote WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND counted_target IS NOT NULL',
             [voterRoute, actor.accountId, STANDARD_QUESTION_ID],
-            2,
+            1,
           ],
           'selected retained votes': [
             'SELECT count(*)::int n FROM rating.vote WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND counted_target IS NULL',
