@@ -118,22 +118,14 @@ test('FULL shelf and Collection rows keep Type facts and the caller current stat
         },
       ],
     });
-    const compatible = await f.call(
-      'GET',
-      '/v1/libraryEntries?view=FULL&limit=1',
-      undefined,
-      'reader',
-      { 'accept-language': 'fr' },
-    );
+    const compatible = await f.call('GET', '/v1/libraryEntries?view=FULL&limit=1', undefined, 'reader', {
+      'accept-language': 'fr',
+    });
     expect(compatible.body.libraryEntries[0]!.facts).toEqual(shelf.body.libraryEntries[0]!.facts);
 
-    const members = await f.call(
-      'GET',
-      `/v1/collections/${collection.id}/members?view=FULL`,
-      undefined,
-      'reader',
-      { 'accept-language': 'fr' },
-    );
+    const members = await f.call('GET', `/v1/collections/${collection.id}/members?view=FULL`, undefined, 'reader', {
+      'accept-language': 'fr',
+    });
     expect(members.status).toBe(200);
     expect(members.body.members[0]).toMatchObject({ subjectId: book, facts: shelf.body.libraryEntries[0].facts });
     expect(members.body.viewerFacts).toMatchObject({
