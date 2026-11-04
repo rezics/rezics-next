@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
@@ -88,6 +88,11 @@ type ShelfPageRead = {
   issue?: ShelfIssue;
   failure?: NativePreferenceFailure;
 };
+type ShelfResponseState = {
+  reason: ShelfIssue | undefined;
+  failure: NativePreferenceFailure | undefined;
+  retryAt: number;
+};
 type ShelfState = {
   known: { shelf: ShelfPreferences; version: number };
   advice: ReadingAdvice | undefined;
@@ -96,17 +101,25 @@ type ShelfState = {
   dirty: Set<string>;
   pending: Pending | null;
   comparison: Pending | null;
-  phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
-  reason: ShelfIssue | undefined;
-  failure: NativePreferenceFailure | undefined;
-  retryAt: number;
+  confirmedWrite: Pending | null;
+  writeReceipt: { shelf: ShelfPreferences; version: number } | null;
+  phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'failed';
+  readResponse: ShelfResponseState;
+  writeResponse: ShelfResponseState;
+  readBusy: boolean;
+  writeBusy: boolean;
 };
 type ShelfOwner = {
+  isCurrent?: () => boolean;
   canRead: () => boolean;
   canWrite: () => boolean;
   version: () => number;
   onVersionChange: (version: number) => void;
 };
+
+function shelfResponse(reason?: ShelfIssue, failure?: NativePreferenceFailure): ShelfResponseState {
+  return { reason, failure, retryAt: preferenceRetryDeadline(failure?.retryAfter) };
+}
 
 function same(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -389,6 +402,8 @@ function choiceAdmitted(
 export class ShelfPreferenceDraftRecovery {
   private state: ShelfState;
   private listeners = new Set<() => void>();
+  private retired = false;
+  private generation = 0;
 
   constructor(
     initial: ReadingPreferences,
@@ -404,46 +419,75 @@ export class ShelfPreferenceDraftRecovery {
       dirty: new Set(),
       pending: null,
       comparison: null,
+      confirmedWrite: null,
+      writeReceipt: null,
       phase: 'idle',
-      reason: undefined,
-      failure: undefined,
-      retryAt: 0,
+      readResponse: shelfResponse(),
+      writeResponse: shelfResponse(),
+      readBusy: false,
+      writeBusy: false,
     };
   }
 
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
+    if (this.retired) return () => {};
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
+  activate() {
+    this.retired = false;
+    this.generation++;
+  }
+  dispose() {
+    this.retired = true;
+    this.generation++;
+    this.listeners.clear();
+  }
+  private active(generation = this.generation) {
+    return !this.retired && generation === this.generation && (this.owner.isCurrent?.() ?? true);
+  }
   canRetryOriginal = () =>
+    this.active() &&
     this.owner.canWrite() &&
     this.state.phase === 'uncertain' &&
     this.state.pending !== null &&
-    (this.state.current
-      ? ownerMayChangeShelf(this.state.advice)
-      : this.state.advice?.allowedActions.update.allowed !== false);
-  canSubmit = () => this.writable() && !this.state.pending && this.state.phase !== 'reloading';
+    this.state.current &&
+    this.owner.version() <= this.state.known.version &&
+    ownerMayChangeShelf(this.state.advice) &&
+    !this.state.readBusy &&
+    !this.state.writeBusy &&
+    !this.waiting(this.state.writeResponse);
+  canSubmit = () =>
+    this.writable() &&
+    !this.state.pending &&
+    !this.state.comparison &&
+    this.state.phase !== 'review' &&
+    this.state.phase !== 'conflict' &&
+    !this.state.readBusy &&
+    !this.state.writeBusy &&
+    !this.waiting(this.state.writeResponse);
   needsNavigationDecision = () =>
     this.state.pending !== null ||
     this.state.comparison !== null ||
     Object.keys(patchFor(this.state.known.shelf, this.state.draft, this.state.dirty)).length > 0;
 
   private update(patch: Partial<ShelfState>) {
+    if (this.retired) return;
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
 
   private editable() {
-    return this.owner.canWrite() && ownerMayChangeShelf(this.state.advice);
+    return this.active() && this.owner.canWrite() && ownerMayChangeShelf(this.state.advice);
   }
 
   private writable() {
     return this.state.current && this.editable();
   }
 
-  private waiting() {
-    return this.state.retryAt > Date.now();
+  private waiting(response: ShelfResponseState) {
+    return response.retryAt > Date.now();
   }
 
   edit(next: Partial<ShelfDraft>, dirtyKey: string) {
@@ -482,15 +526,24 @@ export class ShelfPreferenceDraftRecovery {
 
   private async send(recovering: boolean) {
     const pending = this.state.pending;
-    if (!pending || !this.owner.canWrite() || this.waiting()) return;
-    this.update({ phase: 'saving', reason: undefined, failure: undefined, retryAt: 0 });
+    const generation = this.generation;
+    if (
+      !pending ||
+      !this.active(generation) ||
+      !this.owner.canWrite() ||
+      this.state.readBusy ||
+      this.state.writeBusy ||
+      this.waiting(this.state.writeResponse)
+    )
+      return;
+    this.update({ phase: 'saving', writeBusy: true });
     let result;
     try {
       result = await this.io.save(pending.input);
     } catch {
       result = { ok: false as const, reason: 'unavailable' as const };
     }
-    if (!this.owner.canWrite()) return;
+    if (!this.active(generation) || !this.owner.canWrite()) return;
     if (!result.ok) {
       const uncertain =
         result.reason === 'unavailable' ||
@@ -500,11 +553,12 @@ export class ShelfPreferenceDraftRecovery {
       this.update({
         pending: uncertain ? pending : null,
         comparison: uncertain ? this.state.comparison : pending,
+        confirmedWrite: null,
+        writeReceipt: null,
         phase: uncertain ? 'uncertain' : result.reason === 'conflict' ? 'conflict' : 'failed',
-        reason,
-        failure: result.failure,
-        retryAt: preferenceRetryDeadline(result.failure?.retryAfter),
-        current: uncertain || result.reason === 'conflict' ? false : this.state.current,
+        writeResponse: shelfResponse(reason, result.failure),
+        writeBusy: false,
+        current: false,
         advice:
           result.reason === 'forbidden'
             ? deniedShelfUpdate(this.state.advice)
@@ -518,73 +572,62 @@ export class ShelfPreferenceDraftRecovery {
     const requested = pending.input.shelf;
     const written = receipt.shelf ?? {};
     if (!requestedShelfMatches(requested, written) || receipt.version < pending.input.expectedVersion) {
-      this.update({ phase: 'uncertain', reason: 'write:unknown_outcome', pending, current: false, retryAt: 0 });
+      this.update({
+        phase: 'uncertain',
+        pending,
+        confirmedWrite: null,
+        writeReceipt: null,
+        current: false,
+        writeBusy: false,
+        writeResponse: shelfResponse('write:unknown_outcome'),
+      });
       return;
     }
-    let current = receipt;
-    let readIssue: ShelfIssue | undefined;
-    let reacquired = false;
-    if (recovering || this.owner.version() > receipt.version) {
-      if (!this.owner.canRead() || this.waiting()) return;
-      reacquired = true;
-      try {
-        const read = currentPage(await this.io.read());
-        if (!this.owner.canRead() || !read.preferences) {
-          this.update({
-            phase: 'uncertain',
-            reason: read.issue ?? 'read:unavailable',
-            failure: read.failure,
-            retryAt: preferenceRetryDeadline(read.failure?.retryAfter),
-            current: false,
-            advice: undefined,
-            pending,
-          });
-          return;
-        }
-        const refreshed = read.preferences;
-        if (refreshed.version < Math.max(receipt.version, this.owner.version())) {
-          this.update({
-            phase: 'uncertain',
-            reason: 'stale_version',
-            failure: undefined,
-            retryAt: 0,
-            current: false,
-            advice: undefined,
-            pending,
-          });
-          return;
-        }
-        if (refreshed.version === receipt.version && !same(refreshed.shelf ?? {}, receipt.shelf ?? {})) {
-          this.update({
-            phase: 'uncertain',
-            reason: 'read:inconsistent',
-            failure: undefined,
-            retryAt: 0,
-            current: false,
-            advice: undefined,
-            pending,
-          });
-          return;
-        }
-        current = refreshed;
-        readIssue = read.issue;
-      } catch {
-        if (this.owner.canRead())
-          this.update({
-            phase: 'uncertain',
-            reason: 'read:unavailable',
-            failure: undefined,
-            retryAt: 0,
-            current: false,
-            advice: undefined,
-            pending,
-          });
-        return;
-      }
+    const shelf = receipt.shelf ?? {};
+    const shouldRead = recovering || this.owner.version() > receipt.version;
+    if (shouldRead) {
+      this.update({
+        known: { shelf, version: receipt.version },
+        advice: undefined,
+        current: false,
+        pending: null,
+        comparison: pending,
+        confirmedWrite: pending,
+        writeReceipt: { shelf, version: receipt.version },
+        phase: 'review',
+        writeResponse: shelfResponse(),
+        writeBusy: false,
+      });
+      this.owner.onVersionChange(Math.max(this.owner.version(), receipt.version));
+      await this.refreshCurrent(generation);
+      return;
     }
-    if (!this.owner.canWrite()) return;
-    const shelf = current.shelf ?? {};
-    const remainingDirty = new Set(
+    const remainingDirty = this.remainingDirty(pending);
+    const changedWhileSaving = remainingDirty.size > 0;
+    const draft = rebaseDraft(shelf, this.state.draft, remainingDirty);
+    const needsReview =
+      changedWhileSaving ||
+      (pending.reset && pending.dirty.size > 0) ||
+      (remainingDirty.size > 0 && !choiceAdmitted(draft, receipt.advice, remainingDirty, shelf));
+    this.update({
+      known: { shelf, version: receipt.version },
+      advice: receipt.advice,
+      current: true,
+      draft,
+      dirty: remainingDirty,
+      pending: null,
+      comparison: needsReview ? pending : null,
+      confirmedWrite: needsReview ? pending : null,
+      writeReceipt: null,
+      phase: needsReview ? 'review' : 'saved',
+      writeResponse: shelfResponse(),
+      writeBusy: false,
+    });
+    this.owner.onVersionChange(Math.max(this.owner.version(), receipt.version));
+  }
+
+  private remainingDirty(pending: Pending) {
+    return new Set(
       [...this.state.dirty].filter((key) => {
         if (pending.reset && pending.dirty.size > 0) return true;
         if (key.startsWith('layout:')) {
@@ -602,41 +645,13 @@ export class ShelfPreferenceDraftRecovery {
             : key === 'columns' && !same(this.state.draft.columns, pending.draft.columns);
       }),
     );
-    const changedWhileSaving = remainingDirty.size > 0;
-    const changedAfterReceipt =
-      current.version > receipt.version && !requestedShelfMatches(requested, current.shelf ?? {});
-    const resetDraft = rebaseDraft(shelf, this.state.draft, remainingDirty);
-    const needsReview =
-      reacquired ||
-      changedWhileSaving ||
-      (pending.reset && pending.dirty.size > 0) ||
-      changedAfterReceipt ||
-      !!readIssue ||
-      (remainingDirty.size > 0 && !choiceAdmitted(resetDraft, current.advice, remainingDirty));
-    this.update({
-      known: { shelf, version: current.version },
-      advice: current.advice,
-      current: true,
-      draft: resetDraft,
-      dirty: remainingDirty,
-      pending: null,
-      comparison: needsReview ? pending : null,
-      phase: needsReview ? 'review' : 'saved',
-      reason: readIssue,
-      failure: undefined,
-      retryAt: 0,
-    });
-    this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
   }
 
   async submit(reset = false) {
-    if (!this.writable() || this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
+    if (!this.canSubmit()) return;
     if (this.owner.version() > this.state.known.version) {
       this.update({
         phase: 'conflict',
-        reason: 'stale_version',
-        failure: undefined,
-        retryAt: 0,
         current: false,
         advice: undefined,
       });
@@ -649,7 +664,7 @@ export class ShelfPreferenceDraftRecovery {
       Object.keys(shelf).length > 0 &&
       !choiceAdmitted(this.state.draft, this.state.advice, this.state.dirty, this.state.known.shelf)
     ) {
-      this.update({ phase: 'failed', reason: 'write:invalid' });
+      this.update({ phase: 'failed', writeResponse: shelfResponse('write:invalid') });
       return;
     }
     if (shelf?.layouts) {
@@ -659,7 +674,7 @@ export class ShelfPreferenceDraftRecovery {
         Object.keys(shelf.layouts).length > maxLayouts ||
         Object.values(merged).filter((value) => value !== null).length > maxLayouts
       ) {
-        this.update({ phase: 'failed', reason: 'write:invalid' });
+        this.update({ phase: 'failed', writeResponse: shelfResponse('write:invalid') });
         return;
       }
     }
@@ -681,31 +696,52 @@ export class ShelfPreferenceDraftRecovery {
       pending,
       comparison: null,
       phase: 'saving',
-      reason: undefined,
-      failure: undefined,
-      retryAt: 0,
+      confirmedWrite: null,
+      writeReceipt: null,
     });
     await this.send(false);
   }
 
   async retry() {
-    if (!this.canRetryOriginal() || this.waiting()) return;
+    if (!this.canRetryOriginal()) return;
     await this.send(true);
   }
 
   async reload() {
-    if (!this.owner.canRead() || this.waiting() || this.state.phase === 'saving' || this.state.phase === 'reloading')
+    const generation = this.generation;
+    if (
+      !this.active(generation) ||
+      !this.owner.canRead() ||
+      this.waiting(this.state.readResponse) ||
+      this.state.readBusy ||
+      this.state.writeBusy
+    )
       return;
-    this.update({ phase: 'reloading', reason: undefined, failure: undefined, retryAt: 0 });
+    await this.refreshCurrent(generation);
+  }
+
+  private async refreshCurrent(generation: number) {
+    if (
+      !this.active(generation) ||
+      !this.owner.canRead() ||
+      this.waiting(this.state.readResponse) ||
+      this.state.readBusy ||
+      this.state.writeBusy
+    )
+      return;
+    this.update({ readBusy: true });
     try {
       const read = currentPage(await this.io.read());
-      if (!this.owner.canRead()) return;
+      if (!this.active(generation) || !this.owner.canRead()) return;
       if (!read.preferences) {
         this.update({
-          phase: this.state.pending ? 'uncertain' : 'failed',
-          reason: read.issue ?? 'read:unavailable',
-          failure: read.failure,
-          retryAt: preferenceRetryDeadline(read.failure?.retryAfter),
+          phase: this.state.pending
+            ? 'uncertain'
+            : this.state.confirmedWrite || this.state.comparison
+              ? 'review'
+              : 'failed',
+          readResponse: shelfResponse(read.issue ?? 'read:unavailable', read.failure),
+          readBusy: false,
           current: false,
           advice: undefined,
         });
@@ -714,10 +750,27 @@ export class ShelfPreferenceDraftRecovery {
       const current = read.preferences;
       if (current.version < Math.max(this.state.known.version, this.owner.version())) {
         this.update({
-          phase: this.state.pending ? 'uncertain' : 'conflict',
-          reason: 'stale_version',
-          failure: undefined,
-          retryAt: 0,
+          phase: this.state.pending
+            ? 'uncertain'
+            : this.state.confirmedWrite || this.state.comparison
+              ? 'review'
+              : 'conflict',
+          readResponse: shelfResponse('stale_version'),
+          readBusy: false,
+          current: false,
+          advice: undefined,
+        });
+        return;
+      }
+      if (
+        this.state.writeReceipt &&
+        current.version === this.state.writeReceipt.version &&
+        !same(current.shelf ?? {}, this.state.writeReceipt.shelf)
+      ) {
+        this.update({
+          phase: 'review',
+          readResponse: shelfResponse('read:inconsistent'),
+          readBusy: false,
           current: false,
           advice: undefined,
         });
@@ -730,19 +783,27 @@ export class ShelfPreferenceDraftRecovery {
         advice: current.advice,
         current: true,
         draft,
-        phase: this.state.pending ? 'uncertain' : read.issue ? 'failed' : 'review',
-        reason: read.issue,
-        failure: undefined,
-        retryAt: 0,
+        phase: this.state.pending
+          ? 'uncertain'
+          : this.state.confirmedWrite || this.state.comparison
+            ? 'review'
+            : read.issue
+              ? 'failed'
+              : 'review',
+        readResponse: shelfResponse(read.issue, read.failure),
+        readBusy: false,
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
     } catch {
-      if (this.owner.canRead())
+      if (this.active(generation) && this.owner.canRead())
         this.update({
-          phase: this.state.pending ? 'uncertain' : 'failed',
-          reason: 'read:unavailable',
-          failure: undefined,
-          retryAt: 0,
+          phase: this.state.pending
+            ? 'uncertain'
+            : this.state.confirmedWrite || this.state.comparison
+              ? 'review'
+              : 'failed',
+          readResponse: shelfResponse('read:unavailable'),
+          readBusy: false,
           current: false,
           advice: undefined,
         });
@@ -751,6 +812,7 @@ export class ShelfPreferenceDraftRecovery {
 
   useCurrent() {
     if (
+      !this.active() ||
       !this.owner.canRead() ||
       !this.state.current ||
       this.state.pending ||
@@ -761,10 +823,9 @@ export class ShelfPreferenceDraftRecovery {
       draft: draftFrom(this.state.known.shelf),
       dirty: new Set(),
       comparison: null,
+      confirmedWrite: null,
+      writeReceipt: null,
       phase: 'idle',
-      reason: undefined,
-      failure: undefined,
-      retryAt: 0,
     });
   }
 }
@@ -837,17 +898,34 @@ export function ShelfPreferencesCard({
   const readCurrent = useSettingsReadCurrent(csrfToken, !!io);
   const sessionOwner = useSettingsSessionOwner(csrfToken);
   const canRead = readCurrent();
-  const ownerRef = useRef({ version, writeCurrent, readCurrent, onVersionChange });
-  ownerRef.current = { version, writeCurrent, readCurrent, onVersionChange };
-  const [controller] = useState(
+  const subject = sessionOwner?.subject ?? null;
+  const episodeRef = useRef({ subject, csrfToken, io, token: Symbol() });
+  if (
+    episodeRef.current.subject !== subject ||
+    episodeRef.current.csrfToken !== csrfToken ||
+    episodeRef.current.io !== io
+  )
+    episodeRef.current = { subject, csrfToken, io, token: Symbol() };
+  const episode = episodeRef.current;
+  const ownerRef = useRef({ version, writeCurrent, readCurrent, onVersionChange, token: episode.token });
+  ownerRef.current = { version, writeCurrent, readCurrent, onVersionChange, token: episode.token };
+  const controller = useMemo(
     () =>
       new ShelfPreferenceDraftRecovery(initial, io, {
-        canRead: () => ownerRef.current.readCurrent(),
-        canWrite: () => ownerRef.current.writeCurrent(),
+        isCurrent: () => ownerRef.current.token === episode.token,
+        canRead: () => ownerRef.current.token === episode.token && ownerRef.current.readCurrent(),
+        canWrite: () => ownerRef.current.token === episode.token && ownerRef.current.writeCurrent(),
         version: () => ownerRef.current.version,
-        onVersionChange: (next) => ownerRef.current.onVersionChange(next),
+        onVersionChange: (next) => {
+          if (ownerRef.current.token === episode.token) ownerRef.current.onVersionChange(next);
+        },
       }),
+    [episode.token, io],
   );
+  useEffect(() => {
+    controller.activate();
+    return () => controller.dispose();
+  }, [controller]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const needsNavigationDecision = readCurrent() && controller.needsNavigationDecision();
   useSettingsNavigationDraft(
@@ -861,16 +939,40 @@ export function ShelfPreferencesCard({
   const ownerMayChange = ownerMayChangeShelf(advice);
   const canEdit = writeCurrent() && ownerMayChange;
   const canWrite = writeCurrent() && controller.canSubmit();
-  const retryWaiting = usePreferenceRetry(state.failure, state.retryAt);
-  const retrySeconds = Math.max(1, Math.ceil((state.retryAt - Date.now()) / 1000));
-  const disabled = !canEdit || state.phase === 'saving' || state.phase === 'reloading';
+  const writeRetryWaiting = usePreferenceRetry(state.writeResponse.failure, state.writeResponse.retryAt);
+  const readRetryWaiting = usePreferenceRetry(state.readResponse.failure, state.readResponse.retryAt);
+  const writeRetrySeconds = Math.max(1, Math.ceil((state.writeResponse.retryAt - Date.now()) / 1000));
+  const readRetrySeconds = Math.max(1, Math.ceil((state.readResponse.retryAt - Date.now()) / 1000));
+  const disabled = !canEdit || state.writeBusy || state.readBusy;
   const unavailableColumns = unsupportedShelfColumns(state.known.shelf);
   const unavailableSorts = unsupportedShelfSorts(state.known.shelf);
   const inputId = 'shelf-default-columns';
   const showFailure = ['failed', 'conflict', 'uncertain', 'review'].includes(state.phase);
-  const waiting = state.phase === 'saving' || state.phase === 'reloading';
+  const waiting = state.writeBusy || state.readBusy;
   const showRecovery = !shelfAdvice || showFailure;
   const original = state.pending ?? state.comparison;
+  const responses: {
+    operation: 'write' | 'read';
+    response: ShelfResponseState;
+    retryWaiting: boolean;
+    retrySeconds: number;
+    label: string;
+  }[] = [
+    {
+      operation: 'write',
+      response: state.writeResponse,
+      retryWaiting: writeRetryWaiting,
+      retrySeconds: writeRetrySeconds,
+      label: m.settings_shelf_write_status(),
+    },
+    {
+      operation: 'read',
+      response: state.readResponse,
+      retryWaiting: readRetryWaiting,
+      retrySeconds: readRetrySeconds,
+      label: m.settings_shelf_read_status(),
+    },
+  ];
   const offeredLayouts = shelfAdvice?.supported.layouts ?? [];
   const offeredSizes = shelfAdvice?.supported.gridSizes ?? [];
   const offeredSorts = executableSorts(shelfAdvice?.supported);
@@ -900,9 +1002,9 @@ export function ShelfPreferencesCard({
             ))
           : null}
         {!shelfAdvice ? (
-          state.current ? (
-            shelfReadSummary(state.known.shelf)
-          ) : null
+          <>
+            {shelfReadSummary(state.known.shelf)}
+          </>
         ) : (
           <>
             {ownerMayChange ? null : (
@@ -1079,26 +1181,42 @@ export function ShelfPreferencesCard({
             <AlertDescription className="space-y-2">
               {!shelfAdvice ? <p>{m.settings_shelf_choices_unavailable_text()}</p> : null}
               {state.phase === 'uncertain' && state.pending ? <p>{m.settings_shelf_uncertain()}</p> : null}
-              {state.reason ? (
-                <p className="font-mono text-xs" data-recovery-reason={state.reason}>
-                  {state.reason.replace(':', ' · ').replaceAll('_', ' ')}
+              {state.confirmedWrite ? (
+                <p>
+                  {m.settings_shelf_write_confirmed({
+                    version: String(state.writeReceipt?.version ?? state.known.version),
+                  })}
                 </p>
               ) : null}
-              {state.failure?.status !== undefined ? (
-                <p className="font-mono text-xs">HTTP {state.failure.status ?? 'unknown'}</p>
+              {!state.current && !state.confirmedWrite ? (
+                <p>{m.settings_shelf_values_unconfirmed()}</p>
               ) : null}
-              {state.failure?.code ? <p className="font-mono text-xs">{state.failure.code}</p> : null}
-              {state.failure?.requestId ? <p>{state.failure.requestId}</p> : null}
-              {state.failure?.retryAfter ? (
-                <p className="font-mono text-xs" data-retry-after={state.failure.retryAfter}>
-                  Retry-After: {state.failure.retryAfter}
-                </p>
-              ) : null}
-              {retryWaiting ? (
-                <p role="status" data-retry-after={state.failure?.retryAfter}>
-                  {m.route_retry_after({ seconds: retrySeconds })}
-                </p>
-              ) : null}
+              {responses.map(({ operation, response, retryWaiting, retrySeconds, label }) => {
+                if (!response.reason && !response.failure) return null;
+                return (
+                  <div key={operation} data-recovery-operation={operation}>
+                    <p className="font-mono text-xs" data-recovery-reason={response.reason}>
+                      {label}
+                      {response.reason ? ` · ${response.reason.replace(':', ' · ').replaceAll('_', ' ')}` : ''}
+                    </p>
+                    {response.failure?.status !== undefined ? (
+                      <p className="font-mono text-xs">HTTP {response.failure.status ?? 'unknown'}</p>
+                    ) : null}
+                    {response.failure?.code ? <p className="font-mono text-xs">{response.failure.code}</p> : null}
+                    {response.failure?.requestId ? <p>{response.failure.requestId}</p> : null}
+                    {response.failure?.retryAfter ? (
+                      <p className="font-mono text-xs" data-retry-after={response.failure.retryAfter}>
+                        Retry-After: {response.failure.retryAfter}
+                      </p>
+                    ) : null}
+                    {retryWaiting ? (
+                      <p role="status" data-retry-after={response.failure?.retryAfter}>
+                        {m.route_retry_after({ seconds: retrySeconds })}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
               {original ? (
                 <pre className="overflow-auto rounded bg-muted p-2 text-xs" data-original-shelf-change="true">
                   {JSON.stringify(
@@ -1113,7 +1231,7 @@ export function ShelfPreferencesCard({
                   type="button"
                   variant="outline"
                   className="min-h-11"
-                  disabled={!controller.canRetryOriginal() || !writeCurrent() || retryWaiting || waiting}
+                  disabled={!controller.canRetryOriginal() || !writeCurrent() || writeRetryWaiting || waiting}
                   onClick={() => void controller.retry()}
                 >
                   {m.settings_shelf_retry()}
@@ -1123,7 +1241,7 @@ export function ShelfPreferencesCard({
                 type="button"
                 variant="outline"
                 className="min-h-11"
-                disabled={!canRead || waiting || retryWaiting}
+                disabled={!canRead || waiting || readRetryWaiting}
                 onClick={() => void controller.reload()}
               >
                 {m.settings_shelf_reload()}
@@ -1142,7 +1260,7 @@ export function ShelfPreferencesCard({
             <Button
               type="button"
               className="min-h-11 max-w-full whitespace-normal"
-              disabled={disabled || retryWaiting || !!state.pending || !state.dirty.size || !canWrite}
+              disabled={disabled || writeRetryWaiting || !!state.pending || !state.dirty.size || !canWrite}
               onClick={() => void controller.submit()}
             >
               {m.settings_shelf_save()}
@@ -1151,7 +1269,7 @@ export function ShelfPreferencesCard({
               type="button"
               variant="outline"
               className="min-h-11 max-w-full whitespace-normal"
-              disabled={disabled || retryWaiting || !!state.pending || !canWrite}
+              disabled={disabled || writeRetryWaiting || !!state.pending || !canWrite}
               onClick={() => void controller.submit(true)}
             >
               {m.settings_shelf_reset()}
