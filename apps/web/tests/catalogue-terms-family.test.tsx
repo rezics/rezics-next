@@ -371,7 +371,12 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       ),
     );
     const c = host.querySelector<HTMLElement>('article')!;
-    await settle(() => !button(c, m.catalogue_terms_save()).disabled);
+    await settle(() => {
+      const save = [...c.querySelectorAll('button')].find(
+        (candidate) => candidate.textContent === m.catalogue_terms_save(),
+      );
+      return !!save && !save.disabled;
+    });
     const nameC = fieldset(c, m.catalogue_create_label());
     await select(nameC, m.catalogue_terms_action(), 'set');
     await replace(nameC, m.catalogue_create_label(), 'Draft after revocation');
