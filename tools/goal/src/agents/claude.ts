@@ -2,7 +2,7 @@ import type { AgentAdapter, AgentLaunchOptions, AgentEvent } from '../agents.ts'
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { unknownReading, tokens, textSignals, parseExitObject } from './shared.ts';
-import type { Pool, PoolReading } from '../types.ts';
+import type { Pool, PoolReading, Profile } from '../types.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -55,6 +55,7 @@ export const claudeAdapter: AgentAdapter = {
   parseUsage() {
     return null;
   },
+  pinProfile: pinnedClaudeProfile,
   failure(event) {
     return event.type === 'result' && event.is_error === true ? String(event.result ?? 'Claude turn failed') : null;
   },
@@ -81,10 +82,24 @@ function command(options: AgentLaunchOptions): [string, string[]] {
       '--strict-mcp-config',
       '--settings',
       JSON.stringify({ disableAllHooks: true }),
+      ...(options.research ? ['--allowedTools', 'WebSearch'] : []),
       '--',
       prompt,
     ],
   ];
+}
+
+function pinnedClaudeProfile(model: string, requestedEffort: string | undefined, route: Profile): Profile {
+  if (!/^claude-[a-z0-9.-]+$/.test(model)) throw new Error(`brief model must be a Claude model: ${model}`);
+  const effort = (requestedEffort ?? route.effort) as Profile['effort'];
+  if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) throw new Error(`invalid brief effort: ${effort}`);
+  return {
+    cli: 'claude' as const,
+    model,
+    effort,
+    poolClass: 'claude',
+    ...(route.serviceTier ? { serviceTier: route.serviceTier } : {}),
+  };
 }
 
 /** Parse the plan windows of Claude's OAuth usage endpoint, the one Claude Code's /usage reads. */

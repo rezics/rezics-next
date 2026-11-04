@@ -138,12 +138,16 @@ export function routeTask(
   const taskClass = classifyTask(brief);
   if (taskClass === 'mechanical') throw new Error('mechanical work must run without a model');
   if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error('invalid task sequence');
+  if (brief.model?.startsWith('claude-') && brief.kind !== 'research')
+    throw new Error('Claude model pins are only supported on research briefs');
   if (brief.kind === 'verification') {
     const profile = table.classes.implementation.first;
     requireOriginalProofProfile(profile);
     return { taskClass, profile, tableVersion: table.version, experiment: null };
   }
-  // A brief may pin its Codex model and effort, for example a deep research question on Sol max beside a Terra copy.
+  if (brief.researchers?.length)
+    throw new Error('researchers must be dispatched by the backlog as an independent research group');
+  // A brief may pin a provider model and effort, for example a deep research question on Sol max beside a Terra copy.
   if (brief.model !== undefined) {
     const profile = pinnedModelProfile(brief.model, brief.effort, table.classes[taskClass].first);
     return { taskClass, profile, tableVersion: table.version, experiment: null };

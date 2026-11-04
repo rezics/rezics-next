@@ -93,6 +93,11 @@ export class SqliteLandingQueue implements LandingQueue {
         CREATE TRIGGER landing_batch_ref_continuations_no_delete BEFORE DELETE ON landing_batch_ref_continuations
           BEGIN SELECT RAISE(ABORT, 'Native ref continuations are immutable'); END;`,
       },
+      {
+        module: 'landing',
+        version: 9,
+        sql: 'ALTER TABLE landing_queue ADD COLUMN resolving INTEGER NOT NULL DEFAULT 0;',
+      },
     ]);
   }
   controlPlaneRefContinuation(batchId: string): string | undefined {
@@ -365,7 +370,7 @@ export class SqliteLandingQueue implements LandingQueue {
     const excluded = excludedIds.length ? ` AND id NOT IN (${excludedIds.map(() => '?').join(',')})` : '';
     const rows = this.db
       .query(
-        `SELECT * FROM landing_queue WHERE delivered = 0 AND batch IS NULL${laneFilter}${excluded} ORDER BY ${priority}id LIMIT ?`,
+        `SELECT * FROM landing_queue WHERE delivered = 0 AND batch IS NULL AND resolving = 0${laneFilter}${excluded} ORDER BY CASE WHEN json_type(request, '$.devResolution') = 'object' THEN 0 ELSE 1 END, ${priority}id LIMIT ?`,
       )
       .all(...excludedIds, limit) as {
       id: number;
@@ -394,7 +399,7 @@ export class SqliteLandingQueue implements LandingQueue {
     this.db.query('UPDATE landing_queue SET candidate = ? WHERE id = ?').run(commit, id);
   }
   finish(id: number, outcome: GateOutcome): void {
-    this.db.query('UPDATE landing_queue SET outcome = ? WHERE id = ?').run(JSON.stringify(outcome), id);
+    this.db.query('UPDATE landing_queue SET outcome = ?, resolving = 0 WHERE id = ?').run(JSON.stringify(outcome), id);
     const row = this.db.query('SELECT task,attempt FROM landing_queue WHERE id=?').get(id) as {
       task: string;
       attempt: number;
@@ -409,6 +414,33 @@ export class SqliteLandingQueue implements LandingQueue {
       });
   }
   acknowledge(id: number): void {
-    this.db.query('UPDATE landing_queue SET delivered = 1 WHERE id = ?').run(id);
+    this.db.query('UPDATE landing_queue SET delivered = 1, resolving = 0 WHERE id = ?').run(id);
+  }
+  beginResolution(id: number): void {
+    const result = this.db
+      .query('UPDATE landing_queue SET resolving = 1 WHERE id = ? AND delivered = 0 AND outcome IS NULL')
+      .run(id);
+    if (result.changes !== 1) throw new Error(`Cannot reserve landing ${id} for conflict resolution`);
+  }
+  requeueResolved(id: number, request: LandingRequest, candidate?: string): void {
+    this.db
+      .transaction(() => {
+        this.fence.assertCurrent(request);
+        const result = this.db
+          .query(
+            'UPDATE landing_queue SET request = ?, outcome = NULL, delivered = 0, candidate = ?, batch = NULL, resolving = 0 WHERE id = ?',
+          )
+          .run(JSON.stringify(request), candidate ?? null, id);
+        if (result.changes !== 1) throw new Error(`Cannot requeue resolved landing ${id}`);
+        recordFlow(this.db, {
+          taskId: request.taskId,
+          attempt: request.attempt,
+          stage: 'landing',
+          action: 'resolver-requeued',
+          at: new Date().toISOString(),
+          detail: JSON.stringify({ commit: request.devResolution?.commit, attempts: request.devResolution?.attempts }),
+        });
+      })
+      .immediate();
   }
 }

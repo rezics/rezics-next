@@ -36,7 +36,7 @@ import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SqliteLandingQueue, type LandingEntry } from './land.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import type { IntegrationTarget, Task } from './types.ts';
+import type { IntegrationTarget, Task, Tokens } from './types.ts';
 import { WorkerStore } from './store.ts';
 import { assertManagerLandingEvidence } from './manager-landing.ts';
 import {
@@ -1359,6 +1359,7 @@ export function rebaseOnto(
 
 export type TrainOptions = {
   policy?: ControlPolicy | undefined;
+  configurationRevision?: string;
   mainCheckout: string;
   stateDirectory: string;
   worktreeRoot: string;
@@ -1415,6 +1416,36 @@ export type TrainOptions = {
   beforePromotionAdvance?: () => void;
 };
 
+export type TrainConfigurationValues = Pick<
+  TrainOptions,
+  | 'policy'
+  | 'integration'
+  | 'formatCommand'
+  | 'affectedTests'
+  | 'integrationChecks'
+  | 'derivedFiles'
+  | 'gateIdentity'
+  | 'mainBranch'
+  | 'integrationBranch'
+  | 'stabilizeBranch'
+  | 'supermanager'
+  | 'inboxDirectory'
+>;
+export type TrainConfigurationSnapshot = TrainConfigurationValues &
+  Pick<TrainOptions, 'runGate' | 'runTypecheck' | 'runControlPlaneGate'> & {
+    configurationRevision: string;
+  };
+export type TrainConfigurationReloader = () => TrainConfigurationSnapshot | Promise<TrainConfigurationSnapshot>;
+
+export function trainConfigurationRevision(configuration: TrainConfigurationValues): string {
+  const integrationChecks =
+    typeof configuration.integrationChecks === 'function'
+      ? configuration.integrationChecks()
+      : (configuration.integrationChecks ?? []);
+  const content = JSON.stringify({ ...configuration, integrationChecks });
+  return `sha256:${createHash('sha256').update(content).digest('hex')}`;
+}
+
 type PreparedLanding = {
   entry: LandingEntry;
   result: GateOutcome;
@@ -1427,7 +1458,32 @@ type BatchLandingResult = {
   outcomes: { entry: LandingEntry; outcome: GateOutcome }[];
   deferredIds: number[];
   skippedIds: number[];
+  resolution?: DevResolutionHandoff;
 };
+
+type DevResolutionHandoff = {
+  kind: 'dev-resolution';
+  entry: LandingEntry;
+  outcome: GateOutcome;
+  targetHead: string;
+  paths: string[];
+};
+
+function emptyTokens(): Tokens {
+  return { input: 0, cached: 0, output: 0 };
+}
+
+function addTokens(left: Tokens, right: Tokens): Tokens {
+  return {
+    input: left.input + right.input,
+    cached: left.cached + right.cached,
+    output: left.output + right.output,
+  };
+}
+
+function isDevResolutionHandoff(value: GateOutcome | DevResolutionHandoff | undefined): value is DevResolutionHandoff {
+  return !!value && 'kind' in value && value.kind === 'dev-resolution';
+}
 
 class ControlPlaneProofInterrupted extends Error {}
 
@@ -1515,8 +1571,13 @@ export class MergeTrain {
     return policyGit(cwd, args, this.options.policy?.merge);
   }
 
-  private readonly workspaceFailures = new Map<number, GateOutcome[]>();
+  private workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
+
+  private initializeLandingLog(logPath: string): void {
+    const revision = this.options.configurationRevision ?? trainConfigurationRevision(this.options);
+    writeFileSync(logPath, `Configuration revision: ${revision}\n`);
+  }
 
   private configuredLandingBoot(): IntegrationCheck | undefined {
     if (this.options.devLandingBoot !== undefined) {
@@ -1766,16 +1827,19 @@ export class MergeTrain {
    * pile up: 304 trains polling every 50 ms took the host to load 111. The owner drains the queue and checks its code
    * version before each request, and the host's sweep starts a train for any request left behind.
    */
-  async runWaiting(): Promise<void> {
-    await this.drainBoth(false);
+  async runWaiting(refreshConfiguration?: TrainConfigurationReloader): Promise<void> {
+    await this.drainBoth(false, refreshConfiguration);
   }
 
   /** Background pumps are best-effort: a current lease owner will see any request queued during shutdown. */
-  async pump(): Promise<void> {
-    await this.drainBoth(false);
+  async pump(refreshConfiguration?: TrainConfigurationReloader): Promise<void> {
+    await this.drainBoth(false, refreshConfiguration);
   }
 
-  private async drainBoth(failWhenInitiallyHeld: boolean): Promise<void> {
+  private async drainBoth(
+    failWhenInitiallyHeld: boolean,
+    refreshConfiguration?: TrainConfigurationReloader,
+  ): Promise<void> {
     let handOff: Promise<void> | undefined;
     const handOffOnce = () => {
       handOff ??= Promise.resolve(this.options.handOff?.());
@@ -1783,7 +1847,12 @@ export class MergeTrain {
     };
     const start = (lane: 'main' | 'dev') =>
       new Promise<void>((resolve, reject) => {
-        setTimeout(() => this.drain(lane, failWhenInitiallyHeld, handOffOnce).then(resolve, reject), 0);
+        const train = refreshConfiguration ? new MergeTrain({ ...this.options }) : this;
+        if (train !== this) train.workspaceFailures = this.workspaceFailures;
+        setTimeout(
+          () => train.drain(lane, failWhenInitiallyHeld, handOffOnce, refreshConfiguration).then(resolve, reject),
+          0,
+        );
       });
     // Start dev first: a strict run must not mistake its own main release's dev lease for another train.
     // Once dev has acquired its lane, later contention already uses the normal quiet return path.
@@ -1794,6 +1863,7 @@ export class MergeTrain {
     lane: 'main' | 'dev',
     failWhenInitiallyHeld: boolean,
     handOff: () => Promise<void>,
+    refreshConfiguration?: TrainConfigurationReloader,
   ): Promise<void> {
     const o = this.options;
     mkdirSync(o.stateDirectory, { recursive: true });
@@ -1820,6 +1890,7 @@ export class MergeTrain {
       acquired = true;
       const roundHead = this.integrationHead();
       const deferred = new Set<number>();
+      const pendingDevResolutions: DevResolutionHandoff[] = [];
       let processedEntry = false;
       try {
         if (o.codeIsCurrent && !o.codeIsCurrent()) {
@@ -1831,6 +1902,8 @@ export class MergeTrain {
             await handOff();
             return;
           }
+          if (refreshConfiguration) Object.assign(o, await refreshConfiguration());
+          o.configurationRevision ??= trainConfigurationRevision(o);
           const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
           if (!entry) break;
           processedEntry = true;
@@ -1863,6 +1936,10 @@ export class MergeTrain {
             }
             if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
               const integrated = await this.integrateBatch(batch);
+              if (integrated.resolution) {
+                o.queue.beginResolution(integrated.resolution.entry.id);
+                pendingDevResolutions.push(integrated.resolution);
+              }
               for (const id of integrated.skippedIds) {
                 o.queue.acknowledge(id);
                 retryDeferred.delete(id);
@@ -1884,12 +1961,18 @@ export class MergeTrain {
                 }
               }
             } else {
-              const outcome = await this.integrateOrdinary(entry, lane, handOff);
-              if (!outcome) {
+              const integration = await this.integrateOrdinary(entry, lane, handOff);
+              if (!integration) {
                 // Leave the request pending for the next pump, without retrying contention in this drain.
                 if (o.codeIsCurrent && !o.codeIsCurrent()) await handOff();
                 return;
               }
+              if (isDevResolutionHandoff(integration)) {
+                o.queue.beginResolution(entry.id);
+                pendingDevResolutions.push(integration);
+                continue;
+              }
+              const outcome = integration;
               const workspaceFailures = this.workspaceFailures.get(entry.id);
               this.workspaceFailures.delete(entry.id);
               if (workspaceFailures) {
@@ -1947,6 +2030,11 @@ export class MergeTrain {
         lease.release();
       }
 
+      if (pendingDevResolutions.length) {
+        for (const pending of pendingDevResolutions) await this.resolveDevLanding(pending);
+        continue;
+      }
+
       if (o.codeIsCurrent && !o.codeIsCurrent()) {
         await handOff();
         return;
@@ -1982,6 +2070,7 @@ export class MergeTrain {
   private canBatch(entry: LandingEntry): boolean {
     const o = this.options;
     if (entry.request.unchangedClaim) return false;
+    if (entry.request.devResolution) return false;
     if (entry.request.managerLanding) return false;
     if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
     if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
@@ -2059,7 +2148,7 @@ export class MergeTrain {
           const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
           logPaths.set(entry.id, logPath);
           memberStarted.set(entry.id, Date.now());
-          writeFileSync(logPath, '');
+          this.initializeLandingLog(logPath);
         }
         if (this.git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
           throw new Error('The main checkout must already have main checked out');
@@ -2135,8 +2224,37 @@ export class MergeTrain {
               const context = makeRebaseConflictContext(previous, request.workerCommit ?? tip, conflicts);
               if (context) result.rebaseConflict = context;
             }
+            if (error instanceof WorkerConflictError && previous !== base) {
+              appendFileSync(
+                logPath,
+                `Deferred until a later batch round; conflict with an earlier member: ${error.path}\n`,
+              );
+              deferred.add(entry.id);
+              resetTo(trainTree, previous);
+              continue;
+            }
             if (error instanceof WorkerConflictError) {
+              if (o.trainResolver) {
+                result.firstFailure = firstFailure(error.message, this.options.policy?.merge);
+                const resolution = this.devResolutionHandoff(entry, result, previous, [error.path]);
+                resetTo(trainTree, previous);
+                return {
+                  outcomes: orderedOutcomes(),
+                  deferredIds: [...deferred],
+                  skippedIds: [...skipped],
+                  resolution,
+                };
+              }
               refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
+              result.conflictResolution = {
+                method: 'worker',
+                tokens: request.devResolution?.tokens ?? emptyTokens(),
+                attempts: request.devResolution?.attempts ?? 0,
+              };
+              appendFileSync(
+                logPath,
+                `Dev landing conflict method=worker; resolver attempts=${result.conflictResolution.attempts}; tokens=${JSON.stringify(result.conflictResolution.tokens)}\n`,
+              );
               localOutcomes.set(entry.id, result);
               try {
                 this.git(trainTree, 'rebase', '--abort');
@@ -2157,6 +2275,25 @@ export class MergeTrain {
               result.stage = 'rebase';
               result.conflictedFiles = canonicalConflictPaths(conflicts);
               result.firstFailure = firstFailure(String(error), this.options.policy?.merge);
+              if (o.trainResolver) {
+                const resolution = this.devResolutionHandoff(entry, result, previous, conflicts);
+                resetTo(trainTree, previous);
+                return {
+                  outcomes: orderedOutcomes(),
+                  deferredIds: [...deferred],
+                  skippedIds: [...skipped],
+                  resolution,
+                };
+              }
+              result.conflictResolution = {
+                method: 'worker',
+                tokens: request.devResolution?.tokens ?? emptyTokens(),
+                attempts: request.devResolution?.attempts ?? 0,
+              };
+              appendFileSync(
+                logPath,
+                `Dev landing conflict method=worker; resolver attempts=${result.conflictResolution.attempts}; tokens=${JSON.stringify(result.conflictResolution.tokens)}\n`,
+              );
               appendFileSync(logPath, `Rebase conflicts with dev: ${conflicts.join(', ')}\n`);
               localOutcomes.set(entry.id, result);
             } else {
@@ -2588,7 +2725,7 @@ export class MergeTrain {
     entry: LandingEntry,
     lane: 'main' | 'dev',
     handOff: () => Promise<void>,
-  ): Promise<GateOutcome | undefined> {
+  ): Promise<GateOutcome | DevResolutionHandoff | undefined> {
     const o = this.options;
     if (
       lane !== 'main' ||
@@ -2763,7 +2900,10 @@ export class MergeTrain {
       (o.policy ?? defaultPolicy).controlPlane.pollMs,
     );
     try {
-      const outcome = await this.integrate(entry, custody);
+      const integrated = await this.integrate(entry, custody);
+      if (isDevResolutionHandoff(integrated))
+        throw new Error('Control-plane proof cannot be handed off to the dev resolver');
+      const outcome = integrated;
       attempt.status = 'finished';
       attempt.outcome = outcome;
       save();
@@ -2820,7 +2960,216 @@ export class MergeTrain {
     }
   }
 
-  private async integrate(entry: LandingEntry, custody?: OrdinaryProofCustody): Promise<GateOutcome> {
+  private devResolutionHandoff(
+    entry: LandingEntry,
+    outcome: GateOutcome,
+    targetHead: string,
+    paths: readonly string[],
+  ): DevResolutionHandoff {
+    const canonical = canonicalConflictPaths(paths);
+    outcome.stage = 'rebase';
+    outcome.conflictedFiles = canonical;
+    const conflict = makeRebaseConflictContext(
+      targetHead,
+      entry.request.workerCommit ??
+        this.git(this.options.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`),
+      canonical,
+    );
+    if (conflict) outcome.rebaseConflict = conflict;
+    outcome.firstFailure ??= firstFailure(
+      `Rebase conflicts with dev: ${canonical.join(', ')}`,
+      this.options.policy?.merge,
+    );
+    appendFileSync(
+      outcome.logPath,
+      `Dev landing conflict queued for the train resolver: ${canonical.join(', ')}; target=${targetHead}\n`,
+    );
+    return { kind: 'dev-resolution', entry, outcome, targetHead, paths: canonical };
+  }
+
+  private async resolveDevLanding(pending: DevResolutionHandoff): Promise<void> {
+    const o = this.options;
+    const { entry, outcome } = pending;
+    const request = entry.request;
+    const targetBranch = o.integrationBranch ?? 'dev';
+    const targetRef = `refs/heads/${targetBranch}`;
+    const resolver = o.trainResolver;
+    const maximum = o.policy?.trainResolver.devAttempts ?? defaultPolicy.trainResolver.devAttempts;
+    const sourceCommit = request.workerCommit ?? this.git(o.mainCheckout, 'rev-parse', `${request.branch}^{commit}`);
+    let attempts = request.devResolution?.attempts ?? 0;
+    let tokens = request.devResolution?.tokens ?? emptyTokens();
+    let lastTarget = pending.targetHead;
+    let paths = [...pending.paths];
+    let failure = '';
+    let candidate: string | undefined;
+    let method: TrainConflict['method'] = request.devResolution?.method ?? 'mechanical';
+    let alreadyRepresented = false;
+
+    while (resolver && attempts < maximum) {
+      try {
+        o.fence.assertCurrent(request);
+      } catch (error) {
+        if (error instanceof StaleAttemptError) {
+          o.queue.acknowledge(entry.id);
+          return;
+        }
+        failure = String(error);
+        break;
+      }
+      lastTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
+      const tree = resolve(o.worktreeRoot, `train-resolver-dev-${randomUUID()}`);
+      const priorCompleted = new Set(
+        o.fence instanceof WorkerStore
+          ? o.fence
+              .events(request.taskId, request.attempt)
+              .filter((event) => event.kind === 'train-resolver-completed')
+              .map((event) => event.body)
+          : [],
+      );
+      const newResolverTokens = (): Tokens => {
+        if (!(o.fence instanceof WorkerStore)) return emptyTokens();
+        const event = o.fence
+          .events(request.taskId, request.attempt)
+          .findLast((item) => item.kind === 'train-resolver-completed' && !priorCompleted.has(item.body));
+        if (!event) return emptyTokens();
+        try {
+          const value = JSON.parse(event.body).tokens as Tokens | undefined;
+          return value ?? emptyTokens();
+        } catch {
+          return emptyTokens();
+        }
+      };
+      let added = false;
+      try {
+        this.git(o.mainCheckout, 'worktree', 'add', '--detach', tree, lastTarget);
+        added = true;
+        const frozen = frozenFilesForTask(o.stateDirectory, request.taskId).map((file) => file.path);
+        let conflict: TrainConflict | undefined;
+        try {
+          conflict = await resolver.compose(
+            request,
+            tree,
+            lastTarget,
+            targetRef,
+            sourceCommit,
+            frozen,
+            outcome.logPath,
+          );
+        } catch (error) {
+          failure = String(error);
+          tokens = addTokens(tokens, newResolverTokens());
+          attempts++;
+          if (this.git(o.mainCheckout, 'rev-parse', targetRef) !== lastTarget) continue;
+          break;
+        }
+        attempts++;
+        tokens = addTokens(tokens, conflict?.tokens ?? newResolverTokens());
+        if (conflict?.conflictFiles.length) paths = canonicalConflictPaths(conflict.conflictFiles);
+        const currentTarget = this.git(o.mainCheckout, 'rev-parse', targetRef);
+        if (currentTarget !== lastTarget) {
+          failure = `dev moved from ${lastTarget} to ${currentTarget} during resolution`;
+          continue;
+        }
+        if (conflict && !conflict.resolvedCommit) {
+          failure = conflict.detail ?? 'Train resolver did not produce a resolved commit';
+          break;
+        }
+        const resolved = conflict?.resolvedCommit ?? this.git(tree, 'rev-parse', 'HEAD');
+        if (resolved === lastTarget && isAncestor(o.mainCheckout, sourceCommit, lastTarget, o.policy?.merge)) {
+          candidate = lastTarget;
+          alreadyRepresented = true;
+          method = conflict?.method ?? 'mechanical';
+          break;
+        }
+        if (
+          this.git(tree, 'rev-parse', `${resolved}^1`) !== lastTarget ||
+          this.git(tree, 'rev-parse', `${resolved}^2`) !== sourceCommit
+        ) {
+          failure = 'Train resolver commit does not preserve the current dev and worker parents';
+          break;
+        }
+        this.git(o.mainCheckout, 'update-ref', `refs/goal/dev-resolution/${entry.id}/${attempts}`, resolved);
+        candidate = resolved;
+        method = conflict?.method ?? 'mechanical';
+        break;
+      } catch (error) {
+        if (error instanceof StaleAttemptError) {
+          o.queue.acknowledge(entry.id);
+          return;
+        }
+        failure = String(error);
+        break;
+      } finally {
+        if (added) {
+          try {
+            this.git(tree, 'merge', '--abort');
+          } catch {}
+          try {
+            const removal = captureTrainWorktreeRemoval(tree);
+            removal();
+            this.git(o.mainCheckout, 'worktree', 'remove', '--force', tree);
+          } catch (error) {
+            appendFileSync(outcome.logPath, `Resolver tree cleanup deferred: ${tree}: ${error}\n`);
+          }
+        }
+      }
+    }
+
+    if (candidate) {
+      const resolution = {
+        attempts,
+        commit: candidate,
+        targetHead: lastTarget,
+        method,
+        tokens,
+        paths: canonicalConflictPaths(paths),
+      } as const;
+      appendFileSync(
+        outcome.logPath,
+        `Dev landing conflict method=${method}; resolver attempts=${attempts}; tokens=${JSON.stringify(tokens)}; commit=${candidate}\n`,
+      );
+      try {
+        o.queue.requeueResolved(
+          entry.id,
+          { ...request, devResolution: resolution },
+          alreadyRepresented ? lastTarget : undefined,
+        );
+      } catch (error) {
+        if (!(error instanceof StaleAttemptError)) throw error;
+        o.queue.acknowledge(entry.id);
+      }
+      return;
+    }
+
+    if (!failure) failure = `Train resolver attempt bound reached (${maximum})`;
+    outcome.stage = 'rebase';
+    outcome.passed = false;
+    outcome.conflictedFiles = paths;
+    const conflict = makeRebaseConflictContext(lastTarget, request.workerCommit ?? sourceCommit, paths);
+    if (conflict) outcome.rebaseConflict = conflict;
+    outcome.conflictResolution = { method: 'worker', tokens, attempts };
+    outcome.firstFailure = firstFailure(
+      `${outcome.firstFailure?.assertion ?? `Rebase conflicts with dev: ${paths.join(', ')}`}; train resolver returned the conflict to the worker: ${failure}`,
+      o.policy?.merge,
+    );
+    appendFileSync(
+      outcome.logPath,
+      `Dev landing conflict method=worker; resolver attempts=${attempts}/${maximum}; tokens=${JSON.stringify(tokens)}; ${failure}\n`,
+    );
+    try {
+      o.fence.assertCurrent(request);
+    } catch (error) {
+      if (!(error instanceof StaleAttemptError)) throw error;
+      o.queue.acknowledge(entry.id);
+      return;
+    }
+    o.queue.finish(entry.id, outcome);
+  }
+
+  private async integrate(
+    entry: LandingEntry,
+    custody?: OrdinaryProofCustody,
+  ): Promise<GateOutcome | DevResolutionHandoff> {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
       assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit, o.policy?.integration);
@@ -2861,12 +3210,27 @@ export class MergeTrain {
     let integratesIntoDev = integrationTarget !== 'main';
     const started = Date.now();
     const logPath = custody?.logPath ?? join(o.stateDirectory, `landing-${entry.id}.log`);
-    writeFileSync(logPath, '');
+    if (request.devResolution)
+      appendFileSync(
+        logPath,
+        `Resuming dev landing with resolved commit ${request.devResolution.commit} on target ${request.devResolution.targetHead}\n`,
+      );
+    else this.initializeLandingLog(logPath);
     const result: GateOutcome = {
       taskId: request.taskId,
       attempt: request.attempt,
       passed: false,
       stage: 'setup',
+      ...(request.devResolution
+        ? {
+            conflictedFiles: [...request.devResolution.paths],
+            conflictResolution: {
+              method: request.devResolution.method,
+              tokens: request.devResolution.tokens,
+              attempts: request.devResolution.attempts,
+            },
+          }
+        : {}),
       logPath,
       hostMs: 0,
       changedFiles: [],
@@ -2992,12 +3356,13 @@ export class MergeTrain {
       }
       if (this.git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      const tip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
-      workerCommit = request.workerCommit ?? tip;
+      const sourceTip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      const tip = request.devResolution?.commit ?? sourceTip;
+      workerCommit = request.workerCommit ?? sourceTip;
       if (workspace && sharedStore) {
-        sharedSource = tip;
+        sharedSource = sourceTip;
         const task = sharedStore.task(request.taskId);
-        const own = taskCommits(task, tip, this.options.policy?.merge);
+        const own = taskCommits(task, sourceTip, this.options.policy?.merge);
         if (!own.length)
           throw new Error('No Goal-Task trailer commits for this task: commit your own work before finishing');
         if (own.every((commit) => workspaceAncestor(o.mainCheckout, commit, target()))) {
@@ -3011,7 +3376,7 @@ export class MergeTrain {
         const attribution = workspaceCommits(
           task.worktree,
           workspace.workspace(recorded.workspace!.module).base,
-          tip,
+          sourceTip,
           this.options.policy?.merge,
         );
         sharedTasks = sharedStore
@@ -3030,8 +3395,8 @@ export class MergeTrain {
       // diff. Only the commits after the main fork are considered for the main landing.
       let controlPlaneFork: string | undefined;
       if (!workspace && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
-        const fork = this.git(o.mainCheckout, 'merge-base', tip, `refs/heads/${mainBranch}`);
-        const taskChanges = changedPathsBetween(o.mainCheckout, fork, tip, this.options.policy?.merge);
+        const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
+        const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
         controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
         if (controlPlane) controlPlaneFork = fork;
       }
@@ -3044,9 +3409,9 @@ export class MergeTrain {
       }
       // Recover an advance that committed before its outcome was saved.
       if (await recoverAlreadyIntegrated()) return finish();
-      const originalBase = controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', tip, target());
+      const originalBase = controlPlaneFork ?? this.git(o.mainCheckout, 'merge-base', sourceTip, target());
       mkdirSync(resolve(o.worktreeRoot), { recursive: true });
-      this.git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, tip);
+      this.git(o.mainCheckout, 'worktree', 'add', '--detach', trainTree, sourceTip);
       added = true;
       prepareRemoval = captureTrainWorktreeRemoval(trainTree);
       for (;;) {
@@ -3065,7 +3430,7 @@ export class MergeTrain {
           continue;
         }
         stage = 'rebase';
-        this.git(trainTree, 'reset', '--hard', tip);
+        this.git(trainTree, 'reset', '--hard', sourceTip);
         this.git(trainTree, 'clean', '-fdx');
         const derivedFiles = o.derivedFiles ?? defaultDerivedFiles;
         // A worker that left its work uncommitted would otherwise integrate nothing and release its dependents. The
@@ -3218,7 +3583,12 @@ export class MergeTrain {
           throw new Error(
             'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
           );
-        if (workspace) {
+        if (request.devResolution) {
+          this.git(trainTree, 'reset', '--hard', base);
+          if (this.git(trainTree, 'rev-parse', `${tip}^1`) === base)
+            this.git(trainTree, 'merge', '--ff-only', '--no-edit', tip);
+          else this.git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
+        } else if (workspace) {
           this.git(trainTree, 'reset', '--hard', base);
           this.git(trainTree, 'merge', '--no-ff', '--no-edit', tip);
         } else {
@@ -3235,7 +3605,22 @@ export class MergeTrain {
             );
           } catch (error) {
             if (!(error instanceof WorkerConflictError)) throw error;
+            if (integratesIntoDev && !stabilize && !controlPlane && o.trainResolver) {
+              result.firstFailure = firstFailure(error.message, this.options.policy?.merge);
+              return this.devResolutionHandoff(entry, result, base, [error.path]);
+            }
             refuseNoEffect(result, [error.path], logPath, error.detail ? error.message : undefined);
+            if (integratesIntoDev && !stabilize && !controlPlane) {
+              result.conflictResolution = {
+                method: 'worker',
+                tokens: emptyTokens(),
+                attempts: 0,
+              };
+              appendFileSync(
+                logPath,
+                `Dev landing conflict method=worker; resolver attempts=${result.conflictResolution.attempts}; tokens=${JSON.stringify(result.conflictResolution.tokens)}\n`,
+              );
+            }
             return finish();
           }
         }
@@ -3359,8 +3744,8 @@ export class MergeTrain {
         }
         const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
         const taskPaths = workspace
-          ? taskChangedPaths(sharedStore!.task(request.taskId), tip, this.options.policy?.merge)
-          : changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
+          ? taskChangedPaths(sharedStore!.task(request.taskId), sourceTip, this.options.policy?.merge)
+          : changedPathsBetween(o.mainCheckout, originalBase, sourceTip, this.options.policy?.merge);
         if (treeDiffIsEmpty(trainTree, base, candidate, this.options.policy?.merge)) {
           refuseNoEffect(result, taskPaths, logPath);
           return finish();
@@ -3369,7 +3754,7 @@ export class MergeTrain {
           trainTree,
           base,
           candidate,
-          tip,
+          sourceTip,
           taskPaths,
           this.options.policy?.merge,
         );
@@ -3920,7 +4305,7 @@ export class MergeTrain {
             ...new Set([
               ...outsideScope(
                 (workspace
-                  ? taskChangedPaths(sharedStore!.task(request.taskId), tip, this.options.policy?.merge)
+                  ? taskChangedPaths(sharedStore!.task(request.taskId), sourceTip, this.options.policy?.merge)
                   : (result.changedFiles ?? [])
                 ).filter(
                   (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
@@ -3950,9 +4335,23 @@ export class MergeTrain {
           result.conflictedFiles = conflicts;
           const context = makeRebaseConflictContext(activeTargetHead, workerCommit, conflicts);
           if (context) result.rebaseConflict = context;
+          result.firstFailure = firstFailure(message, this.options.policy?.merge);
+          if (integratesIntoDev && !stabilize && !controlPlane) {
+            if (o.trainResolver)
+              return this.devResolutionHandoff(entry, result, activeTargetHead ?? target(), conflicts);
+            result.conflictResolution = {
+              method: 'worker',
+              tokens: request.devResolution?.tokens ?? emptyTokens(),
+              attempts: request.devResolution?.attempts ?? 0,
+            };
+            appendFileSync(
+              logPath,
+              `Dev landing conflict method=worker; resolver attempts=${result.conflictResolution.attempts}; tokens=${JSON.stringify(result.conflictResolution.tokens)}\n`,
+            );
+          }
         }
       }
-      result.firstFailure = firstFailure(message, this.options.policy?.merge);
+      result.firstFailure ??= firstFailure(message, this.options.policy?.merge);
       return finish();
     } finally {
       result.hostMs = Date.now() - started;

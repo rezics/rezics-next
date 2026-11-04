@@ -1,0 +1,1 @@
+If the outcome does not fit this attempt, commit a coherent, type-checking part and write the rest as a continuation brief at `{{task.continuationBriefPath}}` (goal {{task.goal}}, manager {{task.manager}}). Unfinished work is not a blocker: return success and name the continuation.

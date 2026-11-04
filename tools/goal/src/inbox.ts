@@ -19,6 +19,7 @@ const wakingKinds = new Set<ManagerEventKind>([
   'goal-unmet',
   'goal-met',
   'goal-idle',
+  'research-complete',
   'instruction',
   'question',
   'decision',

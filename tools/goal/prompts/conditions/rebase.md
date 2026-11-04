@@ -1,0 +1,1 @@
+The control plane has already started a rebase onto current main in this worktree. Conflicted files: {{task.resolutionFiles}}. Resolve and stage them, then run `git rebase --continue` until the rebase completes. Do not start another rebase.

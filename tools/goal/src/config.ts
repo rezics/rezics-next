@@ -29,7 +29,14 @@ import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch, sshProbe } from './watchdog.ts';
 import { readRouting } from './routing.ts';
-import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
+import {
+  FORMAT_FLAGS,
+  MergeTrain,
+  trainConfigurationRevision,
+  type IntegrationCheck,
+  type TrainConfigurationReloader,
+  type TrainOptions,
+} from './merge-train.ts';
 import { promote } from './promotion.ts';
 import { preparePromotionGate } from './promotion-placement.ts';
 import { bootSmokeRepairBrief, verifyDev, type BootSmokeRepair } from './dev-verifier.ts';
@@ -657,8 +664,51 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     true,
     settings.policy?.merge,
   );
+  const refreshTrainConfiguration: TrainConfigurationReloader = () => {
+    const latest = loadSettings({ cwd: settings.mainCheckout, localFile: settings.localFile });
+    const configuration = {
+      policy: latest.policy,
+      integration: latest.integration,
+      formatCommand: latest.formatCommand,
+      affectedTests: latest.affectedTests ?? [],
+      integrationChecks: latest.integrationChecks,
+      derivedFiles: options.train?.derivedFiles ?? latest.derivedFiles ?? packageDerivedFiles,
+      gateIdentity: JSON.stringify(latest.gate),
+      mainBranch: latest.mainBranch,
+      integrationBranch: latest.integrationBranch,
+      stabilizeBranch: latest.stabilizeBranch,
+      supermanager: latest.integration.supermanager,
+      inboxDirectory: latest.integration.inboxDirectory,
+      runGate:
+        options.runGate ??
+        gateRunner(
+          latest.integration.gateTimeoutMs,
+          latest.stateDirectory,
+          LANDING_CHECK_ENVIRONMENT,
+          checkResultOptions,
+          latest.policy?.merge,
+        ),
+      runTypecheck: processGroupRunner(
+        latest.integration.gateTimeoutMs,
+        latest.stateDirectory,
+        process.env,
+        true,
+        latest.policy?.merge,
+      ),
+      runControlPlaneGate:
+        options.runGate ??
+        gateRunner(
+          latest.integration.gateTimeoutMs,
+          latest.stateDirectory,
+          LANDING_CHECK_ENVIRONMENT,
+          undefined,
+          latest.policy?.merge,
+        ),
+    };
+    return { ...configuration, configurationRevision: trainConfigurationRevision(configuration) };
+  };
   let train!: MergeTrain;
-  const pump = () => train.pump();
+  const pump = () => train.pump(refreshTrainConfiguration);
   const managerContext = () => {
     if (process.env.GOAL_MANAGER) return true;
     const threadId = process.env.CODEX_THREAD_ID;
@@ -708,21 +758,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     formatCommand: settings.formatCommand,
     // The configured list, not the package default: local configuration switches landing affected checks off.
     affectedTests: settings.affectedTests ?? [],
-    integrationChecks: () => {
-      const configured = (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [];
-      // The local file is read for every landing, so checks can be switched off or on without restarting the train.
-      try {
-        const file = join(settings.stateDirectory, 'local.json');
-        const local = existsSync(file)
-          ? (JSON.parse(readFileSync(file, 'utf8')) as { integrationChecks?: unknown })
-          : {};
-        return local.integrationChecks === undefined
-          ? readIntegrationChecks()
-          : readIntegrationChecks(local.integrationChecks);
-      } catch {
-        return configured;
-      }
-    },
+    integrationChecks: (settings as Settings & { integrationChecks?: IntegrationCheck[] }).integrationChecks ?? [],
     queue,
     fence: store,
     sink: job,
@@ -857,6 +893,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     managerServices,
     landing,
     managerLand,
+    refreshTrainConfiguration,
     handoffTrain: handOff,
     manager,
     pump,

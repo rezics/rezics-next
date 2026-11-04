@@ -2,8 +2,11 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { agentAdapter, withAgentAdapter } from './agents.ts';
+import { MergeTrain } from './merge-train.ts';
 import { resolveMechanicalConflicts } from './merge-train.ts';
 import { git } from './merge.ts';
+import { TrainResolver } from './train-resolver.ts';
 import { integrationHarness } from './test-support.ts';
 
 function conflictStages(root: string, file: string, base: string, dev: string, task: string): void {
@@ -83,10 +86,11 @@ test('a conflicting JSON message replacement remains unresolved for the worker',
   }
 });
 
-test('a train returns a union that preserves replaced task lines to its worker with the lines named', async () => {
+test('a train resolves the Markdown task-deletion union without starting another worker attempt', async () => {
   const h = integrationHarness();
   try {
     h.ensureDev();
+    h.settings.integration.devLandingChecks = false;
     const task = h.dispatch('README.md');
     writeFileSync(
       join(task.worktree, '.temp/worker-plan.json'),
@@ -95,17 +99,47 @@ test('a train returns a union that preserves replaced task lines to its worker w
     await h.start(task);
     const dev = h.advanceDev('README.md', 'Fixture\nDev note\n');
 
-    await h.train();
+    const adapter = {
+      ...agentAdapter('codex'),
+      start(options: Parameters<ReturnType<typeof agentAdapter>['start']>[0]): [string, string[]] {
+        const data = JSON.parse(options.prompt.split('\nDATA:\n')[1]!);
+        expect(data.sourceContract).toContain('goal: fixture');
+        expect(data.files[0]).toMatchObject({
+          path: 'README.md',
+          base: 'Fixture\n',
+          target: 'Fixture\nDev note\n',
+          source: 'Updated fixture\n',
+        });
+        return [
+          process.execPath,
+          ['-e', `require('node:fs').writeFileSync('README.md', 'Updated fixture\\nDev note\\n')`],
+        ];
+      },
+    };
+    await withAgentAdapter(adapter, async () => {
+      await new MergeTrain({
+        ...h.settings,
+        queue: h.queue,
+        fence: h.store,
+        sink: {
+          onGateOutcome(outcome) {
+            h.outcomes.push(outcome);
+            h.job.onGateOutcome(outcome);
+          },
+        },
+        trainResolver: new TrainResolver(h.store, h.tasks),
+      }).run();
+    });
+    await h.job.drain();
 
     const outcome = h.outcomes[0]!;
-    expect(outcome.passed).toBe(false);
+    expect(outcome.passed).toBe(true);
     expect(outcome.conflictedFiles).toEqual(['README.md']);
-    expect(outcome.firstFailure?.assertion).toContain('task-deleted lines remain: "Fixture"');
-    expect(readFileSync(outcome.logPath, 'utf8')).toContain('task-deleted lines remain: "Fixture"');
-    expect(outcome.mergedCommit).toBeUndefined();
-    expect(h.store.task(task.id).currentAttempt).toBeGreaterThan(1);
-    expect(h.store.task(task.id).state).not.toBe('integrated');
-    expect(h.head('dev')).toBe(dev);
+    expect(outcome).toMatchObject({ conflictResolution: { method: 'resolver', attempts: 1 } });
+    expect(readFileSync(outcome.logPath, 'utf8')).toContain('Dev landing conflict method=resolver');
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, state: 'integrated' });
+    expect(h.head('dev')).not.toBe(dev);
+    expect(git(h.root, 'show', 'dev:README.md')).toBe('Updated fixture\nDev note');
   } finally {
     h.dispose();
   }

@@ -1,0 +1,16 @@
+Work only in /work/t, at captured commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa. The applicable AGENTS.md is already loaded.
+
+The main checkout /repo is read-only.
+
+Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.
+
+The task contract follows:
+
+Read-only original journey.
+
+Unfinished work is not a blocker: if the contract does not fit this attempt, commit a coherent working part and return success with the remainder listed as follow-up.
+
+## Current controller launch context
+No controller launch context was supplied. Dependency status is unknown: build against each dependency contract.
+
+This registered original integrated journey proof has a task-scoped exception to minimal verification. Captured source: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; logical check UUID: 11111111-1111-4111-8111-111111111111. Product source, tests and contracts are read-only. Do not edit, typecheck, commit or land. Only check-owned ignored temporary or derived preparation under the original command is permitted. The controller has already started or replayed this one bound invocation. Use its current evidence; do not start an unbound worker-check or another invocation. Current owned check evidence: {"status":"unknown","cause":"Await controller evidence"}. If the supplied check is running, immediately end this turn with {"status":"waiting","checks":["11111111-1111-4111-8111-111111111111"]}. Goal resumes this same session from actual terminal records. Do not use --wait, ps, pgrep, log polling, duplicate invocation or an automatic model retry. The wrapper alone owns its one infrastructure rerun and holds the permit throughout. Use supplied terminal results exactly. Missing, unknown, timed out or nonzero wrapper results stay non-green. Route failed assertions and log evidence to the original Goal owner for a separate minimal product fix. Finish with structured success and checks:[] only after the owned terminal check passes; no source commit or landing is required.

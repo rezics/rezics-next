@@ -170,7 +170,9 @@ test('every worker can ask for research, and a research worker is told how to do
   expect(research).toContain('This is a research task');
   expect(research).toContain('.reference/<topic>/<project>/');
   expect(research).toContain('never install, build or run anything from them');
-  expect(research).toContain('write only inside /work/trees/t1 and the reference clones under /repo/main/.reference/.');
+  expect(research).toContain(
+    "write only inside /work/trees/t1 and the reference clones under that checkout's .reference/.",
+  );
   expect(implementation).not.toContain('and the reference clones');
 });
 
@@ -275,7 +277,7 @@ test('local placement renders the concrete declared argv, overrides saved remote
     expect(prompt).toContain(
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts' '-t' 'filter'\\''s phrase'",
     );
-    expect(prompt).toContain('overrides any older prompt, saved session, remote invocation or `--wait` recipe');
+    expect(prompt).toContain('Ignore older prompt, saved session, remote invocation or `--wait` recipes');
     expect(prompt.indexOf('The acceptance placement is local')).toBeGreaterThan(
       prompt.indexOf('The task contract follows:'),
     );
@@ -409,7 +411,8 @@ test('a worker is told where reference projects are and to read the ones its con
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('/repo/main/.reference/');
+  expect(prompt).toContain('/repo/main');
+  expect(prompt).toContain("the main checkout's .reference/");
   expect(prompt).toContain('read any reference source the contract names before designing');
 });
 
@@ -426,7 +429,6 @@ const MINIMAL_RULES = [
   'return success (blocker null, `"checks":[]`)',
   'the deferred acceptance, which is neither a blocker nor a reason to wait',
   'return waiting only for a still-running check UUID this attempt started',
-  'overrides contract, saved-session and retry-manifest instructions to run acceptance or to start or poll checks',
 ];
 
 test('minimal product policy keeps supported compiler placement and the open command session at final input', () => {
