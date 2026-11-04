@@ -24,6 +24,14 @@ export function homeFeedDestination(item: FeedItem, locale: string): string | un
     (item.key.id !== destination.id || item.summary.id !== destination.id)
   )
     return;
+  if (
+    destination.kind === 'space' &&
+    (item.key.owner !== 'content' ||
+      item.key.kind !== 'space' ||
+      !('address' in item.summary) ||
+      destination.address !== item.summary.address)
+  )
+    return;
   switch (destination.kind) {
     case 'subject':
       return subjectHref({ id: destination.id, label: homeFeedTitle(item, locale) }, locale).href;
@@ -49,6 +57,19 @@ export function homeFeedDestination(item: FeedItem, locale: string): string | un
         ? `/${encodeURIComponent(locale)}/spaces/${encodeURIComponent(destination.address)}`
         : undefined;
   }
+}
+
+/** A Realm link uses only the disclosed carrier on the exact native Space row. */
+export function homeFeedRealmDestination(item: FeedItem, locale: string): string | undefined {
+  const { destination, summary } = item;
+  if (
+    destination.kind !== 'space' ||
+    !homeFeedDestination(item, locale) ||
+    !('realm' in summary) ||
+    summary.realm == null
+  )
+    return;
+  return `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(summary.realm.id)}`;
 }
 
 export function homeFeedResume(item: FeedItem, locale: string): string | undefined {

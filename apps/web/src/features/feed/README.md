@@ -72,10 +72,14 @@ client. It retains the supplied title, canonical destination, cover/avatar, lang
 attributes, Continue progress, and separate resume link. Discovery Collections use the Commerce owner identity and
 open `/collections/{id}`; reviews keep their Content thread identity and current admitted work/citation; replies keep
 their exact post identity and may show a disclosed immediate parent; Spaces
-keep the current address and show a supplied Realm title only as carrier text. Collection curator and cover data,
+keep the exact admitted identity and address, and link a supplied Realm carrier by its native id. Collection curator
+and cover data,
 and review ratings, stay absent until their bounded public owner summaries supply them. The adapter performs no
 reads, does not rank or apply public/private predicates, and omits missing descriptive fields. Following
 Collections and Content thread/post summaries keep their existing native identities and actions.
+
+Decision: On a Space card, missing Realm facts stay unavailable, explicit null says no Realm is attached, and a
+supplied Realm identity remains linked when its title is null or empty; null and empty titles stay distinct.
 
 Home discussion and review cards also consume the selected thread's `conversationActivity` summary. A current
 public cohort shows its admitted reply count and original last-contribution time; lower-bound counts retain a
@@ -237,7 +241,8 @@ null or invalid occurrence remains Unknown and never falls back to creation, pro
 The installed destination discriminant selects work/Subject, discussion, reply, review, Collection, account or Space
 presentation. A Subject is labelled Work only when `creativeWork` is supplied. Replies open their exact post query
 and fragment, reviews open their thread rather than their reviewed Subject, and Spaces open their own admitted
-address rather than a carrier Realm. An unreadable destination stays unlinked. Source copy names only Discover,
+address with a separate link to a supplied carrier Realm. An unreadable destination stays unlinked. Source copy names
+only Discover,
 Following or Continue; it does not invent a followed person, endorsement, publication event or recommendation cause.
 
 Only current supplied data is projected. Missing Content authors use Unknown account, not a claim of deletion;
