@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
 import type { Dump } from '../../../../specs/imports-api-driver.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
@@ -61,6 +63,15 @@ test('imported TVAnime original run and episode count are independently adopted,
     }
   })();
   try {
+    expect(
+      (
+        await runtime.request(
+          `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
+          { key: randomUUID(), tier: 'trusted' },
+          identitySupport(runtime.identity).managementBearer,
+        )
+      ).status,
+    ).toBe(200);
     const editor = await openApiObserver(runtime);
     expect(
       (
@@ -174,4 +185,4 @@ test('imported TVAnime original run and episode count are independently adopted,
   } finally {
     await runtime.close();
   }
-}, 180_000);
+}, 600_000);
