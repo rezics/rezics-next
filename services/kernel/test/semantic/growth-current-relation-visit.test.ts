@@ -15,19 +15,17 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const route = 16000;
 const property = 'schema:character';
 const owner = newId(route);
-const target = newId(route);
+const targets = Array.from({ length: 20 }, () => newId(route));
 const routeKey = new Uint8Array(32).fill(29);
 const transaction = newId(route);
-const targetTransaction = newId(route);
-const body = {
+const bodies = targets.map((target) => ({
   property: { id: property },
   value: { type: 'value' as const, content: target },
   qualifiers: [],
   references: [],
-};
-const facts = itemFacts(owner, { type: 'schema:VideoGame', statements: { [property]: [body] } }, 'schema:VideoGame', bundledRelease);
-const current = facts.find((fact) => fact.kind === 'statement')!;
-const key = `${owner}\n${property}\n${current.statement_id}`;
+}));
+const facts = itemFacts(owner, { type: 'schema:VideoGame', statements: { [property]: bodies } }, 'schema:VideoGame', bundledRelease);
+const currentFacts = facts.filter((fact) => fact.kind === 'statement');
 let db: GrowthDatabase;
 
 beforeAll(async () => {
@@ -36,14 +34,13 @@ beforeAll(async () => {
   await db.admin.query(
     `INSERT INTO semantic.subject
       (route, subject_id, type, recorded_transaction_id, visibility, security_revision, current_facts, current_release, projection_pending)
-     VALUES ($1,$2,'schema:VideoGame',$3,'visible',0,0,$4,false),
-            ($1,$5,'schema:Person',$6,'visible',0,0,$4,false)`,
-    [route, owner, transaction, bundledDigest, target, targetTransaction],
+     VALUES ($1,$2,'schema:VideoGame',$3,'visible',0,$4,$5,false)`,
+    [route, owner, transaction, facts.length, bundledDigest],
   );
   await db.admin.query(
     `INSERT INTO semantic.revision (route, subject_id, revision, kind, release, recorded_transaction_id)
-     VALUES ($1,$2,1,'create',$3,$4), ($1,$5,1,'create',$3,$6)`,
-    [route, owner, bundledDigest, transaction, target, targetTransaction],
+     VALUES ($1,$2,1,'create',$3,$4)`,
+    [route, owner, bundledDigest, transaction],
   );
   const client = await db.admin.connect();
   try {
@@ -92,22 +89,23 @@ function assertBound(raw: Capture, scale: number) {
   for (const node of currentKeys) {
     for (const key of ['route', 'subject_id', 'slot_id', 'statement_id'])
       expect(String(node['Index Cond'])).toContain(key);
-    expect(examined(node)).toBeLessThanOrEqual(1);
+    expect(examined(node)).toBeLessThanOrEqual(20);
   }
   const subjectRows = scans.filter((node) => node['Relation Name'] === 'subject').reduce((n, node) => n + examined(node), 0);
   const candidateRows = scans.filter((node) => node['Relation Name'] === 'candidate').reduce((n, node) => n + examined(node), 0);
   const factRows = scans.filter((node) => node['Relation Name'] === 'fact').reduce((n, node) => n + examined(node), 0);
   const revisionRows = scans.filter((node) => node['Relation Name'] === 'revision').reduce((n, node) => n + examined(node), 0);
-  expect(subjectRows).toBeLessThanOrEqual(1);
-  expect(candidateRows).toBeLessThanOrEqual(1);
-  expect(factRows).toBeLessThanOrEqual(8);
-  expect(revisionRows).toBeLessThanOrEqual(2);
+  expect(subjectRows).toBeLessThanOrEqual(20);
+  expect(candidateRows).toBeLessThanOrEqual(20);
+  expect(factRows).toBeLessThanOrEqual(160);
+  expect(revisionRows).toBeLessThanOrEqual(40);
   for (const sort of planNodes.filter((node) => String(node['Node Type']).includes('Sort')))
-    expect(examined(sort)).toBeLessThanOrEqual(3);
-  console.info('Current relation keyed plan rows', { scale, subjectRows, candidateRows, factRows, revisionRows });
+    expect(examined(sort)).toBeLessThanOrEqual(60);
+  console.info('Current relation keyed plan rows', { scale, requestedKeys: currentFacts.length, subjectRows, candidateRows, factRows, revisionRows });
 }
 
 test('current relation key reads stay fixed across unrelated Subjects and obsolete selected-Subject revisions', async () => {
+  expect(currentFacts).toHaveLength(20);
   const routeValue = routeOf(owner)!;
   let unrelated = 0;
   let obsolete = 0;
@@ -172,41 +170,42 @@ test('current relation key reads stay fixed across unrelated Subjects and obsole
                   'qualifiers', '[]'::jsonb, 'references', '[]'::jsonb
                 ), $6, revision, 'proposal', 0, true
          FROM history`,
-        [encoded, routeValue, owner, current.slot_id, property, bundledDigest],
+        [encoded, routeValue, owner, currentFacts[0]!.slot_id, property, bundledDigest],
       );
       obsolete = scale;
     }
+    await db.admin.query('ANALYZE semantic.candidate');
     await db.admin.query('ANALYZE semantic.subject');
     await db.admin.query('ANALYZE semantic.fact');
     await db.admin.query('ANALYZE semantic.revision');
 
     const measure = async (slot?: string): Promise<readonly [number, number]> => {
+      const candidates = currentFacts.map((fact) => ({
+        subject: owner,
+        property,
+        candidate: fact.statement_id!,
+        target: (fact.body as { value: { content: string } }).value.content,
+        value: 'value' as const,
+        context: GLOBAL_CONTEXT,
+        ...(slot === undefined ? {} : { slot }),
+        requireRelation: true,
+      }));
       const measured = await capture(db, () =>
         withReadTransaction(db.pool, (client) =>
-          currentRelationFacts(client, routeKey, [
-            {
-              subject: owner,
-              property,
-              candidate: current.statement_id!,
-              target,
-              value: 'value',
-              context: GLOBAL_CONTEXT,
-              ...(slot === undefined ? {} : { slot }),
-              requireRelation: true,
-            },
-          ]),
+          currentRelationFacts(client, routeKey, candidates),
         ),
       );
-      expect(measured.value.get(key)?.statement_id).toBe(current.statement_id);
+      for (const fact of currentFacts)
+        expect(measured.value.get(`${owner}\n${property}\n${fact.statement_id}`)?.statement_id).toBe(fact.statement_id);
       assertBound(measured.capture, scale);
       return [
         measured.capture.plans.flatMap(nodes).filter((node) => node['Relation Name'] === 'subject').reduce((n, node) => n + examined(node), 0),
         measured.capture.plans.flatMap(nodes).filter((node) => node['Relation Name'] === 'fact').reduce((n, node) => n + examined(node), 0),
       ];
     };
-    measures.push(await measure(current.slot_id!));
+    measures.push(await measure(currentFacts[0]!.slot_id));
     measures.push(await measure());
   }
   expect(measures).toHaveLength(6);
-  expect(measures.every((sample) => sample[0] === 1 && sample[1] <= 8)).toBe(true);
+  expect(measures.every((sample) => sample[0] === 20 && sample[1] <= 160)).toBe(true);
 });
