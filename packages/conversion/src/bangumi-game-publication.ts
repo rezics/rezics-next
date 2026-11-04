@@ -18,10 +18,13 @@ export type BangumiGamePublication = {
 const empty: BangumiGamePublication = { facts: [], diagnostics: [] };
 
 /** One unqualified Game-template publication date, with the precision supplied by Bangumi. */
-export function bangumiGamePublication(record: {
-  readonly type: number;
-  readonly infobox?: string;
-}, scan: BangumiGameInfoboxScan = scanBangumiGameInfobox(record)): BangumiGamePublication {
+export function bangumiGamePublication(
+  record: {
+    readonly type: number;
+    readonly infobox?: string;
+  },
+  scan: BangumiGameInfoboxScan = scanBangumiGameInfobox(record),
+): BangumiGamePublication {
   if (!scan.handledInfobox) return empty;
   if (scan.overflow) return omission('/infobox', 'infobox_field_limit');
   if (scan.malformed) return omission('/infobox', 'unsupported_infobox_structure');

@@ -5,11 +5,7 @@ import { join } from 'node:path';
 import { converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
 import { converter_revision as entityRevision } from '../../../../packages/conversion/src/cross-media-entities.ts';
 import { crossMediaBangumiRevision } from '../../../importer/src/source-registry.ts';
-import {
-  crossMediaAliases,
-  emptyCrossMediaPlan,
-  seedCrossMedia,
-} from '../../../importer/src/cross-media-seed.ts';
+import { crossMediaAliases, emptyCrossMediaPlan, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import {
   captureShowcaseCommands,
@@ -22,7 +18,11 @@ import { openApiRuntime } from './api-runtime.ts';
 
 const gameId = 94002;
 const recordUrl = `https://bgm.tv/subject/${gameId}`;
-const expectedDate = { time: '+2006-04-00T00:00:00Z', precision: 10, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' };
+const expectedDate = {
+  time: '+2006-04-00T00:00:00Z',
+  precision: 10,
+  calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+};
 type ReadStatement = {
   value: { content: unknown };
   references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[];
@@ -95,9 +95,12 @@ test('selected Bangumi Game date is independently adopted, read at source precis
     const corrected = await importSelected('2006-04');
     expect(corrected.id).toBe(malformed.id);
     const candidates = (await candidatePage(corrected.id)).candidates;
-    const dateCandidate = candidates.find((candidate) =>
-      'source' in candidate && candidate.source && 'external_id' in candidate.source &&
-      candidate.source.external_id === String(gameId),
+    const dateCandidate = candidates.find(
+      (candidate) =>
+        'source' in candidate &&
+        candidate.source &&
+        'external_id' in candidate.source &&
+        candidate.source.external_id === String(gameId),
     );
     if (!dateCandidate || !('statement' in dateCandidate) || dateCandidate.statement.value.type !== 'value')
       throw new Error('Corrected Game date candidate was not acknowledged');
@@ -110,12 +113,18 @@ test('selected Bangumi Game date is independently adopted, read at source precis
     });
     expect(
       dateCandidate.statement.references?.some((reference) =>
-        reference.parts.some((part) => part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === recordUrl),
+        reference.parts.some(
+          (part) =>
+            part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === recordUrl,
+        ),
       ),
     ).toBe(true);
     expect(
-      (await publicClient.readSubject(corrected.id).then((read) => read.subject as { statements: Record<string, unknown[]> }))
-        .statements['schema:datePublished'],
+      (
+        await publicClient
+          .readSubject(corrected.id)
+          .then((read) => read.subject as { statements: Record<string, unknown[]> })
+      ).statements['schema:datePublished'],
     ).toBeUndefined();
 
     expect(
@@ -174,9 +183,14 @@ test('selected Bangumi Game date is independently adopted, read at source precis
     const fenced = await importSelected('2006-05');
     expect(fenced.id).toBe(corrected.id);
     const afterFence = (await candidatePage(fenced.id)).candidates;
-    expect(afterFence.some((candidate) => 'statement' in candidate && candidate.statement.value.type === 'value' && JSON.stringify(candidate.statement.value.content).includes('+2006-05'))).toBe(
-      false,
-    );
+    expect(
+      afterFence.some(
+        (candidate) =>
+          'statement' in candidate &&
+          candidate.statement.value.type === 'value' &&
+          JSON.stringify(candidate.statement.value.content).includes('+2006-05'),
+      ),
+    ).toBe(false);
     const after = await publicClient.readSubject(fenced.id);
     expect(
       (after.subject as { statements: Record<string, { value: { content: unknown } }[]> }).statements[

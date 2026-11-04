@@ -82,7 +82,11 @@ import {
 import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
-import { createSelectedFamilySourceRegistration, createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
+import {
+  createSelectedFamilySourceRegistration,
+  createSourceRegistration,
+  crossMediaBangumiRevision,
+} from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 import {

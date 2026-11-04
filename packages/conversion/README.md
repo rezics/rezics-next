@@ -1187,4 +1187,3 @@ platform, genre, player-count, summary or cover ownership.
 ## Bangumi Game publication date
 
 [Touches, Bound and Growth check](bangumi-game-publication.md).
-

@@ -92,13 +92,9 @@ function port(commands: BatchCommand[]) {
         subject: {
           id,
           type: types.get(id) ?? 'schema:Thing',
-          statements: externalId
-            ? { 'wdt:P5732': [{ value: { type: 'value', content: externalId } }] }
-            : {},
+          statements: externalId ? { 'wdt:P5732': [{ value: { type: 'value', content: externalId } }] } : {},
         },
-      } as unknown as Awaited<
-        ReturnType<CrossMediaPort['readReviewedSubject']>
-      >;
+      } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
   };
   return fixture satisfies CrossMediaPort & {
@@ -119,9 +115,9 @@ test('Bangumi Game publication keeps only the admitted infobox date through ordi
   const qualified = game('Japanese edition 2006-04-15');
   const sourceInput = { external_id: String(qualified.id), record_revision: null, record: qualified };
   const diagnostic = ordinary.convert(sourceInput, { source: alias, subjectId: randomUUID() });
-  expect(diagnostic.proposals.some((command) => command.op === 'propose' && command.statement.property.id === dateProperty)).toBe(
-    false,
-  );
+  expect(
+    diagnostic.proposals.some((command) => command.op === 'propose' && command.statement.property.id === dateProperty),
+  ).toBe(false);
   expect(diagnostic.diagnostics).toContainEqual({
     pointer: '/infobox/发行日期',
     code: 'unsupported_publication_date',
@@ -141,30 +137,24 @@ test('Bangumi Game publication keeps only the admitted infobox date through ordi
     const oldCommands = commands.map((command) => JSON.stringify(command));
     await importer.close();
 
-    const firstSelected = await seedCrossMedia(
-      selectedPlan(qualified),
-      path,
-      api,
-      undefined,
-      { providers: ['bangumi'] },
+    const firstSelected = await seedCrossMedia(selectedPlan(qualified), path, api, undefined, {
+      providers: ['bangumi'],
+    });
+    expect(firstSelected.readings.find((reading) => reading.externalId === '94001')?.subject.subject?.id).toBe(
+      subjectId,
     );
-    expect(firstSelected.readings.find((reading) => reading.externalId === '94001')?.subject.subject?.id).toBe(subjectId);
     expect(commands.some((command) => command.op === 'propose' && command.statement.property.id === dateProperty)).toBe(
       false,
     );
 
     const corrected = game('2006-04');
-    const refreshed = await seedCrossMedia(
-      selectedPlan(corrected),
-      path,
-      api,
-      undefined,
-      { providers: ['bangumi'] },
-    );
+    const refreshed = await seedCrossMedia(selectedPlan(corrected), path, api, undefined, { providers: ['bangumi'] });
     expect(refreshed.readings.find((reading) => reading.externalId === '94001')?.subject.subject?.id).toBe(subjectId);
     const selectedDate = commands.find(
       (command): command is Extract<BatchCommand, { op: 'propose' }> =>
-        command.op === 'propose' && command.source.external_id === '94001' && command.statement.property.id === dateProperty,
+        command.op === 'propose' &&
+        command.source.external_id === '94001' &&
+        command.statement.property.id === dateProperty,
     );
     expect(selectedDate?.statement.value).toEqual({
       type: 'value',

@@ -111,7 +111,7 @@ export function scanBangumiGameInfobox(record: {
       active.continued = true;
     }
 
-    for (let index = 0; index < line.length; ) {
+    for (let index = 0; index < line.length;) {
       if (line.startsWith('{{', index)) {
         depth += 1;
         if (depth > 2) malformed = true;
@@ -176,10 +176,13 @@ function parseCount(field: BangumiGameInfoboxField): {
 }
 
 /** Type-4 pinned `{{Infobox Game` 游玩人数 only: unqualified count or inclusive range. */
-export function bangumiGamePlayerCount(record: {
-  readonly type: number;
-  readonly infobox?: string;
-}, scan = scanBangumiGameInfobox(record)): GamePlayerCountMapping {
+export function bangumiGamePlayerCount(
+  record: {
+    readonly type: number;
+    readonly infobox?: string;
+  },
+  scan = scanBangumiGameInfobox(record),
+): GamePlayerCountMapping {
   if (!scan.handledInfobox) return { handledInfobox: false, facts: [], diagnostics: [] };
 
   const diagnostics: ConversionDiagnostic[] = [];

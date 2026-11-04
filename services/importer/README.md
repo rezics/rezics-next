@@ -2774,4 +2774,3 @@ projections, so this delivery claims no page/index acceptance.
 ### Bangumi Game first publication date
 
 [Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
-

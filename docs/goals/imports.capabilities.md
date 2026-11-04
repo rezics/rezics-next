@@ -1608,4 +1608,3 @@ A selected type-4 Game keeps top-level `subject.platform` as the profile selecto
 ## Bangumi Game first publication date
 
 [Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
-
