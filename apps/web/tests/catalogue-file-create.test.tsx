@@ -227,7 +227,7 @@ test('A contributor reviews a file grain, repairs a nested citation, copies evid
       await act(async () => user.click(button!));
     }
     await addProperty('schema:sameAs');
-    await addProperty('schema:sha256');
+    await addProperty('wdt:P4092');
     expect(host.textContent).toContain(m.catalogue_file_hash_statement());
     const same = host.querySelector('[id^="catalogue-file-initial-"]') as HTMLElement;
     const urls = within(same).getAllByRole('textbox');
@@ -330,8 +330,15 @@ async function chooseTypeAndName(
   type: string,
   label: string,
 ) {
-  await act(async () => page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), type));
-  await act(async () => page.user.type(page.canvas.getByRole('textbox', { name: page.m.catalogue_create_label() }), label));
+  await act(async () =>
+    page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), type),
+  );
+  await act(async () =>
+    page.user.type(page.canvas.getByRole('textbox', { name: page.m.catalogue_create_language() }), 'en'),
+  );
+  await act(async () =>
+    page.user.type(page.canvas.getByRole('textbox', { name: page.m.catalogue_create_label() }), label),
+  );
 }
 
 test('the mounted file visit keeps definitions when eligibility is refused, unknown, or guest', async () => {
@@ -341,30 +348,34 @@ test('the mounted file visit keeps definitions when eligibility is refused, unkn
   const page = await fileCreateSession();
   try {
     await page.waitFor(() =>
-      expect(page.canvas.getByRole('alert')).toHaveTextContent(page.m.identity_intake_authority_refused_permission()),
+      expect(page.canvas.getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
     );
     expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
-    await act(async () =>
-      page.user.type(page.canvas.getByRole('textbox', { name: page.m.catalogue_create_label() }), 'Kept draft'),
-    );
-    expect(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })).toBeDisabled();
+    await chooseTypeAndName(page, 'schema:MediaObject', 'Kept draft');
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(commands).toHaveLength(0);
 
     observe = async () => ({ state: 'unknown', reason: 'unavailable' });
     await page.refresh();
     await page.waitFor(() =>
-      expect(page.canvas.getByRole('alert')).toHaveTextContent(page.m.identity_intake_authority_unknown()),
+      expect(page.canvas.getByRole('alert').textContent).toContain(page.m.identity_intake_authority_unknown()),
     );
     expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
-    expect(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })).toBeDisabled();
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
 
     viewer = { state: 'signed-out', subject: null, csrfToken: null };
     await page.refresh();
-    await page.waitFor(() =>
-      expect(page.host.textContent).toContain(page.m.identity_intake_authority_guest()),
-    );
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_guest()));
     expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
-    expect(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })).toBeDisabled();
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(commands).toHaveLength(0);
   } finally {
     await page.close();
@@ -384,9 +395,13 @@ test('revoking create grant after an allowed read cannot prepare a fresh file cr
     observe = async () => ({ state: 'refused', reason: 'permission' });
     await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })));
     await page.waitFor(() =>
-      expect(page.canvas.getByRole('alert')).toHaveTextContent(page.m.identity_intake_authority_refused_permission()),
+      expect(page.canvas.getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
     );
-    expect(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })).toBeDisabled();
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(commands).toHaveLength(0);
   } finally {
     await page.close();
@@ -478,12 +493,18 @@ test('viewer replacement drops a late allowed observation; uncertain retry keeps
     viewer = { state: 'signed-in', subject: 'bob', csrfToken: 'csrf-bob' };
     await page.refresh();
     await page.waitFor(() =>
-      expect(page.canvas.getByRole('alert')).toHaveTextContent(page.m.identity_intake_authority_refused_permission()),
+      expect(page.canvas.getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
     );
     pending?.(allowedCreateAuthority);
     await act(async () => undefined);
-    expect(page.canvas.getByRole('alert')).toHaveTextContent(page.m.identity_intake_authority_refused_permission());
-    expect(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })).toBeDisabled();
+    expect(page.canvas.getByRole('alert').textContent).toContain(
+      page.m.identity_intake_authority_refused_permission(),
+    );
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(commands).toHaveLength(0);
   } finally {
     await page.close();
