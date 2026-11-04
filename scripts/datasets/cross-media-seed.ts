@@ -31,8 +31,7 @@ export async function runDevelopmentSeed(
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
   const showcase = join(root, '.temp', 'cross-media-seed', 'showcase.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
-  const catalogueState = join(root, '.temp', 'cross-media-seed', 'reviewed-vocabulary.sqlite');
-  await mkdir(dirname(catalogueState), { recursive: true });
+  await mkdir(dirname(state), { recursive: true });
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: accountKey,
     account,
@@ -41,7 +40,7 @@ export async function runDevelopmentSeed(
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
   const reviewedCatalogue = await seedReviewedCatalogue({
-    path: catalogueState,
+    path: state,
     port: createImportTransport({ origin: api, tokenProvider }),
   });
   await (options.runSeed ?? runCrossMediaSeedCli)(
