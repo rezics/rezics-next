@@ -2366,6 +2366,7 @@
   "settings_notifications_use_current": "使用当前值",
   "settings_notifications_reading": "正在加载当前通知设置…",
   "settings_notifications_read_failed": "无法加载当前通知设置",
+  "settings_notifications_confirmed_text": "原始保存已确认，但当前通知设置仍不可用。请重新加载以查看最新值。",
   "settings_notifications_read_unavailable": "通知设置暂时不可用，请重新加载。",
   "settings_notifications_read_denied": "当前登录身份无权读取通知设置。请确认帐号访问权限后重试。",
   "settings_notifications_read_closed": "目前无法加载通知设置。请稍后重新加载，查看当前设置。",

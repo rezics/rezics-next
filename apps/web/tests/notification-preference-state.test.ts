@@ -344,7 +344,8 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
           { code: 'platform_closed', retryable: false, request_id: `native-${step}` },
           { status: 403, headers: { 'retry-after': '20' } },
         );
-      return Response.json(accountEnvelope(currentNotifications, step === 4 ? 10 : 11));
+      if (step === 4) return Response.json(accountEnvelope({ ...receiptNotifications, mention: false }, 8));
+      return Response.json(accountEnvelope(currentNotifications, step === 5 ? 10 : 11));
     }, 'POST');
     const confirmed: number[] = [];
     const editor = new NotificationEditor(page, {
@@ -390,6 +391,13 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     now += 20_000;
     await editor.reload();
     expect(editor.snapshot()).toMatchObject({
+      phase: 'failed',
+      currentAdvice: null,
+      readReason: 'unavailable',
+      confirmedReceipt: { receipt: { version: 8, notifications: receiptNotifications } },
+    });
+    await editor.reload();
+    expect(editor.snapshot()).toMatchObject({
       phase: 'review',
       known: { notifications: currentNotifications, version: 10 },
       pending: null,
@@ -397,7 +405,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       draft: { ...currentNotifications, thread_watch: true },
       intent: { mention: false, thread_watch: true },
     });
-    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'GET']);
+    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'GET', 'GET']);
     expect(transport.calls[1]!.headers.get('idempotency-key')).toBe(transport.calls[0]!.headers.get('idempotency-key'));
     expect(await transport.calls[1]!.clone().text()).toBe(await transport.calls[0]!.clone().text());
     await editor.edit('thread_watch', false, 9);
@@ -414,9 +422,10 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       'PATCH',
       'GET',
       'GET',
+      'GET',
       'PATCH',
     ]);
-    expect(transport.sessionReads()).toBe(5);
+    expect(transport.sessionReads()).toBe(6);
     expect(confirmed).toEqual([10, 11]);
     expect(editor.snapshot()).toMatchObject({
       phase: 'saved',
