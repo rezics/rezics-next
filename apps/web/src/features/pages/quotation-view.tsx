@@ -154,7 +154,7 @@ function AssertionGate({
 }) {
   const o = option(locale);
   return spoiler ? (
-    <SpoilerGate label={m.thread_reveal_spoiler({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+    <SpoilerGate label={m.thread_reveal_spoiler({}, o)} hideLabel={m.subject_spoiler_hide({}, o)} unmountOnHide>
       {children}
     </SpoilerGate>
   ) : (
