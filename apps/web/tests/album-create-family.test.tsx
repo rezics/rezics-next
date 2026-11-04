@@ -248,7 +248,11 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect([...field.options].some((option) => option.value === 'schema:datePublished')).toBe(false);
     const credit = await add(scope, 'schema:contributor');
     frame(credit, 3);
-    expect(within(credit).getByRole('heading', { level: 3, name: longLabel }).textContent).toBe(longLabel);
+    const creditHeading = within(credit).getByRole('heading', {
+      level: 3,
+      name: /^Artist credit — Full released multilingual name/,
+    });
+    expect(creditHeading.textContent).toBe(longLabel);
     await chooseTarget(credit, longLabel, 'Harbour', /The Harbour Ensemble/);
     await select(credit, m.relation_qualifier(), 'wdt:P1932');
     const creditedAs = textbox(credit, name(fixture, 'wdt:P1932'));
