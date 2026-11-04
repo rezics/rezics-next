@@ -1135,8 +1135,8 @@ function PostComposerContent<T, Context = undefined>({
         <SlowModeEligibility
           boardId={boardId}
           refusal={failure}
-          scopeKey={slowModeScopeKey}
-          credentialMode={slowModeCredentialMode}
+          {...(slowModeScopeKey === undefined ? {} : { scopeKey: slowModeScopeKey })}
+          {...(slowModeCredentialMode === undefined ? {} : { credentialMode: slowModeCredentialMode })}
           advice={slowModeAdvice}
         />
       ) : null}
