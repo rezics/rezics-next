@@ -201,7 +201,7 @@ export function workFranchiseGroups(
       more: !window.complete || !!window.next || !current,
     };
   });
-  let remaining = WORK_FRANCHISE_PREVIEW.total;
+  let remaining: number = WORK_FRANCHISE_PREVIEW.total;
   for (let row = 0; row < WORK_FRANCHISE_PREVIEW.perStream && remaining > 0; row++) {
     for (const group of groups) {
       const relation = group.relations[row];
