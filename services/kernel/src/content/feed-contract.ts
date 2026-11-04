@@ -110,8 +110,10 @@ const reactionFreshness = t.Unsafe<ReactionCountFreshness>(
 );
 /** Feed-local only: Semantic summaries and public Search caches carry no viewer slot. */
 const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
-export const FeedSubjectReactionKindSchema = t.Union(subjectReactionKinds.map((kind) => t.Literal(kind)));
-export type FeedSubjectReactionKind = Static<typeof FeedSubjectReactionKindSchema>;
+export type FeedSubjectReactionKind = (typeof subjectReactionKinds)[number];
+export const FeedSubjectReactionKindSchema = t.Unsafe<FeedSubjectReactionKind>(
+  t.Union(subjectReactionKinds.map((kind) => t.Literal(kind))),
+);
 const subjectReactionCounts = t.Object(
   {
     like: t.Optional(t.Integer({ minimum: 1 })),

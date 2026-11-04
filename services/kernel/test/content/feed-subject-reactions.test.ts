@@ -46,8 +46,13 @@ test('selected native Subject projections distinguish coverage, five kinds, clea
         counts: { state: 'available', values: { [kind]: 1 } }, viewer: { state: 'available', kind }, action: 'allowed',
       } });
     }
+    const late = await prepare();
+    await write('love');
+    expect((await late.finish())[0]!.summary).toMatchObject({ subjectReactions: {
+      counts: { state: 'available', values: { love: 1 } }, viewer: { kind: 'love' },
+    } });
     expect(await read(world.system.actors.author.actor)).toMatchObject({ subjectReactions: {
-      viewer: { state: 'available', kind: null }, counts: { values: { sad: 1 } },
+      viewer: { state: 'available', kind: null }, counts: { values: { love: 1 } },
     } });
     await write(null);
     expect(await read()).toMatchObject({ subjectReactions: {
@@ -69,7 +74,7 @@ test('selected native Subject projections distinguish coverage, five kinds, clea
       expect(trace.records.filter(({ statement }) => statement.includes('content.reaction_total'))).toHaveLength(1);
       expect(trace.records.filter(({ statement }) => statement.includes('content.reaction AS'))).toHaveLength(0);
       trace.armFault({ match: { statement: counts.sql }, boundary: 'before', error: new Error('Count home unavailable') });
-      await expect(prepare()).rejects.toThrow('Count home unavailable');
+      await expect((await prepare()).finish()).rejects.toThrow('Count home unavailable');
       expect(await read()).toMatchObject({ subjectReactions: { viewer: { kind: null }, counts: { values: {} } } });
     } finally { await trace.close(); }
 

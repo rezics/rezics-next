@@ -86,34 +86,6 @@ export async function prepareFeedSubjectReactions(
   }, deadline);
 
   const initial = await observe();
-  const targets = [...initial.observed.keys()].map((id) => ({ id }));
-  // Native totals retain coverage and source watermarks, including zero rows after
-  // a clear. A missing row is unknown; it is never manufactured as a zero map.
-  const counted = await withReactionCountsAndCoverage(dependencies, targets, deadline);
-  const viewed = await withViewerReactions(dependencies, actor, counted.items, deadline);
-  const coverage = new Map(counted.targetFreshness.map(({ id, source }) => [id, source]));
-  const projections = new Map<string, FeedSubjectReactions>();
-  for (const target of viewed) {
-    const values: Partial<Record<FeedSubjectReactionKind, number>> = {};
-    for (const [kind, count] of Object.entries(target.reactions)) {
-      if (!isKind(kind)) throw new TypeError('Invalid feed Subject reaction kind');
-      values[kind] = count;
-    }
-    const source = coverage.get(target.id);
-    const viewerKind = target.viewerReaction;
-    if (viewerKind !== undefined && viewerKind !== null && !isKind(viewerKind))
-      throw new TypeError('Invalid feed Subject viewer reaction kind');
-    projections.set(target.id, {
-      target: { targetKind: 'subject', targetId: target.id },
-      counts: source ? { state: 'available', values, asOf: source } : { state: 'unavailable' },
-      ...(actor.kind === 'account' ? {
-        viewer: Object.hasOwn(target, 'viewerReaction') && viewerKind !== undefined
-          ? { state: 'available' as const, kind: viewerKind }
-          : { state: 'unavailable' as const },
-      } : {}),
-      action: actor.kind === 'anonymous' ? 'sign_in' : source ? 'denied' : 'unavailable',
-    });
-  }
   return {
     async finish() {
       if (finished || JSON.stringify(actor) !== readerWitness)
@@ -121,6 +93,34 @@ export async function prepareFeedSubjectReactions(
       // A retry opens a new preparation at the same page frontier. This handle
       // must never replay a retained viewer slot in another request lifetime.
       finished = true;
+      const targets = [...initial.observed.keys()].map((id) => ({ id }));
+      // Native totals retain coverage and source watermarks, including zero rows after
+      // a clear. A missing row is unknown; it is never manufactured as a zero map.
+      const counted = await withReactionCountsAndCoverage(dependencies, targets, deadline);
+      const viewed = await withViewerReactions(dependencies, actor, counted.items, deadline);
+      const coverage = new Map(counted.targetFreshness.map(({ id, source }) => [id, source]));
+      const projections = new Map<string, FeedSubjectReactions>();
+      for (const target of viewed) {
+        const values: Partial<Record<FeedSubjectReactionKind, number>> = {};
+        for (const [kind, count] of Object.entries(target.reactions)) {
+          if (!isKind(kind)) throw new TypeError('Invalid feed Subject reaction kind');
+          values[kind] = count;
+        }
+        const source = coverage.get(target.id);
+        const viewerKind = target.viewerReaction;
+        if (viewerKind !== undefined && viewerKind !== null && !isKind(viewerKind))
+          throw new TypeError('Invalid feed Subject viewer reaction kind');
+        projections.set(target.id, {
+          target: { targetKind: 'subject', targetId: target.id },
+          counts: source ? { state: 'available', values, asOf: source } : { state: 'unavailable' },
+          ...(actor.kind === 'account' ? {
+            viewer: Object.hasOwn(target, 'viewerReaction') && viewerKind !== undefined
+              ? { state: 'available' as const, kind: viewerKind }
+              : { state: 'unavailable' as const },
+          } : {}),
+          action: actor.kind === 'anonymous' ? 'sign_in' : source ? 'denied' : 'unavailable',
+        });
+      }
       // Re-evaluate prepared Access/account evidence and exact identity after every
       // count/slot checkout. An alias change retires the original card entirely.
       const final = await observe();

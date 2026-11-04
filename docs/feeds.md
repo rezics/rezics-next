@@ -409,7 +409,8 @@ its reaction slot is never rebound to a survivor card.
 The composition deduplicates selected IDs before count/slot reads, groups identity checks by represented home and
 uses the installed native coverage and viewer readers. It copies selected Subject cards before preparation and
 never mutates the source summary. A preparation is single-use and retires if its reader operands change; retries
-prepare again at the same source frontier. Initial and final identity checks include visibility, latest redirect, current
+prepare again at the same source frontier. Counts and slots are loaded inside finish after foreign hydration,
+then current identity and Access are rechecked before disclosure. Initial and final identity checks include visibility, latest redirect, current
 type and security revision. Native reaction aggregation and merge reconciliation retain their existing owners.
 Dependency failure propagates to the page owner rather than returning a guessed count or authenticated null slot.
 
@@ -421,7 +422,7 @@ Dependency failure propagates to the page owner rather than returning a guessed 
   snapshot (`BEGIN`, statement timeout, partition binding and `COMMIT`, or `ROLLBACK`). Foreign Access preparation
   releases its connections before either snapshot; include its native Account/Auth, grant/denial, scope, eligibility,
   operator and client pool work from the installed Access producers, not just the outer Kernel statements. Retained
-  native Subject summaries, their copies, identity rows, sparse five-kind maps, target watermarks and viewer slots
+  native Subject summaries, their copies, reader-operand snapshots, identity rows, sparse five-kind maps, target watermarks and viewer slots
   all count toward materialized and serialized UTF-8 bytes. A failed preparation returns no partial projection and
   a same-input retry repeats preparation, reads and confirmation; page source retry remains the assembler's work.
 - **Bound:** S <= 20 selected unique Subjects, H <= S represented partitions, five admitted Subject kinds, and the
