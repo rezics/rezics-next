@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { idempotencyKeyOf } from '../../../services/kernel/src/http/request.ts';
 import { operationGroups } from '../src/kernel/exposure';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
@@ -342,6 +341,7 @@ test('verification request and withdrawal serialize the original key once throug
         expect(sent.method).toBe('POST');
         expect(new URL(sent.url).pathname).toBe(`/v1/accounts/alice:$${operation}Verification`);
         expect(sent.headers.get('authorization')).toBe('Bearer token');
+        const { idempotencyKeyOf } = await import('../../../services/kernel/src/http/request.ts');
         expect(idempotencyKeyOf(sent.headers.get('idempotency-key'))).toBe(idempotencyKey);
         expect(await sent.clone().json()).toEqual(
           operation === 'request'
