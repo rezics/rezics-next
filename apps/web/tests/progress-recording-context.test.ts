@@ -212,7 +212,18 @@ test('Record and correct exact progress and a selected-field journal with retain
   const page = await readProgressSession({ data: { id } });
   const queries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   queries.setQueryData(['session'], { state: 'signed-in', csrfToken: 'recording-csrf', subject: 'owner' });
-  queries.setQueryData(['exposure', 'viewer'], ['reading_progress']);
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+  const observation = viewerExposureLifetime(queries);
+  const stopObservation = observation.subscribe(() => {});
+  const admit = () => {
+    const current = observation.getSnapshot();
+    if (current.state !== 'signed-in') throw new Error('Expected prepared recording viewer');
+    queries.setQueryData(viewerExposureQuery(current.observation).queryKey, {
+      subject: 'owner',
+      admitted: ['reading_progress'],
+    });
+  };
+  admit();
   queries.setQueryData(['exposure', 'anonymous'], []);
   const originating = {
     viewer: 'owner',
@@ -334,9 +345,10 @@ test('Record and correct exact progress and a selected-field journal with retain
       resolveJournal!({ kind: 'saved', journal });
     });
     expect(host.textContent).not.toContain('Original private reflection');
-    await act(async () =>
-      queries.setQueryData(['session'], { state: 'signed-in', csrfToken: 'recording-csrf', subject: 'owner' }),
-    );
+    await act(async () => {
+      queries.setQueryData(['session'], { state: 'signed-in', csrfToken: 'recording-csrf', subject: 'owner' });
+      admit();
+    });
     await act(async () => button(m.library_occurrence_read_current()).click());
     expect(journalWrites).toHaveLength(1);
     expect(journalSection().textContent).toContain(m.library_journal_retry_identity());
@@ -361,6 +373,7 @@ test('Record and correct exact progress and a selected-field journal with retain
     expect(journalWrites[3]?.key).not.toBe(journalWrites[2]?.key);
   } finally {
     await act(async () => root.unmount());
+    stopObservation();
     queries.clear();
     window.close();
     for (const [key, descriptor] of previous) {
