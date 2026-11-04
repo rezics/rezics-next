@@ -871,7 +871,6 @@ export async function planCrossMediaSeed(
       !characters.has(characterId)
     )
       continue;
-    const work = String(subjectId);
     const character = `character:${characterId}`;
     member({
       source: 'bangumi',
