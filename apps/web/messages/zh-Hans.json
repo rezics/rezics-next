@@ -9174,5 +9174,10 @@
   "arc_reader_page_address": "当前页面地址",
   "arc_reader_start_address": "所选数据流的起点",
   "arc_reader_arc_filter": "精确故事篇章筛选",
-  "arc_reader_direction": "已发布的方向"
+  "arc_reader_direction": "已发布的方向",
+  "profile_contribution_action_denied": "当前不允许此操作。",
+  "profile_contribution_action_missing": "缺少此操作的当前提示。",
+  "profile_contribution_action_withheld": "此操作的提示不予公开。",
+  "profile_contribution_action_not_applicable": "此操作不适用于这条贡献。",
+  "profile_contribution_action_failed": "无法加载当前操作提示，请重试。"
 }

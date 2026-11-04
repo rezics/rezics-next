@@ -9266,5 +9266,10 @@
   "arc_reader_page_address": "Current page address",
   "arc_reader_start_address": "Start of the selected stream",
   "arc_reader_arc_filter": "Exact story arc filter",
-  "arc_reader_direction": "Released direction"
+  "arc_reader_direction": "Released direction",
+  "profile_contribution_action_denied": "This action is currently not allowed.",
+  "profile_contribution_action_missing": "Current advice for this action is missing.",
+  "profile_contribution_action_withheld": "Advice for this action is withheld.",
+  "profile_contribution_action_not_applicable": "This action does not apply to this contribution.",
+  "profile_contribution_action_failed": "Current action advice could not be loaded. Retry to check again."
 }

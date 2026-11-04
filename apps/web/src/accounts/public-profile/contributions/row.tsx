@@ -13,7 +13,12 @@ import { accountHref } from '../../../subject/subject-href';
 import { coverSrc } from '../../../media/cover-src';
 import { m } from '../../../paraglide/messages.js';
 import { locales, type Locale } from '../../../paraglide/runtime.js';
-import { rememberContribution, restoreContribution, restoreContributionRecovery } from './navigation';
+import {
+  rememberContribution,
+  restoreContribution,
+  restoreContributionRecovery,
+  contributionReturnOccurrence,
+} from './navigation';
 
 export type ContributionKind = 'reply' | 'review' | 'discussion';
 
@@ -109,6 +114,7 @@ function ContributionVisit({
   const locale = locales.find((candidate) => candidate === value.locale) ?? 'en';
   const options = { locale };
   const id = key(item.id) ? item.id : '';
+  const occurrence = contributionReturnOccurrence(item);
   useEffect(() => {
     if (!root.current || !id) return;
     const restore = () => {
@@ -122,7 +128,7 @@ function ContributionVisit({
       window.removeEventListener('pageshow', restore);
       window.removeEventListener('popstate', restore);
     };
-  }, [id]);
+  }, [id, occurrence]);
   // Refuse replacement/hidden rows even if a stale composition contains their old authored fields.
   if (!publicItem(item) || (kind !== 'reply' && item.kind !== kind)) return null;
   const first =
@@ -161,14 +167,18 @@ function ContributionVisit({
         if (!(target instanceof Element)) return;
         const link = target.closest('a[href]');
         const destination = link?.getAttribute('href');
-        if (id && destination) rememberContribution(id, destination);
+        if (id && destination) rememberContribution(id, destination, window, occurrence);
       }}
       title={title}
       {...(href ? { href } : {})}
       headingLevel={3}
       context={<span data-profile-contribution-kind={kind}>{feedCardKindLabel(kind, locale)}</span>}
       metadata={
-        <div className="min-w-0 space-y-1" data-profile-contribution-id={id}>
+        <div
+          className="min-w-0 space-y-1"
+          data-profile-contribution-id={id}
+          data-profile-contribution-occurrence={occurrence}
+        >
           <span className="flex min-w-0 flex-wrap items-center gap-x-2">
             <span>{m.home_card_by({}, options)}</span>
             {author?.handle ? (

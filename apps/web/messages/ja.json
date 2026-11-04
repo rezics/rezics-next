@@ -9174,5 +9174,10 @@
   "arc_reader_page_address": "現在のページアドレス",
   "arc_reader_start_address": "選択したストリームの先頭",
   "arc_reader_arc_filter": "正確なストーリーアークの絞り込み",
-  "arc_reader_direction": "公開された方向"
+  "arc_reader_direction": "公開された方向",
+  "profile_contribution_action_denied": "この操作は現在許可されていません。",
+  "profile_contribution_action_missing": "この操作の現在の案内がありません。",
+  "profile_contribution_action_withheld": "この操作の案内は非公開です。",
+  "profile_contribution_action_not_applicable": "この操作はこの投稿には適用されません。",
+  "profile_contribution_action_failed": "現在の操作の案内を読み込めませんでした。再試行してください。"
 }

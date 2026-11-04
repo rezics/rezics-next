@@ -9174,5 +9174,10 @@
   "arc_reader_page_address": "目前頁面位址",
   "arc_reader_start_address": "所選資料流的起點",
   "arc_reader_arc_filter": "精確故事篇章篩選",
-  "arc_reader_direction": "已發布的方向"
+  "arc_reader_direction": "已發布的方向",
+  "profile_contribution_action_denied": "目前不允許此操作。",
+  "profile_contribution_action_missing": "缺少此操作的目前提示。",
+  "profile_contribution_action_withheld": "此操作的提示不予公開。",
+  "profile_contribution_action_not_applicable": "此操作不適用於這則貢獻。",
+  "profile_contribution_action_failed": "無法載入目前操作提示，請重試。"
 }

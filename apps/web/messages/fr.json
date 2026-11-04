@@ -9174,5 +9174,10 @@
   "arc_reader_page_address": "Adresse de la page actuelle",
   "arc_reader_start_address": "Début du flux sélectionné",
   "arc_reader_arc_filter": "Filtre exact de l’arc narratif",
-  "arc_reader_direction": "Direction publiée"
+  "arc_reader_direction": "Direction publiée",
+  "profile_contribution_action_denied": "Cette action n’est pas autorisée actuellement.",
+  "profile_contribution_action_missing": "Les informations actuelles sur cette action sont absentes.",
+  "profile_contribution_action_withheld": "Les informations sur cette action ne sont pas divulguées.",
+  "profile_contribution_action_not_applicable": "Cette action ne s’applique pas à cette contribution.",
+  "profile_contribution_action_failed": "Impossible de charger les informations actuelles sur les actions. Réessayez."
 }

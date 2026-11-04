@@ -9174,5 +9174,10 @@
   "arc_reader_page_address": "Aktuelle Seitenadresse",
   "arc_reader_start_address": "Anfang des gewählten Datenstroms",
   "arc_reader_arc_filter": "Genauer Handlungsbogenfilter",
-  "arc_reader_direction": "Freigegebene Richtung"
+  "arc_reader_direction": "Freigegebene Richtung",
+  "profile_contribution_action_denied": "Diese Aktion ist derzeit nicht erlaubt.",
+  "profile_contribution_action_missing": "Aktuelle Hinweise zu dieser Aktion fehlen.",
+  "profile_contribution_action_withheld": "Hinweise zu dieser Aktion werden zurückgehalten.",
+  "profile_contribution_action_not_applicable": "Diese Aktion ist für diesen Beitrag nicht anwendbar.",
+  "profile_contribution_action_failed": "Aktuelle Aktionshinweise konnten nicht geladen werden. Versuche es erneut."
 }
