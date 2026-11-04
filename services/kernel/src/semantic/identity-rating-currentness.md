@@ -82,6 +82,8 @@ selection to its read-only `assertHeldAdmission` in that same transaction. Its s
 ownership uses `core.partition.node` and its monotonic `epoch`; selected owner fields
 must match them. The root never updates its owner incarnation and cannot revive after
 reclamation. Moving away and back therefore cannot authorize terminal replay.
+Every journal method holds the native owner row lock through the command fence,
+including checkpoint and compact-proof reads, so ownership cannot change during verification.
 
 Acknowledgement and the producer's frontier advancement belong in the same transaction.
 The journal retains the actual native frontier, phase, revision and selected-page digest,

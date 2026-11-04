@@ -76,11 +76,11 @@ function same(left: unknown, right: unknown): boolean {
     Object.hasOwn(right, key) && same(Reflect.get(left, key), Reflect.get(right, key)));
 }
 
-async function owner(tx: CommandTransaction, lock: boolean): Promise<Owner> {
+async function owner(tx: CommandTransaction): Promise<Owner> {
   const partition = currentCommand(tx).partition;
   const row = (await tx.query<Owner>(
     `SELECT node,epoch,position::text FROM core.partition
-     WHERE partition_no=$1 AND write_state='active'${lock ? ' FOR UPDATE' : ''}`, [partition],
+     WHERE partition_no=$1 AND write_state='active' FOR UPDATE`, [partition],
   )).rows[0];
   if (!row) throw stale();
   return row;
@@ -125,7 +125,7 @@ export async function commitIdentityRatingJournalPage(
   if (!bound?.binding.native) throw new TypeError('Native identity rating page required');
   const selection = Object.freeze({ scope: identity.scope, ...bound });
   await producer.assertHeldAdmission(tx, selection);
-  const native = await owner(tx, true);
+  const native = await owner(tx);
   const { page, binding } = bound;
   if (binding.ownerId !== native.node || binding.ownerRevision !== String(native.epoch)) throw stale();
   const partition = currentCommand(tx).partition;
@@ -176,7 +176,7 @@ export async function acknowledgeIdentityRatingJournalPage(
   binding: IdentityRatingPageBinding,
   receipt: IdentityRatingCommitReceipt,
 ): Promise<boolean> {
-  const native = await owner(tx, true);
+  const native = await owner(tx);
   const { scope, partition, key, row } = await journal(tx, input, true);
   if (!row || !current(row, native) || row.reclaimed || !binding.native) return false;
   const retained = await pageRow(tx, partition, key, binding.digest);
@@ -202,7 +202,7 @@ export async function acknowledgeIdentityRatingJournalPage(
 
 /** Full scope keys and current native ownership are checked even on terminal replay. */
 export async function readIdentityRatingJournalCheckpoint(tx: CommandTransaction, input: IdentityRatingRepairScope) {
-  const native = await owner(tx, false);
+  const native = await owner(tx);
   const { scope, row } = await journal(tx, input, false);
   if (!row) return null;
   if (!current(row, native)) throw stale();
@@ -215,7 +215,7 @@ export async function readIdentityRatingJournalPage(
   input: IdentityRatingRepairScope,
   binding: IdentityRatingPageBinding,
 ) {
-  const native = await owner(tx, false);
+  const native = await owner(tx);
   const { partition, key, row } = await journal(tx, input, false);
   if (!row || !current(row, native) || row.reclaimed) return null;
   const retained = await pageRow(tx, partition, key, binding.digest);
@@ -227,7 +227,7 @@ export async function verifyIdentityRatingJournalReclaimed(
   input: IdentityRatingRepairScope,
   checkpoint: IdentityRatingRepairCheckpoint,
 ): Promise<'current' | 'stale' | 'pending'> {
-  const native = await owner(tx, false);
+  const native = await owner(tx);
   const { scope, row } = await journal(tx, input, false);
   if (!row) return 'pending';
   if (!current(row, native)) return 'stale';
@@ -249,7 +249,7 @@ export async function reclaimIdentityRatingJournalPages(
     tx: CommandTransaction, checkpoint: IdentityRatingRepairCheckpoint,
   ) => Promise<boolean>,
 ): Promise<'stale' | 'still-referenced' | 'continuing' | 'reclaimed' | 'already-reclaimed'> {
-  const native = await owner(tx, true);
+  const native = await owner(tx);
   const { partition, key, row } = await journal(tx, input, true);
   if (!row || !current(row, native)) return 'stale';
   if (row.reclaimed) return 'already-reclaimed';
