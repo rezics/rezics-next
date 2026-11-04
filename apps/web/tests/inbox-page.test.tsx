@@ -226,6 +226,7 @@ const nativeCount = (count: number, extras: { capped?: boolean; basis?: 'current
 });
 
 test('a failed unread summary stays unavailable on a usable page, and Retry-After blocks count IO until a deliberate eligible retry', async () => {
+  seenCommands.length = 0;
   const clock = Date.now;
   let now = Date.parse('2026-11-05T00:00:00.000Z');
   Date.now = () => now;
