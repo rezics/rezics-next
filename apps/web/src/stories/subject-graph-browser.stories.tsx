@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import type { SubjectRead } from '@rezics/client';
 import type { GraphBrowserRouteState } from '../features/pages/graph-browser';
 import { GraphBrowserPage, type GraphBrowserTransport } from '../features/pages/graph-browser/view';
 import type { GraphRead } from '../features/pages/graph-browser';
@@ -15,20 +16,31 @@ const second = '00000000-0000-4000-8000-00000000a003';
 const statement = '00000000-0000-4000-8000-00000000e001';
 
 type StoryState = 'pending' | 'failure' | 'returned';
+type StoryQuery = Parameters<GraphBrowserTransport['read']>[0];
 
-function subject(id: string, label: string) {
+function subject(id: string, label: string): SubjectRead {
   return {
     subject: {
       id,
       type: 'schema:Book',
-      labels: { en: { value: label, language: 'en' } },
+      revision: 1,
+      release: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      context: '00000000-0000-4000-8000-000000000001',
+      labels: { en: label },
+      descriptions: {},
+      aliases: {},
       statements: {},
+      resolution: {},
+      relationCounts: {},
+      sourceRecords: [],
     },
-    labels: { en: { value: label, language: 'en' } },
+    account: null,
+    related: {},
+    summary: null,
   };
 }
 
-function reading(query: GraphBrowserRouteState = {}): Extract<GraphRead, { ok: true }> {
+function reading(query: StoryQuery = {}): Extract<GraphRead, { ok: true }> {
   const detailId = query.node ?? (query.edge ? neighbour : undefined);
   const detail = detailId
     ? {

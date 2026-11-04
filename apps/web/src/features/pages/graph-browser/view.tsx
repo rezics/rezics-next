@@ -435,7 +435,7 @@ export function GraphBrowserPage({
   const relationRef = useRef<HTMLSelectElement>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const pageRef = useRef<HTMLElement>(null);
-  const focusIntentRef = useRef<{ kind: 'selection'; key: string } | { kind: 'relation' }>();
+  const focusIntentRef = useRef<{ kind: 'selection'; key: string } | { kind: 'relation' } | null>(null);
   const source = useMemo<GraphSource>(() => ({ id, locale, reader, transport }), [id, locale, reader, transport]);
   const sourceRef = useRef(source);
   sourceRef.current = source;
@@ -629,7 +629,7 @@ export function GraphBrowserPage({
     if (active.status === 'pending' && focusIntentRef.current) statusRef.current?.focus();
     if (active.status === 'failure') {
       failureRef.current?.focus();
-      focusIntentRef.current = undefined;
+      focusIntentRef.current = null;
     }
     if (active.status === 'success' && focusIntentRef.current) {
       const intent = focusIntentRef.current;
@@ -639,7 +639,7 @@ export function GraphBrowserPage({
         );
         (target ?? detailHeadingRef.current ?? relationRef.current)?.focus();
       } else relationRef.current?.focus();
-      focusIntentRef.current = undefined;
+      focusIntentRef.current = null;
     }
   }, [active?.requestId, active?.status, source]);
 
