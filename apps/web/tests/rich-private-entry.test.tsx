@@ -2,7 +2,7 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
-import type { PersonalEntry } from '@rezics/client';
+import { createKernelClient, type PersonalEntry } from '@rezics/client';
 import { annotationWrite } from '../src/library/rich-private-entry/contract';
 
 mock.module('@tanstack/react-start', () => start);
@@ -245,5 +245,30 @@ test('rendered review preserves operands and focus, retries original uncertainty
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
     }
+  }
+});
+
+test('native annotation writes keep the exact reviewed operands and definitive conflicts require review', async () => {
+  const { writePrivateAnnotations } = await import('../src/library/rich-private-entry/native');
+  const body = annotationWrite(entry, { note: entry.note!, priority: '1' }, guard)!;
+  for (const status of [409, 422]) {
+    let sent: Request | undefined;
+    const client = createKernelClient('https://api.test', {
+      fetch: async (input, init) => {
+        sent = new Request(input, init);
+        return Response.json({ code: status === 409 ? 'conflict' : 'idempotency_conflict' }, { status });
+      },
+    });
+    expect(
+      await writePrivateAnnotations(client, {
+        subjectId: entry.subjectId,
+        body,
+        key: guard.incarnationId,
+        authorization: 'Bearer captured',
+      }),
+    ).toEqual({ kind: 'conflict' });
+    expect(await sent!.json()).toEqual(body);
+    expect(sent!.headers.get('authorization')).toBe('Bearer captured');
+    expect(sent!.headers.get('idempotency-key')).toBe(guard.incarnationId);
   }
 });
