@@ -220,10 +220,16 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     await act(async () => {
       await client.invalidateQueries({ queryKey: ['board-slow-mode'] });
     });
-    await appeared(
-      m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }),
-    );
     expect(readCalls).toBeGreaterThan(readsBeforeAcknowledgement);
+    expect(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: ['board-slow-mode'] })
+        .some((query) => {
+          const current = query.state.data as SlowModeRead | undefined;
+          return current?.kind === 'available' && current.policy.intervalSeconds === 45;
+        }),
+    ).toBe(true);
     expect(host.textContent).toContain(m.slow_mode_saved());
     await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
     const send = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
