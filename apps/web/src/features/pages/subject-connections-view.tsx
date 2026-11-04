@@ -17,7 +17,7 @@ import { CoverList } from './cover-list';
 import { SpoilerGate } from './values';
 import { OverviewContext, holderItems, statementItems } from './overview';
 import { formatCount } from '../count';
-import type { SubjectPageData } from './subject';
+import { subjectBody, type SubjectPageData } from './subject';
 import {
   connectionGroups,
   type ConnectionAddress,
@@ -59,6 +59,10 @@ export function SubjectConnections({
     resume?: ConnectionReturnWindow;
   } | null>(null);
   const reader = JSON.stringify([
+    page.subject,
+    page.profile,
+    subjectBody(page),
+    value?.subject,
     viewer.state,
     viewer.subject,
     viewer.csrfToken,

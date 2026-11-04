@@ -112,7 +112,9 @@ test('mounted VN to anime to book uses one immediate window opener, inverse mean
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
   const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
+  let reads = 0;
   const read = async (address: { id: string }): Promise<ConnectionVisit> => {
+    reads++;
     const direction = address.id === id(2) ? 'in' : 'out';
     const selected = stream(direction);
     const row = direction === 'in' ? { subject: id(3), property, statement: id(10), assertion: original(10, id(2)), summary: summary(id(3)), related: {} }
@@ -121,9 +123,9 @@ test('mounted VN to anime to book uses one immediate window opener, inverse mean
       stream: selected, reading: 'b'.repeat(64), section: { ok: true, read: { kind: direction === 'in' ? 'links' : 'relations', id: address.id, property, limit: 12, cursor: 'selected-window' }, body: { [direction === 'in' ? 'links' : 'relations']: [row], next: null } },
     } } };
   };
-  async function mount(subject: string, returnTo?: string) {
+  async function mount(subject: string, returnTo?: string, page = pageFor(subject, subject === id(1) ? 'wd:Q689445' : subject === id(2) ? 'schema:TVSeries' : 'schema:Book')) {
     const value = { subject, subjectLabel: 'Source work', locale: 'en', link: (props: any) => createElement('a', props), reader: { spoilerLevel: 0, suitability: 'show' }, labels: { cover: {}, spoilerHide: 'Hide' }, unlabelled: 'Unlabelled', spoilerShow: 'Reveal', relations: {}, sections: {} } as OverviewValue;
-    await act(async () => root.render(createElement(OverviewContext.Provider, { value }, createElement(SubjectConnections, { page: pageFor(subject, subject === id(1) ? 'wd:Q689445' : subject === id(2) ? 'schema:TVSeries' : 'schema:Book'), viewer: { state: 'signed-out', csrfToken: null }, read, returnTo }))));
+    await act(async () => root.render(createElement(OverviewContext.Provider, { value }, createElement(SubjectConnections, { page, viewer: { state: 'signed-out', csrfToken: null }, read, returnTo }))));
   }
   try {
     await mount(id(1));
@@ -142,6 +144,12 @@ test('mounted VN to anime to book uses one immediate window opener, inverse mean
     browser.location.href = next.href; await mount(id(3), immediate);
     browser.location.href = `https://site.test${via}`; await mount(id(1));
     expect(document.activeElement?.closest('[data-work-statement]')?.getAttribute('data-work-statement')).toBe(id(10));
+    const sameSource = pageFor();
+    await mount(id(1), undefined, sameSource);
+    const before = reads;
+    subjectBody(sameSource)!.subject.revision++;
+    await mount(id(1), undefined, sameSource);
+    expect(reads).toBe(before + 1);
     await act(async () => root.render(createElement('p', {}, 'Reader replaced')));
     expect(host.textContent).not.toContain('source.test/original');
   } finally {
