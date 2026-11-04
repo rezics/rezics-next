@@ -109,7 +109,7 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     { sourceKind: 'bangumi' },
   );
   expect(person.proposals[0]).toMatchObject({ subject: { type: 'schema:Person' } });
-  const createdPerson = await runtime.importTransport.batch({ commands: person.proposals });
+  const createdPerson = await runtime.importTransport.batch({ commands: [...person.proposals] });
   expect(createdPerson.results[0]?.status).toBe(201);
   const personId =
     createdPerson.results[0] && 'value' in createdPerson.results[0]
