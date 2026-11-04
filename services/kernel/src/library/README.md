@@ -1878,6 +1878,9 @@ transaction. An addressed comparison observes at most two distinct historical Me
 native owner/lifetime/revision check after those observations. Growth evidence must vary Collections, changes and
 historical Media independently at 64, 512 and 4096, and count every participating database/Access pool, negative
 foreign observations, bytes, retries and cleanup; this source contract is not that runtime measurement.
+`test/library/collection-metadata-history-growth.test.ts` authors independent Collection, journal, historical Media
+and bounded-cleanup cases with constant rows/statements, logarithmic blocks, fixed request/response bytes and backend
+attribution; its execution remains with the controller's protected native growth gate.
 
 ### Update Collection
 
