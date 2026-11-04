@@ -224,7 +224,9 @@ function CreatorRead({
     );
   }, [display.outcome, origin, query.data, refreshFailure]);
   if (hydrated && !origin.isCurrent()) return <Notice kind="preparing" address={address} locale={locale} />;
-  if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
+  useLayoutEffect(() => {
+    if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
+  }, [display.value, origin]);
   const data = display.value?.data;
   let content;
   if (!data)
