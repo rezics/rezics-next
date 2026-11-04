@@ -651,7 +651,7 @@
         "apps/web/src/zones/**",
         "apps/web/src/routes/**"
       ],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/session/reader.ts"],
       "allowedDependencies": [
         "client",
         "composition",
