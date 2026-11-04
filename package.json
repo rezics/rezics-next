@@ -25,6 +25,7 @@
     "@rezics/client": "workspace:*",
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
+    "@rezics/operations": "workspace:*",
     "@types/bun": "1.4.4",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",

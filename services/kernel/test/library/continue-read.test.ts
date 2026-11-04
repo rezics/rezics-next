@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { continuePageSchema } from '../../src/library/continue-routes.ts';
+import { continuePageSchema } from '../../src/library/transport-contract.ts';
 
 const page = {
   subjects: [

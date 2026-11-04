@@ -13,7 +13,7 @@ import type {
   PublicSpaceDiscoverySummary,
 } from '../search/discovery.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
-import { continuePageSchema } from '../library/continue-routes.ts';
+import { continuePageSchema } from '../library/transport-contract.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';

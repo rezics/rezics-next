@@ -1,5 +1,10 @@
 # Library
 
+transport-contract.ts owns the public Progress session and Continue response schemas consumed by
+Progress, Continue and Content Feed. The Progress record and Continue list wire/security metadata
+comes from the immutable operation declarations composed by createKernel; native commands,
+currentness and disclosure remain Library-owned.
+
 Private [consumption statistics](../../../../docs/library-consumption-statistics.md) are mounted
 at `GET /v1/libraryConsumptionSummary` through `progress-routes.ts`. The native session table
 maintains owner/subject counters transactionally for completion, corrections and retirement;

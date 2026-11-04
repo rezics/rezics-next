@@ -1,4 +1,6 @@
 import { contentViewerActionResources } from '../content/viewer-actions.ts';
+import { createOperationCatalogue } from '@rezics/operations';
+import { FEED_OPERATION_DECLARATIONS } from '../content/feed-operation-declarations.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
 import { mountContentEditionConsent } from '../content/edition-sale.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
@@ -47,6 +49,7 @@ import { feedRoutes } from '../content/feed-routes.ts';
 import { personalLabelRoutes } from '../library/label-routes.ts';
 import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
+import { LIBRARY_OPERATION_DECLARATIONS } from '../library/operation-declarations.ts';
 import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
 import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
@@ -363,6 +366,10 @@ export function createKernelAccessResolver(options: {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
+  const operationCatalogue = createOperationCatalogue([
+    ...LIBRARY_OPERATION_DECLARATIONS,
+    ...FEED_OPERATION_DECLARATIONS,
+  ]);
   if (dependencies.content?.readConsent)
     mountContentEditionConsent(dependencies.pool, dependencies.content.readConsent);
   const sourceClock = dependencies.clock ?? systemClock;
@@ -508,6 +515,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     tokens,
     clock,
+    operations: operationCatalogue,
     access: () => resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
   });
   let yearlyGoals: ReturnType<typeof yearlyCompletionGoalRoutes>;
@@ -544,6 +552,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     clock,
     routeKey: dependencies.routeKey,
+    operations: operationCatalogue,
     ...(dependencies.search ? { search: dependencies.search } : {}),
     access: () => resolveAccess({ actions: actionCatalogue(continued), realmRoleReader }),
   });
@@ -567,6 +576,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
+    operations: operationCatalogue,
     workClient,
     ...(dependencies.search ? { search: dependencies.search } : {}),
     ...(dependencies.discovery ? { discovery: dependencies.discovery } : {}),

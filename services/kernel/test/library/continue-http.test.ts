@@ -1,28 +1,16 @@
 import { expect, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
+import { Value } from 'typebox/value';
+import type { Static } from 'typebox';
 import type { HttpResponse } from '../../../../specs/semantic-driver.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import readSummaries from '../../src/semantic/summaries-read.sql';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createReleasedDiscoveryFixture, discoveryKey } from '../support/released-discovery.ts';
 import { createReleasedLibraryPopulation } from './support/released-library-population.ts';
+import { continuePageSchema } from '../../src/library/transport-contract.ts';
 
-type Summary = {
-  id: string;
-  type: string;
-  types: string[];
-  label: { value: string; language: string } | null;
-  creativeWork: boolean;
-  cover: unknown;
-};
-type ContinueRow = {
-  subjectId: string;
-  state: string | null;
-  lastActivityAt: string;
-  activeProgressSession: unknown;
-  subject?: Summary | null;
-};
-type ContinuePage = { subjects: ContinueRow[]; next: string | null };
+type ContinuePage = Static<typeof continuePageSchema>;
 
 function queryText(value: unknown): string | null {
   if (typeof value === 'string') return value;
@@ -70,6 +58,7 @@ function status(response: HttpResponse, expected: number, code?: string) {
   if (code !== undefined) expect((response.body as Record<string, unknown>).code).toBe(code);
 }
 function page(response: HttpResponse): ContinuePage {
+  expect(Value.Check(continuePageSchema, response.body)).toBe(true);
   return response.body as ContinuePage;
 }
 

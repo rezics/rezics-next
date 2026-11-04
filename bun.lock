@@ -9,6 +9,7 @@
         "@rezics/client": "workspace:*",
         "@rezics/definitions": "workspace:*",
         "@rezics/document": "workspace:*",
+        "@rezics/operations": "workspace:*",
         "@types/bun": "1.4.4",
         "bun": "1.4.4-canary.20261031.1",
         "oxfmt": "0.75.0",
@@ -217,6 +218,9 @@
         "@types/node": "26.6.6",
       },
     },
+    "packages/operations": {
+      "name": "@rezics/operations",
+    },
     "packages/progress": {
       "name": "@rezics/progress",
     },
@@ -325,6 +329,7 @@
         "@rezics/definitions": "workspace:*",
         "@rezics/document": "workspace:*",
         "@rezics/filter": "workspace:*",
+        "@rezics/operations": "workspace:*",
         "@rezics/progress": "workspace:*",
         "aws4fetch": "1.0.20",
         "canonicalize": "5.1.0",
@@ -1062,6 +1067,8 @@
     "@rezics/importer": ["@rezics/importer@workspace:services/importer"],
 
     "@rezics/kernel": ["@rezics/kernel@workspace:services/kernel"],
+
+    "@rezics/operations": ["@rezics/operations@workspace:packages/operations"],
 
     "@rezics/progress": ["@rezics/progress@workspace:packages/progress"],
 

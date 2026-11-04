@@ -1,5 +1,9 @@
 # Content
 
+Feed's mounted list operation consumes the shared immutable declaration catalogue through the
+Kernel transport adapter. Content retains the Feed query/result schemas and current disclosure
+composition; this route adds no publisher or generated-tree writer.
+
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
 ## Native moderation directory

@@ -1,5 +1,9 @@
 # Kernel
 
+createKernel composes the pure Progress, Continue and Feed operation declarations for API, worker
+and persona setup. The Elysia adapter binds their framework schemas and derives mounted security,
+exposure, action and rate metadata; domain handlers remain the owners of native behavior.
+
 The kernel workspace owns the database records and adapters used by the service.
 
 ## Growth seed target identifiers

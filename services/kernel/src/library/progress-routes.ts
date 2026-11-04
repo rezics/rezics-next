@@ -1,10 +1,12 @@
 import { t } from 'elysia';
+import type { OperationCatalogue } from '@rezics/operations';
 import { createEpisodeProgressCommands, MAX_EPISODE_IDS } from './episode-progress.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
+import { bindOperation } from '../http/operation-adapter.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -24,6 +26,7 @@ import { createConsumptionStatisticsReads, type ConsumptionSummary } from './con
 import { createReportedYearSummaryReads, type ReportedYearSummary } from './reported-year-summary.ts';
 import { readCurrentSubjectSummaries } from '../semantic/current-subject-summaries.ts';
 import { presentProgressDiscovery } from './progress-discovery-presentation.ts';
+import { progressPresentationSchema, sessionSchema } from './transport-contract.ts';
 
 const yearCount = t.String({ pattern: '^[0-9]{1,19}$' });
 const reportedCounts = {
@@ -71,7 +74,14 @@ const MAX_JOURNAL_PATCH_BODY_BYTES = 16_384;
 
 import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
 
-type Dependencies = { routeKey: Uint8Array; pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
+type Dependencies = {
+  routeKey: Uint8Array;
+  pool: Pool;
+  access: () => Access;
+  tokens: KeyRing;
+  clock: KernelClock;
+  operations: OperationCatalogue;
+};
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -96,82 +106,6 @@ const journalAssessmentPatch = t.Union([t.Object({ units: assessmentUnits }, clo
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
 const unitInput = libraryVocabularyIdSchema;
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
-export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(
-  t.Object(
-    {
-      meaning: t.Union([t.Literal('known'), t.Literal('unknown'), t.Literal('unavailable')]),
-      unitLabel: t.Optional(t.String()),
-      unitLabelLanguage: t.Optional(t.String()),
-      unitCountForms: t.Optional(
-        t.Object(
-          {
-            other: t.String(),
-            zero: t.Optional(t.String()),
-            one: t.Optional(t.String()),
-            two: t.Optional(t.String()),
-            few: t.Optional(t.String()),
-            many: t.Optional(t.String()),
-          },
-          closed,
-        ),
-      ),
-      dimension: t.Optional(t.String()),
-      structure: t.Literal('unverified'),
-      recording: t.Union([
-        t.Object(
-          {
-            state: t.Literal('supported'),
-            inputRules: t.Object(
-              {
-                min: t.Optional(t.String()),
-                max: t.Optional(t.String()),
-                step: t.String(),
-                total: t.Union([t.Literal('optional'), t.Literal('required'), t.Literal('forbidden')]),
-              },
-              closed,
-            ),
-          },
-          closed,
-        ),
-        t.Object({ state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]) }, closed),
-      ]),
-    },
-    closed,
-  ),
-);
-export const sessionSchema = t.Object(
-  {
-    id,
-    subjectId: id,
-    versionSubjectId: t.Union([id, t.Null()]),
-    mode,
-    unit: libraryStoredVocabularySchema,
-    total: nullableString,
-    amount: nullableString,
-    locator: nullableString,
-    position: nullableString,
-    completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
-    state: t.Union([state, t.Literal('retired')]),
-    revision,
-    startedAt: t.String(),
-    completedAt: nullableString,
-    measures: t.Optional(
-      t.Array(
-        t.Object(
-          {
-            unit: libraryStoredVocabularySchema,
-            amount: nullableString,
-            total: nullableString,
-            presentation: t.Optional(progressPresentationSchema),
-          },
-          closed,
-        ),
-        { minItems: 2, maxItems: MAX_PROGRESS_MEASURES },
-      ),
-    ),
-  },
-  closed,
-);
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
 const discoveryAction = t.Object(
@@ -402,18 +336,40 @@ async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found
 
 /** HTTP transport for private progress sessions and their public published snapshots. */
 export function progressRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
-  const config = () => ({ ...dependencies, access: dependencies.access() });
-  const { pool, tokens, clock } = dependencies;
+  const { operations, ...runtimeDependencies } = dependencies;
+  const config = () => ({ ...runtimeDependencies, access: runtimeDependencies.access() });
+  const { pool, tokens, clock } = runtimeDependencies;
   let sessions: ReturnType<typeof createSessionCommands> | undefined;
   let published: ReturnType<typeof createPublishedLogCommands> | undefined;
   let episodes: ReturnType<typeof createEpisodeProgressCommands> | undefined;
   const episodeCommands = () => (episodes ??= createEpisodeProgressCommands(config()));
   const sessionCommands = () =>
-    (sessions ??= createSessionCommands({ pool, access: dependencies.access(), tokens, clock }));
+    (sessions ??= createSessionCommands({ pool, access: runtimeDependencies.access(), tokens, clock }));
   const publishedCommands = () =>
-    (published ??= createPublishedLogCommands({ pool, access: dependencies.access(), tokens, clock }));
+    (published ??= createPublishedLogCommands({ pool, access: runtimeDependencies.access(), tokens, clock }));
   const statistics = createConsumptionStatisticsReads({ pool });
   const reportedYears = createReportedYearSummaryReads({ pool });
+  const recordOperation = bindOperation(operations, 'progress_session.record', 'POST', {
+    params: {
+      reference: 'library.progress-session.record.params',
+      schema: t.Object({ sessionId: t.String() }, closed),
+    },
+    headers: { reference: 'library.idempotency.headers', schema: idempotencyHeaders },
+    body: { reference: 'library.progress-session.record.request', schema: recordBody },
+    response: {
+      reference: 'library.progress-session.write.response',
+      schema: {
+        200: progressSessionResponse,
+        400: invalid,
+        401: unauthorized,
+        403: forbidden,
+        404: notFound,
+        409: problemSchema('conflict'),
+        422: profileConflict,
+        503: unavailable,
+      },
+    },
+  });
 
   const episodeRow = t.Object(
     {
@@ -727,9 +683,9 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
               readCurrentSubjectSummaries(
                 {
                   pool,
-                  access: dependencies.access,
+                  access: runtimeDependencies.access,
                   actor: viewer,
-                  routeKey: dependencies.routeKey,
+                  routeKey: runtimeDependencies.routeKey,
                   deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
                 },
                 subjectIds,
@@ -892,23 +848,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       },
     )
     .post(
-      customMethod('/v1/progressSessions/:sessionId', 'record'),
-      {
-        params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
-        body: recordBody,
-        response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          409: problemSchema('conflict'),
-          422: profileConflict,
-          503: unavailable,
-        },
-        detail: detail('progress_session.record', 'progress_session:update'),
-      },
+      recordOperation.path,
+      recordOperation.options,
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);

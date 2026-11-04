@@ -59,6 +59,26 @@ test('the actual kernel generation caller retains closed subject and typed JSON 
   expect(search).toMatchObject({ additionalProperties: false, properties: { limit: { type: 'integer' } } });
   const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
   expect(openApiDocument(kernel)).toEqual(document);
+  const operations = Object.values(document.paths).flatMap((path) => Object.values(path));
+  const record = operations.find((operation) => operation.operationId === 'progress_session.record');
+  const continued = operations.find((operation) => operation.operationId === 'library_continue.list');
+  const feed = operations.find((operation) => operation.operationId === 'feed_item.list');
+  expect(record).toMatchObject({
+    'x-action': 'progress_session:update',
+    'x-exposure': 'gate:reading_progress',
+    security: [{ bearerAuth: [] }],
+    'x-rate-limit': { family: 'write', units: 1 },
+  });
+  expect(continued).toMatchObject({
+    'x-action': 'library_entry:list',
+    'x-exposure': 'gate:personal_library',
+    security: [{ bearerAuth: [] }],
+  });
+  expect(feed).toMatchObject({
+    'x-action': 'feed_item:list',
+    'x-exposure': 'public',
+    security: [{}, { bearerAuth: [] }],
+  });
 });
 
 test('bounded global parsing preserves the real code-first schema without mutating parser hooks', async () => {
