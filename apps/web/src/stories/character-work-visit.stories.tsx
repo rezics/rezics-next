@@ -16,7 +16,7 @@ Object.assign(reading.subject, { id: id(1), type: 'wd:Q95074' });
 page.document = { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'identity' } }] };
 const plan = planReads(platformRegistry, page.document as CompositionDocument, {
   subject: id(1),
-  context: page.context,
+  ...(page.context ? { context: page.context } : {}),
 });
 page.reads = Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: reading }]));
 const title = '海の物語と忘れられた街の長い作品名／跨媒體角色登場與原始來源的繁體中文長標題';
