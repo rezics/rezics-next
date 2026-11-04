@@ -84,7 +84,7 @@ test('ordinary facts and exact release destinations retain source meaning and ke
     expect(mounted.host.textContent).toContain('Windows');
     expect(mounted.host.textContent).toContain('Source engine');
     expect(mounted.host.textContent).toContain('Harbour Studio');
-    expect(mounted.host.textContent).toContain('May 2024');
+    expect(mounted.host.textContent).toContain('+2024-05');
     expect(mounted.host.textContent).toContain('source:status-02?');
     expect(mounted.host.textContent).toContain('Trial 0.8 · ja / Windows');
     expect(mounted.host.textContent).toContain(fixture.publicRead.subject.labels.en);
@@ -108,6 +108,8 @@ test('ordinary facts and exact release destinations retain source meaning and ke
     await mounted.click(m.work_parts_more());
     expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
     expect(mounted.host.textContent).toContain(m.game_reader_unavailable());
+    expect(mounted.host.textContent).toContain('Harbour Studio');
+    expect(mounted.host.textContent).not.toContain(m.game_reader_editions_empty());
     fixture.recover();
     await mounted.click(m.album_tracks_retry());
     expect(addresses.slice(-2)).toEqual([
@@ -118,6 +120,61 @@ test('ordinary facts and exact release destinations retain source meaning and ke
     expect(mounted.host.textContent).toContain(m.game_reader_editions_empty());
     expect(mounted.host.querySelector('a[href*="/details?"]')).not.toBeNull();
     expect(mounted.host.querySelector('a[href*="/edit?"]')).not.toBeNull();
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('sparse release windows continue, cursor refusal restarts, and withheld readings retire work facts', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = gameExample('visual-novel');
+    fixture.respond({ ...fixture.first, links: [] });
+    let refuse = false;
+    const addresses: unknown[] = [];
+    const transport: GameReaderTransport = (address) => {
+      addresses.push(address);
+      return refuse ? Promise.resolve({ ok: false, reason: 'restart' }) : fixture.read(address);
+    };
+    await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport });
+    expect(mounted.host.textContent).toContain(m.game_reader_editions_empty());
+    expect(mounted.host.textContent).toContain(m.game_reader_total_unknown());
+    expect(mounted.host.textContent).not.toContain(m.game_reader_window_complete());
+    refuse = true;
+    await mounted.click(m.work_parts_more());
+    expect(mounted.host.textContent).toContain(m.game_reader_window_restart());
+    expect(mounted.host.textContent).toContain('Harbour Studio');
+    refuse = false;
+    fixture.respond(fixture.last);
+    // The section restart and general refresh both request a first page; use the first matching control.
+    await mounted.click(m.game_reader_refresh());
+    expect(addresses.at(-1)).toEqual(fixture.address);
+    expect(mounted.host.textContent).toContain(m.game_reader_window_complete());
+    fixture.fail(404);
+    await mounted.click(m.game_reader_refresh());
+    expect(mounted.host.textContent).toContain(m.game_reader_withheld());
+    expect(mounted.host.textContent).not.toContain('Harbour Studio');
+    expect(mounted.host.querySelector('a')).toBeNull();
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('accepted release cursor cycles require refresh without another native read', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = gameExample();
+    await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
+    fixture.respond({ ...fixture.first, next: 'opaque:second' });
+    await mounted.click(m.work_parts_more());
+    fixture.respond(fixture.first);
+    await mounted.click(m.work_parts_more());
+    const calls = fixture.calls.length;
+    await mounted.click(m.work_parts_more());
+    expect(fixture.calls.length).toBe(calls);
+    expect(mounted.host.textContent).toContain(m.game_reader_window_restart());
+    expect(mounted.host.querySelector(`a[href*="${editionId}"]`)).toBeNull();
+    expect(mounted.host.textContent).toContain('Harbour Studio');
   } finally {
     await mounted.close();
   }
