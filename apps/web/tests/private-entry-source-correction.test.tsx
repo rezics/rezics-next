@@ -351,8 +351,8 @@ test('review and recovery retry the exact command, then require re-review after 
     expect(reader.host.textContent).toContain(
       reader.m.library_rich_entry_before() +
         reader.m.library_rich_source_timestamp({
-          value: '2004-02',
-          precision: reader.m.library_rich_entry_precision_month(),
+          value: '2005',
+          precision: reader.m.library_rich_entry_precision_year(),
           zone: reader.m.library_rich_entry_zone_unknown(),
         }),
     );
