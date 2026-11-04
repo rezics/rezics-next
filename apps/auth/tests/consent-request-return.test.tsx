@@ -146,6 +146,8 @@ test('same-client scope changes, invalid queries, Back/Forward, locale and cache
     expect(v.host.textContent).not.toContain('a@example.test');
     await v.go(query('b'));
     await v.answer(review('b'));
+    expect(v.notices()).toHaveLength(2);
+    await v.click('Hide this explanation');
     await v.click('Hide this explanation');
     expect(v.notices()).toHaveLength(0);
     overwriteGetLocale(() => 'de');

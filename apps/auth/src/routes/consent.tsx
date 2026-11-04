@@ -20,11 +20,14 @@ function ConsentPage() {
   const [notices, setNotices] = useState<ConsentNotices>({});
   const [outcomes] = useState(() => createConsentRequestReturn(setNotices));
   const current = useRef<HTMLDivElement>(null);
-  const query = useLocation({ select: (location) => location.searchStr });
+  const { searchStr: query, search } = useLocation();
   const parameters = new URLSearchParams(query);
   const clients = parameters.getAll('client_id');
   const scopes = parameters.getAll('scope');
-  const invalid = clients.length !== 1 || scopes.length > 1;
+  // The router serializes duplicate query operands as arrays before rendering.
+  const operands = search as Record<string, unknown>;
+  const invalid =
+    clients.length !== 1 || scopes.length > 1 || Array.isArray(operands.client_id) || Array.isArray(operands.scope);
   const clientId = invalid ? '' : (clients[0] ?? '');
   const scope = invalid ? '' : (scopes[0] ?? '');
   return (

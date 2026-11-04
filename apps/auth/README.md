@@ -285,7 +285,7 @@ The current request has its own heading and shows private client/scopes/account 
 Client, scope and invalid-query replacement synchronously retire the previous reader and callbacks during layout
 cleanup. Pagehide synchronously clears private DOM before freezing; pageshow reobserves without approving. A retired
 approval reply remains unknown even if it later arrives, and cannot clear another attempt's marker. Duplicate client
-or scope parameters admit no speculative read or decision. Read Retry is query-only, excludes overlapping reads and
+or scope parameters, including router-normalized arrays, admit no speculative read or decision. Read Retry is query-only, excludes overlapping reads and
 provides loading feedback through failed, signed-out and not-found recovery. Pending reduction advice remains
 separate from historical uncertainty. Allow requires current native review and deliberate activation; Decline sends
 nothing. Protected navigation uses Stay/Leave and unload warnings. Focus moves away from retired private controls to
