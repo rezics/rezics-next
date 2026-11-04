@@ -18,6 +18,7 @@ import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import { createTypes, type CreateTransport, type CreatedReader, type InitialSubject } from './create-subject';
 import { CreateSubjectForm } from './create-subject-form';
+import { PublicationEditorEntry } from './publication-editor-entry';
 import { applyReuse, captureReuse, cloneReferenceGroup } from './reference-reuse';
 import { ReferenceReusePanel } from './reference-reuse-view';
 import {
@@ -49,7 +50,10 @@ import {
   type LiteraryRead,
 } from './literary-profile';
 
-export type LiteraryTransport = Pick<CreateTransport, 'submit' | 'read'> & { load: () => Promise<LiteraryRead> };
+export type LiteraryTransport = Pick<CreateTransport, 'submit' | 'read'> & {
+  load: () => Promise<LiteraryRead>;
+  eligibility: NonNullable<CreateTransport['eligibility']>;
+};
 type Ready = Extract<LiteraryRead, { ok: true }>;
 type InitialRow = { id: string; statement: StatementInput };
 const editableInitialFacts = () => true;
@@ -661,9 +665,12 @@ function LiteraryProfileLive({
           <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
           <p className="text-sm text-muted-foreground">{m.literary_grain({}, o)}</p>
           {createdId && (
-            <p role="status">
-              {m.literary_created_id({}, o)} <code className="break-all">{createdId}</code>
-            </p>
+            <>
+              <p role="status">
+                {m.literary_created_id({}, o)} <code className="break-all">{createdId}</code>
+              </p>
+              <PublicationEditorEntry work={createdId} locale={locale} />
+            </>
           )}
         </>
       )}
@@ -991,6 +998,7 @@ function LiteraryCorrection({
               <a className={buttonVariants({ variant: 'outline', className: wrappingLink })} href={`${href}/changes`}>
                 {m.changes_title({}, o)}
               </a>
+              <PublicationEditorEntry work={subject.id} locale={locale} />
             </nav>
             <details className="min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] space-y-3">
               <summary className="min-h-8 cursor-pointer whitespace-normal break-words [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11 pointer-coarse:min-h-11">

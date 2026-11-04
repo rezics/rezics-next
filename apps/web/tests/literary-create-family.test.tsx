@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { act, createElement as h, useState, type ComponentProps, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LiteraryRead } from '../src/features/catalogue/literary-profile';
+import type { CreateAuthority } from '../src/features/catalogue/identity-intake';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -1012,5 +1013,144 @@ test('Literary current refusal withdraws all old markup, fences pending work and
       await savedSubmit({ preventDefault() {} });
     });
     expect(commands).toHaveLength(2);
+  });
+});
+
+test('Literary creation uses current parent subject.create observation without inferring authority', async () => {
+  await mounted(async ({ host, render, click, change, input, until }) => {
+    const { LiteraryProfile } = await import('../src/features/catalogue/literary-profile-view');
+    const { literaryFixture, literaryWorkId } = await import('../src/kernel/fake/catalogue-literary-profile');
+    const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+    const { allowedCreateAuthority } = await import('../src/features/catalogue/identity-intake');
+    const { m } = await import('../src/paraglide/messages.js');
+    const type = () => host.querySelector<HTMLSelectElement>('select[id="create-type"]')!;
+    const posts = (fixture: ReturnType<typeof literaryFixture>) =>
+      fixture.calls.filter((call) => call.method === 'POST' && call.path === '/v1/subjects');
+    const props = (fixture: ReturnType<typeof literaryFixture>) => ({
+      locale: 'en',
+      session: 'signed-in' as const,
+      transport: fixture.transport,
+      facts: fixture.facts,
+      review: fixture.review,
+    });
+    const show = async (
+      fixture: ReturnType<typeof literaryFixture>,
+      session: 'signed-in' | 'signed-out' = 'signed-in',
+    ) => {
+      await render(null);
+      await render(h(LiteraryProfile, { ...props(fixture), session }));
+      await until(() => !!type());
+    };
+    const enter = async () => {
+      await change(type(), 'schema:Book');
+      await input(host.querySelector<HTMLInputElement>('input[id="create-label-0"]')!, 'Eligible book');
+      await change(propertyControl(initialPanel(host, m.literary_bibliography())), 'schema:wordCount');
+      await click(m.correction_add(), initialPanel(host, m.literary_bibliography()));
+      await input(labelledInput(factRow()[0]!, m.correction_amount()), '+12000');
+      await change(factRow()[0]!.querySelector<HTMLSelectElement>(`select[aria-label="${m.correction_unit()}"]`)!, '1');
+    };
+
+    const unavailable = literaryFixture();
+    let authority: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+    unavailable.transport.eligibility = async () => authority;
+    await show(unavailable);
+    await until(() => host.textContent!.includes(m.identity_intake_authority_unknown()));
+    expect(type().querySelector('option[value="schema:Book"]')).not.toBeNull();
+    expect(type().querySelector('option[value="schema:BookSeries"]')).not.toBeNull();
+    expect(button(host, m.catalogue_create_submit()).disabled).toBe(true);
+    expect(posts(unavailable)).toHaveLength(0);
+    await input(host.querySelector<HTMLInputElement>('input[id="create-label-0"]')!, 'Kept draft');
+    expect(host.querySelector<HTMLInputElement>('input[id="create-label-0"]')!.value).toBe('Kept draft');
+    authority = allowedCreateAuthority;
+    await click(m.identity_intake_authority_retry());
+    await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
+    expect(host.querySelector<HTMLInputElement>('input[id="create-label-0"]')!.value).toBe('Kept draft');
+    expect(button(host, m.catalogue_create_submit()).disabled).toBe(false);
+
+    const refused = literaryFixture();
+    refused.transport.eligibility = async () => ({ state: 'refused', reason: 'permission' });
+    await show(refused);
+    await until(() => host.textContent!.includes(m.identity_intake_authority_refused_permission()));
+    expect(type().querySelector('option[value="schema:Book"]')).not.toBeNull();
+    expect(button(host, m.catalogue_create_submit()).disabled).toBe(true);
+    expect(posts(refused)).toHaveLength(0);
+
+    await show(literaryFixture(), 'signed-out');
+    expect(host.textContent).toContain(m.identity_intake_authority_guest());
+    expect(host.textContent).not.toContain(m.identity_intake_authority_refused_permission());
+    expect(button(host, m.catalogue_create_submit()).disabled).toBe(true);
+
+    const revoked = literaryFixture();
+    let current: CreateAuthority = allowedCreateAuthority;
+    revoked.transport.eligibility = async () => current;
+    await show(revoked);
+    await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
+    await enter();
+    await click(m.catalogue_create_submit());
+    await until(() => !!host.querySelector('[data-literary-create-review]'));
+    expect(posts(revoked)).toHaveLength(0);
+    current = { state: 'refused', reason: 'permission' };
+    await click(m.catalogue_create_submit());
+    await until(() => host.textContent!.includes(m.identity_intake_authority_refused_permission()));
+    expect(posts(revoked)).toHaveLength(0);
+    expect(labelledInput(factRow()[0]!, m.correction_amount()).value).toBe('+12000');
+    current = allowedCreateAuthority;
+    await click(m.identity_intake_authority_retry());
+    await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
+    await click(m.catalogue_create_submit());
+    await until(() => !!host.querySelector(`a[href*="${literaryWorkId}"]`));
+    expect(posts(revoked)).toHaveLength(1);
+    expect(host.querySelector(`a[href="/en/catalogue/publication?work=${literaryWorkId}"]`)).not.toBeNull();
+
+    const denied = literaryFixture('denied');
+    await show(denied);
+    await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
+    await enter();
+    await click(m.catalogue_create_submit());
+    await until(() => !!host.querySelector('[data-literary-create-review]'));
+    await click(m.catalogue_create_submit());
+    await until(() => host.textContent!.includes(m.catalogue_create_denied()));
+    expect(posts(denied)).toHaveLength(1);
+    expect(labelledInput(factRow()[0]!, m.correction_amount()).value).toBe('+12000');
+
+    const late = literaryFixture();
+    const pending: ((value: CreateAuthority) => void)[] = [];
+    late.transport.eligibility = () => new Promise((resolve) => pending.push(resolve));
+    const observed = (subject: string) => ({
+      state: 'signed-in' as const,
+      subject,
+      csrfToken: subject,
+      handle: 'reader',
+    });
+    await render(null);
+    await render(
+      h(CandidateReaderBoundary, {
+        observed: observed('00000000-0000-4000-8000-000000000001'),
+        address: '/catalogue/literary',
+        children: h(LiteraryProfile, props(late)),
+      }),
+    );
+    await until(() => !!type() && pending.length === 1);
+    expect(button(host, m.catalogue_create_submit()).disabled).toBe(true);
+    await render(
+      h(CandidateReaderBoundary, {
+        observed: observed('00000000-0000-4000-8000-000000000002'),
+        address: '/catalogue/literary',
+        children: h(LiteraryProfile, props(late)),
+      }),
+    );
+    await until(() => !!type() && pending.length === 2);
+    await act(async () => pending[0]!(allowedCreateAuthority));
+    expect(button(host, m.catalogue_create_submit()).disabled).toBe(true);
+    expect(host.textContent).not.toContain(m.identity_intake_authority_allowed());
+    await act(async () => pending[1]!(allowedCreateAuthority));
+    await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
+    expect(button(host, m.catalogue_create_submit()).disabled).toBe(false);
+
+    const existing = literaryFixture('ready', 'en', 'schema:Book', true);
+    await render(null);
+    await render(h(LiteraryProfile, { ...props(existing), id: literaryWorkId }));
+    await until(() => !!host.querySelector(`a[href="/en/catalogue/publication?work=${literaryWorkId}"]`));
+    expect(posts(existing)).toHaveLength(0);
   });
 });

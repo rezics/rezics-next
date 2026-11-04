@@ -7,6 +7,7 @@ import {
   type LiteraryItem,
 } from '../src/features/catalogue/literary-profile';
 import { initialTerms } from '../src/features/catalogue/create-subject';
+import { allowedCreateAuthority } from '../src/features/catalogue/identity-intake';
 import {
   literaryFixture,
   literaryRelease,
@@ -91,6 +92,15 @@ test('Book and book-series work editor uses actual released metadata native writ
     'en',
   );
   expect(invalid.ok).toBe(false);
+});
+
+test('Literary create load reads released definitions independently of parent subject.create eligibility', async () => {
+  const fixture = literaryFixture();
+  const read = await fixture.transport.load();
+  expect(read.ok).toBe(true);
+  expect(fixture.calls.every((call) => call.method === 'GET' && call.path.startsWith('/v1/definitions/'))).toBe(true);
+  expect(await fixture.transport.eligibility()).toEqual(allowedCreateAuthority);
+  expect(fixture.calls.every((call) => call.path.startsWith('/v1/definitions/'))).toBe(true);
 });
 
 test('Literary corrections retain untouched evidence and exact per-field keys while proposals remain separate from current reading', async () => {
