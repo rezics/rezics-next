@@ -103,7 +103,7 @@ function storedReview(): EntryImportMetadataReview {
 }
 
 function journey(provider: string, admission?: EntryImportMetadataConfirmation['nativeAdmission']) {
-  const entry = personal();
+  let entry = personal();
   const shown = proposals();
   let review: EntryImportMetadataReview = storedReview();
   const facts = eligibleFacts();
@@ -117,24 +117,36 @@ function journey(provider: string, admission?: EntryImportMetadataConfirmation['
     },
     async saveAnnotations(_actor: Actor, _subject: string, input: unknown, key: string) {
       sent.push({ phase: 'annotation', key, input });
-      entry.annotationRevision += 1;
-      entry.note = 'Imported note';
-      return { value: entry, partition: 1, epoch: 1, position: 1n, transactionId: 'annotation', replayed: sent.length > 1 } satisfies CommandOutcome<PersonalEntry>;
+      entry = { ...entry, annotationRevision: entry.annotationRevision + 1, note: 'Imported note' };
+      return {
+        value: entry,
+        partition: 1,
+        epoch: 1,
+        position: 1n,
+        transactionId: 'annotation',
+        replayed: sent.length > 1,
+      } satisfies CommandOutcome<PersonalEntry>;
     },
     async admitSourceObservation(_actor: Actor, _subject: string, input: unknown, key: string) {
       sent.push({ phase: 'provenance', key, input });
-      entry.sourceObservations = [
-        {
-          provider,
-          recordId: `${provider}-1`,
-          revision: 1,
-          privacy: { status: 'known', meaning: 'private' },
-          sourceCreated: { status: 'known', value: '2020-01-01', precision: 'day', zone: 'unknown' },
-          sourceUpdated: { status: 'known', value: '2020-02-01', precision: 'day', zone: 'unknown' },
-          recordedAt: '2020-02-01T00:00:00Z',
-        },
-      ];
-      return { value: { sourceObservation: entry.sourceObservations[0] }, partition: 1, epoch: 1, position: 2n, transactionId: 'provenance', replayed: false };
+      const observation = {
+        provider,
+        recordId: `${provider}-1`,
+        revision: 1,
+        privacy: { status: 'known' as const, meaning: 'private' as const },
+        sourceCreated: { status: 'known' as const, value: '2020-01-01', precision: 'day' as const, zone: 'unknown' as const },
+        sourceUpdated: { status: 'known' as const, value: '2020-02-01', precision: 'day' as const, zone: 'unknown' as const },
+        recordedAt: '2020-02-01T00:00:00Z',
+      };
+      entry = { ...entry, sourceObservations: [observation] };
+      return {
+        value: { sourceObservation: observation },
+        partition: 1,
+        epoch: 1,
+        position: 2n,
+        transactionId: 'provenance',
+        replayed: false,
+      };
     },
     async correctSourceObservation() {
       throw new Error('correction is not part of this admission journey');
@@ -143,7 +155,7 @@ function journey(provider: string, admission?: EntryImportMetadataConfirmation['
   const coordinator = createListImportMetadataCoordinator({
     provider,
     ...(admission === undefined ? {} : { nativeAdmission: admission }),
-    native: native as ReturnType<typeof createEntryPersonalCommands>,
+    native: native as unknown as ReturnType<typeof createEntryPersonalCommands>,
     async prepareReview() {
       return { history: [], identity: storedReview() };
     },
@@ -215,16 +227,17 @@ test('each provider confirmation reaches native annotation and provenance and re
     else expect(first.review().confirmation?.nativeAdmission).toBeUndefined();
 
     const lost = journey(provider, nativeAdmission);
+    const prior = first.review().confirmation!;
     lost.review().confirmation = {
       ...proposed(provider, nativeAdmission),
       annotationStarted: true,
       provenanceStarted: true,
-      annotationInput: first.review().confirmation!.annotationInput,
-      provenanceInput: first.review().confirmation!.provenanceInput,
-      annotationReceiptDigest: first.review().confirmation!.annotationReceiptDigest,
-      provenanceReceiptDigest: first.review().confirmation!.provenanceReceiptDigest,
       provenanceKind: 'admit',
-      sourceObservationDigest: first.review().confirmation!.sourceObservationDigest,
+      ...(prior.annotationInput === undefined ? {} : { annotationInput: prior.annotationInput }),
+      ...(prior.provenanceInput === undefined ? {} : { provenanceInput: prior.provenanceInput }),
+      ...(prior.annotationReceiptDigest === undefined ? {} : { annotationReceiptDigest: prior.annotationReceiptDigest }),
+      ...(prior.provenanceReceiptDigest === undefined ? {} : { provenanceReceiptDigest: prior.provenanceReceiptDigest }),
+      ...(prior.sourceObservationDigest === undefined ? {} : { sourceObservationDigest: prior.sourceObservationDigest }),
     };
     const resumed = await lost.coordinator.apply({
       actor,

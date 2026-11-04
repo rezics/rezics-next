@@ -522,7 +522,7 @@ export function createAniListImport(deps: Dependencies) {
     kind: string,
     key: string,
     input: unknown,
-    change: (stored: Stored, fence: { cancelled: boolean }) => Stored,
+    change: (stored: Stored, fence?: { cancelled: boolean }) => Stored,
   ) {
     const account = owner(actor),
       route = requireRoute(account.accountId);
@@ -926,7 +926,11 @@ export function createAniListImport(deps: Dependencies) {
           const record = current.metadataReviews?.find((item) => item.token === reviewToken);
           if (!record) throw new LibraryConflictError();
           const confirmation = listImportMetadataOrConflict(
-            confirmListImportMetadata(record.confirmation, proposed, anilistMetadataFence(record, current, fence.cancelled)),
+            confirmListImportMetadata(
+              record.confirmation,
+              proposed,
+              anilistMetadataFence(record, current, fence?.cancelled === true),
+            ),
             () => {
               throw new LibraryConflictError();
             },
@@ -956,7 +960,11 @@ export function createAniListImport(deps: Dependencies) {
           const record = current.metadataReviews?.find((item) => item.token === token);
           if (!record) throw new LibraryConflictError();
           const merged = listImportMetadataOrConflict(
-            persistListImportMetadata(record.confirmation, confirmation, anilistMetadataFence(record, current, fence.cancelled)),
+            persistListImportMetadata(
+              record.confirmation,
+              confirmation,
+              anilistMetadataFence(record, current, fence?.cancelled === true),
+            ),
             () => {
               throw new LibraryConflictError();
             },
