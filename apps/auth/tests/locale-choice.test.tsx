@@ -78,6 +78,11 @@ test('blocked persistence preserves exact hydration language and reports the cur
     initializeDocumentLocale('fr');
     const host = document.body.appendChild(document.createElement('div'));
     host.innerHTML = renderToString(<Page />);
+    // happy-dom's HTML parser selects an earlier option despite the selected attribute.
+    // Supply the browser's parsed selection before exercising React hydration.
+    const selected = host.querySelector('option[selected]')!.getAttribute('value')!;
+    expect(selected).toBe('fr');
+    host.querySelector('select')!.value = selected;
     const errors: unknown[] = [];
     await flush(() => {
       root = hydrateRoot(host, <Page />, { onRecoverableError: (error) => errors.push(error) });
