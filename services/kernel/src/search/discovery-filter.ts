@@ -15,6 +15,7 @@ import type {
 } from './discovery.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { compileText } from './text.ts';
+import { compileMatchEvidence, type MatchEvidenceQuery } from './match-evidence.ts';
 import { discoveryNativeQuery } from './discovery-query.ts';
 import { compileFilter } from './filter.ts';
 import type {
@@ -214,7 +215,11 @@ export function compileDiscoveryConsumerCapture(
   input: DiscoveryConsumerCaptureInput,
   meaning: PublicFilterProjectionMeaning,
   registry: (DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>) | undefined,
-): Readonly<{ query: Query; dependencyKeys: readonly PublicFilterDependencyKey[] }> {
+): Readonly<{
+  query: Query;
+  dependencyKeys: readonly PublicFilterDependencyKey[];
+  matchEvidence?: MatchEvidenceQuery;
+}> {
   if (!Object.hasOwn(input, 'filterDocument') || !Object.hasOwn(input, 'text'))
     throw new TypeError('Mixed capture requires the exact root');
   const keys: PublicFilterDependencyKey[] = [
@@ -269,12 +274,14 @@ export function compileDiscoveryConsumerCapture(
       { kind: 'field', field: 'descriptions' },
     );
   const text = input.text === undefined ? undefined : compileText(input.text, { field: 'search_text', prefix: 't' });
+  const matchEvidence = text ? compileMatchEvidence(text) : undefined;
   return {
     query: discoveryNativeQuery({
       filter: plan.filter ?? none,
-      ...(text ? { query: text.query } : {}),
+      ...(text ? { query: matchEvidence!.query } : {}),
       ...(input.boost === undefined ? {} : { boost: input.boost }),
     }),
+    ...(matchEvidence ? { matchEvidence } : {}),
     dependencyKeys: keys,
   };
 }

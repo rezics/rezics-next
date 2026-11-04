@@ -8307,5 +8307,11 @@
   "own_media_removal_uncertain": "Removal is not confirmed.",
   "own_media_removal_uncertain_detail": "Retry the same removal request to learn whether it was accepted. Refreshing this page cannot confirm it.",
   "own_media_retry_removal": "Retry original removal",
-  "own_media_removal_refused": "The current account could not remove this media. Review the current inventory before trying again."
+  "own_media_removal_refused": "The current account could not remove this media. Review the current inventory before trying again.",
+  "search_match_title": "Matched title",
+  "search_match_alias": "Matched alternate title",
+  "search_match_description": "Matched description",
+  "search_match_explanation": "More match details",
+  "search_match_unavailable": "Match details are unavailable.",
+  "search_match_unsupported": "Match details are not supported for this result."
 }

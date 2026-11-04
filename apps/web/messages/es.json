@@ -8215,5 +8215,11 @@
   "own_media_removal_uncertain": "La eliminación no está confirmada.",
   "own_media_removal_uncertain_detail": "Repite la misma solicitud para saber si se aceptó. Actualizar esta página no puede confirmarla.",
   "own_media_retry_removal": "Reintentar eliminación original",
-  "own_media_removal_refused": "La cuenta actual no pudo eliminar este archivo. Revisa la colección actual antes de volver a intentarlo."
+  "own_media_removal_refused": "La cuenta actual no pudo eliminar este archivo. Revisa la colección actual antes de volver a intentarlo.",
+  "search_match_title": "Coincidencia en el título",
+  "search_match_alias": "Coincidencia en el título alternativo",
+  "search_match_description": "Coincidencia en la descripción",
+  "search_match_explanation": "Más detalles de la coincidencia",
+  "search_match_unavailable": "Los detalles de la coincidencia no están disponibles.",
+  "search_match_unsupported": "Este resultado no admite detalles de coincidencia."
 }

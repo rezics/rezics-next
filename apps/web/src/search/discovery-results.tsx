@@ -8,7 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 import { displayRating } from '../features/pages/subject-ratings';
-import { ResultRow, localizedLabel } from './results';
+import { MatchEvidenceView, ResultRow, localizedLabel } from './results';
 import {
   discoveryKey,
   isAccountHit,
@@ -236,25 +236,28 @@ export function DiscoveryResults({
           const kind = localizedLabel(kinds[hit.key.kind] ?? {}, locale).text || hit.key.kind;
           if (isAccountHit(hit))
             return (
-              <AccountRow
-                key={discoveryKey(hit)}
-                account={hit.summary.value}
-                kind={kind}
-                locale={locale}
-                subjectHrefFor={subjectHrefFor}
-              />
+              <Fragment key={discoveryKey(hit)}>
+                <AccountRow account={hit.summary.value} kind={kind} locale={locale} subjectHrefFor={subjectHrefFor} />
+                <li className="ml-6 list-none">
+                  <MatchEvidenceView evidence={hit.matchEvidence} locale={locale} />
+                </li>
+              </Fragment>
             );
           if (isPublicDiscoveryHit(hit))
             return (
-              <DiscoveryPublicRow
-                key={discoveryKey(hit)}
-                hit={hit}
-                kind={kind}
-                locale={locale}
-                subjectHrefFor={subjectHrefFor}
-                actions={hit.summary.kind === 'collection' ? renderPersonal?.(hit, hit.summary.value.title) : undefined}
-                memberKindLabel={(type) => localizedLabel(kinds[type] ?? {}, locale).text || type}
-              />
+              <Fragment key={discoveryKey(hit)}>
+                <DiscoveryPublicRow
+                  hit={hit}
+                  kind={kind}
+                  locale={locale}
+                  subjectHrefFor={subjectHrefFor}
+                  actions={hit.summary.kind === 'collection' ? renderPersonal?.(hit, hit.summary.value.title) : undefined}
+                  memberKindLabel={(type) => localizedLabel(kinds[type] ?? {}, locale).text || type}
+                />
+                <li className="ml-6 list-none">
+                  <MatchEvidenceView evidence={hit.matchEvidence} locale={locale} />
+                </li>
+              </Fragment>
             );
           const summary = hit.summary.value;
           const label = summary.label;

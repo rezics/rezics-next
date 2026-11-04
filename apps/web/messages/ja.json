@@ -8215,5 +8215,11 @@
   "own_media_removal_uncertain": "削除はまだ確認されていません。",
   "own_media_removal_uncertain_detail": "受理されたか確認するには同じ削除要求を再試行してください。このページを更新しても確認にはなりません。",
   "own_media_retry_removal": "元の削除を再試行",
-  "own_media_removal_refused": "現在のアカウントではこのメディアを削除できませんでした。再試行する前に最新の一覧を確認してください。"
+  "own_media_removal_refused": "現在のアカウントではこのメディアを削除できませんでした。再試行する前に最新の一覧を確認してください。",
+  "search_match_title": "タイトルの一致",
+  "search_match_alias": "別名の一致",
+  "search_match_description": "説明の一致",
+  "search_match_explanation": "一致の詳細",
+  "search_match_unavailable": "一致の詳細を利用できません。",
+  "search_match_unsupported": "この検索結果では一致の詳細を表示できません。"
 }

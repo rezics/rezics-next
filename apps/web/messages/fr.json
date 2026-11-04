@@ -8215,5 +8215,11 @@
   "own_media_removal_uncertain": "La suppression n’est pas confirmée.",
   "own_media_removal_uncertain_detail": "Réessayez la même demande pour savoir si elle a été acceptée. Actualiser cette page ne peut pas la confirmer.",
   "own_media_retry_removal": "Réessayer la suppression initiale",
-  "own_media_removal_refused": "Le compte actuel n’a pas pu supprimer ce média. Consultez l’inventaire actuel avant de réessayer."
+  "own_media_removal_refused": "Le compte actuel n’a pas pu supprimer ce média. Consultez l’inventaire actuel avant de réessayer.",
+  "search_match_title": "Correspondance dans le titre",
+  "search_match_alias": "Correspondance dans le titre secondaire",
+  "search_match_description": "Correspondance dans la description",
+  "search_match_explanation": "Autres détails de correspondance",
+  "search_match_unavailable": "Les détails de correspondance ne sont pas disponibles.",
+  "search_match_unsupported": "Les détails de correspondance ne sont pas pris en charge pour ce résultat."
 }

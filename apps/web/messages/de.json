@@ -8215,5 +8215,11 @@
   "own_media_removal_uncertain": "Die Entfernung ist nicht bestätigt.",
   "own_media_removal_uncertain_detail": "Wiederhole dieselbe Anfrage, um festzustellen, ob sie angenommen wurde. Eine Aktualisierung dieser Seite bestätigt sie nicht.",
   "own_media_retry_removal": "Ursprüngliche Entfernung wiederholen",
-  "own_media_removal_refused": "Das aktuelle Konto konnte dieses Medium nicht entfernen. Prüfe den aktuellen Bestand, bevor du es erneut versuchst."
+  "own_media_removal_refused": "Das aktuelle Konto konnte dieses Medium nicht entfernen. Prüfe den aktuellen Bestand, bevor du es erneut versuchst.",
+  "search_match_title": "Passender Titel",
+  "search_match_alias": "Passender Alternativtitel",
+  "search_match_description": "Passende Beschreibung",
+  "search_match_explanation": "Weitere Treffergründe",
+  "search_match_unavailable": "Treffergründe sind nicht verfügbar.",
+  "search_match_unsupported": "Treffergründe werden für dieses Ergebnis nicht unterstützt."
 }

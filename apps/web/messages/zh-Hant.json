@@ -8215,5 +8215,11 @@
   "own_media_removal_uncertain": "移除狀態尚未確認。",
   "own_media_removal_uncertain_detail": "請重試相同移除要求以確認是否已受理。重新整理此頁面無法確認結果。",
   "own_media_retry_removal": "重試原移除要求",
-  "own_media_removal_refused": "目前帳號無法移除此媒體。請檢視目前清單後再試。"
+  "own_media_removal_refused": "目前帳號無法移除此媒體。請檢視目前清單後再試。",
+  "search_match_title": "符合的標題",
+  "search_match_alias": "符合的別名",
+  "search_match_description": "符合的描述",
+  "search_match_explanation": "更多符合詳細資料",
+  "search_match_unavailable": "符合詳細資料目前無法使用。",
+  "search_match_unsupported": "此結果不支援符合詳細資料。"
 }
