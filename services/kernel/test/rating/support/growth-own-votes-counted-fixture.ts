@@ -7,18 +7,19 @@ import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { identityEpochStore } from '../../../src/semantic/identity-epoch-store.ts';
 import * as commandTiming from '../../../src/command/timing.ts';
 import { withReadTransaction } from '../../../src/semantic/read.ts';
-import { seed, type CountedValues } from '../../support/growth.ts';
+import { seed, type CountedValues, type Row } from '../../support/growth.ts';
 import { createSourceStatisticLifecycleFixture } from '../source-statistic-lifecycle-fixture.ts';
 
 export const countedAxes = ['unrelated votes', 'selected retained votes', 'identity/source/authority history', 'repair backlog'] as const;
 export type CountedAxis = (typeof countedAxes)[number];
 const at = '2026-11-03T00:00:00.000000Z';
 const byteCap = 65_536;
+const stringify = JSON.stringify;
 
 // UTF-8 payload bytes, not a JavaScript heap-size estimate. Maps and bigint are native Access/identity payloads.
 function bytes(value: unknown): number {
   const seen = new WeakSet<object>();
-  return Buffer.byteLength(JSON.stringify(value, (_key, item) => {
+  return Buffer.byteLength(stringify(value, (_key, item) => {
     if (typeof item === 'bigint') return item.toString();
     if (item && typeof item === 'object') {
       if (seen.has(item)) return null;
@@ -68,8 +69,12 @@ export async function createCountedGrowthFixture() {
       name: 'fixed counted slots', hotPartition: partitionOf(voterRoute),
       rows: () => ({ 'rating.vote': [vote(terminal!, 0), vote(clear!, null), vote(original!, 9, null)] }),
     }, { from: 0, to: 1 });
+    // The native INSERT trigger initializes counting; retained losing slots are a later explicit state.
+    await db.admin.query('UPDATE rating.vote SET counted_target=NULL WHERE route=$1 AND voter_id=$2 AND target_id=$3',
+      [voterRoute, actor.accountId, original]);
 
     const measured = new AsyncLocalStorage<Record<string, number>>();
+    const phase = new AsyncLocalStorage<'prepare' | 'read' | 'finish'>();
     const observed = new WeakSet<PoolClient>();
     const observeClient = (client: PoolClient) => {
       if (observed.has(client)) return;
@@ -80,6 +85,7 @@ export async function createCountedGrowthFixture() {
         const result = query(...args);
         if (!counters) return result;
         counters.poolQueries!++;
+        counters[`${phase.getStore() ?? 'fixture'}Queries`]!++;
         return result.then((result) => {
           // Include controls and empty/negative query results; the shared harness owns plans and wire bytes.
           for (const page of Array.isArray(result) ? result : [result]) {
@@ -99,7 +105,14 @@ export async function createCountedGrowthFixture() {
     const authorize = f.access.authorize.bind(f.access);
     const mappings = identityEpochStore.readMappings.bind(identityEpochStore);
     const commandPhase = commandTiming.commandPhase;
+    const epoch = identityEpochStore.readEpoch.bind(identityEpochStore);
     const spies = [
+      spyOn(JSON, 'stringify').mockImplementation(((...args: Parameters<typeof JSON.stringify>) => {
+        const result = stringify(...args);
+        const counters = measured.getStore();
+        if (counters && result !== undefined) counters.serializedBytes! += Buffer.byteLength(result);
+        return result;
+      }) as typeof JSON.stringify),
       spyOn(commandTiming, 'commandPhase').mockImplementation((...args) => {
         const counters = measured.getStore();
         if (counters) counters.runnerPhases!++;
@@ -115,7 +128,14 @@ export async function createCountedGrowthFixture() {
       spyOn(f.access, 'authorize').mockImplementation(async (...args) => {
         const counters = measured.getStore();
         if (counters) counters.accessEvaluations!++;
-        return authorize(...args);
+        const result = await authorize(...args);
+        retain(result);
+        return result;
+      }),
+      spyOn(identityEpochStore, 'readEpoch').mockImplementation(async (...args) => {
+        const result = await epoch(...args);
+        retain(result);
+        return result;
       }),
       spyOn(identityEpochStore, 'readMappings').mockImplementation(async (...args) => {
         const counters = measured.getStore();
@@ -131,23 +151,23 @@ export async function createCountedGrowthFixture() {
       const counters = measured.getStore()!;
       const deadline = Date.now() + 120_000;
       counters.preparePhases!++;
-      const prepared = await reader.prepare(request, deadline);
+      const prepared = await phase.run('prepare', () => reader.prepare(request, deadline));
       retain(prepared);
       expect(bytes(prepared)).toBeLessThanOrEqual(byteCap);
       if (prepared.status !== 'prepared') throw new Error(`Unexpected preparation: ${JSON.stringify(prepared)}`);
       counters.readPhases!++;
-      const read = await withReadTransaction(db.pool, client => reader.read(client, request, prepared.preparation), deadline);
+      const read = await phase.run('read', () => withReadTransaction(db.pool, client => reader.read(client, request, prepared.preparation), deadline));
       retain(read);
       expect(bytes(read)).toBeLessThanOrEqual(byteCap);
       return { prepared, read, deadline };
     }
     async function finish(j: Awaited<ReturnType<typeof journey>>) {
       measured.getStore()!.finishPhases!++;
-      const result = await reader.finish(request, j.prepared.preparation, j.read, j.deadline);
+      const result = await phase.run('finish', () => reader.finish(request, j.prepared.preparation, j.read, j.deadline));
       retain(result);
       const size = bytes(result);
       expect(size).toBeLessThanOrEqual(byteCap);
-      measured.getStore()!.serializedBytes! += Buffer.byteLength(JSON.stringify(result));
+      JSON.stringify(result);
       return result;
     }
     async function current() {
@@ -170,27 +190,31 @@ export async function createCountedGrowthFixture() {
         const counters = Object.fromEntries([
           'preparePhases', 'readPhases', 'finishPhases', 'accessPreparations', 'accessEvaluations', 'mappingCollections',
           'poolQueries', 'materializedRows', 'materializedBytes', 'retainedBytes', 'serializedBytes', 'cleanupStatements', 'runnerPhases',
+          'prepareQueries', 'readQueries', 'finishQueries', 'fixtureQueries',
         ].map(key => [key, 0]));
         await measured.run(counters, async () => {
           await current();
           // Eventless losing-slot cleanup invalidates a read even though the effective zero stays unchanged.
           const stale = await journey();
-          await db.pool.query('DELETE FROM rating.vote WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND target_id=$4 AND counted_target IS NULL',
+          const removed = await db.pool.query('DELETE FROM rating.vote WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND target_id=$4 AND counted_target IS NULL RETURNING target_id',
             [voterRoute, actor.accountId, STANDARD_QUESTION_ID, original]);
+          expect(removed.rowCount).toBe(1);
           try {
             expect(await finish(stale)).toMatchObject({ status: 'preparing', reason: 'vote-changed', retry: 'same-input' });
             await current();
           } finally {
             await db.pool.query(`INSERT INTO rating.vote(route,voter_id,question_id,target_id,units,revision,counted_revision,counted_target,changed_at,transaction_id)
               VALUES($1,$2,$3,$4,9,1,1,NULL,$5,$6)`, [voterRoute, actor.accountId, STANDARD_QUESTION_ID, original, at, transaction]);
-            counters.cleanupStatements!++;
+            await db.pool.query('UPDATE rating.vote SET counted_target=NULL WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND target_id=$4',
+              [voterRoute, actor.accountId, STANDARD_QUESTION_ID, original]);
+            counters.cleanupStatements! += 2;
           }
           // Relevant pending authority is a negative observation, then the identical request retries after cleanup.
           await db.pool.query('UPDATE semantic.identity_epoch_group SET pending_job=$3,pending_epoch=published_epoch+1 WHERE partition_no=$1 AND terminal=$2',
             [controlHome, terminal, pendingJob]);
           try {
             counters.preparePhases!++;
-            const pending = await reader.prepare(request, Date.now() + 120_000);
+            const pending = await phase.run('prepare', () => reader.prepare(request, Date.now() + 120_000));
             retain(pending);
             expect(pending).toMatchObject({ status: 'preparing', reason: 'identity-pending', retry: 'same-input' });
           } finally {
@@ -206,7 +230,7 @@ export async function createCountedGrowthFixture() {
         const sourceHome = partitionOf(sourceRoute);
         await seed(db, {
           name: `counted ${axis}`, hotPartition: axis.includes('votes') || axis === 'repair backlog' ? partitionOf(voterRoute) : sourceHome,
-          rows: ({ ordinal }) => {
+          rows: ({ ordinal }): Record<string, readonly Row[]> => {
             const id = newId(sourceRoute);
             if (axis === 'unrelated votes') return { 'rating.vote': [
               { ...vote(id, 11), voter_id: newId(voterRoute) },
@@ -240,6 +264,11 @@ export async function createCountedGrowthFixture() {
             };
           },
         }, { from: previous, to: scale });
+        if (axis === 'selected retained votes') await db.admin.query(
+          `UPDATE rating.vote SET counted_target=NULL WHERE route=$1 AND voter_id=$2 AND question_id=$3
+           AND target_id<>ALL($4::uuid[]) AND counted_target IS NOT NULL`,
+          [voterRoute, actor.accountId, STANDARD_QUESTION_ID, [terminal, clear]],
+        );
         // Count the exact physical prefix, not a global table size or returned DTO cardinality.
         const prefixes = {
           'unrelated votes': ['SELECT count(*)::int n FROM rating.vote WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND counted_target IS NOT NULL', [voterRoute, actor.accountId, STANDARD_QUESTION_ID], 2],
