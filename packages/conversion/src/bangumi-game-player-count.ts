@@ -234,6 +234,7 @@ export function bangumiGamePlayerCount(
       continue;
     }
     if (field.key === '平台' || field.key === '游戏引擎' || handledFields.has(field.key)) continue;
+    if (field.key === 'website' || field.key === '链接') continue;
     omit(field.pointer, 'unsupported_infobox_mapping');
   }
 
