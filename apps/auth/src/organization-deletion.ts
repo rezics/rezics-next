@@ -88,6 +88,7 @@ export type OrganizationDeletionLoad =
 export type OrganizationDeletionReview = {
   humanAccountId?: string | undefined;
   isCurrent: () => boolean;
+  onExecutionDispatch?: (() => boolean) | undefined;
 };
 
 export async function loadOrganizationDeletion(
@@ -163,8 +164,8 @@ export async function executeOrganizationDeletion(
       !organizationDeletePendingMatches(continuation.value, target.humanAccountId, target.organizationId, operationKey))
   )
     return { ok: false, reason: 'changed' };
-  // Persist a minimal uncertainty fence before sending. A crash or reload cannot
-  // turn a lost response into a new approval. It contains no bearer or reference.
+  // Persist the fence at the execution boundary, after approval and immediately
+  // before sending. A preflight or approval failure is not a submitted deletion.
   const identity = {
     version: 1 as const,
     operation: 'delete' as const,
@@ -173,15 +174,71 @@ export async function executeOrganizationDeletion(
     operationKey,
     returnTo: organizationDeleteReturnTo,
   };
-  try {
-    storeOrganizationDeleteUnknown(identity);
-  } catch {
+  let fenceUnavailable = false;
+  let fenceConflict = false;
+  let fenceStored = false;
+  const clearFence = () => {
+    const saved = readOrganizationDeleteUnknown(target.organizationId);
+    if (
+      saved.kind === 'pending' &&
+      organizationDeletePendingMatches(saved.value, target.humanAccountId, target.organizationId, operationKey)
+    )
+      clearOrganizationDeleteUnknown(target.organizationId);
+  };
+  const onExecutionDispatch = () => {
+    if (review && !review.isCurrent()) return false;
+    const saved = readOrganizationDeleteUnknown(target.organizationId);
+    if (saved.kind !== 'absent') {
+      // The installed executor can make one bounded same-key retry after an
+      // unavailable execution response. Only this call's exact fence may cross
+      // that second dispatch; restored or concurrent uncertainty stays read-only.
+      if (
+        !fenceStored ||
+        saved.kind !== 'pending' ||
+        !organizationDeletePendingMatches(saved.value, target.humanAccountId, target.organizationId, operationKey)
+      ) {
+        fenceConflict = true;
+        return false;
+      }
+      return !review?.onExecutionDispatch || review.onExecutionDispatch();
+    }
+    try {
+      storeOrganizationDeleteUnknown(identity);
+      const stored = readOrganizationDeleteUnknown(target.organizationId);
+      if (
+        stored.kind !== 'pending' ||
+        !organizationDeletePendingMatches(stored.value, target.humanAccountId, target.organizationId, operationKey)
+      ) {
+        fenceUnavailable = true;
+        return false;
+      }
+      fenceStored = true;
+    } catch {
+      fenceUnavailable = true;
+      return false;
+    }
+    if (review?.onExecutionDispatch && !review.onExecutionDispatch()) {
+      clearFence();
+      return false;
+    }
+    return true;
+  };
+  const result = await runAccountOperation(
+    operationKey,
+    { kind: 'delete', accountId: target.organizationId },
+    { isCurrent: () => !review || review.isCurrent(), retryUncertain: true, onExecutionDispatch },
+  );
+  if (fenceUnavailable) {
+    clearFence();
     return { ok: false, reason: 'unavailable' };
   }
-  const result = await runAccountOperation(operationKey, { kind: 'delete', accountId: target.organizationId }, review);
-  // Departure retires browser storage changes too; the original native command
-  // may already be running, so its uncertainty identity must remain available.
-  if (review && !review.isCurrent()) return result;
+  if (fenceConflict) return { ok: false, reason: 'unknown' };
+  // A response from this exact attempt may settle its own fence after departure.
+  // It cannot replace a newer view or settle any earlier unknown attempt.
+  if (review && !review.isCurrent()) {
+    if (result.ok || result.reason !== 'unknown') clearFence();
+    return result;
+  }
   if (result.ok || result.reason !== 'unknown') {
     clearOrganizationDeleteUnknown(target.organizationId);
   }

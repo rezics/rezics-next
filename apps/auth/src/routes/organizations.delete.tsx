@@ -1,12 +1,18 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { AuthButton as Button } from '../button';
 import { ErrorAlert } from '../alert';
 import { AuthPage } from '../frame';
-import { OrganizationDeletionRecovery, OrganizationDeletionDeparturePrompt } from '../organization-deletion-recovery';
+import { OrganizationDeletionDeparturePrompt } from '../organization-deletion-recovery';
+import {
+  OrganizationDeletionReturnController,
+  type OrganizationDeletionHistoryView,
+  type OrganizationDeletionReviewGeneration,
+} from '../organization-deletion-return';
+import { OrganizationDeletionReturnView } from '../organization-deletion-return-view';
 import {
   organizationDeletionAttempt,
   warnOrganizationDeletionAttempt,
@@ -32,7 +38,6 @@ import {
   readCurrentOrganizationForDeletion,
   type OrganizationDeletionLoad,
   type OrganizationDeletionReader,
-  type OrganizationDeletionReview,
 } from '../organization-deletion';
 
 // Trusted issuer entry for Web management: /organizations/delete?organization_id=<immutable UUID>.
@@ -116,33 +121,33 @@ export function OrganizationDeleteContent({
   const [confirmation, setConfirmation] = useState('');
   const [confirmationError, setConfirmationError] = useState(false);
   const [pending, setPending] = useState(false);
+  const [nativeBusy, setNativeBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [outcome, setOutcome] = useState<'form' | 'accepted' | 'unknown'>('form');
+  const [history, setHistory] = useState<OrganizationDeletionHistoryView>([]);
+  const [needsReview, setNeedsReview] = useState(false);
   const submitting = useRef<object | null>(null);
   const attempt = useRef<OrganizationDeletionAttempt | null>(null);
+  const [returns] = useState(
+    () =>
+      new OrganizationDeletionReturnController(setHistory, () => {
+        if (attempt.current) attempt.current.unresolved = true;
+      }),
+  );
   const recoveryHeading = useRef<HTMLHeadingElement>(null);
-  const review = useRef<
-    | (OrganizationDeletionReview & {
-        selected?: string | undefined;
-        operationKey?: string | undefined;
-        active: boolean;
-        source: string | undefined;
-        reader: OrganizationDeletionReader;
-      })
-    | null
-  >(null);
-  const selectedId = useRef<string | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
   const alert = useRef<HTMLDivElement>(null);
   const router = useRouter({ warn: false });
   const bypassDeparture = useRef(false);
-  const departureState = useRef({ confirmation, pending, outcome, loaded, organizationId, read });
-  departureState.current = { confirmation, pending, outcome, loaded, organizationId, read };
+  const nativeFlight = useRef<object | null>(null);
+  const focusIntent = useRef<'history' | 'retry' | 'sign-in' | 'confirmation' | null>(null);
+  const departureState = useRef({ confirmation, pending, loaded, organizationId, read });
+  departureState.current = { confirmation, pending, loaded, organizationId, read };
 
   const shouldWarn = useCallback(() => {
     const state = departureState.current;
-    const current = review.current;
+    const current = returns.current;
     const continuation = readOrganizationDeleteStepUp();
+    const attemptSelection = current?.selected ?? state.organizationId ?? attempt.current?.identity.organizationId;
     const hasAuthority = state.loaded === null || state.loaded.kind === 'ready' || state.loaded.kind === 'unavailable';
     const unfinished =
       Boolean(state.confirmation.trim()) ||
@@ -156,28 +161,56 @@ export function OrganizationDeleteContent({
           current!.selected!,
           current!.operationKey!,
         ));
+    const activeReviewCanWarn = Boolean(
+      current &&
+        current.source === state.organizationId &&
+        current.reader === state.read &&
+        current.active &&
+        hasAuthority &&
+        unfinished,
+    );
     return Boolean(
       !bypassDeparture.current &&
-      current?.source === state.organizationId &&
-      current?.reader === state.read &&
-      (warnOrganizationDeletionAttempt(attempt.current, current?.selected) ||
-        (current?.active && hasAuthority && unfinished)),
+      (warnOrganizationDeletionAttempt(attempt.current, attemptSelection) ||
+        activeReviewCanWarn),
     );
   }, []);
 
-  function resetReview() {
+  function resetReview(needsCurrentReview = false) {
     submitting.current = null;
     setPending(false);
     setLoaded(null);
     setConfirmationError(false);
     setMessage('');
     setConfirmation('');
-    setOutcome('form');
+    setNeedsReview(needsCurrentReview);
   }
 
-  function invalidateReview(current: NonNullable<typeof review.current>) {
-    current.active = false;
-    if (review.current === current) {
+  function acquireNativeFlight(token: object): boolean {
+    if (nativeFlight.current) return false;
+    nativeFlight.current = token;
+    setNativeBusy(true);
+    return true;
+  }
+
+  function releaseNativeFlight(token: object): void {
+    if (nativeFlight.current !== token) return;
+    nativeFlight.current = null;
+    setNativeBusy(false);
+  }
+
+  function retireReview(current: OrganizationDeletionReviewGeneration, result?: OrganizationDeletionLoad) {
+    const belongsToAttempt = attempt.current?.identity.organizationId === current.selected;
+    returns.retire(current);
+    if (belongsToAttempt && !attempt.current?.unresolved) {
+      attempt.current.mounted = false;
+      attempt.current = null;
+    }
+    if (!current.active) {
+      if (result) setLoaded(result);
+      setNeedsReview(true);
+    }
+    if (returns.current === null) {
       submitting.current = null;
       setPending(false);
     }
@@ -186,25 +219,65 @@ export function OrganizationDeleteContent({
   function leaveReview() {
     bypassDeparture.current = true;
     if (attempt.current) attempt.current.mounted = false;
-    if (review.current) review.current.active = false;
-    selectedId.current = undefined;
-    resetReview();
+    returns.retire();
+    resetReview(true);
   }
 
-  async function loadReview(current: NonNullable<typeof review.current>) {
-    const result = current.selected
-      ? await loadOrganizationDeletion(current.selected, read, current)
+  function selectedForReview(): string | undefined {
+    if (organizationId !== undefined) return organizationId;
+    if (attempt.current?.unresolved) return attempt.current.identity.organizationId;
+    const continuation = readOrganizationDeleteStepUp();
+    return continuation.kind === 'pending' ? continuation.value.organizationId : undefined;
+  }
+
+  function beginReview(selected: string | undefined): OrganizationDeletionReviewGeneration {
+    const uncertain = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
+    const continuation = readOrganizationDeleteStepUp();
+    const retained = attempt.current?.unresolved && attempt.current.identity.organizationId === selected
+      ? attempt.current.identity
+      : uncertain.kind === 'pending' && uncertain.value.organizationId === selected
+        ? uncertain.value
+        : continuation.kind === 'pending' && continuation.value.organizationId === selected
+          ? continuation.value
+          : undefined;
+    return returns.begin({
+      selected,
+      source: organizationId,
+      reader: read,
+      humanAccountId: retained?.humanAccountId,
+      operationKey: retained?.operationKey,
+    });
+  }
+
+  function retainUnresolved(selected: string | undefined) {
+    if (selected && !attempt.current?.unresolved) {
+      const hint = readOrganizationDeleteUnknown(selected);
+      attempt.current = organizationDeletionAttempt(
+        hint.kind === 'pending' && hint.value.organizationId === selected
+          ? hint.value
+          : { organizationId: selected },
+        true,
+      );
+    }
+    if (!returns.history().includes('unresolved')) returns.seed('unresolved');
+  }
+
+  async function loadReview(current: OrganizationDeletionReviewGeneration) {
+    const selected = current.selected;
+    const reader = current.reader;
+    const result = selected && reader
+      ? await loadOrganizationDeletion(selected, reader, current)
       : { kind: 'missing' as const };
     if (!current.isCurrent()) return;
-    if (['signed-out', 'denied', 'hidden', 'missing', 'changed'].includes(result.kind)) {
-      invalidateReview(current);
-      setLoaded(result);
+    if (['signed-out', 'denied', 'hidden', 'missing', 'changed', 'unavailable'].includes(result.kind)) {
+      retireReview(current, result);
+      focusIntent.current = result.kind === 'signed-out' ? 'sign-in' : 'retry';
       return;
     }
     const continuation = readOrganizationDeleteStepUp();
     if (
       continuation.kind === 'pending' &&
-      continuation.value.organizationId === current.selected &&
+      continuation.value.organizationId === selected &&
       result.kind === 'ready'
     ) {
       if (
@@ -215,75 +288,117 @@ export function OrganizationDeleteContent({
           current.operationKey ?? '',
         )
       ) {
-        invalidateReview(current);
-        setLoaded({ kind: 'changed' });
+        retireReview(current, { kind: 'changed' });
+        setMessage(m.auth_organization_delete_changed());
+        focusIntent.current = 'retry';
         return;
       }
       setMessage(m.auth_account_operation_reconfirm());
     }
     setLoaded(result);
+    setNeedsReview(false);
+    focusIntent.current = result.kind === 'ready' ? 'confirmation' : null;
+  }
+
+  function startInitialRead(current: OrganizationDeletionReviewGeneration) {
+    const operationToken = {};
+    if (!acquireNativeFlight(operationToken)) {
+      setNeedsReview(true);
+      return;
+    }
+    submitting.current = operationToken;
+    setPending(true);
+    void loadReview(current).finally(() => {
+      releaseNativeFlight(operationToken);
+      if (submitting.current === operationToken) {
+        submitting.current = null;
+        setPending(false);
+      }
+    });
+  }
+
+  async function reviewCurrent() {
+    if (submitting.current || nativeFlight.current || pending) return;
+    const current = beginReview(selectedForReview());
+    setLoaded(null);
+    setConfirmation('');
+    setConfirmationError(false);
+    setMessage('');
+    setNeedsReview(false);
+    setPending(true);
+    focusIntent.current = null;
+    const operationToken = {};
+    if (!acquireNativeFlight(operationToken)) return;
+    submitting.current = operationToken;
+    try {
+      await loadReview(current);
+    } finally {
+      releaseNativeFlight(operationToken);
+      if (submitting.current === operationToken) {
+        submitting.current = null;
+        setPending(false);
+      }
+    }
   }
 
   useLayoutEffect(() => {
-    if (review.current) review.current.active = false;
+    returns.retire();
     bypassDeparture.current = false;
-    resetReview();
+    resetReview(false);
     const continuation = readOrganizationDeleteStepUp();
     const saved = continuation.kind === 'pending' ? continuation.value : null;
-    const selected = organizationId ?? saved?.organizationId;
-    selectedId.current = selected;
+    const selected = selectedForReview();
     const hint = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
-    // A record stored under a different target is conservative, never a replacement operation.
+    const conflictingContinuation = Boolean(saved && organizationId !== undefined && saved.organizationId !== organizationId);
     const uncertain =
-      hint.kind === 'pending' && hint.value.organizationId !== selected ? { kind: 'invalid' as const } : hint;
-    attempt.current = selected
-      ? organizationDeletionAttempt(
-          uncertain.kind === 'pending' ? uncertain.value : { organizationId: selected },
-          uncertain.kind !== 'absent',
-        )
-      : null;
-    const current = {
-      selected,
-      operationKey:
-        uncertain.kind === 'pending'
-          ? uncertain.value.operationKey
-          : saved?.organizationId === selected
-            ? saved?.operationKey
-            : undefined,
-      active: true,
-      source: organizationId,
-      reader: read,
-      humanAccountId:
-        uncertain.kind === 'pending'
-          ? uncertain.value.humanAccountId
-          : saved?.organizationId === selected
-            ? saved?.humanAccountId
-            : undefined,
-      isCurrent: (): boolean => review.current === current && current.active,
-    };
-    review.current = current;
-    if (continuation.kind === 'invalid' || (saved && organizationId && saved.organizationId !== organizationId)) {
-      if (continuation.kind === 'invalid') clearOrganizationDeleteStepUp();
+      hint.kind !== 'absent' ||
+      continuation.kind === 'invalid' ||
+      conflictingContinuation ||
+      Boolean(attempt.current?.unresolved);
+    if (uncertain) {
+      retainUnresolved(selected);
+    } else if (!attempt.current?.unresolved) {
+      attempt.current = selected ? organizationDeletionAttempt({ organizationId: selected }) : null;
+    }
+    if (continuation.kind === 'invalid' || (saved && organizationId !== undefined && saved.organizationId !== organizationId)) {
       setMessage(m.auth_organization_delete_changed());
     }
-    if (uncertain.kind !== 'absent') setOutcome('unknown');
-    void loadReview(current);
+    const current = beginReview(selected);
+    const mustReadDeliberately = uncertain || returns.history().length > 0;
+    if (mustReadDeliberately) {
+      setNeedsReview(true);
+      setPending(false);
+    } else {
+      startInitialRead(current);
+    }
     const retire = () => {
-      if (review.current) review.current.active = false;
-      resetReview();
-      const retained = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
-      if (attempt.current && retained.kind !== 'absent') attempt.current.unresolved = true;
-      if (attempt.current?.unresolved) setOutcome('unknown');
-      setLoaded({ kind: 'unavailable' });
+      flushSync(() => {
+        returns.retire();
+        if (attempt.current && !attempt.current.unresolved) {
+          attempt.current.mounted = false;
+          attempt.current = null;
+        }
+        resetReview(true);
+        focusIntent.current = returns.history().length ? 'history' : 'retry';
+      });
     };
     const restore = (event: PageTransitionEvent) => {
-      if (event.persisted) retire();
+      if (!event.persisted) return;
+      flushSync(() => {
+        returns.retire();
+        beginReview(selectedForReview());
+        resetReview(true);
+        focusIntent.current = returns.history().length ? 'history' : 'retry';
+      });
     };
     window.addEventListener('pagehide', retire);
     window.addEventListener('pageshow', restore);
     return () => {
-      if (attempt.current) attempt.current.mounted = false;
-      if (review.current) review.current.active = false;
+      if (attempt.current && !attempt.current.unresolved) {
+        attempt.current.mounted = false;
+        attempt.current = null;
+      }
+      returns.retire();
       window.removeEventListener('pagehide', retire);
       window.removeEventListener('pageshow', restore);
     };
@@ -299,199 +414,243 @@ export function OrganizationDeleteContent({
     return () => window.removeEventListener('beforeunload', unload);
   }, [shouldWarn]);
 
-  async function recover() {
-    const previous = review.current;
-    if (!previous || submitting.current) return;
-    previous.active = false;
-    const current = {
-      ...previous,
-      active: true,
-      isCurrent: (): boolean => review.current === current && current.active,
-    };
-    review.current = current;
-    resetReview();
-    if (current.selected && readOrganizationDeleteUnknown(current.selected).kind !== 'absent') setOutcome('unknown');
-    await loadReview(current);
-  }
+  const recover = () => void reviewCurrent();
 
-  useLayoutEffect(() => {
-    if (confirmationError) input.current?.focus();
-    else if (message) alert.current?.focus();
-  }, [confirmationError, message]);
-
-  const target = loaded?.kind === 'ready' ? loaded.target : null;
+  const hasUnresolvedHistory = history.includes('unresolved');
+  const target = loaded?.kind === 'ready' && !hasUnresolvedHistory ? loaded.target : null;
   const phrase = target ? organizationDeleteConfirmation(target, m.auth_organization_delete_phrase()) : '';
 
-  function clearReviewContinuation(current: NonNullable<typeof review.current>) {
+  function clearReviewContinuationFor(humanAccountId: string, selected: string, operationKey: string) {
     const saved = readOrganizationDeleteStepUp();
     if (
       saved.kind === 'pending' &&
-      current.humanAccountId &&
-      current.selected &&
-      current.operationKey &&
-      organizationDeletePendingMatches(saved.value, current.humanAccountId, current.selected, current.operationKey)
+      organizationDeletePendingMatches(saved.value, humanAccountId, selected, operationKey)
     )
       clearOrganizationDeleteStepUp();
   }
 
   function authenticate(humanAccountId: string, selected: string) {
-    const current = review.current;
+    const current = returns.current;
     if (
       !current?.isCurrent() ||
       current.selected !== selected ||
       current.humanAccountId !== humanAccountId ||
-      outcome !== 'form'
+      history.includes('unresolved')
     )
       return;
     // Unknown work is never replaced by a new authentication continuation.
     if (readOrganizationDeleteUnknown(selected).kind !== 'absent') {
       setConfirmation('');
-      if (attempt.current) attempt.current.unresolved = true;
-      setOutcome('unknown');
+      retainUnresolved(selected);
+      retireReview(current);
+      setNeedsReview(true);
       return;
     }
-    const key = current.operationKey ?? operationKeyFor({ kind: 'delete', accountId: selected }, humanAccountId);
-    current.operationKey = key;
     const continuation = readOrganizationDeleteStepUp();
-    if (
-      continuation.kind === 'invalid' ||
-      (continuation.kind === 'pending' &&
-        !organizationDeletePendingMatches(continuation.value, humanAccountId, selected, key))
-    ) {
-      invalidateReview(current);
-      setLoaded({ kind: 'changed' });
+    if (continuation.kind === 'invalid') {
+      retainUnresolved(current.selected);
+      retireReview(current, { kind: 'changed' });
       setConfirmation('');
+      setMessage(m.auth_organization_delete_changed());
+      focusIntent.current = 'retry';
       return;
     }
+    let key = current.operationKey;
+    if (continuation.kind === 'pending') {
+      if (
+        continuation.value.humanAccountId !== humanAccountId ||
+        continuation.value.organizationId !== selected ||
+        (key !== undefined && continuation.value.operationKey !== key)
+      ) {
+        retireReview(current, { kind: 'changed' });
+        setConfirmation('');
+        setMessage(m.auth_organization_delete_changed());
+        focusIntent.current = 'retry';
+        return;
+      }
+      key ??= continuation.value.operationKey;
+    }
+    key ??= operationKeyFor({ kind: 'delete', accountId: selected }, humanAccountId);
+    current.operationKey = key;
     if (!storeOrganizationDeleteStepUp({ humanAccountId, organizationId: selected, operationKey: key })) {
       setMessage(m.auth_account_operation_unavailable());
       return;
     }
     setConfirmation('');
     setLoaded(null);
-    current.active = false;
+    retireReview(current);
     bypassDeparture.current = true;
     window.location.assign(organizationDeleteStepUpUrl);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const current = review.current;
-    if (!current?.isCurrent() || !target || !privacyContact || submitting.current || outcome !== 'form') return;
+    const current = returns.current;
+    if (
+      !current?.isCurrent() ||
+      !target ||
+      !privacyContact ||
+      submitting.current ||
+      nativeFlight.current ||
+      history.includes('unresolved')
+    ) return;
     if (!organizationDeleteConfirmed(confirmation, phrase)) {
       setConfirmationError(true);
       return;
     }
+    const continuation = readOrganizationDeleteStepUp();
+    if (continuation.kind === 'invalid') {
+      retainUnresolved(selectedForReview());
+      retireReview(current, { kind: 'changed' });
+      setConfirmation('');
+      setMessage(m.auth_organization_delete_changed());
+      focusIntent.current = 'retry';
+      return;
+    }
+    const selected = target.organizationId;
+    const unknown = readOrganizationDeleteUnknown(selected);
+    if (unknown.kind !== 'absent') {
+      retainUnresolved(selected);
+      retireReview(current);
+      setConfirmation('');
+      setNeedsReview(true);
+      focusIntent.current = 'history';
+      return;
+    }
+    let key = current.operationKey;
+    if (continuation.kind === 'pending') {
+      if (
+        continuation.value.humanAccountId !== target.humanAccountId ||
+        continuation.value.organizationId !== selected ||
+        (key !== undefined && continuation.value.operationKey !== key)
+      ) {
+        retainUnresolved(selected);
+        retireReview(current, { kind: 'changed' });
+        setConfirmation('');
+        setMessage(m.auth_organization_delete_changed());
+        focusIntent.current = 'retry';
+        return;
+      }
+      key ??= continuation.value.operationKey;
+    }
+    key ??= operationKeyFor({ kind: 'delete', accountId: selected }, target.humanAccountId);
+    current.operationKey = key;
+    const attemptId = returns.beginAttempt(current);
+    if (attemptId === null) return;
     const operationToken = {};
+    if (!acquireNativeFlight(operationToken)) return;
     submitting.current = operationToken;
     setPending(true);
     setConfirmationError(false);
     setMessage('');
     try {
       const operation = { kind: 'delete' as const, accountId: target.organizationId };
-      const key = current.operationKey ?? operationKeyFor(operation, target.humanAccountId);
-      current.operationKey = key;
-      const continuation = readOrganizationDeleteStepUp();
-      if (
-        continuation.kind === 'invalid' ||
-        (continuation.kind === 'pending' &&
-          !organizationDeletePendingMatches(continuation.value, target.humanAccountId, target.organizationId, key))
-      ) {
-        invalidateReview(current);
-        setLoaded({ kind: 'changed' });
-        setConfirmation('');
-        setMessage(m.auth_organization_delete_changed());
-        return;
-      }
       attempt.current = organizationDeletionAttempt({
         organizationId: target.organizationId,
         humanAccountId: target.humanAccountId,
         operationKey: key,
       });
       const result = await executeOrganizationDeletion(target, key, read, current);
-      // Navigation cannot apply an earlier target's result to the new selection.
-      if (!current.isCurrent()) return;
       if (result.ok) {
+        returns.resolveAttempt(attemptId, 'acknowledged');
+        focusIntent.current = 'history';
         forgetOperationKey(operation, target.humanAccountId);
-        clearReviewContinuation(current);
-        if (attempt.current) attempt.current.unresolved = false;
-        setOutcome('accepted');
+        clearReviewContinuationFor(target.humanAccountId, target.organizationId, key);
+        if (attempt.current?.identity.operationKey === key && attempt.current.identity.organizationId === target.organizationId) {
+          attempt.current.unresolved = false;
+          attempt.current.mounted = false;
+          attempt.current = null;
+        }
         setConfirmation('');
+        if (current.isCurrent()) {
+          returns.retire(current);
+          setLoaded(null);
+          setNeedsReview(true);
+          setMessage('');
+          focusIntent.current = 'history';
+        }
+        return;
+      }
+      const phase = returns.attemptPhase(attemptId);
+      if (!current.isCurrent()) {
+        if (result.reason === 'unknown') {
+          focusIntent.current = 'history';
+          if (phase === 'unsent') {
+            returns.finishUnsentAttempt(attemptId);
+            if (!returns.history().includes('unresolved')) returns.seed('unresolved');
+          } else returns.markAttemptUnresolved(attemptId);
+        }
+        else if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
+        else if (phase === 'unsent' && result.reason !== 'step-up') returns.finishUnsentAttempt(attemptId);
+        if (result.reason !== 'unknown' && attempt.current?.identity.operationKey === key) {
+          attempt.current.unresolved = false;
+          attempt.current.mounted = false;
+          attempt.current = null;
+        }
         return;
       }
       if (result.reason === 'step-up') {
         authenticate(target.humanAccountId, target.organizationId);
         return;
       }
+      if (phase === 'unsent') {
+        returns.finishUnsentAttempt(attemptId);
+        if (result.reason === 'unknown' && !returns.history().includes('unresolved')) returns.seed('unresolved');
+      }
       setConfirmation('');
       if (result.reason === 'unknown') {
-        // No new approval or execution after ambiguity; only current readback
-        // follows while the original command identity remains stored.
-        clearReviewContinuation(current);
+        if (phase !== 'unsent') returns.markAttemptUnresolved(attemptId);
         const retained = readOrganizationDeleteUnknown(target.organizationId);
         if (retained.kind === 'pending' && retained.value.organizationId === target.organizationId)
           attempt.current = organizationDeletionAttempt(retained.value, true);
         else if (attempt.current) attempt.current.unresolved = true;
-        setOutcome('unknown');
+        retireReview(current);
+        setLoaded(null);
+        setNeedsReview(true);
         setMessage('');
+        focusIntent.current = 'history';
       } else if (result.reason === 'changed') {
-        invalidateReview(current);
-        clearReviewContinuation(current);
-        setLoaded({ kind: 'unavailable' });
+        if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
+        retireReview(current, { kind: 'changed' });
+        clearReviewContinuationFor(target.humanAccountId, target.organizationId, key);
         setMessage(m.auth_organization_delete_changed());
+        focusIntent.current = 'retry';
       } else if (result.reason === 'denied') {
-        invalidateReview(current);
-        setLoaded({ kind: 'denied' });
+        if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
+        retireReview(current, { kind: 'denied' });
         setMessage(m.auth_organization_delete_denied());
-      } else if (result.reason === 'platform-closed') setMessage(m.auth_organization_not_open());
-      else if (result.reason === 'unavailable') setMessage(m.auth_account_operation_unavailable());
-      else setMessage(m.auth_account_operation_failure());
+        focusIntent.current = 'retry';
+      } else if (result.reason === 'platform-closed') {
+        setMessage(m.auth_organization_not_open());
+        focusIntent.current = 'retry';
+      } else if (result.reason === 'unavailable') {
+        if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
+        retireReview(current, { kind: 'unavailable' });
+        setMessage(m.auth_account_operation_unavailable());
+        focusIntent.current = 'retry';
+      } else {
+        if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
+        setMessage(m.auth_account_operation_failure());
+        focusIntent.current = 'retry';
+      }
     } finally {
-      if (current.isCurrent() && submitting.current === operationToken) {
+      releaseNativeFlight(operationToken);
+      if (submitting.current === operationToken) {
         submitting.current = null;
         setPending(false);
       }
     }
   }
 
-  async function readback(currentOrganizationId: string) {
-    const previous = review.current;
-    if (
-      !previous ||
-      previous.selected !== currentOrganizationId ||
-      previous.source !== organizationId ||
-      previous.reader !== read ||
-      !attempt.current?.mounted ||
-      !attempt.current.unresolved ||
-      submitting.current
-    )
-      return;
-    const current = previous.isCurrent()
-      ? previous
-      : {
-          ...previous,
-          active: true,
-          isCurrent: (): boolean => review.current === current && current.active,
-        };
-    review.current = current;
-    const operationToken = {};
-    submitting.current = operationToken;
-    setPending(true);
-    try {
-      const result = await loadOrganizationDeletion(currentOrganizationId, read, current);
-      if (!current.isCurrent()) return;
-      if (['signed-out', 'denied', 'hidden', 'missing', 'changed'].includes(result.kind)) invalidateReview(current);
-      // A missing/denied read is not proof of deletion; a readable target is not
-      // proof that an earlier command failed. Preserve the unknown command state.
-      setLoaded(result);
-      setMessage('');
-    } finally {
-      if (current.isCurrent() && submitting.current === operationToken) {
-        submitting.current = null;
-        setPending(false);
-      }
-    }
-  }
+  useLayoutEffect(() => {
+    if (confirmationError) input.current?.focus();
+    else if (focusIntent.current === 'history') recoveryHeading.current?.focus();
+    else if (focusIntent.current === 'retry') document.getElementById('organization-delete-return-review')?.focus();
+    else if (focusIntent.current === 'sign-in') document.getElementById('organization-delete-return-sign-in')?.focus();
+    else if (focusIntent.current === 'confirmation' && target) input.current?.focus();
+    else if (message) alert.current?.focus();
+    focusIntent.current = null;
+  }, [confirmationError, message, target, loaded, pending, history]);
 
   const [privacyBefore, privacyAfter] = privacyContact
     ? m.auth_account_delete_privacy_contact({ contact: privacyContact }).split(privacyContact)
@@ -500,17 +659,20 @@ export function OrganizationDeleteContent({
     <OrganizationDeleteDeparture
       shouldWarn={shouldWarn}
       leave={leaveReview}
-      unknown={outcome === 'unknown'}
+      unknown={hasUnresolvedHistory}
       focus={() => {
         if (bypassDeparture.current) return;
-        if (attempt.current?.unresolved) recoveryHeading.current?.focus();
-        else if (review.current?.isCurrent()) input.current?.focus();
+        if (hasUnresolvedHistory || needsReview) recoveryHeading.current?.focus();
+        else if (loaded?.kind === 'signed-out') document.getElementById('organization-delete-return-sign-in')?.focus();
+        else if (loaded && loaded.kind !== 'ready' && loaded.kind !== 'authentication-required')
+          document.getElementById('organization-delete-return-review')?.focus();
+        else if (returns.current?.isCurrent() && target) input.current?.focus();
       }}
     />
   ) : null;
 
   return (
-    <AuthPage heading={m.auth_organization_delete_heading()} returnToSecurity={outcome !== 'accepted'}>
+    <AuthPage heading={m.auth_organization_delete_heading()} returnToSecurity>
       {departure}
       <div className="auth-login-form">
         <p>{m.auth_organization_delete_effect()}</p>
@@ -530,30 +692,52 @@ export function OrganizationDeleteContent({
             {message}
           </ErrorAlert>
         ) : null}
-        {outcome === 'accepted' ? (
-          <Alert role="status">
-            <AlertDescription>{m.auth_organization_delete_accepted()}</AlertDescription>
-          </Alert>
-        ) : outcome === 'unknown' ? (
-          <OrganizationDeletionRecovery
-            advice={loaded}
-            pending={pending || loaded === null}
-            headingRef={recoveryHeading}
-            readback={selectedId.current ? () => void readback(selectedId.current!) : undefined}
-          />
-        ) : !loaded ? (
-          <p role="status">{m.auth_inventory_loading()}</p>
+        <OrganizationDeletionReturnView
+          history={history}
+          advice={loaded}
+          pending={pending}
+          readCurrent={nativeBusy ? undefined : recover}
+          headingRef={recoveryHeading}
+        />
+        {hasUnresolvedHistory ? null : !loaded ? (
+          pending ? (
+            <p role="status">{m.auth_inventory_loading()}</p>
+          ) : needsReview ? (
+            <>
+              <p role="status">{m.auth_organization_delete_return_review_required()}</p>
+              <Button
+                id="organization-delete-return-review"
+                type="button"
+                disabled={pending || nativeBusy}
+                aria-busy={pending}
+                onClick={recover}
+              >
+                {m.auth_organization_delete_readback()}
+              </Button>
+            </>
+          ) : (
+            <p role="status">{m.auth_inventory_loading()}</p>
+          )
         ) : loaded.kind === 'signed-out' ? (
           <>
             <p>{m.auth_account_operation_sign_in_required()}</p>
-            <a href="/login">{m.auth_security_sign_in()}</a>
+            <a id="organization-delete-return-sign-in" href="/login">{m.auth_security_sign_in()}</a>
+            <Button
+              id="organization-delete-return-review"
+              type="button"
+              disabled={pending || nativeBusy}
+              aria-busy={pending}
+              onClick={recover}
+            >
+              {m.auth_organization_delete_readback()}
+            </Button>
           </>
         ) : loaded.kind === 'authentication-required' ? (
           <>
             <p>{m.auth_transfer_acting_as({ account: loaded.humanAccountId })}</p>
-            <p className="break-all">{selectedId.current}</p>
+            <p className="break-all">{returns.current?.selected}</p>
             <p>{m.auth_organization_delete_authentication_required()}</p>
-            <Button type="button" onClick={() => authenticate(loaded.humanAccountId, selectedId.current!)}>
+            <Button type="button" onClick={() => authenticate(loaded.humanAccountId, returns.current?.selected ?? '')}>
               {m.auth_organization_delete_authenticate()}
             </Button>
           </>
@@ -562,15 +746,23 @@ export function OrganizationDeleteContent({
             <ErrorAlert>
               {loaded.kind === 'changed'
                 ? m.auth_organization_delete_changed()
-                : loaded.kind === 'denied' || loaded.kind === 'hidden' || loaded.kind === 'missing'
-                  ? m.auth_organization_delete_read_denied()
+                : loaded.kind === 'denied'
+                  ? m.auth_organization_delete_recovery_denied()
+                  : loaded.kind === 'hidden'
+                    ? m.auth_organization_delete_recovery_hidden()
+                    : loaded.kind === 'missing'
+                      ? m.auth_organization_delete_recovery_missing()
                   : m.auth_account_operation_unavailable()}
             </ErrorAlert>
-            {loaded.kind === 'unavailable' ? (
-              <Button type="button" onClick={() => void recover()}>
-                {m.auth_account_delete_retry()}
-              </Button>
-            ) : null}
+            <Button
+              id="organization-delete-return-review"
+              type="button"
+              disabled={pending || nativeBusy}
+              aria-busy={pending}
+              onClick={recover}
+            >
+              {m.auth_organization_delete_readback()}
+            </Button>
           </>
         ) : (
           <form
