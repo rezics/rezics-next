@@ -2242,8 +2242,8 @@ volume 26) from the pinned dump relation check, walks only 1002/1003 novel
 members, and delivers authors through the existing creator-credit helper.
 Steins;Gate remains the required VN/anime showcase; this book family is a
 separate actual source family. Decision: type 1 Book/BookSeries dispatch uses
-the current `bangumi@9` converter, preserving TVAnime names, original-run and
-Game player-count rather than advancing to `@10`. Decision: one Bangumi subject stays one
+the current `bangumi@10` converter, preserving Book names, TVAnime original-run
+and Game player-count while adding TVAnime work evidence. Decision: one Bangumi subject stays one
 identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
 selected Book Girl records join the common showcase manifest; book review
 gaps stay in the seed books section so they do not fail Steins;Gate

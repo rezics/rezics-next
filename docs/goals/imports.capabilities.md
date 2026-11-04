@@ -770,8 +770,8 @@ not additional check requests.
   same-title extras stay excluded; ISBN does not invent an edition; missing
   volumes and missing author-role bindings stay gaps. Refresh keeps the same
   book, volume and person identities. Decision: type 1 Book/BookSeries dispatch
-  uses the current `bangumi@9` converter, preserving TVAnime names,
-  original-run and Game player-count rather than advancing to `@10`. Decision: selected Book Girl
+  uses the current `bangumi@10` converter, preserving Book names, TVAnime
+  original-run and Game player-count while adding TVAnime work evidence. Decision: selected Book Girl
   records join the common showcase manifest; book review gaps stay in the seed
   books section so they do not fail Steins;Gate publication.
 - `production operator imports two VNDB staff aliases through ordinary accept and current reads`:
