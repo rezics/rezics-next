@@ -511,7 +511,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       return typeof value === 'function' ? value.bind(commands) : value;
     },
   });
-  const readingInsights = readingInsightsRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, { pool: dependencies.pool });
+  const readingInsights = readingInsightsRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+  });
   const diary = diaryRoutes(readingInsights as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
     pool: dependencies.pool,

@@ -90,9 +90,16 @@ SELECT row_to_json(head) AS head,(SELECT row_to_json(year) FROM year) AS year,
 function counts(value: Counts | null | undefined): ReadingInsightsCounts {
   return { completedOccurrences: value?.completed ?? '0', repeatOccurrencesWithinProfile: value?.repeats ?? '0' };
 }
-function unavailable(year: number, reason: 'not_installed' | 'initializing' | 'maintenance_unavailable', head?: Head): ReadingInsightsProfiles {
+function unavailable(
+  year: number,
+  reason: 'not_installed' | 'initializing' | 'maintenance_unavailable',
+  head?: Head,
+): ReadingInsightsProfiles {
   return {
-    scope: 'selected_reported_year', year, state: 'unavailable', reason,
+    scope: 'selected_reported_year',
+    year,
+    state: 'unavailable',
+    reason,
     coverage: { initializedSessions: head?.initialized ?? null, retainedSessions: head?.retained ?? null },
   };
 }
@@ -106,54 +113,97 @@ function present(year: number, snapshot: Snapshot | undefined): ReadingInsightsP
     if (!profile) throw new ProblemError('dependency_unavailable');
     return { profile, ...counts(group) };
   });
-  const totals = counts(snapshot.year), unknown = counts(snapshot.unknown);
-  const remaining = (field: keyof ReadingInsightsCounts) => (
-    BigInt(totals[field]) - BigInt(unknown[field]) - profiles.reduce((sum, group) => sum + BigInt(group[field]), 0n)
-  ).toString();
+  const totals = counts(snapshot.year),
+    unknown = counts(snapshot.unknown);
+  const remaining = (field: keyof ReadingInsightsCounts) =>
+    (
+      BigInt(totals[field]) -
+      BigInt(unknown[field]) -
+      profiles.reduce((sum, group) => sum + BigInt(group[field]), 0n)
+    ).toString();
   return {
-    scope: 'selected_reported_year', year, state: 'available',
-    dateSource: 'explicitly_reported_journal_finish', grouping: 'exact_retained_profile_pin',
+    scope: 'selected_reported_year',
+    year,
+    state: 'available',
+    dateSource: 'explicitly_reported_journal_finish',
+    grouping: 'exact_retained_profile_pin',
     historicalLabels: 'unavailable',
-    coverage: { nativeSessions: 'complete', initializedSessions: head.initialized, retainedSessions: head.retained,
-      otherHistory: 'unavailable' },
-    currentness: { state: 'snapshot', source: 'reading_insights_v1', revision: head.revision,
-      retainedSourceRevision: head.source_revision },
-    totals, profiles, unknown,
-    remainder: { completedOccurrences: remaining('completedOccurrences'),
+    coverage: {
+      nativeSessions: 'complete',
+      initializedSessions: head.initialized,
+      retainedSessions: head.retained,
+      otherHistory: 'unavailable',
+    },
+    currentness: {
+      state: 'snapshot',
+      source: 'reading_insights_v1',
+      revision: head.revision,
+      retainedSourceRevision: head.source_revision,
+    },
+    totals,
+    profiles,
+    unknown,
+    remainder: {
+      completedOccurrences: remaining('completedOccurrences'),
       repeatOccurrencesWithinProfile: remaining('repeatOccurrencesWithinProfile'),
-      profileGroups: (BigInt(snapshot.year?.known_profiles ?? '0') - BigInt(profiles.length)).toString() },
+      profileGroups: (BigInt(snapshot.year?.known_profiles ?? '0') - BigInt(profiles.length)).toString(),
+    },
     limit: READING_INSIGHTS_PROFILE_LIMIT,
   };
 }
 
 /** Bounded native reader; final delivery runs under current owner authority. */
 export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
-  function profiles(actor: Actor, year: number, deadline: number, signal?: AbortSignal): Promise<ReadingInsightsProfiles>;
-  function profiles<T>(actor: Actor, year: number, deadline: number, signal: AbortSignal | undefined,
-    deliver: (value: ReadingInsightsProfiles, encoded: string) => T): Promise<T>;
+  function profiles(
+    actor: Actor,
+    year: number,
+    deadline: number,
+    signal?: AbortSignal,
+  ): Promise<ReadingInsightsProfiles>;
+  function profiles<T>(
+    actor: Actor,
+    year: number,
+    deadline: number,
+    signal: AbortSignal | undefined,
+    deliver: (value: ReadingInsightsProfiles, encoded: string) => T,
+  ): Promise<T>;
   async function profiles<T>(
-    actor: Actor, year: number, deadline: number, signal?: AbortSignal,
+    actor: Actor,
+    year: number,
+    deadline: number,
+    signal?: AbortSignal,
     deliver?: (value: ReadingInsightsProfiles, encoded: string) => T,
   ): Promise<ReadingInsightsProfiles | T> {
-      if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
-      if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-      const route = routeOf(actor.accountId);
-      if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
-      const alive = () => {
-        if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
-      };
-      alive();
-      return within(deadline, () => withConnection(deps.pool, async (connection) => {
+    if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
+    if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+    const route = routeOf(actor.accountId);
+    if (route === null || !actor.scopes.includes('progress_session:list')) throw new ProblemError('forbidden');
+    const alive = () => {
+      if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+    };
+    alive();
+    return within(deadline, () =>
+      withConnection(deps.pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
         let committed = false;
         try {
           await client.query('BEGIN');
-          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [route, actor.accountId]);
+          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+            route,
+            actor.accountId,
+          ]);
           const authorize = async () => {
             const owner = await readAccount(client, route, actor.accountId);
-            if (!owner || owner.kind !== 'actor' || owner.state !== 'active' || owner.fenced ||
-              !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
-              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)) throw new ProblemError('forbidden');
+            if (
+              !owner ||
+              owner.kind !== 'actor' ||
+              owner.state !== 'active' ||
+              owner.fenced ||
+              !Number.isSafeInteger(actor.authnEpoch) ||
+              actor.authnEpoch < 1 ||
+              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+            )
+              throw new ProblemError('forbidden');
           };
           await authorize();
           // An absent optional installation cannot abort the surrounding authority
@@ -164,8 +214,13 @@ export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
           try {
             snapshot = (await client.query<Snapshot>(snapshotSql, [route, actor.accountId, year])).rows[0];
           } catch (error) {
-            if (typeof error !== 'object' || error === null || !('code' in error) ||
-              (error.code !== '42P01' && error.code !== '42703')) throw error;
+            if (
+              typeof error !== 'object' ||
+              error === null ||
+              !('code' in error) ||
+              (error.code !== '42P01' && error.code !== '42703')
+            )
+              throw error;
             await client.query('ROLLBACK TO SAVEPOINT reading_insights_schema');
             installed = false;
           }
@@ -176,7 +231,8 @@ export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
           await authorize();
           if (installed) {
             const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
-            if (JSON.stringify(latest) !== JSON.stringify(snapshot?.head)) throw new ProblemError('dependency_unavailable');
+            if (JSON.stringify(latest) !== JSON.stringify(snapshot?.head))
+              throw new ProblemError('dependency_unavailable');
           }
           alive();
           await client.query('COMMIT');
@@ -187,7 +243,8 @@ export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
           if (!committed) await connection.query('ROLLBACK');
           throw error;
         }
-      }));
+      }),
+    );
   }
   return { profiles };
 }

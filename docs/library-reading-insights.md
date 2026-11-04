@@ -106,6 +106,8 @@ raw-fetch Web adapter or handwritten client delivery is added. Installed client 
 The first typecheck placement returned exit 75; a retry identified a future migration timestamp, which was corrected
 in a committed fix. `bun run --cwd services/kernel typecheck --emit-schema=library` then reached the compiler and
 failed, beginning with `../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module
-'./kernel/rating/own-votes-counted' or its corresponding type declarations.` Full diagnostic comparison and the
-required focused native file run remain to be recorded. Full/frozen acceptance, broad native growth, root checks
+'./kernel/rating/own-votes-counted' or its corresponding type declarations.` A clean clone of the bound base produced the same 301 compiler diagnostics after the new panel's delivery-result
+typing was fixed; the changed source adds zero diagnostics. The focused command
+`bun run --cwd services/kernel check test/library/reading-insights-profiles.test.ts` initially stopped at the
+formatter before executing tests. The changed TypeScript files were formatted and the command is rerun below. Full/frozen acceptance, broad native growth, root checks
 and browser review remain with integration.
