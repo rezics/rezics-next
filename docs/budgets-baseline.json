@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": ".temp/continuation/**",
+      "bytes": 194053
+    },
+    {
+      "path": "apps/auth/README.md",
+      "bytes": 79575
+    },
+    {
+      "path": "apps/web/README.md",
+      "bytes": 307536
+    },
+    {
+      "path": "apps/web/src/threads/README.md",
+      "bytes": 54684
+    },
+    {
+      "path": "docs/accounts.md",
+      "bytes": 69523
+    },
+    {
+      "path": "docs/catalogue-editing.md",
+      "bytes": 132270
+    },
+    {
+      "path": "docs/commerce-modules.md",
+      "bytes": 41325
+    },
+    {
+      "path": "docs/development/**/*.md",
+      "bytes": 400455
+    },
+    {
+      "path": "docs/development/page-stories.md",
+      "bytes": 209613
+    },
+    {
+      "path": "docs/development/verification.md",
+      "bytes": 39907
+    },
+    {
+      "path": "docs/development/web-check-entrypoints.md",
+      "bytes": 44736
+    },
+    {
+      "path": "docs/dynamic-collections.md",
+      "bytes": 73176
+    },
+    {
+      "path": "docs/feeds.md",
+      "bytes": 50450
+    },
+    {
+      "path": "docs/goals/**/*.capabilities.*",
+      "bytes": 720402
+    },
+    {
+      "path": "docs/goals/accounts.capabilities.md",
+      "bytes": 31042
+    },
+    {
+      "path": "docs/goals/commerce.capabilities.md",
+      "bytes": 168316
+    },
+    {
+      "path": "docs/goals/commerce.md",
+      "bytes": 14780
+    },
+    {
+      "path": "docs/goals/content.capabilities.md",
+      "bytes": 31422
+    },
+    {
+      "path": "docs/goals/imports.capabilities.md",
+      "bytes": 159043
+    },
+    {
+      "path": "docs/goals/library.capabilities.md",
+      "bytes": 93503
+    },
+    {
+      "path": "docs/goals/library.md",
+      "bytes": 15254
+    },
+    {
+      "path": "docs/goals/performance.capabilities.md",
+      "bytes": 84532
+    },
+    {
+      "path": "docs/goals/search.capabilities.md",
+      "bytes": 72078
+    },
+    {
+      "path": "docs/goals/semantic.capabilities.md",
+      "bytes": 57348
+    },
+    {
+      "path": "docs/goals/web.capabilities.md",
+      "bytes": 23118
+    },
+    {
+      "path": "docs/goals/web.md",
+      "bytes": 99893
+    },
+    {
+      "path": "docs/library-and-collections.md",
+      "bytes": 89539
+    },
+    {
+      "path": "docs/library-labels.md",
+      "bytes": 40726
+    },
+    {
+      "path": "docs/library-owner-queries.md",
+      "bytes": 54185
+    },
+    {
+      "path": "docs/library-profile-consumers.md",
+      "bytes": 58724
+    },
+    {
+      "path": "docs/private-follow-counts.md",
+      "bytes": 41218
+    },
+    {
+      "path": "docs/research/access-model-gpt-6-astra.md",
+      "bytes": 104470
+    },
+    {
+      "path": "docs/research/accounts-erasure-participants.md",
+      "bytes": 160797
+    },
+    {
+      "path": "docs/research/api-acceptance-gaps.md",
+      "bytes": 120790
+    },
+    {
+      "path": "docs/research/backend-architecture-current.md",
+      "bytes": 114128
+    },
+    {
+      "path": "docs/research/backend-architecture-deep.md",
+      "bytes": 110417
+    },
+    {
+      "path": "docs/research/backend-design-catalogue-search.md",
+      "bytes": 128749
+    },
+    {
+      "path": "docs/research/backend-design-community.md",
+      "bytes": 143015
+    },
+    {
+      "path": "docs/research/backend-design-library-commerce.md",
+      "bytes": 137921
+    },
+    {
+      "path": "docs/research/collections-and-covers.md",
+      "bytes": 100609
+    },
+    {
+      "path": "docs/research/growth-uncertainty-calibration.md",
+      "bytes": 1168020
+    },
+    {
+      "path": "docs/research/home-and-list-items.md",
+      "bytes": 468663
+    },
+    {
+      "path": "docs/research/home-feed-deep.md",
+      "bytes": 107559
+    },
+    {
+      "path": "docs/research/limits-inventory.md",
+      "bytes": 131388
+    },
+    {
+      "path": "docs/research/page-needs-api-render-audit.md",
+      "bytes": 114016
+    },
+    {
+      "path": "docs/research/performance-cost-audit.md",
+      "bytes": 515498
+    },
+    {
+      "path": "docs/research/quality-round3-backlog.md",
+      "bytes": 147947
+    },
+    {
+      "path": "docs/research/search-header-and-scopes.md",
+      "bytes": 106321
+    },
+    {
+      "path": "docs/research/shared-history-erasure.md",
+      "bytes": 101274
+    },
+    {
+      "path": "docs/research/subject-page-ia-current.md",
+      "bytes": 133719
+    },
+    {
+      "path": "docs/research/subject-page-ia-deep.md",
+      "bytes": 117362
+    },
+    {
+      "path": "docs/research/test-value-audit.md",
+      "bytes": 103516
+    },
+    {
+      "path": "docs/search-composed-closure-plan.md",
+      "bytes": 99785
+    },
+    {
+      "path": "docs/search-conditions.md",
+      "bytes": 42701
+    },
+    {
+      "path": "docs/search-facet-runtime-plan.md",
+      "bytes": 98958
+    },
+    {
+      "path": "docs/search-index-erasure-plan.md",
+      "bytes": 105310
+    },
+    {
+      "path": "docs/search-mixed-kind-plan.md",
+      "bytes": 107915
+    },
+    {
+      "path": "docs/search-native-runtime-plan.md",
+      "bytes": 96049
+    },
+    {
+      "path": "docs/subject-pages.md",
+      "bytes": 230318
+    },
+    {
+      "path": "docs/zones.md",
+      "bytes": 57132
+    },
+    {
+      "path": "packages/composition/README.md",
+      "bytes": 43429
+    },
+    {
+      "path": "packages/conversion/README.md",
+      "bytes": 85687
+    },
+    {
+      "path": "packages/definitions/README.md",
+      "bytes": 127249
+    },
+    {
+      "path": "packages/ui/README.md",
+      "bytes": 41635
+    },
+    {
+      "path": "services/auth/README.md",
+      "bytes": 307645
+    },
+    {
+      "path": "services/auth/src/metadata-privacy-contract.md",
+      "bytes": 45231
+    },
+    {
+      "path": "services/importer/README.md",
+      "bytes": 338993
+    },
+    {
+      "path": "services/kernel/README.md",
+      "bytes": 168836
+    },
+    {
+      "path": "services/kernel/src/access/README.md",
+      "bytes": 597605
+    },
+    {
+      "path": "services/kernel/src/access/account-discovery-contract.md",
+      "bytes": 42918
+    },
+    {
+      "path": "services/kernel/src/command/README.md",
+      "bytes": 47279
+    },
+    {
+      "path": "services/kernel/src/commerce/README.md",
+      "bytes": 105868
+    },
+    {
+      "path": "services/kernel/src/community/README.md",
+      "bytes": 232072
+    },
+    {
+      "path": "services/kernel/src/content/README.md",
+      "bytes": 509194
+    },
+    {
+      "path": "services/kernel/src/history/README.md",
+      "bytes": 40312
+    },
+    {
+      "path": "services/kernel/src/library/README.md",
+      "bytes": 396552
+    },
+    {
+      "path": "services/kernel/src/library/shelf-contract.md",
+      "bytes": 59332
+    },
+    {
+      "path": "services/kernel/src/presentation/README.md",
+      "bytes": 40360
+    },
+    {
+      "path": "services/kernel/src/rating/README.md",
+      "bytes": 211655
+    },
+    {
+      "path": "services/kernel/src/search/README.md",
+      "bytes": 209553
+    },
+    {
+      "path": "services/kernel/src/semantic/README.md",
+      "bytes": 265687
+    },
+    {
+      "path": "services/kernel/src/semantic/account-erasure-contract.md",
+      "bytes": 54538
+    },
+    {
+      "path": "services/kernel/src/semantic/definition-publication-contract.md",
+      "bytes": 49138
+    },
+    {
+      "path": "services/kernel/src/semantic/deletion-contract.md",
+      "bytes": 63243
+    },
+    {
+      "path": "services/kernel/src/semantic/identity-epoch-contract.md",
+      "bytes": 194268
+    },
+    {
+      "path": "services/kernel/src/semantic/identity-source-consumer-custody-contract.md",
+      "bytes": 85983
+    },
+    {
+      "path": "services/kernel/src/semantic/public-filter-source-contract.md",
+      "bytes": 91540
+    },
+    {
+      "path": "services/kernel/src/work/README.md",
+      "bytes": 44164
+    },
+    {
+      "path": "tools/goal/README.md",
+      "bytes": 334778
+    }
+  ]
+}
