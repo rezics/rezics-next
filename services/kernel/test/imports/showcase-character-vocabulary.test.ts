@@ -64,6 +64,7 @@ test('selected character traits and appearances use current adopted vocabulary a
       else process.env.TMPDIR = previous;
     }
   })();
+  console.error('vocabulary-test: runtime ready');
   const directory = await mkdtemp(join(tmpdir(), 'showcase-character-vocabulary-'));
   try {
     expect(
@@ -76,6 +77,7 @@ test('selected character traits and appearances use current adopted vocabulary a
       ).status,
     ).toBe(200);
     const editor = await openApiObserver(runtime);
+    console.error('vocabulary-test: observer ready');
     expect(
       (
         await editor.http('/v1/grants', {
@@ -104,6 +106,7 @@ test('selected character traits and appearances use current adopted vocabulary a
       })),
     });
     expect(create.results.every((result) => result.status === 201)).toBe(true);
+    console.error('vocabulary-test: subjects created');
     const ids = new Map(
       subjects.map(([externalId], index) => [
         externalId,
@@ -136,8 +139,10 @@ test('selected character traits and appearances use current adopted vocabulary a
       })),
     });
     expect(proposed.results.every((result) => result.status === 201)).toBe(true);
+    console.error('vocabulary-test: evidence proposed');
     for (const [externalId, property, content] of facts)
       await editor.adoptSubject(ids.get(externalId)!, property, content, GLOBAL_CONTEXT);
+    console.error('vocabulary-test: evidence adopted');
 
     const profile = parseVndbCharacterVocabularyProfile({
       traits: {
@@ -159,6 +164,7 @@ test('selected character traits and appearances use current adopted vocabulary a
     );
     expect(bindings.releaseDigest).toBe(bundledDigest);
     expect(bindings.concepts.map(({ code }) => code).sort()).toEqual(['i73', 'main']);
+    console.error('vocabulary-test: bindings composed');
 
     const path = join(directory, 'state.sqlite');
     const imported = await importVndbCharacterTraits({
@@ -169,6 +175,7 @@ test('selected character traits and appearances use current adopted vocabulary a
       selectedWorkIds: requirements.requirements.selectedWorkIds,
       destination: { origin: 'https://kernel.import.test' },
     });
+    console.error('vocabulary-test: traits imported');
     const subjectId = (externalId: string) =>
       (imported.readings.find((item) => item.externalId === externalId)?.subject as { subject?: { id?: string } })
         .subject?.id;
@@ -220,6 +227,7 @@ test('selected character traits and appearances use current adopted vocabulary a
       destination: { origin: 'https://kernel.import.test' },
     });
     expect(subjectIdFrom(refreshed, 'c1')).toBe(heroineId);
+    console.error('vocabulary-test: refreshed');
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
