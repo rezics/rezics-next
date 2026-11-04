@@ -8040,5 +8040,8 @@
   "home_owner_description_unavailable": "説明を利用できません。",
   "home_owner_curator_unavailable": "キュレーターの情報を利用できません。",
   "home_owner_carrier_unavailable": "Realm の紹介を利用できません。",
-  "home_owner_follow_context": "フォローしてもアクセス権や Realm のメンバー資格は付与されません。"
+  "home_owner_follow_context": "フォローしてもアクセス権や Realm のメンバー資格は付与されません。",
+  "relation_actions_unavailable": "現在の関係操作を取得できませんでした。再読み込みしてお試しください。",
+  "relation_actions_read_only": "関係を比較できます。提案には現在の権限が必要です。",
+  "relation_participants_unreadable": "関係する対象を現在読み取れません。読み取り可能な対象を選ぶか、再読み込みしてください。"
 }

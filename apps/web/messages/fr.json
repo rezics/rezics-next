@@ -8040,5 +8040,8 @@
   "home_owner_description_unavailable": "Description indisponible.",
   "home_owner_curator_unavailable": "Informations sur le curateur indisponibles.",
   "home_owner_carrier_unavailable": "Présentation du Realm indisponible.",
-  "home_owner_follow_context": "Suivre ne donne ni accès ni adhésion à un Realm."
+  "home_owner_follow_context": "Suivre ne donne ni accès ni adhésion à un Realm.",
+  "relation_actions_unavailable": "Les actions actuelles de la relation sont indisponibles. Rechargez pour réessayer.",
+  "relation_actions_read_only": "Vous pouvez comparer les relations. Une autorisation actuelle est nécessaire pour proposer.",
+  "relation_participants_unreadable": "Un participant de la relation est illisible actuellement. Choisissez une identité accessible ou rechargez."
 }

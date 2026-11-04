@@ -9,6 +9,7 @@ import {
   proposeRelation,
   readRelationEditor,
   validRelationSlot,
+  relationDraftWithinBounds,
   type RelationConfirmation,
   type RelationProposal,
   type RelationRead,
@@ -80,6 +81,7 @@ export const proposeSubjectRelation = createServerFn({ method: 'POST', strict: f
       const statement = record(value.statement);
       if (!Array.isArray(statement.qualifiers) || !Array.isArray(statement.references))
         throw new Error('Invalid statement');
+      if (!relationDraftWithinBounds(statement as RelationProposal['statement'])) throw new Error('Invalid statement');
       return {
         id: checked.id,
         slot: checked.slot,

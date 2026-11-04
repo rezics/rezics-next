@@ -8040,5 +8040,8 @@
   "home_owner_description_unavailable": "Beschreibung nicht verfügbar.",
   "home_owner_curator_unavailable": "Informationen zum Kurator sind nicht verfügbar.",
   "home_owner_carrier_unavailable": "Realm-Präsentation nicht verfügbar.",
-  "home_owner_follow_context": "Folgen gewährt weder Zugriff noch eine Realm-Mitgliedschaft."
+  "home_owner_follow_context": "Folgen gewährt weder Zugriff noch eine Realm-Mitgliedschaft.",
+  "relation_actions_unavailable": "Die aktuellen Beziehungsaktionen konnten nicht geladen werden. Bitte erneut laden.",
+  "relation_actions_read_only": "Sie können Beziehungen vergleichen. Für Vorschläge ist eine aktuelle Berechtigung erforderlich.",
+  "relation_participants_unreadable": "Ein Beziehungsteilnehmer kann derzeit nicht gelesen werden. Wählen Sie eine lesbare Identität oder laden Sie erneut."
 }

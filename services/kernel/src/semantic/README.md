@@ -375,6 +375,13 @@ terminal retraction clears the candidate. The focused default-composition regres
 
 ## Relations
 
+The mounted `subject.propose` operation advertises its existing fixed Global Context parent through the ordinary
+viewer-action catalogue. It still creates a revision through parent creation authorization; no resource/action
+formula changes. The generic `semantic.subject` viewer-action resolver uses the same exact native visible-Subject
+points as released Type resolvers, including custom released Types. Hidden or missing participants return native
+unreadability. The private relationship editor batches that disclosure with Context operations and independently
+reads candidate decisions and slot selection; proposal availability never grants decision or adoption authority.
+
 A relation is a statement whose property is an item property and whose value is another subject. Subject-to-subject relations, credits and character appearances all use this one shape; none has a table, endpoint or read path of its own.
 
 ### Relation properties

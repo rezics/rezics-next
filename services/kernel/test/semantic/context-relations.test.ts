@@ -20,6 +20,7 @@ const actions = [
   'definitions:activate',
   'subject:create',
   'subject:read',
+  'context:read',
   'statement:propose',
   'context:create',
   'context:accept',
@@ -467,3 +468,40 @@ test('a Context preview includes each projected statement once when a slot selec
   expect(preview.statements['ex:appearance'].map((row: any) => row.id)).toEqual(selected);
   expect(preview.relationCounts).toEqual({});
 }, 60_000);
+
+
+test('native relationship preparation separates proposal, decision, selection and concealed participant disclosure', async () => {
+  const parent = { route: 0, id: GLOBAL_CONTEXT };
+  const resources = [
+    { type: 'semantic.context', id: GLOBAL_CONTEXT },
+    { type: 'semantic.subject', id: work },
+    { type: 'semantic.subject', id: people[0]! },
+  ];
+  const readActions = async () => (await call('POST', '/v1/viewerActions', { resources })).resources;
+  const operations = (rows: any[]) => rows[0].viewerActions.flatMap((entry: any) => entry.operations);
+  try {
+    await access.revoke(parent, 'editor', 'context:accept');
+    await access.revoke(parent, 'editor', 'context:adopt');
+    const prepared = await readActions();
+    expect(operations(prepared)).toContain('subject.propose');
+    expect(operations(prepared)).not.toContain('subject.accept_candidate');
+    expect(operations(prepared)).not.toContain('subject.adopt');
+    expect(prepared[2]).toMatchObject({ type: 'semantic.subject', id: people[0], viewerActions: [] });
+    await access.revoke(parent, 'editor', 'statement:propose');
+    expect(operations(await readActions())).not.toContain('subject.propose');
+    const denied = await kernel.handle(new Request(`http://kernel.test/v1/subjects/${work}/candidates`, {
+      method: 'POST', headers: { authorization: `Bearer ${access.bearer('editor')}`,
+        'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` },
+      body: JSON.stringify({ statement: { ...statement('ex:appearance', people[0]!, 1),
+        references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/citation' } }] }] } }),
+    }));
+    expect(denied.status).toBe(403);
+    const hidden = (await call('POST', '/v1/subjects', { type: 'ex:Person', labels: { en: 'Hidden participant' } })).subject.id;
+    await access.grant({ route: routeOf(hidden)!, id: hidden }, 'editor', 'moderation:hide');
+    await call('POST', `/v1/subjects/${hidden}:hide`, { reason: 'Native relationship disclosure test' });
+    const concealed = await call('POST', '/v1/viewerActions', { resources: [{ type: 'semantic.subject', id: hidden }] });
+    expect(concealed.resources).toEqual([{ type: 'semantic.subject', id: hidden, error: 'not_found' }]);
+  } finally {
+    for (const action of ['statement:propose', 'context:accept', 'context:adopt']) await access.grant(parent, 'editor', action);
+  }
+});

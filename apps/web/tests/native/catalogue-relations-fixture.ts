@@ -1,6 +1,6 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { Page } from 'playwright';
-import { candidateContext } from '../../src/subject/candidates.ts';
+import { candidateContext, type Candidate } from '../../src/subject/candidates.ts';
 import { startAuthStack, type AuthJourney, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
@@ -150,7 +150,7 @@ export async function readSlotCandidates(
   stack: NativeWebStack,
   id: string,
   slot: { property: string; target: string; key?: string },
-): Promise<{ id: string }[]> {
+): Promise<Candidate[]> {
   const query = new URLSearchParams({
     property: slot.property,
     target: slot.target,
@@ -158,10 +158,10 @@ export async function readSlotCandidates(
     limit: '20',
   });
   if (slot.key) query.set('key', slot.key);
-  const body = await json<{ candidates: { id: string; deleted?: true }[] }>(
+  const body = await json<{ candidates: (Candidate | { id: string; deleted: true })[] }>(
     await stack.kernel(`/v1/subjects/${id}/candidates?${query}`, undefined, 'alice'),
     200,
     `GET /v1/subjects/${id}/candidates`,
   );
-  return body.candidates.filter((candidate) => !('deleted' in candidate && candidate.deleted));
+  return body.candidates.filter((candidate): candidate is Candidate => !('deleted' in candidate && candidate.deleted));
 }

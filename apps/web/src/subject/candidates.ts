@@ -65,6 +65,68 @@ export type CandidateResult =
 
 export const candidateContext = '00000000-0000-8000-8000-000000000000';
 
+export type CandidateActions =
+  | { state: 'available'; context: string; operations: string[] }
+  | { state: 'unavailable' };
+export type CandidateAuthority = {
+  actions: CandidateActions;
+  disclosure: 'available' | 'unreadable' | 'unavailable';
+};
+
+/** One native projection for the mounted operations and at most three exact participants.
+ * These are owner-resolved disclosure references, never browser-selected authority anchors.
+ */
+export async function readCandidateAuthority(
+  client: KernelClient,
+  authorization: string,
+  context: string,
+  subjects: readonly string[] = [],
+): Promise<CandidateAuthority> {
+  const unavailable: CandidateAuthority = { actions: { state: 'unavailable' }, disclosure: 'unavailable' };
+  if (subjects.length > 3) return unavailable;
+  const references = [
+    { type: 'semantic.context', id: context },
+    ...[...new Set(subjects)].map((id) => ({ type: 'semantic.subject', id })),
+  ];
+  try {
+    const result = await client.viewerActions.post(
+      { resources: references },
+      { headers: { authorization }, fetch: { cache: 'no-store' } },
+    );
+    if (result.status !== 200 || !result.data || result.data.resources.length !== references.length)
+      return unavailable;
+    const resources = references.map(({ type, id }) =>
+      result.data!.resources.filter((resource) => resource.type === type && resource.id === id),
+    );
+    if (resources.some((matches) => matches.length !== 1)) return unavailable;
+    const contextResource = resources[0]![0]!;
+    if (!('viewerActions' in contextResource)) return unavailable;
+    const entries = contextResource.viewerActions;
+    if (entries.length > 64 || entries.reduce((count, entry) => count + entry.operations.length, 0) > 256)
+      return unavailable;
+    const bindings: Record<string, string> = {
+      'subject.propose': 'statement:propose',
+      'subject.accept_candidate': 'context:accept',
+      'subject.reject_candidate': 'context:accept',
+      'subject.adopt': 'context:adopt',
+    };
+    return {
+      actions: {
+        state: 'available',
+        context,
+        operations: [...new Set(entries.flatMap((entry) =>
+          entry.operations.filter((operation) => bindings[operation] === entry.action),
+        ))],
+      },
+      disclosure: resources.slice(1).some(([resource]) => !resource || !('viewerActions' in resource))
+        ? 'unreadable'
+        : 'available',
+    };
+  } catch {
+    return unavailable;
+  }
+}
+
 /** Optional producer metadata follows the existing subject Sources region's runtime compatibility read. */
 export function candidateSourceRecords(subject: object): {
   name: string;

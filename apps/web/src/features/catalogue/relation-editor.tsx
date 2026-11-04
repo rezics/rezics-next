@@ -38,6 +38,7 @@ import {
 import { catalogueEntries } from './catalogue-entry';
 import {
   relationDraft,
+  relationDraftWithinBounds,
   relationSlotMatches,
   validRelationSlot,
   type RelationDraft,
@@ -489,6 +490,14 @@ function RelationEditorLive({
   const visibleNow = useRef(visible);
   visibleNow.current = visible;
   const publicRead = result?.public ?? current?.public;
+  const allows = (operation: 'propose' | 'accept' | 'reject' | 'adopt') =>
+    current?.viewer === 'signed-in' &&
+    current.authority?.disclosure === 'available' &&
+    current.authority.actions.state === 'available' &&
+    current.authority.actions.context === candidateContext &&
+    current.authority.actions.operations.includes(
+      operation === 'propose' ? 'subject.propose' : operation === 'adopt' ? 'subject.adopt' : `subject.${operation}_candidate`,
+    );
   const concealed = failure?.reason === 'denied' && !current;
   const uncertain = failure?.reason === 'unavailable' && !!request.current;
   const nativeFrozen = busy || targetChecking || !!confirmation || uncertain || failure?.reason === 'stale';
@@ -504,10 +513,10 @@ function RelationEditorLive({
   const target = (value: unknown): EntityPickerSubject[] =>
     typeof value === 'string'
       ? [
-          picked.current[value] ?? {
+          (current?.authority?.disclosure !== 'unreadable' ? picked.current[value] : undefined) ?? {
             id: value,
             title:
-              pickText(current?.public.related[value]?.labels ?? {}, locale).text ||
+              (current?.authority?.disclosure !== 'unreadable' && pickText(current?.public.related[value]?.labels ?? {}, locale).text) ||
               m.subject_value_unlabelled({}, options),
             types: [],
             typeLabel: '',
@@ -960,7 +969,7 @@ function RelationEditorLive({
     setDraft(next);
     setOwnConsent(false);
     setConsentEntry(undefined);
-    setRead((previous) => (previous?.ok ? { ...previous, page: null } : previous));
+    setRead((previous) => (previous?.ok ? { ...previous, page: null, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : previous));
     setSlot(undefined);
     setCandidate(undefined);
     setResult(undefined);
@@ -1065,7 +1074,7 @@ function RelationEditorLive({
     const destination = { slot: address && { ...address }, cursor, session };
     reading.current = destination;
     // A previous page is never fresh authority after another read starts or fails.
-    setRead((previous) => (previous?.ok ? { ...previous, page: null } : undefined));
+    setRead((previous) => (previous?.ok ? { ...previous, page: null, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : undefined));
     setCandidate(undefined);
     setResult(undefined);
     setConsentEntry(undefined);
@@ -1119,32 +1128,53 @@ function RelationEditorLive({
     void load(destination?.slot ?? slot, destination?.cursor, destination?.session ?? nativeSession.current, event);
   }
   async function prepareProposal() {
-    if (!editable() || !field) return;
-    const value = draft.value.type === 'value' && typeof draft.value.content === 'string' ? draft.value.content : '';
-    if (!resolveTarget || !value) {
-      setConfirmation('propose');
-      return;
-    }
+    const address = draftSlot();
+    if (!relationDraftWithinBounds(draft)) { setTargetFailure('invalid'); return; }
+    if (!editable() || !field || !address) return;
     const generation = ++targetCheck.current;
     const revision = draftRevision.current;
-    const admittedField = field;
+    const admittedRelease = current?.descriptor?.releaseDigest;
+    const readRevision = ++readGeneration.current;
     setTargetChecking(true);
     setTargetFailure(undefined);
+    setFailure(undefined);
+    const active = () => mount.active() && visible && targetCheck.current === generation &&
+      draftRevision.current === revision && readGeneration.current === readRevision;
     try {
-      const resolved = await resolveTarget(value);
-      if (!mount.active() || !visible || targetCheck.current !== generation || draftRevision.current !== revision)
-        return;
-      if (!resolved.ok) {
-        setTargetFailure(resolved.reason);
+      // Re-read the exact slot and native actions together before explicit review. Public
+      // readability, definition admission and command authority are independent observations.
+      const next = await transport.read(address, undefined, nativeSession.current);
+      if (!active()) return;
+      if (!next.ok) {
+        setRead((previous) => previous?.ok ? { ...previous, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : previous);
+        failed(next);
         return;
       }
-      if (!admittedField.targets.includes(resolved.type)) {
-        setTargetFailure('invalid');
+      setRead(next);
+      setSlot(address);
+      setCandidate(undefined);
+      setResult(undefined);
+      pageCursor.current = undefined;
+      nativeSession.current = next.session ?? nativeSession.current;
+      const admitted = next.fields.find((item) => item.id === address.property);
+      if (!admitted || next.descriptor?.releaseDigest !== admittedRelease || !relationSlotMatches(draft, address, admitted)) {
+        failed({ ok: false, reason: 'stale' });
         return;
+      }
+      if (next.authority?.disclosure !== 'available' || next.authority.actions.state !== 'available' ||
+        next.authority.actions.context !== candidateContext || !next.authority.actions.operations.includes('subject.propose')) return;
+      if (resolveTarget && address.target) {
+        const resolved = await resolveTarget(address.target);
+        if (!active()) return;
+        if (!resolved.ok) { setTargetFailure(resolved.reason); return; }
+        if (!admitted.targets.includes(resolved.type)) { setTargetFailure('invalid'); return; }
       }
       setConfirmation('propose');
     } catch {
-      if (mount.active() && targetCheck.current === generation) setTargetFailure('unavailable');
+      if (active()) {
+        setRead((previous) => previous?.ok ? { ...previous, authority: { actions: { state: 'unavailable' }, disclosure: 'unavailable' } } : previous);
+        setTargetFailure('unavailable');
+      }
     } finally {
       if (mount.active() && targetCheck.current === generation) setTargetChecking(false);
     }
@@ -1154,6 +1184,7 @@ function RelationEditorLive({
     if (running.current || targetChecking || !confirmation || !field) return;
     const address = confirmation === 'propose' ? draftSlot() : slot;
     if (!address || (!request.current && !candidate && confirmation !== 'propose')) return;
+    if (!request.current && !allows(confirmation)) return;
     const reused = !!request.current;
     request.current ??=
       confirmation === 'propose'
@@ -1209,10 +1240,13 @@ function RelationEditorLive({
           failed(next);
           return;
         }
-        setResult(next);
         if ('session' in next) nativeSession.current = next.session ?? nativeSession.current;
         setConfirmation(undefined);
         request.current = undefined;
+        // Acknowledgement is an effect, not a current decision or selection read.
+        await readPage(address, pageCursor.current, nativeSession.current, pending.candidate);
+        if (!mount.active()) return;
+        setResult(next);
         if (next.kind === 'selected') await onSelected?.();
         if (!lifetime.active()) return;
       }
@@ -1390,6 +1424,16 @@ function RelationEditorLive({
         current &&
         !concealed && (
           <>
+            {(!current.authority || current.authority.actions.state === 'unavailable' || current.authority.disclosure === 'unavailable') ? (
+              <div role="status" className="space-y-2">
+                <p>{m.relation_actions_unavailable({}, options)}</p>
+                <Button variant="outline" disabled={frozen} onClick={(event) => reload(event)}>{m.candidate_reload({}, options)}</Button>
+              </div>
+            ) : current.authority.disclosure === 'unreadable' ? (
+              <p role="status">{m.relation_participants_unreadable({}, options)}</p>
+            ) : !allows('propose') ? (
+              <p role="status">{m.relation_actions_read_only({}, options)}</p>
+            ) : null}
             {!fields?.length ? (
               <p
                 ref={openingBoundary}
@@ -1784,7 +1828,8 @@ function RelationEditorLive({
                             disabled={
                               !draftSlot() ||
                               (!draft.references.length && !(field.disclosure === 'sourceOrConsent' && ownConsent)) ||
-                              proposed
+                              proposed ||
+                              !(current.authority?.actions.state === 'available' && current.authority.actions.operations.includes('subject.propose'))
                             }
                             onClick={() => void prepareProposal()}
                           >
@@ -1950,9 +1995,10 @@ function RelationEditorLive({
                             </ContentItemFrame>
                           </section>
                         </div>
+                        <p role="status">{candidate.decision === 'accepted' ? m.candidate_accepted({}, options) : candidate.decision === 'rejected' ? m.relation_rejected({}, options) : m.candidate_pending({}, options)}</p>
                         {selected ? (
                           <p role="status">{m.candidate_selected({}, options)}</p>
-                        ) : result ? (
+                        ) : result && !current.page ? (
                           <p role="status">
                             {result.kind === 'accepted'
                               ? m.candidate_accepted({}, options)
@@ -1963,7 +2009,7 @@ function RelationEditorLive({
                         ) : (
                           !confirmation && (
                             <>
-                              {candidate.decision === 'accepted' && (
+                              {candidate.decision === 'accepted' && allows('adopt') && (
                                 <Field>
                                   <FieldLabel htmlFor={`${formId}-rank`}>{m.relation_rank({}, options)}</FieldLabel>
                                   <NativeSelect
@@ -1986,9 +2032,9 @@ function RelationEditorLive({
                               <div className="flex flex-wrap gap-2">
                                 <Button
                                   className="min-h-11"
-                                  disabled={frozen || candidate.retracted !== null}
+                                  disabled={frozen || candidate.retracted !== null || !allows(candidate.decision === 'accepted' ? 'adopt' : 'accept')}
                                   onClick={() =>
-                                    editable() &&
+                                    editable() && allows(candidate.decision === 'accepted' ? 'adopt' : 'accept') &&
                                     setConfirmation(candidate.decision === 'accepted' ? 'adopt' : 'accept')
                                   }
                                 >
@@ -2000,8 +2046,8 @@ function RelationEditorLive({
                                   <Button
                                     className="min-h-11"
                                     variant="outline"
-                                    disabled={frozen}
-                                    onClick={() => editable() && setConfirmation('reject')}
+                                    disabled={frozen || !allows('reject')}
+                                    onClick={() => editable() && allows('reject') && setConfirmation('reject')}
                                   >
                                     {m.relation_reject({}, options)}
                                   </Button>

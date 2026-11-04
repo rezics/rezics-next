@@ -8115,5 +8115,8 @@
   "home_owner_description_unavailable": "Description unavailable.",
   "home_owner_curator_unavailable": "Curator information unavailable.",
   "home_owner_carrier_unavailable": "Realm presentation unavailable.",
-  "home_owner_follow_context": "Following does not grant access or Realm membership."
+  "home_owner_follow_context": "Following does not grant access or Realm membership.",
+  "relation_actions_unavailable": "Current relationship actions could not be read. Reload to try again.",
+  "relation_actions_read_only": "You can compare relationships. Proposing requires current permission.",
+  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload."
 }

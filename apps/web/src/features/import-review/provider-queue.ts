@@ -1,3 +1,4 @@
+import { readCandidateAuthority } from '../../subject/candidates';
 import {
   decideProviderCandidate as decideNativeProviderCandidate,
   readProviderDecisionSubjects,
@@ -239,28 +240,7 @@ export async function readProviderQueue(
   try {
     // Hydrate once for the exact Context through the installed generated native surface.
     // Queue admission runs afterwards, so failed action hydration cannot conceal revoked list access.
-    let actions: QueuePage['actions'] = { state: 'unavailable' };
-    try {
-      const observed = await client.viewerActions.post(
-        { resources: [{ type: 'semantic.context', id: scope.context }] },
-        { headers: { authorization } },
-      );
-      const anchor = observed.data?.resources.find(
-        (resource) => resource.type === 'semantic.context' && resource.id === scope.context,
-      );
-      if (observed.status === 200 && anchor && 'viewerActions' in anchor)
-        actions = {
-          state: 'available',
-          context: scope.context,
-          operations: anchor.viewerActions
-            .flatMap((entry) => entry.operations)
-            .filter((operation) =>
-              ['subject.accept_candidate', 'subject.reject_candidate', 'subject.adopt'].includes(operation),
-            ),
-        };
-    } catch {
-      /* An unavailable component is independent of native list admission. */
-    }
+    const { actions } = await readCandidateAuthority(client, authorization, scope.context);
     const [result, release, contextDefinitions] = await Promise.all([
       client['review-candidates'].get({
         query: { ...scope, limit: 20, ...(cursor ? { cursor } : {}) },

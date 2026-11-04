@@ -8040,5 +8040,8 @@
   "home_owner_description_unavailable": "Descripción no disponible.",
   "home_owner_curator_unavailable": "Información del curador no disponible.",
   "home_owner_carrier_unavailable": "Presentación del Realm no disponible.",
-  "home_owner_follow_context": "Seguir no otorga acceso ni pertenencia a un Realm."
+  "home_owner_follow_context": "Seguir no otorga acceso ni pertenencia a un Realm.",
+  "relation_actions_unavailable": "No se pudieron leer las acciones actuales de la relación. Vuelve a cargar para reintentar.",
+  "relation_actions_read_only": "Puedes comparar relaciones. Proponer requiere un permiso vigente.",
+  "relation_participants_unreadable": "No se puede leer un participante de la relación. Elige una identidad accesible o vuelve a cargar."
 }

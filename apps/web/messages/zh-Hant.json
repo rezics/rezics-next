@@ -8040,5 +8040,8 @@
   "home_owner_description_unavailable": "說明暫時無法取得。",
   "home_owner_curator_unavailable": "策展者資訊暫時無法取得。",
   "home_owner_carrier_unavailable": "Realm 展示資訊暫時無法取得。",
-  "home_owner_follow_context": "追蹤不會授予存取權限或 Realm 成員資格。"
+  "home_owner_follow_context": "追蹤不會授予存取權限或 Realm 成員資格。",
+  "relation_actions_unavailable": "無法讀取目前的關係操作。請重新載入後重試。",
+  "relation_actions_read_only": "你可以比較關係。提出建議需要目前有效的權限。",
+  "relation_participants_unreadable": "目前無法讀取一個關係參與者。請選擇可讀取的身分或重新載入。"
 }

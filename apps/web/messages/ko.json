@@ -8040,5 +8040,8 @@
   "home_owner_description_unavailable": "설명을 확인할 수 없습니다.",
   "home_owner_curator_unavailable": "큐레이터 정보를 확인할 수 없습니다.",
   "home_owner_carrier_unavailable": "Realm 소개를 확인할 수 없습니다.",
-  "home_owner_follow_context": "팔로우는 접근 권한이나 Realm 멤버 자격을 부여하지 않습니다."
+  "home_owner_follow_context": "팔로우는 접근 권한이나 Realm 멤버 자격을 부여하지 않습니다.",
+  "relation_actions_unavailable": "현재 관계 작업을 불러올 수 없습니다. 다시 불러와 주세요.",
+  "relation_actions_read_only": "관계를 비교할 수 있습니다. 제안하려면 현재 권한이 필요합니다.",
+  "relation_participants_unreadable": "관계 참여자를 현재 읽을 수 없습니다. 읽을 수 있는 대상을 선택하거나 다시 불러오세요."
 }

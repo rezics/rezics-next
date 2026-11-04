@@ -210,6 +210,35 @@ source-or-consent behavior remain authoritative. Invalid input, stale metadata, 
 drafts. Uncertain requests freeze the original body and key for retry; changing metadata or session state hides
 the retained workspace until it can be read again.
 
+## Browser flow: current relationship authority
+
+The existing qualified relationship editor reads current viewer actions in one deduplicated native batch for
+Global Context and the exact source, target and released slot-key participants. Semantic resolves disclosure;
+readable public data, a picker label and released admission never grant proposal, decision or selection authority.
+The private page identifies its authenticated viewer state and reports action unavailability separately from a
+confirmed denial. Unavailable actions offer read recovery while exact-slot comparison remains useful.
+Decision: use the existing shared native action projection for relationship preparation and provider review; the
+proposal binds its actual Global Context parent, while source/target/slot-key references establish disclosure only.
+
+Fresh proposal preparation reads the current descriptor, exact slot and native actions before explicit review.
+A changed release requires another review. Proposal, acceptance/rejection and adoption retain separate native
+commands, expected heads and confirmations. Decision and selection readback follows acknowledgement; acceptance
+never adopts. Concealed participants keep an unreadable state. A known proposal followed by a failed read offers
+read recovery; uncertain delivery retains the exact original command and key. Existing creator handoffs still own
+missing related identities and their independently acknowledged native UUIDs. Archive position remains a role code;
+no fabricated ordering, music role or live-action binding is introduced.
+
+### Prepare a qualified relationship correction
+
+- Touches: the source Subject, immutable admitted descriptor, at most two addressed participants, one exact candidate
+  slot (20 candidates), current selection, and one native Context/Subject action and disclosure projection.
+- Bound: at most four deduplicated native resource references before hydration, 64 action entries and 256 mounted
+  operation bindings per resource; only the four applicable operations reach the page. Existing statement admission,
+  qualifier/reference and serialized request limits apply. Native execution reauthorizes, including exact-key replay.
+- Growth check: the existing native relation fixture fixes participants and slot while independent relation/history
+  populations grow. Native Subject points and Context anchors use their existing partition-leading indexes; target
+  disclosure preparation and decision/selection readback are part of the work, not just rendered candidate rows.
+
 ## Browser flow: missing related work
 
 A released work-to-work relation in the relation editor (derivation, world, association, or order groups
