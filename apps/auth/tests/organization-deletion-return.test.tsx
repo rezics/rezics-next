@@ -1,5 +1,16 @@
 import { expect, test } from 'bun:test';
-import { creationFixture, approval, button, dom, fill, flush, leave, open, send, session } from './creation-page-fixture';
+import {
+  creationFixture,
+  approval,
+  button,
+  dom,
+  fill,
+  flush,
+  leave,
+  open,
+  send,
+  session,
+} from './creation-page-fixture';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
 import { readOrganizationDeleteUnknown, storeOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
@@ -63,10 +74,7 @@ test('dispatched history survives BFCache and failed review; late acknowledgemen
     send(page.host);
   });
   await flush(() => page.calls[0]!.resolve(approval()));
-  expect(page.calls.map((call) => call.path)).toEqual([
-    '/account-operations/approve',
-    '/account-operations/execute',
-  ]);
+  expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve', '/account-operations/execute']);
   expect(readOrganizationDeleteUnknown(organization).kind).toBe('pending');
 
   await flush(leave);

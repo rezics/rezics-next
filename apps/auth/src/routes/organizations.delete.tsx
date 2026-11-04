@@ -163,16 +163,15 @@ export function OrganizationDeleteContent({
         ));
     const activeReviewCanWarn = Boolean(
       current &&
-        current.source === state.organizationId &&
-        current.reader === state.read &&
-        current.active &&
-        hasAuthority &&
-        unfinished,
+      current.source === state.organizationId &&
+      current.reader === state.read &&
+      current.active &&
+      hasAuthority &&
+      unfinished,
     );
     return Boolean(
       !bypassDeparture.current &&
-      (warnOrganizationDeletionAttempt(attempt.current, attemptSelection) ||
-        activeReviewCanWarn),
+      (warnOrganizationDeletionAttempt(attempt.current, attemptSelection) || activeReviewCanWarn),
     );
   }, []);
 
@@ -234,13 +233,14 @@ export function OrganizationDeleteContent({
   function beginReview(selected: string | undefined): OrganizationDeletionReviewGeneration {
     const uncertain = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
     const continuation = readOrganizationDeleteStepUp();
-    const retained = attempt.current?.unresolved && attempt.current.identity.organizationId === selected
-      ? attempt.current.identity
-      : uncertain.kind === 'pending' && uncertain.value.organizationId === selected
-        ? uncertain.value
-        : continuation.kind === 'pending' && continuation.value.organizationId === selected
-          ? continuation.value
-          : undefined;
+    const retained =
+      attempt.current?.unresolved && attempt.current.identity.organizationId === selected
+        ? attempt.current.identity
+        : uncertain.kind === 'pending' && uncertain.value.organizationId === selected
+          ? uncertain.value
+          : continuation.kind === 'pending' && continuation.value.organizationId === selected
+            ? continuation.value
+            : undefined;
     return returns.begin({
       selected,
       source: organizationId,
@@ -254,9 +254,7 @@ export function OrganizationDeleteContent({
     if (selected && !attempt.current?.unresolved) {
       const hint = readOrganizationDeleteUnknown(selected);
       attempt.current = organizationDeletionAttempt(
-        hint.kind === 'pending' && hint.value.organizationId === selected
-          ? hint.value
-          : { organizationId: selected },
+        hint.kind === 'pending' && hint.value.organizationId === selected ? hint.value : { organizationId: selected },
         true,
       );
     }
@@ -266,9 +264,8 @@ export function OrganizationDeleteContent({
   async function loadReview(current: OrganizationDeletionReviewGeneration) {
     const selected = current.selected;
     const reader = current.reader;
-    const result = selected && reader
-      ? await loadOrganizationDeletion(selected, reader, current)
-      : { kind: 'missing' as const };
+    const result =
+      selected && reader ? await loadOrganizationDeletion(selected, reader, current) : { kind: 'missing' as const };
     if (!current.isCurrent()) return;
     if (['signed-out', 'denied', 'hidden', 'missing', 'changed', 'unavailable'].includes(result.kind)) {
       retireReview(current, result);
@@ -276,11 +273,7 @@ export function OrganizationDeleteContent({
       return;
     }
     const continuation = readOrganizationDeleteStepUp();
-    if (
-      continuation.kind === 'pending' &&
-      continuation.value.organizationId === selected &&
-      result.kind === 'ready'
-    ) {
+    if (continuation.kind === 'pending' && continuation.value.organizationId === selected && result.kind === 'ready') {
       if (
         !organizationDeletePendingMatches(
           continuation.value,
@@ -350,7 +343,9 @@ export function OrganizationDeleteContent({
     const saved = continuation.kind === 'pending' ? continuation.value : null;
     const selected = selectedForReview();
     const hint = selected ? readOrganizationDeleteUnknown(selected) : { kind: 'absent' as const };
-    const conflictingContinuation = Boolean(saved && organizationId !== undefined && saved.organizationId !== organizationId);
+    const conflictingContinuation = Boolean(
+      saved && organizationId !== undefined && saved.organizationId !== organizationId,
+    );
     const uncertain =
       hint.kind !== 'absent' ||
       continuation.kind === 'invalid' ||
@@ -361,7 +356,10 @@ export function OrganizationDeleteContent({
     } else if (!attempt.current?.unresolved) {
       attempt.current = selected ? organizationDeletionAttempt({ organizationId: selected }) : null;
     }
-    if (continuation.kind === 'invalid' || (saved && organizationId !== undefined && saved.organizationId !== organizationId)) {
+    if (
+      continuation.kind === 'invalid' ||
+      (saved && organizationId !== undefined && saved.organizationId !== organizationId)
+    ) {
       setMessage(m.auth_organization_delete_changed());
     }
     const current = beginReview(selected);
@@ -494,7 +492,8 @@ export function OrganizationDeleteContent({
       submitting.current ||
       nativeFlight.current ||
       history.includes('unresolved')
-    ) return;
+    )
+      return;
     if (!organizationDeleteConfirmed(confirmation, phrase)) {
       setConfirmationError(true);
       return;
@@ -557,7 +556,10 @@ export function OrganizationDeleteContent({
         focusIntent.current = 'history';
         forgetOperationKey(operation, target.humanAccountId);
         clearReviewContinuationFor(target.humanAccountId, target.organizationId, key);
-        if (attempt.current?.identity.operationKey === key && attempt.current.identity.organizationId === target.organizationId) {
+        if (
+          attempt.current?.identity.operationKey === key &&
+          attempt.current.identity.organizationId === target.organizationId
+        ) {
           attempt.current.unresolved = false;
           attempt.current.mounted = false;
           attempt.current = null;
@@ -580,8 +582,7 @@ export function OrganizationDeleteContent({
             returns.finishUnsentAttempt(attemptId);
             if (!returns.history().includes('unresolved')) returns.seed('unresolved');
           } else returns.markAttemptUnresolved(attemptId);
-        }
-        else if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
+        } else if (phase === 'unresolved') returns.resolveAttempt(attemptId, 'refused');
         else if (phase === 'unsent' && result.reason !== 'step-up') returns.finishUnsentAttempt(attemptId);
         if (result.reason !== 'unknown' && attempt.current?.identity.operationKey === key) {
           attempt.current.unresolved = false;
@@ -722,7 +723,9 @@ export function OrganizationDeleteContent({
         ) : loaded.kind === 'signed-out' ? (
           <>
             <p>{m.auth_account_operation_sign_in_required()}</p>
-            <a id="organization-delete-return-sign-in" href="/login">{m.auth_security_sign_in()}</a>
+            <a id="organization-delete-return-sign-in" href="/login">
+              {m.auth_security_sign_in()}
+            </a>
             <Button
               id="organization-delete-return-review"
               type="button"
@@ -753,7 +756,7 @@ export function OrganizationDeleteContent({
                     ? m.auth_organization_delete_recovery_hidden()
                     : loaded.kind === 'missing'
                       ? m.auth_organization_delete_recovery_missing()
-                  : m.auth_account_operation_unavailable()}
+                      : m.auth_account_operation_unavailable()}
             </ErrorAlert>
             <Button
               id="organization-delete-return-review"

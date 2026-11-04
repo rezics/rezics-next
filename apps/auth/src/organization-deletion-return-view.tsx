@@ -29,12 +29,7 @@ export function OrganizationDeletionReturnView({
   return (
     <div className="auth-login-form min-w-0 break-words">
       {history.includes('unresolved') ? (
-        <OrganizationDeletionRecovery
-          advice={advice}
-          pending={pending}
-          readback={readCurrent}
-          headingRef={heading()}
-        />
+        <OrganizationDeletionRecovery advice={advice} pending={pending} readback={readCurrent} headingRef={heading()} />
       ) : null}
       {history.includes('unsent') ? (
         <section aria-labelledby="organization-delete-unsent-heading">

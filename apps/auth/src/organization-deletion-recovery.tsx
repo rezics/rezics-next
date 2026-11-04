@@ -26,26 +26,25 @@ export function OrganizationDeletionRecovery({
 }) {
   const kind = advice?.kind;
   const authentication = kind === 'authentication-required' || kind === 'signed-out';
-  const feedback =
-    pending
-      ? m.auth_organization_delete_recovery_pending()
-      : !advice
-        ? m.auth_organization_delete_recovery_not_started()
-        : kind === 'ready'
-          ? m.auth_organization_delete_still_readable()
-          : kind === 'signed-out'
-            ? m.auth_account_operation_sign_in_required()
-            : kind === 'authentication-required'
-              ? m.auth_organization_delete_recovery_authentication()
-              : kind === 'denied'
-                ? m.auth_organization_delete_recovery_denied()
-                : kind === 'hidden'
-                  ? m.auth_organization_delete_recovery_hidden()
-                  : kind === 'missing'
-                    ? m.auth_organization_delete_recovery_missing()
-                    : kind === 'changed'
-                      ? m.auth_organization_delete_recovery_changed()
-                      : m.auth_organization_delete_recovery_unavailable();
+  const feedback = pending
+    ? m.auth_organization_delete_recovery_pending()
+    : !advice
+      ? m.auth_organization_delete_recovery_not_started()
+      : kind === 'ready'
+        ? m.auth_organization_delete_still_readable()
+        : kind === 'signed-out'
+          ? m.auth_account_operation_sign_in_required()
+          : kind === 'authentication-required'
+            ? m.auth_organization_delete_recovery_authentication()
+            : kind === 'denied'
+              ? m.auth_organization_delete_recovery_denied()
+              : kind === 'hidden'
+                ? m.auth_organization_delete_recovery_hidden()
+                : kind === 'missing'
+                  ? m.auth_organization_delete_recovery_missing()
+                  : kind === 'changed'
+                    ? m.auth_organization_delete_recovery_changed()
+                    : m.auth_organization_delete_recovery_unavailable();
   return (
     <section aria-labelledby="organization-delete-recovery-heading" className="auth-login-form min-w-0 break-words">
       <h2 id="organization-delete-recovery-heading" tabIndex={-1} ref={headingRef}>

@@ -50,10 +50,7 @@ test('return review, preflight and bounded write retries have explicit whole-cal
   expect(reads).toBe(3);
   expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve']);
   await flush(() => page.calls[0]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
-  expect(page.calls.map((call) => call.path)).toEqual([
-    '/account-operations/approve',
-    '/account-operations/approve',
-  ]);
+  expect(page.calls.map((call) => call.path)).toEqual(['/account-operations/approve', '/account-operations/approve']);
   await flush(() => page.calls[1]!.resolve(approval()));
   expect(page.calls.map((call) => call.path)).toEqual([
     '/account-operations/approve',
