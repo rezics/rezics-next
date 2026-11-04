@@ -37,6 +37,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { RealmMembership } = await import('../src/community/realm-membership');
+type Completion = import('../src/community/realm-membership').RealmMembershipCompletion;
 const { m } = await import('../src/paraglide/messages.js');
 afterAll(async () => {
   await window.happyDOM.close();
@@ -46,7 +47,7 @@ afterAll(async () => {
   }
 });
 
-test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', 'background'])(
+test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', 'background', 'outer', 'decline'])(
   '%s keeps only the explicit current keyboard operation at its membership result',
   async (scenario) => {
     const member = ['leave', 'recovery', 'survive'].includes(scenario);
@@ -61,7 +62,29 @@ test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', '
     const session = { state: 'signed-in', subject: 'focus-person', csrfToken: 'original' };
     client.setQueryData(['session'], session);
     const realm = { id: 'focus-realm', visibility: 'public' as const, viewer: null };
-    const route = createRootRoute({ component: () => <RealmMembership realm={realm} returnTo="/spaces/atlas" /> });
+    const completions: Completion[] = [];
+    const sentinel = window.document.createElement('button');
+    const route = createRootRoute({
+      component: () => (
+        <RealmMembership
+          realm={realm}
+          returnTo="/spaces/atlas"
+          onCompleted={(receipt) => {
+            completions.push(receipt);
+            expect(receipt.current()).toBe(true);
+            expect(host.querySelector('[data-member-state]')?.getAttribute('data-member-state')).toBe(
+              member ? 'none' : 'member',
+            );
+            expect(receipt.focusEligible()).toBe(!['pointer', 'move'].includes(scenario));
+            if (scenario === 'outer' && receipt.focusEligible()) {
+              sentinel.focus();
+              return true;
+            }
+            return false;
+          }}
+        />
+      ),
+    });
     const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
     await router.load();
     const host = window.document.createElement('main');
@@ -106,7 +129,6 @@ test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', '
       }
       await until(() => reads === 2);
       if (scenario === 'pointer') host.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
-      const sentinel = window.document.createElement('button');
       host.append(sentinel);
       if (scenario === 'move') sentinel.focus();
       if (scenario === 'renew') {
@@ -121,7 +143,7 @@ test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', '
       const expected =
         scenario === 'survive'
           ? source
-          : scenario === 'move'
+          : ['move', 'outer'].includes(scenario)
             ? sentinel
             : ['pointer', 'renew', 'background'].includes(scenario)
               ? window.document.body
@@ -129,8 +151,12 @@ test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', '
       expect(window.document.activeElement).toBe(expected);
       expect(commands).toBe(scenario === 'background' ? 0 : 1);
       expect(reads).toBe(scenario === 'renew' ? 3 : 2);
+      expect(completions).toHaveLength(['recovery', 'survive', 'renew', 'background'].includes(scenario) ? 0 : 1);
+      await tick();
+      expect(completions.length).toBeLessThanOrEqual(1);
     } finally {
       await act(async () => root.unmount());
+      expect(completions.every((receipt) => !receipt.current() && !receipt.focusEligible())).toBe(true);
       client.clear();
       host.remove();
     }

@@ -240,6 +240,7 @@ export function usePublicationControls(
     locked: !enabled || !draft.current() || state.busy || state.outcome?.kind === 'unavailable',
     ...actions,
     scope: `${realmId}:${reader}:${locale}:${source?.id ?? 'no-session-cache'}:${revision}:${draft.id}`,
+    current: draft.current,
   };
 }
 
@@ -247,13 +248,14 @@ type PublicationControlsProps = {
   search?: EntityPickerSearch | undefined;
   control: ReturnType<typeof usePublicationControls>;
   refresh: () => Promise<void>;
+  onCommand?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
 };
 
 export function PublicationControls(props: PublicationControlsProps) {
   return <PublicationControlsVisit key={props.control.scope} {...props} />;
 }
 
-function PublicationControlsVisit({ control, refresh, search }: PublicationControlsProps) {
+function PublicationControlsVisit({ control, refresh, search, onCommand }: PublicationControlsProps) {
   const [open, setOpen] = useState(false);
   const locale = getLocale();
   const searchSubjects = useMemo(() => search ?? publicationSubjectSearch(locale), [search, locale]);
@@ -495,7 +497,10 @@ function PublicationControlsVisit({ control, refresh, search }: PublicationContr
                   disabled={
                     !selected || control.locked || !preparation || !admittedPublicationCommand(preparation, action)
                   }
-                  onClick={() => void control.change(action)}
+                  onClick={(event) => {
+                    onCommand?.(event);
+                    void control.change(action);
+                  }}
                 >
                   {action === 'publish'
                     ? m.realm_publication_publish()
@@ -554,7 +559,10 @@ function PublicationControlsVisit({ control, refresh, search }: PublicationContr
                 <Button
                   className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
                   variant="outline"
-                  onClick={() => void control.retry()}
+                  onClick={(event) => {
+                    onCommand?.(event);
+                    void control.retry();
+                  }}
                 >
                   {m.realm_publication_retry()}
                 </Button>
