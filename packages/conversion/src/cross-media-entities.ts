@@ -85,7 +85,7 @@ export const vndbStaffNameLimits = Object.freeze({
   maxAliases: vndbStaffNameLimit,
   maxNameChars: 200,
   recordBytes: vndbLimits.recordBytes,
-  maxCommands: vndbStaffNameLimit + 1,
+  maxCommands: vndbStaffNameLimit + vndbLimits.maxLinks + 1,
 });
 const copySmallint = /^(?:0|[1-9][0-9]{0,4})$/u;
 const smallintMax = '32767';
@@ -1059,6 +1059,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   }
   if (kind === 'vndb-staff') {
     const names = projectStaffNames(raw, expected);
+    projectEntityLinks(kind, raw, expected, names.normalized);
     if (Buffer.byteLength(JSON.stringify(names.normalized), 'utf8') > vndbStaffNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     return {
