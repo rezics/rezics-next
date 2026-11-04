@@ -30,7 +30,7 @@ test('available Work links return to the exact localized inventory address', asy
     for (const link of links) {
       const destination = new URL(link.href);
       const via = new URL(destination.searchParams.get('via')!, 'https://rezics.test');
-      expect(destination.pathname.split('/').at(-1)).toBe(work.id);
+      expect(destination.pathname.split('/')[3]).toBe(work.id);
       expect(via.pathname).toBe('/en/library/copies');
       expect([...via.searchParams.keys()]).toEqual(['subjectId', 'cursor']);
       expect(via.searchParams.get('subjectId')).toBe(id('9'));
