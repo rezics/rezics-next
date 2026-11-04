@@ -5,14 +5,13 @@ Kind links start without a cursor. Browser history retains the kind and opaque c
 query identity and visit retirement include the kind; changing the address retires inspection and late row callbacks.
 The list remains bounded to twenty FULL rows with native order, locale and destination/action projections unchanged.
 
-Decision: expose native target kinds as ordinary wrapping, keyboard accessible links; until native filtering is
-installed, selecting a kind shows unavailable rather than filtering a mixed page or claiming an empty population.
+Decision: map URL kind to the native `targetType` selector on every read; all omits the selector.
 
-`followingKindProducer` is the named unavailable seam. The installed generated `personalLibraryRoutes` follows
-query accepts only view, cursor and limit; its native FollowPage likewise has no kind. Commerce owns delivery of
-whole-population filtering, kind-bound cursors, disclosure and allowed actions. Activation requires its matching
-installed generated contract and native evidence. Do not send an undeclared query field, infer a supported filter
-from local rows, or reinterpret a subject subtype as a target kind. Unsupported reads make no native list request.
+Commerce owns whole-population filtering, kind-bound cursors, disclosure and allowed actions. The native
+`personalLibraryRoutes` producer accepts subject, collection and space; it returns the unchanged follows/next
+page. Initial reads, continuation, same-address retries and stale-cursor first-page recovery all keep the selector.
+Do not filter mixed pages or reinterpret subject subtypes as target kinds. Failed reads remain unavailable rather
+than establishing an empty population; only successful native exhaustion does that.
 
 The earlier repository's `features/following/pages/following-page.tsx` sends an owner filter in its cursor query.
 `legacy-final:apps/web/features/relationships/manager.tsx` sends kind and order through its relationship reader.

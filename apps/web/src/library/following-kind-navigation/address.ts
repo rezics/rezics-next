@@ -7,7 +7,5 @@ export function followingKind(value: unknown): FollowingKind | null {
   return value === 'subject' || value === 'collection' || value === 'space' ? value : null;
 }
 
-/** Named unavailable seam: installed follows.get has only view, cursor and limit.
- * Activate only with Commerce's matching generated query and native kind-bound cursor evidence.
- */
-export const followingKindProducer = 'unavailable' as const;
+/** Commerce owns the native population selector and kind-bound cursors. */
+export const followingKindProducer = 'native' as const;
