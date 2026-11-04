@@ -240,7 +240,14 @@ export async function readProviderQueue(
   try {
     // Hydrate once for the exact Context through the installed generated native surface.
     // Queue admission runs afterwards, so failed action hydration cannot conceal revoked list access.
-    const { actions } = await readCandidateAuthority(client, authorization, scope.context);
+    const authority = await readCandidateAuthority(client, authorization, scope.context);
+    const actions: QueuePage['actions'] =
+      authority.actions.state === 'available'
+        ? {
+            ...authority.actions,
+            operations: authority.actions.operations.filter((operation) => operation !== 'subject.propose'),
+          }
+        : authority.actions;
     const [result, release, contextDefinitions] = await Promise.all([
       client['review-candidates'].get({
         query: { ...scope, limit: 20, ...(cursor ? { cursor } : {}) },
