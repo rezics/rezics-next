@@ -4,12 +4,12 @@ CREATE TABLE semantic.identity_rating_repair_journal (
   partition_no integer NOT NULL CHECK (partition_no BETWEEN 0 AND 4095),
   scope_key text NOT NULL CHECK (scope_key ~ '^[a-f0-9]{64}$'),
   scope jsonb NOT NULL CHECK (octet_length(scope::text) <= 4096),
-  owner_node text NOT NULL,
+  owner_node text NOT NULL CHECK (octet_length(owner_node) BETWEEN 1 AND 256),
   owner_epoch integer NOT NULL CHECK (owner_epoch > 0),
   checkpoint jsonb CHECK (octet_length(checkpoint::text) <= 32768),
   reclaimed boolean NOT NULL DEFAULT false,
   PRIMARY KEY (partition_no, scope_key),
-  CHECK (NOT reclaimed OR checkpoint->>'phase' = 'complete')
+  CHECK (NOT reclaimed OR (checkpoint->>'phase') IS NOT DISTINCT FROM 'complete')
 );
 
 CREATE TABLE semantic.identity_rating_repair_page (
