@@ -26,11 +26,7 @@ import { candidateContext, type NativeOperationAvailability } from '../../subjec
 import { DefinitionGuideLink } from './definition-guide-view';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { EditorFailure, PartValue, StatementFields, StatementViolationLinks } from './statement-editor-view';
-import {
-  correctionInspectionAvailability,
-  correctionProposalAvailability,
-  type EditorRead,
-} from './statement-editor';
+import { correctionInspectionAvailability, correctionProposalAvailability, type EditorRead } from './statement-editor';
 import { presentStatementViolations, type StatementFeedback } from './statement-validation-presentation';
 import {
   applyReuse,
@@ -604,33 +600,33 @@ function FactField({
                   <>
                     <p className="font-semibold">{m.correction_proposed({}, o)}</p>
                     {inspectionAvailability === 'allowed' ? (
-                    <a
-                      href={`${href}/edit?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`}
-                      {...(editorHref
-                        ? {
-                            href: `${editorHref}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`,
+                      <a
+                        href={`${href}/edit?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`}
+                        {...(editorHref
+                          ? {
+                              href: `${editorHref}?${new URLSearchParams({ reviewProperty: property, candidate: draft.result.candidate })}`,
+                            }
+                          : {})}
+                        className={buttonVariants({
+                          variant: 'outline',
+                          className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2',
+                        })}
+                        onClick={(event) => {
+                          if (
+                            event.button === 0 &&
+                            !event.metaKey &&
+                            !event.ctrlKey &&
+                            !event.shiftKey &&
+                            !event.altKey
+                          ) {
+                            event.preventDefault();
+                            if (draft.result?.ok)
+                              onReview({ property, candidate: draft.result.candidate, session: draft.result.session });
                           }
-                        : {})}
-                      className={buttonVariants({
-                        variant: 'outline',
-                        className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2',
-                      })}
-                      onClick={(event) => {
-                        if (
-                          event.button === 0 &&
-                          !event.metaKey &&
-                          !event.ctrlKey &&
-                          !event.shiftKey &&
-                          !event.altKey
-                        ) {
-                          event.preventDefault();
-                          if (draft.result?.ok)
-                            onReview({ property, candidate: draft.result.candidate, session: draft.result.session });
-                        }
-                      }}
-                    >
-                      {m.correction_review({}, o)}
-                    </a>
+                        }}
+                      >
+                        {m.correction_review({}, o)}
+                      </a>
                     ) : (
                       <p className="text-sm text-muted-foreground">
                         {inspectionAvailability === 'denied'
@@ -984,9 +980,7 @@ function SubjectFactsLive({
               )}
             </>
           )}
-          {proposalAvailability === 'unavailable' && (
-            <p role="status">{m.correction_actions_unavailable({}, o)}</p>
-          )}
+          {proposalAvailability === 'unavailable' && <p role="status">{m.correction_actions_unavailable({}, o)}</p>}
           {proposalAvailability === 'denied' && <p role="status">{m.correction_denied({}, o)}</p>}
         </header>
       )}

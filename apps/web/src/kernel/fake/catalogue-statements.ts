@@ -2,7 +2,12 @@ import { createKernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { candidateFixture, candidateProperty } from './subject-candidates';
 import definitions from '../recorded/definitions-release.json';
-import { readCandidates, selectCandidate, type CandidateRead, type CandidateViewerActions } from '../../subject/candidates';
+import {
+  readCandidates,
+  selectCandidate,
+  type CandidateRead,
+  type CandidateViewerActions,
+} from '../../subject/candidates';
 import {
   readStatementEditor,
   proposeStatement,

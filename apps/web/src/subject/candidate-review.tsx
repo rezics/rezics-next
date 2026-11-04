@@ -713,7 +713,12 @@ function CandidateReviewLive({
                             <Button
                               variant="outline"
                               className="min-h-11"
-                              disabled={locked || requiresReload || acceptanceAvailability === 'denied' || acceptanceAvailability === 'unavailable'}
+                              disabled={
+                                locked ||
+                                requiresReload ||
+                                acceptanceAvailability === 'denied' ||
+                                acceptanceAvailability === 'unavailable'
+                              }
                               onClick={(event) => openConfirmation('accept', event.currentTarget)}
                             >
                               {m.candidate_accept({}, options)}
@@ -723,7 +728,12 @@ function CandidateReviewLive({
                             <Button
                               variant="outline"
                               className="min-h-11"
-                              disabled={locked || requiresReload || rejectionAvailability === 'denied' || rejectionAvailability === 'unavailable'}
+                              disabled={
+                                locked ||
+                                requiresReload ||
+                                rejectionAvailability === 'denied' ||
+                                rejectionAvailability === 'unavailable'
+                              }
                               onClick={(event) => openConfirmation('reject', event.currentTarget)}
                             >
                               {m.candidate_reject({}, options)}

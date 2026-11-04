@@ -1388,9 +1388,13 @@ function StatementEditorLive({
         <section className={reviewControlsClassName}>
           {!cleared && <p role="status">{m.correction_proposed({}, o)}</p>}
           <div className="flex flex-wrap gap-3">
-            {!cleared && (
-              inspectionAvailability === 'allowed' ? (
-                <Button className={actionClassName} type="button" onClick={() => lifetime.active() && setReviewing(true)}>
+            {!cleared &&
+              (inspectionAvailability === 'allowed' ? (
+                <Button
+                  className={actionClassName}
+                  type="button"
+                  onClick={() => lifetime.active() && setReviewing(true)}
+                >
                   {m.correction_review({}, o)}
                 </Button>
               ) : (
@@ -1399,8 +1403,7 @@ function StatementEditorLive({
                     ? m.candidate_denied({}, o)
                     : m.candidate_actions_unavailable({}, o)}
                 </p>
-              )
-            )}
+              ))}
             {submitted?.href && (
               <a className={buttonVariants({ variant: 'outline', className: actionClassName })} href={submitted.href}>
                 {m.candidate_view_public({}, o)}
@@ -1498,7 +1501,11 @@ function StatementEditorLive({
             />
           </fieldset>
           <div className="flex flex-wrap gap-3">
-            <Button className={actionClassName} type="submit" disabled={busy || (!pending.current && proposalAvailability !== 'allowed')}>
+            <Button
+              className={actionClassName}
+              type="submit"
+              disabled={busy || (!pending.current && proposalAvailability !== 'allowed')}
+            >
               {pending.current ? m.correction_retry({}, o) : m.correction_submit({}, o)}
             </Button>
             {!pending.current && (
