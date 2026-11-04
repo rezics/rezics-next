@@ -25,6 +25,7 @@ import { DefinitionGuideLink } from './definition-guide-view';
 import { RelationEditor } from './relation-editor';
 import { classificationFields } from './character-profile-classification';
 import { ClassificationRecovery, beginClassificationKeyboardRecovery } from './classification-recovery';
+import { correctionInspectionAvailability } from './statement-editor';
 import { EditorFailure, PartValue } from './statement-editor-view';
 import { ExactReview, FactField, SelectedFacts } from './subject-facts-view';
 import {
@@ -557,6 +558,7 @@ function AlbumCorrectionWorkspaceLive({
                     busy={busy}
                     canStage={drafts.length < factLimit}
                     draft={draft}
+                    inspectionAvailability={correctionInspectionAvailability(current.actions)}
                     onReview={(address) => {
                       if (lifetime.active()) setReviewing(address);
                     }}
