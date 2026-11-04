@@ -80,7 +80,7 @@ test('uncertain deletion survives cached return with its exact command; accepted
     restore();
   });
   expect(page.host.querySelector('input')).toBeNull();
-  expect(page.host.querySelector('a[href="/security"]')).toBeNull();
+  expect(page.host.querySelector('a[href="/security"]')).not.toBeNull();
   expect(page.calls).toHaveLength(5);
 });
 for (const phase of ['read', 'approval', 'success', 'step-up'] as const)

@@ -96,17 +96,23 @@ export function storePendingAccountOperationStepUp(input: Omit<PendingAccountOpe
 }
 
 export function pendingAccountOperationStepUpState(): PendingAccountOperationStepUpState {
+  let stored: string | null;
   try {
-    const stored = window.sessionStorage.getItem(storageKey);
-    if (stored === null) return { kind: 'absent' };
-    const value: unknown = JSON.parse(stored);
-    if (!isPending(value)) return { kind: 'invalid' };
-    const { version: _version, ...pending } = value as PendingAccountOperationStepUp & { version: 1 };
-    return { kind: 'pending', value: pending };
+    stored = window.sessionStorage.getItem(storageKey);
   } catch {
     // Storage access can be disabled; without a saved continuation the operation page can still use its normal flow.
     return { kind: 'absent' };
   }
+  if (stored === null) return { kind: 'absent' };
+  let value: unknown;
+  try {
+    value = JSON.parse(stored);
+  } catch {
+    return { kind: 'invalid' };
+  }
+  if (!isPending(value)) return { kind: 'invalid' };
+  const { version: _version, ...pending } = value as PendingAccountOperationStepUp & { version: 1 };
+  return { kind: 'pending', value: pending };
 }
 
 export function readPendingAccountOperationStepUp(): PendingAccountOperationStepUp | null {

@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "Die Passkey-Abfrage wurde vor dem Senden abgebrochen. Wählen Sie ein Passwort oder drücken Sie erneut die Passkey-Schaltfläche.",
   "auth_security_passkey_history_acknowledged": "Auth hat diese Passkey-Registrierung zuvor bestätigt. Diese Bestätigung zeigt nicht, ob der Passkey jetzt aktiv ist.",
   "auth_security_passkey_history_unknown": "Auth hat diese Passkey-Registrierung möglicherweise erhalten, aber das Ergebnis ist unbekannt. Prüfe die aktuellen Passkeys, bevor du fortfährst.",
-  "auth_security_passkey_dismiss_history": "Passkey-Status ausblenden"
+  "auth_security_passkey_dismiss_history": "Passkey-Status ausblenden",
+  "auth_account_delete_return_heading": "Früherer Löschstatus",
+  "auth_account_delete_return_unsent": "Bei der früheren Prüfung wurde kein Löschbefehl gesendet.",
+  "auth_account_delete_return_unknown": "Ein Löschbefehl könnte den Server erreicht haben. Sein Ergebnis ist weiterhin unbekannt; die aktuelle Kontoprüfung kann es nicht klären.",
+  "auth_account_delete_return_acknowledged": "Der Löschauftrag wurde angenommen. Die Bereinigung steht noch aus; eine vollständige Löschung ist nicht bestätigt.",
+  "auth_account_delete_return_dismiss": "Status ausblenden"
 }

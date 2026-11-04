@@ -397,8 +397,9 @@ The page heading has the same space below it as the sections have between them.
 
 ## Delete account
 
-`/account/delete` reads the signed-in account id from one `GET /session`. The page explains that deletion is permanent,
-signs the person out everywhere and cannot be undone. Before submitting, the person must type the localized confirmation
+`/account/delete` reads current deletion advice and the signed-in account identity from one
+`POST /account-management/deletion-page`. The page explains that deletion is permanent, signs the person out everywhere
+and cannot be undone. Before submitting, the person must type the localized confirmation
 phrase shown above the input (ignoring letter case, trimming surrounding whitespace and normalizing Unicode to NFC) and
 review the three prerequisites: no operated automated accounts, not the last owner of an organization, and no pending
 transfer. These are requirements to resolve, never static verified results; the application and consent inventories
@@ -407,6 +408,12 @@ pending-transfer requirements link to the existing operator-transfer page. Organ
 website's managed-account settings: Auth has neither a trusted website destination nor an owned organization ID in
 its session/security inventories, so it keeps the local Security fallback rather than inventing a list target or
 opening membership management without a valid organization ID.
+
+The mounted return reader uses `loadAccountDeletionPage`: one same-origin `POST /account-management/deletion-page` per
+entry, persisted-page return or explicit Retry, with the existing five-second private-read deadline and no retry. An
+admitted review mounts the existing `SecurityInventory`, which reads one bounded clients page and one bounded consents
+page (at most 20 rows each); it does not fetch a next page until the person explicitly navigates. Retiring the review
+aborts the page lifetime and invalidates both inventory results. Returning and Retry perform no approval or execution.
 
 Each deletion attempt keeps one exact account, operation key and payload for `POST /account-operations/approve` and
 `POST /account-operations/execute`. Approval is unsent navigation state; the continuation stores `submitted: false`
@@ -418,12 +425,20 @@ pending. After returning with only the submitted hint, the page cannot reconstru
 on mount or return. Refreshing deletion review only reads current advice. Repeating a command requires current review,
 the same retained account, key and payload, and deliberate typed confirmation. One same-body execution retry remains
 limited to the existing unavailable response; a timeout ends browser waiting without cancelling native work.
-The initial review and successful submit remain three Auth requests, independent of the number of sessions,
-organizations or operated accounts.
+From a current review, a successful deletion command normally makes two POSTs: one approval and one execution. The
+approval phase has one same-body retry only for `503 unavailable` while the current review still owns the attempt; if
+approval is accepted, execution is dispatched once and deletion keeps its existing single same-body retry only for
+`503 unavailable` while that review still owns the attempt. A page read is separate: one deletion-advice POST and, for
+an admitted review, one bounded clients page and one bounded consents page. The deletion route does not make a separate
+`GET /session` request. These costs do not scale with the account's session count, organization count or operated
+account count.
 
-Unavailable session reads offer a review refresh without submitting deletion; recovery and cached-page restoration
+Unavailable advice reads offer a review refresh without submitting deletion; recovery and cached-page restoration
 require fresh typed confirmation, and departure retires callbacks while preserving the original command for explicit
 reconciliation. An accepted deletion remains a confirmation of acceptance with cleanup still pending.
+
+Decision: the mounted return summary can be dismissed, but dismissal hides only generic presentation; any exact
+unresolved descriptor, native fence and departure warning remain intact.
 
 Decision: protect nonblank typed confirmation and unresolved deletion in memory with Stay/Leave and unload warnings; Stay keeps the exact review and focus, while Leave retires callbacks and preserves the original reconciliation identity. Authority loss and intended reauthentication release the guard immediately.
 

@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "The passkey prompt was cancelled before authentication was sent. Choose password or press the passkey button when ready.",
   "auth_security_passkey_history_acknowledged": "Auth confirmed this passkey registration earlier. This acknowledgement does not show whether the passkey is active now.",
   "auth_security_passkey_history_unknown": "Auth may have received this passkey registration, but the result is unknown. Check current passkeys before continuing.",
-  "auth_security_passkey_dismiss_history": "Dismiss passkey status"
+  "auth_security_passkey_dismiss_history": "Dismiss passkey status",
+  "auth_account_delete_return_heading": "Earlier deletion status",
+  "auth_account_delete_return_unsent": "The earlier review did not send a deletion command.",
+  "auth_account_delete_return_unknown": "A deletion command may have reached the server. Its result is still unknown; current account advice cannot settle it.",
+  "auth_account_delete_return_acknowledged": "The deletion request was accepted. Cleanup remains pending, so complete erasure is not confirmed.",
+  "auth_account_delete_return_dismiss": "Dismiss status"
 }

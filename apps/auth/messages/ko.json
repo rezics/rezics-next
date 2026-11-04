@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "인증을 보내기 전에 패스키 요청이 취소되었습니다. 비밀번호를 선택하거나 패스키 버튼을 누르세요.",
   "auth_security_passkey_history_acknowledged": "Auth가 이전에 이 패스키 등록을 확인했습니다. 이 확인은 패스키가 현재 활성 상태인지 알려주지 않습니다.",
   "auth_security_passkey_history_unknown": "Auth가 이 패스키 등록을 받았을 수 있지만 결과는 알 수 없습니다. 계속하기 전에 현재 패스키를 확인하세요.",
-  "auth_security_passkey_dismiss_history": "패스키 상태 닫기"
+  "auth_security_passkey_dismiss_history": "패스키 상태 닫기",
+  "auth_account_delete_return_heading": "이전 계정 삭제 상태",
+  "auth_account_delete_return_unsent": "이전 검토에서는 삭제 명령을 보내지 않았습니다.",
+  "auth_account_delete_return_unknown": "삭제 명령이 서버에 도달했을 수 있습니다. 결과는 아직 알 수 없으며 현재 계정 안내로는 확정할 수 없습니다.",
+  "auth_account_delete_return_acknowledged": "계정 삭제 요청이 접수되었습니다. 정리는 진행 중이며 전체 삭제가 완료된 것은 확인되지 않았습니다.",
+  "auth_account_delete_return_dismiss": "상태 숨기기"
 }

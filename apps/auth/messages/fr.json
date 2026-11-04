@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "La demande de clé d’accès a été annulée avant l’envoi. Choisissez un mot de passe ou appuyez sur le bouton de clé d’accès.",
   "auth_security_passkey_history_acknowledged": "Auth a confirmé cet enregistrement de clé d’accès plus tôt. Cette confirmation ne permet pas de savoir si la clé est active maintenant.",
   "auth_security_passkey_history_unknown": "Auth a peut-être reçu cet enregistrement de clé d’accès, mais le résultat est inconnu. Vérifiez les clés actuelles avant de continuer.",
-  "auth_security_passkey_dismiss_history": "Masquer l’état de la clé d’accès"
+  "auth_security_passkey_dismiss_history": "Masquer l’état de la clé d’accès",
+  "auth_account_delete_return_heading": "État antérieur de la suppression",
+  "auth_account_delete_return_unsent": "La vérification précédente n’a envoyé aucune commande de suppression.",
+  "auth_account_delete_return_unknown": "Une commande de suppression a peut-être atteint le serveur. Son résultat reste inconnu ; l’état actuel du compte ne peut pas le clarifier.",
+  "auth_account_delete_return_acknowledged": "La demande de suppression a été acceptée. Le nettoyage est en attente ; l’effacement complet n’est pas confirmé.",
+  "auth_account_delete_return_dismiss": "Masquer l’état"
 }

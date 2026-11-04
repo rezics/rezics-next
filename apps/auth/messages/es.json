@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "La solicitud de clave de acceso se canceló antes de enviar la autenticación. Elija una contraseña o pulse el botón de clave de acceso.",
   "auth_security_passkey_history_acknowledged": "Auth confirmó antes este registro de llave de acceso. Esta confirmación no indica si la llave está activa ahora.",
   "auth_security_passkey_history_unknown": "Es posible que Auth recibiera este registro de llave de acceso, pero el resultado es desconocido. Comprueba las llaves actuales antes de continuar.",
-  "auth_security_passkey_dismiss_history": "Descartar el estado de la llave de acceso"
+  "auth_security_passkey_dismiss_history": "Descartar el estado de la llave de acceso",
+  "auth_account_delete_return_heading": "Estado anterior de la eliminación",
+  "auth_account_delete_return_unsent": "En la revisión anterior no se envió ningún comando de eliminación.",
+  "auth_account_delete_return_unknown": "Es posible que un comando de eliminación haya llegado al servidor. El resultado sigue sin conocerse; el estado actual de la cuenta no puede aclararlo.",
+  "auth_account_delete_return_acknowledged": "La solicitud de eliminación fue aceptada. La limpieza sigue pendiente; no se ha confirmado el borrado completo.",
+  "auth_account_delete_return_dismiss": "Ocultar estado"
 }

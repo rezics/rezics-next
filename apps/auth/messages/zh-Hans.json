@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "通行密钥提示已在发送认证前取消。准备好后请选择密码或点击通行密钥按钮。",
   "auth_security_passkey_history_acknowledged": "Auth 之前已确认此通行密钥注册。此确认不表示该通行密钥目前仍处于启用状态。",
   "auth_security_passkey_history_unknown": "Auth 可能已收到此通行密钥注册，但结果未知。继续前请检查当前通行密钥。",
-  "auth_security_passkey_dismiss_history": "关闭通行密钥状态提示"
+  "auth_security_passkey_dismiss_history": "关闭通行密钥状态提示",
+  "auth_account_delete_return_heading": "先前的删除状态",
+  "auth_account_delete_return_unsent": "先前的审核没有发送删除命令。",
+  "auth_account_delete_return_unknown": "删除命令可能已到达服务器。结果仍然未知；当前账户建议无法确定此前的结果。",
+  "auth_account_delete_return_acknowledged": "删除请求已受理。清理仍在进行，尚未确认已完全删除。",
+  "auth_account_delete_return_dismiss": "隐藏状态"
 }

@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "認証の送信前にパスキーの要求がキャンセルされました。パスワードを選ぶか、パスキーボタンを押してください。",
   "auth_security_passkey_history_acknowledged": "Auth は以前、このパスキー登録を確認しました。この確認は、現在もパスキーが有効であることを示すものではありません。",
   "auth_security_passkey_history_unknown": "Auth がこのパスキー登録を受け取った可能性がありますが、結果は不明です。続行する前に現在のパスキーを確認してください。",
-  "auth_security_passkey_dismiss_history": "パスキーの状態を閉じる"
+  "auth_security_passkey_dismiss_history": "パスキーの状態を閉じる",
+  "auth_account_delete_return_heading": "以前の削除状況",
+  "auth_account_delete_return_unsent": "以前の確認では、削除コマンドは送信されていません。",
+  "auth_account_delete_return_unknown": "削除コマンドがサーバーに届いた可能性があります。結果は不明のままで、現在のアカウント情報では確定できません。",
+  "auth_account_delete_return_acknowledged": "削除の申請は受け付けられました。後処理は保留中で、完全な消去は確認されていません。",
+  "auth_account_delete_return_dismiss": "状況を非表示"
 }

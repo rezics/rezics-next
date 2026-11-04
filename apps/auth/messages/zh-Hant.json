@@ -759,5 +759,10 @@
   "auth_login_prompt_cancelled": "通行密鑰提示已在傳送驗證前取消。準備好後請選擇密碼或按下通行密鑰按鈕。",
   "auth_security_passkey_history_acknowledged": "Auth 之前已確認此通行密鑰註冊。此確認不表示該通行密鑰目前仍處於啟用狀態。",
   "auth_security_passkey_history_unknown": "Auth 可能已收到此通行密鑰註冊，但結果未知。繼續前請檢查目前的通行密鑰。",
-  "auth_security_passkey_dismiss_history": "關閉通行密鑰狀態提示"
+  "auth_security_passkey_dismiss_history": "關閉通行密鑰狀態提示",
+  "auth_account_delete_return_heading": "先前的刪除狀態",
+  "auth_account_delete_return_unsent": "先前的審查並未送出刪除命令。",
+  "auth_account_delete_return_unknown": "刪除命令可能已送達伺服器。結果仍未知；目前的帳戶建議無法確認先前的結果。",
+  "auth_account_delete_return_acknowledged": "刪除請求已受理。清理仍在進行，尚未確認已完全刪除。",
+  "auth_account_delete_return_dismiss": "隱藏狀態"
 }
