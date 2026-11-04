@@ -269,6 +269,8 @@ nativeTest(
       expect(compareAddress.searchParams.get('candidateField')).toBe('schema:url');
       expect(compareAddress.searchParams.get('sourceStatement')).toBeTruthy();
       await compare.click();
+      await contributor.getByRole('button', { name: m.candidate_entry(), exact: true }).click();
+      await contributor.locator('#candidate-review select').first().waitFor({ state: 'visible' });
       await contributor.getByRole('link', { name: m.correction_title(), exact: true }).click();
       await contributor
         .getByLabel(m.correction_url(), { exact: true })

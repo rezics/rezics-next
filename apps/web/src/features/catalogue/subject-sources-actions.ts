@@ -56,32 +56,38 @@ export const loadSubjectSources = createServerFn({ method: 'GET', strict: false 
 
 /** Hydrated private reading; the loader never serializes a viewer's action envelope into SSR. */
 export const readCurrentSubjectSources = createServerFn({ method: 'POST', strict: false })
-  .validator((input: { id: string; locale: string; expectedReader: string }) => {
+  .validator((input: { id: string; locale: string; expectedReader: string | null }) => {
     if (
       !input ||
       !/^[0-9a-f-]{36}$/i.test(input.id) ||
       typeof input.locale !== 'string' ||
       input.locale.length > 35 ||
-      typeof input.expectedReader !== 'string' ||
-      input.expectedReader.length > 128
+      (input.expectedReader !== null && (typeof input.expectedReader !== 'string' || input.expectedReader.length > 128))
     )
       throw new Error('Invalid Sources reader');
     return input;
   })
   .handler(async ({ data }): Promise<SourcesResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { candidateAuthorization } = await import('../../subject/candidate-admission');
-    const authorization = await candidateAuthorization(data.expectedReader);
-    if (!authorization) return { kind: 'denied' };
+    const { getRequest } = await import('@tanstack/react-start/server');
+    const { env } = await import('cloudflare:workers');
+    const { prepareSession, sessionSubject, viewerCredential } = await import('../../session/request');
+    const request = getRequest();
+    await prepareSession(request, env);
+    if ((sessionSubject(request) ?? null) !== data.expectedReader) return { kind: 'denied' };
+    const authorization = viewerCredential(request) ?? undefined;
     const [{ kernelClient }, { readRelease }] = await Promise.all([
       import('../../kernel/client'),
       import('../../subject/definitions'),
     ]);
-    return readSubjectSources(
+    const result = await readSubjectSources(
       kernelClient(data.locale, authorization),
       data.id,
       data.locale,
       readRelease().catch(() => undefined),
       true,
     );
+    if (result.kind === 'ready' && result.page.viewer)
+      result.page.viewer.state = data.expectedReader ? 'signed-in' : 'signed-out';
+    return result;
   });
