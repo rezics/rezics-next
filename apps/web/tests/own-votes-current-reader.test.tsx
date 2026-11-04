@@ -261,7 +261,9 @@ test('account ABA and locale replacement retire a deferred return before status 
     await visitSubject(view);
     const old = await back(view);
     await view.expose('reader-b', 'csrf-b');
+    expect(view.host.textContent).not.toContain('The same original question and Subject pair');
     await view.expose(account, 'csrf-a-returned');
+    expect(view.host.textContent).not.toContain('The same original question and Subject pair');
     ready(old);
     const extraReads = reads.slice(1);
     for (const call of extraReads) ready(call);
@@ -276,7 +278,10 @@ test('account ABA and locale replacement retire a deferred return before status 
     if (nextInspect) await view.click(nextInspect);
     await visitSubject(view);
     const localeRead = await back(view);
-    await setLocale('ja', { reload: false });
+    await view.perform(async () => {
+      await setLocale('ja', { reload: false });
+      await view.router.invalidate();
+    });
     ready(localeRead);
     for (const call of reads) ready(call);
     await act(async () => Promise.all(reads.map((call) => call.promise)));
@@ -307,7 +312,7 @@ test('cursor and equal-response replacement reject the old refresh completion', 
     await act(async () => old.promise);
     expect(view.host.textContent).not.toContain('The same original question and Subject pair');
 
-    await view.router.navigate({ to: '/library/ratings', search: { cursor: 'next/+sealed=' } });
+    await view.perform(() => view.router.navigate({ to: '/library/ratings', search: { cursor: 'next/+sealed=' } }));
     const next = await waitForRead(reads.length);
     expect(next.cursor).toBe('next/+sealed=');
     for (const call of reads) if (call !== next) ready(call);
