@@ -170,7 +170,7 @@ function SubjectTermsPageLive({
   const visit = currentVisit.current!;
   const transportKey = termsTransportKey(transport);
   const query = useQuery({
-    queryKey: ['catalogue-terms', id, locale, session, lifetime.generation, transportKey],
+    queryKey: [...['catalogue-terms', id, locale], lifetime.generation],
     queryFn: () => transport.read(id),
     retry: false,
     staleTime: Infinity,
