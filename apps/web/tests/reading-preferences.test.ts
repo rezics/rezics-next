@@ -118,3 +118,16 @@ test('a lost acknowledgement never becomes success without current readback', as
   expect(fixture.calls[1]).toBe(input);
   expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
 });
+
+test('a validated replay receipt stays confirmed when its current read is unavailable', async () => {
+  const f = readingFixture('lost'), input = readingMutation(f.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  await sendReading(f.io, input, false, latest);
+  const result = await sendReading(
+    { ...f.io, read: async () => ({ signedIn: true as const, state: 'unavailable' as const, failure: { status: 503 }, securityHref: null }) },
+    input,
+    true,
+    latest,
+  );
+  expect(result).toMatchObject({ kind: 'confirmed-read-failed', receipt: { spoilerLevel: 1, version: 1 } });
+  expect(f.calls[1]).toBe(input);
+});

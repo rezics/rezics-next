@@ -12,11 +12,11 @@ const advice = readingAdviceFor({ spoilerLevel: 1, suitability: 'blur' });
 advice.reading.defaults = { spoilerLevel: 2, suitability: 'show' };
 const denied = readingAdviceFor({ spoilerLevel: 1, suitability: 'blur' }, false);
 const initial = { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 3, advice };
-const createEditor = (io: ReadingIO, current: () => boolean = () => true) =>
+const createEditor = (io: ReadingIO, current: () => boolean = () => true, version: () => number = () => 3) =>
   new ReadingDraftRecovery(initial, io, {
     canRead: current,
     canWrite: current,
-    version: () => 3,
+    version,
     onVersionChange: () => {},
   });
 
@@ -193,6 +193,47 @@ test('temporary read failure keeps the original until fresh advice is reviewed a
   });
   await editor.retry();
   expect(calls[1]).toBe(original);
+});
+
+test('confirmed replay read recovery keeps its receipt, newer baseline and later draft without another write', async () => {
+  let version = 3;
+  const preferences = (spoilerLevel: 0 | 1 | 2, suitability: 'blur' | 'show', version: number) => ({
+    spoilerLevel,
+    suitability,
+    version,
+    advice: readingAdviceFor({ spoilerLevel, suitability }),
+  });
+  const receipt = preferences(0, 'blur', 4), current = preferences(2, 'show', 5);
+  const pages: SettingsPage[] = [
+    { signedIn: true, state: 'unavailable', failure: { status: 503 }, securityHref: null },
+    { signedIn: true, preferences: current, securityHref: null },
+  ];
+  const calls: unknown[] = [];
+  const editor = createEditor(
+    {
+      save: async (input) => (calls.push(input), calls.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, preferences: receipt }),
+      read: async () => pages.shift()!,
+    },
+    () => true,
+    () => version,
+  );
+  await editor.edit({ spoilerLevel: 0 });
+  const original = editor.snapshot().pending;
+  version = 5;
+  await editor.retry();
+  expect(editor.snapshot()).toMatchObject({ phase: 'failed', pending: null, knownCurrent: false, failureOrigin: 'read' });
+  expect(editor.snapshot().confirmedReceipt).toEqual({ spoilerLevel: 0, suitability: 'blur', version: 4 });
+  await editor.edit({ suitability: 'show' });
+  await editor.submit();
+  await editor.resetToNativeDefaults();
+  expect(calls).toHaveLength(2);
+  expect(calls[1]).toBe(original);
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({
+    phase: 'review', knownCurrent: true, known: current, draft: { spoilerLevel: 0, suitability: 'show' },
+  });
+  expect(editor.snapshot().confirmedReceipt?.version).toBe(4);
+  expect(calls).toHaveLength(2);
 });
 
 const withNow = async (start: number, run: (advance: (ms: number) => void) => Promise<void>) => {

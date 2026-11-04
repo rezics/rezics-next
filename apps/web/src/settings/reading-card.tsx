@@ -67,6 +67,7 @@ type ReadingState = {
   known: ReadingPreferences;
   draft: ReadingValues;
   pending: Readonly<PreferenceChange> | null;
+  confirmedReceipt: ReadingPreferences | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
   knownCurrent: boolean;
   advice?: ReadingAdvice | undefined;
@@ -102,6 +103,7 @@ export class ReadingDraftRecovery {
       known: advice ? initial : withoutReadingAdvice(initial),
       draft: initial,
       pending: null,
+      confirmedReceipt: null,
       phase: 'idle',
       knownCurrent: advice !== undefined,
       advice,
@@ -138,9 +140,28 @@ export class ReadingDraftRecovery {
       failure: undefined,
       failureOrigin: undefined,
       knownCurrent: false,
+      confirmedReceipt: null,
     });
     const result = await sendReading(this.io, input, recovering, () => this.owner.version());
     if (!this.owner.canWrite()) return;
+    if (result.kind === 'confirmed-read-failed') {
+      const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
+      this.update({
+        known: retireAdvice ? withoutReadingAdvice(this.state.known) : this.state.known,
+        advice: retireAdvice ? undefined : this.state.advice,
+        pending: null,
+        confirmedReceipt: withoutReadingAdvice(result.receipt),
+        phase: 'failed',
+        knownCurrent: false,
+        reason: result.reason,
+        failure: result.failure,
+        failureOrigin: 'read',
+        readRetryAt: preferenceRetryDeadline(result.failure?.retryAfter),
+        commandRetryAt: 0,
+      });
+      this.owner.onVersionChange(Math.max(this.owner.version(), result.receipt.version));
+      return;
+    }
     if (result.kind !== 'confirmed') {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
       const deniedWrite = result.kind === 'rejected' && retireAdvice;
@@ -165,6 +186,7 @@ export class ReadingDraftRecovery {
       known: preferences,
       knownCurrent: true,
       pending: null,
+      confirmedReceipt: withoutReadingAdvice(receipt),
       phase: matches ? 'saved' : 'review',
       failure: undefined,
       advice: preferences.advice,
@@ -174,7 +196,14 @@ export class ReadingDraftRecovery {
     this.owner.onVersionChange(Math.max(this.owner.version(), preferences.version));
   }
   async submit() {
-    if (!this.canWrite() || this.commandWaiting() || this.state.pending || this.state.phase === 'reloading') return;
+    if (
+      !this.canWrite() ||
+      !this.state.knownCurrent ||
+      this.commandWaiting() ||
+      this.state.pending ||
+      this.state.phase === 'reloading'
+    )
+      return;
     if (this.owner.version() > this.state.known.version) {
       this.update({
         phase: 'conflict',
@@ -203,7 +232,14 @@ export class ReadingDraftRecovery {
     if (autosave && !this.state.pending) await this.submit();
   }
   async resetToNativeDefaults() {
-    if (!this.canWrite() || this.commandWaiting() || this.state.pending || this.state.phase === 'reloading') return;
+    if (
+      !this.canWrite() ||
+      !this.state.knownCurrent ||
+      this.commandWaiting() ||
+      this.state.pending ||
+      this.state.phase === 'reloading'
+    )
+      return;
     if (this.owner.version() > this.state.known.version) {
       this.update({
         phase: 'conflict',
@@ -250,6 +286,21 @@ export class ReadingDraftRecovery {
         failure: result.failure,
         failureOrigin: 'read',
         readRetryAt: preferenceRetryDeadline(result.failure?.retryAfter),
+      });
+      return;
+    }
+    if (
+      this.state.confirmedReceipt &&
+      result.preferences.version === this.state.confirmedReceipt.version &&
+      !sameReading(result.preferences, this.state.confirmedReceipt)
+    ) {
+      this.update({
+        phase: 'failed',
+        knownCurrent: false,
+        reason: 'unavailable',
+        failure: undefined,
+        failureOrigin: 'read',
+        readRetryAt: 0,
       });
       return;
     }
@@ -610,6 +661,7 @@ export function ReadingCard({
                                   ? m.settings_failed_text()
                                   : m.settings_conflict_text()}
               </p>
+              {state.confirmedReceipt ? <p>{m.settings_saved()}</p> : null}
               {uncertain && (readLoading || readFailed) ? <p>{m.settings_reading_uncertain_text()}</p> : null}
               {uncertain && !readFailed && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
               {uncertain && !readFailed && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
