@@ -26,8 +26,9 @@
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
-// Admission depends on free slots and held memory reservations, whatever the host's load average. Each run has a nested
-// slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average cores and peak memory.
+// Admission depends on free slots, held memory reservations and slice headroom that counts inactive file cache.
+// Each run has a nested slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average
+// cores and peak memory.
 import { createHash, randomUUID } from 'node:crypto';
 import type { LifecycleHostControl } from './check-lifecycle-child.ts';
 import {
@@ -1041,20 +1042,24 @@ case "$slice_cgroup" in /*) ;; *) slice_cgroup= ;; esac
 current=
 maximum=
 cpu_max=
+inactive_file=0
 if [ -n "$slice_cgroup" ]; then
   current=$(cat "/sys/fs/cgroup$slice_cgroup/memory.current" 2>/dev/null || true)
   maximum=$(cat "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true)
   cpu_max=$(cat "/sys/fs/cgroup$slice_cgroup/cpu.max" 2>/dev/null || true)
+  inactive_file=$(awk '/^inactive_file / { print $2; exit }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
 fi
 case "$current" in ''|*[!0-9]*) current= ;; esac
 case "$maximum" in ''|*[!0-9]*) maximum= ;; esac
+case "$inactive_file" in ''|*[!0-9]*) inactive_file=0 ;; esac
+if [ -n "$current" ] && [ "$inactive_file" -gt "$current" ]; then inactive_file=$current; fi
 if [ -n "$current" ] && [ -n "$maximum" ]; then
-  headroom=$((maximum - current))
+  headroom=$((maximum - current + inactive_file))
   [ "$headroom" -ge 0 ] || headroom=0
-  printf 'MEMORY_CURRENT %s\\nMEMORY_MAX %s\\nMEMORY_HEADROOM %s\\n' "$current" "$maximum" "$headroom"
+  printf 'MEMORY_CURRENT %s\\nMEMORY_MAX %s\\nMEMORY_HEADROOM %s\\nMEMORY_RECLAIMABLE %s\\n' "$current" "$maximum" "$headroom" "$inactive_file"
 else
   [ -n "$available" ] || exit 1
-  printf 'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM %s\\n' "$available"
+  printf 'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM %s\\nMEMORY_RECLAIMABLE 0\\n' "$available"
 fi
 printf 'AVAILABLE %s\\nTMP_BYTES %s\\nTMP_INODES %s\\n' "\${available:--}" "\${tmp_bytes:--}" "\${tmp_inodes:--}"
 slice_processors=
@@ -1169,6 +1174,39 @@ done
 flock -u 6
 exec 6>&-
 printf 'PROCESSORS %s\\nSLICE_PROCESSORS %s\\nLOAD %s\\nMEMORY_RESERVED %s\\nORDINARY_SLOTS_USED %s\\nEXPRESS_SLOT_USED %s\\nGATE_WAITING %s\\nMULTI_SLOT_WAITING_SLOTS %s\\nMULTI_SLOT_WAITING_ID %s\\nLANDING_WAITING_SLOTS %s\\nLANDING_WAITING_ID %s\\nLANDING_WAITING_STARTED %s\\nLANDING_WAITING_ESTIMATE_MS %s\\nLANDING_WAITING_MEMORY_BYTES %s\\n' "$processors" "$slice_processors" "$load" "$memory_reserved" "$ordinary_slots_used" "$express_slot_used" "$gate_waiting" "$multi_waiting_slots" "$multi_waiting_id" "$landing_waiting_slots" "$landing_waiting_id" "\${landing_waiting_started:--}" "$landing_waiting_estimate_ms" "$landing_waiting_memory_bytes"`;
+}
+
+/** Asks the kernel to reclaim inactive file pages; missing or unwritable memory.reclaim is ignored. */
+function reclaimScript(bytes: number): string {
+  return `# REMOTE_CHECK_MEMORY_RECLAIM ${bytes}
+set +e
+slice_cgroup=$(systemctl show --property=ControlGroup --value ${SLICE} 2>/dev/null || true)
+case "$slice_cgroup" in /*) ;; *) exit 0 ;; esac
+reclaim="/sys/fs/cgroup$slice_cgroup/memory.reclaim"
+if [ -e "$reclaim" ] && [ -w "$reclaim" ]; then
+  printf '%s\\n' ${bytes} > "$reclaim"
+fi
+exit 0`;
+}
+
+async function reclaimSliceMemory(host: Host, bytes: number): Promise<void> {
+  if (!Number.isSafeInteger(bytes) || bytes < 1) return;
+  try {
+    const child = Bun.spawn(['ssh', ...sshOptions(host, undefined, true), host.address, reclaimScript(bytes)], {
+      stdin: 'ignore',
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    await child.exited;
+  } catch {
+    /* A missing or unwritable memory.reclaim must not fail the run. */
+  }
+}
+
+function reclaimBytes(needed: number, headroom: number, reclaimable: number): number {
+  const unreclaimed = Math.max(0, headroom - reclaimable);
+  const shortfall = Math.max(0, needed - unreclaimed);
+  return Math.min(shortfall, reclaimable);
 }
 
 /** Holds a marker while a gate waits, so single-slot checks can prefer unmarked hosts. */
@@ -3892,6 +3930,7 @@ type HostProbe = {
   tmpBytes: number;
   tmpInodes: number;
   memoryHeadroom: number;
+  memoryReclaimable: number;
   memoryReserved: number;
   memoryMaximum: number | null;
   ordinarySlotsUsed: number;
@@ -3915,6 +3954,7 @@ type RankedHost = {
   freeSlots: number;
   slotLimit: number;
   memoryHeadroom: number;
+  memoryReclaimable: number;
   memoryReserved: number;
   gateWaiting: boolean;
   ordinarySlotsUsed: number;
@@ -4004,6 +4044,7 @@ function rankHost(
     slotLimit = Math.min(admissionLimit, probe.ordinarySlotsUsed + resourceSlots);
   }
   if (probe.memoryReserved + slots * memoryReservationBytes > memoryMaximum) freeSlots = 0;
+  if (slots * memoryReservationBytes > probe.memoryHeadroom) freeSlots = 0;
   if (waitsBehindOlderMulti) freeSlots = 0;
   // Expiry permits ordinary backfill; it does not reorder the priority queue itself.
   if (!gate && priority !== undefined && hasLandingWaiter && !isOldestLandingWaiter) freeSlots = 0;
@@ -4018,6 +4059,7 @@ function rankHost(
     freeSlots,
     slotLimit,
     memoryHeadroom: probe.memoryHeadroom,
+    memoryReclaimable: probe.memoryReclaimable,
     memoryReserved: probe.memoryReserved,
     gateWaiting: probe.gateWaiting,
     ordinarySlotsUsed: probe.ordinarySlotsUsed,
@@ -4062,6 +4104,7 @@ function parseProbe(output: string): HostProbe | null {
   const tmpBytesValue = value('TMP_BYTES');
   const tmpInodesValue = value('TMP_INODES');
   const headroomValue = value('MEMORY_HEADROOM');
+  const reclaimableValue = value('MEMORY_RECLAIMABLE');
   const reservedValue = value('MEMORY_RESERVED');
   const processors = Number(processorValue);
   const sliceProcessors = Number(sliceProcessorValue);
@@ -4070,6 +4113,7 @@ function parseProbe(output: string): HostProbe | null {
   const tmpBytes = Number(tmpBytesValue);
   const tmpInodes = Number(tmpInodesValue);
   const memoryHeadroom = Number(headroomValue);
+  const memoryReclaimable = Number(reclaimableValue);
   const memoryReserved = Number(reservedValue);
   const ordinarySlotsUsedValue = value('ORDINARY_SLOTS_USED') ?? value('SLOTS_USED');
   const ordinarySlotsUsed = Number(ordinarySlotsUsedValue);
@@ -4103,6 +4147,7 @@ function parseProbe(output: string): HostProbe | null {
     tmpBytesValue === null ||
     tmpInodesValue === null ||
     headroomValue === null ||
+    reclaimableValue === null ||
     reservedValue === null ||
     !Number.isSafeInteger(processors) ||
     processors < 1 ||
@@ -4118,6 +4163,8 @@ function parseProbe(output: string): HostProbe | null {
     tmpInodes < 0 ||
     !Number.isSafeInteger(memoryHeadroom) ||
     memoryHeadroom < 0 ||
+    !Number.isSafeInteger(memoryReclaimable) ||
+    memoryReclaimable < 0 ||
     !Number.isSafeInteger(memoryReserved) ||
     memoryReserved < 0 ||
     ordinarySlotsUsedValue === null ||
@@ -4160,6 +4207,7 @@ function parseProbe(output: string): HostProbe | null {
     tmpBytes,
     tmpInodes,
     memoryHeadroom,
+    memoryReclaimable,
     memoryReserved,
     memoryMaximum: sliceMemory ? Number(maximum) : null,
     ordinarySlotsUsed,
@@ -4401,6 +4449,7 @@ async function rankedHosts(
   pollMs = 5000,
 
   uploadedPlacement?: { host: Placement; directory: string },
+  reclaim = false,
 ): Promise<RankedHost[]> {
   const probes = await Promise.all(
     hosts.map(async (host) => ({
@@ -4435,31 +4484,59 @@ async function rankedHosts(
       loggedSkipLines.add(entry.host.name);
     }
   }
-  return (
-    probes
-      .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
-      .filter(({ host, probe }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
-      .map(({ host, probe }) =>
-        rankHost(
-          host,
-          probe,
-          slots,
-          estimateMs,
-          gate,
-          priority,
-          multiWaiterId,
-          memoryReservationBytes,
-          landingWaiterId,
-          pollMs,
-        ),
-      )
-      // Equal slot counts prefer the host with more measured slice memory headroom.
-      .sort(
-        (left, right) =>
-          (preferUngated ? Number(left.gateWaiting) - Number(right.gateWaiting) : 0) ||
-          right.freeSlots - left.freeSlots ||
-          right.memoryHeadroom - left.memoryHeadroom,
-      )
+  const ranked = probes
+    .filter((entry): entry is { host: Host; probe: HostProbe } => entry.probe !== null)
+    .filter(({ host, probe }) => !skipped.some(({ host: skippedHost }) => skippedHost.name === host.name))
+    .map(({ host, probe }) =>
+      rankHost(
+        host,
+        probe,
+        slots,
+        estimateMs,
+        gate,
+        priority,
+        multiWaiterId,
+        memoryReservationBytes,
+        landingWaiterId,
+        pollMs,
+      ),
+    )
+    // Equal slot counts prefer the host with more measured slice memory headroom.
+    .sort(
+      (left, right) =>
+        (preferUngated ? Number(left.gateWaiting) - Number(right.gateWaiting) : 0) ||
+        right.freeSlots - left.freeSlots ||
+        right.memoryHeadroom - left.memoryHeadroom,
+    );
+  if (!reclaim) return ranked;
+  const needed = slots * memoryReservationBytes;
+  if (startableHosts(ranked, slots, gate).some(({ freeSlots }) => freeSlots >= slots)) return ranked;
+  const blocked = ranked.filter(
+    ({ memoryHeadroom, memoryReclaimable }) => memoryHeadroom < needed && memoryReclaimable > 0,
+  );
+  if (blocked.length === 0) return ranked;
+  await Promise.all(
+    blocked.map(({ host, memoryHeadroom, memoryReclaimable }) =>
+      reclaimSliceMemory(host, reclaimBytes(needed, memoryHeadroom, memoryReclaimable)),
+    ),
+  );
+  if (signal.aborted) throw new Aborted();
+  return rankedHosts(
+    hosts,
+    signal,
+    slots,
+    estimateMs,
+    gate,
+    preferUngated,
+    multiWaiterId,
+    loggedSkips,
+    loggedSkipLines,
+    memoryReservationBytes,
+    priority,
+    landingWaiterId,
+    pollMs,
+    uploadedPlacement,
+    false,
   );
 }
 
@@ -4630,6 +4707,8 @@ async function acquireOnce(
     priority,
     landingWaiterId,
     pollMs,
+    undefined,
+    true,
   );
   let slots = requestedSlots;
   if (ranked.length > 0) {
@@ -4731,12 +4810,13 @@ async function acquire(
   let waitingHosts: RankedHost[] = [];
   let waitingConfiguration = placementConfig(hosts);
   let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let reclaim = true;
   const printWaiting = (): void => {
     const state = waitingHosts.length
       ? waitingHosts
           .map(
-            ({ host, freeSlots, slotLimit, memoryReserved }) =>
-              `${host.name} ${freeSlots}/${slotLimit} free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${(slots * memoryReservationBytes) / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB`,
+            ({ host, freeSlots, slotLimit, memoryReserved, memoryReclaimable }) =>
+              `${host.name} ${freeSlots}/${slotLimit} free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${(slots * memoryReservationBytes) / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB, ${memoryReclaimable / 2 ** 30} GiB reclaimable file cache`,
           )
           .join(', ')
       : 'no responding hosts';
@@ -4788,7 +4868,9 @@ async function acquire(
         landingWaiterId,
         pollMs,
         placement && uploadedDirectory ? { host: placement, directory: uploadedDirectory } : undefined,
+        reclaim,
       );
+      reclaim = false;
       skippedHosts.clear();
       for (const [hostName, reason] of currentSkippedHosts) skippedHosts.set(hostName, reason);
       const ranked = placement

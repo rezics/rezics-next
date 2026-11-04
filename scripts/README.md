@@ -365,7 +365,7 @@ G = max(0, O - 1)        gate capacity
 
 Slice processors are the quota divided by the period in `cpu.max`.
 Slice memory is `memory.max`; configured values supply the fallbacks above.
-Admission also needs 2.5 GiB of current memory headroom for each requested slot. A host is skipped when its 1-minute
+Admission also needs the requested reservation of current memory headroom for each requested slot. A host is skipped when its 1-minute
 load exceeds 1.5 times its slice processors, its machine `MemAvailable` is below 4 GiB, `/tmp` has less than 4 GiB
 free, or `/tmp` has fewer than 65,536 free inodes. These thresholds apply to gates and multi-slot runs too; skipped
 hosts are logged and the check waits for capacity. Because check-host `/tmp` is tmpfs, the byte floor protects the
@@ -375,7 +375,11 @@ Under the host reservation lock, each held slot contributes its recorded per-slo
 `n` slots at `m` GiB per slot is admitted only when held memory plus `n * m` fits the same host memory maximum used
 by physical take (`memory.max`, or configured `memoryMaxGiB` when that counter is unavailable). A priority head is
 ranked with this total reservation too. A free slot's stale reservation file does not count.
-Headroom is `max(0, memory.max - memory.current)` in the shared slice.
+Headroom is `max(0, memory.max - memory.current + inactive_file)` in the shared slice, so reclaimable file cache
+counts as available. Anon memory is never treated as free. Held reservations and `memory.max` stay the hard limits.
+When a reservation still does not fit on any answering host, admission writes `min(shortfall, inactive_file)` to
+the slice's `memory.reclaim` once and re-probes before waiting or reporting no slot. A missing or unwritable
+`memory.reclaim` is ignored and does not fail the run. The slot-wait line reports the reclaimable file-cache amount.
 When slice memory cannot be read, it uses the machine's `MemAvailable` instead. Every run also sets Node's compile cache to a directory inside its run directory; cleanup removes the cache with that run.
 Slots reserve admission capacity. They do not impose a separate CPU or memory cap on each run.
 

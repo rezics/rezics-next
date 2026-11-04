@@ -525,6 +525,19 @@ if (refusedControlSession) {
   log({ kind: 'master-session-refused' });
   log({ kind: 'standalone-fallback' });
 }
+if (script.includes('REMOTE_CHECK_MEMORY_RECLAIM')) {
+  const bytes = Number(script.match(/# REMOTE_CHECK_MEMORY_RECLAIM (\\d+)/)?.[1] ?? 0);
+  const writable = !config.reclaimMissing && !config.reclaimUnwritable;
+  log({ kind: 'reclaim', bytes, writable, script });
+  if (writable) {
+    const configuredMaximum = config.memoryMax ?? Math.max(16 * 2 ** 30, config.available ?? 16 * 2 ** 30);
+    const current = Number(config.memoryCurrent ?? Math.max(0, configuredMaximum - (config.memoryHeadroom ?? config.available ?? configuredMaximum)));
+    const inactive = Number(config.inactiveFile ?? 0);
+    const reclaimed = Math.min(bytes, inactive, current);
+    updateConfig({ memoryCurrent: current - reclaimed, inactiveFile: inactive - reclaimed });
+  }
+  process.exit(0);
+}
 if (script.includes('/proc/loadavg')) {
   if (!knownHost || config.down) process.exit(255);
   const configuredMaximum = config.memoryMax ?? Math.max(16 * 2 ** 30, config.available ?? 16 * 2 ** 30);
@@ -532,9 +545,11 @@ if (script.includes('/proc/loadavg')) {
   const memoryCurrent = config.memoryUnreadable
     ? '-'
     : (config.memoryCurrent ?? Math.max(0, configuredMaximum - (config.memoryHeadroom ?? config.available ?? configuredMaximum)));
+  const inactiveFile = config.memoryUnreadable ? 0 : Math.min(Number(memoryCurrent), config.inactiveFile ?? 0);
   const memoryHeadroom = config.memoryUnreadable
     ? (config.available ?? 0)
-    : configuredMaximum - Number(memoryCurrent);
+    : Math.max(0, configuredMaximum - Number(memoryCurrent) + inactiveFile);
+  const memoryReclaimable = inactiveFile;
   const processors = config.processors ?? 16;
   const sliceProcessors = config.cpuMaxUnreadable || config.cpuMaxIsMax
     ? (config.cpuQuotaPercent ?? 800) / 100
@@ -575,6 +590,7 @@ if (script.includes('/proc/loadavg')) {
     memoryCurrent,
     memoryMaximum,
     memoryHeadroom,
+    memoryReclaimable,
     memoryReserved,
     ordinarySlotsUsed,
     expressSlotUsed,
@@ -596,6 +612,7 @@ if (script.includes('/proc/loadavg')) {
   console.log('MEMORY_CURRENT ' + memoryCurrent);
   console.log('MEMORY_MAX ' + memoryMaximum);
   console.log('MEMORY_HEADROOM ' + memoryHeadroom);
+  console.log('MEMORY_RECLAIMABLE ' + memoryReclaimable);
   console.log('MEMORY_RESERVED ' + memoryReserved);
   console.log('PROCESSORS ' + processors);
   console.log('SLICE_PROCESSORS ' + sliceProcessors);
@@ -1103,6 +1120,9 @@ type HostConfig = {
   memoryCurrent?: number;
   memoryMax?: number;
   memoryHeadroom?: number;
+  inactiveFile?: number;
+  reclaimMissing?: boolean;
+  reclaimUnwritable?: boolean;
   memoryUnreadable?: boolean;
   processors?: number;
   sliceProcessors?: number;
@@ -2255,6 +2275,8 @@ test('among hosts that pass load and available-memory admission, free slots and 
       'systemctl show --property=ControlGroup',
       'memory.current',
       'memory.max',
+      'memory.stat',
+      'inactive_file',
       'cpu.max',
       '/proc/meminfo',
     ])
@@ -2339,6 +2361,7 @@ test('memory reservations that exceed a host limit queue with the host and both 
   const waiting = await run.stderr;
   expect(waiting).toContain('a 0/2 free');
   expect(waiting).toContain('6 GiB reserved + 4 GiB requested of 8 GiB');
+  expect(waiting).toContain('0 GiB reclaimable file cache');
 });
 
 test('a request fits beside held reservations when their total equals the host memory limit', async () => {
@@ -2462,6 +2485,128 @@ test('try-once callers apply their memory request when ranking and acquiring hos
     const granted = events().find((event) => event.kind === 'slot' && event.granted);
     if (memoryGiB === 4) expect(granted).toBeUndefined();
     else expect(granted?.script).toContain(`# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${2 * 2 ** 30}`);
+  }
+});
+
+test('a slice full of inactive file cache admits a reservation that fits that reclaimable headroom', async () => {
+  const max = 8 * 2 ** 30;
+  const current = 7 * 2 ** 30;
+  const inactive = 4 * 2 ** 30;
+  const { env, events } = scenario({
+    a: {
+      available: 16 * 2 ** 30,
+      memoryMax: max,
+      memoryMaxGiB: 8,
+      memoryCurrent: current,
+      inactiveFile: inactive,
+      cpuQuotaPercent: 800,
+      slots: 4,
+    },
+  });
+  const result = await remote(env, workspace(), ['true']);
+  expect(result.code, result.stderr).toBe(0);
+  const probe = events().find((event) => event.kind === 'probe')!;
+  expect(probe.memoryCurrent).toBe(current);
+  expect(probe.memoryHeadroom).toBe(max - current + inactive);
+  expect(probe.memoryReclaimable).toBe(inactive);
+  expect(String(probe.script)).toContain('inactive_file');
+  expect(events().some((event) => event.kind === 'reclaim')).toBe(false);
+  expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(true);
+});
+
+test('admission reclaims inactive file pages once, re-probes, then reports no-slot when the reservation still does not fit', async () => {
+  const max = 8 * 2 ** 30;
+  const current = max - 2 ** 29;
+  const inactive = 2 ** 29;
+  const { env, events } = scenario({
+    a: {
+      available: 16 * 2 ** 30,
+      memoryMax: max,
+      memoryMaxGiB: 8,
+      memoryCurrent: current,
+      inactiveFile: inactive,
+      cpuQuotaPercent: 800,
+      slots: 4,
+    },
+  });
+  const options = {
+    hosts: readHosts(env.KERNEL_CHECK_REMOTE!),
+    workspace: workspace(),
+    command: ['true'],
+  };
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '--eval',
+      `const { tryRemoteCheck } = await import(${JSON.stringify(remoteCheck)});
+       console.log('TRY_ONCE ' + JSON.stringify(await tryRemoteCheck(${JSON.stringify(options)}, new AbortController().signal)));`,
+    ],
+    { env, stdout: 'pipe', stderr: 'pipe' },
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(code, stderr).toBe(0);
+  expect(JSON.parse(stdout.split('\n').filter((line) => line.startsWith('TRY_ONCE '))[0]!.slice('TRY_ONCE '.length)).status).toBe(
+    'no-slot',
+  );
+  const reclaim = events().filter((event) => event.kind === 'reclaim');
+  expect(reclaim).toHaveLength(1);
+  expect(reclaim[0]).toMatchObject({ bytes: inactive, writable: true });
+  expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);
+  const probesAfterReclaim = events().filter(
+    (event) => event.kind === 'probe' && Number(event.observedAt) >= Number(reclaim[0]!.observedAt),
+  );
+  expect(probesAfterReclaim.length).toBeGreaterThan(0);
+});
+
+test('a host without writable memory.reclaim keeps current admission and never fails the run for it', async () => {
+  const max = 8 * 2 ** 30;
+  const current = max - 2 ** 29;
+  const inactive = 2 ** 29;
+  for (const blocked of [{ reclaimMissing: true }, { reclaimUnwritable: true }] as const) {
+    const { env, events } = scenario({
+      a: {
+        available: 16 * 2 ** 30,
+        memoryMax: max,
+        memoryMaxGiB: 8,
+        memoryCurrent: current,
+        inactiveFile: inactive,
+        cpuQuotaPercent: 800,
+        slots: 4,
+        ...blocked,
+      },
+    });
+    const options = {
+      hosts: readHosts(env.KERNEL_CHECK_REMOTE!),
+      workspace: workspace(),
+      command: ['true'],
+    };
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        '--eval',
+        `const { tryRemoteCheck } = await import(${JSON.stringify(remoteCheck)});
+       console.log('TRY_ONCE ' + JSON.stringify(await tryRemoteCheck(${JSON.stringify(options)}, new AbortController().signal)));`,
+      ],
+      { env, stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, stderr).toBe(0);
+    expect(JSON.parse(stdout.split('\n').filter((line) => line.startsWith('TRY_ONCE '))[0]!.slice('TRY_ONCE '.length)).status).toBe(
+      'no-slot',
+    );
+    expect(stderr).not.toContain('memory.reclaim');
+    const reclaim = events().filter((event) => event.kind === 'reclaim');
+    expect(reclaim).toHaveLength(1);
+    expect(reclaim[0]).toMatchObject({ writable: false });
+    expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);
   }
 });
 
@@ -2861,6 +3006,7 @@ test('an unreadable check slice memory limit falls back to MemAvailable', async 
     memoryCurrent: '-',
     memoryMaximum: '-',
     memoryHeadroom: 4 * 2 ** 30,
+    memoryReclaimable: 0,
   });
   expect(events().find((event) => event.kind === 'run')!.address).toBe('ops@a.test');
 });
