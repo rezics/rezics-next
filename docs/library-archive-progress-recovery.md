@@ -101,28 +101,19 @@ archive/review/application evidence does not undo a native Session already accep
 | I                 | 20 selected episode IDs, limited by the delivered direct-membership cap              |
 | review retention  | 4,096 review rows and 32 MiB evidence per upload; each review at most 32 KiB         |
 | command retention | 8 KiB canonical JSON operands per application; at most 4,096 applications per upload |
-| lifetime/cleanup  | 7 days; removal and terminal erasure delete at most 100 indexed child rows per call  |
+| lifetime/cleanup  | 7-day expiry is eligibility, not timed physical deletion; each removal or terminal-erasure call deletes at most 100 indexed child rows, then a separate empty-root delete; the helper's returned `removed` count is children only |
 
 Parsing is O(U+N) under the byte/depth/record limits. Review uses one selected-occurrence lookup, at most I selected
 unit rows, one current Subject/profile observation and final currentness fence, plus at most I bounded direct
-membership reads. It never scans retained owner history or arbitrary catalogue graphs. Apply performs at most ten
-native commands for a scalar Session (A measure writes plus create and optional transition). The archive caller
-performs one initial owner operation to load the review and persist the create command, one checkpoint operation per
-native command, and one cancellation gate before each later command: at most twenty archive operations and no
-separate Session reads during Apply, down from the prior path's up to twenty-one archive operations and nine Session
-reads.
-Each native command still includes its own authorization, target/currentness checks, preparation, locks, receipt,
-source fences, triggers, History/events, serialization, transaction and rollback. The statement update trigger uses
-`previous_row`/`next_row` aliases because PL/pgSQL `OLD`/`NEW` conflict with transition-table aliases `old`/`new`. A lost acknowledgement before a
-checkpoint adds one bounded archive reload and a retry through the same native receipt; for L such replay attempts,
-the archive transaction count is at most 20+L and no native effect is duplicated. Each command serialization is
-bounded by 8 KiB; a ten-step application writes at most 80 KiB of command JSON, while each replay reloads at most
-8 KiB. Across 4,096 retained applications, active command JSON is at most 32 MiB per upload. A cleanup call removes
-at most 100 rows; if all are application rows, it physically deletes at most 800 KiB of active command JSON. The
-seven-day expiry makes evidence eligible for deletion; it does not establish timed physical deletion. Explicit
-removal and terminal erasure use the bounded cleanup and continue while rows remain. Completed-unit membership is
-paid by the native episode command once. Page and cleanup work use the archive's section/session indexes. No
-arbitrary LIMIT over unrelated units or History establishes the I/P bounds.
+membership reads. It never scans retained owner history or arbitrary catalogue graphs.
+
+Apply performs at most ten native commands for a scalar Session (A measure writes plus create and optional
+transition). The archive caller performs one initial owner operation to load the review and persist the create
+command, one checkpoint operation per native command, and one cancellation gate before each later command: at most
+twenty archive operations and no separate Session reads during Apply, down from the prior path's up to twenty-one
+archive operations and nine Session reads. That twenty is an archive transaction count, not a count or cost claim
+for the nested native commands. Each native command still includes its own authorization, target/currentness checks,
+preparation, locks, receipt, source fences, triggers, History/events, serialization, transaction and rollback.
 
 The profile-migration writer fence uses function-scoped `plan_cache_mode = force_custom_plan` in both fresh schema
 and migration installation. Generic pending-pin probes seq-scanned pinned owner Sessions at Native512 despite the
@@ -132,7 +123,66 @@ unchanged.
 
 Performance must measure the actual admitted writer through the existing whole-caller capture, including nested
 pending probes, examined rows, buffers, locks, retries, planning overhead, full physical/native work and cleanup.
-Native64/512/4096 unrelated same-owner Session/unit/History acceptance and whole-caller row/buffer/byte/effect
-measurements remain unmeasured until evidence exists for that admitted source, without increasing capture limits or
-reducing capture. The focused native test establishes the owner outcome only; it is not a replacement for the frozen
-growth oracle.
+
+A lost acknowledgement before a checkpoint adds one bounded archive reload (`reserve`) and a retry through the same
+native original receipt. Nested native rollback is charged inside that native command; a thrown checkpoint or
+archive operation is not free and is another caller restart through `reserve`. For L lost-ack replays before
+checkpoint, the archive transaction count across the first attempt and those retries is at most 20+L, and no native
+effect is duplicated. A rejection that records `stale`/`failed` after a native failure adds one archive write of
+that outcome; native work that rolled back is still charged.
+
+Each command serialization is bounded by 8 KiB; a ten-step application cumulatively rewrites at most 80 KiB of
+command JSON while retaining at most 8 KiB of active command JSON. Those are different quantities. Across 4,096
+retained applications, active command JSON is at most 32 MiB per upload.
+
+`progressResult` is not part of Apply's zero-Session-read claim. It performs its own archive observations (load
+review/application, then a currentness recheck) plus `readSession` and, when the plan has unit IDs, `readEpisodes`.
+A scalar plan with empty `unitIds` has E=0 episode reads. The complete journey is Apply + `progressResult` +
+serialization of both responses.
+
+Cleanup enters through owner `remove` or terminal-erasure `copy_archive`, each holding the root lock after
+admission, not through `removeCopyArchivePage` alone. The shared page budget is at most 100 child rows across
+application, review and upload-row tables and is not reset per table. Each visited table does one indexed bounded
+selection/delete. A separate indexed root DELETE with three bounded existence probes runs after that; the final page
+may therefore remove 100 children plus one root. The helper's returned `removed` counts children, not the root.
+SQL statement count is not the removed-row count. A 100-row all-application page can physically delete at most
+800 KiB of active command JSON, plus separately bounded row/review/result data; that 800 KiB is not a charge for
+the root, probes, locks or wrapper. Root/probes/locks/wrapper are charged separately. The seven-day expiry makes
+evidence eligible; it does not promise timed physical deletion. Explicit removal and terminal erasure continue while
+children remain.
+
+Completed-unit membership is paid by the native episode command once. Page and cleanup work use the archive's
+section/session indexes. No arbitrary LIMIT over unrelated units or History establishes the I/P bounds. No
+production total-history COUNT proves the cleanup cap; tests name known identities and remaining active bytes
+outside the measured caller.
+
+### Caller equations
+
+Symbols: A=apply archive transactions, N=nested native commands, L=lost-ack replays before checkpoint, R=result
+archive observations, S=Session reads, E=episode reads, C_child≤100, C_root∈{0,1}. Unrelated same-owner
+Session/unit/History population is U.
+
+- Apply (ten scalar steps, no lost ack): A=1+10+9=20, S=0, N=10. Command JSON retained ≤8 KiB; cumulative rewrite
+  ≤80 KiB. Envelope in U: statements and returned/affected rows constant; shared hit/read logarithmic in U
+  (index). Change-linear in N and accepted steps, not in U.
+- Retry from a lost ack before checkpoint of step k: the retry caller still pays remaining checkpoints and
+  cancellation gates; L such replays add L archive reloads. Across first attempt plus retries, A≤20+L. Nested
+  native rollback is inside N, never omitted from the journey.
+- Rejection after native currentness/conflict failure: N includes the rolled-back command; one extra archive write
+  records `stale`/`failed`. Envelope in U remains constant/log.
+- Result: R=2, S=1, E=1 if unit IDs else 0. Scalar recovery here has E=0. Envelope in U: constant/log.
+- Journey: J = Apply + Result + both serializations. Zero Session reads describes Apply only.
+- Cleanup page: wrapper (admission, authorization, currentness, operational transaction) + root lock + removing
+  mark + per visited child table an indexed select/delete against the remaining shared budget + optional root
+  delete with three probes. Envelope in U: constant statements/rows, logarithmic blocks. Change-linear in C_child,
+  not in total owner history. Final page: C_child + C_root. 800 KiB is the application-command JSON maximum on an
+  all-application child page, charged beside the root/probes/locks/wrapper, not instead of them.
+
+Native64/512/4096 whole-caller statements, returned/affected rows and shared hit/read for apply, retry,
+rejection/rollback, `progressResult` and owner-remove cleanup are executed by
+`services/kernel/test/library/copy-archive-progress-growth.test.ts` against an isolated native stack and a bounded
+fixture. Unrelated same-owner Session/unit/History rows are seeded as planner population; measured callers remain
+the production apply, result and owner-remove paths. The installed export currently emits V4, which the archive
+parser does not accept; the growth fixture encodes a V2 artifact from the native Session rather than the live
+producer. Until that check records a scale, that scale stays unmeasured. The focused owner-outcome test in
+`copy-archive.test.ts` is not a substitute for those measurements.
