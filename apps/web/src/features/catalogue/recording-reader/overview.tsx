@@ -52,7 +52,7 @@ export function RecordingOverview({
       onRetry={episode.retry}
       scope={episode.generation}
       active={episode.active}
-      link={link}
+      {...(link ? { link } : {})}
     />
   );
 }

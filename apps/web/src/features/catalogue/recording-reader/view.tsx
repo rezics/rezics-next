@@ -345,7 +345,7 @@ export function RecordingReader({
   const selection = useRecordingFactSelection({
     scope,
     active,
-    currentHref,
+    ...(currentHref ? { currentHref } : {}),
     subjectId: read.subject.id,
     locale,
     hasStatement,
@@ -436,7 +436,7 @@ export function RecordingReader({
             locale={locale}
             {...(context ? { context } : {})}
             link={link}
-            returnTo={currentAddress}
+            {...(currentAddress ? { returnTo: currentAddress } : {})}
             selectedStatement={selection.selectedStatement}
             onInspect={selection.inspect}
           />
@@ -448,7 +448,7 @@ export function RecordingReader({
             locale={locale}
             {...(context ? { context } : {})}
             link={link}
-            returnTo={currentAddress}
+            {...(currentAddress ? { returnTo: currentAddress } : {})}
             selectedStatement={selection.selectedStatement}
             onInspect={selection.inspect}
           />
@@ -460,7 +460,7 @@ export function RecordingReader({
             locale={locale}
             {...(context ? { context } : {})}
             link={link}
-            returnTo={currentAddress}
+            {...(currentAddress ? { returnTo: currentAddress } : {})}
             selectedStatement={selection.selectedStatement}
             onInspect={selection.inspect}
           />
@@ -477,7 +477,9 @@ export function RecordingReader({
           locale={locale}
           {...(context ? { context } : {})}
           link={link}
-          statementReturn={directionReturn(selectedFact.fact.id)}
+          {...(directionReturn(selectedFact.fact.id)
+            ? { statementReturn: directionReturn(selectedFact.fact.id) }
+            : {})}
           onClose={selection.close}
           headingRef={selection.inspectionHeading}
         />
