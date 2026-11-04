@@ -43,6 +43,8 @@ const books = [
   book(1, 'Book one', [language('ja')]),
   book(2, 'Book two', [language('ja'), language('en')]),
   book(3, 'Book three', [language('zh-Hant'), { property: 'schema:alternateName', value: 'ja' }]),
+  book(4, 'Book four', [language('pt-BR')]),
+  book(5, 'Book five', [language('es-419')]),
 ];
 const release: FilterRelease = {
   types: { 'schema:Book': { bases: [], facets: ['schema:inLanguage', 'schema:alternateName'] } },
@@ -173,6 +175,18 @@ test('code facets filter by exact value', async () => {
   expect(await names(['zh-hant'])).toEqual([]);
 });
 
+test('resource-language codes retain canonical BCP 47 spelling and OR within the dimension', async () => {
+  expect(await names(['pt-BR'])).toEqual(['Book four']);
+  expect(await names(['es-419'])).toEqual(['Book five']);
+  expect(await names(['ja', 'zh-Hant', 'pt-BR', 'es-419'])).toEqual([
+    'Book five',
+    'Book four',
+    'Book one',
+    'Book three',
+    'Book two',
+  ]);
+});
+
 test("code values are checked against the property's pattern", async () => {
   const search = (property: string, values: unknown[]) =>
     service.search('anonymous', { filter: { statement: { property, in: values } } });
@@ -201,7 +215,9 @@ test('code facets return ordered values without subjects or public counts', asyn
       next: null,
       values: [
         { value: 'en', labels: {} },
+        { value: 'es-419', labels: {} },
         { value: 'ja', labels: {} },
+        { value: 'pt-BR', labels: {} },
         { value: 'zh-Hant', labels: {} },
       ],
     },

@@ -1,9 +1,11 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
+import { canonicalLanguageTag } from './language-refinement';
 
 export const MAX_LANGUAGE_PREFERENCES = 8;
 
@@ -16,13 +18,14 @@ export type LanguagePreferenceAction =
 export function updateLanguagePreferences(current: readonly string[], action: LanguagePreferenceAction): string[] {
   if (action.type === 'clear') return [];
   if (action.type === 'add') {
+    const canonical = canonicalLanguageTag(action.tag);
     if (
+      !canonical ||
       current.length >= MAX_LANGUAGE_PREFERENCES ||
-      !locales.some((locale) => locale === action.tag) ||
-      current.some((tag) => tag.toLowerCase() === action.tag.toLowerCase())
+      current.some((tag) => tag.toLowerCase() === canonical.toLowerCase())
     )
       return [...current];
-    return [...current, action.tag];
+    return [...current, canonical];
   }
   if (action.type === 'remove') {
     if (action.index < 0 || action.index >= current.length) return [...current];
@@ -83,9 +86,11 @@ export function ConditionLanguages({
   const occurrenceKeys = useRef<string[]>([]);
   const nextOccurrenceKey = useRef(0);
   const pendingFocus = useRef<
-    { kind: 'move'; index: number; offset: -1 | 1 } | { kind: 'remove'; index: number } | null
+    { kind: 'move'; index: number; offset: -1 | 1 } | { kind: 'remove' | 'add'; index: number } | null
   >(null);
   const [selected, setSelected] = useState('');
+  const [customTag, setCustomTag] = useState('');
+  const [customTagInvalid, setCustomTagInvalid] = useState(false);
   const atLimit = languages.length >= MAX_LANGUAGE_PREFERENCES;
   const available = locales.filter(
     (tag) => !languages.some((language) => language.toLowerCase() === tag.toLowerCase()),
@@ -99,6 +104,7 @@ export function ConditionLanguages({
     const next = updateLanguagePreferences(languages, action);
     if (!preferencesUnchanged(languages, next)) {
       occurrenceKeys.current = shiftOccurrenceKeys(occurrenceKeys.current, action, allocateKey);
+      if (action.type === 'add') pendingFocus.current = { kind: 'add', index: next.length - 1 };
       if (action.type === 'move') pendingFocus.current = { kind: 'move', index: action.index, offset: action.offset };
       if (action.type === 'remove') pendingFocus.current = { kind: 'remove', index: action.index };
     }
@@ -122,7 +128,7 @@ export function ConditionLanguages({
     const row = rows[pending.index] ?? rows[pending.index - 1];
     if (row) {
       const buttons = [...row.querySelectorAll<HTMLButtonElement>('button')];
-      (buttons[2] ?? buttons.find((button) => !button.disabled))?.focus();
+      (pending.kind === 'add' ? buttons.find((button) => !button.disabled) : buttons[2])?.focus();
       return;
     }
     root.ownerDocument.getElementById(selectId)?.focus();
@@ -131,6 +137,7 @@ export function ConditionLanguages({
   return (
     <Field ref={rootRef}>
       <FieldLabel htmlFor={selectId}>{m.condition_languages_label({}, options)}</FieldLabel>
+      <p className="text-sm text-muted-foreground">{m.condition_languages_help({}, options)}</p>
       <div className="flex flex-wrap items-end gap-2">
         <NativeSelect
           id={selectId}
@@ -207,6 +214,61 @@ export function ConditionLanguages({
           ))}
         </ol>
       )}
+      <div className="space-y-2">
+        <FieldLabel htmlFor={`${selectId}-custom`}>{m.condition_languages_custom_label({}, options)}</FieldLabel>
+        <div className="flex flex-wrap items-end gap-2">
+          <Input
+            id={`${selectId}-custom`}
+            value={customTag}
+            maxLength={35}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={m.condition_languages_custom_placeholder({}, options)}
+            aria-invalid={customTagInvalid || undefined}
+            disabled={disabled || atLimit}
+            onChange={(event) => {
+              setCustomTag(event.currentTarget.value);
+              setCustomTagInvalid(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                const tag = canonicalLanguageTag(customTag.trim());
+                if (!tag) {
+                  setCustomTagInvalid(true);
+                  return;
+                }
+                update({ type: 'add', tag });
+                setCustomTag('');
+                setCustomTagInvalid(false);
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled || atLimit || !customTag.trim()}
+            onClick={() => {
+              const tag = canonicalLanguageTag(customTag.trim());
+              if (!tag) {
+                setCustomTagInvalid(true);
+                return;
+              }
+              update({ type: 'add', tag });
+              setCustomTag('');
+              setCustomTagInvalid(false);
+            }}
+          >
+            {m.condition_languages_add_custom({}, options)}
+          </Button>
+        </div>
+        {customTagInvalid && (
+          <p role="alert" className="text-sm text-destructive">
+            {m.condition_languages_invalid({}, options)}
+          </p>
+        )}
+      </div>
       {atLimit && <p className="mt-2 text-sm text-muted-foreground">{m.condition_languages_limit({}, options)}</p>}
       <Button
         type="button"

@@ -21,6 +21,7 @@ import {
   type RangeDraftState,
 } from './range-draft';
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
+import { RESOURCE_LANGUAGE_PROPERTY } from '../language-refinement';
 
 /** Native refusal, restart and Retry-After block every entry; expiry only admits an explicit recovery. */
 function admitFacetRead(state: FacetState | undefined, recovery: boolean, now = Date.now()): boolean {
@@ -78,6 +79,10 @@ type RefinementProps = {
     firstLabel: string | undefined,
   ) => void;
   selectedLabels?: Record<string, string>;
+  clearActions?: Record<string, string>;
+  preserveSelectedWhenUnavailable?: readonly string[];
+  selectedValueFallbacks?: readonly string[];
+  selectionLimits?: Record<string, number>;
   onShownChange?: (properties: string[]) => void;
   rangeName?: (property: string, bound: 'from' | 'to') => string;
 };
@@ -116,6 +121,10 @@ function RefinementInstance({
   onConditionsChange,
   onValueSelectionChange,
   selectedLabels = {},
+  clearActions = {},
+  preserveSelectedWhenUnavailable = [],
+  selectedValueFallbacks = [],
+  selectionLimits = {},
   onShownChange,
   rangeName,
   queryIdentity,
@@ -595,6 +604,7 @@ function RefinementInstance({
         const currentState = propertyState(property);
         const selectedValues = conditions.facetValues[property] ?? [];
         const visibleValues = page?.values ?? [];
+        const keepSelectedEditable = preserveSelectedWhenUnavailable.includes(property) && selectedValues.length > 0;
         const values = [
           ...visibleValues,
           ...selectedValues
@@ -613,8 +623,8 @@ function RefinementInstance({
             tabIndex={-1}
             className="min-w-0 gap-2 border-t border-border/60 pt-4"
             disabled={
-              busy ||
-              (!perPropertyState &&
+              (busy && !keepSelectedEditable) ||
+              (!perPropertyState && !keepSelectedEditable &&
                 (state?.status === 'refused' ||
                   state?.status === 'restart' ||
                   state?.status === 'preparing' ||
@@ -622,6 +632,7 @@ function RefinementInstance({
             }
           >
             <FieldLegend variant="label">{title}</FieldLegend>
+            {definition.help && <p className="text-sm text-muted-foreground">{definition.help}</p>}
             {definition.mode === 'types' && (
               <p className="text-sm text-muted-foreground">{m.search_subject_types_help({}, options)}</p>
             )}
@@ -647,60 +658,93 @@ function RefinementInstance({
               <p className="text-sm text-muted-foreground">{m.refinement_unsupported({}, options)}</p>
             ) : (
               <>
-                {values.map((entry, index) => (
-                  <Label
-                    key={entry.value}
-                    htmlFor={`${id}-${property}-${index}`}
-                    className="min-h-9 items-start gap-2 font-normal"
-                  >
-                    <NativeCheckbox
-                      id={`${id}-${property}-${index}`}
-                      name={`f.${property}`}
-                      value={entry.value}
-                      checked={selectedValues.includes(entry.value)}
-                      disabled={
-                        busy || (perPropertyState && propertyFailed(property) && !selectedValues.includes(entry.value))
-                      }
-                      onChange={(event) => {
-                        const nextValues = event.currentTarget.checked
-                          ? [...selectedValues, entry.value]
-                          : selectedValues.filter((value) => value !== entry.value);
-                        if (onValueSelectionChange)
-                          onValueSelectionChange(
-                            property,
-                            nextValues,
-                            nextValues[0],
-                            nextValues[0] === entry.value ? label(entry.labels) || selectedLabels[property] : undefined,
+                {values.map((entry, index) => {
+                  const picked = localizedLabel(entry.labels, locale);
+                  const text =
+                    picked.text.trim() ||
+                    (selectedValueFallbacks.includes(property) && selectedValues.includes(entry.value)
+                      ? entry.value
+                      : undefined) ||
+                    (selectedValues[0] === entry.value ? selectedLabels[property] : undefined) ||
+                    (perPropertyState ? entry.value : m.refinement_selected_value({}, options));
+                  return (
+                    <Label
+                      key={entry.value}
+                      htmlFor={`${id}-${property}-${index}`}
+                      className="min-h-9 items-start gap-2 font-normal"
+                    >
+                      <NativeCheckbox
+                        id={`${id}-${property}-${index}`}
+                        name={`f.${property}`}
+                        value={entry.value}
+                        checked={selectedValues.includes(entry.value)}
+                        disabled={
+                          (busy && !(keepSelectedEditable && selectedValues.includes(entry.value))) ||
+                          (disabled && !(keepSelectedEditable && selectedValues.includes(entry.value))) ||
+                          (perPropertyState && propertyFailed(property) && !selectedValues.includes(entry.value)) ||
+                          (!selectedValues.includes(entry.value) &&
+                            selectedValues.length >= (selectionLimits[property] ?? Number.POSITIVE_INFINITY))
+                        }
+                        onChange={(event) => {
+                          const nextValues = event.currentTarget.checked
+                            ? [...selectedValues, entry.value]
+                            : selectedValues.filter((value) => value !== entry.value);
+                          if (onValueSelectionChange)
+                            onValueSelectionChange(
+                              property,
+                              nextValues,
+                              nextValues[0],
+                              nextValues[0] === entry.value ? picked.text.trim() || selectedLabels[property] : undefined,
+                            );
+                          if (onConditionsChange) {
+                            onConditionsChange({
+                              ...conditions,
+                              facetValues: { ...conditions.facetValues, [property]: nextValues },
+                            });
+                            return;
+                          }
+                          if (!onNavigate && !router) {
+                            event.currentTarget.form?.requestSubmit();
+                            return;
+                          }
+                          navigate(
+                            href({
+                              ...conditions,
+                              facetValues: {
+                                ...conditions.facetValues,
+                                [property]: nextValues,
+                              },
+                            }),
                           );
-                        if (onConditionsChange) {
-                          onConditionsChange({
-                            ...conditions,
-                            facetValues: { ...conditions.facetValues, [property]: nextValues },
-                          });
-                          return;
-                        }
-                        if (!onNavigate && !router) {
-                          event.currentTarget.form?.requestSubmit();
-                          return;
-                        }
-                        navigate(
-                          href({
-                            ...conditions,
-                            facetValues: {
-                              ...conditions.facetValues,
-                              [property]: nextValues,
-                            },
-                          }),
-                        );
-                      }}
-                    />
-                    <span className="min-w-0 break-words">
-                      {label(entry.labels) ||
-                        (selectedValues[0] === entry.value ? selectedLabels[property] : undefined) ||
-                        (perPropertyState ? entry.value : m.refinement_selected_value({}, options))}
-                    </span>
-                  </Label>
-                ))}
+                        }}
+                      />
+                      <span
+                        className="min-w-0 break-words"
+                        lang={property === RESOURCE_LANGUAGE_PROPERTY ? picked.lang : undefined}
+                      >
+                        {text}
+                      </span>
+                    </Label>
+                  );
+                })}
+                {clearActions[property] && selectedValues.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy && !keepSelectedEditable}
+                    onClick={() =>
+                      navigate(
+                        href({
+                          ...conditions,
+                          facetValues: { ...conditions.facetValues, [property]: [] },
+                        }),
+                      )
+                    }
+                  >
+                    {clearActions[property]}
+                  </Button>
+                )}
                 {page?.values.length === 0 && !selectedValues.length && currentState?.status === 'ready' && (
                   <p className="text-sm text-muted-foreground">{m.refinement_no_values({}, options)}</p>
                 )}

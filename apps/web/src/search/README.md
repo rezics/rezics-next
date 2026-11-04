@@ -59,9 +59,20 @@ BottomSheet's own focus lifecycle. The header retains the scoped filter through 
 remain unavailable until a native scoped suggestion loader exists; the missing loader never changes the scoped Search
 action into a Global request.
 
-Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve
-existing valid authored tags verbatim, remove or move individual entries, and use the page-language default only
-when the user clears the list.
+Filters edits title display-language preferences as an ordered list of at most eight: add from the interface locale
+list or enter any valid BCP 47 tag admitted by the current API, preserve existing valid authored tags, remove or move
+individual entries, and use the page-language default only when the user clears the list. These preferences order
+title and description labels; interface copy follows the page locale.
+
+Resource language is a separate Search condition over the released `schema:inLanguage` statement. It uses the
+existing typed `subjects.$facets` client and one count-free size-10 page from the current query with only its own
+selected facet omitted. Decision: resource-language options omit only their own selected facet, retaining the
+complete remaining query, Boolean tree, type/kind/scope and display-language chain. Search keeps the selected codes
+in the ordinary statement `in` filter, so several values
+form an OR within that dimension while authored Boolean conditions, type, exact kinds and scope stay intact. The
+native release controls applicability and currentness; the UI keeps selected absent or malformed codes removable,
+uses up to the existing 64 continuations, and preserves the actual `lang` attached to a localized option label.
+This does not change title display preferences or the interface locale.
 
 The Revert edits action appears at the bottom of Filters only when condition or ordered-language drafts differ from
 the committed search; it restores those drafts, clears draft validation, and focuses a status announcement in the

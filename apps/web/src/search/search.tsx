@@ -59,6 +59,13 @@ import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-disco
 import { readScopedSearchReader } from './search-reader';
 import { canonicalRealmRatingPopulationId, RATING_POPULATION_FIELD } from './rating-population';
 import type { RealmRatingPopulationOption, RealmRatingReadiness } from './rating-population';
+import {
+  RESOURCE_LANGUAGE_PROPERTY,
+  RESOURCE_LANGUAGE_SELECTION_LIMIT,
+  resourceLanguageRefinement,
+  withoutResourceLanguageSelection,
+  type ResourceLanguageRefinement,
+} from './language-refinement';
 import { searchRequiresCurrentReader } from './scoped-search-lifetime';
 import { sessionCsrfToken } from '../session/query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
@@ -96,6 +103,7 @@ export type SearchPageData = {
   problem?: SearchProblem;
   queryState?: SearchLoaderDeps;
   refinement?: RefinementData;
+  resourceLanguage?: ResourceLanguageRefinement;
   ranges?: Record<string, FilterRange>;
   condition?: FilterDocument | undefined;
   result?: SearchResult;
@@ -320,13 +328,23 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       ? [...new Set([...(knownType ? factProperties(release, knownType) : []), ...years])].slice(0, 4)
       : [];
     const roster = release ? refinementProperties(release, knownType ?? data.facetValues.type) : [];
-    const requestedFacets = roster
+    const eligibleFacets = roster.filter((entry) => entry.mode === 'values' || entry.mode === 'types');
+    const requestedFacets = [
+      ...eligibleFacets.filter((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY),
+      ...eligibleFacets.filter((entry) => entry.property !== RESOURCE_LANGUAGE_PROPERTY),
+    ]
       .slice(0, 8)
-      .filter((entry) => entry.mode === 'values' || entry.mode === 'types')
       .map(({ property }) => ({ property, size: 10 }));
     let refinementRequests: ReturnType<typeof scopedRefinementRequests> | undefined;
     try {
-      refinementRequests = scopedRefinementRequests(queryState, requestLanguages(data.locale), requestedFacets);
+      const fallbackLanguages = requestLanguages(data.locale);
+      const searchRequest = scopedRefinementRequests(queryState, fallbackLanguages, []);
+      const optionRequest = scopedRefinementRequests(
+        withoutResourceLanguageSelection(queryState),
+        fallbackLanguages,
+        requestedFacets,
+      );
+      refinementRequests = { ...searchRequest, facets: optionRequest.facets };
     } catch {
       refinementRequests = undefined;
     }
@@ -427,6 +445,12 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
             },
           }
         : {}),
+      resourceLanguage: resourceLanguageRefinement(
+        roster,
+        data.facetValues[RESOURCE_LANGUAGE_PROPERTY] ?? [],
+        facetResult ?? (release ? undefined : { status: 'unavailable', code: 'release_unavailable' }),
+        release !== undefined,
+      ),
       ...(data.ranges ? { ranges: data.ranges } : {}),
       ...(data.condition ? { condition: data.condition } : {}),
       selectedFacets: data.facetValues,
@@ -607,6 +631,7 @@ export function SearchPage({
   const result = data?.result;
   const discovery = data?.discovery;
   const selectedFacets = data?.selectedFacets ?? {};
+  const resourceLanguage = data?.resourceLanguage;
   const committedState: SearchLoaderDeps = data?.queryState ?? {
     query,
     type,
@@ -650,9 +675,9 @@ export function SearchPage({
   const number = new Intl.NumberFormat(locale);
   const label = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, locale).text.trim() || fallback;
-  const constraints: { key: string; text: string; state: SearchLoaderDeps; details?: unknown }[] = [];
-  const add = (key: string, text: string, state: SearchLoaderDeps, details?: unknown) =>
-    constraints.push({ key, text, state: { ...state, cursor: undefined }, details });
+  const constraints: { key: string; text: string; state: SearchLoaderDeps; details?: unknown; lang?: string }[] = [];
+  const add = (key: string, text: string, state: SearchLoaderDeps, details?: unknown, lang?: string) =>
+    constraints.push({ key, text, state: { ...state, cursor: undefined }, details, ...(lang ? { lang } : {}) });
   if (type)
     add(
       'type',
@@ -679,21 +704,45 @@ export function SearchPage({
     for (const value of values) {
       const page = data?.refinement?.initial;
       const valueLabels =
-        page?.status === 'ready'
+        property === RESOURCE_LANGUAGE_PROPERTY
+          ? page?.status === 'ready'
+            ? page.page.facets
+                .find((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY)
+                ?.values.find((entry) => entry.value === value)?.labels
+            : undefined
+          : page?.status === 'ready'
           ? page.page.facets.find((entry) => entry.property === property)?.values.find((entry) => entry.value === value)
               ?.labels
           : undefined;
+      const selectedLanguage =
+        property === RESOURCE_LANGUAGE_PROPERTY ? resourceLanguage?.selected.find((entry) => entry.value === value) : undefined;
+      const languageLabel =
+        property === RESOURCE_LANGUAGE_PROPERTY
+          ? localizedLabel(valueLabels ?? {}, locale)
+          : undefined;
+      const fallbackValue =
+        property === RESOURCE_LANGUAGE_PROPERTY
+          ? selectedLanguage?.needsRepair
+            ? m.search_resource_language_repair({ value }, options)
+            : (selectedLanguage?.canonical ?? value)
+          : m.search_constraint_identity_value_unavailable({}, options);
       add(
         `facet:${property}:${value}`,
-        `${property === 'type' ? m.search_subject_types({}, options) : label(data?.selectedFacetLabels[property], m.search_constraint_identity_property_unavailable({}, options))}: ${label(
-          valueLabels,
-          m.search_constraint_identity_value_unavailable({}, options),
-        )}`,
+        `${property === 'type'
+          ? m.search_subject_types({}, options)
+          : property === RESOURCE_LANGUAGE_PROPERTY
+            ? m.search_resource_language({}, options)
+            : label(data?.selectedFacetLabels[property], m.search_constraint_identity_property_unavailable({}, options))}: ${
+          property === RESOURCE_LANGUAGE_PROPERTY
+            ? languageLabel?.text.trim() || fallbackValue
+            : label(valueLabels, fallbackValue)
+        }`,
         {
           ...navigationState,
           facets: { ...selectedFacets, [property]: values.filter((entry) => entry !== value) },
         },
         { property, value },
+        property === RESOURCE_LANGUAGE_PROPERTY ? languageLabel?.lang : undefined,
       );
     }
   for (const [property, range] of Object.entries(data?.ranges ?? {}))
@@ -815,6 +864,16 @@ export function SearchPage({
         cursor: undefined,
       }),
     );
+  const clearResourceLanguage = () =>
+    navigate(
+      discoverySearchHref(locale, {
+        ...committedState,
+        facets: Object.fromEntries(
+          Object.entries(selectedFacets).filter(([property]) => property !== RESOURCE_LANGUAGE_PROPERTY),
+        ),
+        cursor: undefined,
+      }),
+    );
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     setDraft((previous) => ({ ...previous, attempted: true }));
     if (localIssues.length || router) event.preventDefault();
@@ -869,7 +928,7 @@ export function SearchPage({
       </Button>
       {constraints.length > 0 && (
         <ul aria-label={m.refinement_selected({}, options)} data-search-constraints className="flex flex-wrap gap-2">
-          {constraints.map(({ key, text, state }, index) => (
+          {constraints.map(({ key, text, state, lang }, index) => (
             <li key={key} className="min-w-0 max-w-full">
               <a
                 className={cn(
@@ -888,7 +947,7 @@ export function SearchPage({
                 )}
                 href={discoverySearchHref(locale, state)}
               >
-                <span className="min-w-0 text-start wrap-anywhere">
+                <span lang={lang} className="min-w-0 text-start wrap-anywhere">
                   {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
                 </span>
                 <XIcon aria-hidden="true" className="size-3" />
@@ -926,6 +985,37 @@ export function SearchPage({
     </div>
   );
 
+  const resourceLanguageCurrentness = resourceLanguage?.asOf
+    ? m.search_resource_language_current(
+        {
+          date: new Intl.DateTimeFormat(locale, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: 'UTC',
+          }).format(new Date(resourceLanguage.asOf)),
+        },
+        options,
+      )
+    : undefined;
+  const filterRefinementProperties = (data?.refinement?.properties ?? [])
+    .filter(
+      (entry) =>
+        (entry.mode !== 'types' || selectedFacets.type?.length) &&
+        !(entry.property === RESOURCE_LANGUAGE_PROPERTY && resourceLanguage?.applicability !== 'applicable'),
+    )
+    .map((entry) =>
+      entry.property === RESOURCE_LANGUAGE_PROPERTY
+        ? {
+            ...entry,
+            labels: { ...entry.labels, [locale]: m.search_resource_language({}, options) },
+            help: [m.search_resource_language_help({}, options), resourceLanguageCurrentness].filter(Boolean).join(' '),
+          }
+        : entry,
+    )
+    .sort((left, right) =>
+      left.property === RESOURCE_LANGUAGE_PROPERTY ? -1 : right.property === RESOURCE_LANGUAGE_PROPERTY ? 1 : 0,
+    );
+
   const filterContents = (surface: 'desktop' | 'mobile') => (
     <div className="space-y-5 pt-3 lg:pt-0">
       <input type="hidden" name="q" value={query} />
@@ -940,6 +1030,21 @@ export function SearchPage({
         locale={locale}
         onRemove={removeScope}
       />
+      {resourceLanguage?.applicability === 'not-applicable' && (type || resourceLanguage.selected.length > 0) && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_resource_language_not_applicable({}, options)}
+        </p>
+      )}
+      {resourceLanguage?.applicability === 'unknown' && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_resource_language_metadata_unavailable({}, options)}
+        </p>
+      )}
+      {resourceLanguage?.applicability !== 'applicable' && resourceLanguage?.actions.clear && (
+        <Button type="button" variant="outline" size="sm" onClick={clearResourceLanguage}>
+          {m.search_resource_language_clear({}, options)}
+        </Button>
+      )}
       {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
       ))}
@@ -1017,14 +1122,17 @@ export function SearchPage({
           onRangeDraftChange={(property: string, draft: RangeDraft) =>
             setRangeDraftState((previous) => updateRangeDraft(previous, stateKey, property, draft))
           }
-          data={{
-            ...data.refinement,
-            properties: data.refinement.properties.filter(
-              (entry) => entry.mode !== 'types' || selectedFacets.type?.length,
-            ),
-          }}
+          data={{ ...data.refinement, properties: filterRefinementProperties }}
           showSummary={false}
           onNavigate={navigate}
+          clearActions={
+            resourceLanguage?.actions.clear
+              ? { [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options) }
+              : {}
+          }
+          preserveSelectedWhenUnavailable={[RESOURCE_LANGUAGE_PROPERTY]}
+          selectedValueFallbacks={[RESOURCE_LANGUAGE_PROPERTY]}
+          selectionLimits={{ [RESOURCE_LANGUAGE_PROPERTY]: RESOURCE_LANGUAGE_SELECTION_LIMIT }}
           conditions={{
             ...(type ? { type } : {}),
             facetValues: selectedFacets,
@@ -1046,7 +1154,10 @@ export function SearchPage({
                 ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
                 conditions: {
                   ...(type ? { type } : {}),
-                  facetValues: selectedFacets,
+                  facetValues: withoutResourceLanguageSelection({
+                    ...committedState,
+                    facets: selectedFacets,
+                  }).facets,
                   ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
                   ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
                   ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
