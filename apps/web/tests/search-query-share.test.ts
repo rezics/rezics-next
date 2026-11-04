@@ -4,7 +4,7 @@ import { searchLoaderDeps } from '../src/search/search-params';
 import { discoveryRequest } from '../src/search/search-request';
 
 test('same-origin localized link reopens full text, kinds, languages and Boolean conditions without cursor', () => {
-  const filter = { or: [{ type: { in: ['book'] } }, { not: { type: { in: ['film'] } } }] };
+  const filter = { or: [{ type: { in: ['rezics:Book'] } }, { not: { type: { in: ['rezics:Film'] } } }] };
   const params = new URLSearchParams({ q: '"raw phrase" | -other', condition: JSON.stringify(filter) });
   params.append('kinds', 'book');
   params.append('language', 'ja');

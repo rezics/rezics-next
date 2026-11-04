@@ -1,4 +1,3 @@
-import type { ReleaseSearchGroupsResult, ReleaseSearchChildrenResult } from '../release-search-source.ts';
 import { prepareQueryShare, unavailableQueryShare } from '../query-share.ts';
 import { QueryShareSchema } from './query-share-schemas.ts';
 import { createTrendingSearchesService } from '../trending-searches.ts';
@@ -539,13 +538,14 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'unsupported' }],
               });
             const active = await activeRelease(pool);
-            const principal: 'anonymous' | `account:${string}` =
-              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
-            const page: (ReleaseSearchGroupsResult | ReleaseSearchChildrenResult) & { as_of: string } =
-              await search.releaseGroups(principal, body as GroupedReleaseSearchRequest, clock().getTime(), active, {
-                deadline: job.deadline,
-                complete: async () => {},
-              });
+            const principal = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
+            const page = await search.releaseGroups(
+              principal,
+              body as GroupedReleaseSearchRequest,
+              clock().getTime(),
+              active,
+              { deadline: job.deadline, complete: async () => {} },
+            );
             await trending.submitted(actor, body);
             if ('groups' in page) {
               const cards = page.groups.flatMap((group) =>

@@ -5,7 +5,10 @@ import { prepareQueryShare } from '../../src/search/query-share.ts';
 
 test('portable projection preserves raw text and branches while excluding cursor and authority', () => {
   const filter = {
-    and: [{ or: [{ type: { in: ['book'] } }, { not: { type: { in: ['film'] } } }] }, { kind: { in: ['book'] } }],
+    and: [
+      { or: [{ type: { in: ['rezics:Book'] } }, { not: { type: { in: ['rezics:Film'] } } }] },
+      { kind: { in: ['book'] } },
+    ],
   };
   const request = {
     text: '  "a phrase" | -other ',
@@ -44,7 +47,7 @@ test('private, unknown and oversized queries never emit partial portable documen
     expect(result.parameters).toBeNull();
   }
   expect(prepareQueryShare({ filter: { type: { in: ['x'.repeat(17000)] } } }).reason).toBe('oversized');
-  expect(prepareQueryShare({ filter: { type: { in: ['book'] } } }).action).toBe('allowed');
+  expect(prepareQueryShare({ filter: { type: { in: ['rezics:Book'] } } }).action).toBe('allowed');
 });
 
 // Exercise the mounted contract and its ordinary current-reader authorization, not a second share authority.
