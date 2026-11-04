@@ -15,9 +15,10 @@ const proposal = (subject: string) => fixture.proposal(subject);
 
 test('owned semantic deletion and restore stay bounded across unrelated history and population', async () => {
   const { db, call, status, path } = fixture;
-  for (const axis of ['history', 'population'] as const) {
+  for (const axis of ['history', 'population', 'authority', 'deleted'] as const) {
     const subject = await person();
     const unrelated = await person();
+    for (let i = 0; i < 21; i++) await proposal(subject);
     const selected = await proposal(subject);
     status(await call('POST', `${path(selected)}:accept`, { context: GLOBAL_CONTEXT, expected_head: null }), 200);
     status(
@@ -37,13 +38,21 @@ test('owned semantic deletion and restore stay bounded across unrelated history 
       warmups: 1,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(_database, scale, previous) {
-        // Native proposals grow the same subject's history; native creates grow other subjects.
+        // Native producers independently grow same-slot candidates, unrelated revision authority,
+        // retained tombstones and other subjects. The target remains beyond a full first page.
         // Neither fixture installs SQL truth into a future lifecycle table.
         for (let i = previous; i < scale; i++) {
           if (axis === 'history') await proposal(subject);
+          else if (axis === 'authority') await proposal(unrelated);
+          else if (axis === 'deleted') status(await call('DELETE', path(await proposal(subject))), 200);
           else await person();
         }
         await proposal(unrelated);
+        const page = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl&limit=20`);
+        status(page, 200);
+        expect(page.body.candidates.some((candidate: { id: string }) => candidate.id === selected.candidate)).toBe(
+          false,
+        );
       },
       async operation() {
         const exact = `${path(selected)}/lifecycle?property=schema%3Aurl`;

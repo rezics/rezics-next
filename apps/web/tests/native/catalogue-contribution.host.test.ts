@@ -33,7 +33,7 @@ async function openReviewedContribution(page: Page, record: CatalogueContributio
   await review.locator('#candidate-field').selectOption('schema:url');
   await browserExpect(review.getByRole('button', { name: 'Review suggestion', exact: true })).toBeVisible();
   await review.getByRole('button', { name: 'Review suggestion', exact: true }).click();
-  await browserExpect(review.getByRole('button', { name: 'Withdraw contribution', exact: true })).toBeVisible();
+  await browserExpect(review.getByRole('button', { name: 'Read current availability', exact: true })).toBeEnabled();
 }
 
 async function confirmContribution(
@@ -70,8 +70,8 @@ nativeTest(
     const bobPage = await fixture.bob.context.newPage();
     bobPage.setDefaultTimeout(30_000);
     await openReviewedContribution(bobPage, record);
-    await confirmContribution(bobPage, 'Withdraw contribution');
-    await browserExpect(bobPage.getByRole('alert').filter({ hasText: 'cannot perform this action' })).toBeVisible();
+    await browserExpect(bobPage.getByRole('button', { name: 'Withdraw contribution', exact: true })).toHaveCount(0);
+    await browserExpect(bobPage.getByRole('button', { name: 'Restore contribution', exact: true })).toHaveCount(0);
     expect(JSON.stringify(await fixture.current(record.subject, 'alice'))).toContain(record.payload);
     await bobPage.close();
 

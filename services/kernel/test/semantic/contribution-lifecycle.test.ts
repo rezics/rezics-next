@@ -150,6 +150,9 @@ test('native compact contribution permits only its original writer through later
   await accept(record);
   await adopt(record, null);
   // An expansion editor and current adopter is still not the original author.
+  const exact = await call('GET', `${path(record)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(exact, 200);
+  expect(exact.body).toMatchObject({ state: 'available', selected: true, actions: { operations: ['delete'] } });
   status(await call('DELETE', path(record), 'editor'), 403);
   status(await call('DELETE', path(record), 'owner'), 200);
   expect(JSON.stringify(await current(record.subject))).not.toContain(record.payload);
@@ -222,6 +225,9 @@ test('512 compact facts create one author grant per write revision and preserve 
     [routeOf(record.subject), anchor],
   );
   expect(wronglyGranted.rows).toEqual([{ subject_id: accounts.owner }]);
+  const exact = await call('GET', `${path(record)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(exact, 200);
+  expect(exact.body).toMatchObject({ state: 'available', selected: true, actions: { operations: ['delete'] } });
   status(await call('DELETE', path(record), 'editor'), 403);
   status(await call('DELETE', path(record), 'owner'), 200);
   status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 200);
@@ -326,4 +332,19 @@ test('exact lifecycle recovers a candidate outside the first page with current a
   status(restored, 200);
   expect(restored.body).toMatchObject({ state: 'available', selected: false, actions: { operations: ['delete'] } });
   expect(JSON.stringify(restored.body)).not.toContain(target.payload);
+});
+
+test('concealed Subject and unknown contribution have the same exact lifecycle outcome', async () => {
+  const target = await proposal(await person());
+  status(await call('DELETE', path(target), 'owner'), 200);
+  status(
+    await call('POST', `/v1/subjects/${target.subject}:takedown`, 'platform', {
+      notice: { complaint: 'Conceal Subject', received_at: clock().toISOString(), scope: '/' },
+    }),
+    200,
+  );
+  const concealed = await call('GET', `${path(target)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(concealed, 404);
+  expect(JSON.stringify(concealed.body)).not.toContain(target.payload);
+  expect(concealed.body).not.toHaveProperty('state');
 });
