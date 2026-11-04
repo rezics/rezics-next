@@ -335,15 +335,15 @@ function SettingsSections({
     ),
     account: (
       <section id="account" aria-labelledby="settings-account-heading" className="scroll-mt-6 space-y-6">
-        <div hidden={managedTarget !== undefined} inert={managedTarget !== undefined} className="space-y-6">
-          <AccountSafetySection
-            state="signed-in"
-            accountId={page.accountId}
-            securityHref={page.securityHref}
-            renameAccount={page.renameAccount ?? null}
-            csrfToken={csrfToken}
-            onReload={() => window.location.reload()}
-          />
+        <AccountSafetySection
+          state="signed-in"
+          accountId={page.accountId}
+          securityHref={page.securityHref}
+          renameAccount={page.renameAccount ?? null}
+          csrfToken={csrfToken}
+          onReload={() => window.location.reload()}
+        />
+        <div hidden={managedTarget !== undefined} inert={managedTarget !== undefined}>
           <ManagedAccountsSection io={managedAccountsIO} />
         </div>
         {managedTarget !== undefined ? (

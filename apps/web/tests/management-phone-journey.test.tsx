@@ -229,7 +229,12 @@ test('directory, organization, account and recovery retain independent phone con
             expect(host.querySelector('[role="alert"]')).not.toBeNull();
             for (const message of messages[state]) expect(text()).toContain(message);
             if (state === 'signed-out') {
-              link(`/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/accounts`)}`);
+              const signIn = `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/accounts`)}`;
+              const found = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((item) => {
+                const href = item.getAttribute('href') ?? '';
+                return href === signIn || href.endsWith(signIn);
+              });
+              expect(found).toBeDefined();
               expect(host.querySelector('button')).toBeNull();
             } else {
               const before = retries;

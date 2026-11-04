@@ -565,7 +565,7 @@
   "settings_managed_restart_list": "Start at first page",
   "settings_managed_authority_text": "A responsibility hold does not confirm a completed operation or permission to manage the account.",
   "settings_managed_identity_unavailable": "Public account identity is unavailable.",
-  "settings_managed_no_responsibilities_page": "No responsibility holds on this page. More entries remain to be checked.",
+  "settings_managed_no_responsibilities_page": "This list has no current holds; more remain to be checked.",
   "managed_title": "Accounts",
   "managed_intro": "Your identity, organization memberships and the accounts you are responsible for.",
   "managed_unnamed": "Account without a display name",

@@ -149,7 +149,9 @@ function button(host: Element, label: string): HTMLButtonElement {
 function feed(host: Element, label: string) {
   const list = [...host.querySelectorAll('ul')].find((node) => node.getAttribute('aria-label') === label);
   expect(list).toBeDefined();
-  return list!.parentElement!;
+  const region = list!.closest('[role="region"]');
+  expect(region).toBeDefined();
+  return region!;
 }
 function geometryContract(host: Element) {
   for (const control of host.querySelectorAll<HTMLButtonElement>('button')) {

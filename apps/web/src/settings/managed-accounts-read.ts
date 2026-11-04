@@ -417,12 +417,18 @@ export class ManagedAccountsInventory {
     }
     const current = this.value;
     const replaced = firstPage || Object.keys(cursors).length === 0;
+    const account =
+      current.account && result.page.account.id === current.account.id ? current.account : result.page.account;
+    const viewer =
+      current.viewer && result.page.viewer.account.id === current.viewer.account.id
+        ? current.viewer
+        : result.page.viewer;
     if (feed === 'organizations') {
       const next = result.page.organizations;
       this.publish({
         ...current,
-        account: result.page.account,
-        viewer: result.page.viewer,
+        account,
+        viewer,
         organizations: {
           ...feedFrom(
             {
@@ -439,8 +445,8 @@ export class ManagedAccountsInventory {
       const next = result.page.responsibilities;
       this.publish({
         ...current,
-        account: result.page.account,
-        viewer: result.page.viewer,
+        account,
+        viewer,
         responsibilities: feedFrom(next, replaced, (item) => item.reservationId),
       });
     }
