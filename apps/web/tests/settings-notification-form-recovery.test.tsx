@@ -20,7 +20,12 @@ function settingsPage(notifications: NotificationPreferences, version: number, w
       })),
       { kind: 'moderation_decision', optional: false, default: true, enabled: true },
     ],
-    actions: writable ? [{ name: 'edit', expectedVersion: version }, { name: 'reset', expectedVersion: version }] : [],
+    actions: writable
+      ? [
+          { name: 'edit', expectedVersion: version },
+          { name: 'reset', expectedVersion: version },
+        ]
+      : [],
   };
 }
 
@@ -114,8 +119,9 @@ test('native kind forms own each field once; hydration retains choices and recov
     />,
   );
   expect(readOnlyHost.textContent).toContain('current account access does not allow changes');
-  expect([...readOnlyHost.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].every((input) => input.disabled))
-    .toBe(true);
+  expect(
+    [...readOnlyHost.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].every((input) => input.disabled),
+  ).toBe(true);
   expect([...readOnlyHost.querySelectorAll('button')].every((button) => (button as HTMLButtonElement).disabled)).toBe(
     true,
   );

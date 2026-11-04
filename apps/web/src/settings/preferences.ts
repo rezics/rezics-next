@@ -698,11 +698,7 @@ function presentNotifications(value: unknown, page?: PreferencePage): Notificati
   return { ...value } as NotificationPreferences;
 }
 
-function currentPageFrom(
-  value: unknown,
-  version: number,
-  expectedWritable?: boolean,
-): PreferencePage | undefined {
+function currentPageFrom(value: unknown, version: number, expectedWritable?: boolean): PreferencePage | undefined {
   const keys = [
     'spoilerLevel',
     'suitability',
@@ -727,11 +723,7 @@ function currentPageFrom(
   const writable = advice.allowedActions.update.allowed;
   if (expectedWritable !== undefined && writable !== expectedWritable) return undefined;
   const page = presentPreferencePage(value.page, version);
-  if (
-    !page ||
-    preferencePageAllows(page, 'edit') !== writable ||
-    preferencePageAllows(page, 'reset') !== writable
-  )
+  if (!page || preferencePageAllows(page, 'edit') !== writable || preferencePageAllows(page, 'reset') !== writable)
     return undefined;
   return page;
 }
@@ -860,8 +852,7 @@ export async function changeNotifications(
     }
     const failure = failureDetails(result.error, statusOf(result), result.headers);
     const refused = writeFailure(failure);
-    const page =
-      failure.status === 409 && failure.code === 'conflict' ? conflictPageFrom(result.error) : undefined;
+    const page = failure.status === 409 && failure.code === 'conflict' ? conflictPageFrom(result.error) : undefined;
     return page ? { ...refused, page } : refused;
   } catch (error) {
     const failure = failureDetails(error);
