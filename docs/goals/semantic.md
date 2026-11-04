@@ -70,3 +70,10 @@ owns this connected Web surface. Native Context read/accept checks, independent 
 registrations retain their existing authority. No parallel Semantic UI task or broader importer/catalogue expansion
 is included. Authored connected assertions remain UNRUN pending integration acceptance; typing alone is not native,
 browser, growth or private-SSR proof. The Web rating owner alone updates its Goal document.
+
+## Audit gap journeys
+
+The [audit gap journey plan](../research/semantic-gap-journeys-plan.md) maps the three source audits to retained
+work and the remaining native catalogue admission journeys; it does not certify acceptance or reopen delivered UI.
+Decision: journey sizes of 2,000–3,000 lines are implementation estimates, and missing released meanings extend the
+existing bounded page composition and consumers under current grants; music personal profiles remain Commerce-owned.
