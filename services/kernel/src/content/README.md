@@ -610,7 +610,7 @@ No membership or caller-supplied action is accepted. Available output is
 `{ state: "ready", viewer: { kind: "account", id }, boardId, pinRevision, management, threads }`, with only
 selected original thread IDs, current `pinned` and closed `actions` per row. Full native capacity removes only
 `pin`; current pins retain `unpin`. Current read access never supplies curation authority.
-The route uses the authenticated `board:pin-advice` action, separate from anonymous `board:read`.
+The route uses the authenticated `board:pin_advice` action, separate from anonymous `board:read`.
 
 The reader reuses native Board/Realm disclosure and two exact selected reading-card disclosure rounds, then
 prepares current curation and evaluates it in the final native pin snapshot. That snapshot fences the exact
