@@ -528,6 +528,7 @@ Excerpts collapse native document whitespace and count at most 160 Unicode code 
 whole grapheme would exceed the cap. Home uses these fields without a second content or identity request.
 The [feed contract](../../../../docs/feeds.md#content-reaction-summaries) defines native reaction targets, viewer slots,
 source freshness and the bounded cost for disclosed thread/post cards.
+Decision: mounted `feed_item.list` adds optional `summary.reactionAdvice` to Content thread/review/post rows as `{target, state: 'current', allowed: [...REACTION_KINDS]}` or `{target, state: 'sign_in' | 'unavailable'}`; current `allowed: []` is denial, and advice is independent of counts and viewer slots.
 The producer constants derive at most 91 mixed candidates plus 21 author keys (seven identities, each with
 at most one avatar and one verified-agent Subject), 123 anonymous candidates, or 20 Following candidates plus
 60 author keys; the composed maxima 112, 123 and 80 remain below the 160 ceiling.

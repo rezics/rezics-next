@@ -109,6 +109,22 @@ const reactionFreshness = t.Unsafe<ReactionCountFreshness>(
     closed,
   ),
 );
+export type FeedReactionAdvice =
+  | Readonly<{ target: FeedReactionTarget; state: 'current'; allowed: readonly ViewerReactionKind[] }>
+  | Readonly<{ target: FeedReactionTarget; state: 'sign_in' | 'unavailable' }>;
+const reactionAdvice = t.Unsafe<FeedReactionAdvice>(
+  t.Union([
+    t.Object(
+      {
+        target: reactionTarget,
+        state: t.Literal('current'),
+        allowed: t.Array(reactionKind, { maxItems: REACTION_KINDS.length, uniqueItems: true }),
+      },
+      closed,
+    ),
+    t.Object({ target: reactionTarget, state: t.Union([t.Literal('sign_in'), t.Literal('unavailable')]) }, closed),
+  ]),
+);
 /** Feed-local only: Semantic summaries and public Search caches carry no viewer slot. */
 const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
 export type FeedSubjectReactionKind = (typeof subjectReactionKinds)[number];
@@ -159,6 +175,7 @@ export type FeedContentSummary = {
   reactionTarget?: FeedReactionTarget;
   reactions?: FeedReactionCounts;
   viewerReaction?: ViewerReactionKind | null;
+  reactionAdvice?: FeedReactionAdvice;
 };
 export type FeedConversationActivity =
   | Readonly<{
@@ -197,6 +214,7 @@ const contentSummaryFields = {
   reactionTarget: t.Optional(reactionTarget),
   reactions: t.Optional(reactionCounts),
   viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
+  reactionAdvice: t.Optional(reactionAdvice),
 };
 const threadSummary = t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'> & FeedContentSummary>(
   t.Object(
@@ -251,6 +269,7 @@ const discoveryReviewSummary = t.Unsafe<
       reactionTarget: t.Optional(reactionTarget),
       reactions: t.Optional(reactionCounts),
       viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
+      reactionAdvice: t.Optional(reactionAdvice),
     },
     closed,
   ),
