@@ -75,7 +75,7 @@ test('A filtered queue with only deleted rows and a real next cursor shows prepa
     headers: { authorization: 'Bearer fixture' },
   });
   expect(native.status).toBe(200);
-  expect(native.data).toMatchObject({
+  expect(native.data).toEqual({
     candidates: [fixture.deleted],
     next: fixture.next,
     freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },

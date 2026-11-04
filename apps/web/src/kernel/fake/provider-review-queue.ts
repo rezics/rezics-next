@@ -67,6 +67,7 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
     next: null,
     freshness: { consistency: 'eventual' as const, target_seconds: 10 as const, caught_up: true },
   };
+  const { actions: _actions, ...nativePage } = page;
   const deleted = {
     subject: native.id,
     candidate: { id: `${native.id.slice(0, -3)}889`, deleted: true },
@@ -221,13 +222,13 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
       current = 'loaded';
       return json({ next: 'opaque-continuation' }, 202);
     }
-    if (current === 'empty') return json({ ...page, candidates: [] });
-    if (current === 'empty-more') return json({ ...page, candidates: [], next });
+    if (current === 'empty') return json({ ...nativePage, candidates: [] });
+    if (current === 'empty-more') return json({ ...nativePage, candidates: [], next });
     if (current === 'empty-lagging')
-      return json({ ...page, candidates: [], freshness: { ...page.freshness, caught_up: false } });
-    if (current === 'deleted') return json({ ...page, candidates: [deleted] });
+      return json({ ...nativePage, candidates: [], freshness: { ...page.freshness, caught_up: false } });
+    if (current === 'deleted') return json({ ...nativePage, candidates: [deleted] });
     if (current === 'deleted-more' && !url.searchParams.has('cursor'))
-      return json({ ...page, candidates: [deleted], next });
+      return json({ ...nativePage, candidates: [deleted], next });
     const candidates = suggestions.map((original) => {
       const candidate = structuredClone(original);
       if (url.searchParams.get('status') === 'accepted_unselected') {
@@ -237,7 +238,7 @@ export function providerQueueFixture(scenario: ProviderQueueScenario = 'loaded')
       return { subject: candidateSubjects.get(candidate.id) ?? native.id, candidate, adoption: null };
     });
     return json({
-      ...page,
+      ...nativePage,
       candidates: current === 'mixed' ? [deleted, ...candidates] : candidates,
       next: current === 'mixed' ? next : null,
     });
