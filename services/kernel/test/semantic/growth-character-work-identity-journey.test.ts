@@ -33,6 +33,19 @@ beforeAll(async () => {
      VALUES ($1,$2,1,'create',$3,$4), ($5,$6,1,'create',$3,$4)`,
     [route, character, bundledDigest, transaction, route + 16, holder],
   );
+  await db.admin.query(
+    `INSERT INTO semantic.inbound_link
+      (route,subject_id,context_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key,filter_value)
+     SELECT $1,$2,'00000000-0000-8000-8000-000000000000'::uuid,$3,$4,gen_random_uuid(),1,true,gen_random_uuid(),'schema:VideoGame',lpad(n::text,8,'0'),'00000000-0000-0000-0000-000000000000'::uuid
+     FROM generate_series(0,24) n`,
+    [route, character, appearanceProperty, holder],
+  );
+  await db.admin.query(
+    `INSERT INTO semantic.inbound_link_count(route,subject_id,property,filter_value,value)
+     VALUES ($1,$2,$3,'00000000-0000-0000-0000-000000000000',25)
+     ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=excluded.value`,
+    [route, character, appearanceProperty],
+  );
 });
 afterAll(async () => {
   await db.close();
@@ -86,18 +99,19 @@ test('a 20-row character appearance window stays fixed at 64/512/4096 unrelated 
         { from: previous, to: scale },
       );
       if (previous === 0) {
-        await db.admin.query(
-          `INSERT INTO semantic.inbound_link(route,subject_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key,filter_value)
-          SELECT $1,$2,$3,$4,gen_random_uuid(),1,true,gen_random_uuid(),'schema:VideoGame',lpad(n::text,8,'0'),'00000000-0000-0000-0000-000000000000'
-          FROM generate_series(0,24) n`,
-          [route, character, appearanceProperty, holder],
-        );
-        await db.admin.query(
-          `INSERT INTO semantic.inbound_link_count(route,subject_id,property,filter_value,value)
-          VALUES ($1,$2,$3,'00000000-0000-0000-0000-000000000000',25)
-          ON CONFLICT(route,subject_id,property,filter_value) DO UPDATE SET value=excluded.value`,
+        const existing = await db.admin.query(
+          `SELECT 1 FROM semantic.inbound_link WHERE route=$1 AND subject_id=$2 AND property=$3 LIMIT 1`,
           [route, character, appearanceProperty],
         );
+        if (existing.rows.length === 0) {
+          await db.admin.query(
+            `INSERT INTO semantic.inbound_link
+              (route,subject_id,context_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key,filter_value)
+             SELECT $1,$2,'00000000-0000-8000-8000-000000000000'::uuid,$3,$4,gen_random_uuid(),1,true,gen_random_uuid(),'schema:VideoGame',lpad(n::text,8,'0'),'00000000-0000-0000-0000-000000000000'::uuid
+             FROM generate_series(0,24) n`,
+            [route, character, appearanceProperty, holder],
+          );
+        }
       }
     },
     operation: window,
