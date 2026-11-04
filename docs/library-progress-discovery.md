@@ -98,6 +98,22 @@ details in a per-row loop, or duplicate editor and recovery logic.
 Focused native HTTP coverage is in `services/kernel/test/library/progress-http.test.ts`; focused address and stale
 response coverage is in `apps/web/tests/progress-address.test.tsx` and
 `apps/web/tests/progress-index-current-origin.test.tsx`. Rendered page states are in
-`apps/web/src/stories/library-progress-discovery.stories.tsx`. Exact commands and results run for this delivery will
-be recorded here. Frozen broader acceptance, independent 64/512/4096 growth, full Kernel checks, and browser review
-remain controller-owned.
+`apps/web/src/stories/library-progress-discovery.stories.tsx`.
+
+`bun run --cwd services/kernel derived schema` passed and derived the installed schema from the migration. The Kernel
+typecheck command, `bun run --cwd services/kernel typecheck`, completed with repository errors outside the discovery
+sources; the first is the missing Content-owned client publication at
+`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.` The final typecheck reported no diagnostics in the discovery route, store, SQL, presentation, or erasure changes.
+
+`bun run --cwd apps/web typecheck` failed while loading Kernel source without its SQL content mapper. Its discovery-specific
+error is `../../services/kernel/src/library/progress-discovery-presentation.ts(10,26): error TS2307: Cannot find module './progress-discovery-releases.sql' or its corresponding type declarations.` This does not validate generated client consumption; that publication remains with Content.
+
+The focused Kernel command `bun run --cwd services/kernel check test/library/progress-http.test.ts` was attempted three
+times. Each attempt stopped during shared remote preparation before the test process started: the first reported
+`stalledPhase: "native-cache-lock"`, the first retry reported `stalledPhase: "source-artifact-publication"`, and the
+second retry reported `phase: "run-lifetime"` after a 50.045-second timeout. The Web command
+`bun apps/web/scripts/focused.ts --private-network -- bun test tests/progress-address.test.tsx tests/progress-index-current-origin.test.tsx`
+was attempted three times and exited before spawning tests with `Web check custody: private descriptor must be outside candidate source` each time. These focused results are unavailable, not passes.
+
+Frozen broader acceptance, independent 64/512/4096 growth, full Kernel checks, and browser review remain
+controller-owned.
