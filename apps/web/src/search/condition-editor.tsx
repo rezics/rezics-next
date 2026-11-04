@@ -401,14 +401,14 @@ function EditorField({
 }
 
 type QualifierDraftIdentity = {
-  draftKey: string;
+  draftKey: number;
   values: readonly FilterQualifier[];
   keys: string[];
 };
 
 function reconcileQualifierKeys(
   previous: QualifierDraftIdentity | undefined,
-  draftKey: string,
+  draftKey: number,
   values: readonly FilterQualifier[],
   nextKey: () => string,
 ): QualifierDraftIdentity {
