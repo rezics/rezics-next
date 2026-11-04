@@ -577,7 +577,7 @@ export function LiteraryReaderEntry({
                       </nav>
                     ) : (
                       <p role="status" className="text-sm text-muted-foreground">
-                        {m.literary_grain_stream_none({}, o)}
+                        {m.literary_grain_mapping_missing({}, o)}
                       </p>
                     )}
                     {active ? renderNative(active) : null}
