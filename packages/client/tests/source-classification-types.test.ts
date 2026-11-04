@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { ClientKernel } from '../src/kernel/http/kernel.ts';
 import type {
-  KernelSubjectsClient, SourceClassificationBatchInput, SourceClassificationBatch,
+  SourceClassificationBatchInput, SourceClassificationBatch,
   SourceClassificationPutInput, SourceClassificationPutResult,
   SourceClassificationClearInput, SourceClassificationClearResult,
 } from '../src/index.ts';
@@ -20,11 +20,9 @@ const closure: [
   Assert<Equal<SourceClassificationBatchInput, Body<Read>>>, Assert<Equal<SourceClassificationBatch, Result<Read>>>,
   Assert<Equal<SourceClassificationPutInput, Body<Put>>>, Assert<Equal<SourceClassificationPutResult, Result<Put>>>,
   Assert<Equal<SourceClassificationClearInput, Body<Clear>>>, Assert<Equal<SourceClassificationClearResult, Result<Clear>>>,
-  Assert<Equal<'source-classifications' extends keyof ReturnType<KernelSubjectsClient> ? true : false,
-    'source-classifications' extends keyof Mounted ? true : false>>,
-] = [true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true];
 
-test('classification client aliases follow installed mounted declarations without an overlay', () => {
+test('official classification DTO aliases follow installed mounted declarations', () => {
   // This pins declaration closure, not the presence of an installed publication.
-  expect(closure).toEqual([true, true, true, true, true, true, true]);
+  expect(closure).toEqual([true, true, true, true, true, true]);
 });

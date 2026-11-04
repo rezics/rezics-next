@@ -298,6 +298,13 @@ type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
 };
 
 type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
+type SubjectPath = ReturnType<SubjectsClient>;
+type ProvisionalClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
+// Preserve the existing consumer seam while publication is pending. Once installed, the mounted transport
+// supplies its complete mutation unions without intersection with the provisional narrowing.
+type ClassificationCompatibility<Path> = Path extends { 'source-classifications': unknown }
+  ? Path
+  : Path & { 'source-classifications': ProvisionalClassificationsClient };
 
 // These aliases become usable only when the mounted declaration publisher installs the actual methods.
 // No hand-maintained transport supplies a missing mounted route.
@@ -340,7 +347,8 @@ type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;
 export type NoticeInboxPage = NonNullable<NoticeInboxRead['data']>;
 export type NoticeInboxItem = NoticeInboxPage['items'][number];
 export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
-export type KernelSubjectsClient = SubjectsClient;
+export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
+  ((...args: Parameters<SubjectsClient>) => ClassificationCompatibility<SubjectPath>);
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 
 type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];

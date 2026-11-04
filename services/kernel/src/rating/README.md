@@ -1712,10 +1712,11 @@ Decision: use the existing Subject `:id` resource path with explicit `:read`, `:
 supplied-association reads and immutable CAS commands. Imports consumes them through the generated Eden client;
 official client declaration emit for these routes stays on the compiler database.
 
-Root client methods and DTO aliases derive only from the actual mounted declarations. When those declarations
-lack the transport, its DTO aliases are `never` and the root client exposes no classification methods; the retained
-provisional declaration is not an installed delivery. The sole declaration publisher must emit the mounted route
-before Imports can receive official types. Source-side `SourceClassificationPutResult` and
+Official root DTO aliases derive only from the actual mounted declarations. When those declarations lack the
+transport, these aliases are `never`; the existing consumer retains its explicitly provisional compatibility seam.
+That seam is not installed delivery. Once the publisher emits the mounted transport, the root uses it directly
+without intersecting the provisional narrower mutation states. The sole declaration publisher must emit the
+mounted route before Imports can receive official types. Source-side `SourceClassificationPutResult` and
 `SourceClassificationClearResult` derive from the response schemas, preserving `published | cleared` for both.
 
 `POST /v1/subjects/:id/source-classifications:read` takes `{ associations: [...] }` (zero through 32).
