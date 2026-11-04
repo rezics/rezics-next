@@ -26,6 +26,7 @@ const globals = {
   MutationObserver: window.MutationObserver,
   ResizeObserver: window.ResizeObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  scrollTo() {},
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
@@ -133,7 +134,7 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
     expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(m.edition_publication_leave_pending());
     await click(m.thread_authoring_stay());
     expect(fixture.controller.snapshot().intent).toBe(originalIntent);
-    expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+    expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions' && call.method === 'POST')).toHaveLength(1);
     expect(router.state.location.pathname).toBe('/editions/new');
 
     await click(m.creator_edition_origin_return());
@@ -150,7 +151,7 @@ test('Stay preserves the uncertain publication intent; Discard returns to the or
     expect(returnUrl.searchParams.get('editionOrigin')).toBe(token);
     expect(returnUrl.searchParams.has('postId')).toBe(false);
     expect(returnUrl.searchParams.has('revisionId')).toBe(false);
-    expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+    expect(fixture.calls.filter((call) => call.path === '/v1/contentEditions' && call.method === 'POST')).toHaveLength(1);
     expect(button(m.creator_edition_origin_restart())).toBeDefined();
   } finally {
     await act(async () => root.unmount());
