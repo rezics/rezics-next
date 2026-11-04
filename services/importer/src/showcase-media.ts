@@ -30,6 +30,19 @@ export type BangumiCoverSource = Readonly<{
     | 'media-intent-not-delivered';
 }>;
 
+export type BangumiPersonCareerSource = Readonly<{
+  sourceAlias: 'bangumi_cross_media';
+  externalId: string;
+  sourceRevision: string;
+  archiveDigest: string;
+  endpoint: string;
+  sourceStatus: 'available' | 'unavailable';
+  careers?: readonly string[];
+  responseDigest?: string;
+  etag?: string;
+  code?: 'source-api-http' | 'source-api-unavailable' | 'source-payload-invalid';
+}>;
+
 export type CrossMediaMediaOutcome = Omit<BangumiCoverSource, 'sourceStatus'> &
   Readonly<{
     sourceStatus: BangumiCoverSource['sourceStatus'];

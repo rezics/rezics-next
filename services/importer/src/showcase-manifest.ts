@@ -5,7 +5,7 @@ import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
-import { createSelectedFamilySourceRegistration } from './source-registry.ts';
+import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource } from './cross-media-bindings.ts';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
@@ -287,6 +287,19 @@ function selectedEnvelopes(
   }
   for (const appearance of plan.characterAppearances ?? [])
     allowed.add(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)));
+  for (const source of plan.personCareerSources ?? []) {
+    if (source.sourceStatus !== 'available' || !source.responseDigest) continue;
+    allowed.add(
+      envelopeKey({
+        source: aliases.bangumi,
+        external_id: source.externalId,
+        record_revision: source.etag ?? 'unversioned',
+        digest: source.responseDigest,
+        converter_revision: crossMediaBangumiRevision,
+        field_group: 'facts',
+      }),
+    );
+  }
   for (const requirement of requirements) allowed.add(envelopeKey(requirement.source));
   for (const observation of tagWeightObservations) {
     if (!/^[0-9a-f]{64}$/u.test(observation.responseDigest ?? '')) continue;

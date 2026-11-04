@@ -1,3 +1,4 @@
+import { bundledDigest } from '@rezics/definitions/bundled';
 import { BATCH_LIMIT, SourceSchema } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import {
@@ -22,11 +23,12 @@ import {
   crossMediaEntityKind,
   bangumiRecordUrl,
   vndbRecordUrl,
+  mapSourceEnumeration,
   type CrossMediaEntityConversion,
 } from '@rezics/conversion/cross-media-entities';
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
-import type { SourceVocabularyGap, SourceVocabularyInput } from '@rezics/conversion';
+import type { NativeIdentity, SourceVocabularyGap, SourceVocabularyInput, SourceVocabularyRow } from '@rezics/conversion';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
 import { projectSourceClassification } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
@@ -54,6 +56,7 @@ type VocabularySource = {
   readonly converter_revision: string;
   readonly proposals: NativeConversion['proposals'];
   readonly sourceMetadata?: unknown;
+  readonly normalizedRecord?: Record<string, unknown>;
 };
 
 // This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
@@ -190,7 +193,7 @@ function addAliases(
   }
   const vocabulary =
     context.sourceVocabulary && (sourceKind === 'bangumi' || sourceKind === 'vndb')
-      ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary)
+      ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary, context)
       : undefined;
   return {
     ...result,
@@ -221,6 +224,7 @@ function sourceVocabularyResult(
   sourceAlias: string,
   sourceKind: 'bangumi' | 'vndb',
   request: NonNullable<ConversionContext['sourceVocabulary']>,
+  context: ConversionContext,
 ) {
   const metadata = describeSourceRecord(sourceKind, result.external_id);
   const recorded =
@@ -233,6 +237,28 @@ function sourceVocabularyResult(
       : sourceKind === 'bangumi'
         ? bangumiRecordUrl(result.external_id)
         : `https://vndb.org/${result.external_id}.${result.record_revision}`;
+  const rows: SourceVocabularyRow[] = [...request.rows];
+  if (sourceKind === 'bangumi' && context.subjectId && result.normalizedRecord) {
+    const normalized = result.normalizedRecord;
+    const nativeType = mapSourceEnumeration('bangumi', 'person.type', normalized.type as number)?.term;
+    const career = normalized.career;
+    if ((nativeType === 'schema:Person' || nativeType === 'schema:Organization') && Array.isArray(career)) {
+      const identity: NativeIdentity = { id: context.subjectId, type: nativeType, releaseDigest: bundledDigest };
+      const explicit = new Map(
+        rows
+          .filter((row): row is Extract<SourceVocabularyRow, { kind: 'person-career' }> => row.kind === 'person-career')
+          .map((row) => [`${row.path}\0${row.code}`, row]),
+      );
+      for (const code of career) {
+        if (typeof code !== 'string') continue;
+        const key = `/career\0${code}`;
+        if (!explicit.has(key)) explicit.set(key, { kind: 'person-career', person: identity, code, path: '/career' });
+      }
+      for (const [key, row] of explicit)
+        if (row.person === undefined) explicit.set(key, { ...row, person: identity });
+      rows.splice(0, rows.length, ...rows.filter((row) => row.kind !== 'person-career'), ...explicit.values());
+    }
+  }
   const input: SourceVocabularyInput = {
     metadata: {
       provider: sourceKind,
@@ -246,7 +272,7 @@ function sourceVocabularyResult(
       attribution: metadata.attribution ?? '',
     },
     bindings: request.bindings,
-    rows: request.rows,
+    rows,
     commandLimit: Math.max(0, BATCH_LIMIT - result.proposals.length),
   };
   return sourceKind === 'bangumi' ? mapBangumiVocabulary(input) : mapVndbVocabulary(input);
@@ -289,7 +315,7 @@ export function createSourceRegistration(
             mediaImportIntents: [],
           };
           if (!context.sourceVocabulary) return base;
-          const vocabulary = sourceVocabularyResult(entity, source, sourceKind, context.sourceVocabulary);
+          const vocabulary = sourceVocabularyResult(entity, source, sourceKind, context.sourceVocabulary, context);
           return {
             ...base,
             proposals: [...entity.proposals, ...vocabulary.proposals],

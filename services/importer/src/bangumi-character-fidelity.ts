@@ -23,10 +23,17 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const schemes = {
   'bangumi.character.role': 'https://rezics.com/schemes/bangumi/character-kinds',
   'bangumi.subject-characters.type': 'https://rezics.com/schemes/bangumi/appearance-roles',
+  'bangumi.person.career': 'https://rezics.com/schemes/bangumi/careers',
 } as const;
 const codes: Record<keyof typeof schemes, readonly string[]> = {
   'bangumi.character.role': ['1', '2', '3', '4'],
   'bangumi.subject-characters.type': ['1', '2', '3'],
+  'bangumi.person.career': ['producer', 'mangaka', 'artist', 'seiyu', 'writer', 'illustrator', 'actor'],
+};
+const taxonomyGroups: Record<keyof typeof schemes, string> = {
+  'bangumi.character.role': 'character.role',
+  'bangumi.subject-characters.type': 'subject-characters.type',
+  'bangumi.person.career': 'person.career',
 };
 type Taxonomy = keyof typeof schemes;
 
@@ -166,11 +173,7 @@ export async function currentBangumiCharacterVocabularyBindings(
               item.type === 'skos:Concept' &&
               item.releaseDigest === bundledDigest,
           );
-          const expected = mapSourceEnumeration(
-            'bangumi',
-            taxonomy === 'bangumi.character.role' ? 'character.role' : 'subject-characters.type',
-            code,
-          )?.concept?.id;
+          const expected = mapSourceEnumeration('bangumi', taxonomyGroups[taxonomy], code)?.concept?.id;
           return binding && expected ? [{ binding, schemeId, expected }] : [];
         })
       : [];

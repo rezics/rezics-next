@@ -25,7 +25,12 @@ import { converter_revision as entityRevision, mapSourceEnumeration } from '@rez
 import { createSelectedFamilySourceRegistration } from './source-registry.ts';
 import { subjectSlug } from '@rezics/definitions/slug';
 import { safeSourceUrl } from '../../../packages/conversion/src/support.ts';
-import type { BangumiCoverSource, BangumiCoverSourceJournal, CrossMediaMediaOutcome } from './showcase-media.ts';
+import type {
+  BangumiCoverSource,
+  BangumiCoverSourceJournal,
+  BangumiPersonCareerSource,
+  CrossMediaMediaOutcome,
+} from './showcase-media.ts';
 import { validAvailableCover } from './showcase-media.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
 import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
@@ -308,6 +313,45 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal {
     return source;
   }
 
+  personCareerSource(
+    sourceAlias: string,
+    externalId: string,
+    archiveDigest: string,
+  ): BangumiPersonCareerSource | null {
+    const row = this.#db
+      .query<{ source_json: string }, [string, string, string]>(
+        'SELECT source_json FROM showcase_cover_source WHERE source_alias=? AND external_id=? AND archive_digest=?',
+      )
+      .get(sourceAlias, externalId, archiveDigest);
+    return row ? (JSON.parse(row.source_json) as BangumiPersonCareerSource) : null;
+  }
+
+  sealPersonCareerSource(source: BangumiPersonCareerSource): BangumiPersonCareerSource {
+    if (
+      source.sourceAlias !== 'bangumi_cross_media' ||
+      !/^person:[1-9][0-9]*$/u.test(source.externalId) ||
+      !/^[0-9a-f]{64}$/u.test(source.archiveDigest) ||
+      source.endpoint !== `https://api.bgm.tv/v0/persons/${source.externalId.slice('person:'.length)}` ||
+      source.sourceStatus !== 'available' ||
+      !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
+      !Array.isArray(source.careers) ||
+      source.careers.length > 7 ||
+      source.careers.some((career) => typeof career !== 'string' || !career.isWellFormed() || career.length > 64) ||
+      (source.etag !== undefined && (source.etag.length > 64 || !/^[\x20-\x7e]*$/u.test(source.etag)))
+    )
+      throw new TypeError('Invalid Bangumi Person career receipt');
+    const body = json(source);
+    const prior = this.personCareerSource(source.sourceAlias, source.externalId, source.archiveDigest);
+    if (prior) {
+      if (json(prior) !== body) throw new TypeError('Bangumi Person career source changed under the same archive digest');
+      return prior;
+    }
+    this.#db
+      .query('INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,source_json) VALUES(?,?,?,?)')
+      .run(source.sourceAlias, source.externalId, source.archiveDigest, body);
+    return source;
+  }
+
   close(): void {
     this.#db.close();
   }
@@ -447,10 +491,13 @@ function recordSource(record: ShowcaseRecord, assertion: ShowcaseAssertion): boo
 
 const bangumiCharacterKindsUri = 'https://rezics.com/schemes/bangumi/character-kinds';
 const bangumiAppearanceRolesUri = 'https://rezics.com/schemes/bangumi/appearance-roles';
+const bangumiPersonCareersUri = 'https://rezics.com/schemes/bangumi/careers';
 const bangumiCharacterKindsSource =
   'https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/CharacterType';
 const bangumiAppearanceRolesSource =
   'https://github.com/bangumi/Archive/blob/959474a4fcb833f6dabe8dd2f4fe192f82a71140/README.md';
+const bangumiPersonCareersSource =
+  'https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/PersonCareer';
 
 function sourceVocabularyCitation(record: ShowcaseRecord, uri: string): boolean {
   if (record.provider !== 'bangumi' || record.kind !== 'source-vocabulary' || !record.sourceUri) return false;
@@ -458,6 +505,8 @@ function sourceVocabularyCitation(record: ShowcaseRecord, uri: string): boolean 
     return uri === record.sourceUri || uri === bangumiCharacterKindsSource;
   if (/^https:\/\/rezics\.com\/schemes\/bangumi\/appearance-roles(?:\/[1-3])?$/u.test(record.sourceUri))
     return uri === record.sourceUri || uri === bangumiAppearanceRolesSource;
+  if (/^https:\/\/rezics\.com\/schemes\/bangumi\/careers\/(?:producer|mangaka|artist|seiyu|writer|illustrator|actor)$/u.test(record.sourceUri))
+    return uri === record.sourceUri || uri === bangumiPersonCareersSource;
   return false;
 }
 
@@ -730,6 +779,10 @@ function sourceCitationMatchesRecord(record: ShowcaseRecord, citation: string): 
         (cited.hash.startsWith(staffPrefix) && /^[1-9][0-9]*\/position$/u.test(cited.hash.slice(staffPrefix.length))) ||
         (cited.hash.startsWith(voicePrefix) && /^[1-9][0-9]*\/[1-9][0-9]*$/u.test(cited.hash.slice(voicePrefix.length)))
       );
+    }
+    if (record.provider === 'bangumi' && record.kind === 'person' && record.sourceKey.startsWith('person:')) {
+      const id = record.sourceKey.slice('person:'.length);
+      return cited.href === `https://api.bgm.tv/v0/persons/${id}#/career`;
     }
     if (record.provider === 'vndb' && record.kind === 'work') {
       const prefix = `#/tags_vn/${record.sourceKey}/`;
@@ -1127,6 +1180,7 @@ export async function publishShowcase(input: {
                 host !== 'bangumi.tv' &&
                 host !== 'www.bgm.tv' &&
                 host !== 'www.bangumi.tv' &&
+                !(record.kind === 'person' && assertion.property === 'wdt:P106' && sourceCitationMatchesRecord(record, uri)) &&
                 !(assertion.property === 'schema:image' && host === 'lain.bgm.tv') &&
                 !sourceVocabularyCitation(record, uri)
               : host !== 'vndb.org' && !host.endsWith('.vndb.org');

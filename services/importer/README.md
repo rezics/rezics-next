@@ -1546,7 +1546,7 @@ coordinator and source registration. `vndb-character-profile@1` emits a
 and `o`. Literal `unknown`, COPY null, missing, unsupported and malformed
 values produce bounded omissions; none resolves by label or nearby Concept.
 The classification input and its omission reason enter the deterministic
-projection under `cross-media-entities@11`, so a same-source refresh can offer
+projection under `cross-media-entities@12`, so a same-source refresh can offer
 new support without inventing an upstream revision. Character identity, names
 and height/weight survive this projection together.
 
@@ -1711,7 +1711,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@11` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@12` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2230,7 +2230,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@11`.
+selected release payload and convert them through `cross-media-entities@12`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2326,7 +2326,7 @@ only weights while valid association and spoiler facts remain eligible.
 
 `bangumi@13` includes TVAnime names, original-run, work evidence and official
 websites. Ordinary and selected-family registration share bounded conversion;
-selected envelopes use `cross-media-entities@11+bangumi@13`. The existing journal
+selected envelopes use `cross-media-entities@12+bangumi@13`. The existing journal
 preserves exact alias/key, source admission, citations, independent
 review/adoption and current reads. Unversioned rows retain the bounded infobox
 digest; no publisher or identity lookup is added.
@@ -2355,7 +2355,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@11+bangumi@13` registration, record bindings,
+uses its existing `cross-media-entities@12+bangumi@13` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
@@ -2397,7 +2397,7 @@ date is not completion or access authority.
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
 `游玩人数` on type 4 through current `bangumi@13`, retaining original-run and
 work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@11+bangumi@13` registration; this journey adds no
+existing combined `cross-media-entities@12+bangumi@13` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2689,10 +2689,44 @@ The result carries provider and native type bindings, source keys, source and co
 - Bound: work is limited to the exact five roots, their direct cast and episodes, at most 64 people/organizations per provider, reviewed VNDB trait/tag codes i23/i30 and g105/g249, exact local candidate IDs and required current subject/property reads. Cover lookup remains sequential over selected Bangumi roots with a shared 1 MiB response cap; media send/status uses the ordinary authenticated transport, exact importer bindings and current cover fence. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-media.test.ts` covers source validation and same-state media recovery; `services/importer/tests/showcase-publication.test.ts` retains candidate journal coverage; `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution. The native showcase media and genre checks in `services/kernel/test/imports/` remain controller-owned; no native pass or database growth series is claimed here.
 
+### Bangumi Person careers
+
+The selected-family converter retains authentic career strings on actual
+type-1 Persons. When the selected archive row omits `career`, explicit local
+showcase seeding fills only that selected Person through bounded public
+`GET /v0/persons/{id}`. A career field present in the archive, including an
+empty or malformed value, takes precedence and prevents fallback. The API
+response must identify the requested Person and contain at most seven bounded
+strings; its exact endpoint, SHA-256, optional ETag and values are sealed in the
+existing `ShowcaseJournal`. Missing or malformed responses withhold only
+dependent occupations and retain independent identity, biography and credits.
+No archive revision is invented.
+
+The default local review derives only present finite categories, uses the
+existing common ShowcaseJournal publisher and current vocabulary reader, and
+feeds the reread bindings into the ordinary importer. The optional
+`--bangumi-character-bindings` input remains a validated current-binding
+override. Ordinary imports emit cited `wdt:P106` proposals only; only explicit
+local showcase review accepts and adopts candidates. Source Concepts under
+`https://rezics.com/schemes/bangumi/careers/` are source-owned and do not assert
+canonical equivalence.
+
+- Touches: at most 64 selected Person/Organization rows, 64 selected-Person
+  fallback requests, one 64 KiB response per request, one Scheme and at most
+  seven Concept requirements, and their separate current reads.
+- Bound: only selected actual Persons missing the archive field are fetched;
+  requests are sequential with a 250 ms gap, share the existing import deadline
+  and bounded public transport, and no population or label scan occurs.
+- Growth check: `services/importer/tests/showcase-bangumi-person-careers.test.ts`
+  covers archive precedence, exact API receipt, malformed-response withholding
+  and sealed replay. `services/kernel/test/imports/bangumi-person-careers.test.ts`
+  covers default review/adoption, current reads and ordinary source proposals;
+  broader acceptance remains integration-owned.
+
 ### Bangumi TVAnime official websites
 
 The official-website projection runs through ordinary `bangumi@13` and the
-selected-family `cross-media-entities@11+bangumi@13` registration. It recognizes
+selected-family `cross-media-entities@12+bangumi@13` registration. It recognizes
 only a literal `官方网站` value from the exact pinned type-2 TVAnime template.
 The URL fact is distinct from its `schema:url` reference to the exact Bangumi
 subject record. Source spelling, path, query and fragment are preserved. A
@@ -2723,7 +2757,7 @@ Decision: trim only horizontal template/list-boundary whitespace; `链接` remai
 
 Only exact `{{Infobox animanga/TVAnime` type-2 fields `链接` and `Copyright` are admitted. Descriptive destinations preserve their source spelling and cite the Bangumi subject record; notices remain verbatim `schema:copyrightNotice` values and grant no licence or media permission. Malformed neighbors are bounded, source-free omissions; summary and cover rights remain separate.
 
-- Touches: ordinary `bangumi@13` and selected-family `cross-media-entities@11+bangumi@13` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
+- Touches: ordinary `bangumi@13` and selected-family `cross-media-entities@12+bangumi@13` publication of cited TVAnime work evidence through the existing journal and review/adoption/current-read path.
 - Bound: 64 visited fields, 16 descriptive links, 16 diagnostics, and the compiled TVSeries 1,500-character limits. No linked-page fetch or hostname identity lookup.
 - Growth check: `tests/bangumi-work-evidence.test.ts` covers selected-family proposals, unchanged/changed source, citations, malformed neighbor and repair. `../kernel/test/imports/bangumi-work-evidence.test.ts` authors ordinary independent adoption, reopen/current reads and the facts fence; no real-data walkthrough is claimed.
 

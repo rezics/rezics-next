@@ -10,7 +10,7 @@ import {
 import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { commandKey, safeSourceUrl, sourceEnvelope } from './support.ts';
 
-export const sourceVocabularyRevision = 'source-vocabulary@2';
+export const sourceVocabularyRevision = 'source-vocabulary@3';
 export const sourceVocabularyLimits = Object.freeze({
   rows: 128,
   commands: BATCH_LIMIT,
@@ -61,6 +61,7 @@ export type BangumiVocabularyRow =
   | (RowBase & { kind: 'episode-sort'; episode: NativeIdentity; sort: string | number })
   | (RowBase & { kind: 'episode-kind'; episode: NativeIdentity; code: string | number })
   | (RowBase & { kind: 'character-kind'; character?: NativeIdentity; code: string | number })
+  | (RowBase & { kind: 'person-career'; person?: NativeIdentity; code: string })
   | (RowBase & {
       kind: 'staff';
       subject: NativeIdentity;
@@ -645,10 +646,18 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
     const sourceUrl = origin && sourceText(origin.url, 2048) ? origin.url : metadata.recordUrl;
     let url: string;
     try {
+      const personCareerApi =
+        row.kind === 'person-career' &&
+        /^person:[1-9][0-9]*$/u.test(externalId) &&
+        sourceUrl === `https://api.bgm.tv/v0/persons/${externalId.slice('person:'.length)}`;
       const parsed = new URL(
         safeSourceUrl(
           sourceUrl,
-          metadata.provider === 'bangumi' ? ['bgm.tv', 'bangumi.tv', 'chii.in'] : ['vndb.org', 'api.vndb.org'],
+          metadata.provider === 'bangumi'
+            ? personCareerApi
+              ? ['bgm.tv', 'bangumi.tv', 'chii.in', 'api.bgm.tv']
+              : ['bgm.tv', 'bangumi.tv', 'chii.in']
+            : ['vndb.org', 'api.vndb.org'],
         ),
       );
       parsed.hash = path;

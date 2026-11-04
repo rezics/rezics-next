@@ -341,6 +341,48 @@ function sourceVocabularyOriginMatches(
   return request.rows.some((row) => {
     const origin = row.origin;
     if (
+      row.kind === 'person-career' &&
+      origin &&
+      /^person:[1-9][0-9]*$/u.test(recordKey) &&
+      origin.externalId === recordKey &&
+      origin.url === `https://api.bgm.tv/v0/persons/${recordKey.slice('person:'.length)}` &&
+      row.path === '/career' &&
+      row.person?.id === command.subject &&
+      row.person.type === 'schema:Person' &&
+      command.statement.property.id === 'wdt:P106' &&
+      origin.revision !== undefined &&
+      typeof origin.digest === 'string' &&
+      /^[0-9a-f]{64}$/u.test(origin.digest) &&
+      command.source.record_revision === origin.revision &&
+      command.source.digest === origin.digest &&
+      typeof origin.converterRevision === 'string' &&
+      /^cross-media-entities@[0-9]+\+bangumi@[0-9]+$/u.test(origin.converterRevision) &&
+      command.source.converter_revision === origin.converterRevision
+    ) {
+      try {
+        const parsed = new URL(origin.url);
+        parsed.hash = row.path;
+        const sourceUrl = parsed.href;
+        return command.statement.references?.some((reference) => {
+          let citedUrl = false;
+          let citedRevision = false;
+          for (const part of reference.parts) {
+            if (part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === sourceUrl)
+              citedUrl = true;
+            if (
+              part.property.id === 'schema:version' &&
+              part.value.type === 'value' &&
+              part.value.content === (origin.revision ?? 'unversioned')
+            )
+              citedRevision = true;
+          }
+          return citedUrl && citedRevision;
+        }) ?? false;
+      } catch {
+        return false;
+      }
+    }
+    if (
       !origin ||
       origin.externalId !== recordKey ||
       (origin.revision !== null && origin.revision !== recordRevision) ||
