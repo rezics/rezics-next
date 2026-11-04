@@ -214,7 +214,10 @@ function ScalarControl({
     const compound = definition?.datatype === 'quantity' || definition?.datatype === 'monolingualtext';
     const errors =
       feedback?.errors.filter(
-        (error) => error.target === id(field) || (compound && field !== 'state' && error.target === id('value')),
+        (error) =>
+          error.target === id(field) ||
+          (field === 'date' && (error.target === id('precision') || error.target === id('year'))) ||
+          (compound && field !== 'state' && error.target === id('value')),
       ) ?? [];
     return {
       'aria-invalid': errors.length ? (true as const) : undefined,

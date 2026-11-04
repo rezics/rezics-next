@@ -78,6 +78,7 @@ test('Create an independently identified edition or publication linked to its re
   const fixture = publicationFixture();
   const read = await fixture.transport.load();
   if (!read.ok) throw new Error('Expected real-shaped work read');
+  expect(fixture.calls.some((call) => call.path === '/v1/viewerActions')).toBe(false);
   const initial = draft(read);
   expect(initial.errors).toEqual([]);
   const command: PublicationCommand = {
@@ -90,7 +91,11 @@ test('Create an independently identified edition or publication linked to its re
   expect(result).toEqual({
     ok: true,
     id: publicationCreatedId,
-    reader: { state: 'ready', href: `/en/subjects/${publicationCreatedId}/a-distinct-edition` },
+    reader: {
+      state: 'ready',
+      href: `/en/subjects/${publicationCreatedId}/a-distinct-edition`,
+      identity: { id: publicationCreatedId, type: 'bf:Instance', label: 'A distinct edition' },
+    },
   });
   expect(publicationCreatedId).not.toBe(command.work);
   const write = fixture.calls.find((call) => call.method === 'POST')!;
@@ -227,12 +232,11 @@ test('English publication metadata uses its actual requested-language descriptio
     const read = await fixture.transport.load();
     if (!read.ok) throw new Error('Expected work');
     const edition = fixture.release.types['bf:Instance']!;
-    expect(edition.descriptions?.en).toBeUndefined();
     expect(read.profiles[0]).toMatchObject({
       label: edition.labels.en,
       labelLang: 'en',
-      description: edition.descriptions!.de,
-      descriptionLang: 'de',
+      description: edition.descriptions!.en,
+      descriptionLang: 'en',
     });
     expect(publicationProfiles(fixture.release, 'schema:Book', 'es')[0]).toMatchObject({
       description: edition.descriptions!.es,

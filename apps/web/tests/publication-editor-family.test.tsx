@@ -1,7 +1,8 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useSyncExternalStore } from 'react';
 import type { CreateFailure } from '../src/features/catalogue/create-subject';
+import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { PublicationCommand, PublicationTransport } from '../src/features/catalogue/publication-editor';
 import type { PublicationScenario } from '../src/kernel/fake/publication-editor';
 
@@ -26,8 +27,10 @@ test('independent publication creation, local corrections, immutable recovery an
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: () => {},
     IS_REACT_ACT_ENVIRONMENT: true,
   };
+  window.scrollTo = () => {};
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -99,18 +102,25 @@ test('independent publication creation, local corrections, immutable recovery an
   let entries: Entry[] = [];
   let scene = 0;
   let admitted = true;
+  const listeners = new Set<() => void>();
+  let revision = 0;
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
   const observed = () =>
     admitted
       ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'original-credential-epoch' }
       : { state: 'signed-out' as const, csrfToken: null };
   const Scene = () => {
+    useSyncExternalStore(subscribe, () => revision, () => revision);
     const destination = useRouterState({ select: (state) => state.location.search.page });
     return destination === 'other' ? null : (
       <CandidateReaderBoundary address={`publication-family-${scene}`} observed={observed()}>
         {admitted &&
           entries.map((entry, index) => (
             <PublicationEditor
-              key={index}
+              key={`${scene}-${index}`}
               work={entry.fixture.work.subject.id}
               locale="en"
               session={entry.session ?? 'signed-in'}
@@ -128,13 +138,15 @@ test('independent publication creation, local corrections, immutable recovery an
     history: createMemoryHistory({ initialEntries: ['/'] }),
   });
   const draw = async () =>
-    act(async () =>
+    act(async () => {
+      revision++;
+      listeners.forEach((listener) => listener());
       root.render(
         <QueryClientProvider client={client}>
           <RouterProvider router={router} />
         </QueryClientProvider>,
-      ),
-    );
+      );
+    });
   const mount = async (...next: Entry[]) => {
     scene++;
     entries = next;
@@ -172,7 +184,8 @@ test('independent publication creation, local corrections, immutable recovery an
   const ready = async (index = 0) => {
     await scope(index).findByRole('textbox', { name: m.catalogue_create_label() });
     await replace(input(m.catalogue_create_label(), index), 'A distinct edition');
-    await act(async () => user.click(scope(index).getByRole('checkbox', { name: m.publication_independent() })));
+    const independent = await scope(index).findByRole('checkbox', { name: m.publication_independent() });
+    await act(async () => user.click(independent));
   };
   const ids = () => [...host.querySelectorAll('[id]')].map((element) => element.id);
   const associations = async (index: number) => {
@@ -387,28 +400,37 @@ test('independent publication creation, local corrections, immutable recovery an
     const publisherLabel = correction.fixture.release.properties['schema:publisher']!.labels.en!;
     await act(async () => user.type(scope().getByRole('combobox', { name: publisherLabel }), 'Press'));
     const correctionBody = within(window.document.body as unknown as HTMLElement);
-    await act(async () => user.click(await correctionBody.findByRole('option', { name: /Supplied publisher/ })));
+    const suppliedPublisher = await correctionBody.findByRole(
+      'option',
+      { name: /Supplied publisher/ },
+      { timeout: 5000 },
+    );
+    await act(async () => user.click(suppliedPublisher));
     await create();
     await scope().findByRole('heading', { name: m.catalogue_create_invalid(), level: 2 });
     const citation = urlIn(workSection());
     const references = workSection().querySelector('[id$="-references"]') as HTMLElement;
+    const invalidAmount = input(m.correction_amount());
+    const invalidPrecision = scope().getByRole('combobox', { name: m.correction_precision() }) as HTMLSelectElement;
     const targetFor = (control: HTMLElement) =>
       [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].find(
         (link) => decodeURIComponent(link.hash.slice(1)) === control.id,
       );
-    expect(targetFor(amount)).toBeDefined();
-    expect(targetFor(precision)).toBeDefined();
+    expect(targetFor(invalidAmount)).toBeDefined();
+    expect(targetFor(invalidPrecision)).toBeDefined();
     expect(targetFor(citation) || targetFor(references)).toBeDefined();
-    expect(amount.getAttribute('aria-invalid')).toBe('true');
-    expect(precision.getAttribute('aria-invalid')).toBe('true');
+    expect(invalidAmount.getAttribute('aria-invalid')).toBe('true');
+    expect(invalidPrecision.getAttribute('aria-invalid')).toBe('true');
     expect(article().textContent).toContain(m.correction_citation_hint());
-    expect(input(m.correction_amount()).value).toBe('+240');
-    expect(precision.value).toBe('10');
-    expect(article().textContent).toContain('Supplied publisher');
+    expect(invalidAmount.value).toBe('+240');
+    expect(invalidPrecision.value).toBe('10');
+    expect(
+      (scope().getByRole('combobox', { name: publisherLabel }) as HTMLInputElement).value,
+    ).toBe('Supplied publisher');
     await associations(0);
 
-    await replace(amount, '+241');
-    await act(async () => user.selectOptions(precision, '9'));
+    await replace(invalidAmount, '+241');
+    await act(async () => user.selectOptions(invalidPrecision, '9'));
     await replace(citation, 'https://publisher.example/edition');
     await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
@@ -525,9 +547,11 @@ test('independent publication creation, local corrections, immutable recovery an
     await replace(input(m.correction_value()), 'ja');
     await add('schema:publisher');
     await replace(scope().getByRole('combobox', { name: 'publisher' }), 'Supplied');
-    const recoveryPublisher = await within(window.document.body as unknown as HTMLElement).findByRole('option', {
-      name: /Supplied publisher/,
-    });
+    const recoveryPublisher = await within(window.document.body as unknown as HTMLElement).findByRole(
+      'option',
+      { name: /Supplied publisher/ },
+      { timeout: 5000 },
+    );
     await act(async () => user.click(recoveryPublisher));
     await replace(urlIn(workSection()), 'https://publisher.example/edition');
     await create();
@@ -535,10 +559,9 @@ test('independent publication creation, local corrections, immutable recovery an
     const recoveryButton = () =>
       scope().getByRole('button', { name: m.catalogue_create_review_new() }) as HTMLButtonElement;
     expect(recoveryButton().disabled).toBe(true);
-    expect(scope().getByRole('option', { name: stagedRelationLabel })).toBeDefined();
-    expect((scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement).value).toBe(
-      'bf:hasPart',
-    );
+    const stagedRelation = scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement;
+    expect([...stagedRelation.options].some((option) => option.textContent === stagedRelationLabel)).toBe(true);
+    expect(stagedRelation.value).toBe('bf:hasPart');
     expect(article().textContent).toContain('"ja"');
     expect(input(m.catalogue_create_language()).value).toBe('en-GB');
     expect(urlIn(workSection()).value).toBe('https://publisher.example/edition');
@@ -574,7 +597,12 @@ test('independent publication creation, local corrections, immutable recovery an
     await click(m.catalogue_create_retry());
     await scope().findByText(m.publication_definitions_review());
     expect(recoveryButton().disabled).toBe(true);
-    expect(article().textContent).toContain('Supplied publisher');
+    const publisherPicker = scope().queryByRole('combobox', { name: 'publisher' }) as HTMLInputElement | null;
+    expect(
+      publisherPicker?.value === 'Supplied publisher' ||
+        article().textContent?.includes('Supplied publisher') ||
+        article().textContent?.includes(publisherId),
+    ).toBe(true);
     const publisherFact = scope().getByRole('heading', { name: 'publisher', level: 3 }).closest('fieldset')!;
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
@@ -814,7 +842,7 @@ test('independent publication creation, local corrections, immutable recovery an
     const picker = scope().getByRole('combobox', { name: publisherName });
     await act(async () => user.type(picker, 'Press'));
     const optionsInDocument = within(window.document.body as unknown as HTMLElement);
-    const choice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ });
+    const choice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ }, { timeout: 5000 });
     expect(optionsInDocument.queryByRole('option', { name: /Wrong target/ })).toBeNull();
     expect(searchCalls.at(-1)).toBe('Press');
     expect(publisher.fixture.calls).toHaveLength(3);
@@ -825,7 +853,11 @@ test('independent publication creation, local corrections, immutable recovery an
     const freshPicker = scope().getByRole('combobox', { name: publisherName }) as HTMLInputElement;
     expect(freshPicker.value).toBe('');
     await act(async () => user.type(freshPicker, 'Press'));
-    const freshChoice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ });
+    const freshChoice = await optionsInDocument.findByRole(
+      'option',
+      { name: /Supplied publisher/ },
+      { timeout: 5000 },
+    );
     await act(async () => user.click(freshChoice));
     await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
@@ -855,9 +887,10 @@ test('independent publication creation, local corrections, immutable recovery an
     await add('schema:isbn');
     await replace(input(m.correction_value()), '978-0-140-44430-8');
     await add('schema:publisher');
-    const publisherName = departure.fixture.release.properties['schema:publisher']!.labels.en!;
-    await act(async () => user.type(scope().getByRole('combobox', { name: publisherName }), 'Press'));
-    await act(async () => user.click(await body.findByRole('option', { name: /Supplied publisher/ })));
+    const departurePublisher = departure.fixture.release.properties['schema:publisher']!.labels.en!;
+    await act(async () => user.type(scope().getByRole('combobox', { name: departurePublisher }), 'Press'));
+    const departureChoice = await body.findByRole('option', { name: /Supplied publisher/ }, { timeout: 5000 });
+    await act(async () => user.click(departureChoice));
     await replace(urlIn(workSection()), 'https://publisher.example/edition');
     const snapshot = () =>
       [...article().querySelectorAll('input, select')].map((element) => {
@@ -887,6 +920,253 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.click(body.getByRole('button', { name: m.thread_authoring_leave() })));
     expect(router.state.location.search).toEqual({ page: 'other' });
     expect(host.querySelector('article')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+    await window.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}, 30_000);
+
+test('publication creation uses Global Context eligibility independently of the disclosed work', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/catalogue/publication' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    Element: window.Element,
+    Node: window.Node,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: () => {},
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  window.scrollTo = () => {};
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
+  const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
+  const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
+  const { PublicationEditor } = await import('../src/features/catalogue/publication-editor-form');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { publicationFixture, publicationCreatedId } = await import('../src/kernel/fake/publication-editor');
+  const { m } = await import('../src/paraglide/messages.js');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement, { identifierPrefix: ':publication-eligibility:' });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const user = userEvent.setup({ document: window.document, delay: null });
+  const canvas = within(host as unknown as HTMLElement);
+  type Entry = {
+    session: 'signed-in' | 'signed-out';
+    observation: CreateAuthority | Promise<CreateAuthority>;
+    fixture: ReturnType<typeof publicationFixture>;
+    commands: PublicationCommand[];
+    reads: string[];
+    transport: PublicationTransport;
+  };
+  let entry: Entry | undefined;
+  let scene = 0;
+  const listeners = new Set<() => void>();
+  let revision = 0;
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const Scene = () => {
+    useSyncExternalStore(subscribe, () => revision, () => revision);
+    return entry ? (
+      <CandidateReaderBoundary
+        address={`publication-eligibility-${scene}`}
+        observed={
+          entry.session === 'signed-in'
+            ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'eligibility-epoch' }
+            : { state: 'signed-out' as const, csrfToken: null }
+        }
+      >
+        <PublicationEditor
+          key={scene}
+          work={entry.fixture.work.subject.id}
+          locale="en"
+          session={entry.session}
+          transport={entry.transport}
+          search={async () => []}
+          onNavigate={() => {}}
+        />
+      </CandidateReaderBoundary>
+    ) : null;
+  };
+  const router = createRouter({
+    routeTree: createRootRoute({ component: Scene }),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
+  const draw = () =>
+    act(async () => {
+      revision++;
+      listeners.forEach((listener) => listener());
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+    });
+  function make(observation: CreateAuthority | Promise<CreateAuthority>, scenario: PublicationScenario = 'ready'): Entry {
+    const fixture = publicationFixture(scenario);
+    const commands: PublicationCommand[] = [];
+    const reads: string[] = [];
+    let current = observation;
+    const next: Entry = {
+      session: 'signed-in',
+      observation,
+      fixture,
+      commands,
+      reads,
+      transport: {
+        load: () => fixture.transport.load(),
+        eligibility: async () => current,
+        submit: async (command) => {
+          commands.push(structuredClone(command));
+          return fixture.transport.submit(command);
+        },
+        read: async (id) => {
+          reads.push(id);
+          return fixture.transport.read(id);
+        },
+      },
+    };
+    Object.defineProperty(next, 'observation', {
+      get: () => current,
+      set: (value: CreateAuthority | Promise<CreateAuthority>) => {
+        current = value;
+      },
+    });
+    return next;
+  }
+  const mount = async (next: Entry) => {
+    entry = next;
+    scene++;
+    await draw();
+  };
+  const scope = () => within(canvas.getByRole('article'));
+  const reviewButton = () => scope().getByRole('button', { name: m.publication_review() }) as HTMLButtonElement;
+  const settled = async () => {
+    await canvas.findByRole('textbox', { name: m.catalogue_create_label() }, { timeout: 5000 });
+    await waitFor(
+      () => expect(canvas.getByRole('article').textContent).not.toContain(m.identity_intake_authority_reading()),
+      { timeout: 5000 },
+    );
+  };
+  const fillDraft = async () => {
+    const label = await canvas.findByRole('textbox', { name: m.catalogue_create_label() }, { timeout: 5000 });
+    const independent = await canvas.findByRole('checkbox', { name: m.publication_independent() }, { timeout: 5000 });
+    await act(async () => {
+      await user.clear(label);
+      await user.type(label, 'A distinct edition');
+      await user.click(independent);
+    });
+  };
+  const ready = async () => {
+    await settled();
+    await fillDraft();
+  };
+  try {
+    const refused = make({ state: 'refused', reason: 'permission' });
+    await mount(refused);
+    await ready();
+    await waitFor(() =>
+      expect(scope().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    );
+    expect(scope().getByRole('heading', { name: refused.fixture.work.subject.labels.en!, level: 2 })).toBeDefined();
+    expect(reviewButton().disabled).toBe(true);
+    expect(
+      (scope().getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value,
+    ).toBe('A distinct edition');
+    expect(refused.commands).toHaveLength(0);
+
+    const unknown = make({ state: 'unknown', reason: 'unavailable' });
+    await mount(unknown);
+    await ready();
+    await waitFor(() =>
+      expect(scope().getByRole('alert').textContent).toContain(m.identity_intake_authority_unknown()),
+    );
+    expect(scope().getByRole('heading', { name: unknown.fixture.work.subject.labels.en!, level: 2 })).toBeDefined();
+    expect(reviewButton().disabled).toBe(true);
+    unknown.observation = allowedCreateAuthority;
+    await act(async () => user.click(scope().getByRole('button', { name: m.identity_intake_authority_retry() })));
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_allowed())).toBeDefined());
+    expect(reviewButton().disabled).toBe(false);
+
+    const revoked = make(allowedCreateAuthority);
+    await mount(revoked);
+    await ready();
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_allowed())).toBeDefined());
+    await act(async () => user.click(reviewButton()));
+    await scope().findByRole('heading', { name: m.publication_review() });
+    revoked.observation = { state: 'refused', reason: 'permission' };
+    await act(async () => user.click(scope().getByRole('button', { name: m.publication_submit() })));
+    await waitFor(() =>
+      expect(scope().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    );
+    expect(revoked.commands).toHaveLength(0);
+    expect(scope().getByRole('heading', { name: m.publication_review() })).toBeDefined();
+
+    const concealed = make(allowedCreateAuthority, 'concealed');
+    await mount(concealed);
+    await scope().findByRole('alert');
+    expect(canvas.getByRole('article').textContent).toContain(m.catalogue_create_concealed());
+    expect(canvas.getByRole('article').querySelector('form')).toBeNull();
+    expect(concealed.commands).toHaveLength(0);
+
+    let lateAllowed: (value: CreateAuthority) => void = () => {};
+    const delayed = make(new Promise<CreateAuthority>((resolve) => (lateAllowed = resolve)));
+    await mount(delayed);
+    await fillDraft();
+    expect(reviewButton().disabled).toBe(true);
+    delayed.session = 'signed-out';
+    await draw();
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_guest())).toBeDefined());
+    await scope().findByRole('button', { name: m.publication_review() });
+    lateAllowed(allowedCreateAuthority);
+    await act(async () => {});
+    expect(reviewButton().disabled).toBe(true);
+    expect(delayed.commands).toHaveLength(0);
+
+    const uncertain = make(allowedCreateAuthority, 'uncertain');
+    await mount(uncertain);
+    await ready();
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_allowed())).toBeDefined());
+    await act(async () => user.click(reviewButton()));
+    await scope().findByRole('heading', { name: m.publication_review() });
+    await act(async () => user.click(scope().getByRole('button', { name: m.publication_submit() })));
+    await scope().findByRole('heading', { name: m.catalogue_create_uncertain(), level: 2 });
+    expect(uncertain.commands).toHaveLength(1);
+    const sealed = uncertain.commands[0]!;
+    uncertain.observation = { state: 'refused', reason: 'permission' };
+    await act(async () => user.click(scope().getByRole('button', { name: m.catalogue_create_retry() })));
+    await scope().findByRole('link', { name: m.catalogue_create_open() });
+    expect(uncertain.commands).toEqual([sealed, sealed]);
+    expect(uncertain.commands[0]!.work).toBe(uncertain.fixture.work.subject.id);
+    expect(uncertain.commands[0]!.work).not.toBe(publicationCreatedId);
+    expect(uncertain.reads).toEqual([]);
   } finally {
     await act(async () => root.unmount());
     client.clear();

@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { launchPrivateBrowser, type PrivateBrowser } from './private-browser.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll } from './lifecycle.ts';
@@ -201,6 +202,15 @@ test('the production route creates Book and Anime releases, then retries only th
   requests = (await currentRequests()).slice(start).filter(({ fixtureRequest }) => !fixtureRequest);
   expect(requests.filter(({ method, url }) => method === 'POST' && url === '/v1/subjects')).toHaveLength(1);
   expect(requests.some(({ url }) => url.startsWith('/v1/progressSessions') || url === '/v1/copies')).toBe(false);
+  const authority = requests.filter(({ method, url }) => method === 'POST' && url === '/v1/viewerActions');
+  expect(authority.length).toBeGreaterThan(0);
+  expect(
+    authority.some((call) => {
+      const body = call.body ? (JSON.parse(call.body) as { resources?: { type?: string; id?: string }[] }) : {};
+      return body.resources?.some((resource) => resource.type === 'semantic.context' && resource.id === GLOBAL_CONTEXT);
+    }),
+  ).toBe(true);
+  expect(bookEditionId).not.toBe(book.id);
 
   const movieCitation = 'https://example.org/native-film-release';
   await page.goto(`${stack.web}/en/catalogue/publication?work=${movie.id}`, { waitUntil: 'domcontentloaded' });
@@ -213,6 +223,7 @@ test('the production route creates Book and Anime releases, then retries only th
   await page.waitForURL((url) => url.pathname.includes('/subjects/'));
   const movieReleaseId = /\/subjects\/([0-9a-f-]{36})\//i.exec(new URL(page.url()).pathname)?.[1];
   expect(movieReleaseId).toBeDefined();
+  expect(movieReleaseId).not.toBe(movie.id);
   expect(await page.getByRole('heading', { name: 'Native animated release', exact: true }).isVisible()).toBe(true);
   const movieRelease = await readSubject(movieReleaseId!);
   expect(movieRelease.subject.id).toBe(movieReleaseId);
@@ -225,4 +236,99 @@ test('the production route creates Book and Anime releases, then retries only th
   expect(requests.filter(({ method, url }) => method === 'POST' && url === '/v1/subjects')).toHaveLength(2);
   const csrfHeaders = await Promise.all(serverFunctionHeaders);
   expect(csrfHeaders.some((headers) => !!headers['x-csrf-token'])).toBe(true);
+});
+
+test('publication eligibility stays independent of the disclosed work', async () => {
+  const book = await createSubject('schema:Book', 'Eligibility publication work');
+  const open = async (persona: string, workId: string) => {
+    const credential = await stack.credentials(persona);
+    if (!credential.cookie) throw new Error(`The native ${persona} has no website session cookie`);
+    const context = await browser.browser.newContext({ viewport: { width: 1280, height: 860 }, locale: 'en' });
+    const page = await context.newPage();
+    page.setDefaultTimeout(30_000);
+    const webOrigin = new URL(stack.web).origin;
+    await page.route('**/*', async (route) => {
+      if (new URL(route.request().url()).origin !== webOrigin) return route.continue();
+      return route.continue({ headers: { ...route.request().headers(), cookie: credential.cookie } });
+    });
+    await page.goto(`${stack.web}/en/catalogue/publication?work=${workId}`, { waitUntil: 'domcontentloaded' });
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
+    return { context, page };
+  };
+
+  const start = (await currentRequests()).length;
+  const guest = await open('bob', book.id);
+  await guest.page.getByRole('heading', { name: 'Eligibility publication work', exact: true }).waitFor({
+    state: 'visible',
+  });
+  await guest.page.getByText(/does not allow creating a catalogue identity/i).waitFor({ state: 'visible' });
+  expect(await guest.page.getByRole('button', { name: 'Review publication', exact: true }).isDisabled()).toBe(true);
+  await guest.page.getByRole('textbox', { name: 'Name', exact: true }).fill('Should not create');
+  expect(
+    (await currentRequests())
+      .slice(start)
+      .filter(({ fixtureRequest, method, url }) => !fixtureRequest && method === 'POST' && url === '/v1/subjects'),
+  ).toHaveLength(0);
+  await guest.context.close();
+
+  await stack.injectKernelFailureOnce({
+    method: 'POST',
+    path: '/v1/viewerActions',
+    status: 503,
+    body: '{"title":"Temporarily unavailable","status":503,"code":"dependency_unavailable"}',
+  });
+  const unknown = await open('editor', book.id);
+  await unknown.page.getByRole('heading', { name: 'Eligibility publication work', exact: true }).waitFor({
+    state: 'visible',
+  });
+  await unknown.page.getByText(/required service is unavailable/i).waitFor({ state: 'visible' });
+  await unknown.page.getByRole('button', { name: /retry creation eligibility/i }).click();
+  await unknown.page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  await unknown.context.close();
+
+  const concealed = await open('editor', '00000000-0000-4000-8000-00000000c0ff');
+  await concealed.page.getByText('This subject is not available.').waitFor({ state: 'visible' });
+  expect(await concealed.page.locator('form').count()).toBe(0);
+  await concealed.context.close();
+
+  const editor = await stack.authPersona('editor');
+  const revoked = await stack.kernel(
+    '/v1/grants:revoke',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: editor.accountId },
+        actions: ['subject:create'],
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+  expect([200, 201, 204, 409]).toContain(revoked.status);
+  const afterRevoke = await open('editor', book.id);
+  await afterRevoke.page.getByRole('heading', { name: 'Eligibility publication work', exact: true }).waitFor({
+    state: 'visible',
+  });
+  await afterRevoke.page.getByText(/does not allow creating a catalogue identity/i).waitFor({ state: 'visible' });
+  expect(await afterRevoke.page.getByRole('button', { name: 'Review publication', exact: true }).isDisabled()).toBe(
+    true,
+  );
+  await afterRevoke.context.close();
+  const restored = await stack.kernel(
+    '/v1/grants',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: editor.accountId },
+        actions: ['subject:create'],
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+  expect([200, 201, 204, 409]).toContain(restored.status);
 });
