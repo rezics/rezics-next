@@ -14,11 +14,11 @@ export const ACCOUNT_CONTEXT_LIMITS = Object.freeze({ biographyBytes: 1024, cont
 export function accountBiography(value: string | null | undefined): AccountBiography {
   if (value === undefined) return { state: 'unavailable' };
   if (!value) return { state: 'absent' };
-  let text = '', bytes = 0;
+  let text = '',
+    bytes = 0;
   for (const character of value) {
     const size = Buffer.byteLength(character);
-    if (bytes + size > ACCOUNT_CONTEXT_LIMITS.biographyBytes)
-      return { state: 'available', text, truncated: true };
+    if (bytes + size > ACCOUNT_CONTEXT_LIMITS.biographyBytes) return { state: 'available', text, truncated: true };
     text += character;
     bytes += size;
   }

@@ -11,7 +11,11 @@ import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KernelClock } from '../clock.ts';
 
-export type FollowDiscoveryTarget = Readonly<{ targetId: string; targetType: 'subject' | 'collection' | 'space'; source: string }>;
+export type FollowDiscoveryTarget = Readonly<{
+  targetId: string;
+  targetType: 'subject' | 'collection' | 'space';
+  source: string;
+}>;
 export type FollowDiscoveryRow = FollowDiscoveryTarget &
   Readonly<{
     following: boolean;

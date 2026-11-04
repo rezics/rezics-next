@@ -9,7 +9,15 @@ import { locales } from '../../paraglide/runtime.js';
 /** Uncertain responses retain FollowControl's original intent/key for exact retry.
  * The mounted host owns retirement; this control never reads a relationship itself.
  */
-export function AccountFollowControl({ row, binding, lifetime, current, locale, write, rowKey }: {
+export function AccountFollowControl({
+  row,
+  binding,
+  lifetime,
+  current,
+  locale,
+  write,
+  rowKey,
+}: {
   row: Extract<InferOutput<typeof collectionFollows>, { state: 'current' }>['rows'][number];
   binding: ExpectedReader;
   lifetime: string;
@@ -19,15 +27,25 @@ export function AccountFollowControl({ row, binding, lifetime, current, locale, 
   rowKey: string;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
-  return <div data-slot="account-follow" data-discovery-personal-row={rowKey}>
-    <FollowControl targetId={row.targetId} initial={{ state: 'ready', following: row.following }}
-      canFollow={row.actions.follow} canRemove={row.actions.unfollow} ready={current()}
-      readLifetime={lifetime} isCurrent={current}
-      write={async (input) => {
-        if (!current()) return { ok: false, reason: 'unavailable' };
-        const result = await write({ ...input, ...binding });
-        return current() ? result : { ok: false, reason: 'unavailable' };
-      }} />
-    {!row.actions.follow && !row.actions.unfollow ? <p role="status">{m.library_follow_forbidden({}, options)}</p> : null}
-  </div>;
+  return (
+    <div data-slot="account-follow" data-discovery-personal-row={rowKey}>
+      <FollowControl
+        targetId={row.targetId}
+        initial={{ state: 'ready', following: row.following }}
+        canFollow={row.actions.follow}
+        canRemove={row.actions.unfollow}
+        ready={current()}
+        readLifetime={lifetime}
+        isCurrent={current}
+        write={async (input) => {
+          if (!current()) return { ok: false, reason: 'unavailable' };
+          const result = await write({ ...input, ...binding });
+          return current() ? result : { ok: false, reason: 'unavailable' };
+        }}
+      />
+      {!row.actions.follow && !row.actions.unfollow ? (
+        <p role="status">{m.library_follow_forbidden({}, options)}</p>
+      ) : null}
+    </div>
+  );
 }

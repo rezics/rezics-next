@@ -43,8 +43,13 @@ export function admitAccountHit(value: unknown): asserts value is AccountHit {
   if (key.owner !== 'accounts' || key.kind !== 'account') unavailable();
   if (matchEvidence.state !== 'unsupported') unavailable();
   const context = summary.value.context;
-  if (context && (Buffer.byteLength(JSON.stringify(context)) > ACCOUNT_CONTEXT_LIMITS.contextBytes ||
-      (context.biography.state === 'available' && Buffer.byteLength(context.biography.text) > ACCOUNT_CONTEXT_LIMITS.biographyBytes))) unavailable();
+  if (
+    context &&
+    (Buffer.byteLength(JSON.stringify(context)) > ACCOUNT_CONTEXT_LIMITS.contextBytes ||
+      (context.biography.state === 'available' &&
+        Buffer.byteLength(context.biography.text) > ACCOUNT_CONTEXT_LIMITS.biographyBytes))
+  )
+    unavailable();
 }
 
 /** Detach all nested native values; later owner mutation cannot change the admitted response. */

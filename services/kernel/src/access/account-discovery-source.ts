@@ -378,12 +378,21 @@ export async function readAccountDiscoverySummaries(
   // No Account transaction/custody remains open during foreign owner reads.
   const mediaIds = [...new Set(initial.flatMap(({ row }) => (row.avatar ? [row.avatar] : [])))];
   const contextBindings = options.context
-    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, initial.map(({ row, handle }) => ({ ...row, handle }))))
+    ? await optionalSummaries(deps.deadline, () =>
+        readAccountContextBindings(
+          deps,
+          initial.map(({ row, handle }) => ({ ...row, handle })),
+        ),
+      )
     : new Map<string, { id: string; source: string }>();
-  const subjectIds = [...new Set(initial.flatMap(({ row }) => {
-    const target = contextBindings.get(row.id);
-    return [...(row.agent ? [row.agent] : []), ...(target ? [target.id] : [])];
-  }))];
+  const subjectIds = [
+    ...new Set(
+      initial.flatMap(({ row }) => {
+        const target = contextBindings.get(row.id);
+        return [...(row.agent ? [row.agent] : []), ...(target ? [target.id] : [])];
+      }),
+    ),
+  ];
   const avatars = mediaIds.length
     ? await optionalSummaries(deps.deadline, () =>
         withReadTransaction(deps.pool, (client) => readAvatarSummaries(client, mediaIds)),
@@ -391,12 +400,18 @@ export async function readAccountDiscoverySummaries(
     : new Map<string, AvatarSummary | null>();
   requireAccessDeadline(deps.deadline);
   const subjects = subjectIds.length
-    ? await optionalSummaries(deps.deadline, () => readSubjectSummaries(
-        { ...deps, actor: { kind: 'anonymous' } }, subjectIds, options))
+    ? await optionalSummaries(deps.deadline, () =>
+        readSubjectSummaries({ ...deps, actor: { kind: 'anonymous' } }, subjectIds, options),
+      )
     : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deps.deadline);
   const finalBindings = options.context
-    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, initial.map(({ row, handle }) => ({ ...row, handle }))))
+    ? await optionalSummaries(deps.deadline, () =>
+        readAccountContextBindings(
+          deps,
+          initial.map(({ row, handle }) => ({ ...row, handle })),
+        ),
+      )
     : contextBindings;
   // Whole candidates, not just their handle, are withheld on a fence, rename or
   // profile revision during hydration. A bad claim alone leaves a handleless hit.
@@ -412,27 +427,41 @@ export async function readAccountDiscoverySummaries(
         (row.handle === null ? null : (found.get(row.handle)?.revision ?? null)) !== before.claimRevision
       )
         continue;
-      const subject = row.agent && (!options.context ||
-        (contextBindings.get(row.id)?.id === row.agent && isDeepStrictEqual(contextBindings.get(row.id), finalBindings.get(row.id))))
-        ? subjects.get(row.agent) : null;
+      const subject =
+        row.agent &&
+        (!options.context ||
+          (contextBindings.get(row.id)?.id === row.agent &&
+            isDeepStrictEqual(contextBindings.get(row.id), finalBindings.get(row.id))))
+          ? subjects.get(row.agent)
+          : null;
       const value = summary(
-          row,
-          before.handle,
-          row.avatar ? (avatars.get(row.avatar) ?? null) : null,
-          subject?.label ? { id: subject.id, label: subject.label.value, type: subject.type } : null,
-        );
+        row,
+        before.handle,
+        row.avatar ? (avatars.get(row.avatar) ?? null) : null,
+        subject?.label ? { id: subject.id, label: subject.label.value, type: subject.type } : null,
+      );
       if (options.context) {
         const binding = contextBindings.get(row.id);
-        const target = binding && isDeepStrictEqual(binding, finalBindings.get(row.id)) ? subjects.get(binding.id) : null;
+        const target =
+          binding && isDeepStrictEqual(binding, finalBindings.get(row.id)) ? subjects.get(binding.id) : null;
         const context: AccountContext = {
           biography: before.handle === null ? { state: 'withheld' } : accountBiography(row.biography),
-          followTarget: target?.label && target.label.value.length <= 160 && target.type.length <= 256 && binding
-            ? { state: 'available', id: target.id, label: target.label.value, type: target.type, source: binding.source }
-            : { state: 'unavailable' },
+          followTarget:
+            target?.label && target.label.value.length <= 160 && target.type.length <= 256 && binding
+              ? {
+                  state: 'available',
+                  id: target.id,
+                  label: target.label.value,
+                  type: target.type,
+                  source: binding.source,
+                }
+              : { state: 'unavailable' },
         };
         // Optional oversized native labels cannot disqualify the Account itself.
-        value.context = Buffer.byteLength(JSON.stringify(context)) <= ACCOUNT_CONTEXT_LIMITS.contextBytes
-          ? context : { biography: context.biography, followTarget: { state: 'unavailable' } };
+        value.context =
+          Buffer.byteLength(JSON.stringify(context)) <= ACCOUNT_CONTEXT_LIMITS.contextBytes
+            ? context
+            : { biography: context.biography, followTarget: { state: 'unavailable' } };
       }
       result.set(row.id, value);
     }

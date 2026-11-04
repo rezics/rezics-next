@@ -426,16 +426,24 @@ export function useDiscoveryPersonalResults(input: {
     if (hit.summary.kind === 'collection' || hit.summary.kind === 'account') {
       const Control = hit.summary.kind === 'account' ? AccountFollowControl : CollectionFollowControl;
       const target = hit.summary.kind === 'account' ? hit.summary.value.context?.followTarget : undefined;
-      const expected = hit.summary.kind === 'collection'
-        ? { id: hit.key.id, type: 'collection', source: collectionFollowSource(hit.summary.value.card) }
-        : target?.state === 'available' ? { id: target.id, type: 'subject', source: target.source } : undefined;
-      const follows = value?.state.status === 'ready'
-        ? hit.summary.kind === 'account' ? value.state.page.accountFollows : value.state.page.collectionFollows : undefined;
+      const expected =
+        hit.summary.kind === 'collection'
+          ? { id: hit.key.id, type: 'collection', source: collectionFollowSource(hit.summary.value.card) }
+          : target?.state === 'available'
+            ? { id: target.id, type: 'subject', source: target.source }
+            : undefined;
+      const follows =
+        value?.state.status === 'ready'
+          ? hit.summary.kind === 'account'
+            ? value.state.page.accountFollows
+            : value.state.page.collectionFollows
+          : undefined;
       const row =
         follows?.state === 'current' && follows.accountId === value?.observation.scope.viewer
           ? follows.rows.find(
               (row) =>
-                expected && row.targetId === expected.id &&
+                expected &&
+                row.targetId === expected.id &&
                 row.targetType === expected.type &&
                 row.source === expected.source,
             )

@@ -851,22 +851,29 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
           const accountTargets = enriched.page.hits.flatMap((hit) => {
             const target = hit.summary.kind === 'account' ? hit.summary.value.context?.followTarget : undefined;
             return target?.state === 'available'
-              ? [{ targetId: target.id, targetType: 'subject' as const, source: target.source }] : [];
+              ? [{ targetId: target.id, targetType: 'subject' as const, source: target.source }]
+              : [];
           });
           const allTargets = [...targets, ...accountTargets];
-          const follows = new Set(allTargets.map((target) => target.targetId)).size === allTargets.length
-            ? await readFollowDiscovery(config, context.actor, allTargets, context.deadline)
-            : { state: 'unavailable' as const, reason: 'native' as const };
-          const collectionFollows = follows.state === 'current'
-            ? { ...follows, rows: follows.rows.filter((row) => row.targetType === 'collection') } : follows;
-          const accountFollows = follows.state === 'current'
-            ? { ...follows, rows: follows.rows.filter((row) => row.targetType === 'subject') } : follows;
+          const follows =
+            new Set(allTargets.map((target) => target.targetId)).size === allTargets.length
+              ? await readFollowDiscovery(config, context.actor, allTargets, context.deadline)
+              : { state: 'unavailable' as const, reason: 'native' as const };
+          const collectionFollows =
+            follows.state === 'current'
+              ? { ...follows, rows: follows.rows.filter((row) => row.targetType === 'collection') }
+              : follows;
+          const accountFollows =
+            follows.state === 'current'
+              ? { ...follows, rows: follows.rows.filter((row) => row.targetType === 'subject') }
+              : follows;
           // Recheck public Account context after private preparation without changing eligibility/counts.
           const accountHits = enriched.page.hits.filter((hit) => hit.summary.kind === 'account');
           if (accountHits.length) {
             const currentAccounts = await readAccountDiscoverySummaries(
               { ...config, actor: { kind: 'anonymous' }, deadline: context.deadline },
-              accountHits.map((hit) => hit.key.id), { languages, context: true },
+              accountHits.map((hit) => hit.key.id),
+              { languages, context: true },
             );
             if (accountHits.some((hit) => !isDeepStrictEqual(hit.summary.value, currentAccounts.get(hit.key.id))))
               throw new ProblemError('search_restart_required');

@@ -452,8 +452,12 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
         if (hit.key.owner !== 'accounts' || hit.key.kind !== 'account' || matchEvidence.state !== 'unsupported') return;
         if (hit.summary.value.context) {
           const context = hit.summary.value.context;
-          if (new TextEncoder().encode(JSON.stringify(context)).byteLength > 8192 ||
-              (context.biography.state === 'available' && new TextEncoder().encode(context.biography.text).byteLength > 1024)) return;
+          if (
+            new TextEncoder().encode(JSON.stringify(context)).byteLength > 8192 ||
+            (context.biography.state === 'available' &&
+              new TextEncoder().encode(context.biography.text).byteLength > 1024)
+          )
+            return;
         }
         break;
       case 'collection':
@@ -516,12 +520,22 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
   }
   if (result.accountFollows?.state === 'current') {
     const follows = result.accountFollows;
-    const targets = result.hits.flatMap((hit) => hit.summary.kind === 'account' &&
-      hit.summary.value.context?.followTarget.state === 'available' ? [hit.summary.value.context.followTarget] : []);
+    const targets = result.hits.flatMap((hit) =>
+      hit.summary.kind === 'account' && hit.summary.value.context?.followTarget.state === 'available'
+        ? [hit.summary.value.context.followTarget]
+        : [],
+    );
     const home = Number.parseInt(follows.accountId.slice(24, 28), 16);
-    if (home >>> 4 !== follows.partition || follows.rows.length !== targets.length ||
-        new Set(targets.map((target) => target.id)).size !== targets.length ||
-        follows.rows.some((row, index) => row.targetType !== 'subject' || row.targetId !== targets[index]!.id || row.source !== targets[index]!.source)) return;
+    if (
+      home >>> 4 !== follows.partition ||
+      follows.rows.length !== targets.length ||
+      new Set(targets.map((target) => target.id)).size !== targets.length ||
+      follows.rows.some(
+        (row, index) =>
+          row.targetType !== 'subject' || row.targetId !== targets[index]!.id || row.source !== targets[index]!.source,
+      )
+    )
+      return;
   }
   const spaces = result.hits.filter((hit) => hit.summary.kind === 'space');
   for (const hit of spaces) {
