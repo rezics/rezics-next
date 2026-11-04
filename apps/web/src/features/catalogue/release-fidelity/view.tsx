@@ -260,6 +260,11 @@ function ReleaseFidelityLive({
               {read.work.historical && (
                 <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
               )}
+              {read.work.completeness && (
+                <p data-slot="release-completeness" lang={read.work.completeness.label?.lang ?? undefined}>
+                  {read.work.completeness.label?.text || read.work.completeness.id}
+                </p>
+              )}
               {workHref && <PublicationEditorEntry work={read.work.id!} locale={locale} />}
             </section>
             <section className="space-y-2" data-slot="release-date">

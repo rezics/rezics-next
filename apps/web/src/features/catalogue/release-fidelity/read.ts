@@ -20,6 +20,7 @@ import {
   selectedStatements,
   statusProperty,
   unknownProvenance,
+  workCompletenessQualifier,
   WORK_PROPERTY,
   type DateReading,
   type ReleaseStream,
@@ -53,6 +54,7 @@ export type WorkIdentity = {
   label?: { text: string; lang: string | null };
   readability: 'readable' | 'concealed' | 'unreadable' | 'absent';
   historical: boolean;
+  completeness?: { id: string; label?: { text: string; lang: string | null }; historical: boolean };
 };
 
 export type ReleaseFidelityRead =
@@ -106,7 +108,22 @@ function workIdentity(read: SubjectRead, locale: string, digest: string): WorkId
   const statement = selected[0]!;
   const id = relatedTarget(statement);
   const historical = historicalStatement(statement, digest);
-  if (!id) return { readability: 'unreadable', historical };
+  const completenessPart = workCompletenessQualifier(statement);
+  const completenessId =
+    completenessPart && completenessPart.value.type === 'value' && typeof completenessPart.value.content === 'string'
+      ? completenessPart.value.content
+      : undefined;
+  const completeness =
+    completenessId === undefined
+      ? undefined
+      : {
+          id: completenessId,
+          historical,
+          ...(relatedReadable(read.related, completenessId) === 'readable'
+            ? { label: pickText(read.related[completenessId]?.labels ?? {}, locale) }
+            : {}),
+        };
+  if (!id) return { readability: 'unreadable', historical, ...(completeness ? { completeness } : {}) };
   const readability = relatedReadable(read.related, id);
   const labels = read.related[id]?.labels ?? {};
   return {
@@ -114,6 +131,7 @@ function workIdentity(read: SubjectRead, locale: string, digest: string): WorkId
     readability,
     historical,
     ...(readability === 'readable' ? { label: pickText(labels, locale) } : {}),
+    ...(completeness ? { completeness } : {}),
   };
 }
 

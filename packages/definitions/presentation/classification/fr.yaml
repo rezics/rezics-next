@@ -7,6 +7,7 @@ properties:
   skos:broader: 'a pour concept générique'
   foaf:focus: 'sujet représenté'
   schema:keywords: 'mots-clés'
+  schema:creativeWorkStatus: 'statut de l’œuvre'
   schema:genre: 'genre'
   skos:closeMatch: 'concept proche'
 inverseProperties:
@@ -16,6 +17,7 @@ inverseProperties:
   foaf:focus: 'Concepts représentant ce sujet'
   schema:genre: 'Œuvres de ce genre'
   schema:keywords: 'Sujets portant cette étiquette'
+  schema:creativeWorkStatus: 'Œuvres avec ce statut'
   skos:closeMatch: 'Concepts proches'
 typeDescriptions:
   skos:Concept: 'Un concept de classification servant de genre, mot-clé, rôle ou autre catégorie nommée ; son objet central peut renvoyer à un sujet.'
@@ -26,5 +28,6 @@ propertyDescriptions:
   skos:broader: 'Un concept plus général dans la hiérarchie, par exemple fiction au-dessus de science-fiction.'
   foaf:focus: 'Le sujet du catalogue que représente ce concept de classification.'
   schema:keywords: 'Un concept de mot-clé classant le sujet ; ni texte séparé par des virgules ni étiquette personnelle de bibliothèque.'
+  schema:creativeWorkStatus: 'Un concept de statut de développement ou de publication de cette œuvre ou de cette parution ; l’intégralité d’une parution pour une œuvre est un qualificatif de cette association.'
   schema:genre: 'Un concept de genre classant cette œuvre, comme science-fiction.'
   skos:closeMatch: 'Un autre concept au sens très proche ; ni équivalence ni élargissement automatique des filtres.'

@@ -47,6 +47,7 @@ classes:
       - productionCompany
       - screenwriter
       - voiceActor
+      - creativeWorkStatus
     annotations:
       list_presentation:
         imageAspect: portrait

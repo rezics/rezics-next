@@ -46,7 +46,6 @@ import {
 
 /** Reuses the existing bulk/governance authority. It grants no native ballot or public fence access. */
 export const SOURCE_CLASSIFICATION_WRITE_ACTION = 'source_statistic:write';
-const root = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
 export type SourceClassificationConfig = {
   pool: Pool;
   access: Access;
@@ -197,7 +196,7 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       config.access,
       input.actor,
       SOURCE_CLASSIFICATION_WRITE_ACTION,
-      root,
+      { route: 0, id: GLOBAL_CONTEXT },
       { pool: config.pool, deadline: input.deadline },
       () => new GrantDeniedError(),
     );
