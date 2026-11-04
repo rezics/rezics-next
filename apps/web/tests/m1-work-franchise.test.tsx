@@ -1,13 +1,16 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SubjectRead } from '@rezics/client';
-import { SubjectPage, type SubjectPageData } from '../src/features/pages/subject';
+import type { SubjectPageData } from '../src/features/pages/subject';
 import type { PageMessages } from '../src/features/pages/data';
 import type { RelationDefinition } from '../src/subject/relations';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { SubjectPage } = await import('../src/features/pages/subject');
 
 const property = 'wdt:P144';
 const context = '00000000-0000-8000-8000-000000000000';

@@ -32,7 +32,7 @@ test('literary work identity keeps multilingual names, and only exact editions l
     { language: 'en', text: 'The harbour' },
     { language: 'ja', text: '港' },
   ]);
-  expect(markup).toContain('lang="ja">港');
+  expect(markup).toMatch(/<li lang="ja"[^>]*>港<\/li>/);
   expect(markup).toContain('Harbour stories');
   expect(markup).toContain('publication facts stay with the exact edition');
   expect(markup).not.toContain(subject.id);
