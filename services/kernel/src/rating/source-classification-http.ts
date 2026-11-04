@@ -89,3 +89,5 @@ export type SourceClassificationBatchInput = Static<typeof SourceClassificationB
 export type SourceClassificationPutInput = Static<typeof SourceClassificationPutInputSchema>;
 export type SourceClassificationClearInput = Static<typeof SourceClassificationClearInputSchema>;
 export type SourceClassificationBatch = Static<typeof SourceClassificationBatchSchema>;
+export type SourceClassificationPutResult = Static<typeof SourceClassificationPutSchema>;
+export type SourceClassificationClearResult = Static<typeof SourceClassificationClearResultSchema>;

@@ -5,6 +5,13 @@ import {
   type ClassificationAssociation,
 } from '../../src/rating/source-classification-contract.ts';
 import { admitClassificationObservation } from '../../src/rating/source-classification.ts';
+import { Compile } from 'typebox/compile';
+import {
+  SourceClassificationPutInputSchema,
+  SourceClassificationClearInputSchema,
+  SourceClassificationPutSchema,
+  SourceClassificationClearResultSchema,
+} from '../../src/rating/source-classification-http.ts';
 
 const association: ClassificationAssociation = {
   subjectId: '00000000-0000-8000-8000-000000000001',
@@ -13,7 +20,7 @@ const association: ClassificationAssociation = {
   targetId: '00000000-0000-8000-8000-000000000003',
   property: 'wdt:P136',
   revision: 1,
-  release: 'a'.repeat(64),
+  release: `sha256:${'a'.repeat(64)}`,
   qualifiersDigest: 'b'.repeat(64),
 };
 const value = {
@@ -60,4 +67,25 @@ test('immutable replay, explicit CAS, stale and rebound observations use indepen
     cleared: true,
   });
   expect(() => admitClassificationObservation(first, cleared, cleared.digest)).toThrow();
+});
+
+test('mounted commands retain canonical release identities, exact CAS and both source mutation states', () => {
+  const put = Compile(SourceClassificationPutInputSchema);
+  const clear = Compile(SourceClassificationClearInputSchema);
+  const input = { association, value, expectedObservation: null };
+  expect(put.Check(input)).toBe(true);
+  expect(put.Check({ ...input, association: { ...association, release: 'a'.repeat(64) } })).toBe(false);
+  for (const expectedObservation of ['', 'a'.repeat(63), 'a'.repeat(65), undefined])
+    expect(put.Check({ ...input, expectedObservation })).toBe(false);
+  expect(put.Check({ ...input, expectedObservation: 'a'.repeat(64) })).toBe(true);
+  const observation = classificationObservation(association, { ...value, confidenceCount: 0, lieCount: 0 });
+  expect(observation.payload).toMatchObject({ confidenceCount: 0, lieCount: 0, lie: false });
+  const cleared = { sourceAlias: 'vndb', sourceRecordId: 'v17', sourceAssociationId: 'g123', asOf: value.asOf, cleared: true };
+  expect(clear.Check({ ...input, value: cleared })).toBe(true);
+  const mutation = Compile(SourceClassificationClearResultSchema);
+  const states = SourceClassificationPutSchema.properties.state;
+  for (const state of ['published', 'cleared']) {
+    expect(mutation.Check({ state, observationDigest: observation.digest })).toBe(true);
+    expect(Compile(states).Check(state)).toBe(true);
+  }
 });

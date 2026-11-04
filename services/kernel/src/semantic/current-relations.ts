@@ -87,6 +87,7 @@ export async function currentRelationFacts(
   client: PoolClient,
   routeKey: Uint8Array | undefined,
   candidates: readonly CurrentRelationCandidate[],
+  options: { sourceFences?: 'caller' } = {},
 ): Promise<Map<string, FactRow>> {
   if (candidates.length > 500) throw new RangeError('Current relation checks accept at most 500 candidates');
   const facts = new Map<string, FactRow>();
@@ -223,6 +224,10 @@ export async function currentRelationFacts(
     const key = currentRelationKey(entry.candidate);
     if (hidden.has(`${entry.candidate.subject}\n${entry.candidate.candidate}`)) facts.delete(key);
   }
+
+  // A supplied-key caller may resolve provenance and fences on independently released source homes.
+  // It must withhold these facts until both provenance and current fences have been verified.
+  if (options.sourceFences === 'caller') return facts;
 
   const matched = valid.flatMap((entry) => {
     const fact = facts.get(currentRelationKey(entry.candidate));

@@ -24,13 +24,15 @@ import {
   type ClassificationObservation,
   type ClassificationClear,
   type ImmutableClassificationObservation,
-  type SourceClassificationFigure,
   type SourceClassificationRead,
 } from './source-classification-contract.ts';
 import {
   createClassificationAssociationReader,
   type ClassificationAssociationResolution,
 } from './source-classification-semantic.ts';
+import { readItemIdentityVersion } from '../semantic/item-identity.ts';
+import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { classificationEvidence, classificationProvenanceMatches, currentClassificationRead } from './source-classification-read.ts';
 import lockSubject from './source-provider-lock.sql';
 import {
   lockClassificationHead,
@@ -78,56 +80,9 @@ export function admitClassificationObservation(
   if (current && next.payload.asOf < current.payload.asOf) throw new ProblemError('conflict');
   return 'changed';
 }
-function available(value: ClassificationAssociationResolution | undefined) {
-  return value?.state === 'available' ? value.evidence : null;
-}
-function provenanceMatches(resolution: ClassificationAssociationResolution | undefined, value: ClassificationPayload) {
-  const evidence = available(resolution);
-  if (!evidence) return false;
-  return (
-    !evidence.source ||
-    (evidence.source.source === value.sourceAlias &&
-      evidence.source.external_id === value.sourceRecordId &&
-      evidence.source.field_group === 'facts')
-  );
-}
-function sameFence(a: SourceFence | undefined, b: SourceFence | undefined) {
-  return !!a && !!b && !a.takenDown && !b.takenDown && a.securityRevision === b.securityRevision;
-}
 function tupleKey(tuple: SourceFenceTuple) {
   return JSON.stringify([tuple.route, tuple.source, tuple.external_id, tuple.field_group]);
 }
-function toFigure(
-  association: ClassificationAssociation,
-  observation: ImmutableClassificationObservation,
-  now: Date,
-): SourceClassificationFigure | null {
-  const payload = observation.payload;
-  if ('cleared' in payload) return null;
-  return {
-    provider: 'vndb',
-    association,
-    observation: { digest: observation.digest, sourceVersion: payload.sourceVersion },
-    sourceAlias: payload.sourceAlias,
-    sourceRecordId: payload.sourceRecordId,
-    sourceAssociationId: payload.sourceAssociationId,
-    confidence:
-      payload.confidence === undefined
-        ? { state: 'unavailable', reason: 'not_supplied' }
-        : { state: 'available', value: payload.confidence, unit: 'vndb-tag-rating', minExclusive: 0, max: 3 },
-    lie:
-      payload.lie === undefined
-        ? { state: 'unavailable', reason: 'not_supplied' }
-        : { state: 'available', value: payload.lie, unit: 'boolean' },
-    ...(payload.confidenceCount === undefined ? {} : { confidenceCount: payload.confidenceCount }),
-    ...(payload.lieCount === undefined ? {} : { lieCount: payload.lieCount }),
-    asOf: payload.asOf,
-    ageSeconds: Math.max(0, Math.floor((now.getTime() - Date.parse(payload.asOf)) / 1000)),
-    attribution: payload.attribution,
-    licence: payload.licence,
-  };
-}
-
 /** The producer consumes admitted aggregate observations. It never fetches a provider,
  * creates an external voter, or reads/writes native ballot or enjoyment tables.
  */
@@ -193,33 +148,27 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       const keys = associations.map(classificationAssociationKey);
       const before = await observe(input.actor, associations, input.deadline);
       // Denied/unknown keys are never used to probe a retained observation slot.
-      const permitted = [...new Set(keys.filter((key) => available(before.get(key))))];
+      const permitted = [...new Set(keys.filter((key) => classificationEvidence(before.get(key))))];
       const first = await heads(input.subjectId, permitted, input.deadline);
       const tuples = [...first.values()].flatMap((head) => ('cleared' in head.payload ? [] : [tuple(head.payload)]));
       const fenceBefore = await fences(tuples, input.deadline);
       const now = config.clock?.() ?? new Date();
-      const figures = associations.map((a, index) => {
-        const head = first.get(keys[index]!);
-        return head ? toFigure(a, head, now) : null;
-      });
       const after = await observe(input.actor, associations, input.deadline);
       const last = await heads(input.subjectId, permitted, input.deadline);
       const fenceAfter = await fences(tuples, input.deadline);
       return keys.map((key, index): SourceClassificationRead => {
-        const start = before.get(key),
-          end = after.get(key);
-        if (start?.state !== 'available') return start ?? { state: 'unavailable', reason: 'authority_unavailable' };
-        if (end?.state !== 'available') return end ?? { state: 'unavailable', reason: 'authority_unavailable' };
-        if (start.evidence.stamp !== end.evidence.stamp) return { state: 'unavailable', reason: 'changed' };
         const head = first.get(key);
-        if (!head || 'cleared' in head.payload) return { state: 'unavailable', reason: 'not_observed' };
-        if (head.digest !== last.get(key)?.digest) return { state: 'unavailable', reason: 'changed' };
-        if (!provenanceMatches(start, head.payload) || !provenanceMatches(end, head.payload))
-          return { state: 'unavailable', reason: 'provenance_unavailable' };
-        const fenceKey = tupleKey(tuple(head.payload));
-        if (!sameFence(fenceBefore.get(fenceKey), fenceAfter.get(fenceKey)))
-          return { state: 'unavailable', reason: 'not_found' };
-        return { state: 'available', value: figures[index]! };
+        const fenceKey = head && !('cleared' in head.payload) ? tupleKey(tuple(head.payload)) : null;
+        return currentClassificationRead({
+          association: associations[index]!,
+          before: before.get(key),
+          after: after.get(key),
+          first: head,
+          last: last.get(key),
+          fenceBefore: fenceKey ? fenceBefore.get(fenceKey) : undefined,
+          fenceAfter: fenceKey ? fenceAfter.get(fenceKey) : undefined,
+          now,
+        });
       });
     });
   }
@@ -256,21 +205,30 @@ export function createSourceClassificationProducer(config: SourceClassificationC
       denied: writer.denied,
       async prepare(attempt) {
         const writerEvidence = await writer.prepare?.(attempt);
-        if (cleared) return { writerEvidence };
+        const subjectIdentity = await identityEpochStore.readMapping(config.pool, association.subjectId);
+        if (cleared) return { writerEvidence, subjectIdentity };
         const semantic = (await observe(input.actor, [association], input.deadline)).get(key);
         const fence = (await fences([tuple(next.payload)], input.deadline)).get(tupleKey(tuple(next.payload)));
-        return { writerEvidence, semantic, fence };
+        return { writerEvidence, subjectIdentity, semantic, fence };
       },
       async authorize(tx, attempt, evidence) {
         const prepared = evidence as {
           writerEvidence: unknown;
+          subjectIdentity: Awaited<ReturnType<typeof identityEpochStore.readMapping>>;
           semantic?: ClassificationAssociationResolution;
           fence?: SourceFence;
         };
         const mode = await writer.authorize(tx, attempt, prepared.writerEvidence);
+        if (prepared.subjectIdentity.state !== 'mapped' || prepared.subjectIdentity.terminal !== association.subjectId)
+          throw new ProblemError('not_found');
+        // Subject custody and redirect checks also precede receipt recovery, including clear replays.
+        if (!(await lockSubject.run(tx, { route, subject_id: association.subjectId })))
+          throw new ProblemError('not_found');
+        const identity = await readItemIdentityVersion(tx, association.subjectId);
+        if (!identity || identity.redirect !== null) throw new ProblemError('not_found');
         if (
           !cleared &&
-          (!provenanceMatches(prepared.semantic, next.payload) || !prepared.fence || prepared.fence.takenDown)
+          (!classificationProvenanceMatches(prepared.semantic, next.payload) || !prepared.fence || prepared.fence.takenDown)
         )
           throw new ProblemError('not_found');
         return mode;
@@ -295,8 +253,6 @@ export function createSourceClassificationProducer(config: SourceClassificationC
         },
       },
       async (tx, command) => {
-        if (!(await lockSubject.run(tx, { route, subject_id: association.subjectId })))
-          throw new ProblemError('not_found');
         const address = { route, subjectId: association.subjectId, key };
         const current = await lockClassificationHead(tx, address);
         const value: SourceClassificationMutation = {

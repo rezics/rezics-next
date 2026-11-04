@@ -1604,6 +1604,15 @@ candidate selection. It uses the public statement audience and independently che
 release/provenance authority cannot produce an available figure. A replacement, different revision, changed
 qualifiers or Context uses a different slot; old figures remain attached to their original identity.
 
+The release identity uses Semantic's `sha256:` prefix followed by 64 hexadecimal characters; observation and
+qualifier digests remain unprefixed. The adapter requests caller-owned source-fence resolution from Semantic,
+then verifies candidate provenance against the observed record and independently anchored facts fences. Passing
+an absent route key to Semantic's ordinary source-filtering mode would discard imported candidates before this
+verification. Deprecated display candidates are not current associations.
+
+Decision: treat a selected Subject or target identity revision change during hydration as `changed`; retain the
+VNDB confidence domain (0, 3], allowing zero only for explicitly supplied counts.
+
 The immutable observation identity is SHA-256 of canonical JSON
 `["vndb-classification-observation.v1", association, payload]`. The payload includes exact source alias, record,
 association member, indicators, supplied counts, millisecond UTC `asOf`, attribution, licence and either an explicit
@@ -1613,6 +1622,8 @@ Only admitted fields are accepted. `classificationObservation` lets Imports comp
 
 Both commands require explicit `expectedObservation` (`null` for no head) and an idempotency key. Current native
 `source_statistic:write` Global authority is checked before every receipt lookup, including exact replay and retry.
+The command also prepares the current Subject identity mapping and locks and checks the Subject's nonredirected
+identity before receipt lookup. This applies to clear without requiring public association or Context disclosure.
 Every changed payload requires matching CAS. Older observations conflict even with matching CAS; a different
 equal-time observation or source rebinding requires the current digest. An identical immutable payload is already
 satisfied. Clear retains a tombstone, preventing delayed observations from resurrecting a slot. A clear cannot
@@ -1627,6 +1638,8 @@ no command holds a foreign checkout or writes a foreign partition. DTOs label pr
 source version, units, as-of, age and unavailable indicators. Unknown and concealed associations both return
 `{state: "unavailable", reason: "not_found"}`; absence of a current observation uses `not_observed`. Typed missing
 provenance/authority and changed-observation states carry no retained source payload.
+Missing and cleared heads participate in final head equality too: a concurrent first publication or replacement
+of a tombstone returns `changed`, rather than a stale `not_observed` result.
 
 Lifecycle visibility is checked on every read and publication/replay, rather than copied into another projection.
 The existing default worker already registers the Rating event catalogue, including
@@ -1639,7 +1652,8 @@ bounded repair operation. An association never migrates by Subject merge, label 
 - Touches: `readExact` delegates to the supplied batch with one key: two Semantic observation passes, two anchored
   Rating head reads, and two anchored facts-fence passes for a nonempty published slot. Each Semantic pass includes
   distinct holder/target `resolveSubject`, one `readContext`, one `readRelease`, `currentRelationFacts` and a separate
-  `candidateSources` probe. Missing authority suppresses slot lookup; cleared/empty slots suppress fence reads.
+  `candidateSources` probe, plus a supplied identity-mapping batch and an anchored item identity version for each
+  distinct holder/target. Missing authority suppresses slot lookup; cleared/empty slots suppress fence reads.
 - Bound: one supplied association, two head and observation primary-key probes per pass, at most one tuple per fence
   pass. The explicit lateral `LIMIT 1` paths bind the entire Rating primary key before reading payload bytes; each
   stored payload is capped at 8192 bytes. Nested Semantic/Access work retains its owners' bounds, including selected
@@ -1651,7 +1665,8 @@ bounded repair operation. An association never migrates by Subject merge, label 
 
 - Touches: for N supplied keys, two Semantic passes over at most N Context/holder groups, N+1 distinct holder/target
   identities, N distinct releases and N Contexts; two Rating reads each return at most N heads/observations. Each
-  fence pass deduplicates at most N tuples and issues one exact query and anchor per participating partition.
+  Semantic pass additionally batches identity mappings and reads at most N+1 anchored item identity versions.
+  Each fence pass deduplicates at most N tuples and issues one exact query and anchor per participating partition.
 - Bound: N <= explicit limit <= 32. No refill, Subject classification inventory, vote query or source-history survey.
   Rating examines at most N selected heads and N selected observations per pass, with logarithmic B-tree positioning.
   Bytes include up to N capped payloads plus bounded association keys. Whole-operation costs additionally include
@@ -1663,7 +1678,8 @@ bounded repair operation. An association never migrates by Subject merge, label 
 ### Put observation Cost
 
 - Touches: each Core attempt prepares native writer authority, one Semantic exact observation and one anchored tuple
-  fence before receipt lookup; it locks one Subject and one source slot, reads one current observation, inserts at
+  fence and current Subject identity mapping before receipt lookup; authorization locks one Subject and reads its
+  item identity version even on replay. The body locks one source slot, reads one current observation, inserts at
   most one immutable observation, updates one head and emits one registered event/receipt. Replay skips mutations.
   After commit, exact-association disclosure runs the read operation above and compares the committed digest.
 - Bound: one exact association/slot, payload <=8192 stored bytes, and one immutable insert per changed attempt.
@@ -1676,6 +1692,7 @@ bounded repair operation. An association never migrates by Subject merge, label 
 
 - Touches: current native Global writer authority before receipt lookup, one locked Subject, one exact locked slot
   and current observation, at most one immutable tombstone insert, one head update, one registered event and receipt.
+  Preparation reads the Subject identity mapping; authorization reads its item identity version before replay.
   Replay and identical tombstones add no new observation/event. There are no public Semantic or tuple-fence reads.
 - Bound: one retained exact key per attempt; no candidate inventory, provider fetch, ballot touch or repair scan.
   Primary-key probes retain logarithmic positioning as unrelated histories grow; existing Core retries multiply
@@ -1694,6 +1711,12 @@ Semantic association. Ordinary Kana association payloads do not imply counts or 
 Decision: use the existing Subject `:id` resource path with explicit `:read`, `:put` and `:clear` methods for
 supplied-association reads and immutable CAS commands. Imports consumes them through the generated Eden client;
 official client declaration emit for these routes stays on the compiler database.
+
+Root client methods and DTO aliases derive only from the actual mounted declarations. When those declarations
+lack the transport, its DTO aliases are `never` and the root client exposes no classification methods; the retained
+provisional declaration is not an installed delivery. The sole declaration publisher must emit the mounted route
+before Imports can receive official types. Source-side `SourceClassificationPutResult` and
+`SourceClassificationClearResult` derive from the response schemas, preserving `published | cleared` for both.
 
 `POST /v1/subjects/:id/source-classifications:read` takes `{ associations: [...] }` (zero through 32).
 `SourceClassificationBatchInput` and `SourceClassificationBatch` are exported from `rating/register.ts`.
@@ -1752,6 +1775,13 @@ for retry. These source observations remain separate from community classificati
   clear a retained slot after concealment. No retained payload is returned by this route.
 - Growth check: focused mounted tests clear an observation and verify anonymous reads cannot resurrect it.
   Native growth and current-authority race injection remain continuation work.
+
+The continuing imported-observation journey retains independent native 256/1024/4096 growth, strict physical-prefix
+plans and all-pool bytes/controls/runner charging. In particular, Semantic's expanded slot selection, retained
+history, identity authority and cold/composed release loading need whole-operation bounds; the supplied-key cap
+alone does not prove them. Current source-fence and identity preparation is released before command acquisition;
+final publication/read disclosure remains separate from a commit-held foreign authority witness. Native race and
+unknown-delivery outcomes, actual declaration publication and Imports/Web receiving remain integration obligations.
 
 ## Classification assessments
 

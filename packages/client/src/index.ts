@@ -298,8 +298,22 @@ type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
 };
 
 type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
-type SubjectPath = ReturnType<SubjectsClient>;
-type SourceClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
+
+// These aliases become usable only when the mounted declaration publisher installs the actual methods.
+// No hand-maintained transport supplies a missing mounted route.
+type ClassificationMethod<Verb extends string> = SubjectRoutes extends {
+  ':id': { 'source-classifications': infer Methods };
+}
+  ? Methods extends Record<Verb, { post: infer Method }> ? Method : never
+  : never;
+type MethodBody<Method> = Method extends { body: infer Body } ? Body : never;
+type MethodResult<Method> = Method extends { response: { 200: infer Result } } ? Result : never;
+export type SourceClassificationBatchInput = MethodBody<ClassificationMethod<'$read'>>;
+export type SourceClassificationBatch = MethodResult<ClassificationMethod<'$read'>>;
+export type SourceClassificationPutInput = MethodBody<ClassificationMethod<'$put'>>;
+export type SourceClassificationPutResult = MethodResult<ClassificationMethod<'$put'>>;
+export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$clear'>>;
+export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
 export type KernelClient = Omit<
   GeneratedKernelClient,
@@ -326,10 +340,7 @@ type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;
 export type NoticeInboxPage = NonNullable<NoticeInboxRead['data']>;
 export type NoticeInboxItem = NoticeInboxPage['items'][number];
 export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
-export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
-  ((...args: Parameters<SubjectsClient>) => SubjectPath & {
-    'source-classifications': SourceClassificationsClient;
-  });
+export type KernelSubjectsClient = SubjectsClient;
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 
 type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];

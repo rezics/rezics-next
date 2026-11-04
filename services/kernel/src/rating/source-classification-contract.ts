@@ -25,7 +25,7 @@ export const ClassificationAssociationSchema = Type.Object(
     targetId: uuid,
     property: text(256),
     revision: Type.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-    release: digest,
+    release: Type.String({ pattern: '^sha256:[0-9a-f]{64}$' }),
     qualifiersDigest: digest,
   },
   closed,
@@ -111,6 +111,8 @@ export function classificationObservation(
   else validateClassificationObservation(payload);
   // Copy through canonical JSON: the retained identity cannot be mutated by the caller while awaiting IO.
   const frozen = JSON.parse(canonicalize(payload)!) as ClassificationPayload;
+  if (Buffer.byteLength(canonicalize([association, frozen])!) > 8192)
+    throw new TypeError('Classification observation exceeds byte limit');
   return { digest: classificationDigest(['vndb-classification-observation.v1', association, frozen]), payload: frozen };
 }
 

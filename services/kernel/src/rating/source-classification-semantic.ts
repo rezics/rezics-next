@@ -9,9 +9,13 @@ import { candidateSources } from '../semantic/fences.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { withPublicStatementReader } from '../semantic/statement-disclosure.ts';
+import { readItemIdentityVersion } from '../semantic/item-identity.ts';
+import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
 import {
   classificationAssociationKey,
   classificationDigest,
+  classificationQualifiersDigest,
+  MAX_SOURCE_CLASSIFICATION_BATCH,
   type ClassificationAssociation,
   type ClassificationUnavailableReason,
 } from './source-classification-contract.ts';
@@ -32,12 +36,23 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
     associations: readonly ClassificationAssociation[],
     deadline: number,
   ): Promise<Map<string, ClassificationAssociationResolution>> => {
+    if (associations.length > MAX_SOURCE_CLASSIFICATION_BATCH)
+      throw new RangeError('Classification admission accepts at most 32 associations');
     const result = new Map<string, ClassificationAssociationResolution>();
+    if (!associations.length) return result;
     const context = { pool: config.pool, deadline };
-    const subjects = new Map<string, boolean>();
-    for (const id of new Set(associations.flatMap((a) => [a.subjectId, a.targetId]))) {
+    const ids = [...new Set(associations.flatMap((a) => [a.subjectId, a.targetId]))];
+    const mappings = await identityEpochStore.readMappings(config.pool, ids);
+    const subjects = new Map<string, unknown>();
+    for (const [index, id] of ids.entries()) {
       const current = await resolveSubject(config, actor, id, undefined, context);
-      subjects.set(id, current?.subjectId === id);
+      const mapping = mappings[index];
+      if (current?.subjectId !== id || mapping?.state !== 'mapped' || mapping.terminal !== id) continue;
+      const version = await withReadTransaction(config.pool, async (client) => {
+        await partitionReadClient(client, partitionOf(routeOf(id)!));
+        return readItemIdentityVersion(client, id);
+      }, deadline);
+      if (version && version.redirect === null) subjects.set(id, { mapping, version });
     }
     const contexts = new Map<string, Awaited<ReturnType<typeof readContext>>>();
     for (const id of new Set(associations.map((a) => a.contextId))) {
@@ -98,7 +113,7 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
           async (client) => {
             await partitionReadClient(client, partitionOf(route));
             // Tuple fences are read later on independently released source homes.
-            const facts = await currentRelationFacts(client, undefined, selected);
+            const facts = await currentRelationFacts(client, undefined, selected, { sourceFences: 'caller' });
             const sources = await candidateSources(
               client,
               group.map((a) => ({
@@ -117,11 +132,16 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
         const key = classificationAssociationKey(a);
         const fact = snapshot.facts.get(currentRelationKey(selected[index]!));
         if (!fact || fact.fact_revision !== a.revision || fact.fact_release !== a.release) continue;
-        const body = fact.body as { value?: { type?: string; content?: unknown }; qualifiers?: unknown[] };
+        const body = fact.body as {
+          rank?: string;
+          value?: { type?: string; content?: unknown };
+          qualifiers?: { property: string | { id: string }; value: unknown }[];
+        };
         if (
+          body.rank === 'deprecated' ||
           body.value?.type !== 'value' ||
           body.value.content !== a.targetId ||
-          classificationDigest(body.qualifiers ?? []) !== a.qualifiersDigest
+          classificationQualifiersDigest(body.qualifiers ?? []) !== a.qualifiersDigest
         )
           continue;
         const sourceKey = `${a.subjectId}\n${a.candidateId}`;
@@ -137,7 +157,7 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
         result.set(key, {
           state: 'available',
           evidence: {
-            stamp: classificationDigest([a, fact, source, defaults]),
+            stamp: classificationDigest([a, fact, source, defaults, subjects.get(a.subjectId), subjects.get(a.targetId)]),
             source: source && 'field_group' in source ? source : null,
           },
         });
