@@ -1,5 +1,4 @@
 import type { Database } from 'bun:sqlite';
-import { isDeepStrictEqual } from 'node:util';
 import type { BatchCommand, BatchStatement, BatchWriteRequest, Source } from '@rezics/definitions/bulk';
 import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
 import {
@@ -453,7 +452,7 @@ export async function inspectReviewedBangumiBinding(
         );
         if (
           selected.length !== 1 ||
-          !isDeepStrictEqual(selected[0]!.statement, expected) ||
+          !sameJson(selected[0]!.statement, expected) ||
           currentCandidates.some((c) => c.id !== selected[0]!.id && c.rank !== null) ||
           !items[seed.key]!.statements[fact.property]?.some((s) => s.id === selected[0]!.id)
         )
@@ -472,7 +471,7 @@ export async function inspectReviewedBangumiBinding(
           command.key !== owned.key ||
           command.subject !== subjects[seed.key] ||
           !currentSource(command.source, seed) ||
-          !isDeepStrictEqual(command.statement, expected)
+          !sameJson(command.statement, expected)
         )
           return { state: 'withdrawn' };
         let entry = vocabulary.get(seed.key);
