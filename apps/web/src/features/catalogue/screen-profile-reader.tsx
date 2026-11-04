@@ -284,6 +284,7 @@ export function ScreenProfileOverview({
     query.fetchStatus,
     query.failureCount,
   ]);
+  const directReturn = screenEpisodeReturn(location.searchStr, locale);
   const episodeVisit = useScreenEpisodeVisit({
     sourceKey: episodeSourceKey,
     pageKey,
@@ -294,7 +295,7 @@ export function ScreenProfileOverview({
     ...(episodeRead ? { read: episodeRead } : {}),
     loading: query.isPending || query.isFetching,
     settledKey,
-    directReturn: screenEpisodeReturn(location.searchStr, locale),
+    ...(directReturn ? { directReturn } : {}),
   });
   return (
     <ScreenProfileReader
