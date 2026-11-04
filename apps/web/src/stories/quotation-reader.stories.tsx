@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, within, userEvent } from 'storybook/test';
 import { useMemo } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { SubjectRead } from '@rezics/client';
@@ -11,7 +11,7 @@ import recordedSubject from '../kernel/recorded/subject.json';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-type State = 'sourced' | 'withheld' | 'unsupported';
+type State = 'sourced' | 'withheld' | 'unsupported' | 'later' | 'recovery' | 'stale';
 const quoteId = '00000000-0000-4000-8000-000000000921';
 const textStatementId = '00000000-0000-4000-8000-000000000922';
 const speakerId = '00000000-0000-4000-8000-000000000923';
@@ -113,7 +113,7 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
 
 function Example({ state = 'sourced' }: { state?: State }) {
   const locale = getLocale();
-  const initial = useMemo(() => quotationFixture(state), [state]);
+  const initial = useMemo<QuotationRead>(() => state === 'recovery' ? { ok: false, reason: 'unavailable' } : state === 'stale' ? { ok: false, reason: 'stale' } : { ...quotationFixture(state), next: state === 'later' ? 'fixture-page-two' : null }, [state]);
   const client = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
   const returnTo = `/${locale}/subjects/work/steins-gate/relations`;
   return (
@@ -125,7 +125,7 @@ function Example({ state = 'sourced' }: { state?: State }) {
               id={initial.public.subject.id}
               locale={locale}
               returnTo={returnTo}
-              transport={{ read: async () => initial }}
+              transport={{ read: async () => quotationFixture('sourced') }}
               initial={initial}
             />
           </main>
@@ -171,5 +171,33 @@ export const DefinitionUnavailable: Story = {
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByText(m.quotation_unsupported())).toBeTruthy();
     await expect(canvas.getByRole('link', { name: m.quotation_facts() })).toBeTruthy();
+  },
+};
+
+export const LaterPageSelection: Story = {
+  args: { state: 'later' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.quotation_more() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.quotation_open({ number: 1 }) }));
+    await expect(canvas.getByText('I will return. The source and the speaker remain distinct.')).toBeTruthy();
+  },
+};
+export const ExplicitFailureRecovery: Story = {
+  args: { state: 'recovery' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: m.quotation_return() })).toBeTruthy();
+    await userEvent.click(canvas.getByRole('button', { name: m.quotation_retry() }));
+    await expect(await canvas.findByText('I will return. The source and the speaker remain distinct.')).toBeTruthy();
+  },
+};
+export const StaleReturn: Story = {
+  args: { state: 'stale' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(m.quotation_stale())).toBeTruthy();
+    await userEvent.click(canvas.getByRole('button', { name: m.quotation_restart() }));
+    await expect(await canvas.findByText('I will return. The source and the speaker remain distinct.')).toBeTruthy();
   },
 };

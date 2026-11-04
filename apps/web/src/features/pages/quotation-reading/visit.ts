@@ -139,7 +139,7 @@ export function useQuotationVisit(props: {
     if (visit.phase === 'loading' || !ticket || ticket.owner !== visit.observation) return;
     focus.current = undefined; // Consumed even if focus moved; blur cannot re-arm this ticket.
     if (work.active() && mounted.current && visit.result?.ok && visit.result.selected &&
-      document.activeElement === ticket.element) selectedRef.current?.focus();
+      (document.activeElement === ticket.element || (!ticket.element?.isConnected && document.activeElement === document.body))) selectedRef.current?.focus();
   }, [visit, work]);
 
   const read: Success | undefined = visit.phase === 'ready' && visit.result?.ok ? visit.result : undefined;
@@ -161,6 +161,10 @@ export function useQuotationVisit(props: {
       current: () => store.getSnapshot() === observed };
     // Departure retires every pending focus ticket without changing the admitted page.
     focus.current = undefined;
+    if (router && event.type === 'click' && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      void router.navigate({ href: link.getAttribute('href')! });
+    }
   }
 
   return {
