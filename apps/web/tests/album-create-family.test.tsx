@@ -50,6 +50,7 @@ test('Album creation composes complete terms and initial facts while preserving 
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { AlbumProfile } = await import('../src/features/catalogue/album-profile-view');
   const { AlbumProfileCreate } = await import('../src/features/catalogue/album-profile-create');
+    const { allowedCreateAuthority } = await import('../src/features/catalogue/identity-intake');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { albumFixture, albumId, artistId, roleId, seriesId, partId } =
     await import('../src/kernel/fake/catalogue-album-profile');
@@ -850,14 +851,14 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(host.querySelector('form')).not.toBeNull();
 
     const admission = albumFixture('uncertain');
-    const admissionGate = deferred<{ state: 'allowed' }>();
+    const admissionGate = deferred<typeof allowedCreateAuthority>();
     let admissionReads = 0;
     const obsoleteCommands: Parameters<typeof admission.transport.create>[0][] = [];
     const obsoleteTransport = {
       ...admission.transport,
       eligibility: async () => {
         admissionReads++;
-        return admissionReads === 2 ? admissionGate.promise : { state: 'allowed' as const };
+        return admissionReads === 2 ? admissionGate.promise : allowedCreateAuthority;
       },
       create: async (command: Parameters<typeof admission.transport.create>[0]) => {
         obsoleteCommands.push(command);
@@ -865,16 +866,16 @@ test('Album creation composes complete terms and initial facts while preserving 
       },
     };
     const currentCommands: Parameters<typeof admission.transport.create>[0][] = [];
-    const currentGate = deferred<{ state: 'allowed' }>();
+    const currentGate = deferred<typeof allowedCreateAuthority>();
     let currentEligibilityReads = 0;
-    let currentAuthority: { state: 'allowed' } | { state: 'refused'; reason: 'permission' } = {
-      state: 'allowed',
-    };
+    let currentAuthority: typeof allowedCreateAuthority | { state: 'refused'; reason: 'permission' } =
+      allowedCreateAuthority;
     const currentTransport = {
       ...admission.transport,
       eligibility: async () => {
         currentEligibilityReads++;
-        if (currentEligibilityReads === 2) return currentGate.promise;
+        if (currentEligibilityReads === 2) return { state: 'refused' as const, reason: 'permission' as const };
+        if (currentEligibilityReads === 4) return currentGate.promise;
         return currentAuthority;
       },
       create: async (command: Parameters<typeof admission.transport.create>[0]) => {
@@ -916,7 +917,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(obsoleteCommands).toHaveLength(0);
 
     await click(host, m.character_create_back());
-    const currentName = 'Harbour sessions after admission';
+    let currentName = 'Harbour sessions after admission';
     await replace(textbox(host, m.catalogue_create_label()), currentName);
     const currentContributor = host.querySelector<HTMLElement>('fieldset[id^="album-row-"]')!;
     await replace(textbox(currentContributor, name(admission, 'wdt:P1932')), 'Current credit');
@@ -926,19 +927,40 @@ test('Album creation composes complete terms and initial facts while preserving 
     metadataCurrent = false;
     await renderAdmission(currentTransport, false, 'admission-current');
     await act(async () => {
-      admissionGate.resolve({ state: 'allowed' });
+      admissionGate.resolve(allowedCreateAuthority);
       await admissionGate.promise;
     });
     await until(() => host.querySelector('form')?.getAttribute('aria-busy') === 'false');
     expect(obsoleteCommands).toHaveLength(0);
     expect((textbox(host, m.catalogue_create_label()) as HTMLInputElement).value).toBe(currentName);
-    expect((textbox(host, name(admission, 'wdt:P1932')) as HTMLInputElement).value).toBe('Current credit');
+    expect((textbox(host, name(admission, 'wdt:P1932')) as HTMLInputElement).value).toBe('Corrected credit');
     expect(host.textContent).toContain(m.catalogue_create_review_stale());
     expect(host.textContent).toContain(m.album_missing());
 
     albumDefinition.properties = originalAlbumProperties;
     metadataCurrent = true;
     await renderAdmission(currentTransport, true, 'admission-current');
+    await until(
+      () =>
+        currentEligibilityReads === 1 &&
+        host.textContent!.includes(m.identity_intake_authority_allowed()),
+    );
+    await click(host, m.album_create_review());
+    currentAuthority = { state: 'refused', reason: 'permission' };
+    await click(host, m.album_create());
+    await until(() => host.textContent!.includes(m.identity_intake_authority_refused_permission()));
+    expect(currentCommands).toHaveLength(0);
+    await click(host, m.character_create_back());
+    currentName = 'Harbour sessions after eligibility correction';
+    await replace(textbox(host, m.catalogue_create_label()), currentName);
+    await replace(textbox(host, name(admission, 'wdt:P1932')), 'Corrected credit');
+    currentAuthority = allowedCreateAuthority;
+    await click(host, m.identity_intake_authority_retry());
+    await until(
+      () =>
+        currentEligibilityReads === 3 &&
+        host.textContent!.includes(m.identity_intake_authority_allowed()),
+    );
     await click(host, m.album_create_review());
     await expect((within(host).getByRole('button', { name: m.album_create() }) as HTMLButtonElement).disabled).toBe(
       false,
@@ -952,7 +974,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     });
     expect(currentCommands).toHaveLength(0);
     await act(async () => {
-      currentGate.resolve({ state: 'allowed' });
+      currentGate.resolve(allowedCreateAuthority);
       await currentGate.promise;
     });
     await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
@@ -960,7 +982,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(currentCommands[0]!.item.labels.en).toBe(currentName);
     expect(currentCommands[0]!.item.statements['schema:contributor']![0]!.qualifiers).toContainEqual({
       property: { id: 'wdt:P1932' },
-      value: { type: 'value', content: 'Current credit' },
+      value: { type: 'value', content: 'Corrected credit' },
     });
     const exactCommand = structuredClone(currentCommands[0]);
     const eligibilityAtUncertainty = currentEligibilityReads;
@@ -972,14 +994,14 @@ test('Album creation composes complete terms and initial facts while preserving 
     expect(currentEligibilityReads).toBe(eligibilityAtUncertainty);
 
     const retirement = albumFixture();
-    const retirementGate = deferred<{ state: 'allowed' }>();
+    const retirementGate = deferred<typeof allowedCreateAuthority>();
     let retirementReads = 0;
     let retirementCreates = 0;
     const retirementTransport = {
       ...retirement.transport,
       eligibility: async () => {
         retirementReads++;
-        return retirementReads === 2 ? retirementGate.promise : { state: 'allowed' as const };
+        return retirementReads === 2 ? retirementGate.promise : allowedCreateAuthority;
       },
       create: async (command: Parameters<typeof retirement.transport.create>[0]) => {
         retirementCreates++;
@@ -1012,7 +1034,7 @@ test('Album creation composes complete terms and initial facts while preserving 
     await show(retirementPage('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11', 'BBBBBBBBBBBBBBBBBBBBBB'));
     await until(() => !!host.querySelector('form'));
     await act(async () => {
-      retirementGate.resolve({ state: 'allowed' });
+      retirementGate.resolve(allowedCreateAuthority);
       await retirementGate.promise;
     });
     await settle();
