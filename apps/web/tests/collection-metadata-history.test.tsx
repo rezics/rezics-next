@@ -224,3 +224,17 @@ test('a retired admission callback cannot revive results through a fresh callbac
   expect(host.textContent).toBe('');
   expect(host.querySelector('img')).toBeNull();
 });
+
+test('an unavailable supplier stays distinct from empty history and revision one is not addressed', async () => {
+  const { readCollectionMetadataHistoryPage, readCollectionMetadataHistoryChange } =
+    await import('../src/library/collection-commands');
+  await expect(
+    readCollectionMetadataHistoryPage({ data: { collectionId: 'collection', cursor: 'opaque+/=?%25', limit: 25 } }),
+  ).resolves.toEqual({ state: 'unavailable' });
+  await expect(
+    readCollectionMetadataHistoryChange({ data: { collectionId: 'collection', revision: 2 } }),
+  ).resolves.toEqual({ state: 'unavailable' });
+  await expect(async () =>
+    readCollectionMetadataHistoryChange({ data: { collectionId: 'collection', revision: 1 } }),
+  ).rejects.toThrow('Invalid Collection metadata history revision');
+});
