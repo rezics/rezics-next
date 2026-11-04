@@ -189,6 +189,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
     if (
+      fragment !== '#literary-reader' &&
       fragment !== '#connections' &&
       !(subject && connectionReturnWindow(fragment)) &&
       fragment !== '#manga-reader' &&
