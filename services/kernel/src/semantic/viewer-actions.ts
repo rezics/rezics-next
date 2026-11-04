@@ -12,30 +12,28 @@ export async function readSubjectPublicStates(client: AccessClient, ids: readonl
   return read.run(client, { routes: ids.map((id) => routeOf(id)!), ids: [...ids] });
 }
 
-/** Register the released semantic catalogue, including namespaced type identifiers. */
-export const subjectViewerActionResources: ViewerActionResources = new Map([
-  [
-    'semantic.subject',
-    {
-      readAction: 'subject:read',
-      async read(client, ids) {
-        const rows = await readSubjectPublicStates(client, ids);
-        return Object.fromEntries(rows.filter((row) => row.visibility === 'visible').map((row) => [row.id, true]));
-      },
+/** Native Subject points supply both generic disclosure and exact released-Type disclosure. */
+function subjectViewerActionResource(type?: string): ViewerActionResource {
+  return {
+    readAction: 'subject:read',
+    async read(client, ids) {
+      const rows = await readSubjectPublicStates(client, ids);
+      // Hidden subjects are absent even if a caller independently holds subject:read.
+      return Object.fromEntries(
+        rows
+          .filter((row) => (type === undefined || row.type === type) && row.visibility === 'visible')
+          .map((row) => [row.id, true]),
+      );
     },
-  ],
+  };
+}
+
+/** Register generic Subject disclosure and the released catalogue, including namespaced Types. */
+export const subjectViewerActionResources: ViewerActionResources = new Map([
+  ['semantic.subject', subjectViewerActionResource()],
   ...Object.keys(bundledRelease.types).map((type): [string, ViewerActionResource] => [
     type,
-    {
-      readAction: 'subject:read',
-      async read(client, ids) {
-        const rows = await readSubjectPublicStates(client, ids);
-        // Hidden subjects are absent even if a caller independently holds subject:read.
-        return Object.fromEntries(
-          rows.filter((row) => row.type === type && row.visibility === 'visible').map((row) => [row.id, true]),
-        );
-      },
-    },
+    subjectViewerActionResource(type),
   ]),
 ]);
 
