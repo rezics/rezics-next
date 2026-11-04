@@ -429,15 +429,14 @@ Admission retries races against other callers. The default probe interval is fiv
 
 #### Retained host-a transfer comparison
 
-Use a confirmed deployed tuple of the `remote-check` hash, `cp-sync` point and periodic check-reclaim state. The
-supplied evidence for the retained comparison does not establish that tuple or provide a comparable required-check
-cohort, so the deployed runner identity, deployment point, stopgap state, transport phases and persistence of the
-reported 58-second symptom are unmeasured. Do not infer deployment from integrated source.
-
-Select receipts with matching command class, host-a, source and dirty state, snapshot/base reuse and concurrency.
-Record each observed run and its snapshot, GitHub fetch and rsync durations; label missing facts unmeasured. Include
-dependency-cache171 and Git-preparation423 only if they occur in the selected cohort. Keep check-reclaim and disk
-stopgap evidence separate; only the supermanager retires either stopgap.
+Three comparable required kernel-check receipts on host a share ordinary one-slot priority, overlay after GitHub
+fetch, 0 overlay files (17 bytes sent), snapshot reuse and a dependency-artifact hit. Git-preparation423 phases are
+present: snapshot staging 3.9–4.8 s, shared-store lock/fetch 0.71–0.92 s, checkout 1.04–1.12 s, GitHub fetch 3.1–3.4 s,
+overlay rsync 2.2–2.9 s. Slot wait 4.5–5.6 s; bun install 13.1–16.0 s; command 10.0–10.7 s; return rsync 16.5–26.6 s.
+The reported 58-second upload rsync does not remain; overlay rsync is the measured upload phase. Exact source commit,
+working-tree dirty bytes beyond that 0-file overlay, concurrent occupancy, the deployed `remote-check` hash, cp-sync
+point and reclaim/disk stopgap state remain unmeasured. Do not infer those missing facts from integrated source.
+Keep check-reclaim and disk stopgap evidence separate; only the supermanager retires either stopgap.
 
 1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
    using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and

@@ -172,9 +172,10 @@ For the host-a transfer question, use genuine required-check receipts from the d
 `remote-check` hash, cp-sync point and periodic check-reclaim stopgap state. Compare the same command class, host, source
 and dirty-tree state, snapshot/base reuse and concurrency. Keep snapshot staging, shared-store lock/fetch, per-run
 checkout, delta rsync (actual bytes, file count and mode), dependencies, slot wait, command and return transfer
-separate. Report the observed sample and its selection limits; keep detailed run artifacts under `.temp`. Source
-integration, fixtures and one-off timings are not deployed throughput evidence. A native compiler error may still yield
-transport measurements, but it is not successful full-check acceptance.
+separate. Report the observed sample and its selection limits; keep detailed run artifacts under `.temp`. The retained
+comparison is recorded under Wall-time measurements. Source integration, fixtures and one-off timings are not deployed
+throughput evidence. A native compiler error may still yield transport measurements, but it is not successful
+full-check acceptance.
 
 `worker-check`, `stack-run`, `check-run` and `remote-check` derive the performance pool from hosts explicitly marked
 `"performance": true` in the private hosts file. Missing or false flags exclude a host, including a or b; there is no
@@ -393,12 +394,12 @@ exceptions. No permissive unsupported-rule flag is used.
 
 ### Retained host-a transfer comparison
 
-The supplied evidence does not establish the deployed `remote-check` hash, `cp-sync` point or periodic check-reclaim
-state, and does not provide a comparable required-check cohort. Record those facts, the measured transport phases and
-whether the reported 58-second symptom remains as unmeasured until confirmed receipts are available; integrated source
-is not deployment evidence. Compare only matching command class, host, source and dirty state, snapshot/base reuse and
-concurrency. Include dependency-cache171 and Git-preparation423 only when present in the selected cohort, and keep
-check-reclaim evidence separate from disk stopgap evidence.
+Three comparable host-a kernel-check receipts (ordinary one-slot, overlay after GitHub fetch, 0 overlay files, snapshot
+reuse, dependency-artifact hit) measure overlay rsync at 2.2–2.9 s. Git-preparation423 lock/fetch and checkout are
+present. The reported 58-second upload rsync does not remain in that overlay phase. The deployed `remote-check` hash,
+cp-sync point, reclaim and disk stopgap state, exact source commit and concurrent occupancy remain unmeasured.
+Integrated source is not that missing evidence. Keep reclaim evidence separate from disk stopgap evidence.
+Decision: no runner repair; overlay rsync is not the remaining 58-second cause.
 
 Measured on 28 October 2026 on this machine: Linux x64, AMD Ryzen Threadripper 3970X,
 32 cores / 64 logical CPUs, 64 GiB RAM. Baseline runtime: Bun 1.4.3. Candidate runtime:
