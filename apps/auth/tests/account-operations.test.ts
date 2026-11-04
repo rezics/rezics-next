@@ -374,7 +374,7 @@ test(
         sessionStorage.setItem(key, JSON.stringify(pending));
       });
       await (await confirmDelete(page)).click();
-      await page.getByRole('alert').waitFor();
+      await page.getByRole('alert').filter({ hasText: 'The request could not be completed.' }).waitFor();
       expect(authCalls('/account-operations/approve')).toHaveLength(1);
       expect(authCalls('/account-operations/execute')).toHaveLength(0);
     } finally {
@@ -525,7 +525,7 @@ test(
       expect(await page.getByRole('button', { name: 'Create organization', exact: true }).isEnabled()).toBe(true);
       const firstApproval = postBodies('/account-operations/approve')[0]!;
       await page.getByRole('button', { name: 'Create organization', exact: true }).click();
-      await page.getByRole('status').waitFor();
+      await page.getByRole('status').filter({ hasText: 'The organization @team-alpha was created.' }).waitFor();
       const approvals = postBodies('/account-operations/approve');
       expect(approvals).toHaveLength(2);
       expect(approvals[1]).toEqual(firstApproval);
