@@ -506,10 +506,10 @@ reproducible key for this policy, not a universal human collation. Missing or em
 coverage and sort after labelled rows in both directions; Subject-ID ties follow the selected direction. A change to
 label selection or key normalization requires a new policy version, a rebuilt materialized basis, and cursor retirement.
 
-This source currently exposes the key derivation only. The title order enum, language-bound cursor, owner-lifetime and
-title-basis binding, index readiness DTO, bounded producer, and page reader are not installed. Until those pieces can
-prove current disclosed source material for the entire selected shelf, title ordering must return a typed preparing or
-unavailable state and must not return a successful empty or date-ordered page.
+The native producer, reader and cursor bindings below require an installed complete-input source adapter. Until that
+adapter proves current disclosed source material for the entire selected shelf and preparation installs its generation,
+title ordering returns preparing or unavailable; it must not return a successful empty or date-ordered page. Root client
+publication and the receiving page remain outstanding, so saved preferences cannot select title yet.
 
 ## Native title order
 
