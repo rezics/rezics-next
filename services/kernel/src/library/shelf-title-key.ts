@@ -1,5 +1,5 @@
 import { chooseLabel } from '../semantic/language.ts';
-import { sortName } from '../semantic/link-keys.ts';
+import { sortName } from '../semantic/title-sort-key.ts';
 
 export const SHELF_TITLE_KEY_POLICY = 'semantic-sort-name-v1';
 const KEY_CODEPOINT_LIMIT = 256;
