@@ -52,7 +52,8 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
       inFlight.current = true;
       const token = ++generation.current;
       const currentLocationKey = router.state.location.state.__TSR_key;
-      const current = () => generation.current === token && router.state.location.state.__TSR_key === currentLocationKey;
+      const current = () =>
+        generation.current === token && router.state.location.state.__TSR_key === currentLocationKey;
       publish({ kind, state: 'pending' });
 
       void (async () => {
@@ -60,7 +61,8 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
           await router.invalidate();
           if (!current()) return;
           const failed =
-            kind === 'missing' || router.state.matches.some((match) => match.status === 'error' || match.status === 'notFound');
+            kind === 'missing' ||
+            router.state.matches.some((match) => match.status === 'error' || match.status === 'notFound');
           if (failed) {
             publish({ kind, state: 'failed' });
             return;
@@ -86,11 +88,7 @@ export function RouteRecoveryProvider({ children }: { children: ReactNode }) {
     <RecoveryContext.Provider value={value}>
       {children}
       {attempt && overlayState ? (
-        <RouteFailureView
-          kind={attempt.kind}
-          state={overlayState}
-          onRetry={() => retry(attempt.kind)}
-        />
+        <RouteFailureView kind={attempt.kind} state={overlayState} onRetry={() => retry(attempt.kind)} />
       ) : null}
     </RecoveryContext.Provider>
   );

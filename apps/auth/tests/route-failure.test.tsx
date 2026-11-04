@@ -20,7 +20,9 @@ const globals = {
   MutationObserver: dom.MutationObserver,
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const previous = new Map([...Object.keys(globals)].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const previous = new Map(
+  [...Object.keys(globals)].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 
@@ -159,7 +161,16 @@ test('Retry never repeats a command already dispatched by the failed page', asyn
     component: function CommandPage() {
       const [sent, setSent] = useState(false);
       if (sent) throw new Error('private authorization result');
-      return <button onClick={() => { commands += 1; setSent(true); }}>Approve once</button>;
+      return (
+        <button
+          onClick={() => {
+            commands += 1;
+            setSent(true);
+          }}
+        >
+          Approve once
+        </button>
+      );
     },
   });
   const { router } = makeRouter('/command', [command]);
@@ -187,7 +198,9 @@ test('pending retries are single-flight and stale route results do not replace t
     loader: async () => {
       reads += 1;
       if (reads === 1) throw new Error('private read failure');
-      await new Promise<void>((resolve) => { release = resolve; });
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
       return 'done';
     },
     component: () => <p>Old page</p>,
@@ -251,7 +264,9 @@ test('unmount fences a pending recovery result', async () => {
     loader: async () => {
       reads += 1;
       if (reads === 1) throw new Error('read failed');
-      await new Promise<void>((resolve) => { release = resolve; });
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
       return 'done';
     },
     component: () => <p>Recovered</p>,

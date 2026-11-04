@@ -17,7 +17,10 @@ const browser = {
 
 test('only admitted browser documents reach the missing UI route; native, POST and asset paths stay outside it', () => {
   const classify = (path: string, method = 'GET', headers: Record<string, string> = browser) =>
-    classifyAuthRequest(new Request(`https://auth.test${path}`, { method, headers }), new URL(`https://auth.test${path}`).pathname);
+    classifyAuthRequest(
+      new Request(`https://auth.test${path}`, { method, headers }),
+      new URL(`https://auth.test${path}`).pathname,
+    );
 
   expect(classify('/')).toBe('ui-page');
   expect(classify('/login')).toBe('ui-page');

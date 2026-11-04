@@ -15,7 +15,15 @@ export default {
   },
 };
 
-function Example({ kind, initial, dark = false }: { kind: 'failure' | 'missing'; initial: RouteRetryState; dark?: boolean }) {
+function Example({
+  kind,
+  initial,
+  dark = false,
+}: {
+  kind: 'failure' | 'missing';
+  initial: RouteRetryState;
+  dark?: boolean;
+}) {
   const [state, setState] = useState(initial);
   const retry = () => {
     if (state === 'pending') return;

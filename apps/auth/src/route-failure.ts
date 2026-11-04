@@ -20,7 +20,14 @@ export const authUiPagePaths = new Set([
 
 export const authAssetPrefix = '/auth-assets/';
 
-export type AuthRequestClass = 'server-function' | 'ui-page' | 'asset' | 'native' | 'upstream' | 'browser-document' | 'other';
+export type AuthRequestClass =
+  | 'server-function'
+  | 'ui-page'
+  | 'asset'
+  | 'native'
+  | 'upstream'
+  | 'browser-document'
+  | 'other';
 
 const nativePaths = new Set([
   '/.well-known',
@@ -46,7 +53,16 @@ const nativePaths = new Set([
   '/oauth2',
 ]);
 
-const nativePrefixes = ['/.well-known/', '/authorize/', '/logout/', '/signin/', '/sessions/', '/passkeys/', '/api/', '/oauth2/'];
+const nativePrefixes = [
+  '/.well-known/',
+  '/authorize/',
+  '/logout/',
+  '/signin/',
+  '/sessions/',
+  '/passkeys/',
+  '/api/',
+  '/oauth2/',
+];
 
 export function classifyAuthRequest(request: Request, pathname: string): AuthRequestClass {
   if (pathname.startsWith('/_serverFn/')) return 'server-function';
