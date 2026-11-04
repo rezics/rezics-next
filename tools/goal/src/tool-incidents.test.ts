@@ -130,7 +130,7 @@ test('a failed notice is recovered through the SQLite inbox without reopening th
   }
 });
 
-test('a later probe attempt without the original blocker resolves the incident and releases held retries', () => {
+test('later and integrated probes release held retries without another probe', () => {
   const h = harness(),
     now = Date.now(),
     errorLine = 'ENOSPC: shared cache read failed';
@@ -166,27 +166,24 @@ test('a later probe attempt without the original blocker resolves the incident a
       expect(h.store.retryIntent(ref)?.options.notBefore).toBeUndefined();
     }
     expect(h.store.attempts(incident.probe.taskId)).toHaveLength(2);
-  } finally {
-    h.dispose();
-  }
-});
 
-test('an integrated probe makes held retries eligible without opening another probe', () => {
-  const h = harness(),
-    now = Date.now(),
-    errorLine = 'ENOSPC: shared cache read failed';
-  try {
-    const { refs, incident } = seedIncident(h, now, errorLine);
-    const heldRefs = refs.filter((ref) => ref.taskId !== incident.probe.taskId);
-    expect(heldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now + TOOL_INCIDENT_PROBE_MS))).toEqual([
-      false,
-      false,
-    ]);
+    const laterRefs = refs.map((ref) => {
+      if (ref.taskId === incident.probe.taskId) return laterRef;
+      const attempt = h.store.nextAttempt(ref, (number) => incidentAttempt(ref.taskId, number, differentLine));
+      const nextRef = { taskId: ref.taskId, attempt: attempt.attempt };
+      recordToolBlockerFailure(h.store, h.store.task(ref.taskId), attempt, h.settings, inbox, now + 2);
+      return nextRef;
+    });
+    expect(listOpenToolIncidents(h.store)).toHaveLength(1);
+    const nextIncident = listOpenToolIncidents(h.store)[0]!;
+    expect(nextIncident.id).not.toBe(incident.id);
+    const nextHeldRefs = laterRefs.filter((ref) => ref.taskId !== nextIncident.probe.taskId);
+    expect(nextHeldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now))).toEqual([false, false]);
 
-    const integratedAttempt = h.store.nextAttempt(incident.probe, (attempt) =>
-      incidentAttempt(incident.probe.taskId, attempt, null),
+    const integratedAttempt = h.store.nextAttempt(nextIncident.probe, (attempt) =>
+      incidentAttempt(nextIncident.probe.taskId, attempt, null),
     );
-    h.store.updateTask({ taskId: incident.probe.taskId, attempt: integratedAttempt.attempt }, (task) => {
+    h.store.updateTask({ taskId: nextIncident.probe.taskId, attempt: integratedAttempt.attempt }, (task) => {
       task.state = 'integrated';
       task.integratedBase = task.base;
       task.integratedCommit = task.base;
@@ -194,9 +191,9 @@ test('an integrated probe makes held retries eligible without opening another pr
     });
 
     expect(listOpenToolIncidents(h.store)).toEqual([]);
-    expect(heldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now))).toEqual([true, true]);
-    expect(heldRefs.map((ref) => h.store.retryIntent(ref)?.status)).toEqual(['pending', 'pending']);
-    expect(h.store.attempts(incident.probe.taskId)).toHaveLength(2);
+    expect(nextHeldRefs.map((ref) => toolIncidentRetryAllowed(h.store, ref, now))).toEqual([true, true]);
+    expect(nextHeldRefs.map((ref) => h.store.retryIntent(ref)?.status)).toEqual(['pending', 'pending']);
+    expect(h.store.attempts(nextIncident.probe.taskId)).toHaveLength(3);
   } finally {
     h.dispose();
   }
