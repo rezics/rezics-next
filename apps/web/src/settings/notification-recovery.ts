@@ -238,7 +238,7 @@ export class NotificationEditor {
     const known = snapshotFrom(page);
     const laterIntent = intentSince(confirmation.attempt.intent, this.state.intent);
     const intent = admittedNotificationPatch(laterIntent, page);
-    const draft = { ...known.notifications, ...(intent && intent !== null ? intent : {}) };
+    const draft = { ...known.notifications, ...(intent !== undefined && intent !== null ? intent : {}) };
     const newer = known.version > confirmation.receipt.version;
     this.confirm(known);
     this.update({
