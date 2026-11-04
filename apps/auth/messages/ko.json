@@ -268,7 +268,7 @@
   "auth_security_passkey_registration_reviewed": "현재 패스키가 아래에 표시됩니다. 이전 등록 결과는 아직 확인되지 않았습니다. 계속하기 전에 목록을 검토하세요.",
   "auth_security_passkey_registration_unknown": "등록 응답이 유실되었거나 확인할 수 없습니다. 패스키가 이미 등록되었을 수 있습니다. 계속하기 전에 현재 패스키를 확인하세요.",
   "auth_security_passkey_remove": "삭제",
-  "auth_security_passkey_remove_confirmation": "이 패스키를 삭제할까요? 삭제하면 이 패스키로 로그인할 수 없습니다.",
+  "auth_security_passkey_remove_confirmation": "이 패스키를 삭제할까요? 더 이상 이 패스키로 로그인할 수 없으며 모든 세션에서 로그아웃됩니다.",
   "auth_security_passkey_remove_failed": "패스키를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.",
   "auth_security_passkey_remove_named": "패스키 {name} 삭제",
   "auth_security_passkey_removed": "패스키가 삭제되었습니다.",
@@ -442,5 +442,10 @@
   "auth_automated_leave": "나가기",
   "auth_automated_stay": "머무르기",
   "auth_transfer_departure_heading": "운영자 이전에서 나가시겠습니까?",
-  "auth_transfer_departure_description": "아직 전송하지 않은 이전 준비 및 검토 내용이 삭제됩니다."
+  "auth_transfer_departure_description": "아직 전송하지 않은 이전 준비 및 검토 내용이 삭제됩니다.",
+  "auth_security_passkey_unnamed": "이름 없는 패스키",
+  "auth_security_passkeys_browser_unavailable": "이 브라우저에서는 패스키를 만들 수 없습니다. 저장된 패스키를 확인하고 삭제할 수는 있습니다.",
+  "auth_security_inventory_truncated": "목록의 첫 부분만 표시됩니다. 다른 항목이 있을 수 있으니 변경 후 새로고침하세요.",
+  "auth_security_step_up_advice": "계속하려면 본인 인증을 다시 해 주세요.",
+  "auth_security_passkey_capacity": "패스키가 최대 개수인 32개에 도달했습니다. 새로 추가하려면 하나를 삭제하세요."
 }

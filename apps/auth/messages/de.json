@@ -268,7 +268,7 @@
   "auth_security_passkey_registration_reviewed": "Die aktuellen Passkeys werden unten angezeigt. Die vorherige Registrierung ist weiterhin unbestätigt. Prüfe die Liste, bevor du fortfährst.",
   "auth_security_passkey_registration_unknown": "Die Antwort auf die Registrierung ging verloren oder konnte nicht bestätigt werden. Dein Passkey ist möglicherweise bereits eingerichtet. Prüfe die aktuellen Passkeys, bevor du fortfährst.",
   "auth_security_passkey_remove": "Entfernen",
-  "auth_security_passkey_remove_confirmation": "Diesen Passkey entfernen? Du kannst dich dann nicht mehr damit anmelden.",
+  "auth_security_passkey_remove_confirmation": "Diesen Passkey entfernen? Sie können sich damit nicht mehr anmelden. Alle Sitzungen werden abgemeldet.",
   "auth_security_passkey_remove_failed": "Der Passkey konnte nicht entfernt werden. Bitte versuche es später erneut.",
   "auth_security_passkey_remove_named": "Passkey {name} entfernen",
   "auth_security_passkey_removed": "Passkey entfernt.",
@@ -442,5 +442,10 @@
   "auth_automated_leave": "Verlassen",
   "auth_automated_stay": "Bleiben",
   "auth_transfer_departure_heading": "Operatorübertragung verlassen?",
-  "auth_transfer_departure_description": "Ihre noch nicht gesendete Vorbereitung und Prüfung der Übertragung werden verworfen."
+  "auth_transfer_departure_description": "Ihre noch nicht gesendete Vorbereitung und Prüfung der Übertragung werden verworfen.",
+  "auth_security_passkey_unnamed": "Unbenannter Passkey",
+  "auth_security_passkeys_browser_unavailable": "Dieser Browser kann keine Passkeys erstellen. Gespeicherte Passkeys können Sie weiterhin ansehen und entfernen.",
+  "auth_security_inventory_truncated": "Nur der erste Teil der Liste wird angezeigt. Weitere Einträge können vorhanden sein. Aktualisieren Sie nach Änderungen.",
+  "auth_security_step_up_advice": "Bestätigen Sie Ihre Identität erneut, um fortzufahren.",
+  "auth_security_passkey_capacity": "Sie haben das Limit von 32 Passkeys erreicht. Entfernen Sie einen, bevor Sie einen weiteren hinzufügen."
 }

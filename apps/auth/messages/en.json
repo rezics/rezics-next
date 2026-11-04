@@ -268,7 +268,7 @@
   "auth_security_passkey_registration_reviewed": "Current passkeys are shown below. The earlier registration is still unconfirmed. Review the list before continuing.",
   "auth_security_passkey_registration_unknown": "The registration response was lost or could not be confirmed. Your passkey may already be installed. Check current passkeys before continuing.",
   "auth_security_passkey_remove": "Remove",
-  "auth_security_passkey_remove_confirmation": "Remove this passkey? You will no longer be able to sign in with it.",
+  "auth_security_passkey_remove_confirmation": "Remove this passkey? You will no longer be able to sign in with it. This signs you out of all sessions.",
   "auth_security_passkey_remove_failed": "The passkey could not be removed. Please try again later.",
   "auth_security_passkey_remove_named": "Remove passkey {name}",
   "auth_security_passkey_removed": "Passkey removed.",
@@ -442,5 +442,10 @@
   "auth_automated_leave": "Leave",
   "auth_automated_stay": "Stay",
   "auth_transfer_departure_heading": "Leave operator transfer?",
-  "auth_transfer_departure_description": "Your unsent transfer preparation and review will be discarded."
+  "auth_transfer_departure_description": "Your unsent transfer preparation and review will be discarded.",
+  "auth_security_passkey_unnamed": "Unnamed passkey",
+  "auth_security_passkeys_browser_unavailable": "This browser cannot create passkeys. You can still review and remove your saved passkeys.",
+  "auth_security_inventory_truncated": "Some sessions or passkeys may not be shown. Refresh the list after making changes.",
+  "auth_security_step_up_advice": "Confirm your identity again to continue.",
+  "auth_security_passkey_capacity": "You have reached the limit of 32 passkeys. Remove one before adding another."
 }

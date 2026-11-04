@@ -268,7 +268,7 @@
   "auth_security_passkey_registration_reviewed": "Les clés d’accès actuelles sont affichées ci-dessous. L’inscription précédente reste non confirmée. Vérifiez la liste avant de continuer.",
   "auth_security_passkey_registration_unknown": "La réponse à l’inscription a été perdue ou n’a pas pu être confirmée. Votre clé d’accès est peut-être déjà installée. Vérifiez les clés actuelles avant de continuer.",
   "auth_security_passkey_remove": "Supprimer",
-  "auth_security_passkey_remove_confirmation": "Supprimer cette clé d’accès ? Vous ne pourrez plus vous connecter avec elle.",
+  "auth_security_passkey_remove_confirmation": "Supprimer cette clé d’accès ? Vous ne pourrez plus l’utiliser pour vous connecter. Toutes vos sessions seront déconnectées.",
   "auth_security_passkey_remove_failed": "Impossible de supprimer la clé d’accès. Réessayez plus tard.",
   "auth_security_passkey_remove_named": "Supprimer la clé d’accès {name}",
   "auth_security_passkey_removed": "Clé d’accès supprimée.",
@@ -442,5 +442,10 @@
   "auth_automated_leave": "Quitter",
   "auth_automated_stay": "Rester",
   "auth_transfer_departure_heading": "Quitter le transfert d’opérateur ?",
-  "auth_transfer_departure_description": "La préparation et la vérification du transfert non envoyées seront abandonnées."
+  "auth_transfer_departure_description": "La préparation et la vérification du transfert non envoyées seront abandonnées.",
+  "auth_security_passkey_unnamed": "Clé d’accès sans nom",
+  "auth_security_passkeys_browser_unavailable": "Ce navigateur ne peut pas créer de clés d’accès. Vous pouvez toujours consulter et supprimer vos clés enregistrées.",
+  "auth_security_inventory_truncated": "Seule la première partie de la liste est affichée. D’autres éléments peuvent exister. Actualisez après vos modifications.",
+  "auth_security_step_up_advice": "Confirmez à nouveau votre identité pour continuer.",
+  "auth_security_passkey_capacity": "Vous avez atteint la limite de 32 clés d’accès. Supprimez-en une avant d’en ajouter une autre."
 }

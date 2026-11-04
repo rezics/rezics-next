@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { issuerSecurityRequest } from './security-inventory';
+import { issuerSecurityRequest, readNativeSecurityPage, type SecurityPageEnvelope } from './security-inventory';
 import type { SecurityLoadResult, SecurityPasskey, SecuritySession } from './security';
 
 // Only this exact target is retained, in page memory. No cookie, proof, nonce or row metadata.
@@ -14,6 +14,7 @@ export type SecurityReadback =
       sessions: SecuritySession[];
       passkeys: SecurityPasskey[] | null;
       presence: 'present' | 'absent' | 'unknown';
+      page?: SecurityPageEnvelope;
     }
   | { kind: 'signed-out' }
   | { kind: 'denied' }
@@ -125,34 +126,22 @@ const readback = createServerFn({ method: 'POST' })
   .validator(target)
   .handler(async ({ data }): Promise<SecurityReadback> => {
     try {
-      const before = await currentAccount(data.accountId);
-      if (before !== 'current') return { kind: before };
-      const response = await issuerSecurityRequest('/sessions');
-      if (response.status === 401) return { kind: 'signed-out' };
-      if (response.status === 403) return { kind: 'denied' };
-      if (response.status !== 200) return { kind: 'unavailable' };
-      const sessions = parseSecuritySessions(await response.json());
-      if (!sessions) return { kind: 'unavailable' };
-      let passkeys: SecurityPasskey[] | null = null;
-      if (data.kind === 'passkey') {
-        const listed = await issuerSecurityRequest('/passkeys');
-        if (listed.status === 401) return { kind: 'signed-out' };
-        if (listed.status === 403) return { kind: 'denied' };
-        if (listed.status !== 200) return { kind: 'unavailable' };
-        passkeys = parseSecurityPasskeys(await listed.json());
-        if (!passkeys) return { kind: 'unavailable' };
-      }
-      const after = await currentAccount(data.accountId);
-      if (after !== 'current') return { kind: after };
+      const result = await readNativeSecurityPage();
+      if (result.kind !== 'ready') return result;
+      const { page } = result;
+      if (page.viewer.account_id !== data.accountId) return { kind: 'denied' };
+      const inventory = data.kind === 'session' ? page.sessions : page.passkeys;
+      if (inventory.kind !== 'ready' || page.sessions.kind !== 'ready') return { kind: 'unavailable' };
       return {
         kind: 'ready',
-        sessions,
-        passkeys,
-        presence: targetPresence(
-          data.kind === 'session' ? sessions : passkeys!,
-          data.id,
-          data.kind === 'session' ? 64 : 32,
-        ),
+        page,
+        sessions: page.sessions.rows,
+        passkeys: page.passkeys.kind === 'ready' ? page.passkeys.rows : null,
+        presence: inventory.rows.some((row) => row.id === data.id)
+          ? 'present'
+          : inventory.truncated
+            ? 'unknown'
+            : 'absent',
       };
     } catch {
       return { kind: 'unavailable' };
