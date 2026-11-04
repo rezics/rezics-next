@@ -38,6 +38,7 @@ test('People correction focus stays current and profile creation keeps authority
   const { PeopleProfileEditor } = await import('../src/features/catalogue/people-profile-view');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { peopleProfileFixture } = await import('../src/kernel/fake/catalogue-people-profile');
+  const { readPeopleProfile } = await import('../src/features/catalogue/people-profile');
   const { m } = await import('../src/paraglide/messages.js');
   const testing = createRequire(require.resolve('storybook/test'));
   const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
@@ -77,11 +78,10 @@ test('People correction focus stays current and profile creation keeps authority
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary
             observed={{ state: 'signed-in', subject: 'viewer', csrfToken: 'token' }}
-            address={id ?? selectedFixture.work.subject.id}
+            address={id ?? selectedFixture.id}
           >
             <PeopleProfileEditor
               {...(id ? { id } : {})}
-              {...(!id ? { work: selectedFixture.work.subject.id } : {})}
               locale="en"
               session="signed-in"
               transport={selectedTransport}
@@ -143,6 +143,7 @@ test('People correction focus stays current and profile creation keeps authority
     let writes = 0;
     const createTransport = {
       ...createFixture.transport,
+      load: () => readPeopleProfile(createFixture.client, 'en'),
       eligibility: async () => authority,
       create: async (command: Parameters<typeof createFixture.transport.create>[0]) => {
         writes++;
