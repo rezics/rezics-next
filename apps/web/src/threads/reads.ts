@@ -14,7 +14,7 @@ import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../identity
 import type { PageAuthors } from '../identity/read';
 import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
-import type { ThreadPost, ThreadSlugRedirect } from './thread-page';
+import type { LoadedThreadPage, ThreadPost, ThreadSlugRedirect } from './thread-page';
 import { readAuthorRevisionVotes, readRevisionSubjects, type RevisionVotes } from './revision-provenance';
 import { loadPostHistoryPage, type PostHistoryReadData } from './post-history-read';
 import type { ThreadDocumentMedia } from './document-media-read';
@@ -33,7 +33,7 @@ type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
-type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
+type PostPage = LoadedThreadPage['posts'];
 export type { ThreadPost };
 
 export type BoardPageReaderOrigin =
