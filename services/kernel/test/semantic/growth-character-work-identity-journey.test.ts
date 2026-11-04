@@ -6,7 +6,9 @@ import { listSubjectLinks, listSubjectRelations } from '../../src/semantic/links
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
-import { appearanceProperty, identityProperty } from '../../src/presentation/semantic-page.ts';
+
+const appearanceProperty = 'schema:character';
+const identityProperty = 'rezics:relatedCharacterIdentity';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
