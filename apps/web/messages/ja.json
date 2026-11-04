@@ -8791,5 +8791,19 @@
   "producer_history_correction_retired": "訂正の閲覧内容は失効しました",
   "producer_history_retired_explanation": "この訂正には現在有効な閲覧内容がありません。送信済みの操作はすでに反映されている可能性があり、結果が不明な場合があります。この失効した訂正から再送することはありません。",
   "producer_history_slice_lost": "元の範囲はここでは利用できません。履歴を読み直してから、改めて訂正を開始してください。",
-  "producer_history_retired_close": "失効した訂正を閉じる"
+  "producer_history_retired_close": "失効した訂正を閉じる",
+  "subject_synopsis_choice": "提供されたあらすじを選択",
+  "subject_synopsis_candidate": "候補 {number}",
+  "subject_synopsis_evidence": "このあらすじの根拠",
+  "subject_synopsis_none": "作品のあらすじは提供されていません。",
+  "subject_synopsis_choices_unavailable": "あらすじの選択肢を利用できません。",
+  "subject_synopsis_unavailable": "このあらすじの文書は利用できません。",
+  "subject_synopsis_missing": "選択したあらすじの本文はまだ利用できません。",
+  "subject_synopsis_loading": "選択したあらすじを読み込んでいます…",
+  "subject_synopsis_failed": "選択したあらすじを読み込めませんでした。",
+  "subject_synopsis_retry": "もう一度読み込む",
+  "subject_short_description": "短い説明",
+  "subject_synopsis_advice_refused": "訂正に関する案内では、この操作は拒否されています。",
+  "subject_synopsis_advice_unavailable": "訂正に関する案内を利用できません。",
+  "subject_synopsis_return": "この読み取り位置に戻る"
 }

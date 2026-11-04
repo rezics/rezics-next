@@ -1,6 +1,5 @@
 import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
-import { createServerFn } from '@tanstack/react-start';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { useOperation } from '../../kernel/exposure';
 import { RatingsSection } from './subject-ratings-view';
@@ -20,7 +19,16 @@ import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rez
 import { ListRowControl } from '@rezics/ui/list-row';
 import { CoverViewer } from '@rezics/ui/cover-viewer';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { createContext, useContext, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -50,6 +58,7 @@ import {
   spoilerLevel,
   webUrl,
   type PageLink,
+  type Snak,
   type Sources,
   type Stmt,
 } from './shared';
@@ -62,8 +71,17 @@ import {
   SubjectReadingState,
   type SubjectTextRetryToken,
 } from '../../subject/reading-state';
-import { kernelClient } from '../../kernel/client';
 import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
+import { SignInPrompt } from '../../threads/write-prompts';
+import { useSession } from '../../session/query';
+import { subjectHref } from '../../subject/subject-href';
+import { withSubjectVisitReturn, summaryReadingFragment, summaryReadingReturn } from './subject-visit-navigation';
+import {
+  SUMMARY_PROPERTY as SUMMARY_CHOICE_PROPERTY,
+  synopsisChoices,
+  synopsisReturnMatches,
+  type SynopsisChoice,
+} from './subject-summary-reading/model';
 export type { Count } from '../count';
 
 /** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */
@@ -114,6 +132,17 @@ export type OverviewValue = {
   source: string;
   sources: string;
   sections: Map<string, Section>;
+  /** Bounded caller advice from this Subject page response. */
+  viewer?: {
+    state: 'anonymous' | 'account';
+    account?: string;
+    context: string;
+    actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
+  };
+  releaseDigest?: string;
+  /** The existing safe candidate value renderer, bound to this page's related projection. */
+  renderCandidateValue?: (snak: Snak & { id?: string }, candidateSubject: string, link?: PageLink) => ReactNode;
+  candidatePropertyLabel?: (propertyId: string) => string;
   /**
    * What About holds after the summary, when the page places a `Summary`: the key facts of its first `Statements`
    * node, which then renders nothing itself, and the subject's tags.
@@ -132,38 +161,6 @@ export type OverviewValue = {
 export const OverviewContext = createContext<OverviewValue | null>(null);
 
 const SUMMARY_PROPERTY = 'schema:abstract';
-
-const readPublicSummaryDocument = createServerFn({ method: 'GET' })
-  .validator((value: unknown) => {
-    if (!isRecord(value) || typeof value.documentId !== 'string' || typeof value.locale !== 'string')
-      throw new TypeError('Invalid public summary document request');
-    return { documentId: value.documentId, locale: value.locale };
-  })
-  .handler(async ({ data }) => {
-    try {
-      const result = await kernelClient(data.locale)
-        .documents({ id: data.documentId })
-        .get({
-          fetch: { redirect: 'manual' },
-        });
-      if (result.status !== 200 || !result.data) return { kind: 'failed' as const };
-      const document = result.data.document;
-      return {
-        kind: 'read' as const,
-        document: {
-          id: document.id,
-          subjectId: document.subjectId,
-          candidateId: document.candidateId,
-          digest: document.digest,
-          language: document.language,
-          availability: document.availability,
-          body: document.body,
-        },
-      };
-    } catch {
-      return { kind: 'failed' as const };
-    }
-  });
 
 export const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
@@ -1078,10 +1075,14 @@ function SummaryPassage({
   document,
   language,
   value,
+  expanded,
+  onExpandedChange,
 }: {
   document: DocumentSnapshot;
   language: string;
   value: OverviewValue;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
   const excerpt = summaryExcerpt(document);
   const body = (
@@ -1093,7 +1094,13 @@ function SummaryPassage({
     />
   );
   return (
-    <SubjectPassage excerpt={excerpt} language={language} locale={value.locale}>
+    <SubjectPassage
+      excerpt={excerpt}
+      language={language}
+      locale={value.locale}
+      {...(expanded === undefined ? {} : { open: expanded })}
+      {...(onExpandedChange ? { onOpenChange: onExpandedChange } : {})}
+    >
       {body}
     </SubjectPassage>
   );
@@ -1114,11 +1121,10 @@ type SummaryRetryController = {
   finish(token: SubjectTextRetryToken<SummaryRetryTarget>): void;
 };
 type SummaryRetryState =
-  | { target: SummaryRetryTarget; status: 'pending' | 'failed' }
-  | { target: SummaryRetryTarget; status: 'read'; document: unknown };
+  | { target: SummaryRetryTarget; status: 'pending' | 'failed' | 'read' };
 
 function summaryRetryReference(
-  candidate: SummaryCandidate | undefined,
+  candidate: Pick<SynopsisChoice, 'statement' | 'language'> | SummaryCandidate | undefined,
 ): Omit<SummaryRetryTarget, 'subjectId' | 'locale'> | undefined {
   const statement = candidate?.statement;
   const content = statement?.value.type === 'value' ? statement.value.content : undefined;
@@ -1151,6 +1157,19 @@ function summaryDocumentMatches(document: unknown, target: SummaryRetryTarget): 
   );
 }
 
+function synopsisLanguageName(language: string, locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(language) || language;
+  } catch {
+    return language;
+  }
+}
+
+function subjectRevision(subject: Subject): string | undefined {
+  const revision = Reflect.get(subject, 'revision');
+  return typeof revision === 'string' && revision.length <= 128 ? revision : undefined;
+}
+
 function SummaryContent({
   id,
   value,
@@ -1163,20 +1182,103 @@ function SummaryContent({
   read: SubjectRead;
 }) {
   const title = m.subject_about({}, { locale: value.locale as never });
-  const baseCandidate = selectedSummary(read.subject, value.locale, read.documents);
-  const reference = summaryRetryReference(baseCandidate);
+  const options = { locale: value.locale as never };
+  const session = useSession();
+  const choiceSet = synopsisChoices(read.subject, value.locale);
+  const legacyCandidate = choiceSet.kind === 'not-admitted'
+    ? selectedSummary(read.subject, value.locale, read.documents)
+    : undefined;
+  const legacyReference = summaryRetryReference(legacyCandidate);
+  const choices = choiceSet.kind === 'ready'
+    ? choiceSet.choices
+    : legacyCandidate
+      ? [{
+          statement: legacyCandidate.statement,
+          language: legacyCandidate.language,
+          documentId: legacyReference?.documentId,
+          digest: legacyReference?.digest,
+        }]
+      : [];
+  const defaultId = choiceSet.kind === 'ready' ? choiceSet.selectedId : legacyCandidate?.statement.id;
+  const revision = subjectRevision(read.subject);
+  const sourceKey = JSON.stringify([
+    read.subject.id,
+    read.subject.context,
+    value.locale,
+    value.context?.id ?? read.subject.context,
+    value.realm ?? null,
+    value.releaseDigest ?? null,
+    revision ?? null,
+  ]);
+  const [selectionState, setSelectionState] = useState<{
+    sourceKey: string;
+    candidateId: string;
+    expanded: boolean;
+  } | null>(null);
+  const requestedId = selectionState?.sourceKey === sourceKey ? selectionState.candidateId : defaultId;
+  const selectedChoice = choices.find((choice) => choice.statement.id === requestedId) ??
+    choices.find((choice) => choice.statement.id === defaultId);
+  const selectedId = selectedChoice?.statement.id;
+  const returnedFocus = useRef<'reading' | 'evidence' | null>(null);
+  const choicesRef = useRef(choices);
+  choicesRef.current = choices;
+  const expectedContext = value.context?.id ?? read.subject.context;
+  useEffect(() => {
+    const restore = () => {
+      const descriptor = summaryReadingReturn(window.location.hash);
+      if (
+        !descriptor ||
+        descriptor.locale !== value.locale ||
+        descriptor.context !== expectedContext ||
+        descriptor.realm !== value.realm ||
+        descriptor.release !== value.releaseDigest ||
+        descriptor.source !== revision
+      )
+        return;
+      const match = choicesRef.current.find((choice) => synopsisReturnMatches(choice, descriptor));
+      if (!match) return;
+      setSelectionState({
+        sourceKey,
+        candidateId: match.statement.id,
+        expanded: descriptor.expanded ?? false,
+      });
+      returnedFocus.current = descriptor.focus ?? 'reading';
+    };
+    restore();
+    window.addEventListener('hashchange', restore);
+    return () => window.removeEventListener('hashchange', restore);
+  }, [expectedContext, read.subject.id, revision, sourceKey, value.locale, value.realm, value.releaseDigest]);
+  useEffect(() => {
+    const focus = returnedFocus.current;
+    if (!focus) return;
+    returnedFocus.current = null;
+    const target = document.getElementById(focus === 'evidence' ? 'subject-summary-evidence' : 'subject-summary-reading');
+    (target ?? document.getElementById('subject-summary-reading'))?.focus();
+  }, [selectedId, selectionState]);
+
+  const reference = summaryRetryReference(selectedChoice);
   const target = useMemo<SummaryRetryTarget | null>(
-    () => (reference ? { ...reference, subjectId: read.subject.id, locale: value.locale } : null),
+    () =>
+      reference && selectedChoice
+        ? { ...reference, subjectId: read.subject.id, locale: value.locale }
+        : null,
     [
       section,
       value.sections,
       value.cacheReader,
+      value.reader,
       value.context,
       value.realm,
       value.locale,
       value.subject,
+      value.viewer,
+      value.releaseDigest,
+      session.state,
+      session.subject,
       read.subject.id,
       read.subject.context,
+      revision,
+      selectedChoice?.statement.id,
       reference?.statementId,
       reference?.documentId,
       reference?.digest,
@@ -1187,17 +1289,25 @@ function SummaryContent({
   if (!controller.current) controller.current = createSubjectTextRetryController<SummaryRetryTarget>();
   controller.current.select(target);
   const [retryState, setRetryState] = useState<SummaryRetryState | null>(null);
+  const retryDocument = useRef<{ target: SummaryRetryTarget; document: unknown } | null>(null);
+  if (retryDocument.current?.target !== target) retryDocument.current = null;
+  useEffect(() => {
+    setRetryState((current) => (current && current.target !== target ? null : current));
+  }, [target]);
   const activeRetry = retryState?.target === target ? retryState : null;
-  const documents =
-    activeRetry?.status === 'read' && baseCandidate?.statement.id
-      ? {
-          ...(isRecord(read.documents) ? read.documents : {}),
-          [baseCandidate.statement.id]: activeRetry.document,
-        }
-      : read.documents;
-  const selected =
-    activeRetry?.status === 'read' ? selectedSummary(read.subject, value.locale, documents) : baseCandidate;
-  const chosen = selected?.document ? { ...selected, document: selected.document } : undefined;
+  const freshBody =
+    activeRetry?.status === 'read' && retryDocument.current?.target === target && target && selectedChoice &&
+    summaryDocumentMatches(retryDocument.current.document, target)
+      ? statementDocument(read.subject.id, selectedChoice.statement, {
+          [selectedChoice.statement.id]: retryDocument.current.document,
+        })
+      : undefined;
+  const selectedDocument = selectedChoice
+    ? statementDocument(read.subject.id, selectedChoice.statement, read.documents) ?? freshBody
+    : freshBody;
+  const expanded = selectionState?.sourceKey === sourceKey && selectionState.candidateId === selectedId
+    ? selectionState.expanded
+    : false;
   const onRetry = target
     ? (event: MouseEvent<HTMLAnchorElement>) => {
         event.preventDefault();
@@ -1216,7 +1326,10 @@ function SummaryContent({
             if (!controller.current?.isCurrent(attempt)) return;
             setRetryState(
               result.ok && summaryDocumentMatches(result.document, target)
-                ? { target, status: 'read', document: result.document }
+                ? (() => {
+                    retryDocument.current = { target, document: result.document };
+                    return { target, status: 'read' as const };
+                  })()
                 : { target, status: 'failed' },
             );
           })
@@ -1231,27 +1344,149 @@ function SummaryContent({
           });
       }
     : undefined;
-  const unavailable =
-    !chosen &&
-    (read.subject.statements[SUMMARY_PROPERTY] ?? []).some(
-      (statement) => statement.rank !== 'deprecated' && statement.value.type === 'value',
-    );
-  const description = chosen
+  const selectedUnavailable = !!selectedChoice && choiceSet.kind !== 'not-admitted' && !summaryRetryReference(selectedChoice);
+  const failed = activeRetry?.status === 'failed';
+  const workAdmitted = choiceSet.kind !== 'not-admitted';
+  const legacyUnavailable =
+    choiceSet.kind === 'not-admitted' &&
+    ((!!selectedChoice && !selectedDocument && !summaryRetryReference(selectedChoice)) ||
+      (!legacyCandidate &&
+        (read.subject.statements[SUMMARY_PROPERTY] ?? []).some(
+          (statement) => statement.rank !== 'deprecated' && statement.value.type === 'value',
+        )));
+  const missing = !!selectedChoice && !selectedDocument && !selectedUnavailable && !failed && !legacyUnavailable;
+  const noSynopsis = workAdmitted && choiceSet.kind === 'none';
+  const selectorUnavailable = workAdmitted && choiceSet.kind === 'unavailable';
+  const description = selectedDocument
     ? undefined
     : pageText(read.subject.descriptions, value.locale, originalLanguage(read.subject));
   const { facts = null, tags = null } = value.about ?? {};
-  if (!chosen && !unavailable && !description?.text && !facts && !tags) return null;
-  const body = chosen && (
+  if (!selectedChoice && !missing && !selectedUnavailable && !failed && !legacyUnavailable && !noSynopsis && !selectorUnavailable && !description?.text && !facts && !tags)
+    return null;
+  const returnAddress = (focus: 'reading' | 'evidence' = 'reading') => {
+    if (!selectedChoice || !target) return undefined;
+    const href = subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href;
+    const url = new URL(href, 'https://rezics.invalid');
+    if (value.realm) url.searchParams.set('realm', value.realm);
+    const hash = summaryReadingFragment({
+      candidateId: target.statementId,
+      documentId: target.documentId,
+      digest: target.digest,
+      language: target.language,
+      locale: value.locale,
+      context: expectedContext,
+      ...(value.realm ? { realm: value.realm } : {}),
+      ...(value.releaseDigest ? { release: value.releaseDigest } : {}),
+      ...(revision ? { source: revision } : {}),
+      ...(expanded ? { expanded: true } : {}),
+      focus,
+    });
+    if (!hash) return undefined;
+    return `${url.pathname}${url.search}${hash}`;
+  };
+  const readingReturn = returnAddress('reading');
+  const sourceReturn = returnAddress('evidence');
+  const citationGroups = selectedChoice?.statement.references.filter((reference) => reference.parts.length > 0) ?? [];
+  const evidenceLink: PageLink = ({ href, ...props }) => (
+    <value.link {...props} href={readingReturn ? withSubjectVisitReturn(href, readingReturn, value.locale) : href} />
+  );
+  const passage = selectedDocument && selectedChoice ? (
     <div className="space-y-1">
       <SummaryPassage
-        key={`${read.subject.id}/${value.locale}/${read.subject.context}/${chosen.statement.id}`}
-        document={chosen.document}
-        language={chosen.language}
+        key={`${read.subject.id}/${value.locale}/${read.subject.context}/${selectedChoice.statement.id}`}
+        document={selectedDocument}
+        language={selectedChoice.language}
         value={value}
+        expanded={expanded}
+        onExpandedChange={(open) =>
+          setSelectionState({ sourceKey, candidateId: selectedChoice.statement.id, expanded: open })
+        }
       />
-      <LanguageTag lang={chosen.language} locale={value.locale} />
+      <LanguageTag lang={selectedChoice.language} locale={value.locale} />
     </div>
+  ) : null;
+  const candidateEvidence =
+    choiceSet.kind === 'ready' && selectedChoice && value.renderCandidateValue ? (
+      <div id="subject-summary-evidence" tabIndex={-1} className="scroll-mt-32 space-y-2 focus-visible:outline-2">
+        <h3 className="font-medium">{m.subject_synopsis_evidence({}, options)}</h3>
+        {sourceReturn && (
+          <p className="text-sm">
+            <a
+              className={`${linkClass} ${linkColor}`}
+              href={withSubjectVisitReturn(
+                `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/sources${value.realm ? `?${new URLSearchParams({ realm: value.realm })}` : ''}`,
+                sourceReturn,
+                value.locale,
+              )}
+            >
+              {m.sources_open_detail({}, options)}
+            </a>
+          </p>
+        )}
+        {selectedChoice.statement.qualifiers.filter((part) => part.property.id !== 'rezics:spoilerLevel').length > 0 && (
+          <dl className="min-w-0 space-y-2 text-sm text-muted-foreground">
+            {selectedChoice.statement.qualifiers
+              .filter((part) => part.property.id !== 'rezics:spoilerLevel')
+              .map((part, index) => (
+                <div key={index} className="grid min-w-0 gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                  <dt className="[overflow-wrap:anywhere]">{value.candidatePropertyLabel?.(part.property.id) ?? value.unlabelled}</dt>
+                  <dd className="min-w-0 [overflow-wrap:anywhere]">
+                    {value.renderCandidateValue!(part, read.subject.id, evidenceLink)}
+                  </dd>
+                </div>
+              ))}
+          </dl>
+        )}
+        {citationGroups.length ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{m.sources_citations({}, options)}</p>
+            <ol className="list-decimal space-y-2 ps-5">
+              {citationGroups.map((reference, referenceIndex) => (
+                <li key={referenceIndex} className="space-y-1">
+                  {reference.parts.map((part, partIndex) => (
+                    <div key={partIndex} className="grid min-w-0 gap-x-3 gap-y-1 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                      <span className="text-muted-foreground [overflow-wrap:anywhere]">
+                        {value.candidatePropertyLabel?.(part.property.id) ?? value.unlabelled}
+                      </span>
+                      <span className="min-w-0 [overflow-wrap:anywhere]">
+                        {value.renderCandidateValue!(part, read.subject.id, evidenceLink)}
+                      </span>
+                    </div>
+                  ))}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">{m.sources_no_citations({}, options)}</p>
+        )}
+      </div>
+    ) : null;
+  const spoilered = !!selectedChoice && spoilerLevel(selectedChoice.statement) > value.reader.spoilerLevel;
+  const currentAction = value.viewer;
+  const adviceMatches = !!(
+    currentAction &&
+    currentAction.context === expectedContext &&
+    ((currentAction.state === 'anonymous' && session.state === 'signed-out') ||
+      (currentAction.state === 'account' &&
+        session.state === 'signed-in' &&
+        currentAction.account &&
+        currentAction.account === session.subject))
   );
+  const advice = choiceSet.kind === 'ready' && selectedChoice
+    ? session.state === 'signed-out' ? 'sign-in'
+      : !adviceMatches || session.state !== 'signed-in' ? 'unavailable'
+        : currentAction?.actions.statementPropose === 'allowed' ? 'allowed'
+          : currentAction?.actions.statementPropose === 'denied' ? 'denied'
+            : 'unavailable'
+    : 'none';
+  const authoredHref = selectedChoice && readingReturn
+    ? withSubjectVisitReturn(
+        `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/authored?${new URLSearchParams({ property: SUMMARY_CHOICE_PROPERTY })}`,
+        readingReturn,
+        value.locale,
+      )
+    : undefined;
   return (
     <section
       id={id}
@@ -1262,37 +1497,96 @@ function SummaryContent({
       <h2 id={`${id}-title`} className={headingClass}>
         {title}
       </h2>
-      {unavailable && (
-        <SubjectReadingState
-          locale={value.locale}
-          href={
-            target
-              ? `/v1/documents/${encodeURIComponent(target.documentId)}`
-              : (viewHref(value, 'details') ??
-                subjectViewHref(
-                  { id: read.subject.id, label: value.subjectLabel || value.unlabelled },
-                  value.locale,
-                  'details',
-                ))
-          }
-          onRetry={onRetry}
-          busy={retryState?.status === 'pending'}
-        />
-      )}
-      {chosen &&
-        (spoilerLevel(chosen.statement) > value.reader.spoilerLevel ? (
-          <SpoilerGate
-            key={`${read.subject.id}/${value.locale}/${read.subject.context}/${chosen.statement.id}/${value.reader.spoilerLevel}`}
-            label={value.spoilerShow}
-            hideLabel={value.labels.spoilerHide}
+      {choiceSet.kind === 'ready' && choiceSet.choices.length > 1 && selectedChoice && (
+        <div className="max-w-prose space-y-2">
+          <label htmlFor={`${id}-synopsis-choice`} className="block text-sm font-medium">
+            {m.subject_synopsis_choice({}, options)}
+          </label>
+          <select
+            id={`${id}-synopsis-choice`}
+            className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value={selectedChoice.statement.id}
+            onChange={(event) => {
+              setRetryState(null);
+              retryDocument.current = null;
+              setSelectionState({ sourceKey, candidateId: event.currentTarget.value, expanded: false });
+            }}
           >
-            {body}
-          </SpoilerGate>
-        ) : (
-          body
-        ))}
+            {[...new Set(choiceSet.choices.map((choice) => choice.language))].map((language) => {
+              const languageChoices = choiceSet.choices.filter((choice) => choice.language === language);
+              const displayName = synopsisLanguageName(language, value.locale);
+              return (
+                <optgroup key={language} label={displayName === language ? language : `${displayName} (${language})`}>
+                  {languageChoices.map((choice, index) => (
+                    <option key={choice.statement.id} value={choice.statement.id}>
+                      {languageChoices.length > 1 ? `${m.subject_synopsis_candidate({ number: index + 1 }, options)} · ` : ''}
+                      {choice.statement.rank === 'preferred'
+                        ? m.candidate_rank_preferred({}, options)
+                        : m.candidate_rank_normal({}, options)}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+          </select>
+        </div>
+      )}
+      {choiceSet.kind === 'ready' && selectedChoice && (
+        <p className="text-sm text-muted-foreground">
+          {synopsisLanguageName(selectedChoice.language, value.locale)} ({selectedChoice.language})
+        </p>
+      )}
+      {selectorUnavailable && <p role="status">{m.subject_synopsis_choices_unavailable({}, options)}</p>}
+      {noSynopsis && <p role="status">{m.subject_synopsis_none({}, options)}</p>}
+      <div id="subject-summary-reading" tabIndex={-1} className="scroll-mt-32 focus-visible:outline-2">
+        {legacyUnavailable && (
+          <SubjectReadingState
+            locale={value.locale}
+            href={viewHref(value, 'details') ?? subjectViewHref(
+              { id: read.subject.id, label: value.subjectLabel || value.unlabelled },
+              value.locale,
+              'details',
+            )}
+          />
+        )}
+        {selectedUnavailable && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.subject_synopsis_unavailable({}, options)}
+          </p>
+        )}
+        {(missing || failed) && (
+          <SubjectReadingState
+            locale={value.locale}
+            href={target ? `/v1/documents/${encodeURIComponent(target.documentId)}` : ''}
+            onRetry={onRetry}
+            retryLabel={m.subject_synopsis_retry({}, options)}
+            message={
+              failed
+                ? m.subject_synopsis_failed({}, options)
+                : activeRetry?.status === 'pending'
+                  ? m.subject_synopsis_loading({}, options)
+                  : m.subject_synopsis_missing({}, options)
+            }
+            busy={activeRetry?.status === 'pending'}
+          />
+        )}
+        {selectedChoice && (
+          spoilered ? (
+            <SpoilerGate
+              key={`${read.subject.id}/${value.locale}/${read.subject.context}/${selectedChoice.statement.id}/${value.reader.spoilerLevel}`}
+              label={value.spoilerShow}
+              hideLabel={value.labels.spoilerHide}
+            >
+              <>{passage}{candidateEvidence}</>
+            </SpoilerGate>
+          ) : (
+            <>{passage}{candidateEvidence}</>
+          )
+        )}
+      </div>
       {description?.text && (
         <div className="space-y-1">
+          <p className="text-sm font-medium">{m.subject_short_description({}, options)}</p>
           <DescriptionPassage
             key={`${read.subject.id}/${value.locale}/${read.subject.context}/${description.lang}`}
             text={description.text}
@@ -1302,6 +1596,14 @@ function SummaryContent({
           <LanguageTag lang={description.lang} locale={value.locale} />
         </div>
       )}
+      {advice === 'sign-in' && readingReturn && (
+        <SignInPrompt returnTo={readingReturn} label={m.account_sign_in({}, options)} compact />
+      )}
+      {advice === 'allowed' && authoredHref && (
+        <p className="text-sm"><a className={`${linkClass} ${linkColor}`} href={authoredHref}>{m.correction_title({}, options)}</a></p>
+      )}
+      {advice === 'denied' && <p role="status" className="text-sm text-muted-foreground">{m.subject_synopsis_advice_refused({}, options)}</p>}
+      {advice === 'unavailable' && <p role="status" className="text-sm text-muted-foreground">{m.subject_synopsis_advice_unavailable({}, options)}</p>}
       {facts}
       {tags}
       {viewHref(value, 'details') && (

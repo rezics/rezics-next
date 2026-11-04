@@ -8791,5 +8791,19 @@
   "producer_history_correction_retired": "Korrekturansicht nicht mehr aktuell",
   "producer_history_retired_explanation": "Diese Korrektur hat keine aktuelle Ansicht mehr. Ein bereits gesendeter Befehl kann wirksam geworden sein; das Ergebnis kann unbekannt sein. Aus dieser Korrektur wird nichts erneut gesendet.",
   "producer_history_slice_lost": "Der ursprüngliche Ausschnitt ist hier nicht mehr verfügbar. Lies den Verlauf erneut, bevor du bewusst eine weitere Korrektur beginnst.",
-  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen"
+  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen",
+  "subject_synopsis_choice": "Eine bereitgestellte Zusammenfassung auswählen",
+  "subject_synopsis_candidate": "Kandidat {number}",
+  "subject_synopsis_evidence": "Belege zu dieser Zusammenfassung",
+  "subject_synopsis_none": "Es ist keine bereitgestellte Werkzusammenfassung verfügbar.",
+  "subject_synopsis_choices_unavailable": "Die Auswahl der Zusammenfassungen ist nicht verfügbar.",
+  "subject_synopsis_unavailable": "Für diese Zusammenfassung ist kein Dokument verfügbar.",
+  "subject_synopsis_missing": "Der Text der ausgewählten Zusammenfassung ist noch nicht verfügbar.",
+  "subject_synopsis_loading": "Ausgewählte Zusammenfassung wird gelesen …",
+  "subject_synopsis_failed": "Die ausgewählte Zusammenfassung konnte nicht gelesen werden.",
+  "subject_synopsis_retry": "Erneut lesen",
+  "subject_short_description": "Kurzbeschreibung",
+  "subject_synopsis_advice_refused": "Die Korrekturempfehlung lehnt diese Aktion ab.",
+  "subject_synopsis_advice_unavailable": "Die Korrekturempfehlung ist nicht verfügbar.",
+  "subject_synopsis_return": "Zu dieser Lesestelle zurückkehren"
 }
