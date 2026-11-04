@@ -109,6 +109,7 @@ test('Previous revisits accepted native addresses, Retry keeps the failed addres
       (node) => node.textContent === m.game_reader_previous(),
     )!;
     expect(previous.disabled).toBe(true);
+    await mounted.click(m.game_reader_start());
     defer = true;
     await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.game_reader_requested());
@@ -188,7 +189,9 @@ test('equal-success replacement drops selection and reveal consent; tab return a
       link.focus();
       link.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
     });
-    const other = mounted.host.querySelector<HTMLButtonElement>('button')!;
+    const other = Array.from(mounted.host.querySelectorAll('button')).find(
+      (node) => node.textContent === m.game_reader_start(),
+    )!;
     await act(async () => {
       other.focus();
       window.dispatchEvent(new Event('focus'));
