@@ -86,7 +86,7 @@ test('the real shelf selects exact visible assignments, reviews all pages, repla
     },
     apply: async (...args) => {
       calls.push(['apply', structuredClone(args)]);
-      if (expired) { expired = false; return { data: null, error: { status: 409, value: { code: 'conflict', title: 'Expired', status: 409, type: 'about:blank' } } }; }
+      if (expired) { expired = false; return { data: null, error: { status: 409, code: 'conflict' } }; }
       return { data: {
         confirmationId: 'plan', sourceLabelId: 'source', targetLabelId: 'target', status: 'active', expiresAt: '2030-01-01T00:00:00Z',
         items: [ { item: 0, selected: selected(0), status: 'moved', targetAssignment: { id: 'accepted-target', revision: 1 }, sourceUnassignRevision: 4 },

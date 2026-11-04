@@ -30,5 +30,18 @@ export function consolidationClient(client: KernelClient, sourceLabelId: string,
 export type ConsolidationTransport = {
   [K in keyof ReturnType<typeof consolidationClient>]: (
     ...args: Parameters<ReturnType<typeof consolidationClient>[K]>
-  ) => Promise<Pick<Awaited<ReturnType<ReturnType<typeof consolidationClient>[K]>>, 'data' | 'error'>>;
+  ) => Promise<{
+    data: Awaited<ReturnType<ReturnType<typeof consolidationClient>[K]>>['data'];
+    error: { status: number; code: string | null } | null;
+  }>;
 };
+
+/** Preserve native refusal status/code without serializing a transport Response or untyped problem fields. */
+export function consolidationError(error: { status: number; value: unknown } | null) {
+  if (!error) return null;
+  const value = error.value;
+  return {
+    status: error.status,
+    code: value && typeof value === 'object' && 'code' in value && typeof value.code === 'string' ? value.code : null,
+  };
+}

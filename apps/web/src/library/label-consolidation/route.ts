@@ -4,7 +4,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { readSubjectSlotSession } from '../subject-slot';
-import { consolidationClient, type ConsolidationTransport } from './client';
+import { consolidationClient, consolidationError, type ConsolidationTransport } from './client';
 
 type Owner = { viewer: string; sourceLabelId: string; csrfToken: string };
 type Call<K extends keyof ConsolidationTransport> = Owner & { args: Parameters<ConsolidationTransport[K]> };
@@ -23,32 +23,32 @@ async function owner(data: Owner) {
 const review = createServerFn({ method: 'POST' }).validator((data: Call<'review'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).review(...data.args);
-    return { data: value, error };
+    return { data: value, error: consolidationError(error) };
   });
 const confirm = createServerFn({ method: 'POST' }).validator((data: Call<'confirm'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).confirm(...data.args);
-    return { data: value, error };
+    return { data: value, error: consolidationError(error) };
   });
 const apply = createServerFn({ method: 'POST' }).validator((data: Call<'apply'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).apply(...data.args);
-    return { data: value, error };
+    return { data: value, error: consolidationError(error) };
   });
 const retry = createServerFn({ method: 'POST' }).validator((data: Call<'retry'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).retry(...data.args);
-    return { data: value, error };
+    return { data: value, error: consolidationError(error) };
   });
 const cancel = createServerFn({ method: 'POST' }).validator((data: Call<'cancel'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).cancel(...data.args);
-    return { data: value, error };
+    return { data: value, error: consolidationError(error) };
   });
 const result = createServerFn({ method: 'POST' }).validator((data: Call<'result'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).result(...data.args);
-    return { data: value, error };
+    return { data: value, error: consolidationError(error) };
   });
 
 /** Native DTOs and errors pass through unchanged; no client publisher or assignment writer. */
