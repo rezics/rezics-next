@@ -438,14 +438,19 @@ Admission retries races against other callers. The default probe interval is fiv
    and manifest/pack integrity match. Snapshot staging reports local duration; GitHub fetch is a separate host line;
    rsync reports duration, bytes sent, file count and mode (`overlay after GitHub fetch`, `checksum copy-dest`, or
    `full tree`). The per-run local staging directory is removed after transfer, including on failure.
-   Host fetch serializes only GitHub fetch and ref verify on the shared store lock; `checkout-index` is per-run, and
-   daily store gc takes a second short lock. A live preparation holds an exclusive flock on
-   `<store>.preparing/<run>` before that first lock is released; that file is the liveness pin, and
-   `refs/check-runs/<run>` remains the Git GC root. Daily gc deletes a run ref only when its published
-   directory is absent and its preparing lock is free, so a preparing run is distinct from a published or
-   still-live run, an abandoned preparation, and a completed or removed run. Directory absence, staging-name
-   age, and object mtime are not process-stopped evidence.
-   Decision: a per-run flock beside the store is preparation liveness; `refs/check-runs/<run>` stays the GC root.
+   Ref changes and per-run lock-file lifecycle use the shared store lock. Before changing
+   `refs/check-runs/<run>`, a fetch rejects an existing checkout or active per-run lock. It takes
+   `<store>.preparing/<run>` without waiting while holding the store lock, then changes the ref; a dead preparation
+   can be reused after its lock is free and its final checkout is absent. The per-run lock stays held through
+   `checkout-index`, while the store lock is released so distinct runs
+   prepare concurrently. A lock pathname is unlinked only under the store lock, which serializes all openers and
+   prevents split flock inodes. Daily gc uses the same store-then-run lock order and removes a ref only when the final
+   checkout is absent and its per-run lock is free; `refs/check-runs/<run>` remains the Git GC root. Directory
+   absence alone, staging-name age, and object mtime do not establish retirement. The fetch trap removes only its own
+   temporary stage. Full-pack fallback removes a final checkout only after that fetch returned success; rejected
+   identities and uncertain transport results cannot clean or overwrite another run's directory.
+   Decision: active or published same-run identities are rejected; an abandoned ref is reusable only after acquiring
+   its free per-run lock under the store lock and confirming the final checkout is absent.
    Overlay rsync then sends only working edits and untracked inputs.
    GitHub publication retries the same candidate/ref once after 250 ms within one absolute preparation deadline
    (the configured 900-second default). Each failed push reports its exit/signal status and credential-redacted stderr;

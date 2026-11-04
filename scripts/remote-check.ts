@@ -5979,6 +5979,8 @@ async function uploadRun(
   try {
     let uploadFiles = [...files];
     let fetchedGit = false;
+    let fetchedPublished = false;
+    let rejectedIdentity = false;
     if (options.expectedSourceManifest) {
       const manifestBytes = Buffer.from(`${JSON.stringify(options.expectedSourceManifest)}\n`);
       const temporaryRoot = join(resolve(options.workspace), '.temp', 'check-host');
@@ -5996,7 +5998,12 @@ async function uploadRun(
       if (!lstatSync(localTemp).isDirectory())
         throw new Error('remote-check: local Git staging directory is unavailable');
       const gitStageStarted = performance.now();
-      const { stageCheckGit, fetchCheckGitScript } = await import('./check-git.ts');
+      const {
+        stageCheckGit,
+        fetchCheckGitScript,
+        CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION,
+        CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT,
+      } = await import('./check-git.ts');
       if (!transfer.stage) {
         const directory = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
         try {
@@ -6030,7 +6037,16 @@ async function uploadRun(
             'GitHub fetch',
             transferLimit,
           );
-          if (result.code !== 0) throw new Error('check-git: host fetch failed');
+          if (result.code === CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT) {
+            rejectedIdentity = true;
+            throw new Error('remote-check: run identity is active or already published');
+          }
+          if (result.code !== 0) {
+            if (!result.output.includes(CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION))
+              throw new RemoteTransportError(host.name, 'GitHub fetch', result.code);
+            throw new Error('check-git: host fetch failed');
+          }
+          fetchedPublished = true;
           const gitPhases = parseCheckGitPhaseTimings(result.output);
           if (gitPhases) {
             reportObservedDuration('shared-store lock/fetch', gitPhases.sharedStoreLockFetchSeconds, host.name);
@@ -6053,16 +6069,23 @@ async function uploadRun(
           console.error(`remote-check: fetched native Git snapshot on ${host.name}`);
         } catch (error) {
           if (signal.aborted) throw new Aborted();
+          if (rejectedIdentity || (error instanceof RemoteTransportError && !fetchedPublished)) throw error;
           console.error(`remote-check: GitHub fetch unavailable on ${host.name}; using full snapshot upload`);
-          // A successful fetch followed by failed preparation must not leave Git metadata for pack restoration.
-          const cleared = await boundedSsh(
-            host,
-            connectionId,
-            `rm -rf -- ${quote(directory)}`,
-            'Git fallback cleanup',
-            transferLimit,
-          );
-          if (cleared.code !== 0) throw new RemoteTransportError(host.name, 'Git fallback cleanup', cleared.code);
+          if (fetchedPublished) {
+            try {
+              const cleared = await boundedSsh(
+                host,
+                connectionId,
+                `rm -rf -- ${quote(directory)}`,
+                'Git fallback cleanup',
+                transferLimit,
+              );
+              if (cleared.code !== 0) throw new Error('remote-check: Git fallback cleanup failed');
+            } catch {
+              console.error('remote-check: Git fallback cleanup failed; preserving the primary preparation failure');
+              throw error;
+            }
+          }
         } finally {
           reportDuration('GitHub fetch', fetchStarted, host.name);
         }
@@ -6908,11 +6931,13 @@ async function runWithTransportRetries(
       ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
     };
     let managedByRun = false;
+    let uploaded = false;
     try {
       await options.allocated?.({ host: host.name, run: id });
       assertExecutionAllowed(options, signal);
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
       Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
+      uploaded = true;
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
       const lease = await acquire(
@@ -6944,7 +6969,7 @@ async function runWithTransportRetries(
       managedByRun = true;
       return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
-      if (!managedByRun) await cleanupPreparedRun(prepared);
+      if (!managedByRun && uploaded) await cleanupPreparedRun(prepared);
       assertExecutionAllowed(options, signal);
       if (
         !(error instanceof RemoteTransportError) ||
@@ -7031,9 +7056,11 @@ async function tryRemoteCheckOwned(
     connectionId: randomUUID().slice(0, 8),
     ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
   };
+  let uploaded = false;
   try {
     prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
     Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
+    uploaded = true;
     assertExecutionAllowed(options, signal);
     const current = hostsForRound().find(
       ({ name, address, identity }) => name === host.name && address === host.address && identity === host.identity,
@@ -7066,7 +7093,7 @@ async function tryRemoteCheckOwned(
       code: await runLeased(lease, prepared, options, performance.now(), signal),
     };
   } catch (error) {
-    await cleanupPreparedRun(prepared);
+    if (uploaded) await cleanupPreparedRun(prepared);
     throw error;
   }
 }
