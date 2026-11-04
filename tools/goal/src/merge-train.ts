@@ -783,7 +783,7 @@ function taskIntegrationTarget(
   stateDirectory: string,
   taskId: string,
   policy = defaultPolicy.storage,
-): { target?: string; manager?: string; goal?: string; base?: string; workspace?: Task['workspace'] } {
+): { target?: string; manager?: string; goal?: string; kind?: string; base?: string; workspace?: Task['workspace'] } {
   const path = join(stateDirectory, 'goal.sqlite');
   if (!existsSync(path)) return {};
   const db = new Database(path, { readonly: true, strict: true });
@@ -794,7 +794,7 @@ function taskIntegrationTarget(
     const task = JSON.parse(row.body) as {
       base?: unknown;
       workspace?: Task['workspace'];
-      brief?: { target?: unknown; manager?: unknown; goal?: unknown };
+      brief?: { target?: unknown; manager?: unknown; goal?: unknown; kind?: unknown };
     };
     const brief = task.brief;
     return {
@@ -802,6 +802,7 @@ function taskIntegrationTarget(
       ...(typeof brief?.target === 'string' ? { target: brief.target } : {}),
       ...(typeof brief?.manager === 'string' ? { manager: brief.manager } : {}),
       ...(typeof brief?.goal === 'string' ? { goal: brief.goal } : {}),
+      ...(typeof brief?.kind === 'string' ? { kind: brief.kind } : {}),
       ...(typeof task.base === 'string' ? { base: task.base } : {}),
     };
   } finally {
@@ -1017,6 +1018,18 @@ function acceptAlreadyPresent(result: GateOutcome, commit: string, paths: readon
     logPath,
     `Already present on the integration target: ${canonicalConflictPaths(paths).join(', ') || 'no source changes'}\n`,
   );
+}
+
+export function devMayRepairFrozenAcceptance(target: IntegrationTarget, taskKind?: string, controlPlane = false): boolean {
+  return target === 'integration' && !controlPlane && taskKind !== 'verification';
+}
+
+function recordFrozenAcceptanceChange(result: GateOutcome, paths: readonly string[], logPath: string): void {
+  const previous = new Set(result.frozenAcceptanceChanges ?? []);
+  const added = canonicalConflictPaths(paths).filter((path) => !previous.has(path));
+  if (!added.length) return;
+  result.frozenAcceptanceChanges = canonicalConflictPaths([...previous, ...added]);
+  appendFileSync(logPath, `Frozen acceptance file changed: ${added.join(', ')}\n`);
 }
 
 function treeDiffIsEmpty(cwd: string, base: string, candidate: string, policy = defaultPolicy.merge): boolean {
@@ -2002,7 +2015,7 @@ export class MergeTrain {
               batch.push(candidate);
             }
             if (batch.length > 1 || (batch.length === 1 && retryDeferred.has(batch[0]!.id))) {
-              const integrated = await this.integrateBatch(batch);
+              const integrated = await this.integrateBatch(batch, lane);
               if (integrated.resolution) {
                 o.queue.beginResolution(integrated.resolution.entry.id);
                 pendingDevResolutions.push(integrated.resolution);
@@ -2145,7 +2158,7 @@ export class MergeTrain {
     return !recorded.workspace && recorded.target !== 'stabilize' && !controlPlaneReleaseBrief(recorded);
   }
 
-  private async integrateBatch(entries: readonly LandingEntry[]): Promise<BatchLandingResult> {
+  private async integrateBatch(entries: readonly LandingEntry[], lane: 'main' | 'dev'): Promise<BatchLandingResult> {
     const o = this.options;
     const outcomes = new Map<number, GateOutcome>();
     const deferred = new Set<number>();
@@ -2230,6 +2243,11 @@ export class MergeTrain {
           const request = { ...entry.request };
           const logPath = logPaths.get(entry.id)!;
           const result = createResult(entry, logPath);
+          const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId, o.policy?.storage);
+          const mayRepairFrozen = devMayRepairFrozenAcceptance(
+            lane === 'dev' ? 'integration' : 'main',
+            recorded.kind,
+          );
           try {
             o.fence.assertCurrent(request);
           } catch (error) {
@@ -2290,18 +2308,21 @@ export class MergeTrain {
           this.git(trainTree, 'clean', '-fdx');
           const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
           if (changedFrozenAtSource.length) {
-            const changedFrozenOnTarget = new Set(
-              frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart, this.options.policy?.merge),
-            );
-            refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
-            // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
-            // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
-            const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
-            if (workerOnlyFrozenChanges.length)
-              result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
-            localOutcomes.set(entry.id, result);
-            resetTo(trainTree, previous);
-            continue;
+            if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+            else {
+              const changedFrozenOnTarget = new Set(
+                frozenFilesModifiedAtCommit(trainTree, previous, frozenAtStart, this.options.policy?.merge),
+              );
+              refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+              // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+              // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+              const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+              if (workerOnlyFrozenChanges.length)
+                result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
           }
           if (!worked) {
             acceptAlreadyPresent(result, previous, [], logPath);
@@ -2413,10 +2434,13 @@ export class MergeTrain {
           const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
           const changedFrozen = changedFrozenFiles(trainTree, frozen);
           if (changedFrozen.length) {
-            refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
-            localOutcomes.set(entry.id, result);
-            resetTo(trainTree, previous);
-            continue;
+            if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozen, logPath);
+            else {
+              refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
+              localOutcomes.set(entry.id, result);
+              resetTo(trainTree, previous);
+              continue;
+            }
           }
 
           result.stage = 'scope';
@@ -3512,6 +3536,7 @@ export class MergeTrain {
         stabilize = false;
         integratesIntoDev = false;
       }
+      const mayRepairFrozen = devMayRepairFrozenAcceptance(integrationTarget, recorded.kind, controlPlane);
       if (!workspace && !request.devResolution && !request.managerLanding) {
         const frozen = frozenFilesForTask(o.stateDirectory, request.taskId);
         const frozenPaths = new Set(frozen.map((file) => file.path));
@@ -3530,7 +3555,7 @@ export class MergeTrain {
             );
           return difference.status === 1;
         });
-        if (frozenNotOnTarget.length) {
+        if (frozenNotOnTarget.length && !mayRepairFrozen) {
           stage = 'rebase';
           refuseFrozenAcceptanceChange(result, frozenNotOnTarget, logPath);
           result.conflictedFiles = canonicalConflictPaths(frozenNotOnTarget);
@@ -3613,23 +3638,27 @@ export class MergeTrain {
             : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozenAtSource = changedFrozenFiles(trainTree, frozenAtStart);
         if (changedFrozenAtSource.length) {
-          const changedFrozenOnTarget = new Set(
-            frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart, this.options.policy?.merge),
-          );
-          refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
-          // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
-          // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
-          const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
-          if (workerOnlyFrozenChanges.length) result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
-          if (workspace) {
-            const owners = sharedTasks.filter((task) =>
-              taskChangedPaths(task, tip, this.options.policy?.merge).some((path) =>
-                changedFrozenAtSource.includes(path),
-              ),
+          if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+          else {
+            const changedFrozenOnTarget = new Set(
+              frozenFilesModifiedAtCommit(trainTree, base, frozenAtStart, this.options.policy?.merge),
             );
-            attributeFailure(result, owners.length ? owners : undefined);
+            refuseFrozenAcceptanceChange(result, changedFrozenAtSource, logPath);
+            // Keep the historical path diagnostic for a worker-only frozen-file change. If the target also
+            // changed that immutable input, the typed refusal is the complete cause and this is not a Git conflict.
+            const workerOnlyFrozenChanges = changedFrozenAtSource.filter((path) => !changedFrozenOnTarget.has(path));
+            if (workerOnlyFrozenChanges.length)
+              result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
+            if (workspace) {
+              const owners = sharedTasks.filter((task) =>
+                taskChangedPaths(task, tip, this.options.policy?.merge).some((path) =>
+                  changedFrozenAtSource.includes(path),
+                ),
+              );
+              attributeFailure(result, owners.length ? owners : undefined);
+            }
+            return finish();
           }
-          return finish();
         }
         const frozenPaths = new Set(frozenAtStart.map((file) => file.path));
         const worked = this.git(trainTree, 'diff', '--name-only', '-z', originalBase, tip)
@@ -3812,15 +3841,18 @@ export class MergeTrain {
           : frozenFilesForTask(o.stateDirectory, request.taskId);
         const changedFrozen = changedFrozenFiles(trainTree, frozen);
         if (changedFrozen.length) {
-          stage = 'rebase';
-          refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
-          if (workspace) {
-            const owners = sharedTasks.filter((task) =>
-              taskChangedPaths(task, tip, this.options.policy?.merge).some((path) => changedFrozen.includes(path)),
-            );
-            attributeFailure(result, owners.length ? owners : undefined);
+          if (mayRepairFrozen) recordFrozenAcceptanceChange(result, changedFrozen, logPath);
+          else {
+            stage = 'rebase';
+            refuseFrozenAcceptanceChange(result, changedFrozen, logPath);
+            if (workspace) {
+              const owners = sharedTasks.filter((task) =>
+                taskChangedPaths(task, tip, this.options.policy?.merge).some((path) => changedFrozen.includes(path)),
+              );
+              attributeFailure(result, owners.length ? owners : undefined);
+            }
+            return finish();
           }
-          return finish();
         }
         stage = 'scope';
         result.changedFiles = changedFiles(trainTree, base, this.options.policy?.merge);

@@ -33,22 +33,22 @@ function promptTask(goal: string, extra: Partial<Task> = {}): Task {
 
 test('a dev product worker verifies premises, decides and informs its manager, and continues a larger outcome', () => {
   const prompt = workerPrompt(promptTask('web'), undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain("Check the contract's premises against your base first.");
+  expect(prompt).toContain('Check premises against your base first.');
   expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
-  expect(prompt).toContain('take the reversible option most consistent with the owner documents');
+  expect(prompt).toContain('Decide ambiguity and product choices reversibly per owner docs');
   expect(prompt).toContain(
-    'record it in one line in your summary and the owning document, send it with `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
+    'Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.',
   );
   expect(prompt).toContain('Code another Goal has not delivered is not a blocker');
-  expect(prompt).toContain('A blocker is only two requirements in existing specs or tests that cannot both hold');
+  expect(prompt).toContain('When two requirements conflict, take the reading most consistent with the owner documents and the delivered code');
+  expect(prompt).toContain('A blocker is only a conflict where every choice breaks an owner-document rule');
   expect(prompt).not.toContain('receipt');
   expect(prompt).not.toContain('when the work needs a product decision the contract does not make');
-  expect(prompt).toContain('research the rest yourself');
-  expect(prompt).toContain('A question needing a large survey of products or sources is a `spec-conflict` blocker');
-  expect(prompt).toContain('continuation brief at `.temp/continuation/<short-name>.md`');
+  expect(prompt).toContain('Large surveys are `spec-conflict` blockers starting "Research needed:"');
+  expect(prompt).toContain('.temp/continuation/<short-name>.md');
   expect(prompt).toContain('goal web, manager web');
   expect(prompt).toContain(
-    'open the workflow skill, docs/development, architecture or scope only for a section it links',
+    'open only linked workflow, docs/development and architecture/scope sections',
   );
   expect(prompt).toContain('Summary at most 120 words');
   expect(prompt).toContain('Blocker detail at most 80 words');

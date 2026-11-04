@@ -8,7 +8,7 @@ The task contract follows:
 
 Read-only original journey.
 
-Unfinished work is not a blocker: if the contract does not fit this attempt, commit a coherent working part and return success with the remainder listed as follow-up.
+Unfinished work is not a blocker: if the outcome does not fit this attempt, commit a coherent part and return success with the remainder listed as follow-up.
 
 ## Current controller launch context
 No controller launch context was supplied. Dependency status is unknown: build against each dependency contract.

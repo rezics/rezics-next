@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchCommand, workerCheckProtocol, workerPrompt } from './launch.ts';
+import { defaultPolicy } from './policy.ts';
+import { renderCheckProtocol, renderManagerOpening, renderWorkerPrompt } from './prompts.ts';
 import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 import type { Attempt, Task } from './types.ts';
 import type { LaunchContext } from './launch-context.ts';
@@ -22,8 +24,8 @@ test('the worker prompt names the main checkout as read-only and asks for paths 
     brief: { markdown: 'Do the thing.', acceptance: { command: ['bun', 'test'], tests: ['x'] } },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('/repo/main is read-only');
-  expect(prompt).toContain('write only inside /work/trees/t1.');
+  expect(prompt).toContain('Main checkout: /repo/main (read-only)');
+  expect(prompt).toContain('work only in /work/trees/t1.');
 });
 
 // Skipped while LOCAL_STORYBOOK_AVAILABLE is false (storybook-dev.ts still refuses interactive use).
@@ -55,8 +57,8 @@ test('the worker prompt says failures outside the declared paths are reported, n
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('A failure that also occurs on your base commit is not your blocker');
-  expect(prompt).toContain('A test that passes on your base and fails after your change is yours');
+  expect(prompt).toContain('Failures on base are not yours; name them.');
+  expect(prompt).toContain('Fix tests that passed on base but fail now.');
 });
 
 test('a dev product worker may merge or cherry-pick only what its contract names; other workers may not merge', () => {
@@ -100,7 +102,7 @@ test('an implementation worker is told the applicable AGENTS.md is already loade
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('AGENTS.md is already loaded.');
+  expect(prompt).toContain('AGENTS.md is loaded.');
   expect(prompt).not.toContain('Read and follow its AGENTS.md');
   expect(prompt).toContain(
     'Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.',
@@ -195,13 +197,82 @@ test('a worker writes acceptance tests the contract names and waits for queued c
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('Write missing acceptance tests the contract names');
-  expect(prompt).toContain('never edit a frozen file');
-  expect(prompt).toContain(
-    'If the contract changes a behaviour an existing test asserts, update that test and list it; keep assertions of unchanged behaviour.',
-  );
-  expect(prompt).toContain('as a rule fewer test lines than product lines');
+  expect(prompt).toContain('Write missing acceptance tests the contract names or implies');
+  expect(prompt).not.toContain('never edit a frozen file');
+  expect(prompt).not.toContain('must not be edited');
+  expect(prompt).not.toContain('must not be edited');
+  expect(prompt).toContain('Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions.');
+  expect(prompt).toContain('fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines)');
   expect(prompt).toContain('Wait for a long command, even one queued for a test slot');
+});
+
+test('worker and manager prompts trust repository callers and let dev repair contradictory frozen tests', () => {
+  const task = {
+    id: 'task',
+    worktree: '/work/trees/t1',
+    branch: 'worker/t1',
+    currentAttempt: 1,
+    frozenFiles: [{ path: 'tests/acceptance.test.ts', hash: 'frozen-hash' }],
+    brief: {
+      goal: 'web',
+      manager: 'web',
+      kind: 'implementation',
+      paths: ['src/a.ts', 'tests/acceptance.test.ts'],
+      riskAreas: [],
+      markdown: 'Implement the requested behavior.',
+      acceptance: { command: ['bun', 'test'], tests: ['acceptance'], failing: true },
+      estimate: { lines: 100, files: 2 },
+      criticalPath: false,
+      waiting: [],
+      after: [],
+    },
+  } as unknown as Task;
+  const rendered = renderWorkerPrompt({ task, mainCheckout: '/repo/main' });
+  expect(rendered.prompt).toContain(
+    "Frozen acceptance files hold the contract's tests: tests/acceptance.test.ts. If one contradicts the contract, an owner document or the delivered code it depends on, change the smallest assertion that makes them agree, list the file and the reason in your summary, and continue.",
+  );
+  expect(rendered.prompt).toContain(
+    'When two requirements conflict, take the reading most consistent with the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue.',
+  );
+  expect(rendered.prompt).toContain(
+    'Validate only where outside input enters: HTTP requests, imported records, external files and third-party responses.',
+  );
+  expect(rendered.prompt).toContain('Large surveys are `spec-conflict` blockers starting "Research needed:"');
+  expect(rendered.prompt).not.toContain('must not be edited');
+  expect(rendered.prompt).not.toContain('never edit a frozen file');
+  expect(rendered.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.workerRoleBytes);
+
+  const directory = temporaryDirectory();
+  try {
+    const trustBlock =
+      'Trust model for briefs. Agents and internal callers are trusted; REZICS is a community product, and a mistake on dev is caught and returned after integration. When an incident shows a wrong result, brief the repair that produces the right result where the problem appears (resolve, merge, regenerate, normalize), so the pipeline continues. Do not brief a new refusal, rejection, stop or failed attempt unless no agent could produce the correct result there; if you still need one, state the defect it prevents and the attempts and hours it will cost. Ask for validation only at system boundaries: HTTP input, imported records, external files and third-party responses. Acceptance covers the behaviour asked for; ask for refusal tests only for boundary input and authorization rules. Money movement (payments, payouts, balances) keeps strict guards.';
+    const manager = renderManagerOpening({
+      spec: { id: 'manager', goal: 'web', brief: '', cwd: directory.path, engine: 'codex' },
+      backlogPath: 'backlog.md',
+      command: 'bun tools/goal/src/cli.ts',
+    });
+    expect(manager.prompt).toContain(trustBlock);
+    expect(manager.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
+    expect(manager.openingBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerOpeningBytes);
+  } finally {
+    directory.close();
+  }
+});
+
+test('minimal verification permits a focused check and keeps acceptance deferred', () => {
+  const directory = temporaryDirectory();
+  try {
+    writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
+    const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
+    expect(prompt).toContain('Acceptance, native, browser and root checks run after integration; you need not run them.');
+    expect(prompt).toContain(
+      'Run a focused check yourself only when you cannot finish the outcome without seeing it, for example a page you changed.',
+    );
+    expect(prompt).not.toContain('overrides');
+    expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
+  } finally {
+    directory.close();
+  }
 });
 
 test('a prompt without a runtime receipt keeps task readiness and installed dependency code unknown', () => {
@@ -413,12 +484,12 @@ test('a worker is told where reference projects are and to read the ones its con
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('/repo/main');
   expect(prompt).toContain("the main checkout's .reference/");
-  expect(prompt).toContain('read any reference source the contract names before designing');
+  expect(prompt).toContain('list contract-named sources read before design');
 });
 
 /** The behaviour the minimal verification policy must state wherever it is rendered. */
 const MINIMAL_RULES = [
-  'do not run acceptance, native or browser checks, a root check, worker-check or remote-check',
+  'Run a focused check yourself only when you cannot finish the outcome without seeing it',
   'type-check each workspace you changed',
   'services/kernel and services/auth may use the compiler database or a check host',
   'do not force `env -u KERNEL_CHECK_REMOTE` or local placement',
@@ -476,7 +547,7 @@ test('minimal product policy keeps supported compiler placement and the open com
   }
 });
 
-test('original integrated journey proof bypasses only its registered task-scoped minimal ban at final Codex input', () => {
+test('original integrated journey proof bypasses only its registered task-scoped minimal mode at final Codex input', () => {
   const directory = temporaryDirectory();
   try {
     const state = join(directory.path, '.temp/goal');

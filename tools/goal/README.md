@@ -50,8 +50,9 @@ memory limits even without `capacity.json`; ordinary admission retains the exist
 ordinary throughput. Resource usage totals still include urgent work.
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
-must have main checked out. Workers commit source changes on their assigned branches, do not rebase and never edit frozen
-acceptance files. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged
+must have main checked out. Workers commit source changes on their assigned branches and do not rebase. Ordinary dev
+product landings may repair contradictory frozen acceptance assertions; control-plane, stabilize and verification
+landings refuse those changes. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged
 acceptance on its retained source, while dirty or changed source or contract and failed or unavailable acceptance stay
 non-green. When a contract changes a behaviour an existing test asserts, the worker updates that test.
 Historical empty commits and controller-frozen acceptance files alone count as unchanged: acceptance records the retained
@@ -122,9 +123,11 @@ Briefs can carry frozen acceptance files in fenced blocks whose info string incl
 ` ```ts path=tools/example.test.ts `. Each path must be inside the brief's declared paths. The controller runs the
 configured `formatCommand` on exactly these files before committing them and records their formatted SHA-256 hashes. If
 the formatter rejects a file, the controller restores the brief's original bytes, commits those, and reports the
-formatter output so the manager can repair the brief. The train checks hashes before formatting a landing and refuses
-integration if a worker changes a frozen file. This immutable-input refusal names the changed paths and goes directly
-to the manager as a specification conflict; it does not enter the Git rebase conflict retry path.
+formatter output so the manager can repair the brief. The train checks hashes before formatting a landing. An
+ordinary dev product landing may change a frozen file to repair an assertion that contradicts the contract, an owner
+document or the delivered code. The landing log names the changed paths and the owning manager receives one `info`
+event. Control-plane, stabilize and verification landings still refuse frozen-file changes as immutable-input
+conflicts; they do not enter the Git rebase conflict retry path.
 When a retry reshapes a brief and drops a previously frozen path, the controller restores that file from the task's base
 commit when it existed there; it removes the file only when it was absent from the base. Paths still frozen by the new
 brief continue to be written and formatted from that brief.
@@ -1225,6 +1228,7 @@ over a budget refuses the launch and names each layer's measured size; a manager
 warning until Goal files finish migrating. Each attempt records a prompt manifest: git blob SHAs of `AGENTS.md`, the
 role template, each condition and the brief; a hash of the policy object; and rendered bytes per layer.
 `attempts --json` exports it.
+Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 
 ### Research
 
@@ -1593,8 +1597,8 @@ conflict or tool blocker), or two consecutive attempts that end without a new co
 attempt records an `attempt-progress` event: whether its branch head moved from the head recorded at its first prompt,
 or work was left uncommitted. Unknown progress never stops a task. A changed file outside its declared paths and a diff
 beyond twice its estimate do not stop it either: the attempt record lists such files in `outsidePaths` and the size in
-`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change, a specification
-conflict and a stall still reach the owning manager. Control-plane releases, stabilize-target and verification work keep
+`estimateOverrun`. A scope-stage refusal for an undeclared risk area, a frozen acceptance change on lanes that retain
+the refusal, a specification conflict and a stall still reach the owning manager. Control-plane releases, stabilize-target and verification work keep
 every limit above.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
@@ -1712,13 +1716,17 @@ The supermanager sets direction and the managers own the work. This applies to e
 
 - **Workers own the how; managers own the what.** A brief states the outcome in user terms, its owner links and what
   done means. A product worker on dev verifies the brief's premises against its base, designs the change and writes
-  the acceptance tests the brief does not name; frozen files stay untouchable and only cross-Goal contracts are frozen
-  in advance. It decides ambiguities itself, including a product choice the brief does not make, by taking the
-  reversible option most consistent with the owner documents and decided references; it records each decision in its
+  the acceptance tests the brief does not name. If a frozen assertion contradicts the contract, an owner document or
+  delivered code, it changes the smallest side and lists the reason; ordinary dev product landings may carry that
+  repair, while control-plane, stabilize and verification landings retain the frozen refusal. Only cross-Goal
+  contracts are frozen in advance. It decides ambiguities itself, including a product choice the brief does not make,
+  by taking the reversible option most consistent with the owner documents and decided references; it records each decision in its
   summary and the owning document, tells its manager with
-  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>`, and continues. A blocker is only a
-  contradiction between existing specs or tests, or missing access; undelivered code from another Goal, absent
-  receipts and unfinished work are not blockers. The worker does its own research and stops only for a large survey.
+  `bun tools/goal/src/cli.ts inbox send <manager> info "<decision>" --task <task>`, and continues. When requirements
+  conflict, it follows the owner documents and delivered code and changes the smaller side. A blocker is only a
+  conflict where every choice breaks an owner-document rule, a tool or infrastructure failure, or a large survey of
+  products or sources. Undelivered code from another Goal, absent receipts and unfinished work are not blockers. The
+  worker does its own research and stops only for a large survey.
   It may change any file its outcome needs outside risk areas, merges or cherry-picks only branches its brief names,
   lands committed, type-checking increments, and writes the rest of a larger outcome as a continuation brief. Workers
   build on their brief and the owner READMEs and do not read other workers' tasks.

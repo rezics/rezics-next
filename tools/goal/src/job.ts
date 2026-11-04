@@ -2052,6 +2052,18 @@ export class WorkerJob implements GateOutcomeSink {
           });
           if (plan) store.clearIntegrationPlan(outcome);
           released = this.releaseMetDependents();
+          if (outcome.frozenAcceptanceChanges?.length) {
+            const paths = canonicalConflictPaths(outcome.frozenAcceptanceChanges);
+            const event = {
+              managerId: task.brief.manager,
+              taskId: task.id,
+              from: `worker:${task.id}`,
+              kind: 'info' as const,
+              summary: `Frozen acceptance file changed: ${paths.join(', ')}`,
+            };
+            store.event(outcome, 'manager-event', event);
+            this.inbox.deliver(event);
+          }
           // A manager waits for research to decide its next contract; an integration does not otherwise wake it.
           if (task.brief.kind === 'research') {
             const reports = (outcome.changedFiles ?? []).filter((path) => path.startsWith('docs/research/'));

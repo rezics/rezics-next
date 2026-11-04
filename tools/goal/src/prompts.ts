@@ -308,26 +308,30 @@ function promptView(input: WorkerPromptInput): PromptView {
       product && !task.workspace
         ? 'Do not rebase; merge or cherry-pick only what the contract names.'
         : 'Do not rebase or merge.',
-    premiseCheck: product && !research ? " Check the contract's premises against your base first." : '',
+    premiseCheck: product && !research ? 'Check premises against your base first.' : '',
     acceptanceTests: research
       ? ''
-      : `Write missing acceptance tests the contract names${product ? ' or implies' : ''}; never edit a frozen file. If the contract changes a behaviour an existing test asserts, update that test and list it; keep assertions of unchanged behaviour. Write the fewest tests that pin user-visible behaviour and edge cases (as a rule fewer test lines than product lines) and only stories for states the contract names.`,
+      : `Write missing acceptance tests the contract names${product ? ' or implies' : ''}. Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions. Use the fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines); add stories only for named states.`,
     decisionFollowThrough: product
-      ? `, record it in one line in your summary${research ? '' : ' and the owning document'}, send it with \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
-      : ', record it in one line in your summary, and continue.',
+      ? research
+        ? `, record this choice in one line in your summary and owner doc, send \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
+        : `Record this choice in one summary line and the owner doc, send \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
+      : research
+        ? ', record it in one line in your summary, and continue.'
+        : 'Record it in one summary line and continue.',
     toolFailureRetries: RETRY_WORDS[policy.guidance.toolFailureRetries] ?? String(policy.guidance.toolFailureRetries),
     devInfrastructure: product
-      ? ' On dev, when your change is complete and committed and only the shared check infrastructure fails, that is not a blocker: report success and name each check that could not run with its error line; dev is verified after the merge.'
+      ? 'On dev, committed work blocked only by shared check infrastructure is success; name each skipped check and exact error. Dev is verified after merge.'
       : '',
     researchNeeded: research
       ? ''
-      : ' A question needing a large survey of products or sources is a `spec-conflict` blocker starting "Research needed:"; research the rest yourself in owner documents, primary sources and the main checkout\'s .reference/ (INDEX.md), read any reference source the contract names before designing, and list what you read.',
+      : 'Large surveys are `spec-conflict` blockers starting "Research needed:". Research owner documents, primary sources and the main checkout\'s .reference/INDEX.md; list contract-named sources read before design.',
     frozenFilesLine: frozen.length
-      ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.`
+      ? `Frozen acceptance files hold the contract's tests: ${frozen.join(', ')}. If one contradicts the contract, an owner document or the delivered code it depends on, change the smallest assertion that makes them agree, list the file and the reason in your summary, and continue.`
       : '',
     unfinished: continuesItself(task)
-      ? ''
-      : 'Unfinished work is not a blocker: if the contract does not fit this attempt, commit a coherent working part and return success with the remainder listed as follow-up.',
+      ? `If unfinished, commit a coherent type-checking part. Put the rest in .temp/continuation/<short-name>.md (goal ${brief.goal ?? ''}, manager ${manager}); return success and name it. Unfinished work is not a blocker.`
+      : 'Unfinished work is not a blocker: if the outcome does not fit this attempt, commit a coherent part and return success with the remainder listed as follow-up.',
     continuationBriefPath: `${CONTINUATION_DIRECTORY}/<short-name>.md`,
     waitSeconds: String(policy.guidance.longCommandWaitMs / 1000),
     waitMs: String(policy.guidance.longCommandWaitMs),
@@ -435,6 +439,16 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     .map((item) => item.text)
     .filter(Boolean)
     .join('\n\n');
+  const taskGuidance = !research && !verification
+    ? [
+        view.mergeRule,
+        view.premiseCheck,
+        view.acceptanceTests,
+        view.decisionFollowThrough,
+        view.devInfrastructure,
+        view.researchNeeded,
+      ]
+    : [];
   const extras = [
     view.unfinished,
     view.testCommands,
@@ -445,7 +459,9 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     deferredSentence(deferred),
   ].filter(Boolean);
   const prompt = collapse(
-    [roleText, prefixText, 'The task contract follows:', briefText, ...extras, suffixText].filter(Boolean).join('\n\n'),
+    [roleText, prefixText, 'The task contract follows:', briefText, ...taskGuidance, ...extras, suffixText]
+      .filter(Boolean)
+      .join('\n\n'),
   );
   const roleBytes = bytes(roleText);
   const conditionBytes = conditionBodyBytes;

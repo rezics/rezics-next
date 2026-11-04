@@ -235,6 +235,8 @@ export type GateOutcome = AttemptRef & {
   conflictedFiles?: readonly string[];
   /** Typed train refusal for immutable inputs; not a Git rebase conflict. */
   refusal?: GateOutcomeRefusal;
+  /** Frozen acceptance files repaired by a dev product landing and reported after it integrates. */
+  frozenAcceptanceChanges?: readonly string[];
   /** Complete Git identity of an actual unresolved rebase conflict; absent on legacy or non-Git failures. */
   rebaseConflict?: RebaseConflictContext;
   /** A task repeated the same control-plane propagation conflict without source or target progress. */
