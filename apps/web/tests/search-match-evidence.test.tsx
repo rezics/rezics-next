@@ -34,7 +34,7 @@ test('the live mixed result row shows current alias and description matches as s
   expect(html).toContain('lang="zh-Hant"');
   expect(html).toContain('lang="ja"');
   expect(html).toContain('&lt;<mark');
-  expect(html).toContain('Harbor</mark> &amp; Silence');
+  expect(html).toContain('Harbor</mark>&gt; &amp; Silence');
   expect(html).toContain('<details');
   expect(html).not.toContain('<Harbor> & Silence');
   for (const locale of locales) {
@@ -65,7 +65,7 @@ test('malformed spans, overlong UTF-8 excerpts and a different source identity a
     reasons: [{ field: 'alias', language: 'zh-Hant', text: 'Harbor', spans: [{ start: 0, end: 6 }] }],
   };
   for (const evidence of [
-    { ...base, source: { id: discoveryExample.hits[1]!.key.id, revision: 1 } },
+    { ...base, source: { id: discoveryExample.hits[3]!.key.id, revision: 1 } },
     { ...base, reasons: [{ ...base.reasons[0]!, spans: [{ start: 0, end: 7 }] }] },
     { ...base, reasons: [{ ...base.reasons[0]!, text: '海'.repeat(100), spans: [{ start: 0, end: 1 }] }] },
   ]) {
