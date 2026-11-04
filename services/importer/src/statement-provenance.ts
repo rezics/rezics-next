@@ -17,6 +17,9 @@ function content(value: unknown): unknown {
 
 export function sameStatementProvenance(actual: unknown, expected: unknown): boolean {
   try {
+    // Keep the importer's bounded descriptor-only admission before reading projected fields.
+    sourceDigest(actual);
+    sourceDigest(expected);
     return sourceDigest(content(actual)) === sourceDigest(content(expected));
   } catch {
     return false;
