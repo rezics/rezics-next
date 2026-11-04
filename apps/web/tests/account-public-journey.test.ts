@@ -150,14 +150,17 @@ test('denied, preparing, invalid continuation and unavailable are distinct from 
 
 test('composed public pages keep automation visible when operator hydration is unavailable or has no handle', () => {
   const page = profilePage({ profile: { automated: true, operatorId: accountId } });
-  const render = (operator?: { id: string; handle: string | null; displayName: string | null }) => {
+  const render = (
+    operator?: { id: string; handle: string | null; displayName: string | null },
+    target = page,
+  ) => {
     const cache = new QueryClient();
     cache.setQueryData(['exposure', 'anonymous'], []);
     return renderToString(
       createElement(QueryClientProvider, {
         client: cache,
         children: createElement(PublicProfilePage, {
-          page,
+          page: target,
           locale: 'en',
           messages: {
             unknown: 'Unknown',
@@ -174,7 +177,13 @@ test('composed public pages keep automation visible when operator hydration is u
       }),
     );
   };
-  expect(render()).toContain('Automated account');
+  const unavailable = render();
+  expect(unavailable).toContain('Automated account');
+  expect(unavailable).toContain('Operated by');
+  expect(unavailable).toContain('Operator unavailable');
+  expect(unavailable).not.toContain(`href="/en/@${accountId}"`);
+  expect(unavailable).toContain('Person');
+  expect(render(undefined, profilePage({ profile: { kind: 'organization' } }))).toContain('Organization');
   const html = render({ id: accountId, handle: null, displayName: 'Reading Room' });
   expect(html).toContain('Reading Room');
   expect(html).not.toContain('href="/en/@"');

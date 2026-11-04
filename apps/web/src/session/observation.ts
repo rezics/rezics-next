@@ -57,7 +57,7 @@ class BrowserObservation {
   private reconcile(forceFresh = false): void {
     const state = this.client.getQueryState(sessionQueryKey);
     const data = state?.status === 'success' ? normalizeSessionObservation(state.data) : undefined;
-    if (state?.status !== 'success' || !data) {
+    if (state?.status !== 'success' || state.fetchStatus !== 'idle' || state.isInvalidated || !data) {
       this.lastData = undefined;
       this.lastCsrfToken = undefined;
       this.lastUpdatedAt = 0;

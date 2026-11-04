@@ -4,13 +4,14 @@ import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { useCallback, useId, useRef, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';
+import { useId, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { accountOf, viewIsPublic, accountOperationAllowed, readAccountViewerActions } from './account-read';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
-import { sessionQuery, useSession } from '../../session/query';
+import { browserObservation } from '../../session/observation';
+import { useSession } from '../../session/query';
 import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
 import { ContributionRow } from '../../accounts/public-profile/contributions/row';
@@ -26,31 +27,17 @@ import { AccountFollow } from '../../accounts/public-profile/follow';
 function AccountManagementLinks({ id, value }: { id: string; value: OverviewValue }) {
   const session = useSession();
   const client = useQueryClient();
+  const reader = browserObservation(client);
   const mount = useId();
-  const subscribe = useCallback(
-    (listener: () => void) =>
-      client.getQueryCache().subscribe(({ query }) => {
-        const key = query.queryKey;
-        if (key.length === sessionQuery.queryKey.length && key[0] === sessionQuery.queryKey[0]) listener();
-      }),
-    [client],
-  );
-  const getSnapshot = useCallback(() => client.getQueryState(sessionQuery.queryKey), [client]);
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, () => undefined);
-  const scope = useRef({ snapshot, revision: 0 });
-  // A successful refresh of the same reader also replaces the permission observation.
-  // Query state identity covers removal/recreation and batched account changes.
-  if (scope.current.snapshot !== snapshot) scope.current = { snapshot, revision: scope.current.revision + 1 };
-  const observation = scope.current;
+  const snapshot = useSyncExternalStore(reader.subscribe, reader.getSnapshot, reader.getServerSnapshot);
+  const observation = snapshot.state === 'signed-in' ? snapshot.observation : undefined;
   const enabled =
     personalRead.enabled &&
     session.state === 'signed-in' &&
     !!session.subject &&
-    snapshot?.status === 'success' &&
-    snapshot.fetchStatus === 'idle' &&
-    !snapshot.isInvalidated;
-  const currentReader = () => enabled && scope.current === observation && getSnapshot() === snapshot;
-  const queryKey = ['account-viewer-actions', id, session.subject, session.csrfToken, mount, observation.revision];
+    observation?.subject === session.subject;
+  const currentReader = () => enabled && reader.getSnapshot() === snapshot;
+  const queryKey = ['account-viewer-actions', id, session.subject, session.csrfToken, mount, observation?.id];
   const query = useQuery({
     ...personalRead,
     queryKey,
@@ -187,6 +174,11 @@ export function AccountIdentity(props: Record<string, unknown>) {
               {`@${profile.handle}`}
             </p>
           )}
+          <p data-slot="agent-kind" className="text-sm text-muted-foreground">
+            {profile.kind === 'organization'
+              ? m.settings_verification_organization({}, { locale: value.locale as never })
+              : m.settings_verification_person({}, { locale: value.locale as never })}
+          </p>
         </div>
         <div
           data-slot="agent-description"
@@ -209,16 +201,16 @@ export function AccountIdentity(props: Record<string, unknown>) {
               {m.public_account_automated({}, { locale: value.locale as never })}
             </p>
           )}
-          {profile.automated && value.operator && (
+          {profile.operated && (
             <p data-slot="agent-operator" className="text-sm text-muted-foreground">
               {m.agent_operated_by({}, { locale: value.locale as never })}{' '}
-              {value.operator.handle ? (
+              {value.operator?.handle ? (
                 <value.link href={`/${encodeURIComponent(value.locale)}/@${encodeURIComponent(value.operator.handle)}`}>
                   {value.operator.displayName || value.operator.handle}
                 </value.link>
               ) : (
                 <span>
-                  {value.operator.displayName ||
+                  {value.operator?.displayName ||
                     m.public_account_operator_unavailable({}, { locale: value.locale as never })}
                 </span>
               )}
