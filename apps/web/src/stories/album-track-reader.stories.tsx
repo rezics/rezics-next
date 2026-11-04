@@ -50,11 +50,15 @@ type Story = StoryObj<typeof meta>;
 export const AdmittedMemberships: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const links = await canvas.findAllByRole('link', { name: m.album_tracks_open() });
-    await expect(links.length).toBe(3);
-    await expect(links[0]).not.toHaveAttribute('href', links[1]!.getAttribute('href'));
+    const memberships = await canvas.findAllByRole('button', { name: new RegExp(m.album_tracks_inspect()) });
+    await expect(memberships.length).toBe(3);
+    await userEvent.click(memberships[0]!);
+    const target = await canvas.findByRole('link', { name: m.album_tracks_open() });
+    await expect(target).toHaveAttribute('target', '_blank');
+    await expect(canvasElement.querySelector('[data-slot="album-track-inspection"]')).not.toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.work_parts_more() }));
     await canvas.findByText(m.album_tracks_complete());
+    await expect(canvasElement.querySelector('[data-slot="album-track-inspection"]')).toBeNull();
   },
 };
 export const MissingConfiguration: Story = { args: { scenario: 'unconfigured' } };
@@ -62,10 +66,13 @@ export const UnavailableContinuation: Story = {
   args: { scenario: 'continuation-unavailable' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const membership = await canvas.findByRole('button', { name: new RegExp(m.album_tracks_inspect()) });
+    await userEvent.click(membership);
     const next = await canvas.findByRole('button', { name: m.work_parts_more() });
     await userEvent.click(next);
     await canvas.findByText(m.album_tracks_next_unavailable());
-    await expect(canvas.getAllByRole('link', { name: m.album_tracks_open() }).length).toBe(3);
+    await expect(canvas.getAllByRole('link', { name: m.album_tracks_open() }).length).toBe(1);
+    await expect(canvasElement.querySelector('[data-slot="album-track-inspection"]')).not.toBeNull();
   },
 };
 export const Withheld: Story = { args: { scenario: 'withheld' } };
