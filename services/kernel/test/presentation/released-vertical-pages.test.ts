@@ -26,7 +26,7 @@ const launch = {
   book: ['schema:Book', 'bf:Instance'],
   recipe: ['schema:Recipe'],
   'visual-novel': ['wd:Q689445'],
-  anime: ['schema:Episode', 'schema:Movie', 'schema:TVSeason', 'schema:TVSeries'],
+  anime: ['schema:Episode', 'schema:Movie', 'schema:TVSeason', 'schema:TVSeries', 'rezics:AnimeRelease'],
   manga: ['schema:ComicSeries', 'schema:PublicationVolume'],
   game: ['schema:VideoGame', 'wd:Q20631656', 'wd:Q209163'],
   series: ['wd:Q7725310', 'schema:BookSeries'],

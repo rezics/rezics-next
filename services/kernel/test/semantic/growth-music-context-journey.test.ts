@@ -76,7 +76,7 @@ beforeAll(async () => {
       `INSERT INTO semantic.fact(
          route, subject_id, slot_id, log_seq, operation, kind, language, property, statement_id,
          body, recorded_transaction_id, release, relation)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, false)`,
       [
         route,
         eventId,
@@ -87,7 +87,7 @@ beforeAll(async () => {
         fact.language,
         fact.property,
         fact.statement_id,
-        fact.body,
+        JSON.stringify(fact.body),
         transaction,
         fact.kind === 'statement' ? bundledDigest : null,
       ],

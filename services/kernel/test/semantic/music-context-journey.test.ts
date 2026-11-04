@@ -85,6 +85,7 @@ test('a reader follows a sourced music event through native review and a bounded
         {
           context: driver.globalContext,
           property: statement.property.id,
+          ...(typeof statement.value.content === 'string' ? { target: statement.value.content } : {}),
           mode: 'replace',
           selection: [{ candidate, rank: 'normal' }],
           expected_head: (listing.body.adoption as { head: number } | null)?.head ?? null,
