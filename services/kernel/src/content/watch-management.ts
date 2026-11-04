@@ -167,7 +167,40 @@ export async function listWatches(
           now,
         )
       : null;
+  await requireCurrentWatchSession(deps, actor, owner.route, owner.id, deadline);
   return { items: finalItems, next };
+}
+
+/** Access evidence is request-scoped; recheck the session fence after asynchronous target disclosure. */
+async function requireCurrentWatchSession(
+  deps: WatchDependencies,
+  actor: Actor,
+  route: number,
+  accountId: string,
+  deadline: number,
+): Promise<void> {
+  if (actor.kind !== 'account') throw new ProblemError('not_found');
+  const current = await within(deadline, () =>
+    withConnection(deps.pool, async (connection) => {
+      const result = await deadlineClient(connection, deadline).query<{
+        state: string;
+        fenced: boolean;
+        minimum_authn_epoch: string;
+      }>(
+        `SELECT state,authn_fenced AS fenced,minimum_authn_epoch::text AS minimum_authn_epoch
+         FROM access.account WHERE route=$1 AND account_id=$2`,
+        [route, accountId],
+      );
+      return result.rows[0];
+    }),
+  );
+  if (
+    !current ||
+    current.state !== 'active' ||
+    current.fenced ||
+    BigInt(actor.authnEpoch) < BigInt(current.minimum_authn_epoch)
+  )
+    throw new ProblemError('not_found');
 }
 
 async function watchGeneration(deps: WatchDependencies, route: number, deadline: number): Promise<number> {
