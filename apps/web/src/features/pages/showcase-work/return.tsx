@@ -39,25 +39,34 @@ export function useWorkRegionReturn({
   const origin = workFranchiseReturnHref(currentHref, fallbackHref, locale);
   const address = origin.split('#')[0]!;
   const identity = JSON.stringify([descriptor, address, locale, spoiler, release, revision]);
-  const previous = useRef<{
-    sources: readonly unknown[];
-    identity: string;
-    store: typeof store;
-    observation: BrowserObservationSnapshot | undefined;
-    serial: number;
-    lease: ReturnType<typeof addressLease>;
-  } | undefined>(undefined);
+  const previous = useRef<
+    | {
+        sources: readonly unknown[];
+        identity: string;
+        store: typeof store;
+        observation: BrowserObservationSnapshot | undefined;
+        serial: number;
+        lease: ReturnType<typeof addressLease>;
+      }
+    | undefined
+  >(undefined);
+  const retiredSources = useRef(new WeakSet<object>());
+  const source = sources.at(-1) ?? sources[0];
+  const objectSource = source !== null && typeof source === 'object' ? source : undefined;
   const initialized = useRef(false);
-  const subscribe = useCallback((notify: () => void) => {
-    if (!store) return noSubscription();
-    const stop = store.subscribe(notify);
-    // The first browser observation binds the already prepared server reading during hydration.
-    if (!initialized.current && previous.current?.store === store) {
-      previous.current.observation = store.getSnapshot();
-      initialized.current = true;
-    }
-    return stop;
-  }, [store]);
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      if (!store) return noSubscription();
+      const stop = store.subscribe(notify);
+      // The first browser observation binds the already prepared server reading during hydration.
+      if (!initialized.current && previous.current?.store === store) {
+        previous.current.observation = store.getSnapshot();
+        initialized.current = true;
+      }
+      return stop;
+    },
+    [store],
+  );
   const observation = useSyncExternalStore(
     subscribe,
     store?.getSnapshot ?? noObservation,
@@ -66,6 +75,8 @@ export function useWorkRegionReturn({
   const old = previous.current;
   if (!old || old.sources.length !== sources.length || sources.some((source, index) => source !== old.sources[index])) {
     old?.lease.retire();
+    const oldSource = old?.sources.at(-1) ?? old?.sources[0];
+    if (oldSource !== null && typeof oldSource === 'object') retiredSources.current.add(oldSource);
     previous.current = {
       sources: [...sources],
       identity,
@@ -76,7 +87,12 @@ export function useWorkRegionReturn({
     };
   }
   const binding = previous.current!;
-  if (binding.identity !== identity || binding.store !== store || binding.observation !== observation)
+  if (
+    (objectSource && retiredSources.current.has(objectSource)) ||
+    binding.identity !== identity ||
+    binding.store !== store ||
+    binding.observation !== observation
+  )
     binding.lease.retire();
   const current = () => binding.lease.current();
   const [missing, setMissing] = useState(false);
@@ -140,7 +156,9 @@ export function useWorkRegionReturn({
   const mounted = useRef(true);
   useLayoutEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
   const returnToFor = (selection: Omit<WorkFranchiseReturn, 'spoiler' | 'release' | 'revision'>) =>
     workFranchiseReturnHref(currentHref, fallbackHref, locale, { ...selection, spoiler, release, revision });

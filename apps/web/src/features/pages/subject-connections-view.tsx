@@ -104,8 +104,10 @@ export function SubjectConnections({
   const current = incarnation.current;
   if (!current || current.page !== page || current.reader !== reader || current.read !== read || !lifetime.available) {
     current?.window.retire(true);
-    const visitHref = typeof window !== 'undefined' && window.location.pathname.includes(`/subjects/${page.subject}/`)
-      ? `${window.location.pathname}${window.location.search}${window.location.hash}` : undefined;
+    const visitHref =
+      typeof window !== 'undefined' && window.location.pathname.includes(`/subjects/${page.subject}/`)
+        ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+        : undefined;
     const requested = visitHref ? connectionReturnWindow(new URL(visitHref, 'https://rezics.invalid').hash) : undefined;
     const retiredReturn = !!requested && returnVisit.current === visitHref;
     const resume = retiredReturn ? undefined : requested;
@@ -280,12 +282,11 @@ function ConnectionsReading({
     });
   }
   const visit = snapshot.visit;
-  const currentHref = withSubjectVisitReturn(connectionReturnHref(
-    value.subject!,
-    value.subjectLabel ?? value.unlabelled,
+  const currentHref = withSubjectVisitReturn(
+    connectionReturnHref(value.subject!, value.subjectLabel ?? value.unlabelled, value.locale, value.realm),
+    returnTo ?? '',
     value.locale,
-    value.realm,
-  ), returnTo ?? '', value.locale);
+  );
   const Link = value.link;
   const link = useMemo<typeof PlainLink>(
     () => (props) => <Link {...props} href={withSubjectVisitReturn(props.href, currentHref, value.locale)} />,
@@ -489,23 +490,42 @@ function ConnectionsReading({
                           (item) => item.statement === work.statement.id && item.id === work.id,
                         );
                         if (!item || !current) return null;
-                        const returnToFor = (control: 'browse' | 'evidence') => withSubjectVisitReturn(connectionReturnHref(
-                          value.subject!,
-                          value.subjectLabel ?? value.unlabelled,
-                          value.locale,
-                          value.realm,
-                          connectionReturn(current, snapshot.pages?.[group], work.statement.id, work.holder, control),
-                        ), returnTo ?? '', value.locale);
+                        const returnToFor = (control: 'browse' | 'evidence') =>
+                          withSubjectVisitReturn(
+                            connectionReturnHref(
+                              value.subject!,
+                              value.subjectLabel ?? value.unlabelled,
+                              value.locale,
+                              value.realm,
+                              connectionReturn(
+                                current,
+                                snapshot.pages?.[group],
+                                work.statement.id,
+                                work.holder,
+                                control,
+                              ),
+                            ),
+                            returnTo ?? '',
+                            value.locale,
+                          );
                         const returnHref = returnToFor('browse');
                         const target = restore.current;
-                        const restoreFocus = target && !snapshot.pending.size && current.section.ok &&
-                          current.reading === target.reading && current.stream.key === target.stream &&
-                          target.focus === work.statement.id && target.holder === work.holder
-                          ? {
-                            control: target.control ?? 'browse' as const,
-                            current: () => ready && restore.current === target,
-                            complete: () => { restore.current = undefined; },
-                          } : undefined;
+                        const restoreFocus =
+                          target &&
+                          !snapshot.pending.size &&
+                          current.section.ok &&
+                          current.reading === target.reading &&
+                          current.stream.key === target.stream &&
+                          target.focus === work.statement.id &&
+                          target.holder === work.holder
+                            ? {
+                                control: target.control ?? ('browse' as const),
+                                current: () => ready && restore.current === target,
+                                complete: () => {
+                                  restore.current = undefined;
+                                },
+                              }
+                            : undefined;
                         const WorkLink: typeof PlainLink = (props) => (
                           <Link {...props} href={withSubjectVisitReturn(props.href, returnHref, value.locale)} />
                         );

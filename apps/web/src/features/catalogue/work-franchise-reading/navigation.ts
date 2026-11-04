@@ -16,7 +16,9 @@ export function workFranchiseReturn(hash: string): WorkFranchiseReturn | undefin
   const keys = [...params.keys()];
   if (
     new Set(keys).size !== keys.length ||
-    keys.some((key) => !['stream', 'statement', 'holder', 'spoiler', 'node', 'focus', 'release', 'revision'].includes(key))
+    keys.some(
+      (key) => !['stream', 'statement', 'holder', 'spoiler', 'node', 'focus', 'release', 'revision'].includes(key),
+    )
   )
     return;
   const stream = params.get('stream');
@@ -31,7 +33,7 @@ export function workFranchiseReturn(hash: string): WorkFranchiseReturn | undefin
   if (
     !stream ||
     !/^(in|out):[^\s\u0000-\u001f\u007f]{1,256}$/u.test(stream) ||
-    ((statement === null) !== (holder === null)) ||
+    (statement === null) !== (holder === null) ||
     (statement !== null && !uuid.test(statement)) ||
     (holder !== null && !uuid.test(holder)) ||
     (node !== null && !/^[A-Za-z0-9_-]{1,64}$/.test(node)) ||
@@ -42,7 +44,8 @@ export function workFranchiseReturn(hash: string): WorkFranchiseReturn | undefin
   )
     return;
   return {
-    stream, spoiler: Number(spoiler),
+    stream,
+    spoiler: Number(spoiler),
     ...(statement && holder ? { statement, holder } : {}),
     ...(node ? { node } : {}),
     ...(focus ? { focus: focus as 'browse' | 'evidence' } : {}),
