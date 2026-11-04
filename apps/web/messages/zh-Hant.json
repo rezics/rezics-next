@@ -8022,5 +8022,16 @@
   "library_layout_source_url": "本次瀏覽選擇的版面。",
   "library_layout_source_type": "正在使用此類型已儲存的版面。",
   "library_layout_source_all": "正在使用所有類型已儲存的版面。",
-  "library_layout_source_application": "正在使用應用程式預設版面。"
+  "library_layout_source_application": "正在使用應用程式預設版面。",
+  "search_share_action": "分享已執行的搜尋",
+  "search_share_draft": "未套用的編輯不包含在內。這是上次執行的搜尋。",
+  "search_share_executed": "這是上次執行的搜尋。接收者仍須具有目前權限。",
+  "search_share_loading": "正在準備預覽…",
+  "search_share_copy": "複製連結",
+  "search_share_copied": "連結已複製。",
+  "search_share_refused": "複製遭拒。請選取並複製下方連結。",
+  "search_share_oversized": "此搜尋過大，無法透過連結分享。請繼續編輯以縮小搜尋。",
+  "search_share_private": "此搜尋含有私密或不可攜的條件。分享前請明確移除這些條件。",
+  "search_share_unavailable": "暫時無法分享。搜尋已保留，請重試。",
+  "search_share_close": "關閉預覽"
 }

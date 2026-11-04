@@ -8022,5 +8022,16 @@
   "library_layout_source_url": "이번 방문에서 선택한 레이아웃입니다.",
   "library_layout_source_type": "이 유형에 저장된 레이아웃을 사용합니다.",
   "library_layout_source_all": "모든 유형에 저장된 레이아웃을 사용합니다.",
-  "library_layout_source_application": "앱 기본 레이아웃을 사용합니다."
+  "library_layout_source_application": "앱 기본 레이아웃을 사용합니다.",
+  "search_share_action": "실행한 검색 공유",
+  "search_share_draft": "적용하지 않은 편집은 제외됩니다. 마지막으로 실행한 검색입니다.",
+  "search_share_executed": "마지막으로 실행한 검색입니다. 받는 사람의 현재 권한이 적용됩니다.",
+  "search_share_loading": "미리보기 준비 중…",
+  "search_share_copy": "링크 복사",
+  "search_share_copied": "링크를 복사했습니다.",
+  "search_share_refused": "복사가 거부되었습니다. 아래 링크를 선택하여 복사하세요.",
+  "search_share_oversized": "링크로 공유하기에는 검색이 너무 큽니다. 편집하여 줄이세요.",
+  "search_share_private": "비공개 또는 이전할 수 없는 조건이 있습니다. 공유 전에 명시적으로 제거하세요.",
+  "search_share_unavailable": "공유할 수 없습니다. 검색은 유지됩니다. 다시 시도하세요.",
+  "search_share_close": "미리보기 닫기"
 }

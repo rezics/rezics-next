@@ -8097,5 +8097,16 @@
   "library_layout_source_url": "Layout chosen for this visit.",
   "library_layout_source_type": "Using the saved layout for this type.",
   "library_layout_source_all": "Using the saved layout for all types.",
-  "library_layout_source_application": "Using the application layout."
+  "library_layout_source_application": "Using the application layout.",
+  "search_share_action": "Share executed query",
+  "search_share_draft": "Unapplied edits are excluded. This is the last executed query.",
+  "search_share_executed": "This is the last executed query. Recipients use their current permissions.",
+  "search_share_loading": "Preparing preview…",
+  "search_share_copy": "Copy link",
+  "search_share_copied": "Link copied.",
+  "search_share_refused": "Copy was refused. Select and copy the link below.",
+  "search_share_oversized": "This query is too large for a link. Keep editing to reduce it.",
+  "search_share_private": "This query has private or nonportable conditions. Remove them explicitly before sharing.",
+  "search_share_unavailable": "Sharing is unavailable. Your query is preserved; try again.",
+  "search_share_close": "Close preview"
 }
