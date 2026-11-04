@@ -21,11 +21,13 @@ export function creditSearchIndexDefinition(base: Record<string, unknown>): Reco
       direction: { type: 'keyword' },
       nameRevision: { type: 'keyword' },
       qualifiers: {
-        type: 'nested', dynamic: 'strict',
+        type: 'nested',
+        dynamic: 'strict',
         properties: { property: { type: 'keyword' }, value: { type: 'keyword' } },
       },
       name: {
-        type: 'object', dynamic: 'strict',
+        type: 'object',
+        dynamic: 'strict',
         properties: { language: { type: 'keyword' }, value: { type: 'text', analyzer: names.analyzer } },
       },
     },

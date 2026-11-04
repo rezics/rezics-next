@@ -1,14 +1,28 @@
 import { describe, expect, test } from 'bun:test';
-import { CREDIT_SEARCH_LIMITS, currentCreditSearchMatch, projectCreditSearch,
-  type CreditSearchEntry, type CreditSearchSource } from '../../src/search/credit-search.ts';
+import {
+  CREDIT_SEARCH_LIMITS,
+  currentCreditSearchMatch,
+  projectCreditSearch,
+  type CreditSearchEntry,
+  type CreditSearchSource,
+} from '../../src/search/credit-search.ts';
 import { creditSearchIndexDefinition } from '../../src/search/credit-search-mapping.ts';
 import { subjectIndexDefinition } from '../../src/search/indices.ts';
 
 const entry = (id = 'statement', targetId = 'creator'): CreditSearchEntry => ({
-  witness: { workId: 'work', statementId: id, targetId, direction: 'outgoing', revision: 1,
-    release: 'release', property: 'released-credit-property', qualifiers: [{ property: 'role', value: 'writer' }],
-    nameRevision: 'name-1' },
-  names: [{ language: 'en', value: 'Name absent from title and description' }], namesComplete: true,
+  witness: {
+    workId: 'work',
+    statementId: id,
+    targetId,
+    direction: 'outgoing',
+    revision: 1,
+    release: 'release',
+    property: 'released-credit-property',
+    qualifiers: [{ property: 'role', value: 'writer' }],
+    nameRevision: 'name-1',
+  },
+  names: [{ language: 'en', value: 'Name absent from title and description' }],
+  namesComplete: true,
 });
 function native(entries: readonly CreditSearchEntry[] = [entry()]): CreditSearchSource {
   return {
@@ -26,20 +40,23 @@ describe('bounded credited-name projection consumer', () => {
     if (projection.state !== 'complete') throw new Error('complete projection required');
     expect(projection.names.map((w) => w.targetId)).toEqual(['person-a', 'person-b']);
     expect(await currentCreditSearchMatch(source, projection, projection.names[1]!)).toBe('current');
-    expect(await currentCreditSearchMatch(source, projection, {
-      ...projection.names[1]!, qualifiers: [{ property: 'role', value: 'composer' }],
-    })).toBe('unavailable');
+    expect(
+      await currentCreditSearchMatch(source, projection, {
+        ...projection.names[1]!,
+        qualifiers: [{ property: 'role', value: 'composer' }],
+      }),
+    ).toBe('unavailable');
     source.current = async () => false; // renamed, concealed, merged or retired supporting identity
     expect(await currentCreditSearchMatch(source, projection, projection.names[1]!)).toBe('restart');
   });
 
   test('missing support and partial creator labels never prove an empty complete population', async () => {
     expect(await projectCreditSearch(undefined, 'work')).toEqual({ state: 'unavailable' });
-    expect(await projectCreditSearch(native([{ ...entry(), namesComplete: false }]), 'work'))
-      .toEqual({ state: 'incomplete' });
+    expect(await projectCreditSearch(native([{ ...entry(), namesComplete: false }]), 'work')).toEqual({
+      state: 'incomplete',
+    });
     const names = Array.from({ length: CREDIT_SEARCH_LIMITS.namesPerCreator + 1 }, () => entry().names[0]!);
-    expect(await projectCreditSearch(native([{ ...entry(), names }]), 'work'))
-      .toEqual({ state: 'incomplete' });
+    expect(await projectCreditSearch(native([{ ...entry(), names }]), 'work')).toEqual({ state: 'incomplete' });
   });
 
   test('seeks at most four native pages with independent expansion bounds', async () => {
@@ -49,8 +66,13 @@ describe('bounded credited-name projection consumer', () => {
       expect(input.limits).toBe(CREDIT_SEARCH_LIMITS);
       expect(input.after).toBe(calls ? `cursor-${calls}` : null);
       calls++;
-      return { state: 'current', workId: 'work', observation: 'cut',
-        entries: [entry(`statement-${calls}`)], next: `cursor-${calls}` };
+      return {
+        state: 'current',
+        workId: 'work',
+        observation: 'cut',
+        entries: [entry(`statement-${calls}`)],
+        next: `cursor-${calls}`,
+      };
     };
     expect(await projectCreditSearch(source, 'work')).toEqual({ state: 'incomplete' });
     expect(calls).toBe(4);
@@ -63,8 +85,13 @@ describe('bounded credited-name projection consumer', () => {
     source.unchanged = async () => false;
     expect(await currentCreditSearchMatch(source, projection, projection.names[0]!)).toBe('restart');
     let calls = 0;
-    source.page = async () => ({ state: 'current', workId: 'work', observation: `cut-${calls++}`,
-      entries: [entry()], next: 'next' });
+    source.page = async () => ({
+      state: 'current',
+      workId: 'work',
+      observation: `cut-${calls++}`,
+      entries: [entry()],
+      next: 'next',
+    });
     expect(await projectCreditSearch(source, 'work')).toEqual({ state: 'restart' });
   });
 

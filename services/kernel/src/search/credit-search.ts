@@ -49,12 +49,14 @@ export type CreditSearchPage =
  * charge raw examined rows and nested label work against these bounds before performing the read.
  * Missing native support is unavailable, never a complete empty page. */
 export interface CreditSearchSource {
-  page(input: Readonly<{
-    workId: string;
-    after: string | null;
-    observation: string | null;
-    limits: typeof CREDIT_SEARCH_LIMITS;
-  }>): Promise<CreditSearchPage>;
+  page(
+    input: Readonly<{
+      workId: string;
+      after: string | null;
+      observation: string | null;
+      limits: typeof CREDIT_SEARCH_LIMITS;
+    }>,
+  ): Promise<CreditSearchPage>;
   /** Exact current statement, directed target, qualifiers, release, name and both disclosures.
    * The receiving page must retain this observation through its final native disclosure guard. */
   current(witness: CreditSearchWitness, observation: string): Promise<boolean | 'unavailable'>;
@@ -72,18 +74,25 @@ export type CreditSearchProjection =
 const encoder = new TextEncoder();
 const bytes = (value: unknown) => encoder.encode(JSON.stringify(value)).byteLength;
 const bounded = (value: string, max = 256) =>
-  typeof value === 'string' && value.length > 0 && value.length <= max && value.isWellFormed() &&
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= max &&
+  value.isWellFormed() &&
   encoder.encode(value).byteLength <= max;
 
 function validEntry(entry: CreditSearchEntry, workId: string): boolean {
   const w = entry.witness;
-  return w.workId === workId && w.direction === 'outgoing' &&
+  return (
+    w.workId === workId &&
+    w.direction === 'outgoing' &&
     [w.workId, w.statementId, w.release, w.property, w.targetId, w.nameRevision].every((s) => bounded(s)) &&
-    Number.isSafeInteger(w.revision) && w.revision > 0 &&
+    Number.isSafeInteger(w.revision) &&
+    w.revision > 0 &&
     w.qualifiers.length <= CREDIT_SEARCH_LIMITS.qualifiersPerCredit &&
     w.qualifiers.every((q) => bounded(q.property) && bounded(q.value)) &&
     entry.names.length <= CREDIT_SEARCH_LIMITS.namesPerCreator &&
-    entry.names.every((name) => bounded(name.language, 35) && bounded(name.value, CREDIT_SEARCH_LIMITS.nameBytes));
+    entry.names.every((name) => bounded(name.language, 35) && bounded(name.value, CREDIT_SEARCH_LIMITS.nameBytes))
+  );
 }
 
 /** All-or-readiness: a prefix never becomes a definitive negative for a credited-name query. */
@@ -107,8 +116,11 @@ export async function projectCreditSearch(
     if (observation !== null && observation !== page.observation) return { state: 'restart' };
     observation = page.observation;
     for (const entry of page.entries) {
-      if (entry.names.length > CREDIT_SEARCH_LIMITS.namesPerCreator ||
-          entry.witness.qualifiers.length > CREDIT_SEARCH_LIMITS.qualifiersPerCredit) return { state: 'incomplete' };
+      if (
+        entry.names.length > CREDIT_SEARCH_LIMITS.namesPerCreator ||
+        entry.witness.qualifiers.length > CREDIT_SEARCH_LIMITS.qualifiersPerCredit
+      )
+        return { state: 'incomplete' };
       if (!validEntry(entry, workId)) return { state: 'unavailable' };
       if (!entry.namesComplete) return { state: 'incomplete' };
       if (statements.has(entry.witness.statementId)) return { state: 'unavailable' };
