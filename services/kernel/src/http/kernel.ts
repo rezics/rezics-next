@@ -47,6 +47,7 @@ import { feedRoutes } from '../content/feed-routes.ts';
 import { personalLabelRoutes } from '../library/label-routes.ts';
 import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
+import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
 import { diaryRoutes } from '../library/diary-routes.ts';
 import { createSessionCommands } from '../library/sessions.ts';
 import { ratingRoutes } from '../rating/routes.ts';
@@ -509,7 +510,8 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       return typeof value === 'function' ? value.bind(commands) : value;
     },
   });
-  const diary = diaryRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
+  const readingInsights = readingInsightsRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, { pool: dependencies.pool });
+  const diary = diaryRoutes(readingInsights as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
     pool: dependencies.pool,
     clock,
@@ -936,6 +938,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof payoutRoutes> &
   ReturnType<typeof commerceRoutes> &
   ReturnType<typeof progressRoutes> &
+  ReturnType<typeof readingInsightsRoutes> &
   ReturnType<typeof diaryRoutes> &
   ReturnType<typeof contextRoutes> &
   ReturnType<typeof providerReviewQueueRoutes>;
