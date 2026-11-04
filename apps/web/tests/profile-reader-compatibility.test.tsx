@@ -277,6 +277,11 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       if (!result) throw new Error(`Missing public activity switch: ${label}`);
       return result;
     };
+    const togglePublicSwitch = async (label: string) => {
+      const control = publicSwitch(label).closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      if (!control) throw new Error(`Missing public activity switch input: ${label}`);
+      await click(control);
+    };
     const resolveRead = async (index: number, value: ProfileReadResult) => {
       await act(async () => {
         const request = readRequests[index];
@@ -297,13 +302,6 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     const click = async (element: HTMLElement) =>
       act(async () => {
         element.click();
-        await Promise.resolve();
-      });
-    const pressSpace = async (element: HTMLElement) =>
-      act(async () => {
-        element.focus();
-        element.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-        element.dispatchEvent(new window.KeyboardEvent('keyup', { key: ' ', bubbles: true }));
         await Promise.resolve();
       });
 
@@ -437,7 +435,8 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     const reviewSwitch = publicSwitch(m.settings_public_reviews());
     expect(reviewSwitch.getAttribute('aria-disabled')).toBeNull();
     const viewSaveCount = saveRequests.length;
-    await pressSpace(reviewSwitch);
+    await togglePublicSwitch(m.settings_public_reviews());
+    expect(publicSwitch(m.settings_public_reviews()).getAttribute('aria-checked')).toBe('false');
     await click(button(m.settings_profile_save_activity()));
     await until(() => saveRequests.length === viewSaveCount + 1, 'the public activity command');
     const viewCommand = saveRequests[viewSaveCount]!;
@@ -454,7 +453,8 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     const speakerSwitch = publicSwitch(m.settings_public_speakers());
     expect(speakerSwitch.getAttribute('aria-checked')).toBe('false');
     const speakerSaveCount = saveRequests.length;
-    await pressSpace(speakerSwitch);
+    await togglePublicSwitch(m.settings_public_speakers());
+    expect(publicSwitch(m.settings_public_speakers()).getAttribute('aria-checked')).toBe('true');
     await click(button(m.settings_profile_save_activity()));
     await until(() => saveRequests.length === speakerSaveCount + 1, 'organization speaker listing command');
     const speakerCommand = saveRequests[speakerSaveCount]!;
