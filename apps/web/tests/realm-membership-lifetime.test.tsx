@@ -23,6 +23,13 @@ type MembershipCommand = {
 const standingReads: string[] = [];
 const joinAdviceReads: string[] = [];
 const membershipCommands: MembershipCommand[] = [];
+const sessionModule = {
+  sessionQuery: {
+    queryKey: ['session'] as const,
+    queryFn: async () => ({ state: 'unknown', csrfToken: null, subject: null }),
+    staleTime: Infinity,
+  },
+};
 let readMembership: (realmId: string) => Promise<RealmViewer | null> = async () => viewer('member');
 let readJoinAdvice: (realmId: string) => Promise<RealmJoinAdvice> = async () => ({ state: 'current', allowed: true });
 let sendMembership: (input: MembershipCommand) => Promise<MembershipResult> = async () => ({
@@ -74,7 +81,6 @@ mock.module('../src/community/space-actions', () => ({
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
-const sessionModule = await import('../src/session/query');
 mock.module('../src/session/query', () => ({
   ...sessionModule,
   useSession: () =>
