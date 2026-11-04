@@ -2757,6 +2757,34 @@ organization memberships and personal operator responsibility holds. It accepts 
 `operatorsCursor`. Incomplete native membership-inverse coverage returns an explicit `preparing` organization
 section, while independently available identity and responsibility sections remain readable.
 
+The inventory DTO adds a closed `viewer: {state: "current", account}` that repeats the current human, and a
+closed `navigation` on each organization and responsibility row: `admitted`, `unavailable`, or `concealed`.
+Admission reuses `createManagementRead`'s current membership role and one operator-self `account:manage` check
+for the whole responsibility feed. A reservation or reconciling hold is coordination evidence, never authority.
+A missing public identity is `concealed` and yields no destination or extra denial. A current reservation also
+requires an active, unfenced subject still held by the admitted operator before its navigation is admitted.
+`admitted` is not a URL; consumers construct the existing Settings destination from the identity.
+Decision: unavailable optional operator-management preparation leaves independently authorized inventory readable
+with unavailable navigation.
+
+The response schemas and types are exported from `account-management.ts` and mounted by `routes.ts` with their
+actual Access, pool, token and clock dependencies. Content's official complete compiler publisher derives the
+installed callable/root and generated envelope from this source independently of unfinished consumers. Its serial
+successor after the integrated input publisher owns publication; no handwritten client mirror or method override
+is an interface. Installed transport, rendering, navigation and native growth acceptance remain deferred.
+
+After official publication, directory paging keeps one native page per feed (at most 20 rows each). Next replaces that page;
+return-to-first is a cursor-free read. Duplicates collapse to the first occurrence inside the current page
+only. The sibling feed's current page is retained; the incidental sibling first page in a selected-feed read
+is ignored.
+
+Cost of the additive envelope: the existing finite membership inverse (`MEMBERSHIP_LIMIT` = 1000), both feeds
+actually read (20 processed candidates and at most 20 returned rows each, plus the indexed responsibility
+lookahead), public identity hydration, anchored current organization roles and subject relations/lifecycle,
+operator-self authorization and preparation/currentness, cursor seal/open and JSON serialization, including
+repeated work on retry. No runtime quotes, funding or metered invisible MVCC versions. These are whole-call
+finite bounds; growth at three unrelated account/reservation populations remains a controller obligation.
+
 `GET /v1/accounts/{accountId}/management` (`account.read_management`, `account:read`) accepts `membersCursor` and
 `operatorsCursor`. Both routes require the installed formula's `account:read` on the human's own account, and
 reject operated identities. Organization details require current native membership. Private holders and operator
