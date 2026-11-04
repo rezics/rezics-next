@@ -91,7 +91,7 @@ export const contextViewerActionResource: ViewerActionResource = {
                 ...actions,
                 'context:accept': visible.get(id)?.state === 'active',
                 'context:adopt': visible.get(id)?.state === 'active',
-                'statement:propose': id === GLOBAL_CONTEXT.id,
+                'statement:propose': id === GLOBAL_CONTEXT,
               },
             ];
           }),
