@@ -279,7 +279,12 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         this.update(
           uncertain
             ? // A refused replay cannot establish whether the earlier transport-ambiguous command committed.
-              { phase: 'uncertain', failure: answer.reason, nativeFailure: answer.failure, outcomeUnknown: true }
+              {
+                phase: 'uncertain',
+                failure: answer.reason === 'conflict' ? undefined : answer.reason,
+                nativeFailure: answer.failure,
+                outcomeUnknown: true,
+              }
             : {
                 attempt: null,
                 receipt: null,
