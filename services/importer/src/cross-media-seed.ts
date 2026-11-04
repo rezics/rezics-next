@@ -3267,17 +3267,17 @@ export async function runCrossMediaSeedCli(
       });
     }
     ensure(vndbBindings, 'Selected VNDB character vocabulary bindings are missing');
-    const separator = String.fromCharCode(0);
+    const mergeSeparator = String.fromCharCode(0);
     const readings = new Map<string, (typeof result.readings)[number]>();
     for (const reading of [
       ...result.readings,
       ...('readings' in publicTags ? publicTags.readings : []),
       ...(characterResult?.readings ?? []),
     ])
-      readings.set(reading.source + separator + reading.externalId, reading);
+      readings.set(reading.source + mergeSeparator + reading.externalId, reading);
     const members = new Map<string, (typeof result.members)[number]>();
     for (const member of [...result.members, ...(characterResult?.members ?? [])]) {
-      const key = member.source + separator + member.key;
+      const key = member.source + mergeSeparator + member.key;
       const previous = members.get(key);
       if (!previous || member.membership === 'family') members.set(key, member);
     }
