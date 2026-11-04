@@ -217,12 +217,12 @@ test('Record and correct exact progress and a selected-field journal with retain
   const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const observation = viewerExposureLifetime(queries);
   const stopObservation = observation.subscribe(() => {});
-  const admit = () => {
+  const admit = (admitted: readonly string[] = ['reading_progress']) => {
     const current = observation.getSnapshot();
     if (current.state !== 'signed-in') throw new Error('Expected prepared recording viewer');
     queries.setQueryData(viewerExposureQuery(current.observation).queryKey, {
       subject: 'owner',
-      admitted: ['reading_progress'],
+      admitted,
     });
   };
   admit();
@@ -343,17 +343,16 @@ test('Record and correct exact progress and a selected-field journal with retain
     expect(journalWrites).toHaveLength(1);
     const captured = structuredClone(journalWrites[0]!);
     expect(captured.body).toEqual({ revision: 0, finishDate: { year: 2024, month: 2 } });
-    await act(async () => queries.setQueryData(['session'], { state: 'signed-out' }));
+    // Read admission retires the private reader while the same actor and credential retain command custody.
+    await act(async () => admit([]));
     expect(host.textContent).not.toContain('Original private reflection');
     journal = { ...journal, revision: 1, finishDate: { year: 2024, month: 2 } };
     await act(async () => {
       resolveJournal!({ kind: 'saved', journal });
     });
     expect(host.textContent).not.toContain('Original private reflection');
-    await act(async () => {
-      queries.setQueryData(['session'], { state: 'signed-in', csrfToken: 'recording-csrf', subject: 'owner' });
-      admit();
-    });
+    await act(async () => admit());
+    expect(journalSection().textContent).toContain(m.library_journal_retry_identity());
     await act(async () => button(m.library_occurrence_read_current()).click());
     expect(journalWrites).toHaveLength(1);
     expect(journalSection().textContent).toContain(m.library_journal_retry_identity());
