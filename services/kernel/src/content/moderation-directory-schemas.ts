@@ -65,12 +65,7 @@ export const ModerationDirectoryPageSchema = t.Union([
   ),
   t.Object(
     {
-      state: t.Union([
-        t.Literal('preparing'),
-        t.Literal('unavailable'),
-        t.Literal('denied'),
-        t.Literal('stale'),
-      ]),
+      state: t.Union([t.Literal('preparing'), t.Literal('unavailable'), t.Literal('denied'), t.Literal('stale')]),
       items: t.Tuple([]),
       next: t.Null(),
     },
