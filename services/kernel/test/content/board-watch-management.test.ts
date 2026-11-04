@@ -3,7 +3,7 @@ import { normalizeDocument } from '@rezics/document';
 import { contentNoticeEffects } from '../../src/content/relays.ts';
 import { eraseAccountNoticesPage } from '../../src/content/notices.ts';
 import { createContentWorkAccess } from '../../src/content/register.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
