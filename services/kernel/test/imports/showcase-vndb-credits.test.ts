@@ -113,10 +113,7 @@ test('selected-VN credits reach adopted current facts through exact current bind
           source: { ...authored, external_id: 'wrong-credit-scheme', digest: 'e'.repeat(64) },
           subject: { type: 'skos:ConceptScheme', labels: { en: 'Other source roles' } },
         },
-        ...[
-          'scenario',
-          'chardesign',
-        ].map((code, index) => ({
+        ...['scenario', 'chardesign'].map((code, index) => ({
           op: 'create' as const,
           key: randomUUID(),
           source: { ...authored, external_id: code, digest: String.fromCharCode(98 + index).repeat(64) },
@@ -183,7 +180,9 @@ test('selected-VN credits reach adopted current facts through exact current bind
         statement: {
           property: { id: item.property },
           value: { type: 'value' as const, content: item.content },
-          references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: item.content } }] }],
+          references: [
+            { parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: item.content } }] },
+          ],
         },
       })),
     });
@@ -294,7 +293,9 @@ test('selected-VN credits reach adopted current facts through exact current bind
       { origin: 'https://kernel.import.test' },
       { mediaDeadlineMs: 0, vndbCreditReferences: references },
     );
-    expect(reopened.readings.map((row) => row.externalId).sort()).toEqual(first.readings.map((row) => row.externalId).sort());
+    expect(reopened.readings.map((row) => row.externalId).sort()).toEqual(
+      first.readings.map((row) => row.externalId).sort(),
+    );
     current = await readCurrent();
     expect(current.subject.statements['schema:author']).toHaveLength(1);
     expect(current.subject.statements['wdt:P725']).toHaveLength(1);

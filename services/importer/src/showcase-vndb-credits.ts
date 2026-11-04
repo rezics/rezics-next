@@ -69,12 +69,10 @@ function edgePath(table: 'vn_staff' | 'vn_seiyuu', row: Row): string | undefined
 }
 
 function diagnosticCode(value: unknown): string | undefined {
-  return (
-    typeof value === 'string' &&
+  return typeof value === 'string' &&
     value.length <= 64 &&
     value.isWellFormed() &&
     !/[\u0000-\u001f\u007f-\u009f]/u.test(value)
-  )
     ? value
     : undefined;
 }
@@ -141,7 +139,8 @@ export function planShowcaseVndbCredits(plan: CrossMediaPlan): {
       if (diagnostics.length < DIAGNOSTIC_LIMIT) diagnostics.push(gap(path ?? '/vn_staff', 'invalid_row'));
       continue;
     }
-    const spelling = row.note === undefined || row.note === null || row.note === '' ? aliasNames.get(aliasId) : row.note;
+    const spelling =
+      row.note === undefined || row.note === null || row.note === '' ? aliasNames.get(aliasId) : row.note;
     if (spelling !== undefined && !validSpelling(spelling)) {
       if (diagnostics.length < DIAGNOSTIC_LIMIT) diagnostics.push(gap(path, 'invalid_source_value'));
       continue;
@@ -193,7 +192,9 @@ export function planShowcaseVndbCredits(plan: CrossMediaPlan): {
     for (const credit of rows.slice(0, sourceVocabularyLimits.rows)) credits.push(credit);
     const overflow = rows[sourceVocabularyLimits.rows];
     if (overflow && diagnostics.length < DIAGNOSTIC_LIMIT)
-      diagnostics.push(gap(overflow.sourcePath, 'command_limit', diagnosticCode(overflow.role ?? overflow.characterId)));
+      diagnostics.push(
+        gap(overflow.sourcePath, 'command_limit', diagnosticCode(overflow.role ?? overflow.characterId)),
+      );
     if (!recordRevisions.has(vn) && diagnostics.length < DIAGNOSTIC_LIMIT)
       diagnostics.push(gap('/vn_staff', 'missing_identity', vn));
   }
@@ -236,7 +237,8 @@ export async function prepareShowcaseVndbCredits(
   const diagnostics = [...selected.diagnostics];
   const pushDiagnostic = (entry: SourceVocabularyGap) => {
     if (diagnostics.length >= DIAGNOSTIC_LIMIT) return;
-    if (!diagnostics.some((prior) => prior.path === entry.path && prior.reason === entry.reason)) diagnostics.push(entry);
+    if (!diagnostics.some((prior) => prior.path === entry.path && prior.reason === entry.reason))
+      diagnostics.push(entry);
   };
   const creditedPaths = new Set<string>();
   const admission = staffCreditVocabularyAdmission(bindings, selected.credits);

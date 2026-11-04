@@ -57,20 +57,32 @@ function selectedVn() {
 
 function publicSubjects(schemeId: string, concepts: { code: string; id: string }[]) {
   return new Map<string, unknown>([
-    [schemeId, { subject: { id: schemeId, type: 'skos:ConceptScheme', statements: { 'schema:url': [{ value: { content: creditTypeSchemeUri } }] } } }],
-    ...concepts.map(({ code, id }) => [
-      id,
+    [
+      schemeId,
       {
         subject: {
-          id,
-          type: 'skos:Concept',
-          statements: {
-            'schema:url': [{ value: { content: creditTypeConceptUri(code) } }],
-            'skos:inScheme': [{ value: { content: schemeId } }],
-          },
+          id: schemeId,
+          type: 'skos:ConceptScheme',
+          statements: { 'schema:url': [{ value: { content: creditTypeSchemeUri } }] },
         },
       },
-    ] as const),
+    ],
+    ...concepts.map(
+      ({ code, id }) =>
+        [
+          id,
+          {
+            subject: {
+              id,
+              type: 'skos:Concept',
+              statements: {
+                'schema:url': [{ value: { content: creditTypeConceptUri(code) } }],
+                'skos:inScheme': [{ value: { content: schemeId } }],
+              },
+            },
+          },
+        ] as const,
+    ),
   ]);
 }
 
@@ -125,22 +137,16 @@ test('the selected-family seed qualifies staff and voice credits without alias i
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-credits-'));
   try {
-    const result = await seedCrossMedia(
-      plan,
-      join(directory, 'state.sqlite'),
-      port(commands, known),
-      undefined,
-      {
-        vndbCreditReferences: {
-          schemeId,
-          concepts: [
-            { code: 'scenario', id: scenarioId },
-            { code: 'chardesign', id: designId },
-          ],
-        },
-        mediaDeadlineMs: 0,
+    const result = await seedCrossMedia(plan, join(directory, 'state.sqlite'), port(commands, known), undefined, {
+      vndbCreditReferences: {
+        schemeId,
+        concepts: [
+          { code: 'scenario', id: scenarioId },
+          { code: 'chardesign', id: designId },
+        ],
       },
-    );
+      mediaDeadlineMs: 0,
+    });
     const readings = new Map(result.readings.map((reading) => [reading.externalId, reading.subject.subject.id]));
     const person = readings.get('s4');
     const character = readings.get('c3');
@@ -201,12 +207,15 @@ test('the selected-family seed qualifies staff and voice credits without alias i
         { property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Voice Alias' } },
       ]),
     );
-    expect(commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:author'))
-      .toHaveLength(1);
-    expect(commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P725'))
-      .toHaveLength(1);
-    expect(commands.filter((command) => command.op === 'create' && command.source.external_id.startsWith('s')))
-      .toHaveLength(1);
+    expect(
+      commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:author'),
+    ).toHaveLength(1);
+    expect(
+      commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P725'),
+    ).toHaveLength(1);
+    expect(
+      commands.filter((command) => command.op === 'create' && command.source.external_id.startsWith('s')),
+    ).toHaveLength(1);
     expect(result.vndbCreditVocabularyRequirements.map((requirement) => requirement.code)).toEqual([
       'chardesign',
       'scenario',

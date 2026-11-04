@@ -361,25 +361,23 @@ function sourceVocabularyOriginMatches(
     } catch {
       return false;
     }
-    return command.statement.references?.some((reference) => {
-      let citedUrl = false;
-      let citedRevision = false;
-      for (const part of reference.parts) {
-        if (
-          part.property.id === 'schema:url' &&
-          part.value.type === 'value' &&
-          part.value.content === sourceUrl
-        )
-          citedUrl = true;
-        if (
-          part.property.id === 'schema:version' &&
-          part.value.type === 'value' &&
-          part.value.content === recordRevision
-        )
-          citedRevision = true;
-      }
-      return citedUrl && citedRevision;
-    }) ?? false;
+    return (
+      command.statement.references?.some((reference) => {
+        let citedUrl = false;
+        let citedRevision = false;
+        for (const part of reference.parts) {
+          if (part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === sourceUrl)
+            citedUrl = true;
+          if (
+            part.property.id === 'schema:version' &&
+            part.value.type === 'value' &&
+            part.value.content === recordRevision
+          )
+            citedRevision = true;
+        }
+        return citedUrl && citedRevision;
+      }) ?? false
+    );
   });
 }
 
@@ -1878,10 +1876,10 @@ export class RunStore<Projection = BatchStatement[]> {
         if (
           c.source.source !== run.source ||
           c.source.external_id !== key ||
-          (c.source.digest !== row.digest ||
+          ((c.source.digest !== row.digest ||
             c.source.record_revision !== row.recordRevision ||
             c.source.converter_revision !== row.converter_revision) &&
-            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary)
+            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary))
         )
           fail();
       }

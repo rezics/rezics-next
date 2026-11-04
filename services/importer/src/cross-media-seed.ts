@@ -1625,25 +1625,26 @@ export async function seedCrossMedia(
   const vndbCredits = providers.includes('vndb')
     ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences)
     : undefined;
-  const vocabularyAdmission = extras?.vocabularyAdmission || vndbCredits
-    ? {
-        request(
-          context: Parameters<
-            NonNullable<NonNullable<ImporterOptions['vocabularyAdmission']>['request']>
-          >[0],
-        ) {
-          return combineVocabularyRequests([
-            extras?.vocabularyAdmission?.request?.(context),
-            vndbCredits?.vocabularyAdmission.request?.(context),
-          ]);
-        },
-      }
-    : undefined;
+  const vocabularyAdmission =
+    extras?.vocabularyAdmission || vndbCredits
+      ? {
+          request(context: Parameters<NonNullable<NonNullable<ImporterOptions['vocabularyAdmission']>['request']>>[0]) {
+            return combineVocabularyRequests([
+              extras?.vocabularyAdmission?.request?.(context),
+              vndbCredits?.vocabularyAdmission.request?.(context),
+            ]);
+          },
+        }
+      : undefined;
   const importer = createImporter({
     path,
     ...(destination ? { destination } : {}),
     ...(vocabularyAdmission ? { vocabularyAdmission } : {}),
-    ...(vndbCredits ? { recordConcurrency: 1 } : extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
+    ...(vndbCredits
+      ? { recordConcurrency: 1 }
+      : extras?.recordConcurrency === undefined
+        ? {}
+        : { recordConcurrency: extras.recordConcurrency }),
     ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
     transport: {
       batchWrite: (request) => port.batch(request),
@@ -1843,7 +1844,9 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     process.stdout.write(
       `Usage: bun scripts/datasets/cross-media-seed.ts ${requiredFlags
         .map((flag) => `${flag} <value>`)
-        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>]\n`,
+        .join(
+          ' ',
+        )} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>]\n`,
     );
     return;
   }

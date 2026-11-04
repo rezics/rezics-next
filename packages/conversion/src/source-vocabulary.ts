@@ -647,7 +647,9 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
         external_id: externalId,
         record_revision: revision,
         converter_revision:
-          origin && typeof origin.converterRevision === 'string' ? origin.converterRevision : metadata.converterRevision,
+          origin && typeof origin.converterRevision === 'string'
+            ? origin.converterRevision
+            : metadata.converterRevision,
         digest,
       },
       'facts',
