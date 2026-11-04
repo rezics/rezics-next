@@ -6,7 +6,9 @@ import { m } from '../src/paraglide/messages.js';
 import { ThreadWatch, type ThreadWatchProps } from '../src/threads/thread-watch';
 import type { ThreadWatchCommand, ThreadWatchNative, ThreadWatchReadRequest } from '../src/threads/thread-watch-native';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/threads/thread-a/readable' });
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>();
 for (const [key, value] of Object.entries({

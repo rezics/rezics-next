@@ -206,11 +206,7 @@ export function projectCommunityActionAdvice(
       currentness.watch === 'unavailable'
     ) {
       watchAdvice = { state: 'unavailable' };
-    } else if (
-      watch.state === 'withheld' &&
-      exactKeys(watch, ['state']) &&
-      currentness.watch !== 'unavailable'
-    ) {
+    } else if (watch.state === 'withheld' && exactKeys(watch, ['state']) && currentness.watch !== 'unavailable') {
       watchAdvice = { state: 'denied' };
     } else return;
   } else return;

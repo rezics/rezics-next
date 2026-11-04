@@ -83,15 +83,7 @@ export function SubjectCommunityInteractions({
     (advice?.reply === 'sign_in_required' && reader === null);
   const showOverflow = advice?.overflow === true;
 
-  if (
-    !showReply &&
-    !canReact &&
-    !reactionSignIn &&
-    !canWatch &&
-    !canShowWatchAdvice &&
-    !watchSignIn &&
-    !showOverflow
-  )
+  if (!showReply && !canReact && !reactionSignIn && !canWatch && !canShowWatchAdvice && !watchSignIn && !showOverflow)
     return null;
   return (
     <div data-slot="community-actions" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
