@@ -892,7 +892,9 @@ if (script.includes('/proc/loadavg')) {
   console.log('ZSTD ' + (config.zstd === false ? '0' : '1'));
 } else if (script.includes('REMOTE_CHECK_GITHUB_FETCH')) {
   log({ kind: 'github-fetch', script, slotHeld: slotHeld() });
-  process.exit(config.gitFetchExit ?? 0);
+  const exit = config.gitFetchExit ?? 0;
+  if (exit !== 0 && exit !== 73 && exit !== 255) console.error('check-git: preparation failed before publication');
+  process.exit(exit);
 } else if (script.includes('systemd-run')) {
   const runNumber = count('run');
   if (runNumber < (config.preCommandFailures ?? 0)) {
@@ -3243,6 +3245,24 @@ test.each([
     if (rejectDelete) expect(result.stderr).toContain('cleanup refused');
   },
 );
+
+test('a duplicate remote Git identity fails without fallback upload or run cleanup', async () => {
+  const fixture = scenario({ a: { available: 8e9, gitFetchExit: 73 } });
+  const directory = workspace();
+  const origin = join(directory, '.temp/origin.git');
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+  expect(git('init', '--bare', '-q', origin).status).toBe(0);
+  expect(git('remote', 'add', 'origin', origin).status).toBe(0);
+  expect(git('push', '-q', 'origin', 'HEAD:refs/heads/dev').status).toBe(0);
+
+  const result = await remote(fixture.env, directory);
+  expect(result.code).not.toBe(0);
+  expect(result.stderr).toContain('run identity is active or already published');
+  expect(fixture.events().filter((event) => event.kind === 'github-fetch')).toHaveLength(1);
+  expect(fixture.events().filter((event) => event.kind === 'rsync')).toHaveLength(0);
+  expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(0);
+  expect(fixture.events().filter((event) => event.kind === 'cleanup')).toHaveLength(0);
+});
 
 test("a host without zstd support uses rsync's default compression", async () => {
   const { env, events } = scenario({ a: { available: 8e9, zstd: false } });
