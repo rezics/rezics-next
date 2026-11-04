@@ -204,7 +204,7 @@ export async function cacheDumpAsset(
     const finalUrl = new URL(response.url || url);
     ensure(finalUrl.protocol === 'https:', 'Dump download redirected away from HTTPS');
     await pipeline(
-      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
       createWriteStream(partial, { flags: 'wx' }),
     );
     const downloadedHash = await sha256(partial);
@@ -228,7 +228,7 @@ async function cacheUnpinnedAsset(url: string, path: string, options: FetchOptio
     const finalUrl = new URL(response.url || url);
     ensure(finalUrl.protocol === 'https:', 'Dump download redirected away from HTTPS');
     await pipeline(
-      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
       createWriteStream(partial, { flags: 'wx' }),
     );
     const downloadedHash = await sha256(partial);
@@ -453,7 +453,7 @@ async function writeDumpBody(url: string, path: string, response: Response): Pro
   const partial = `${path}.${process.pid}.${randomUUID()}.part`;
   try {
     await pipeline(
-      Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
       createWriteStream(partial, { flags: 'wx' }),
     );
     const downloadedHash = await sha256(partial);
