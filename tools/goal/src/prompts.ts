@@ -14,8 +14,9 @@ import {
   type ProofAuthorization,
   type ProofReservation,
 } from './verification.ts';
-import { acceptanceRequirements, devProductBrief, type AcceptanceRequirement } from './briefs.ts';
-import type { Attempt, AttemptRef, Brief, PromptManifest, Task } from './types.ts';
+import { acceptanceRequirements, devProductBrief } from './briefs.ts';
+import type { AttemptRef } from './contracts.ts';
+import type { AcceptanceRequirement, Attempt, Brief, PromptManifest, Task } from './types.ts';
 
 export const DEFAULT_PROMPT_DIRECTORY = join(import.meta.dir, '../prompts');
 export const CONDITION_IDS = [
@@ -76,16 +77,16 @@ export type RenderedPrompt = {
 };
 export type WorkerPromptInput = {
   task: Task;
-  evidence?: string;
-  consultation?: string;
+  evidence?: string | undefined;
+  consultation?: string | undefined;
   resolutionFiles?: readonly string[];
   mainCheckout: string;
-  launchContext?: LaunchContext;
-  stateDirectory?: string;
-  policy?: ControlPolicy;
-  promptDirectory?: string;
-  proofRun?: ProofReservation;
-  authorization?: ProofAuthorization;
+  launchContext?: LaunchContext | undefined;
+  stateDirectory?: string | undefined;
+  policy?: ControlPolicy | undefined;
+  promptDirectory?: string | undefined;
+  proofRun?: ProofReservation | undefined;
+  authorization?: ProofAuthorization | undefined;
 };
 
 export function gitBlobSha(content: string | Buffer): string {
@@ -221,11 +222,11 @@ function evidenceManifest(evidence: string | undefined): string {
 
 export function selectConditions(input: {
   task: Task;
-  evidence?: string;
+  evidence?: string | undefined;
   resolutionFiles?: readonly string[];
-  stateDirectory?: string;
-  proofRun?: ProofReservation;
-  authorization?: ProofAuthorization;
+  stateDirectory?: string | undefined;
+  proofRun?: ProofReservation | undefined;
+  authorization?: ProofAuthorization | undefined;
 }): ConditionId[] {
   const { task } = input;
   const selected: ConditionId[] = [];
@@ -511,12 +512,12 @@ export function renderManagerOpening(input: {
     cwd: string;
     engine: 'codex' | 'claude';
   };
-  continuationFile?: string;
-  continuationText?: string;
+  continuationFile?: string | undefined;
+  continuationText?: string | undefined;
   backlogPath: string;
   command: string;
-  policy?: ControlPolicy;
-  promptDirectory?: string;
+  policy?: ControlPolicy | undefined;
+  promptDirectory?: string | undefined;
   warn?: (message: string) => void;
 }): { prompt: string; roleBytes: number; openingBytes: number } {
   const policy = input.policy ?? defaultPolicy;
