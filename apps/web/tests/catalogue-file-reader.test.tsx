@@ -19,6 +19,7 @@ import { subjectPageMessages } from '../src/features/pages/route-support';
 import {
   catalogueFileDestinationHref,
   catalogueFileSourceReturnHref,
+  fileEvidenceAt,
 } from '../src/features/catalogue/catalogue-file-reader/navigation';
 
 mock.module('@tanstack/react-start', () => start);
@@ -152,7 +153,15 @@ test('ordinary Subject separates file facts from its directed episode relation a
   expect(html).toContain('data-slot="catalogue-file-reader-technical"');
   expect(html).toContain('data-slot="catalogue-file-reader-associations"');
   expect(html).toContain('data-direction="forward"');
-  expect(html).toContain(`href="${destination}"`);
+  const disclosed = html.match(/href="([^"]*fileSource=[^"]+)"/g) ?? [];
+  expect(
+    disclosed.some((value) => value.includes(`/subjects/${catalogueEpisode}/episode-1?fileSource=${catalogueFile}`)),
+  ).toBe(true);
+  expect(
+    disclosed.some(
+      (value) => fileEvidenceAt(value.slice(6, -1).replaceAll('&amp;', '&'), 'en')?.source === catalogueFile,
+    ),
+  ).toBe(true);
   expect(catalogueFileSourceReturnHref(catalogueFile, 'en')).toContain('#catalogue-file-reader');
   expect(html).toContain('not proof of possession');
   expect(html).toContain('data-slot="catalogue-file-reader-correction"');
@@ -230,6 +239,8 @@ test('native page action decisions keep denied and unavailable correction contro
   expect(unavailable).not.toContain('data-slot="catalogue-file-reader-correction"');
   expect(denied).toContain('Episode 1 file A');
   expect(unavailable).toContain('Episode 1 file A');
+  expect(denied).toContain('No current correction is allowed for this reader.');
+  expect(unavailable).toContain('Current proposal permission could not be confirmed.');
 });
 
 test('return destinations stay in the same locale and accept only a subject path', () => {

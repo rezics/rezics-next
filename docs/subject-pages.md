@@ -490,12 +490,18 @@ visible. A concealed target stays concealed, and a retired relation cannot creat
 hydrated for this reader.
 
 Related episode, release, file and group links keep their admitted direction and kinds. They open the exact disclosed
-ordinary Subject in the same locale and carry one validated `fileSource` identity back to the reader anchor. The
+ordinary Subject in the same locale and carry one validated `fileSource` identity with bounded local evidence keys back to the reader. The
 existing `/file` profile remains the correction path, with the exact selected assertion, revision recovery and a
 return to that anchor. Correction is offered only for the currently admitted type in the existing candidate context.
 Native subjects, links and candidates remain the implementation.
 
 Decision: use `schema:MediaObject` for catalogue files and `rezics:ReleaseGroup` for source groups; `wd:Q55327` is Échevannes, France, not a release-group class.
+
+Decision: a File target visit carries one local `#catalogue-file-reader?evidence=` receipt, never a nested visit stack or arbitrary return URL. It retains the original source UUID and canonical slug, existing public `realm` selector, resolved Context UUID, Definition digest, group and exact assertion key. Native statement ID, release and revision remain part of that key; associations also retain direction, property and original holder. Qualifier and reference item visits return to their owning assertion and its unchanged evidence groups.
+
+The consumed entries are `subjectHref`, the ordinary Subject route's `realm` selection and current `publicHref`, `CatalogueFileReaderOverview` over the current composed `SubjectRead` and finite `profileRelationPages`, and `CatalogueFileReturnLink`. The Subject shell passes the current address and reader spoiler level through; its Context link preserves this validated receipt without adding `via` or replacing its source population. No shared return facility is introduced. The existing correction profile and candidate Context admission retain correction ownership.
+
+Returning enters the current Subject route and resolves the key against that read, not a retained response. Only an exact current assertion in the same resolved Context and Definition restores inspection and focus. Changed, missing, historical, concealed, unavailable and retired readings explain the outcome and focus the current group or reader. The URL receipt is consumed once per address incarnation; session/cache/Context replacement cannot replay it. Complete facts, associations and inspection evidence use the existing `spoilerLevel`/`SpoilerGate` controls, with concealed association evidence unavailable rather than an identifier fallback. Missing released labels stay unavailable.
 
 ## Release and file visit cost
 
@@ -503,6 +509,8 @@ One selected release or file/group visit uses C = 4 installed components: descri
 and at most one explicitly selected detail. Calls per visit are at most C. Web projection and retained response state
 are O(∑ L_i + ∑ B_i) for that visit, independent of catalogue/file history N. Each continuation replaces its page.
 Correction uses a fixed addressed native command/readback sequence.
+
+A File evidence receipt occupies at most 4,096 UTF-8 fragment bytes, including percent encoding. Its local key is at most 1,024 characters, slug 512 and Definition digest 128; UUID selectors are fixed width. One return adds one current composed page read and a linear resolution over its already bounded facts and relation page, with no per-row Subject reads, scans, document fetches, authority probes or polling. Related labels and original evidence remain within that page's existing payload/stream bounds. No new engine path or growth-dependent query is added.
 
 The ordinary Subject file reader uses the current active descriptor already resolved by `POST /v1/pages:read`; the
 response carries only the selected file/group Type and its admitted field and relation meanings. Its current viewer
@@ -529,7 +537,7 @@ This journey adds no engine query, command, projection or worker path. Existing 
 Decision: companion files follow the existing nested `$id_.$slug_.release.tsx` / `$id_.$slug_.file.tsx` route pattern.
 
 Decision: related destinations open the exact disclosed ordinary Subject in the same locale and carry one validated
-`fileSource` identity back to the reader anchor; only the admitted correction entry opens the existing `/file` profile.
+`fileSource` identity and a bounded reader fragment back to the current reading; only the admitted correction entry opens the existing `/file` profile.
 
 Decision: selected release detail and its correction-return receipt stay local to the admitted release visit; after reload or in a new tab, the current release is the fallback and the lost selection is explained without claiming restoration.
 

@@ -17,7 +17,7 @@ import { CharacterRelationshipsEntry } from '../catalogue/character-relationship
 import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
 import { ScreenProfileOverview } from '../catalogue/screen-profile-reader';
 import { CatalogueFileReaderOverview, CatalogueFileReturnLink } from '../catalogue/catalogue-file-reader/reader';
-import { catalogueFileSourceId } from '../catalogue/catalogue-file-reader/navigation';
+import { catalogueFileSourceId, fileEvidenceAt } from '../catalogue/catalogue-file-reader/navigation';
 import { isScreenType } from '../catalogue/screen-profile';
 import { composedSubjectRead } from '../catalogue/music-reader';
 import { MusicAlbumOverview } from '../catalogue/music-reader-view';
@@ -656,7 +656,10 @@ export function SubjectPage({
   const ContextLink = useMemo(() => {
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
-      const existingReturn = new URL(props.href, 'https://rezics.invalid').searchParams.get('via');
+      const destination = new URL(props.href, 'https://rezics.invalid');
+      // The local File receipt already contains its one source and public Context selector.
+      if (fileEvidenceAt(props.href, locale)) return <Link {...props} />;
+      const existingReturn = destination.searchParams.get('via');
       const href = subjectVisitReturn(existingReturn, locale)
         ? props.href
         : withSubjectVisitReturn(props.href, literaryReturn ?? mangaReturn ?? visitReturn ?? '', locale);
@@ -952,7 +955,7 @@ export function SubjectPage({
               </p>
             ) : null}
             {overview && read && !page.account && returnSource && returnSource !== read.subject.id ? (
-              <CatalogueFileReturnLink id={returnSource} locale={locale} link={ContextLink} />
+              <CatalogueFileReturnLink id={returnSource} locale={locale} currentHref={currentHref} link={ContextLink} />
             ) : null}
             {overview && read && !page.account ? (
               <CatalogueFileReaderOverview
@@ -961,6 +964,7 @@ export function SubjectPage({
                 locale={locale}
                 link={ContextLink}
                 returning={returnSource === read.subject.id}
+                readerSpoiler={reader?.spoilerLevel ?? 0}
                 currentHref={currentHref}
                 recoverCurrentPage={recoverCatalogueFileReader}
               />
