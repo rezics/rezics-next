@@ -131,6 +131,8 @@ export type VndbVocabularyRow =
       category: 'cont' | 'ero' | 'tech';
       code: string;
       spoiler: number;
+      /** Public association weight. Individual `tags_vn.vote` values are not this field. */
+      weight?: number;
     })
   | (RowBase & {
       kind: 'character-trait';

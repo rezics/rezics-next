@@ -341,16 +341,29 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         return;
       }
       const resolved = exactConcept(environment, `vndb.tag.${row.category}`, code, path);
-      if (resolved)
+      if (resolved) {
+        const qualifiers = [spoilerQualifier(row.spoiler)];
+        if (row.weight !== undefined) {
+          if (!environment.qualifierAllowed(row.subject, 'schema:genre', 'rezics:sourceTagWeight'))
+            rowGap(environment, row, 'qualifier_not_admitted', 'rezics:sourceTagWeight', code);
+          else if (typeof row.weight !== 'number' || !Number.isFinite(row.weight) || row.weight <= 0 || row.weight > 3)
+            rowGap(environment, row, 'invalid_source_value', 'rezics:sourceTagWeight', code);
+          else
+            qualifiers.push({
+              property: 'rezics:sourceTagWeight',
+              content: { amount: `+${row.weight}`, unit: '1' },
+            });
+        }
         environment.propose({
           row,
           subject: row.subject,
           property: 'schema:genre',
           content: resolved.id,
           target: conceptIdentity(resolved),
-          qualifiers: [spoilerQualifier(row.spoiler)],
+          qualifiers,
           mappingRevision: 'tag@1',
         });
+      }
       return;
     }
     case 'character-trait': {

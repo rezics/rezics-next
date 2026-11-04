@@ -171,13 +171,20 @@ const COLUMNS: Record<Table, readonly string[]> = {
 };
 const TABLES = Object.keys(COLUMNS) as Table[];
 
-/** Inventoried public tag dictionary and association COPY columns from schema_vndbid.sql. */
+/** Inventoried public tag dictionary, parent and association COPY columns from schema_vndbid.sql. */
 export const VNDB_PUBLIC_TAG_COLUMNS = Object.freeze({
   tags: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'],
+  tags_parents: ['id', 'parent', 'main'],
   tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
 } as const);
 export type VndbPublicTagTable = keyof typeof VNDB_PUBLIC_TAG_COLUMNS;
-export const vndbPublicTagLimits = Object.freeze({ dictionary: 512, associations: 256, perWork: 64 });
+export const vndbPublicTagLimits = Object.freeze({
+  dictionary: 512,
+  associations: 256,
+  perWork: 64,
+  parents: 1024,
+  closureDepth: 8,
+});
 const ROW_BYTES = 64 * 1024;
 const BATCH = 32;
 const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
@@ -1270,6 +1277,11 @@ export type VndbPublicTagAssociationRow = Readonly<{
   ignore: boolean;
   lie: boolean;
 }>;
+export type VndbPublicTagParentRow = Readonly<{
+  id: string;
+  parent: string;
+  main: boolean;
+}>;
 
 function copyFlag(value: string | null | undefined): boolean {
   check(value === 't' || value === 'f');
@@ -1320,4 +1332,14 @@ export function projectVndbPublicTagAssociation(cells: Record<string, string | n
     ignore: copyFlag(cells.ignore),
     lie: copyFlag(cells.lie),
   };
+}
+
+/** Project one `tags_parents` COPY row. Preferred-parent `main` is source tree bookkeeping. */
+export function projectVndbPublicTagParent(cells: Record<string, string | null>): VndbPublicTagParentRow {
+  const id = nativeId(cells.id, false);
+  check(id[0] === 'g');
+  const parent = nativeId(cells.parent, false);
+  check(parent[0] === 'g');
+  check(id !== parent);
+  return { id, parent, main: copyFlag(cells.main) };
 }

@@ -1600,6 +1600,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((W+T+A) log R) indexed importer work for admitted works W, dictionary tags T≤512 and associations A≤256, with at most 64 vocabulary rows per work and the existing per-record converter, candidate (≤300) and journal budgets. Bindings and admitted associations are re-read on each convert so unchanged VN bytes cannot hide a retracted Concept or a changed spoiler. Positive integer votes 1–3 with `ignore=f`, `lie=f` and applicable tags publish exact `schema:genre` facts; other associations stay review gaps without native ballots or aggregates.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Default VNDB public-tag showcase seed
+
+- Touches: streamed `tags`, `tags_parents` and `tags_vn` COPY rows for the selected family, at most 1024 parent edges and 8 closure steps, current disclosed scheme/concept point reads, and the existing public-tag coordinator/seed caller. Individual user ids, notes and votes stay unprojected.
+- Bound: O(file bytes) stream plus O((W+T+A+P) log R) importer work for selected works W, closed dictionary T≤512, associations A≤256 and parent edges P≤1024, with one explicit weight-contract gap for the journey. Unrelated VN/tag rows are not materialized. No catalogue scan or vote aggregate.
+- Growth check: `tests/showcase-tags.test.ts` covers selected versus unrelated rows, unsupported/qualified associations, taxonomy-closure gaps and refresh identity. The connected native file `services/kernel/test/imports/showcase-tags.test.ts` is registered and not executed in this attempt.
+
 ### Import authored VNDB producer parent and subsidiary rows
 
 - Touches: one bounded authored family plus `producers`/`producers_relations` COPY tables with the dump header `id pid relation`, referenced parent and subsidiary endpoints reachable under the existing family cap, the production cross-media dump reader and seed caller, and ordinary public batch/fence/candidate commands. Descriptions, language preferences, aliases, predecessor/successor and imprint codes stay omitted.
@@ -2028,6 +2034,22 @@ qualifiers. Lie flags, non-positive or non-integer votes, ignore flags,
 unresolved codes and duplicate `(vid,tag)` rows stay review gaps. User ids,
 notes and vote values never appear in diagnostics. Native classification
 ballots are not written.
+
+The default real-dump seed now acquires `tags`, `tags_parents` and `tags_vn`
+from the same checksum-verified current VNDB archive and runs
+[`showcase-tags.ts`](src/showcase-tags.ts) after the selected-family import.
+That adapter streams only the selected VN associations, closes their tag
+parents inside the dictionary cap, and feeds the existing public-tag
+coordinator. Optional `--vndb-public-tag-bindings` names currently known
+scheme/concept UUIDs; adopted usable bindings are those the current public
+read actually discloses. Publication consumes the finite vocabulary records
+and exact source URIs from this adapter; it does not invent another tag
+publisher. Decision: `tags_vn.vote` remains the public-association admission
+filter (integer 1–3). It is not native weight. Public VNDB `tags.rating` is
+absent from acquired COPY tables, and `rezics:sourceTagWeight` is not a
+released qualifier, so the journey keeps one bounded weight gap. Parent
+`tags_parents` edges stay review gaps until Semantic admits `skos:broader`
+for these source Concepts.
 
 ### Bangumi creator and voice credits
 

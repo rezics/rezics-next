@@ -31,6 +31,7 @@ import { createImportTransport, type ReviewedSubjectRead } from './import-client
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
+import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -1313,6 +1314,8 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       ensure(columns.length > 0 && new Set(columns).size === columns.length, 'Invalid VNDB header');
       if (table === 'producers_relations')
         ensure(columns.join('\t') === 'id\tpid\trelation', 'Invalid VNDB producers_relations header');
+      if (table === 'tags' || table === 'tags_parents' || table === 'tags_vn')
+        ensure(columns.join('\t') === VNDB_PUBLIC_TAG_COLUMNS[table].join('\t'), `Invalid VNDB ${table} header`);
       const headerKey = `${provider}/${table}.header`,
         hash = createHash('sha256').update(header!).digest('hex');
       ensure(!this.digests.has(headerKey) || this.digests.get(headerKey) === hash, 'Dump changed during selection');
@@ -1593,7 +1596,8 @@ export async function seedCrossMedia(
 }
 
 export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<void> {
-  const flags = [
+  const optionalFlags = ['--bangumi-character-bindings', '--vndb-public-tag-bindings'];
+  const requiredFlags = [
     '--bangumi',
     '--vndb',
     '--state',
@@ -1603,20 +1607,18 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     '--account-key',
     '--account',
     '--client',
-    '--bangumi-character-bindings',
   ];
+  const flags = [...requiredFlags, ...optionalFlags];
   if (argv.length === 1 && argv[0] === '--help') {
     process.stdout.write(
-      `Usage: bun scripts/datasets/cross-media-seed.ts ${flags
-        .filter((flag) => flag !== '--bangumi-character-bindings')
+      `Usage: bun scripts/datasets/cross-media-seed.ts ${requiredFlags
         .map((flag) => `${flag} <value>`)
-        .join(' ')} [--bangumi-character-bindings <json>]\n`,
+        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>]\n`,
     );
     return;
   }
-  const requiredFlags = flags.filter((flag) => flag !== '--bangumi-character-bindings');
   ensure(
-    argv.length === requiredFlags.length * 2 || argv.length === flags.length * 2,
+    argv.length % 2 === 0 && argv.length >= requiredFlags.length * 2,
     'Expected explicit cross-media seed configuration',
   );
   const values = new Map<string, string>();
@@ -1646,13 +1648,16 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const characterBindingsPath = values.has('--bangumi-character-bindings')
     ? resolve(values.get('--bangumi-character-bindings')!)
     : undefined;
-  ensure(
-    characterBindingsPath === undefined ||
-      (characterBindingsPath !== resultPath &&
-        characterBindingsPath !== statePath &&
-        ![`${statePath}-wal`, `${statePath}-shm`].includes(characterBindingsPath)),
-    'Bangumi character bindings must not overlap importer state or result',
-  );
+  const tagBindingsPath = values.has('--vndb-public-tag-bindings')
+    ? resolve(values.get('--vndb-public-tag-bindings')!)
+    : undefined;
+  for (const extra of [characterBindingsPath, tagBindingsPath]) {
+    ensure(
+      extra === undefined ||
+        (extra !== resultPath && extra !== statePath && ![`${statePath}-wal`, `${statePath}-shm`].includes(extra)),
+      'Seed binding files must not overlap importer state or result',
+    );
+  }
   let characterBindings: SourceVocabularyBindings | undefined;
   if (characterBindingsPath) {
     const bytes = await readFile(characterBindingsPath);
@@ -1664,20 +1669,47 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     'Result must not overwrite importer state',
   );
   await mkdir(dirname(statePath), { recursive: true });
-  const result = await seedCrossMedia(
-    plan,
-    statePath,
-    createImportTransport({ origin: api, tokenProvider }),
-    { origin: api },
-    undefined,
-    characterBindings,
-  );
+  const port = createImportTransport({ origin: api, tokenProvider });
+  const result = await seedCrossMedia(plan, statePath, port, { origin: api }, undefined, characterBindings);
+  const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
+  let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
+  if (tagBindingsPath) {
+    const bytes = await readFile(tagBindingsPath);
+    ensure(bytes.byteLength <= 256 * 1024, 'VNDB public tag bindings exceed the configuration limit');
+    knownTagBindings = parseShowcaseTagKnownBindings(JSON.parse(bytes.toString('utf8')));
+  }
+  const selectedVids = plan.members
+    .filter((member) => member.source === 'vndb' && member.kind === 'work')
+    .map((member) => member.key);
+  const publicTags = await importShowcaseTags({
+    tables: input,
+    selectedVids,
+    path: statePath,
+    port,
+    known: knownTagBindings,
+    destination: { origin: api },
+  });
   await mkdir(dirname(resultPath), { recursive: true });
   await writeFile(
     resultPath,
-    `${JSON.stringify({ ...result, sourceDigests: Object.fromEntries(input.digests) }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        ...result,
+        publicTags: {
+          admitted: publicTags.admitted,
+          vocabulary: publicTags.vocabulary,
+          weightGap: publicTags.weightGap,
+          truncated: publicTags.truncated,
+          adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
+          gaps: publicTags.gaps,
+        },
+        sourceDigests: Object.fromEntries(input.digests),
+      },
+      null,
+      2,
+    )}\n`,
   );
   process.stdout.write(
-    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length} review gaps. Result: ${resultPath}\n`,
+    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
   );
 }
