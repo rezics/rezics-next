@@ -28,6 +28,10 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
 
+function valueContent(statement: BatchStatement | undefined): unknown {
+  return statement?.value.type === 'value' ? statement.value.content : undefined;
+}
+
 test('selected anime staff and cast use the default acknowledged role adapter and withhold one unresolved association', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-credits-'));
   let journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
@@ -192,20 +196,20 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     });
     const workId = result.readings.find((reading) => reading.externalId === '101')!.subject.subject!.id!;
     const work = (await publicClient.readSubject(workId)).subject as { statements: Record<string, readonly BatchStatement[]> };
-    const staff = work.statements['schema:director']?.find((statement) => statement.value.content === result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id);
-    const voice = work.statements['wdt:P725']?.find((statement) => statement.value.content === result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id);
+    const staff = work.statements['schema:director']?.find((statement) => valueContent(statement) === result.readings.find((reading) => reading.externalId === 'person:11')!.subject.subject!.id);
+    const voice = work.statements['wdt:P725']?.find((statement) => valueContent(statement) === result.readings.find((reading) => reading.externalId === 'person:12')!.subject.subject!.id);
     expect(publication.status).toBe('incomplete');
     expect(accepted.size).toBeGreaterThan(0);
     expect(staff?.qualifiers).toContainEqual({ property: { id: 'wdt:P3831' }, value: { type: 'value', content: result.creditRoles![0]!.conceptId } });
     expect(staff?.qualifiers).toContainEqual({ property: { id: 'wdt:P1932' }, value: { type: 'value', content: 'Chief Director' } });
-    expect(staff?.references?.flatMap((reference) => reference.parts).some((part) => part.value.content === 'https://bgm.tv/subject/101#/subject-persons/101/11/position')).toBe(true);
+    expect(staff?.references?.flatMap((reference) => reference.parts).some((part) => valueContent(part) === 'https://bgm.tv/subject/101#/subject-persons/101/11/position')).toBe(true);
     expect(voice?.qualifiers).toContainEqual({ property: { id: 'wdt:P453' }, value: { type: 'value', content: result.readings.find((reading) => reading.externalId === 'character:21')!.subject.subject!.id } });
     expect(JSON.stringify(voice)).not.toContain('Association commentary');
     expect(result.creditGaps).toContainEqual(expect.objectContaining({ reason: 'missing_identity', property: 'schema:director', path: '/subject-persons/101/99/position' }));
     const role = result.creditRoles![0]!;
     const concept = (await publicClient.readSubject(role.conceptId)).subject as { statements: Record<string, readonly BatchStatement[]> };
-    expect(concept.statements['schema:sameAs']?.[0]?.value.content).toBe(role.uri);
-    expect(concept.statements['skos:inScheme']?.[0]?.value.content).toBe(role.schemeId);
+    expect(valueContent(concept.statements['schema:sameAs']?.[0])).toBe(role.uri);
+    expect(valueContent(concept.statements['skos:inScheme']?.[0])).toBe(role.schemeId);
     expect(accepted.size).toBeGreaterThan(0);
   } finally {
     journal.close();
