@@ -1,9 +1,17 @@
 import type { Release } from '../subject/definitions';
-import { libraryChoices, libraryCopyKindLabel, libraryCopyStatusLabel } from './profiles';
+import type { LibraryProfile } from '@rezics/definitions';
+import { libraryProfile, libraryCopyKindLabel, libraryCopyStatusLabel } from './profiles';
 import { m } from '../paraglide/messages.js';
 import type { LibrarySubject } from './reads';
 
-export type CopyProfile = { kinds: { id: string; label: string; statuses: { id: string; label: string }[] }[] };
+type ReleasedCopyKind = NonNullable<LibraryProfile['copies']>['kinds'][number];
+export type CopyProfile = {
+  kinds: (Pick<ReleasedCopyKind, 'condition'> & {
+    id: string;
+    label: string;
+    statuses: { id: string; label: string }[];
+  })[];
+};
 
 export type CopySubjectResult =
   | { state: 'ready'; subject: LibrarySubject; profile: CopyProfile }
@@ -12,10 +20,12 @@ export type CopySubjectResult =
 /** Serialize only the choices and localized labels needed by this subject, never the definitions release. */
 export function resolveCopyProfile(release: Release, type: string, locale: string): CopyProfile {
   return {
-    kinds: (libraryChoices(release, type)?.copyKinds ?? []).map((kind) => ({
+    kinds: (libraryProfile(release, type)?.copies?.kinds ?? []).map((kind) => ({
       id: kind.id,
+      // Preserve explicit admission only; a physical label or ID supplies no capability.
+      ...(kind.condition === undefined ? {} : { condition: kind.condition }),
       label: libraryCopyKindLabel(release, type, kind.id, locale)?.text ?? m.library_other(),
-      statuses: kind.statuses.map((id) => ({
+      statuses: kind.statuses.map(({ id }) => ({
         id,
         label: libraryCopyStatusLabel(release, type, kind.id, id, locale)?.text ?? m.library_other(),
       })),

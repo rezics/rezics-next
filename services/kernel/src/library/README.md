@@ -2399,9 +2399,11 @@ so old receipt hashes need no compatibility rewrite. Restore keeps both observat
 
 Private detail resolves each observation against its exact accepted release and returns distinct not-recorded,
 recorded, cleared and unavailable states plus independent current editing advice. Admission examines only the explicit
-capability on a released kind; a kind named physical remains unavailable without it. The retained Definitions type and
-closed source schema do not publish that capability yet, so condition writes are rejected and no Web control can be
-enabled. No generated declaration or client export is added here. Condition edits preserve loan/disposal authority
+capability on a released kind; a kind named physical remains unavailable without it. The installed Definitions type
+and closed source/release schemas now publish that capability. Web prepares the exact kind's explicit capability,
+but the installed generated client still lacks the condition create/update/detail shapes, so Web controls remain
+unavailable pending publication through the official callables. No generated declaration or client export is added
+here. Condition edits preserve loan/disposal authority
 through the original copy revision and command.
 
 Helpers inspect two fields and eight fixed values, with constant CPU/bytes and no pools, SQL, network or history

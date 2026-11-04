@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { libraryChoices, libraryCopyKindLabel, libraryCopyStatusLabel } from '../src/library/profiles';
 import type { Release } from '../src/subject/definitions';
 import { writeFailure } from '../src/library/copies-read';
+import { resolveCopyProfile } from '../src/library/copies-profiles';
 
 const release = {
   types: { 'schema:Book': { library: { profileId: 'book-profile' } } },
@@ -30,6 +31,18 @@ const release = {
 } as unknown as Release;
 
 describe('profile copy declarations', () => {
+  test('prepares condition controls only from the exact released kind capability', () => {
+    expect(resolveCopyProfile(release, 'schema:Book', 'en').kinds[0]).not.toHaveProperty('condition');
+    const declared = structuredClone(release);
+    const kind = declared.libraryProfiles?.['book-profile']?.copies?.kinds[0];
+    if (!kind) throw new Error('Missing print fixture');
+    kind.condition = 'physical-v1';
+    const prepared = resolveCopyProfile(declared, 'schema:Book', 'en');
+    expect(prepared.kinds[0]?.condition).toBe('physical-v1');
+    expect(prepared.kinds[1]).not.toHaveProperty('condition');
+    expect(resolveCopyProfile(declared, 'schema:Unknown', 'en').kinds).toEqual([]);
+  });
+
   test('keeps kind and status choices in declared order and scopes statuses to each kind', () => {
     expect(libraryChoices(release, 'schema:Book')?.copyKinds).toEqual([
       { id: 'print', statuses: ['shelf', 'loan'] },
