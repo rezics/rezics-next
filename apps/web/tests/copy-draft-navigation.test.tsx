@@ -72,7 +72,7 @@ mock.module('@rezics/ui/shadcn/alert-dialog', () => ({
 
 const { CopyForm } = await import('../src/library/copies-page');
 const { createRoot } = await import('react-dom/client');
-const { createMemoryHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
@@ -145,9 +145,10 @@ function mount(mode: 'create' | 'edit' | 'picker') {
     path: '/next',
     component: () => <h1>Next page</h1>,
   });
+  window.history.replaceState(null, '', '/copies');
   router = createRouter({
     routeTree: rootRoute.addChildren([copiesRoute, nextRoute]),
-    history: createMemoryHistory({ initialEntries: ['/copies'] }),
+    history: createBrowserHistory(),
   });
   root = createRoot(host);
   return act(async () => {
