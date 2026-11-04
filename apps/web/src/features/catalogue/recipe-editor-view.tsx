@@ -1,6 +1,6 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { hasDocumentContent } from '@rezics/document';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBlocker, useRouter } from '@tanstack/react-router';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
@@ -36,6 +36,12 @@ import { CandidateValue } from '../pages/data';
 import { newAuthoredField, authoredFieldValue, type AuthoredField } from './authored-field';
 import { catalogueEntries } from './catalogue-entry';
 import type { CreateFailure, CreateResult } from './create-subject';
+import {
+  isAllowedCreateAuthority,
+  observedCreateAuthority,
+  type CreateAuthority,
+} from './identity-intake';
+import { CreateAuthorityStatus } from './identity-intake-view';
 import {
   recipeDraft,
   recipeEvidence,
@@ -135,7 +141,50 @@ function RecipeEditorLive({
   review?: (property: string, slot: CandidateSlot | undefined, session?: string) => CandidateTransport;
 }) {
   const lifetime = useEditorLifetime();
+  const client = useQueryClient();
   const o = { locale: locale as never };
+  const observesCreate = !id && !!transport.eligibility;
+  const eligibilityKey = ['recipe-editor', 'eligibility', locale, String(lifetime.generation), session];
+  const eligibilityQuery = useQuery({
+    queryKey: eligibilityKey,
+    queryFn: async () => {
+      if (session === 'signed-out') return { state: 'guest' } satisfies CreateAuthority;
+      if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' } satisfies CreateAuthority;
+      return observedCreateAuthority(await transport.eligibility());
+    },
+    enabled: observesCreate && session !== 'unknown',
+    retry: false,
+    staleTime: 0,
+  });
+  const observedAuthority: CreateAuthority | null = !observesCreate
+    ? null
+    : session === 'signed-out'
+      ? { state: 'guest' }
+      : session === 'unknown'
+        ? null
+        : eligibilityQuery.data
+          ? observedCreateAuthority(eligibilityQuery.data)
+          : eligibilityQuery.isError
+            ? { state: 'unknown', reason: 'unavailable' }
+            : null;
+  async function refreshCreateEligibility(): Promise<CreateAuthority> {
+    if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' };
+    if (session === 'signed-out') return { state: 'guest' };
+    try {
+      return observedCreateAuthority(
+        await client.fetchQuery({
+          queryKey: eligibilityKey,
+          queryFn: () => transport.eligibility!(),
+          staleTime: 0,
+          retry: false,
+        }),
+      );
+    } catch {
+      const next: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+      client.setQueryData(eligibilityKey, next);
+      return next;
+    }
+  }
   const query = useQuery({
     queryKey: ['recipe-editor', id, locale, lifetime.generation],
     queryFn: transport.load,
@@ -238,6 +287,8 @@ function RecipeEditorLive({
     target.focus();
   }, [busy, query.isFetching, read, readUnavailable, readEpoch, lifetime]);
   const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
+  const eligibilityBlocksNewCreate =
+    observesCreate && !pending.current && !isAllowedCreateAuthority(observedAuthority);
   const fieldAdmission = useRef({ read, locked, created, session, rows, property, terms });
   fieldAdmission.current = { read, locked, created, session, rows, property, terms };
   const termAdditionAllowed = () => {
@@ -544,6 +595,7 @@ function RecipeEditorLive({
   function prepareCreateReview() {
     if (!lifetime.active() || !isReadEpochCurrent(readEpoch) || !read || created || session !== 'signed-in') return;
     if (running.current || pending.current || failure?.reason === 'conflict' || failure?.refreshDefinitions) return;
+    if (eligibilityBlocksNewCreate) return;
     const prepared = preparedCreateDraft();
     if (!prepared) return;
     if (prepared.draft.errors.length || prepared.originalErrors.length) {
@@ -564,7 +616,8 @@ function RecipeEditorLive({
       created ||
       session !== 'signed-in' ||
       failure?.reason === 'conflict' ||
-      (failure?.refreshDefinitions && !exactReplay)
+      (failure?.refreshDefinitions && !exactReplay) ||
+      (eligibilityBlocksNewCreate && !exactReplay)
     )
       return;
     if (!pending.current) {
@@ -579,16 +632,34 @@ function RecipeEditorLive({
         reject({ ok: false, reason: 'invalid', errors: prepared.draft.errors }, prepared.originalErrors);
         return;
       }
-      pending.current = { item: prepared.draft.item, key: crypto.randomUUID() };
-      pendingUncertain.current = false;
     }
-    const wasUncertain = pendingUncertain.current;
-    pendingUncertain.current = true;
+    const wasUncertain = exactReplay;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
     setCorrections([]);
     try {
+      if (!pending.current) {
+        if (observesCreate) {
+          const current = await refreshCreateEligibility();
+          if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
+          if (!isAllowedCreateAuthority(current)) return;
+        }
+        if (!read || createReview !== createReviewFingerprint) {
+          prepareCreateReview();
+          return;
+        }
+        const prepared = preparedCreateDraft();
+        if (!prepared) return;
+        if (prepared.draft.errors.length || prepared.originalErrors.length) {
+          setCreateReview(undefined);
+          reject({ ok: false, reason: 'invalid', errors: prepared.draft.errors }, prepared.originalErrors);
+          return;
+        }
+        pending.current = { item: prepared.draft.item, key: crypto.randomUUID() };
+        pendingUncertain.current = false;
+      }
+      pendingUncertain.current = true;
       const result = await transport.create(pending.current, wasUncertain);
       if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
       if (result.ok) {
@@ -632,11 +703,21 @@ function RecipeEditorLive({
           {m.catalogue_create_search({}, o)}
         </a>
       )}
-      {session !== 'signed-in' && (
+      {observesCreate && !created ? (
+        <CreateAuthorityStatus
+          locale={locale}
+          authority={observedAuthority}
+          href={`/${locale}/catalogue/recipe`}
+          {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { pending: true } : {})}
+          onRetry={() => {
+            void refreshCreateEligibility();
+          }}
+        />
+      ) : session !== 'signed-in' ? (
         <p role="status">
           {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
         </p>
-      )}
+      ) : null}
       {(query.isPending || query.isFetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {readUnavailable && (
         <div ref={unavailableReading} tabIndex={-1} className="space-y-3">
@@ -1108,6 +1189,7 @@ function RecipeEditorLive({
                       disabled={
                         busy ||
                         session !== 'signed-in' ||
+                        eligibilityBlocksNewCreate ||
                         failure?.reason === 'conflict' ||
                         failure?.refreshDefinitions === true
                       }
@@ -1122,6 +1204,7 @@ function RecipeEditorLive({
                     disabled={
                       busy ||
                       session !== 'signed-in' ||
+                      (eligibilityBlocksNewCreate && !(pending.current && pendingUncertain.current)) ||
                       failure?.reason === 'conflict' ||
                       (failure?.refreshDefinitions === true && !(pending.current && pendingUncertain.current)) ||
                       (!(pending.current && pendingUncertain.current) && !createReviewCurrent)

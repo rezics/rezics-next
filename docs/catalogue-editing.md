@@ -1122,6 +1122,21 @@ native RecipeCommand item and key. Unknown create outcomes keep that body, key a
 results retry only the returned identity read. After readback, the current Recipe reader and continue-editing
 the exact UUID are ordinary navigation, not a second identity or an implicit correction.
 
+The fresh-create visit reads current `subject.create` eligibility from the mounted Global Context parent through
+the existing private observation, independently of released definitions, target suggestions and later correction.
+Guest, allowed, refused (permission, gate, or suspension) and temporarily unknown stay distinct from session
+availability. Match search remains available when creation is refused or unknown. A stale allowed observation is
+not an authorization bypass; confirm re-reads current eligibility, and the native create command remains final.
+Correction, proposal, editorial decision and selection never consume this parent create admission.
+Decision: Recipe creation eligibility is the current Global Context `subject.create` viewer-action observation;
+guest is session-derived; later correction omits that observation.
+
+### Create a structured Recipe identity
+
+- Touches: one active definition pointer and immutable release, one Global Context `subject.create` viewer-action observation, admitted Recipe fields, existing target/suggestion readers, and one sealed create command with its current-identity readback.
+- Bound: preserve the existing field, statement, qualifier, serialized-command and held-retry caps; no permission request per field or suggested identity, history scan or polling.
+- Growth check: hold one Recipe draft, one parent action observation and the admitted field set fixed while unrelated subjects, grants and candidate histories grow; Access preparation is charged with the existing native Recipe fixture.
+
 A correction edits one selected assertion's value or complete evidence, reviews that proposed statement against
 the currently authorized selected reading, and submits through proposeRecipe. Retained, added, edited and
 explicitly removed evidence groups are listed. Existing source evidence initializes the private draft once under

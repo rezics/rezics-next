@@ -13,7 +13,7 @@ import {
   loadRecipeReview,
   confirmRecipeReview,
 } from './recipe-editor-actions';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 
 function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }) {
   const editorWork = useCatalogueLifetime('transport');
@@ -30,6 +30,7 @@ function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }
       search={search}
       transport={{
         load: () => loadRecipeEditor({ data: id }),
+        ...(id ? {} : { eligibility: () => readCatalogueCreateEligibility() }),
         create: (data, replay) =>
           createCatalogueRecipe({
             data: editorRequest(replay ? { ...data, replay: true } : data, editorWork),
