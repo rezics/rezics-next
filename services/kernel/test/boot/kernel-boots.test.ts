@@ -29,9 +29,8 @@ const access = {
   readAccount: unused,
 };
 
-async function boot(env: NodeJS.ProcessEnv) {
-  const databaseUrl = env.DATABASE_URL!;
-  const serverKeys = {
+function serverKeys(databaseUrl: string) {
+  return {
     DATABASE_URL: databaseUrl,
     KERNEL_ROUTE_KEY: key(),
     KERNEL_SESSION_KEYS: `1:${key()}`,
@@ -39,19 +38,21 @@ async function boot(env: NodeJS.ProcessEnv) {
     KERNEL_WRITE_RATE_SECRET: key(),
     KERNEL_PORT: '0',
   };
-  const { readConfig, startServer } = await import('../../src/server.ts');
-  const { readWorkerConfig, startWorker } = await import('../../src/worker.ts');
-  const { createAuthHost } = await import('../../../auth/src/host.ts');
-  // DBOS is process-global; production runs these entries in separate processes.
+}
 
-  const server = await startServer(readConfig(serverKeys));
+async function startKernelApi(databaseUrl: string) {
+  const { readConfig, startServer } = await import('../../src/server.ts');
+  const server = await startServer(readConfig(serverKeys(databaseUrl)));
   try {
     const health = await fetch(new URL('/health', server.url));
     expect([health.status, await health.json()]).toEqual([200, { status: 'ok' }]);
   } finally {
     await server.stop();
   }
+}
 
+async function startAuthHost(databaseUrl: string) {
+  const { createAuthHost } = await import('../../../auth/src/host.ts');
   const authUrl = await createAuthDatabase(databaseUrl, `auth_boot_${crypto.randomUUID().replaceAll('-', '')}`);
   const database = new Pool({ connectionString: authUrl });
   const system = new Pool({ connectionString: authUrl, max: 8 });
@@ -75,15 +76,26 @@ async function boot(env: NodeJS.ProcessEnv) {
   } finally {
     await host.stop();
   }
+}
 
+async function startKernelWorker(databaseUrl: string) {
+  const { readWorkerConfig, startWorker } = await import('../../src/worker.ts');
   const workerKeys = {
     ...workerTestEnv(),
-    ...serverKeys,
+    ...serverKeys(databaseUrl),
     KERNEL_RATING_COUNTER_SECRET: key(),
     KERNEL_EXECUTOR_ID: `boot-${crypto.randomUUID()}`,
   };
   const worker = await startWorker(readWorkerConfig(workerKeys), undefined, workerKeys);
   await worker.stop();
+}
+
+async function boot(env: NodeJS.ProcessEnv) {
+  const databaseUrl = env.DATABASE_URL!;
+  // DBOS is process-global; production runs these entries in separate processes.
+  await startKernelApi(databaseUrl);
+  await startAuthHost(databaseUrl);
+  await startKernelWorker(databaseUrl);
 }
 
 test('the Kernel API, worker and native Auth host entries start against a throwaway database', async () => {
