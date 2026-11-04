@@ -18,7 +18,7 @@ import { SpoilerGate } from './values';
 import { webUrl } from './shared';
 
 const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
+  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
@@ -59,9 +59,11 @@ function contextText(context: QuotationContext, locale: string) {
 function partStatus(part: QuotationPart, locale: string) {
   const o = option(locale);
   if (part.status === 'current') return undefined;
-  if (part.status === 'concealed' || part.status === 'restricted' || part.status === 'withheld')
-    return m.quotation_concealed_context({}, o);
-  if (part.status === 'missing' || part.status === 'unknown') return m.quotation_unknown_context({}, o);
+  if (part.status === 'concealed') return m.quotation_context_concealed({}, o);
+  if (part.status === 'restricted') return m.quotation_context_restricted({}, o);
+  if (part.status === 'withheld') return m.quotation_concealed_context({}, o);
+  if (part.status === 'missing') return m.quotation_context_missing({}, o);
+  if (part.status === 'unknown') return m.quotation_unknown_context({}, o);
   return m.quotation_unsupported({}, o);
 }
 
@@ -314,6 +316,7 @@ function QuotationVisitView({
             >
               <h2 ref={selectedRef} tabIndex={-1} className="font-semibold">{m.quotation_selected({ id: selected.id }, o)}</h2>
               {selected.statements.length === 0 && <p role="status">{m.quotation_unavailable({}, o)}</p>}
+              {selected.statements.some(text => text.status === 'unavailable') && <Button className={actionClass} onClick={() => void visit.refresh()}>{m.quotation_retry({}, o)}</Button>}
               {selected.statements.map((statement) => (
                 <QuotationStatement
                   key={statement.statementId ?? statement.property}

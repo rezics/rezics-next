@@ -131,7 +131,11 @@ export function useQuotationVisit(props: {
     if (quote === expectedQuote.current) return;
     expectedQuote.current = quote;
     // A URL is only selection intent. Without an admitted descriptor it starts at page one.
-    void request({ quote }, undefined, true);
+    const retained = current.current;
+    const onCurrentPage = quote && retained.result?.ok && retained.result.rows.some(row => row.id === quote);
+    const onPreviousPage = quote && retained.previous?.quote === quote;
+    void request(onCurrentPage ? { ...retained.intent, quote } : onPreviousPage ? retained.previous! : { quote },
+      onCurrentPage ? retained.previous : undefined, true);
   }, [quote]);
 
   useLayoutEffect(() => {
