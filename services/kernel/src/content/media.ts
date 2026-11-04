@@ -22,12 +22,7 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import {
-  accessCheck,
-  accessCommandAuthorization,
-  AuthenticationError,
-  type AccessCheck,
-} from '../request/access.ts';
+import { accessCheck, accessCommandAuthorization, AuthenticationError, type AccessCheck } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
@@ -183,15 +178,21 @@ export class MediaUnavailableError extends Error {
   }
 }
 const imageTypes = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
-export const AVATAR_UPLOAD_MEDIA_TYPES = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
-export const AVATAR_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
-export type AvatarUploadAdvice = Readonly<{
+export const AVATAR_UPLOAD_MEDIA_TYPES = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as [
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+export const AVATAR_UPLOAD_MAX_BYTES = 20_971_520;
+export type AvatarUploadAdvice = {
   viewerState: 'signed_in';
-  viewer: Readonly<{ accountId: string }>;
-  target: Readonly<{ containerId: string; purpose: 'avatar' }>;
-  constraints: Readonly<{ mediaTypes: typeof AVATAR_UPLOAD_MEDIA_TYPES; maxByteCount: typeof AVATAR_UPLOAD_MAX_BYTES }>;
-  allowedActions: readonly ['upload'] | readonly [];
-}>;
+  viewer: { accountId: string };
+  target: { containerId: string; purpose: 'avatar' };
+  constraints: { mediaTypes: typeof AVATAR_UPLOAD_MEDIA_TYPES; maxByteCount: 20_971_520 };
+  allowedActions: ['upload'] | [];
+};
 const digestPattern = /^[0-9a-f]{64}(?![\s\S])/;
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new GrantDeniedError();
@@ -529,7 +530,8 @@ export async function readAvatarUploadAdvice(
           const allowed =
             actor.clientId === 'rezics-website' && current.state === 'active' && (await check(bounded, time));
           await bounded.query('COMMIT');
-          return { ...observation, allowedActions: allowed ? (['upload'] as const) : ([] as const) };
+          const allowedActions: AvatarUploadAdvice['allowedActions'] = allowed ? ['upload'] : [];
+          return { ...observation, allowedActions };
         } catch (error) {
           try {
             await bounded.query('ROLLBACK');
