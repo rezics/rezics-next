@@ -1198,7 +1198,15 @@ export async function sync(options: Options = {}): Promise<number> {
           removeWorktree(path);
         }
       };
+      let publicationStarted = false;
+      let interrupted = false;
       const interrupt = (signal: NodeJS.Signals) => {
+        if (publicationStarted) {
+          interrupted = true;
+          if (activeChild) killGroup(activeChild.pid, 'SIGKILL');
+          print(`cp-sync: ${signal}; completing host recovery before exit.`);
+          return;
+        }
         print(`cp-sync: ${signal}; no ref moved by this step`);
         cleanup();
         process.exit(128 + (constants.signals[signal] ?? 0));
@@ -1272,7 +1280,9 @@ export async function sync(options: Options = {}): Promise<number> {
         const resident = options.resident ?? residentControl;
         print('cp-sync: observing resident workers and gate outcomes for ten minutes before publication.');
         const before = await resident.observe(checkout);
+        publicationStarted = true;
         const published = publish(checkout, 'sync', main, commit, paths, source, print);
+        try {
         const ref = (name: string) => published.updates.find((update) => update.ref === `refs/heads/${name}`);
         const pair = (update: RefUpdate | undefined) =>
           update ? { previous: update.previous, current: update.next } : undefined;
@@ -1300,12 +1310,10 @@ export async function sync(options: Options = {}): Promise<number> {
             ran: verdict.ran,
             failures: verdict.failures,
           });
-        if (!(await reinstall(checkout, main, commit, paths, logs, print))) {
-          print('cp-sync: the main checkout install failed; fix it, or run cp-sync --rollback.');
-          return 1;
-        }
-        try {
+        if (!(await reinstall(checkout, main, commit, paths, logs, print)))
+          throw new Refusal('The main checkout install failed.');
           await resident.restart(checkout);
+          if (interrupted) throw new Refusal('Publication interrupted.');
           print('cp-sync: observing resident workers and gate outcomes for ten minutes after publication.');
           const after = await resident.observe(checkout);
           print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
@@ -1317,7 +1325,13 @@ export async function sync(options: Options = {}): Promise<number> {
           print(`cp-sync: ${error instanceof Error ? error.message : String(error)}; rolling back.`);
           // Release this sync's lock before invoking the ordinary forward-only rollback transaction.
           cleanup();
-          await rollback({ ...options, resident });
+          try {
+            await rollback({ ...options, resident });
+          } catch (recoveryError) {
+            // Rollback can refuse before touching main (for example a ref race). Its current code still needs a host.
+            await resident.restart(checkout);
+            print(`cp-sync: rollback refused; host restarted on current main: ${String(recoveryError)}`);
+          }
           return 1;
         }
         print(
@@ -1364,6 +1378,8 @@ export async function rollback(options: Options = {}): Promise<number> {
       ))
         print(`  ${line}`);
       const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
+      const resident = options.resident ?? residentControl;
+      let moved = false;
       try {
         // Main only moves forward (the repository's reference-transaction hook), so the rollback is a new commit
         // holding the earlier tree.
@@ -1381,6 +1397,7 @@ export async function rollback(options: Options = {}): Promise<number> {
           return 0;
         }
         const published = publish(checkout, 'rollback', current, commit, paths, undefined, print);
+        moved = true;
         appendHistory(historyFile, {
           time: now.toISOString(),
           action: 'rollback',
@@ -1393,10 +1410,36 @@ export async function rollback(options: Options = {}): Promise<number> {
         for (const warning of published.warnings) print(`cp-sync: ${warning}`);
         const logs = join(state, 'cp-sync', `${stamp(now)}-rollback`);
         mkdirSync(logs, { recursive: true });
-        if (!(await reinstall(checkout, current, commit, paths, logs, print))) return 1;
-        await (options.resident ?? residentControl).restart(checkout);
+        if (!(await reinstall(checkout, current, commit, paths, logs, print)))
+          throw new Refusal('The rolled-back checkout install failed.');
+        await resident.restart(checkout);
         print(`cp-sync: ${MAIN} runs the ${CONTROL_PLANE} of ${short(target.main.previous)} again.`);
         return 0;
+      } catch (error) {
+        if (!moved) throw error;
+        // Older code may lack the systemd CLI entirely. Put the published code back in a forward commit before
+        // restarting it; never exit with a new host executing against a rolled-back working tree.
+        print(`cp-sync: rollback host failed (${String(error)}); restoring published code and host.`);
+        const failed = head(checkout, MAIN)!;
+        const restored = commitTree(
+          checkout, replacePaths(checkout, failed, current, paths), [failed],
+          `control-plane: restore running host code ${short(current)}`,
+        );
+        publish(checkout, 'rollback', failed, restored, paths, undefined, print);
+        const logs = join(state, 'cp-sync', `${stamp(now)}-recovery`);
+        mkdirSync(logs, { recursive: true });
+        try {
+          await reinstall(checkout, failed, restored, paths, logs, print);
+        } finally {
+          // Even a failed reinstall must attempt host activation on the matching code.
+          await resident.restart(checkout);
+        }
+        appendHistory(historyFile, {
+          time: now.toISOString(), action: 'sync', paths,
+          main: { previous: failed, current: restored }, source: current,
+        });
+        print('cp-sync: retained the published code with a running host; rollback failed.');
+        return 1;
       } finally {
         release();
       }

@@ -890,6 +890,8 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 | `policy.worker.worktreeLockAgeMs`        | `60000`   | worker: worktree lock age ms.      |
 | `policy.windows.commandTimeoutMs`        | `15000`   | windows: command timeout ms.       |
 | `policy.completion.diagnosticCharacters` | `1000`    | completion: diagnostic characters. |
+| `policy.maintenance.budgetMs`           | `45000`   | Periodic sweep wall-clock budget.          |
+| `policy.maintenance.regenerationBudgetMs` | `600000` | Separate regeneration wall-clock budget. |
 | `policy.maintenance.derivedRefreshMs`    | `3600000` | maintenance: derived refresh ms.   |
 
 ### Delivery flow telemetry
@@ -2458,11 +2460,12 @@ bun tools/goal/src/cli.ts service logs
 ```
 
 Install renders the tracked `systemd/rezics-goal-*` units into `~/.config/systemd/user`, reloads the user manager,
-enables user linger with `loginctl`, and enables and starts the host, verifier and maintenance timer. Linger keeps
+enables user linger with `loginctl`, and enables and starts the host, verifier and maintenance and regeneration timers. Timer activation uses `--no-block`;
+installation never starts or waits for either oneshot and does not fail because of an earlier maintenance result. Linger keeps
 these services running after the last login session exits. Installation fails visibly if user systemd or linger
 permissions are unavailable. No caller shell launches the resident processes.
 
-The private `.temp/goal/goal.env` is the single EnvironmentFile for all three services. It carries only
+The private `.temp/goal/goal.env` is the single EnvironmentFile for all services. It carries only
 `GOAL_MAIN_CHECKOUT`, `GOAL_LOCAL_CONFIG`, `KERNEL_CHECK_REMOTE`, `PATH` and `HOME`. Each ExecStart uses `env -i`
 and adds only the user bus transport and, for the host, systemd notification variables. Caller provider identities,
 including `CLAUDE_*` and `CODEX_THREAD_ID`, cannot reach the services. Re-run install after moving the checkout or
@@ -2480,8 +2483,15 @@ The maintenance timer starts a bounded oneshot every minute. `goal maintenance r
 whose worktree has been deleted, checking process birth identity. `goal maintenance alarm` evaluates product-output
 and flow alarms and sends the completed UTC hour's report through its durable scheduled claim. `goal maintenance
 detect` runs stall and shared-incident detection. `goal maintenance regenerate` regenerates dev derived files at
-most hourly using the existing detached-worktree and compare-and-swap implementation. `goal maintenance all` runs
-every job and reports failures after attempting the others. Daily audit dispatch stays with manager recovery.
+most hourly using its own timer, process and lease and the existing detached-worktree and compare-and-swap implementation.
+It removes generator leftovers before unregistering its derived worktree. `goal maintenance all` runs reap, alarm and
+detect independently, logs failures and returns a failure status after attempting the others within the remaining budget.
+The alarm's flow check and hourly report are independent. Expired steps are reported; owned report and regeneration
+subprocess groups are killed at the deadline. Rendered oneshot timeouts match policy budgets, with one second for
+systemd termination. Daily audit dispatch stays with manager recovery.
+
+Decision: keep the minute sweep to 45 seconds by default and run regeneration separately hourly with a ten-minute
+budget; both bounds are configurable under `policy.maintenance` and applied when installing services.
 
 Decision: cp-sync records ten-minute mean live-worker width and successful gates and landings before and after
 publication; only failed host readiness, zero live workers while ready tasks were observed, or zero landings while
@@ -2491,7 +2501,10 @@ After publishing, a missing environment file or host unit triggers `goal service
 main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
 unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual
 recorded processes, never worker groups or name patterns. cp-sync also completes migration when legacy state remains.
-It restarts the host through systemd after publication and rollback. No ref rewinding is needed. Status, restart and
+It restarts the host through systemd after publication and rollback. If rollback cannot install or activate its host,
+it restores the published code in another forward commit and restarts that host before exiting with failure; a rollback
+refusal also triggers activation on the current main. Dependency installation failures follow this same recovery path.
+No ref rewinding is needed. Status, restart and
 logs show each unit's systemd state and result, including watchdog failure and timer health. Diagnostics live in the
 user journal; consult `systemd.service(5)` and `systemd.exec(5)` for service and environment semantics.
 

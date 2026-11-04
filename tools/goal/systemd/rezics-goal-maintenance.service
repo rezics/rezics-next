@@ -7,5 +7,6 @@ Type=oneshot
 WorkingDirectory=@CHECKOUT@
 EnvironmentFile=@ENVIRONMENT@
 ExecStart=/usr/bin/env -i "HOME=${HOME}" "PATH=${PATH}" "GOAL_MAIN_CHECKOUT=${GOAL_MAIN_CHECKOUT}" "GOAL_LOCAL_CONFIG=${GOAL_LOCAL_CONFIG}" "KERNEL_CHECK_REMOTE=${KERNEL_CHECK_REMOTE}" "XDG_RUNTIME_DIR=%t" "DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus" @BUN@ @CLI@ maintenance all
-TimeoutStartSec=15min
+TimeoutStartSec=@MAINTENANCE_BUDGET@ms
+TimeoutStopSec=1s
 KillMode=control-group

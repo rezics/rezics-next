@@ -531,6 +531,32 @@ test('resident regressions roll back the published tree and restart the restored
   ).toBe(false);
 });
 
+test('a failed rollback restores published code and a matching host after legacy shutdown', async () => {
+  for (const migrationFails of [true, false]) {
+    const f = fixture();
+    let restarts = 0, observations = 0, runningHead = '';
+    const result = await sync({
+      ...f.options,
+      resident: {
+        async observe() {
+          return { liveWorkers: observations++ ? 0 : 1, passedGates: 1, landings: 1, workReady: true };
+        },
+        async restart(checkout) {
+          if (++restarts === 1 && migrationFails) throw new Error('Installer failed after stopping legacy supervisor');
+          if (readFileSync(join(checkout, 'tools/goal/src/a.ts'), 'utf8').includes('a = x'))
+            throw new Error('Legacy CLI cannot install systemd services');
+          runningHead = git(checkout, 'rev-parse', 'main');
+        },
+      },
+    });
+    expect(result).toBe(1);
+    expect(restarts).toBe(3);
+    expect(runningHead).toBe(git(f.repo, 'rev-parse', 'main'));
+    expect(readFileSync(join(f.repo, 'tools/goal/src/a.ts'), 'utf8')).toContain('a = y');
+    expect(history(f.repo).map((entry) => entry.action)).toEqual(['sync', 'rollback', 'sync']);
+  }
+});
+
 test('resident comparison tolerates lower counts and idle windows without rolling back', async () => {
   const f = fixture();
   let observations = 0;
@@ -751,6 +777,7 @@ else if (args.includes('show')) console.log('LoadState=loaded\\nActiveState=acti
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
   }
+  expect(readFileSync(calls, 'utf8')).not.toMatch(/"(?:start|restart)","rezics-goal-(?:maintenance|regenerate)\.service"/);
   expect(installs).toHaveLength(1);
   expect(installs[0]!.code).toBe(0);
   expect(installs[0]!.output).not.toContain('usage: goal <');

@@ -688,6 +688,8 @@
       "diagnosticCharacters": 1000
     },
     "maintenance": {
+      "budgetMs": 45000,
+      "regenerationBudgetMs": 600000,
       "derivedRefreshMs": 3600000
     }
   }

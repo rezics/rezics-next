@@ -71,8 +71,15 @@ export async function run(
       if (args.length !== 1) throw new Error('usage: goal service install|status|restart|logs');
       if (args[0] === 'install') {
         const settings = loadSettings();
-        await installService({ mainCheckout: settings.mainCheckout, localConfig: settingsFile() });
-        return await reportServices('status', undefined, undefined, settings.policy?.service);
+        await installService({
+          mainCheckout: settings.mainCheckout,
+          localConfig: settingsFile(),
+          maintenanceBudgetMs: settings.policy?.maintenance.budgetMs,
+          regenerationBudgetMs: settings.policy?.maintenance.regenerationBudgetMs,
+        });
+        // Past oneshot failures remain visible in status without making installation depend on maintenance.
+        await reportServices('status', undefined, undefined, settings.policy?.service);
+        return 0;
       }
       if (args[0] === 'status' || args[0] === 'restart' || args[0] === 'logs')
         return await reportServices(args[0], undefined, undefined, loadSettings().policy?.service);

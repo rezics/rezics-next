@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
@@ -140,6 +140,8 @@ export async function regenerateDerivedHead(
     const current = head(checkout, branch);
     return current === candidate ? { head: candidate, retry: false } : { head: current, retry: true };
   } finally {
+    // Generators can leave ignored dependency trees behind. Remove their files before unregistering the worktree.
+    rmSync(tree, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     git(checkout, 'worktree', 'remove', '--force', tree);
   }
 }

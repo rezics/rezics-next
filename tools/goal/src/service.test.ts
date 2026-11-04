@@ -43,6 +43,8 @@ test('install renders repository units, one private environment file, linger and
         path: '/usr/bin:/bin',
         bun: '/fixture/bun',
         kernelCheckRemote: '1',
+        maintenanceBudgetMs: 1234,
+        regenerationBudgetMs: 5678,
       },
       run,
     );
@@ -69,15 +71,18 @@ test('install renders repository units, one private environment file, linger and
     expect(host).toContain('_manager-host');
     expect(readFileSync(join(units, SERVICE_UNITS[1]), 'utf8')).toContain('service run-verifier');
     expect(readFileSync(join(units, SERVICE_UNITS[3]), 'utf8')).toContain('OnUnitInactiveSec=1min');
+    expect(readFileSync(join(units, SERVICE_UNITS[2]), 'utf8')).toContain('TimeoutStartSec=1234ms');
+    expect(readFileSync(join(units, SERVICE_UNITS[4]), 'utf8')).toContain('TimeoutStartSec=5678ms');
+    expect(readFileSync(join(units, SERVICE_UNITS[5]), 'utf8')).toContain('OnUnitInactiveSec=1h');
     expect(calls).toEqual([
       ['systemctl', '--user', 'daemon-reload'],
       ['loginctl', 'enable-linger', 'fixture'],
       ['systemd-analyze', '--user', 'verify', ...SERVICE_UNITS.map((unit) => join(units, unit))],
-      ['systemctl', '--user', 'enable', SERVICE_UNITS[0], SERVICE_UNITS[1], SERVICE_UNITS[3]],
+      ['systemctl', '--user', 'enable', SERVICE_UNITS[0], SERVICE_UNITS[1], SERVICE_UNITS[3], SERVICE_UNITS[5]],
       ['systemctl', '--user', 'show', '--property=LoadState', '--value', 'rezics-goal-supervisor.service'],
       ['systemctl', '--user', 'stop', 'rezics-goal-supervisor.service'],
-      ['systemctl', '--user', 'start', SERVICE_UNITS[0], SERVICE_UNITS[1], SERVICE_UNITS[3]],
-      ['systemctl', '--user', 'start', SERVICE_UNITS[2]],
+      ['systemctl', '--user', 'start', SERVICE_UNITS[0], SERVICE_UNITS[1]],
+      ['systemctl', '--user', '--no-block', 'start', SERVICE_UNITS[3], SERVICE_UNITS[5]],
     ]);
   } finally {
     dir.close();
@@ -119,7 +124,10 @@ test('status, restart and logs include each unit health and keep a unit failure 
       expect(lines.some((line) => line.includes(unit) && line.includes('ActiveState=active'))).toBe(true);
       if (action === 'logs') expect(calls.some((call) => call[0] === 'journalctl' && call.includes(unit))).toBe(true);
     }
-    if (action === 'restart') expect(calls[0]).toEqual(['systemctl', '--user', 'restart', ...SERVICE_UNITS]);
+    if (action === 'restart') {
+      expect(calls[0]).toEqual(['systemctl', '--user', 'restart', SERVICE_UNITS[0], SERVICE_UNITS[1]]);
+      expect(calls[1]).toEqual(['systemctl', '--user', '--no-block', 'restart', SERVICE_UNITS[3], SERVICE_UNITS[5]]);
+    }
   }
   expect(
     await reportServices(
@@ -151,16 +159,15 @@ test('host readiness and heartbeat follow systemd watchdog timing and stop on sh
   expect(messages).toHaveLength(count);
 });
 
-test('maintenance keeps detecting incidents when the output alarm fails and respects regeneration cadence', async () => {
+test('maintenance keeps detecting incidents when the output alarm fails without running regeneration', async () => {
   const dir = temporaryDirectory();
   mkdirSync(dir.path, { recursive: true });
-  writeFileSync(join(dir.path, 'dev-derived.json'), JSON.stringify({ at: Date.now() }));
   let detected = 0;
   const runtime = {
     stateDirectory: dir.path,
     store: { tasks: () => [] },
     evaluateFlow: async () => {
-      throw new Error('fixture alarm failure');
+      throw new Error('Directory not empty');
     },
     deliverReminders: async () => {
       await Bun.sleep(5);
@@ -176,7 +183,7 @@ test('maintenance keeps detecting incidents when the output alarm fails and resp
   try {
     expect(await runMaintenance('all', runtime)).toBe(1);
     expect(detected).toBe(1);
-    expect(errors.join('\n')).toContain('fixture alarm failure');
+    expect(errors.join('\n')).toContain('Directory not empty');
   } finally {
     console.error = original;
     dir.close();

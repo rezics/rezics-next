@@ -12,6 +12,8 @@ export const SERVICE_UNITS = [
   'rezics-goal-verifier.service',
   'rezics-goal-maintenance.service',
   'rezics-goal-maintenance.timer',
+  'rezics-goal-regenerate.service',
+  'rezics-goal-regenerate.timer',
 ] as const;
 export type ServiceCommand = (argv: string[]) => Promise<{ code: number; output: string }>;
 
@@ -69,6 +71,8 @@ export type ServiceInstall = {
   bun?: string;
   unitDirectory?: string;
   user?: string;
+  maintenanceBudgetMs?: number;
+  regenerationBudgetMs?: number;
 };
 
 export async function installService(options: ServiceInstall, run = serviceCommand): Promise<void> {
@@ -99,6 +103,8 @@ export async function installService(options: ServiceInstall, run = serviceComma
     '@ENVIRONMENT@': unitPath(envFile),
     '@BUN@': quote(options.bun ?? process.execPath, true, true),
     '@CLI@': quote(join(main, 'tools/goal/src/cli.ts'), true, true),
+    '@MAINTENANCE_BUDGET@': String(options.maintenanceBudgetMs ?? defaultPolicy.maintenance.budgetMs),
+    '@REGENERATION_BUDGET@': String(options.regenerationBudgetMs ?? defaultPolicy.maintenance.regenerationBudgetMs),
   };
   for (const unit of SERVICE_UNITS) {
     let content = readFileSync(join(import.meta.dir, '../systemd', unit), 'utf8');
@@ -112,11 +118,11 @@ export async function installService(options: ServiceInstall, run = serviceComma
   await checked(['loginctl', 'enable-linger', user], run);
   // Reject a broken unit before the legacy supervisor stops, so a bad install never leaves no host at all.
   await checked(['systemd-analyze', '--user', 'verify', ...SERVICE_UNITS.map((unit) => join(directory, unit))], run);
-  await checked(['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3]], run);
+  await checked(['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3], SERVICE_UNITS[5]], run);
   await stopLegacySupervisor(join(main, '.temp/goal'), run);
   // Wait for the notify host only after the old supervisor and host have relinquished the socket.
-  await checked(['systemctl', '--user', 'start', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3]], run);
-  await checked(['systemctl', '--user', 'start', SERVICE_UNITS[2]], run);
+  await checked(['systemctl', '--user', 'start', HOST_UNIT, SERVICE_UNITS[1]], run);
+  await checked(['systemctl', '--user', '--no-block', 'start', SERVICE_UNITS[3], SERVICE_UNITS[5]], run);
   for (const file of ['manager-host-liveness.json', 'manager-host-liveness-retry.json', 'manager-host-restart.json'])
     rmSync(join(main, '.temp/goal', file), { force: true });
 }
@@ -170,9 +176,12 @@ export async function reportServices(
 ): Promise<number> {
   let failed = false;
   if (action === 'restart') {
-    const restarted = await run(['systemctl', '--user', 'restart', ...SERVICE_UNITS]);
+    const restarted = await run(['systemctl', '--user', 'restart', HOST_UNIT, SERVICE_UNITS[1]]);
     failed = restarted.code !== 0;
     if (restarted.output.trim()) print(restarted.output.trim());
+    const timers = await run(['systemctl', '--user', '--no-block', 'restart', SERVICE_UNITS[3], SERVICE_UNITS[5]]);
+    failed ||= timers.code !== 0;
+    if (timers.output.trim()) print(timers.output.trim());
   }
   for (const unit of SERVICE_UNITS) {
     const health = await run([
@@ -187,7 +196,8 @@ export async function reportServices(
     failed ||=
       health.code !== 0 ||
       /^(LoadState=not-found|ActiveState=failed|Result=(?!success\b)\S+)/m.test(health.output) ||
-      (unit !== 'rezics-goal-maintenance.service' && /^ActiveState=(inactive|deactivating)$/m.test(health.output));
+      (unit !== SERVICE_UNITS[2] && unit !== SERVICE_UNITS[4] &&
+        /^ActiveState=(inactive|deactivating)$/m.test(health.output));
     if (action === 'logs') {
       const logs = await run(['journalctl', '--user', '--unit', unit, '--no-pager', `--lines=${policy.logLines}`]);
       print(logs.output.trim());
