@@ -3,7 +3,6 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
-import { defaultPolicy } from './policy.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { matchesPath } from './briefs.ts';
 import { firstFailure, gateRunner, git, type GateRunner } from './merge.ts';
@@ -47,7 +46,7 @@ function observe<T>(action: () => T): T | undefined {
 
 // The root gate runs every workspace on one gate host; with every workspace grown it outlasted two hours (a timeout at
 // 2 h 05 m on 2026-10-29 blocked every promotion), so it gets four.
-export const PROMOTION_GATE_TIMEOUT_MS = defaultPolicy.promotion.gateTimeoutMs;
+export const PROMOTION_GATE_TIMEOUT_MS = 4 * 60 * 60_000;
 const STABILIZE_QUICK_GATE = [
   ['bun', 'scripts/typecheck.ts'],
   ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
@@ -83,8 +82,8 @@ function workingFiles(cwd: string): string[] {
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
 }
 
-export async function regenerateDerivedHead(
-  options: Pick<PromotionOptions, 'settings' | 'derivedFiles'>,
+async function regenerateDerivedHead(
+  options: PromotionOptions,
   expected: string,
   branch = sourceDevBranch(options.settings),
 ): Promise<{ head: string; retry: boolean }> {
@@ -102,7 +101,7 @@ export async function regenerateDerivedHead(
     const tracked = git(tree, 'ls-files', '-z').split('\0').filter(Boolean);
     const commands = new Map<string, string[]>();
     for (const file of files)
-      if (tracked.some((path) => matchesPath(path, [file.path], settings.policy?.brief)))
+      if (tracked.some((path) => matchesPath(path, [file.path])))
         commands.set(JSON.stringify(file.command), file.command);
     // A fresh worktree has no node_modules, and generators such as the kernel's run its installed tools.
     const install =
@@ -116,9 +115,7 @@ export async function regenerateDerivedHead(
     }
 
     const changes = workingFiles(tree);
-    const outside = changes.filter(
-      (path) => !files.some((file) => matchesPath(path, [file.path], settings.policy?.brief)),
-    );
+    const outside = changes.filter((path) => !files.some((file) => matchesPath(path, [file.path])));
     if (outside.length) throw new Error(`Derived generator changed non-derived files: ${outside.join(', ')}`);
     let candidate = expected;
     if (changes.length) {
@@ -285,22 +282,16 @@ async function gateAt(
   if (results.length === commands.length) return results;
   const missingCommands = commands.slice(results.length).map((command) => [...command]);
   const observationWindowId = observe(() =>
-    beginPromotionGroupWindow(
-      store.db,
-      {
-        ...(options.observationParentId === undefined ? {} : { parentWindowId: options.observationParentId }),
-        promotionId: run.id,
-        group: label,
-        commit,
-        commands: missingCommands,
-      },
-      options.settings.policy?.promotion,
-    ),
+    beginPromotionGroupWindow(store.db, {
+      ...(options.observationParentId === undefined ? {} : { parentWindowId: options.observationParentId }),
+      promotionId: run.id,
+      group: label,
+      commit,
+      commands: missingCommands,
+    }),
   );
   observe(() => linkPromotionParentWindow(store.db, options.observationParentId, run.id));
-  observe(() =>
-    recordPromotionCustodyUnavailable(store.db, observationWindowId, undefined, options.settings.policy?.promotion),
-  );
+  observe(() => recordPromotionCustodyUnavailable(store.db, observationWindowId));
   observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'wait-ended'));
   observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'admitted'));
   observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'preparation-started'));
@@ -372,9 +363,11 @@ async function gateAt(
           observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'execution-started'));
           executionStarted = true;
         }
-        const outcome = await (
-          options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).promotion.gateTimeoutMs)
-        )(executionCommand, tree, logFor(index));
+        const outcome = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(
+          executionCommand,
+          tree,
+          logFor(index),
+        );
         observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'execution-ended'));
         let failure = outcome.passed ? undefined : firstFailure(outcome.output);
         if (git(tree, 'rev-parse', 'HEAD') !== commit || git(tree, 'status', '--porcelain'))
@@ -410,7 +403,7 @@ async function gateAt(
       ),
     );
   } finally {
-    await stopProcessesUnder(tree, options.settings.terminationGraceMs, undefined, options.settings.policy?.process);
+    await stopProcessesUnder(tree, options.settings.terminationGraceMs);
     git(main, 'worktree', 'remove', '--force', tree);
   }
   return results;
@@ -609,11 +602,7 @@ async function rerunStabilizeInfrastructure(
   let pending = stabilizeRetryCommands(options, run, initial, failedIndex);
   const passed: PromotionGateResult[] = [];
   let current = initial;
-  for (
-    let attempt = 1;
-    attempt <= (options.settings.policy ?? defaultPolicy).promotion.infrastructureReruns && pending.length;
-    attempt++
-  ) {
+  for (let attempt = 1; attempt <= 2 && pending.length; attempt++) {
     const label = `head-infrastructure-rerun-${attempt}`;
     const reruns = await gateAt(options, run, run.devHead, pending, label, 'headResults', true);
     if (!reruns.length) break;
@@ -901,7 +890,7 @@ function mergeMainIntoDev(
   const settings = options.settings,
     checkout = settings.mainCheckout;
   const derived = (options.derivedFiles ?? defaultDerivedFiles).map((file) => file.path);
-  for (let attempt = 0; attempt < (options.settings.policy ?? defaultPolicy).promotion.advanceAttempts; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     const dev = optionalHead(checkout, branch);
     if (!dev) return undefined;
     if (isAncestor(checkout, target, dev)) return dev;
@@ -915,8 +904,7 @@ function mergeMainIntoDev(
       });
       if (merged.status !== 0) {
         const conflicts = git(tree, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
-        if (!conflicts.length || conflicts.some((path) => !matchesPath(path, derived, settings.policy?.brief)))
-          return undefined;
+        if (!conflicts.length || conflicts.some((path) => !matchesPath(path, derived))) return undefined;
         try {
           git(tree, 'checkout', '--ours', '--', ...conflicts);
           git(tree, 'add', '--', ...conflicts);
@@ -1069,9 +1057,11 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
       if (installed.status !== 0) return false;
     }
     for (const command of STABILIZE_QUICK_GATE) {
-      const result = await (
-        options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).promotion.gateTimeoutMs)
-      )(command, tree, join(settings.stateDirectory, `promotion-quick-${dev}-${command[command.length - 1]}.log`));
+      const result = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(
+        command,
+        tree,
+        join(settings.stateDirectory, `promotion-quick-${dev}-${command[command.length - 1]}.log`),
+      );
       if (!result.passed || git(tree, 'rev-parse', 'HEAD') !== dev || git(tree, 'status', '--porcelain')) return false;
     }
     return head(checkout, sourceDevBranch(settings)) === dev;
@@ -1114,7 +1104,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
   if (paused()) return;
   let lease;
   try {
-    lease = acquireDirectoryLease(join(settings.stateDirectory, 'promotion.lease'), settings.policy?.leases);
+    lease = acquireDirectoryLease(join(settings.stateDirectory, 'promotion.lease'));
   } catch (error) {
     if (error instanceof LeaseHeldError) return;
     throw error;

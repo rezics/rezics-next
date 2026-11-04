@@ -192,7 +192,7 @@ console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',tex
 console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_tokens:2}}));
 `;
 
-test("a dev product attempt's continuation briefs move to Goal review when the attempt ends", async () => {
+test("a dev product attempt's continuation briefs move to its Goal backlog when the attempt ends", async () => {
   const rest = markdown.replace('Write the requested result and commit it.', 'Finish the shelf page.');
   const other = markdown.replace('goal: fixture', 'goal: web');
   const h = harness(continuingWorker(rest, other));
@@ -201,8 +201,8 @@ test("a dev product attempt's continuation briefs move to Goal review when the a
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
     await job.start(task.id);
     await job.drain();
-    const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture', 'proposed');
-    const queued = readdirSync(backlog).filter((file) => file.endsWith('.md'));
+    const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    const queued = readdirSync(backlog);
     expect(queued).toEqual([`continuation-${task.id.slice(0, 8)}-1-rest-of-shelf.md`]);
     expect(readFileSync(join(backlog, queued[0]!), 'utf8')).toBe(
       completeContinuation(rest, task, readRiskOwnership(h.settings.riskAreasFile)),

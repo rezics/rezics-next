@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-import { ownedTemporaryDirectory } from './tmp-janitor.ts';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   encodeLifecycleSpec,
@@ -1331,8 +1330,7 @@ export async function runWorkerCheck(
     writeSync(descriptor, line);
   }
   if (localOnly && needsStack) {
-    const line =
-      'worker-check: --local cannot place a heavy or unknown check on this host; routing to a performance-approved check host\n';
+    const line = 'worker-check: --local cannot place a heavy or unknown check on this host; routing to a or b\n';
     process.stderr.write(line);
     writeSync(descriptor, line);
   }
@@ -1346,7 +1344,7 @@ export async function runWorkerCheck(
     else {
       try {
         if (performanceHosts(readHosts(remoteHostsFile)).length === 0)
-          remoteHostFailure = `remote check hosts ${remoteHostsFile} contain no performance-approved host`;
+          remoteHostFailure = `remote check hosts ${remoteHostsFile} contain no approved a/b host`;
       } catch (error) {
         remoteHostFailure = `remote check hosts are invalid: ${error instanceof Error ? error.message : String(error)}`;
       }
@@ -1817,10 +1815,7 @@ export async function runWorkerCheck(
   let scoped = false;
   const peakFile = join(directory, `peak.${process.pid}.${randomUUID()}.tmp`);
   const ownedCommand = ownedLocalCommand(command);
-  let temporary: ReturnType<typeof ownedTemporaryDirectory> | undefined;
   try {
-    temporary = ownedTemporaryDirectory(join(root, '.temp'), 'check-tmp-');
-    Object.assign(env, temporary.env);
     let callerSlice = '';
     if (env.REZICS_CHECK_SCOPE !== 'off') {
       try {
@@ -1890,7 +1885,6 @@ export async function runWorkerCheck(
   } catch (error) {
     wait.stop();
     const executionIntent = cancelled();
-    temporary?.close();
     const logicalCancelled =
       error instanceof CheckCancelled ||
       (logicalCheckId !== undefined &&
@@ -1952,7 +1946,6 @@ export async function runWorkerCheck(
     throw error;
   } finally {
     clearInterval(progressTimer);
-    temporary?.close();
     stopForwarders();
     wait.stop();
     closeSync(descriptor);

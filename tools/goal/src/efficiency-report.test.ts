@@ -164,34 +164,3 @@ test('hourly delivery stores one timestamped outcome and discards notifier outpu
     h.close();
   }
 });
-
-test('hourly rendering and notifier output use caller limits, including tiny UTF-8 budgets', async () => {
-  const { readControlPolicy } = await import('./policy.ts');
-  const h = fixture();
-  try {
-    const policy = readControlPolicy({ hourlyReport: { reportBytes: 200, notifierOutputBytes: 4 } });
-    for (const reportBytes of [1, 3, 200]) {
-      const report = await renderHourlyEfficiencyReport(h.db, {
-        bucket: '2026-10-31T01:00:00.000Z',
-        policy: { ...policy, hourlyReport: { ...policy.hourlyReport, reportBytes } },
-      });
-      expect(Buffer.byteLength(report)).toBeLessThanOrEqual(reportBytes);
-      expect(report).not.toContain('\uFFFD');
-    }
-    const sent = await sendHourlyEfficiencyReport(
-      h.db,
-      '2026-10-31T01:00:00.000Z',
-      'bounded',
-      [process.execPath, '-e', 'console.log("too much output")'],
-      2000,
-      new Date(),
-      policy,
-    );
-    expect(sent.disposition).toBe('unknown');
-    expect(sent.detail).toContain('output limit exceeded');
-    const ordinary = await renderHourlyEfficiencyReport(h.db, { bucket: '2026-10-31T01:00:00.000Z' });
-    expect(Buffer.byteLength(ordinary)).toBeGreaterThan(200);
-  } finally {
-    h.close();
-  }
-});
