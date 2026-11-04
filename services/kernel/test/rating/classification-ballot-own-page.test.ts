@@ -502,9 +502,7 @@ test('the page continues from raw keys and promotes an exact selected slot once'
   try {
     await hideSubject(subject.id);
     const selection = `selectedSubjectId=${subject.id}&selectedAssociationId=${selectedAssociationId}`;
-    const sparse = await responseJson(
-      await request('owner', 'GET', `/v1/me/classification-assessments?${selection}`),
-    );
+    const sparse = await responseJson(await request('owner', 'GET', `/v1/me/classification-assessments?${selection}`));
     expect(sparse).toMatchObject({ items: [], traversal: 'more' });
     expect(sparse.next).toEqual(expect.any(String));
     const continuation = `/v1/me/classification-assessments?${selection}&cursor=${encodeURIComponent(sparse.next)}`;
