@@ -1045,12 +1045,20 @@ export function auditArchitecture(
       }
       const targetPackage = packageName(edge.specifier);
       const targetWorkspace = targetPackage ? packages.get(targetPackage) : undefined;
-      if (sourceIsPackage && targetWorkspace && /^(apps|services)\//.test(slash(relative(root, targetWorkspace)))) {
+      if (
+        sourceIsPackage &&
+        edge.targets.length === 0 &&
+        targetWorkspace &&
+        /^(apps|services)\//.test(slash(relative(root, targetWorkspace)))
+      ) {
         add(sourceModule.id, "rule 7", source, stableEdge(edge, edge.targets[0] ?? targetWorkspace));
       }
 
       for (const target of edge.targets) {
         const targetModule = ownerByFile.get(target);
+        if (sourceIsPackage && /^(apps|services)\//.test(target)) {
+          add(sourceModule.id, "rule 7", source, stableEdge(edge, target));
+        }
         if (!targetModule) continue;
         locatedEdges.push({ source, sourceModule, edge, target, targetModule });
         if (sourceModule.id === targetModule.id) continue;
