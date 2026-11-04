@@ -201,9 +201,10 @@ export function OrganizationDeleteContent({
 
   function retireReview(current: OrganizationDeletionReviewGeneration, result?: OrganizationDeletionLoad) {
     const belongsToAttempt = attempt.current?.identity.organizationId === current.selected;
+    const activeAttempt = attempt.current;
     returns.retire(current);
-    if (belongsToAttempt && !attempt.current?.unresolved) {
-      attempt.current.mounted = false;
+    if (belongsToAttempt && activeAttempt && !activeAttempt.unresolved) {
+      activeAttempt.mounted = false;
       attempt.current = null;
     }
     if (!current.active) {

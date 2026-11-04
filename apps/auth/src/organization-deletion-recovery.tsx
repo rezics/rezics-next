@@ -22,7 +22,7 @@ export function OrganizationDeletionRecovery({
   advice: OrganizationDeletionLoad | null;
   pending: boolean;
   readback: (() => void) | undefined;
-  headingRef?: Ref<HTMLHeadingElement>;
+  headingRef?: Ref<HTMLHeadingElement> | undefined;
 }) {
   const kind = advice?.kind;
   const authentication = kind === 'authentication-required' || kind === 'signed-out';
