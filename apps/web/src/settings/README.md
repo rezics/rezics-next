@@ -20,14 +20,17 @@ Settings Profile reads Content `GET /v1/media/avatar-upload-advice` for current 
 
 The signed-in Settings notifications section reads the Access preference `page`: current optional kinds, compulsory
 notices as explained policy, honest defaults, and admitted `edit`/`reset` actions with the current version. The
-catalogue is the authority; the page does not invent kinds, title-case unknown keys, or promise email or push. Watch
+catalogue is the authority; the page does not invent kinds, title-case unknown keys, or promise email or push. The same
+200 response carries current-viewer, read/update and Reading advice. Edit and reset appear only when its current
+`account:update` observation allows them; a readable account with update denied keeps confirmed values and sees disabled
+controls with the reason. Missing or malformed advice does not create a catalogue or an editable fallback. Watch
 subscriptions stay at `/settings#watches`. Native notification controls are in the first Settings HTML so a no-JavaScript
 save still works; after hydration the selected section is the only shown panel. Conflict reloads the current page and
-version; a still-valid draft needs review and never replays a removed or compulsory kind. A missing page renders
-unavailable rather than default-enabled values. Session change clears private policy and draft. Uncertain saves keep the
-original patch and key. A confirmed matching recovery drops the spent intent.
+version; a still-valid draft needs review and never replays a removed or compulsory kind. Session change clears private
+policy and draft. Uncertain saves keep the original patch and key. A confirmed matching recovery drops the spent intent.
 
-**Decision:** A successful self-read advertises edit and reset; PATCH still checks `account:update` at command time.
+**Decision:** Notification edit/reset advice follows the current `account:update` observation; commands still recheck
+authority before receipt lookup.
 
 ## Reading
 
@@ -45,8 +48,8 @@ response cannot restore edit authority.
 
 **Decision:** Reset PATCHes `spoilerLevel` 0 and `suitability` `blur` with the reviewed version. Viewer state and
 read/update actions live as additive siblings of the notification catalogue `page` on the same preference 200, without
-a second preference version. Catalogue `page.actions` still advertise edit/reset on a self-read; Reading writability
-is `allowedActions.update`. 409 still returns catalogue `page` only.
+a second preference version. Catalogue `page.actions` use the same current `allowedActions.update` observation. A 409
+returns catalogue `page` only and does not imply complete Reading advice.
 
 ## Watches
 

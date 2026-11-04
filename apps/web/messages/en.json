@@ -1425,6 +1425,7 @@
   "settings_notification_moderation_decision": "Moderation, report and appeal outcomes",
   "settings_notification_save": "Save",
   "settings_notifications_heading": "Notifications",
+  "settings_notifications_read_only": "You can view the saved settings, but current account access does not allow changes.",
   "settings_notifications_mandatory": "Moderation decisions about your content, report outcomes and appeal outcomes are always sent.",
   "settings_notifications_policy_heading": "Always sent",
   "settings_notifications_default_on": "Default: on",

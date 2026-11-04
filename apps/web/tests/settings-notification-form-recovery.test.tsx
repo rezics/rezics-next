@@ -2,11 +2,27 @@ import { expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
-import type { NotificationChange } from '../src/settings/preferences';
+import type { NotificationChange, NotificationPreferences, PreferencePage } from '../src/settings/preferences';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+function settingsPage(notifications: NotificationPreferences, version: number, writable = true): PreferencePage {
+  return {
+    version,
+    kinds: [
+      ...Object.entries(notifications).map(([kind, enabled]) => ({
+        kind,
+        optional: true,
+        default: true,
+        enabled,
+      })),
+      { kind: 'moderation_decision', optional: false, default: true, enabled: true },
+    ],
+    actions: writable ? [{ name: 'edit', expectedVersion: version }, { name: 'reset', expectedVersion: version }] : [],
+  };
+}
 
 test('native kind forms own each field once; hydration retains choices and recovers only the intended operation', async () => {
   const { Window } = await import(
@@ -42,25 +58,28 @@ test('native kind forms own each field once; hydration retains choices and recov
   const { NotificationsCard } = await import('../src/settings/notifications');
   const initial = { reply: true, mention: false, weekly_digest: true };
   const current = { reply: false, mention: true, weekly_digest: false };
+  const initialPage = settingsPage(initial, 7);
+  const currentPage = settingsPage(current, 9);
   const calls: NotificationChange[] = [];
   const io = {
     save: async (input: NotificationChange) => {
       calls.push(input);
       if (calls.length === 1) return { ok: false as const, reason: 'invalid' as const };
       if (calls.length === 3) throw new Error('response lost');
-      if (calls.length === 5) return { ok: false as const, reason: 'conflict' as const };
-      return { ok: true as const, version: 9, notifications: current };
+      if (calls.length === 5) return { ok: false as const, reason: 'conflict' as const, page: currentPage };
+      return { ok: true as const, version: 9, notifications: current, page: currentPage };
     },
     read: async () => ({
       signedIn: true as const,
       preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 9 },
       notifications: current,
+      page: currentPage,
       securityHref: null,
     }),
   };
   const card = (
     <NotificationsCard
-      initial={initial}
+      initial={initialPage}
       version={7}
       csrfToken="token"
       action="/en/settings"
@@ -83,6 +102,23 @@ test('native kind forms own each field once; hydration retains choices and recov
       ['action', kind ? 'save' : 'restore'],
     ]);
   }
+  const readOnlyHost = window.document.createElement('main');
+  readOnlyHost.innerHTML = renderToString(
+    <NotificationsCard
+      initial={{ ...initialPage, actions: [] }}
+      version={7}
+      csrfToken="token"
+      action="/en/settings"
+      io={io}
+      onVersionChange={() => {}}
+    />,
+  );
+  expect(readOnlyHost.textContent).toContain('current account access does not allow changes');
+  expect([...readOnlyHost.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].every((input) => input.disabled))
+    .toBe(true);
+  expect([...readOnlyHost.querySelectorAll('button')].every((button) => (button as HTMLButtonElement).disabled)).toBe(
+    true,
+  );
   host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked = false;
   let root: ReturnType<typeof hydrateRoot> | undefined;
   const click = async (text: string) =>
@@ -132,19 +168,21 @@ test('native failure bodies retain per-kind choices or Restore, replay unknown c
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window();
+  const current = { reply: true, mention: false };
   const writes: NotificationChange[] = [];
   let refused = true;
   const save = spyOn(preferences, 'changeNotifications').mockImplementation(async (_client, _request, _env, input) => {
     writes.push(input);
     return refused
       ? { ok: false, reason: input.notifications === null ? 'conflict' : 'unavailable' }
-      : { ok: true, version: 12, notifications: { reply: true, mention: false } };
+      : { ok: true, version: 12, notifications: current, page: settingsPage(current, 12) };
   });
   const read = spyOn(preferences, 'loadSettingsPage').mockResolvedValue({
     signedIn: true,
     securityHref: null,
     preferences: { spoilerLevel: 1, suitability: 'blur', version: 11 },
-    notifications: { reply: true, mention: false },
+    notifications: current,
+    page: settingsPage(current, 11),
   });
   const client = spyOn(kernel, 'kernelClient').mockReturnValue({} as ReturnType<typeof kernel.kernelClient>);
   const post = (fields: URLSearchParams) =>

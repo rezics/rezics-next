@@ -1403,6 +1403,7 @@
   "settings_notification_moderation_decision": "審核、檢舉與申訴結果",
   "settings_notification_save": "儲存",
   "settings_notifications_heading": "通知",
+  "settings_notifications_read_only": "你可以檢視已儲存的設定，但目前帳戶權限不允許變更。",
   "settings_notifications_mandatory": "與你的內容有關的審核決定、檢舉結果和申訴結果一律會傳送通知。",
   "settings_notifications_policy_heading": "一律傳送",
   "settings_notifications_default_on": "預設：開啟",
