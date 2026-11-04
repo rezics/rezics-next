@@ -27,9 +27,9 @@ estimate:
   files: 5
 acceptance:
   tests:
-    - "The installed KernelClient.copies list row declares optional context with the official closed union, and the Web receiver derives it directly without handwritten wire types."
-    - "Two FULL rows of the same Subject retain distinct contexts, physical Copy IDs, revisions, source/note/location and command identities, with no Subject hydration."
-    - "Qualified author/date presentation, hidden ID-free states, absent-context unavailable, current-viewer retirement and exact localized inventory return remain intact."
+    - 'The installed KernelClient.copies list row declares optional context with the official closed union, and the Web receiver derives it directly without handwritten wire types.'
+    - 'Two FULL rows of the same Subject retain distinct contexts, physical Copy IDs, revisions, source/note/location and command identities, with no Subject hydration.'
+    - 'Qualified author/date presentation, hidden ID-free states, absent-context unavailable, current-viewer retirement and exact localized inventory return remain intact.'
   failing: true
   workerOwned: true
 ---
