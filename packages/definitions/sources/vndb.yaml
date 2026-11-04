@@ -2265,13 +2265,12 @@ tables:
         meaning: Visual-novel work represented by this release.
         citations: [https://schema.org/exampleOfWork, https://www.wikidata.org/wiki/Property:P629]
       - name: rtype
-        status: omitted
+        status: existing
         term: wdt:P31
         'on': wd:Q20631656
+        qualifies: schema:exampleOfWork
         mapping: wdt:P31
-        reason: >-
-          Completeness qualifies the release-to-work relation, while the immutable schema:exampleOfWork property does
-          not admit wdt:P31. Retain the exact code as a review gap instead of changing the relation grain.
+        meaning: Completeness of this release for the linked work, as a Concept qualifier on the work association.
         citations: ['https://www.wikidata.org/wiki/Property:31', 'https://www.wikidata.org/wiki/Property:P31']
         values: *id032
   - name: rlists
@@ -2641,12 +2640,12 @@ tables:
         status: omitted
         reason: VNDB length bucket is not a duration and cannot be mapped to schema:timeRequired.
       - name: devstatus
-        status: proposed
-        term: schema:keywords
+        status: existing
+        term: schema:creativeWorkStatus
         'on': wd:Q689445
         value: skos:Concept
-        meaning: Exact VNDB development-status concept; requires the caller's released concept and scheme bindings.
-        citations: [https://api.vndb.org/kana]
+        meaning: Exact VNDB development-status concept on the visual-novel work, distinct from release completeness.
+        citations: [https://schema.org/creativeWorkStatus, https://api.vndb.org/kana]
       - name: alias
         status: existing
         term: schema:alternateName

@@ -7,6 +7,7 @@ properties:
   skos:broader: '上位概念'
   foaf:focus: '指し示す対象'
   schema:keywords: 'タグ'
+  schema:creativeWorkStatus: '作品の状態'
   schema:genre: 'ジャンル'
   skos:closeMatch: '近似する概念'
 inverseProperties:
@@ -16,6 +17,7 @@ inverseProperties:
   foaf:focus: 'この対象を表す概念'
   schema:genre: 'このジャンルの作品'
   schema:keywords: 'このタグの対象'
+  schema:creativeWorkStatus: 'この状態の作品'
   skos:closeMatch: '近似する概念'
 typeDescriptions:
   skos:Concept: 'ジャンル、タグ、役割などの分類に使う概念。焦点の関連を通じて具体的な対象を表すこともできます。'
@@ -26,5 +28,6 @@ propertyDescriptions:
   skos:broader: '分類階層の上位概念。例えばSFに対するフィクションです。'
   foaf:focus: 'この分類概念が表しているカタログ上の対象。'
   schema:keywords: '対象を分類するタグの概念。カンマ区切りの文字列や個人のライブラリラベルではありません。'
+  schema:creativeWorkStatus: 'この作品またはリリースの開発・公開状態を表す概念。あるリリースが作品に対して完全かどうかは作品関連の修飾語です。'
   schema:genre: 'SFなど、この作品を分類するジャンルの概念。'
   skos:closeMatch: '意味が近い別の概念。同一性や検索フィルターの自動展開を表すものではありません。'

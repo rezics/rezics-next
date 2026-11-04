@@ -317,6 +317,7 @@ export async function createReleasedDiscoveryFixture(
     },
   );
   try {
+    await driver.grant('steward', ['gate:definition_publication'], driver.globalContext);
     const [alice, bob, outsider, unscoped] = await Promise.all([
       driver.fixtures.person('discovery-alice'),
       driver.fixtures.person('discovery-bob'),

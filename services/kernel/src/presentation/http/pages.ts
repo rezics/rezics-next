@@ -41,7 +41,7 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { cataloguePageMetadata, semanticPageView } from '../semantic-page.ts';
+import { cataloguePageMetadata, semanticPageView, subjectPageViewerState } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -318,13 +318,14 @@ export function pageRoutes<App>(
         return result;
       };
       let selected: SelectedPage | undefined;
+      const pageAccess: Access =
+        typeof access === 'function'
+          ? access({ actions: actionCatalogue(routed) })
+          : (access ?? createAccess({ actions: actionCatalogue(routed) }));
       const authority = {
         deps: {
           pool,
-          access:
-            typeof access === 'function'
-              ? access({ actions: actionCatalogue(routed) })
-              : (access ?? createAccess({ actions: actionCatalogue(routed) })),
+          access: pageAccess,
           routeKey,
         },
         actor,
@@ -528,6 +529,10 @@ export function pageRoutes<App>(
         probes,
         budget,
         probeSession,
+        access: pageAccess,
+        actor,
+        pool,
+        deadline: job.deadline,
         ...(languages === undefined ? {} : { languages }),
       });
     },
@@ -561,6 +566,10 @@ async function pageAnswer(input: {
     context: string;
     actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
   }>;
+  access: import('../../request/access.ts').Access;
+  actor: import('../../request/access.ts').Actor;
+  pool: Pool;
+  deadline: number;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -688,6 +697,17 @@ async function pageAnswer(input: {
         : result;
   }
 
+  const catalogueViewer = input.viewer ? await input.viewer() : undefined;
+  const authority =
+    catalogueViewer !== undefined || input.subject === null
+      ? undefined
+      : await subjectPageViewerState({
+          access: input.access,
+          pool: input.pool,
+          actor: input.actor,
+          deadline: input.deadline,
+          subject: input.subject,
+        });
   return respond(
     200,
     {
@@ -700,8 +720,9 @@ async function pageAnswer(input: {
       document: input.resolved.document,
       ...(input.views === null ? {} : { views: input.views }),
       ...(input.catalogue ? { catalogue: input.catalogue } : {}),
-      ...(input.viewer ? { viewer: await input.viewer() } : {}),
+      ...(catalogueViewer ? { viewer: catalogueViewer } : {}),
       reads,
+      ...(authority === undefined ? {} : { viewer: authority.viewer, actions: authority.actions }),
     },
     readSession,
     true,

@@ -371,13 +371,18 @@ distinct objects.
 Release date uses the released time property. Exact day, partial year/month, explicit TBA (`somevalue`), explicit
 no-value and an absent statement remain distinct. TBA is never a missing date, Unix epoch or year zero. Status and
 region appear only when the current descriptor admits those properties; otherwise the page names them unavailable.
+Admitted status is `schema:creativeWorkStatus` on the exact work or release holder; completeness of a particular
+release for its work is the `wdt:P31` qualifier on `schema:exampleOfWork`. A status Concept is never used as a date.
 Historical accepting meaning is the statement's pinned `rezics.release` digest, shown separately from the current
 editor admission. An explicit correction review is required after configuration changes.
 
 Directed release-to-release streams appear only for admitted item properties whose targets are released edition
-types or descendants. Work-targeted CreativeWork relations stay on the existing relation editor. Unknown source
-codes stay visible as provenance. Native edition creation, source mapping and adoption remain with Imports.
-Missing producer capability is named unavailable; Web does not fork native commands.
+types or descendants, including `wdt:P155` once a software-release target is admitted. Work-targeted CreativeWork
+relations stay on the existing relation editor. Unknown source codes stay visible as provenance on the
+`schema:sameAs` qualifier of that follow. Native edition
+creation, source mapping and adoption remain with Imports. Missing producer capability is named unavailable; Web
+does not fork native commands. One composed `POST /v1/pages:read` response carries selected facts with independently
+cacheable public reads and private, no-store viewer/actions derived from native Access for the actual caller.
 
 Correction reuses Subject facts and the relation editor for the exact selected assertion, then returns to this
 release. Native-return links keep the work, existing publisher target selection, candidate reader and Changes.
@@ -442,6 +447,9 @@ Decision: companion files follow the existing nested `$id_.$slug_.release.tsx` /
 
 Decision: related destinations open the exact disclosed ordinary Subject in the same locale and carry one validated
 `fileSource` identity back to the reader anchor; only the admitted correction entry opens the existing `/file` profile.
+
+Decision: VNDB release completeness uses scheme URI `https://rezics.com/schemes/vndb/release-types` because the
+importer does not declare a scheme URI for `releases_vn.rtype`; development status keeps `https://vndb.org/development-status`.
 
 ## Provider queue decisions
 

@@ -7,6 +7,7 @@ properties:
   skos:broader: '上位概念'
   foaf:focus: '代表的主體'
   schema:keywords: '標籤'
+  schema:creativeWorkStatus: '作品狀態'
   schema:genre: '類型'
   skos:closeMatch: '近似概念'
 inverseProperties:
@@ -16,6 +17,7 @@ inverseProperties:
   foaf:focus: '指向此主體的概念'
   schema:genre: '此類型的作品'
   schema:keywords: '使用此標籤的主體'
+  schema:creativeWorkStatus: '此狀態的作品'
   skos:closeMatch: '近似概念'
 typeDescriptions:
   skos:Concept: '用於題材、標籤、職務等分類的概念，也能透過焦點關係指向具體對象。'
@@ -26,5 +28,6 @@ propertyDescriptions:
   skos:broader: '分類階層中範圍較廣的上位概念，例如科幻之上的虛構作品。'
   foaf:focus: '此分類概念所代表的目錄對象。'
   schema:keywords: '用來分類此對象的標籤概念，不是以逗號分隔的字串或個人書庫標籤。'
+  schema:creativeWorkStatus: '表示此作品或發行版本開發或出版狀態的概念；某一發行版本相對作品是否完整，記錄在作品關聯的限定上。'
   schema:genre: '用來分類這部作品的題材概念，例如科幻。'
   skos:closeMatch: '意義相近的另一個獨立概念，不表示等同，也不會自動擴展篩選條件。'

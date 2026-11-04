@@ -49,20 +49,41 @@ export const PageResponseSchema = t.Object(
       ),
     ),
     viewer: t.Optional(
-      t.Object(
-        {
-          state: t.Union([t.Literal('anonymous'), t.Literal('account')]),
-          account: t.Optional(t.String()),
-          context: t.String(),
-          actions: t.Object(
-            { statementPropose: t.Union([t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable')]) },
-            closed,
-          ),
-        },
-        closed,
-      ),
+      t.Union([
+        t.Object(
+          {
+            state: t.Union([t.Literal('anonymous'), t.Literal('account')]),
+            account: t.Optional(t.String()),
+            context: t.String(),
+            actions: t.Object(
+              { statementPropose: t.Union([t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable')]) },
+              closed,
+            ),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            kind: t.Union([t.Literal('anonymous'), t.Literal('account')]),
+            account: t.Optional(t.String()),
+          },
+          closed,
+        ),
+      ]),
     ),
     reads: t.Record(t.String(), readResult),
+    actions: t.Optional(
+      t.Record(
+        t.String(),
+        t.Union([
+          t.Literal('allowed'),
+          t.Literal('denied'),
+          t.Literal('unavailable'),
+          t.Literal('unsupported'),
+          t.Literal('withheld'),
+        ]),
+      ),
+    ),
   },
   closed,
 );
