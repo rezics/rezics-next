@@ -30,6 +30,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('../src/kernel/client', () => ({ configured: () => false }));
 mock.module('../src/ratings/own-votes/actions', () => ({
+  readOwnVotesForViewer: async () => ({ state: 'unavailable', page: null, subject: null, cursor: null, locale: 'en', source: null }),
   executeOwnVoteIntent: async () => ({ kind: 'rejected' }),
   voteReadbackForIntent: async () => ({ kind: 'unavailable' }),
 }));
