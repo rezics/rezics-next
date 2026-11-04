@@ -654,6 +654,7 @@ export function SearchPage({
     session,
     ready: data?.recovery?.status === 'ready',
     settled: data?.recovery?.status !== 'loading',
+    recoverable: ['unavailable', 'index-not-ready', 'source-not-ready'].includes(data?.recovery?.status ?? ''),
     checkpoint: discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of,
     enabled: !filtersOnly,
   });

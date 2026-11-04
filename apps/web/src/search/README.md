@@ -184,3 +184,6 @@ an existing native result route uses normal browser return, which restores only 
 Query, ordered languages, predicates, scope and rating population remain in every window address. Activated page
 navigation owns one request-keyed focus handoff to surviving navigation/recovery or the named result region; reader,
 locale or request replacement, cancellation, leaving Search and a reader's focus move retire that handoff.
+
+A failed forward read retains its last admitted return address; uncertain authority clears rows and labels, and
+Previous re-reads that address rather than restoring its prior render. Refusal and restart keep explicit recovery.
