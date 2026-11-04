@@ -27,7 +27,6 @@ const malformed = [
   null,
   { threads: {}, next: null },
   page([], 42),
-  page([review, review]),
   page(Array(21).fill(review)),
   ...[
     null,
@@ -114,8 +113,21 @@ test('native community windows fail malformed sources locally and retain honest 
       });
   expect(composedCommunityRegion({ status: 403, body: { code: 'platform_closed' } }, expected)).toEqual({
     state: 'closed',
+    request: expected,
   });
   expect(composedCommunityRegion(undefined, expected).state).toBe('unavailable');
+  const duplicates = composedCommunityRegion(
+    { status: 200, body: page([review, review], null, expected.threadKind, expected.place) },
+    expected,
+  );
+  expect(duplicates).toMatchObject({
+    state: 'ready',
+    threads: [
+      { id: review.id, position: 0 },
+      { id: review.id, position: 1 },
+    ],
+  });
+  if (duplicates.state === 'ready') expect(duplicates.threads[0]!.rowKey).not.toBe(duplicates.threads[1]!.rowKey);
   expect(composedCommunityRegion({ status: 200, body: page([]) }).state).toBe('unavailable');
 
   const exactPage = page([], null, expected.threadKind, expected.place);
