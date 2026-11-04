@@ -23,7 +23,7 @@ type Story = StoryObj<typeof meta>;
 function CspShellPreview() {
   return (
     <PatternStory visitor="Signed Out" path={pagePaths.home}>
-      <AppShell communities={null} search={<input aria-label={m.shell_search()} />}>
+      <AppShell communities={null} search={<input aria-label="Search" />}>
         <h1 className="text-2xl font-semibold">{m.nav_home()}</h1>
         <p className="mt-3 text-muted-foreground">Choose a destination from the shared shell.</p>
       </AppShell>
