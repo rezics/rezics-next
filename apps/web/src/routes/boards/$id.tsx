@@ -1,3 +1,4 @@
+import { realmReadingReturn } from '../../community/realm-reading-return';
 import { useSession } from '../../session/query';
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import * as v from 'valibot';
@@ -122,14 +123,17 @@ function BoardPage() {
           )}
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
           postingInterval={
-            session === 'signed-in' ? (
+            <>
+            {search.returnTo ? <a href={search.returnTo} className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">{realmReadingReturn(search.returnTo) ? m.realm_reading_return() : m.subject_connections_return()}</a> : null}
+            {session === 'signed-in' ? (
               <SlowModeSetting
                 boardId={id}
                 scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
                 credentialMode={router.options.context.credentialMode}
                 onApplied={() => void router.invalidate()}
               />
-            ) : null
+            ) : null}
+            </>
           }
         />
       )}

@@ -2992,6 +2992,7 @@
   "realm_shelf_denied": "Cette liste n’est plus accessible.",
   "realm_shelf_stale": "Cette pagination a expiré ou changé. Rechargez la liste pour continuer.",
   "realm_shelf_unavailable": "Cette partie de la liste est indisponible. Réessayez.",
+  "realm_reading_return": "Revenir à la lecture sélectionnée du Realm",
   "realm_shelf_restart": "Recharger la liste",
   "realm_shelf_retry": "Réessayer",
   "realm_shelf_loading": "Chargement…",

@@ -1,3 +1,4 @@
+import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
 import { BOARD_PINNED_SECTION_LIMIT, pinnedIdentitySet, validBoardPinId } from './board-pins/contract';
 import type { BoardSort } from './board-sort';
 
@@ -18,6 +19,7 @@ export type BoardReadingReturn = {
   locale: string;
   cursor?: string;
   focusThreadId?: string;
+  returnTo?: string;
 };
 
 export class BoardPageCursorError extends Error {
@@ -72,6 +74,7 @@ export function captureBoardReadingReturn(input: {
   locale: string;
   cursor?: string;
   focusThreadId?: string;
+  returnTo?: string;
 }): BoardReadingReturn | null {
   if (!validBoardPinId(input.boardId) || !input.locale || input.locale.length > 64) return null;
   if (input.sort !== 'active' && input.sort !== 'hot' && input.sort !== 'new') return null;
@@ -85,6 +88,7 @@ export function captureBoardReadingReturn(input: {
     sort: input.sort,
     locale: input.locale,
     ...(cursor === undefined ? {} : { cursor }),
+    ...(subjectCommunityVisitReturn(input.returnTo, input.locale) ? { returnTo: subjectCommunityVisitReturn(input.returnTo, input.locale)! } : {}),
     ...(validBoardPinId(input.focusThreadId) ? { focusThreadId: input.focusThreadId } : {}),
   };
 }
@@ -104,6 +108,7 @@ export function parseBoardReadingReturn(value: unknown): BoardReadingReturn | nu
     sort: value.sort,
     locale: value.locale,
     ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
+    ...(typeof value.returnTo === 'string' ? { returnTo: value.returnTo } : {}),
     ...(typeof value.focusThreadId === 'string' ? { focusThreadId: value.focusThreadId } : {}),
   });
 }
@@ -113,6 +118,8 @@ export function boardReadingHref(reading: BoardReadingReturn): string {
   const params = new URLSearchParams();
   if (reading.sort !== 'active') params.set('sort', reading.sort);
   if (reading.cursor !== undefined) params.set('cursor', reading.cursor);
+  const returnTo = subjectCommunityVisitReturn(reading.returnTo, reading.locale);
+  if (returnTo) params.set('returnTo', returnTo);
   const search = params.toString();
   const href = search ? `${path}?${search}` : path;
   return reading.focusThreadId ? `${href}#board-thread-${reading.focusThreadId}` : href;

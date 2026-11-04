@@ -2992,6 +2992,7 @@
   "realm_shelf_denied": "이 목록을 더 이상 읽을 수 없습니다.",
   "realm_shelf_stale": "페이지 정보가 만료되거나 변경되었습니다. 목록을 다시 불러오세요.",
   "realm_shelf_unavailable": "목록의 이 부분을 이용할 수 없습니다. 다시 시도하세요.",
+  "realm_reading_return": "선택한 Realm 읽기 위치로 돌아가기",
   "realm_shelf_restart": "목록 다시 불러오기",
   "realm_shelf_retry": "다시 시도",
   "realm_shelf_loading": "불러오는 중…",

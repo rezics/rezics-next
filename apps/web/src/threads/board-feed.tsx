@@ -359,6 +359,7 @@ function BoardFeedVisit({
     boardId,
     sort,
     locale,
+    ...(typeof location.search.returnTo === 'string' ? { returnTo: location.search.returnTo } : {}),
     ...(cursor === undefined || pins.needsRestart ? {} : { cursor }),
   });
   useLayoutEffect(() => {

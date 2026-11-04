@@ -1202,3 +1202,48 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     expect(calls.publications).toHaveLength(1);
   });
 });
+
+
+test('the mounted Realm return reads only its selected native window and keeps publication continuation independent', async () => {
+  setLocale('en', { reload: false });
+  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  nextClient.setQueryData(sessionQuery.queryKey, signedOut());
+  const selectedId = id(71);
+  realmReader = async () => ({ kind: 'page', page: pageFor(address) });
+  boardReader = async () => ({ kind: 'page', items: [board(selectedId, 'Selected board window')], next: 'next-board', unavailable: 0 });
+  publicationReader = async () => ({ kind: 'page', items: [publication(id(72), 'Independent publication window')], next: null, unavailable: 0 });
+  await mountFileRoute(fileRouteTree(realmRoute, '/realms/$id'), `/realms/${realmId}?node=boards&cursor=original%2Fwindow#realm-board-${selectedId}`, nextClient);
+  await settle();
+  expect(calls.boards).toEqual([{ realmId, cursor: 'original/window', credentialMode: 'anonymous' }]);
+  expect(calls.publications).toEqual([]);
+  expect(host.textContent).toContain('Selected board window');
+  expect(host.textContent).not.toContain('Original board');
+  const link = host.querySelector<HTMLAnchorElement>(`#realm-board-${selectedId} a`)!;
+  expect(new URL(link.href).searchParams.get('returnTo')).toBe(`/en/realms/${realmId}?node=boards&cursor=original%2Fwindow#realm-board-${selectedId}`);
+  await act(async () => click(m.realm_publications_more()));
+  await settle();
+  expect(calls.publications).toEqual([{ realmId, cursor: 'publication-cursor-one', credentialMode: 'anonymous' }]);
+  expect(calls.boards).toHaveLength(1);
+  expect(host.textContent).toContain('Selected board window');
+  expect(host.textContent).toContain('Independent publication window');
+  expect(new URL(host.querySelector<HTMLAnchorElement>(`#realm-publication-${id(72)} a`)!.href).searchParams.get('via')).toBe(`/en/realms/${realmId}?node=publications&cursor=publication-cursor-one#realm-publication-${id(72)}`);
+});
+
+test('replacement and removed carriers retire pending shelf return and detached links', async () => {
+  const original = pageFor(address);
+  await mount(<SpacePage page={original} />, { session: signedOut() });
+  const pending = deferred<ShelfPage<RealmBoard>>();
+  boardReader = async () => pending.promise;
+  const detached = host.querySelector<HTMLAnchorElement>(`#realm-board-${boardId} a`)!;
+  await act(async () => click(m.realm_boards_more()));
+  await repaint(<SpacePage page={pageFor(address, false)} />);
+  const activation = new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+  detached.dispatchEvent(activation as unknown as MouseEvent);
+  expect(activation.defaultPrevented).toBe(true);
+  await act(async () => pending.resolve({ kind: 'page', items: [board(id(73), 'Retired return')], next: null, unavailable: 0 }));
+  expect(host.textContent).not.toContain('Retired return');
+  expect(host.querySelector('#realm-boards-heading')).toBeNull();
+  await repaint(<SpacePage page={pageFor(address)} />);
+  expect(host.textContent).toContain('Original board');
+  expect(host.textContent).not.toContain('Retired return');
+});

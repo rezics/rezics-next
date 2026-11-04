@@ -6,6 +6,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { subjectHref } from '../src/subject/subject-href';
 import { boardReadingHref, captureBoardReadingReturn, parseBoardReadingReturn } from '../src/threads/board-reading';
+import { realmReadingReturn, realmReadingSelection, realmShelfReturn } from '../src/community/realm-reading-return';
+import { subjectCommunityVisitReturn, withSubjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import { boardSearch } from '../src/routes/boards/$id';
+import { threadCreationPreset } from '../src/threads/thread-creation-lifetime';
 import { threadLocation } from '../src/threads/thread-href';
 import threadRecording from '../src/kernel/recorded/board-realm-thread.json';
 import * as start from '../.storybook/react-start';
@@ -163,4 +167,47 @@ test('public Realm destinations and the native discussion reader preserve their 
   } finally {
     setLocale(oldLocale, { reload: false });
   }
+});
+
+
+test('the real Realm shelves hand consumed returns to Board, work and participation without mapping a work to a Board', async () => {
+  const page = await loadSpacePage(kernel, new Request('https://site.example.test/en/spaces/atlas-member'), {}, { address: 'atlas-member' }, 'anonymous');
+  if (!page.realm) throw new Error('Recorded Realm unavailable');
+  const previous = getLocale();
+  try {
+    for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'fr', 'de', 'es'] as const) {
+      setLocale(locale, { reload: false });
+      const origin = `/${locale}/realms/${page.realm.id}`;
+      const html = await render(createElement(SpacePage, { page }), origin);
+      const links = [...html.matchAll(/href="([^"]+)"/g)].map(match => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://site.test'));
+      expect((html.match(/id="realm-boards-heading"/g) ?? [])).toHaveLength(1);
+      expect((html.match(/id="realm-published-heading"/g) ?? [])).toHaveLength(1);
+      for (const board of page.realm.boards) {
+        const destination = links.find(url => url.pathname.endsWith(`/boards/${board.id}`));
+        const returnTo = destination?.searchParams.get('returnTo');
+        expect(returnTo).toBe(`${origin}?node=boards#realm-board-${board.id}`);
+        expect(boardSearch({ returnTo })).toEqual({ returnTo });
+        expect(threadCreationPreset({ returnTo }, locale).returnTo).toBe(returnTo);
+        const reading = captureBoardReadingReturn({ boardId: board.id, locale, sort: 'new', returnTo: returnTo! });
+        expect(new URL(boardReadingHref(parseBoardReadingReturn(reading)!), 'https://site.test').searchParams.get('returnTo')).toBe(returnTo);
+      }
+      for (const subject of page.realm.published) {
+        const destination = links.find(url => url.pathname.includes(`/subjects/${subject.id}/`));
+        expect(destination?.searchParams.get('realm')).toBe(page.realm.id);
+        expect(destination?.searchParams.get('via')).toBe(`${origin}?node=publications#realm-publication-${subject.id}`);
+        expect(destination?.searchParams.has('board')).toBe(false);
+      }
+      const selected = realmShelfReturn({ href: origin, locale, node: 'publications', cursor: 'native/+window=', id: page.realm.published[0]?.id });
+      expect(realmReadingSelection(selected)).toMatchObject({ node: 'publications', cursor: 'native/+window=' });
+      expect(realmReadingReturn(`${origin}?private=draft`, locale)).toBeUndefined();
+      expect(realmReadingReturn(`${origin}?node=boards&cursor=a&cursor=b`, locale)).toBeUndefined();
+      expect(realmReadingReturn(selected, locale === 'en' ? 'ja' : 'en')).toBeUndefined();
+      expect(realmReadingReturn(`//elsewhere.test${origin}`, locale)).toBeUndefined();
+    }
+    setLocale('en', { reload: false });
+    const subject = page.realm.published[0]!;
+    const source = `/en/subjects/${subject.id}/work/reviews?realm=${page.realm.id}&node=review-list&cursor=original%2Fwindow#subject-community-review-list`;
+    expect(subjectCommunityVisitReturn(source, 'en')).toBe(source);
+    expect(new URL(withSubjectVisitReturn(subjectHref({ id: subject.id, label: 'work' }, 'en').href, source, 'en'), 'https://site.test').searchParams.get('via')).toBe(source);
+  } finally { setLocale(previous, { reload: false }); }
 });

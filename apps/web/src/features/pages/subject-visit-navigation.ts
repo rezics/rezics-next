@@ -1,3 +1,4 @@
+import { realmReadingReturn } from '../../community/realm-reading-return';
 import { workFranchiseReturn } from '../catalogue/work-franchise-reading/navigation';
 import { subjectHref } from '../../subject/subject-href';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
@@ -357,6 +358,8 @@ function collectionReturn(url: URL, locale?: string): string | undefined {
 function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested: boolean): string | undefined {
   if (typeof value !== 'string' || value.length > returnAddressCap) return;
   if (/[\\\u0000-\u001f\u007f]/u.test(value)) return;
+  const realmReading = realmReadingReturn(value, locale);
+  if (realmReading) return realmReading;
   const catalogueReturn = realmCatalogueReturnHref(value, locale);
   if (catalogueReturn) return catalogueReturn;
   if (!value.startsWith('/') || value.startsWith('//')) return;
@@ -502,6 +505,8 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
 
 /** A thread-entry return may target only a real mounted community region on an admitted Subject route. */
 export function subjectCommunityVisitReturn(value: unknown, locale?: string): string | undefined {
+  const reading = realmReadingReturn(value, locale);
+  if (reading) return reading;
   const accepted = subjectVisitReturn(value, locale);
   if (!accepted) return;
   return subjectCommunityFragment.test(new URL(accepted, 'https://rezics.invalid').hash) ? accepted : undefined;
