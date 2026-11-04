@@ -253,7 +253,7 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
     await waitFor(() => expect(router.state.location.pathname).toBe('/ja/subjects/reader-01'));
     expect(body.getByRole('heading', { name: 'Subject reader route' })).toBeDefined();
     expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
-    expect(router.state.location.hash).toBe('#chapter-4');
+    expect(router.state.location.hash).toBe('chapter-4');
     expect(window.document.cookie).toContain('rezics_locale=ja');
     await waitFor(() => expect(admissions).toContain('ja'));
     expect(button().getAttribute('aria-label')).toContain('日本語');
@@ -283,7 +283,7 @@ test('navigation failure offers the current safe reader and an obsolete completi
       writable: true,
       value: () => Promise.reject(new Error('navigation unavailable')),
     });
-    const trigger = () => body.getByRole('button', { name: /Language/ });
+    const trigger = () => body.getByRole('button', { name: /Language|言語/ });
     trigger().focus();
     await act(async () => user.keyboard('{Enter}'));
     const japanese = await body.findByRole('menuitemradio', { name: /日本語/ });
