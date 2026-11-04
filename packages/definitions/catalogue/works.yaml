@@ -1,11 +1,12 @@
 id: https://rezics.com/catalogue/works
 name: works
 version: 1.0.0
-description: Launch profiles for music albums.
+description: Launch profiles for music albums and sourced quotations.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  rezics: https://rezics.com/vocab/
 default_range: string
 imports:
   - linkml:types
@@ -33,3 +34,77 @@ classes:
       facets: contributor partOfSeries genre keywords inLanguage
       cover_ratio: 5:7
       schema_org_type: https://schema.org/MusicAlbum
+  Quotation:
+    is_a: Thing
+    class_uri: schema:Quotation
+    description: An authored quotation of a work, with speaker, credited creator and cited source kept distinct.
+    exact_mappings:
+      - wd:Q815341
+    slots:
+      - abstract
+      - inLanguage
+      - quotationText
+      - spokenByCharacter
+      - about
+      - creator
+      - actor
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
+      facets: inLanguage
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/Quotation
+slots:
+  quotationText:
+    slot_uri: schema:text
+    description: The exact authored quotation document, with its language on the document value.
+    annotations:
+      datatype: document
+  spokenByCharacter:
+    slot_uri: schema:spokenByCharacter
+    description: The fictional character who speaks this quotation, never a credited creator or voice actor.
+    range: Character
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      relation_group: appearance
+      inverse: rezics:spokenQuotations
+      relation_order: name
+  about:
+    slot_uri: schema:about
+    description: The creative work this quotation cites. A substring match never creates this relationship.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel appliesToPart
+      relation_group: membership
+      inverse: schema:subjectOf
+      relation_order: name
+      acyclic: true
+  creator:
+    slot_uri: schema:creator
+    description: A person or organization credited for this quotation, never the fictional speaker.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs
+      relation_group: association
+      inverse: rezics:quotationsCreated
+      relation_order: name
+  actor:
+    slot_uri: schema:actor
+    description: An optional performing voice for this quotation. A speaker never infers a voice actor.
+    range: Person
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs
+      relation_group: association
+      inverse: rezics:quotationsVoiced
+      relation_order: name

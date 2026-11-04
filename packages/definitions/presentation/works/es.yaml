@@ -1,4 +1,23 @@
 types:
   schema:MusicAlbum: álbum
+  schema:Quotation: cita
 typeDescriptions:
   schema:MusicAlbum: 'Un álbum musical como obra que agrupa pistas, independiente de un ejemplar o edición distribuida concreta.'
+  schema:Quotation: 'Una cita escrita de una obra, con orador, creador acreditado y fuente citados por separado.'
+properties:
+  schema:text: texto
+  schema:spokenByCharacter: locutor
+  schema:about: obra
+  schema:creator: creador acreditado
+  schema:actor: voz
+propertyDescriptions:
+  schema:text: 'El documento exacto de la cita. Use un valor de documento, no una etiqueta de relación ni otro campo de texto.'
+  schema:spokenByCharacter: 'El personaje ficticio que pronuncia esta cita. No es el creador acreditado ni un actor de voz.'
+  schema:about: 'La obra que cita esta cita. Se exige la identidad exacta de la obra o parte; una coincidencia parcial no crea relación.'
+  schema:creator: 'Una persona u organización acreditada por esta cita, distinta del locutor ficticio.'
+  schema:actor: 'Una voz interpretativa opcional. Un locutor no implica un actor de voz sin una afirmación de fuente cualificada.'
+inverseProperties:
+  schema:spokenByCharacter: Citas habladas
+  schema:about: Citas
+  schema:creator: Citas acreditadas a
+  schema:actor: Citas interpretadas

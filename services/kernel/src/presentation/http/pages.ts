@@ -33,14 +33,14 @@ import { ProblemError, problemSchema, type FieldError } from '../../http/problem
 import { createAccess } from '../../access/index.ts';
 import { actionCatalogue } from '../../http/request.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
-import type { Access, AccessFactory } from '../../request/access.ts';
+import type { Access, AccessFactory, Actor } from '../../request/access.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { semanticPageView } from '../semantic-page.ts';
+import { quotationTypeAdmitted, readQuotationPageAuthority, semanticPageView } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -490,10 +490,15 @@ export function pageRoutes<App>(
         resolved,
         views,
         subject: subject?.id ?? null,
+        subjectType: subject?.type ?? null,
         account,
         probes,
         budget,
         probeSession,
+        actor,
+        access: authority.deps.access,
+        pool,
+        deadline: job.deadline,
         ...(languages === undefined ? {} : { languages }),
       });
     },
@@ -511,6 +516,7 @@ async function pageAnswer(input: {
   resolved: ResolvedTemplate;
   views: View[] | null;
   subject: string | null;
+  subjectType: string | null;
   account: PageAccount | null;
   probes: Map<string, ReadResult>;
   budget: PageReadBudget;
@@ -520,6 +526,10 @@ async function pageAnswer(input: {
   continuation?: PageContinuation;
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
+  actor: Actor;
+  access: Access;
+  pool: Pool;
+  deadline: number;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -647,6 +657,15 @@ async function pageAnswer(input: {
         : result;
   }
 
+  const quotationAuthority =
+    input.subject !== null && quotationTypeAdmitted(input.release, input.subjectType)
+      ? await readQuotationPageAuthority({
+          pool: input.pool,
+          access: input.access,
+          actor: input.actor,
+          deadline: input.deadline,
+        })
+      : null;
   return respond(
     200,
     {
@@ -659,6 +678,9 @@ async function pageAnswer(input: {
       document: input.resolved.document,
       ...(input.views === null ? {} : { views: input.views }),
       reads,
+      ...(quotationAuthority === null
+        ? {}
+        : { viewer: quotationAuthority.viewer, actions: quotationAuthority.actions }),
     },
     readSession,
     true,

@@ -1,4 +1,23 @@
 types:
   schema:MusicAlbum: album
+  schema:Quotation: quotation
 typeDescriptions:
   schema:MusicAlbum: 'A music album work grouping tracks, independent of a particular physical copy or distributed edition.'
+  schema:Quotation: 'An authored quotation of a work, with its speaker, credited creator and cited source kept distinct.'
+properties:
+  schema:text: text
+  schema:spokenByCharacter: speaker
+  schema:about: work
+  schema:creator: credited creator
+  schema:actor: performing voice
+propertyDescriptions:
+  schema:text: 'The exact authored quotation document. Supply a document value rather than a relation label or a different text field.'
+  schema:spokenByCharacter: 'The fictional character who speaks this quotation. This is not a credited creator or a voice actor.'
+  schema:about: 'The creative work this quotation cites. Exact work or part identity is required; a substring match is not a relationship.'
+  schema:creator: 'A person or organization credited for this quotation, kept separate from the fictional speaker.'
+  schema:actor: 'An optional performing voice. A speaker never implies a voice actor without a qualified source assertion.'
+inverseProperties:
+  schema:spokenByCharacter: Spoken quotations
+  schema:about: Quotations
+  schema:creator: Quotations credited to
+  schema:actor: Quotations voiced

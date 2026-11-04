@@ -6,7 +6,14 @@ import { DocumentBody } from '../../document-body';
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
-import type { QuotationContext, QuotationPart, QuotationRead, QuotationText } from '../catalogue/quotation';
+import type {
+  QuotationAction,
+  QuotationContext,
+  QuotationPart,
+  QuotationRead,
+  QuotationRow,
+  QuotationText,
+} from '../catalogue/quotation';
 import { ViewHeading } from './view-heading';
 import { SpoilerGate } from './values';
 import { webUrl } from './shared';
@@ -54,6 +61,37 @@ function partStatus(part: QuotationPart, locale: string) {
     return m.quotation_concealed_context({}, o);
   if (part.status === 'missing' || part.status === 'unknown') return m.quotation_unknown_context({}, o);
   return m.quotation_unsupported({}, o);
+}
+
+function correctionControl(
+  read: Extract<QuotationRead, { ok: true }>,
+  selected: QuotationRow,
+  locale: string,
+  origin: string,
+  title: string,
+) {
+  const o = option(locale);
+  const propose = read.actions?.find((action: QuotationAction) => action.action === 'statement:propose');
+  const href = `${catalogueEntries.authored({ id: selected.id, title: title || m.quotation_title({}, o), locale }).href}?${new URLSearchParams({ returnTo: origin })}`;
+  if (!propose || propose.state === 'allowed')
+    return (
+      <a className={linkClass} href={href}>
+        {m.quotation_correct({}, o)}
+      </a>
+    );
+  const status =
+    propose.state === 'denied'
+      ? m.quotation_denied({}, o)
+      : propose.state === 'unavailable'
+        ? m.quotation_unavailable({}, o)
+        : propose.state === 'withheld'
+          ? m.quotation_concealed_context({}, o)
+          : m.quotation_unsupported({}, o);
+  return (
+    <p role="status" data-action-state={propose.state}>
+      {status}
+    </p>
+  );
 }
 
 function textStatus(text: QuotationText, locale: string) {
@@ -347,12 +385,7 @@ export function QuotationView({
                   </li>
                 ))}
               </ul>
-              <a
-                className={linkClass}
-                href={`${catalogueEntries.authored({ id: selected.id, title: title.text || m.quotation_title({}, o), locale }).href}?${new URLSearchParams({ returnTo: origin })}`}
-              >
-                {m.quotation_correct({}, o)}
-              </a>
+              {correctionControl(read, selected, locale, origin, title.text)}
             </section>
           )}
         </div>

@@ -28,6 +28,7 @@ const reviewedTypes = {
   'skos:ConceptScheme': 'https://schema.org/DefinedTermSet',
   'schema:Recipe': 'https://schema.org/Recipe',
   'schema:MusicAlbum': 'https://schema.org/MusicAlbum',
+  'schema:Quotation': 'https://schema.org/Quotation',
 } as const;
 
 type NativeIdentity = readonly [iri: string, bases: readonly string[], mappings: readonly string[]];
@@ -86,6 +87,7 @@ const nativeIdentities: Record<string, NativeIdentity> = {
     [],
   ],
   'schema:MusicAlbum': ['http://schema.org/MusicAlbum', ['schema:CreativeWork', 'schema:Thing'], ['wd:Q482994']],
+  'schema:Quotation': ['http://schema.org/Quotation', ['schema:Thing'], ['wd:Q815341']],
 };
 
 test('every bundled concrete type declares its reviewed schema.org serialization type', () => {
