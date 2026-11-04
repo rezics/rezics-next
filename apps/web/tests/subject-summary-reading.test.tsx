@@ -148,7 +148,7 @@ test('mounted About chooses exact supplied language and candidate, shows selecte
     await act(async () => user.selectOptions(select(), specifications[2][0]));
     expect(select().value).toBe(specifications[2][0]);
     expect(host.querySelector('[data-slot="document-body"]')?.parentElement?.getAttribute('lang')).toBe('ja');
-    expect(host.querySelector('details')?.hasAttribute('open')).toBe(false);
+    expect((host.querySelector('details') as HTMLDetailsElement).open).toBe(false);
     expect(host.textContent).toContain('日本語のあらすじ。');
 
     const [returnId, returnLanguage] = specifications[1];
