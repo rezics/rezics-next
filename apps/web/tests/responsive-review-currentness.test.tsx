@@ -90,18 +90,16 @@ test('retired Collection and selection review episodes cannot publish, focus, or
         <button type="button" onClick={changeSource}>
           Change collection source
         </button>
-        <button type="button" onClick={() => setReviewKey((current) => (current.endsWith('A') ? 'selection-B' : 'selection-A'))}>
+        <button
+          type="button"
+          onClick={() => setReviewKey((current) => (current.endsWith('A') ? 'selection-B' : 'selection-A'))}
+        >
           Replace selection set
         </button>
         <button type="button" onClick={() => setReviewOpen(false)}>
           End selection review
         </button>
-        <button
-          key={reviewKey}
-          ref={launcher}
-          type="button"
-          onClick={() => setReviewOpen(true)}
-        >
+        <button key={reviewKey} ref={launcher} type="button" onClick={() => setReviewOpen(true)}>
           Open selection review {reviewKey}
         </button>
         <CollectionFilters

@@ -3,14 +3,7 @@ import { createPortal } from 'react-dom';
 import { BottomSheet } from './bottom-sheet';
 import { useIsMobile } from '../hooks/use-mobile';
 import { Button } from '../shadcn/button';
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '../shadcn/dialog';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../shadcn/dialog';
 
 type ResponsiveFocus = () => HTMLElement | false;
 

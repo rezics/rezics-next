@@ -193,18 +193,18 @@ export function CollectionFilters({
   function isCurrentEpisode(task: CollectionFilterEpisode | null): task is CollectionFilterEpisode {
     return Boolean(
       task &&
-        sourceIdentity.current === task.identity &&
-        sourceEpoch.current === task.sourceEpoch &&
-        episodeRef.current?.sequence === task.sequence,
+      sourceIdentity.current === task.identity &&
+      sourceEpoch.current === task.sourceEpoch &&
+      episodeRef.current?.sequence === task.sequence,
     );
   }
 
   function canRestoreFocus(task: CollectionFilterEpisode | null) {
     return Boolean(
       task &&
-        sourceIdentity.current === task.identity &&
-        sourceEpoch.current === task.sourceEpoch &&
-        closingEpisode.current?.sequence === task.sequence,
+      sourceIdentity.current === task.identity &&
+      sourceEpoch.current === task.sourceEpoch &&
+      closingEpisode.current?.sequence === task.sequence,
     );
   }
 

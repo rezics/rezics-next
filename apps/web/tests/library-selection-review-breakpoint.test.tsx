@@ -127,8 +127,11 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     );
     expect(done).toBeDefined();
     await act(async () => done?.click());
-    await act(async () =>
-      new Promise<void>((resolve) => browser.requestAnimationFrame(() => browser.requestAnimationFrame(() => resolve()))),
+    await act(
+      async () =>
+        new Promise<void>((resolve) =>
+          browser.requestAnimationFrame(() => browser.requestAnimationFrame(() => resolve())),
+        ),
     );
     expect(browser.document.activeElement).toBe(host.querySelector('button'));
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).toBeNull();

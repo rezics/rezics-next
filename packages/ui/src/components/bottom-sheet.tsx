@@ -52,11 +52,7 @@ export function BottomSheet({
             <DrawerTitle className="min-w-0 flex-1 truncate text-left">{title}</DrawerTitle>
             <DrawerClose
               render={
-                <Button
-                  variant="ghost"
-                  className="min-h-11 shrink-0"
-                  data-responsive-control-id={closeControlId}
-                />
+                <Button variant="ghost" className="min-h-11 shrink-0" data-responsive-control-id={closeControlId} />
               }
             >
               {label}
