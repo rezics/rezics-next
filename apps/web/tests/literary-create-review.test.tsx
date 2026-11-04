@@ -427,7 +427,7 @@ test('Literary review uses the current release and locale while retaining withdr
   expect(withdrawn).toContain('-000000000044-03-15');
   expect(withdrawn).toContain(m.time_calendar_julian({}, { locale: 'ja' }));
   expect(withdrawn).toContain(
-    m.time_uncertainty({ before: 1, after: m.time_unspecified({}, { locale: 'ja' }) }, { locale: 'ja' }),
+    m.time_uncertainty({ before: 1, after: m.time_not_set({}, { locale: 'ja' }) }, { locale: 'ja' }),
   );
   item.statements['schema:url'][0]!.references[0]!.parts[0]!.value.content.precision = 8;
   expect(render('ja', true)).toContain(m.time_unsupported_precision({ precision: 8 }, { locale: 'ja' }));
