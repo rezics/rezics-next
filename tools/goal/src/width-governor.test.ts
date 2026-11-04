@@ -9,6 +9,7 @@ import { emitHourlyLifecycleMetrics, lifecycleMetrics, readHourlyLifecycleMetric
 import { processIdentity, type ProcessIdentity } from './process.ts';
 import { WorkerStore } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
+import { readControlPolicy } from './policy.ts';
 
 const opened: { db: Database; closeDirectory(): void }[] = [];
 
@@ -225,4 +226,29 @@ test('hourly lifecycle and flow report expose live system and Codex counts with 
   expect(emitHourlyLifecycleMetrics(f.db, metrics, at)).toBe(true);
   const saved = readHourlyLifecycleMetrics(f.db, at);
   expect(saved?.metrics.width.system).toMatchObject({ running: 1, codexRunning: 1, unknownRunning: 1 });
+});
+
+test('width policy overrides preserve paged counts, threshold boundaries and bucket deduplication', async () => {
+  const f = fixture();
+  addTask(f.db, 'live', 1, 'running', 1);
+  addAttempt(f.db, 'live', 1, 'running', 'codex', identity(123));
+  addTask(f.db, 'ready', 2, 'ready', 0);
+  const low = readControlPolicy({ width: { workerThreshold: 1, pageSize: 1, bucketMs: 100, sweepYieldItems: 1 } });
+  const high = readControlPolicy({
+    width: { ...low.width, workerThreshold: 2 },
+    backlog: { lowWater: 3, stoppedTaskLimitMs: 120000 },
+  });
+  const delivered: string[] = [];
+  const inbox = { deliver: (event: { summary: string }) => delivered.push(event.summary) } as unknown as Parameters<
+    typeof sweepWidthGovernor
+  >[1];
+  const run = (at: number, policy = high) => sweepWidthGovernor(f.db, inbox, at, { policy, processIsLive: () => true });
+  expect((await run(100, low)).deliveredGoals).toEqual([]);
+  const first = await run(100);
+  expect(first.snapshot.system).toMatchObject({ running: 1, codexRunning: 1, ready: 1 });
+  expect(first.deliveredGoals).toEqual(['goal-a']);
+  expect((await run(199)).deliveredGoals).toEqual([]);
+  expect((await run(200)).deliveredGoals).toEqual(['goal-a']);
+  expect(delivered[0]).toContain('within 2 minutes');
+  expect(delivered[0]).toContain('at least 3 ready briefs');
 });

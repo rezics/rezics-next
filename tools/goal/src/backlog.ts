@@ -7,6 +7,7 @@ import { basename, join } from 'node:path';
 import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { migrate } from './db.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
+import { continuationOverlap, continuationReview, continuationReleased, proposeContinuation } from './continuation.ts';
 import { readBriefContinuation } from './briefs.ts';
 import type { BriefContinuation } from './types.ts';
 
@@ -153,7 +154,7 @@ function activeTaskCount(db: Database): number {
   return (
     db
       .query(
-        `SELECT count(*) AS count FROM worker_tasks WHERE json_extract(body, '$.state') = 'ready' OR (json_extract(body, '$.state') = 'running'${waiting})`,
+        `SELECT count(*) AS count FROM worker_tasks WHERE coalesce(json_extract(body, '$.brief.urgent'),0) != 1 AND (json_extract(body, '$.state') = 'ready' OR (json_extract(body, '$.state') = 'running'${waiting}))`,
       )
       .get() as { count: number }
   ).count;
@@ -461,7 +462,43 @@ async function dispatchReady(
     let taskId: string;
     let continuation: BriefContinuation | undefined;
     try {
-      continuation = readBriefContinuation(readFileSync(claimed, 'utf8'));
+      const markdown = readFileSync(claimed, 'utf8');
+      continuation = readBriefContinuation(markdown);
+      // Worker remainders create new work; manager-authored retries retain their exact-owner validation.
+      if (basename(claimed).startsWith('continuation-')) {
+        const source =
+          continuation?.taskId ??
+          (
+            runtime.db
+              .query("SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?")
+              .all(pick.goal) as { id: string }[]
+          ).find((row) => basename(claimed).startsWith(`continuation-${row.id.slice(0, 8)}-`))?.id;
+        const overlap = continuationOverlap(
+          runtime.db,
+          runtime.stateDirectory,
+          pick.goal,
+          markdown,
+          source,
+          [claimed],
+          runtime.policy?.brief,
+        );
+        const reason =
+          overlap ??
+          (continuationReview(runtime.stateDirectory, pick.goal, runtime.policy) &&
+          !continuationReleased(runtime.stateDirectory, pick.goal, basename(claimed), markdown)
+            ? 'Goal continuation review is enabled; release or retire this proposal'
+            : undefined);
+        if (reason) {
+          const proposed = proposeContinuation(claimed, runtime.stateDirectory, pick.goal, reason);
+          runtime.inbox.deliver({
+            managerId: pick.goal,
+            goalId: pick.goal,
+            kind: 'instruction',
+            summary: `Continuation proposed at ${proposed}: ${reason}`,
+          });
+          continue;
+        }
+      }
       if (continuation) {
         await runtime.continueTask(pick.goal, continuation, claimed);
         taskId = continuation.taskId;
@@ -616,7 +653,10 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
   for (const [key, owner] of byOwner) {
     const managerId = key.split('\u0000', 1)[0]!;
     const listed =
-      owner.tasks.slice(0, 5).join(', ') + (owner.tasks.length > 5 ? ` and ${owner.tasks.length - 5} more` : '');
+      owner.tasks.slice(0, (runtime.policy ?? defaultPolicy).backlog.expiredTaskExamples).join(', ') +
+      (owner.tasks.length > (runtime.policy ?? defaultPolicy).backlog.expiredTaskExamples
+        ? ` and ${owner.tasks.length - (runtime.policy ?? defaultPolicy).backlog.expiredTaskExamples} more`
+        : '');
     const event: ManagerEvent = {
       managerId,
       goalId: owner.goal,
@@ -690,7 +730,7 @@ export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSwee
   // One run at a time, across host restarts too: claim recovery assumes no other run holds a claim.
   let lease;
   try {
-    lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'));
+    lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'), runtime.policy?.leases);
   } catch (error) {
     if (error instanceof LeaseHeldError)
       return { skipped: true, dispatched: [], continued: [], refused: [], expired: [], woken: [] };

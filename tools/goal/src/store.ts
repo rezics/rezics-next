@@ -1,5 +1,6 @@
 import { nativeCheckId, proofFingerprint, ProofCapacityQueuedError } from './verification.ts';
 import type { Database } from 'bun:sqlite';
+import { defaultPolicy } from './policy.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
 import { groupMembers, sameProcess } from './process.ts';
@@ -126,15 +127,19 @@ type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
 export type AttemptPage<T> = { items: T[]; hasMore: boolean; nextAfter?: number };
 export type AttemptPageOptions = { afterAttempt?: number; limit: number };
-export const MAX_ATTEMPT_PAGE_SIZE = 100;
+export const MAX_ATTEMPT_PAGE_SIZE = defaultPolicy.history.attemptPageSize;
 
-function attemptPageOptions(taskId: string, options: AttemptPageOptions): Required<AttemptPageOptions> {
+function attemptPageOptions(
+  taskId: string,
+  options: AttemptPageOptions,
+  max = MAX_ATTEMPT_PAGE_SIZE,
+): Required<AttemptPageOptions> {
   const afterAttempt = options.afterAttempt ?? 0;
   if (!taskId) throw new Error('task id is required');
   if (!Number.isSafeInteger(afterAttempt) || afterAttempt < 0)
     throw new Error('after attempt must be a non-negative integer');
-  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MAX_ATTEMPT_PAGE_SIZE)
-    throw new Error(`limit must be between 1 and ${MAX_ATTEMPT_PAGE_SIZE}`);
+  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > max)
+    throw new Error(`limit must be between 1 and ${max}`);
   return { afterAttempt, limit: options.limit };
 }
 
@@ -155,10 +160,13 @@ export class WorkerStore implements AttemptFence {
   private decodedAttemptRows = 0;
   private decodedTaskBytes = 0;
   private decodedAttemptBytes = 0;
-  constructor(readonly db: Database) {
+  constructor(
+    readonly db: Database,
+    readonly policy = defaultPolicy,
+  ) {
     migrate(db, workerMigrations);
     ensureFlow(db);
-    this.checkResults = new CheckResults(db);
+    this.checkResults = new CheckResults(db, this.policy.storage);
   }
   /** Counts bodies decoded since the previous reset; useful for guarding host read budgets. */
   decodedRows(): { tasks: number; attempts: number } {
@@ -354,7 +362,7 @@ export class WorkerStore implements AttemptFence {
   }
   /** Read one task's attempts in ascending order without decoding any other task's history. */
   attemptsPage(taskId: string, options: AttemptPageOptions): AttemptPage<Attempt> {
-    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options, this.policy.history.attemptPageSize);
     this.refreshSnapshot();
     const rows = this.db
       .query(
@@ -450,6 +458,17 @@ export class WorkerStore implements AttemptFence {
       .get() as { count: number };
     return row.count;
   }
+  /** Count only live attempts in the requested host lane; a waiting urgent attempt retains its reserved slot. */
+  capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number {
+    return (
+      this.db
+        .query(`SELECT count(*) AS count FROM worker_attempts a JOIN worker_tasks t ON t.id=a.task_id
+      WHERE json_extract(a.body,'$.state') IN (${urgent ? "'running','waiting'" : "'running'"})
+      AND coalesce(json_extract(t.body,'$.brief.urgent'),0)=?
+      AND NOT (a.task_id=? AND a.attempt=?)`)
+        .get(urgent ? 1 : 0, taskId ?? '', attempt ?? -1) as { count: number }
+    ).count;
+  }
   /** Retained unbound UUID evidence. Classification affects only logical admission, never physical custody. */
   historicalProofChecks(goal?: string): HistoricalProofCheck[] {
     return this.db
@@ -507,7 +526,7 @@ export class WorkerStore implements AttemptFence {
           .query(`SELECT body FROM worker_events
         WHERE kind='historical-proof-reader-unavailable' ORDER BY sequence DESC LIMIT 1`)
           .get() as { body: string } | null;
-        const body = JSON.stringify({ cause: cause.slice(0, 2000) });
+        const body = JSON.stringify({ cause: cause.slice(0, this.policy.history.diagnosticCharacters) });
         if (previous?.body === body) return;
         this.db
           .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
@@ -555,7 +574,7 @@ export class WorkerStore implements AttemptFence {
     );
     // An orphaned pending preparation may be replaced, but an active command cannot be retried by admission.
     return (
-      ordinary.filter((slot) => slot.taskId !== taskId).length + historical.length < 3 &&
+      ordinary.filter((slot) => slot.taskId !== taskId).length + historical.length < this.policy.proof.concurrency &&
       !ordinary.some((slot) => slot.taskId === taskId && slot.state !== 'pending') &&
       !historical.some((check) => check.taskId === taskId)
     );
@@ -566,7 +585,7 @@ export class WorkerStore implements AttemptFence {
       (check) => !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt),
     );
     return (
-      `Proof cap 3 pending: ${ordinary.length} current ordinary runs; current running/waiting checks: ` +
+      `Proof cap ${this.policy.proof.concurrency} pending: ${ordinary.length} current ordinary runs; current running/waiting checks: ` +
       (checks.map((check) => `${check.checkId} (${check.taskId}/${check.attempt})`).join(', ') || 'none') +
       `; requesting task ${taskId}. Historical and stopped/exited runs do not occupy logical slots; physical leases remain independent`
     );
@@ -593,7 +612,8 @@ export class WorkerStore implements AttemptFence {
         (check) => !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt),
       );
       if (
-        ordinary.filter((slot) => slot.taskId !== binding.taskId).length + historical.length >= 3 ||
+        ordinary.filter((slot) => slot.taskId !== binding.taskId).length + historical.length >=
+          this.policy.proof.concurrency ||
         historical.some((check) => check.taskId === binding.taskId)
       )
         return null;
@@ -771,7 +791,7 @@ export class WorkerStore implements AttemptFence {
   }
   /** Read a bounded page of one task's records without decoding unrelated task histories. */
   recordsPage(taskId: string, options: AttemptPageOptions): AttemptPage<AttemptRecord> {
-    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options, this.policy.history.attemptPageSize);
     const rows = this.db
       .query('SELECT attempt, body FROM worker_records WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?')
       .all(taskId, afterAttempt, limit + 1) as { attempt: number; body: string }[];
@@ -870,16 +890,16 @@ export class WorkerStore implements AttemptFence {
           .run(run.key, run.createdAt, JSON.stringify(run));
         this.db
           .query(
-            'DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET 5000)',
+            'DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET ?)',
           )
-          .run();
+          .run(this.policy.verifier.runRows);
       })
       .immediate();
   }
-  devVerifierFindings(limit = 2000): DevVerifierFinding[] {
+  devVerifierFindings(limit = this.policy.verifier.findingRows): DevVerifierFinding[] {
     return this.db
       .query('SELECT body FROM dev_verifier_findings ORDER BY rowid DESC LIMIT ?')
-      .all(Math.max(0, Math.min(2000, limit)))
+      .all(Math.max(0, Math.min(this.policy.verifier.findingRows, limit)))
       .map((row) => decode<DevVerifierFinding>(row)!);
   }
   devVerifierHasKnownExisting(signature: string): boolean {
@@ -906,9 +926,9 @@ export class WorkerStore implements AttemptFence {
           );
         this.db
           .query(
-            'DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET 2000)',
+            'DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET ?)',
           )
-          .run();
+          .run(this.policy.verifier.findingRows);
       })
       .immediate();
   }
@@ -1121,7 +1141,7 @@ export class WorkerStore implements AttemptFence {
     const ref = { taskId: before.id, attempt: before.currentAttempt };
     if (!this.record(ref)) {
       const attempt = this.attempt(ref);
-      this.saveRecord(makeRecord(before, attempt, readMeasurement(attempt), 'stopped'));
+      this.saveRecord(makeRecord(before, attempt, readMeasurement(attempt, { policy: this.policy }), 'stopped'));
     }
   }
   /** Called inside the lifecycle transaction as well as before writing a submitted brief. */
@@ -1547,13 +1567,15 @@ export class WorkerStore implements AttemptFence {
         task.state === 'cancelled'
       )
         throw new Error(`cannot retry ${task.state} task`);
-      if (admitProof && !this.proofCapacityAvailable(task.brief.goal, task.id)) throw new ProofCapacityQueuedError();
+      if (admitProof && !this.proofCapacityAvailable(task.brief.goal, task.id))
+        throw new ProofCapacityQueuedError(this.policy.proof.concurrency);
       if (ref.attempt) {
         const old = this.attempt(ref);
         old.state = 'superseded';
         this.saveAttempt(old);
         const record =
-          this.record(ref) ?? makeRecord(task, old, readMeasurement(old, { configDirectory }), 'superseded');
+          this.record(ref) ??
+          makeRecord(task, old, readMeasurement(old, { configDirectory, policy: this.policy }), 'superseded');
         const retainedProof = record.taskKind === 'verification';
         if (record.outcome === 'pending-gate' && !retainedProof) {
           record.outcome = 'superseded';
@@ -1589,7 +1611,7 @@ export class WorkerStore implements AttemptFence {
         const record = makeRecord(
           task,
           old,
-          readMeasurement(old, { configDirectory: configDirectory(old) }),
+          readMeasurement(old, { configDirectory: configDirectory(old), policy: this.policy }),
           previous?.outcome ?? 'superseded',
         );
         if (previous) {
@@ -1791,7 +1813,9 @@ export class WorkerStore implements AttemptFence {
         attempt.endedAt ??= new Date().toISOString();
         attempt.after ??= after;
         if (!this.record(ref))
-          this.saveRecord(makeRecord(task, attempt, readMeasurement(attempt, { configDirectory }), state));
+          this.saveRecord(
+            makeRecord(task, attempt, readMeasurement(attempt, { configDirectory, policy: this.policy }), state),
+          );
         if (!this.events(ref.taskId, ref.attempt).some((event) => event.kind === state))
           this.db
             .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
