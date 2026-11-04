@@ -1,4 +1,13 @@
 {
+  "library_yearly_goal_title": "年度完成目标",
+  "library_yearly_goal_metric": "按记录的公历年份计算完成的消费次数。重复完成会分别计算。",
+  "library_yearly_goal_unavailable": "目前无法获取年度目标和进度，尚未读取任何结果。",
+  "library_yearly_goal_coverage": "没有有效完成年份的记录无法计入任何年份。其他历史记录的覆盖情况无法获取。摘要无法获取并不表示次数为零。",
+  "library_yearly_goal_invalid_year": "请输入 1 至 9999 的公历年份。",
+  "library_yearly_goal_previous": "上一年",
+  "library_yearly_goal_next": "下一年",
+  "library_yearly_goal_signed_out": "登录以查看你的年度完成目标。",
+  "library_yearly_goal_checking_session": "正在确认当前账号…",
   "catalogue_context_unavailable": "识别信息暂不可用",
   "catalogue_context_unknown": "识别信息未知",
   "catalogue_context_withheld": "识别信息未公开",

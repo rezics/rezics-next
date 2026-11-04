@@ -1,4 +1,13 @@
 {
+  "library_yearly_goal_title": "Yearly completion goal",
+  "library_yearly_goal_metric": "Count completed consumption occurrences in the reported Gregorian year. Repeat finishes count separately.",
+  "library_yearly_goal_unavailable": "Yearly targets and progress are currently unavailable. No result has been read.",
+  "library_yearly_goal_coverage": "Finishes without a supported reported year cannot be counted in a year. Coverage of other history is unavailable. An unavailable summary does not mean zero.",
+  "library_yearly_goal_invalid_year": "Enter a Gregorian year from 1 to 9999.",
+  "library_yearly_goal_previous": "Previous year",
+  "library_yearly_goal_next": "Next year",
+  "library_yearly_goal_signed_out": "Sign in to view your yearly completion goal.",
+  "library_yearly_goal_checking_session": "Checking your current account…",
   "catalogue_context_unavailable": "Context unavailable",
   "catalogue_context_unknown": "Identifying context is unknown",
   "catalogue_context_withheld": "Identifying context is not disclosed",

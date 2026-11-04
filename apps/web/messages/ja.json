@@ -1,4 +1,13 @@
 {
+  "library_yearly_goal_title": "年間完了目標",
+  "library_yearly_goal_metric": "記録された西暦年ごとに鑑賞・読了などの完了回数を数えます。繰り返しの完了も別々に数えます。",
+  "library_yearly_goal_unavailable": "年間目標と進捗は現在取得できません。結果はまだ読み込まれていません。",
+  "library_yearly_goal_coverage": "対応する完了年が記録されていない場合、年別の集計には含められません。その他の履歴の網羅状況は取得できません。集計を取得できないことは、0 回を意味しません。",
+  "library_yearly_goal_invalid_year": "1 から 9999 までの西暦年を入力してください。",
+  "library_yearly_goal_previous": "前年",
+  "library_yearly_goal_next": "翌年",
+  "library_yearly_goal_signed_out": "ログインして年間完了目標を確認してください。",
+  "library_yearly_goal_checking_session": "現在のアカウントを確認しています…",
   "catalogue_context_unavailable": "識別情報を利用できません",
   "catalogue_context_unknown": "識別情報は不明です",
   "catalogue_context_withheld": "識別情報は非公開です",

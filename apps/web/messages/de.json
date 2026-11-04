@@ -1,4 +1,13 @@
 {
+  "library_yearly_goal_title": "Jährliches Abschlussziel",
+  "library_yearly_goal_metric": "Gezählt werden abgeschlossene Nutzungen im angegebenen gregorianischen Jahr. Wiederholte Abschlüsse zählen einzeln.",
+  "library_yearly_goal_unavailable": "Jahresziele und Fortschritt sind derzeit nicht verfügbar. Es wurde noch kein Ergebnis gelesen.",
+  "library_yearly_goal_coverage": "Abschlüsse ohne unterstütztes Abschlussjahr können keinem Jahr zugeordnet werden. Die Abdeckung anderer Verläufe ist nicht verfügbar. Eine nicht verfügbare Zusammenfassung bedeutet nicht null.",
+  "library_yearly_goal_invalid_year": "Gib ein gregorianisches Jahr von 1 bis 9999 ein.",
+  "library_yearly_goal_previous": "Vorheriges Jahr",
+  "library_yearly_goal_next": "Nächstes Jahr",
+  "library_yearly_goal_signed_out": "Melde dich an, um dein jährliches Abschlussziel zu sehen.",
+  "library_yearly_goal_checking_session": "Dein aktuelles Konto wird geprüft…",
   "catalogue_context_unavailable": "Kontext nicht verfügbar",
   "catalogue_context_unknown": "Identifizierender Kontext ist unbekannt",
   "catalogue_context_withheld": "Identifizierender Kontext wird nicht offengelegt",

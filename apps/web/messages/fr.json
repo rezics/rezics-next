@@ -1,4 +1,13 @@
 {
+  "library_yearly_goal_title": "Objectif annuel de réalisations",
+  "library_yearly_goal_metric": "Le nombre de consommations terminées est compté dans l’année grégorienne déclarée. Chaque répétition terminée compte séparément.",
+  "library_yearly_goal_unavailable": "Les objectifs annuels et la progression sont actuellement indisponibles. Aucun résultat n’a été lu.",
+  "library_yearly_goal_coverage": "Sans année de fin déclarée prise en charge, une réalisation ne peut pas être comptée dans une année. La couverture des autres historiques est indisponible. Un récapitulatif indisponible ne signifie pas zéro.",
+  "library_yearly_goal_invalid_year": "Saisissez une année grégorienne de 1 à 9999.",
+  "library_yearly_goal_previous": "Année précédente",
+  "library_yearly_goal_next": "Année suivante",
+  "library_yearly_goal_signed_out": "Connectez-vous pour voir votre objectif annuel.",
+  "library_yearly_goal_checking_session": "Vérification du compte actuel…",
   "catalogue_context_unavailable": "Contexte indisponible",
   "catalogue_context_unknown": "Le contexte d’identification est inconnu",
   "catalogue_context_withheld": "Le contexte d’identification n’est pas divulgué",
