@@ -623,7 +623,6 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       history: createMemoryHistory({ initialEntries: ['/inbox', '/terms'] }),
     });
     await router.load();
-    await router.navigate({ to: '/terms' });
     client.clear();
     await act(async () =>
       root.render(
@@ -632,6 +631,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
         </QueryClientProvider>,
       ),
     );
+    await act(async () => router.navigate({ to: '/terms' }));
     await settle(() => !!host.querySelector('form'));
     const page = () => host.querySelector<HTMLElement>('article')!;
     const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
