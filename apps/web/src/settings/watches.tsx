@@ -50,7 +50,10 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
   const retryFailure = useMemo(
     () =>
       state.problem
-        ? { status: state.problem.status, ...(state.problem.retryAfter ? { retryAfter: state.problem.retryAfter } : {}) }
+        ? {
+            status: state.problem.status,
+            ...(state.problem.retryAfter ? { retryAfter: state.problem.retryAfter } : {}),
+          }
         : undefined,
     [state.problem],
   );

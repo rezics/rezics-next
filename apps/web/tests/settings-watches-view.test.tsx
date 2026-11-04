@@ -101,9 +101,7 @@ test('the mounted private view separates inaccessible targets, uncertain removal
       return response;
     },
     stop: async () =>
-      writes++ === 0
-        ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } }
-        : { kind: 'removed' },
+      writes++ === 0 ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } } : { kind: 'removed' },
   };
   const click = async (text: string) => {
     const button = [...host.querySelectorAll('button')].find((item) => item.textContent === text);

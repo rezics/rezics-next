@@ -3602,13 +3602,13 @@ command-kind assignments are `content.board.watch=8` and `content.watch.remove=9
 `board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
 Decision: opening fanout uses 20 recipients per durable page, matching the native Inbox's default presentation page.
 
-| Consumer             | Native method and mounted operation                                                                                       | Result                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Web board control    | `readBoardWatchState`; `GET /v1/boards/{id}/watch`                                                                        | `{watching,revision}`, with current board disclosure                                          |
-| Web board control    | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key`                            | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt |
+| Consumer             | Native method and mounted operation                                                                                       | Result                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Web board control    | `readBoardWatchState`; `GET /v1/boards/{id}/watch`                                                                        | `{watching,revision}`, with current board disclosure                                                |
+| Web board control    | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key`                            | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt       |
 | Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread\|board&limit=&cursor=`                                   | `{viewer,actions,items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range |
-| Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread\|board`, `{expectedRevision}`, `Idempotency-Key` | `{removed:true}`, including an already absent own identity, without resource read access      |
-| Performance Inbox    | Existing `notifications.list` with `board_activity`                                                                       | Existing post/thread target identifiers and current native post disclosure                    |
+| Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread\|board`, `{expectedRevision}`, `Idempotency-Key` | `{removed:true}`, including an already absent own identity, without resource read access            |
+| Performance Inbox    | Existing `notifications.list` with `board_activity`                                                                       | Existing post/thread target identifiers and current native post disclosure                          |
 
 Performance Settings consumes this management page; thread watch GET/PUT/DELETE and reply delivery keep their
 existing shapes and storage. A thread management row has revision 1 for its unique edge. Board state retains a CAS

@@ -71,9 +71,7 @@ function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
     },
     stop: async (attempt) => {
       attempts.push(attempt);
-      return view === 'uncertain'
-        ? { kind: 'uncertain', problem: { status: 503, code: null } }
-        : { kind: 'removed' };
+      return view === 'uncertain' ? { kind: 'uncertain', problem: { status: 503, code: null } } : { kind: 'removed' };
     },
   }));
   useEffect(() => {

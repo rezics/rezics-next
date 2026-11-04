@@ -79,14 +79,22 @@ export function watchProblem(status: number | null, body?: unknown, headers?: He
   };
 }
 
-function readFailure(status: number | null, body?: unknown, headers?: HeadersInit): Exclude<WatchRead, { kind: 'page' }> {
+function readFailure(
+  status: number | null,
+  body?: unknown,
+  headers?: HeadersInit,
+): Exclude<WatchRead, { kind: 'page' }> {
   const problem = watchProblem(status, body, headers);
   if (problem.code === 'invalid_cursor') return { kind: 'invalid_cursor', problem };
   if (status !== null && [401, 403, 404, 410].includes(status)) return { kind: 'denied', problem };
   return { kind: 'unavailable', problem };
 }
 
-function writeFailure(status: number | null, body?: unknown, headers?: HeadersInit): Exclude<StopWatchResult, { kind: 'removed' }> {
+function writeFailure(
+  status: number | null,
+  body?: unknown,
+  headers?: HeadersInit,
+): Exclude<StopWatchResult, { kind: 'removed' }> {
   const problem = watchProblem(status, body, headers);
   if (status === 409 || problem.code === 'conflict') return { kind: 'conflict', problem };
   if (status !== null && [401, 403, 404, 410].includes(status)) return { kind: 'denied', problem };

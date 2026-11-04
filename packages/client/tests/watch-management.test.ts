@@ -21,9 +21,7 @@ expectTypeOf<keyof AvailableWatch>().toEqualTypeOf<
 expectTypeOf<AvailableWatch['resourceId']>().toEqualTypeOf<string>();
 expectTypeOf<AvailableWatch['title']>().toEqualTypeOf<string | null>();
 expectTypeOf<UnavailableWatch['state']>().toEqualTypeOf<'unavailable'>();
-expectTypeOf<keyof UnavailableWatch>().toEqualTypeOf<
-  'id' | 'kind' | 'revision' | 'createdAt' | 'state' | 'command'
->();
+expectTypeOf<keyof UnavailableWatch>().toEqualTypeOf<'id' | 'kind' | 'revision' | 'createdAt' | 'state' | 'command'>();
 type BoardWatch = ReturnType<KernelClient['boards']>['watch'];
 expectTypeOf<Awaited<ReturnType<BoardWatch['get']>>['data']>().toEqualTypeOf<{
   watching: boolean;
@@ -50,11 +48,7 @@ test('generated mounted inventory keeps bounded closed disclosure variants', asy
     expect(variant.properties.revision.minimum).toBe(1);
     expect(variant.properties.createdAt.format).toBe('date-time');
     expect(variant.properties.id.pattern).toBeString();
-    expect(Object.keys(variant.properties.command.properties).sort()).toEqual([
-      'expectedRevision',
-      'kind',
-      'watchId',
-    ]);
+    expect(Object.keys(variant.properties.command.properties).sort()).toEqual(['expectedRevision', 'kind', 'watchId']);
   }
   expect(Object.keys(variants[1].properties).sort()).toEqual([
     'command',
