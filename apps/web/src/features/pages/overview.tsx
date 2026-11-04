@@ -25,7 +25,12 @@ import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
 import { originalLanguage } from '../../subject/language';
-import { RELATION_GROUPS, type RelationDefinition, type RelationGroup } from '../../subject/relations';
+import {
+  copyWorkDisclosureControl,
+  RELATION_GROUPS,
+  type RelationDefinition,
+  type RelationGroup,
+} from '../../subject/relations';
 import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
@@ -612,7 +617,45 @@ function LinkSection(
   const found = forward ? statementItems(section, props.property, limit, value) : linkItems(section, limit, value);
   if (!found)
     return <Failed slot={slot} id={id} title={text.text || title} titleLang={text.lang} locale={value.locale} />;
-  if (found.items.length === 0 && !found.more && !found.count?.value && props.paged !== true) return null;
+  if (found.items.length === 0 && !found.more && !found.count?.value && props.paged !== true) {
+    if (forward && props.property === 'schema:exampleOfWork') {
+      return (
+        <Preview
+          slot={slot}
+          id={id}
+          title={text.text || title}
+          titleLang={text.text ? text.lang : undefined}
+          count={found.count}
+          more={false}
+          href={viewHref(value, view, propertyView)}
+          locale={value.locale}
+        >
+          <p role="status">{m.subject_relation_empty_page({}, { locale: value.locale as never })}</p>
+        </Preview>
+      );
+    }
+    return null;
+  }
+  if (
+    forward &&
+    props.property === 'schema:exampleOfWork' &&
+    copyWorkDisclosureControl({ items: found.items, count: found.count }) === 'withheld'
+  ) {
+    return (
+      <Preview
+        slot={slot}
+        id={id}
+        title={text.text || title}
+        titleLang={text.text ? text.lang : undefined}
+        count={found.count}
+        more={false}
+        href={viewHref(value, view, propertyView)}
+        locale={value.locale}
+      >
+        <p role="status">{m.library_copy_reading_context_withheld({}, { locale: value.locale as never })}</p>
+      </Preview>
+    );
+  }
   const listed = forward ? found : { ...found, items: datedItems(found.items, value.locale) };
   return (
     <Preview

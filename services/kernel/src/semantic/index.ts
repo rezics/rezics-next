@@ -9,6 +9,20 @@ export {
 export type { AgentSelfSource } from './subject.ts';
 export { readSemanticLifecycle } from './lifecycle-state.ts';
 export { readListPresentationFacts } from './list-presentation.ts';
+export {
+  readCopyWorkDisclosure,
+  COPY_WORK_DISCLOSURE_LOOKAHEAD,
+  COPY_WORK_DISCLOSURE_MAX_RAW,
+  COPY_WORK_DISCLOSURE_MAX_WORKS,
+  COPY_WORK_PROPERTY,
+} from './copy-work-disclosure.ts';
+export type {
+  CopyWorkDisclosureDependencies,
+  CopyWorkDisclosureObservation,
+  CopyWorkDisclosureRequest,
+  CopyWorkDisclosureState,
+  CopyWorkReference,
+} from './copy-work-disclosure-contract.ts';
 
 export { semanticRetention } from './retention.ts';
 export type { RetentionPage, RetentionInput } from './retention.ts';
