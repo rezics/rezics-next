@@ -178,7 +178,7 @@ async function mountSearch() {
       else Reflect.deleteProperty(globalThis, key);
     }
   };
-  return { host, requests, visits, loader, render, pause, input, options, key, editQuery, close };
+  return { host, requests, visits, loader, render, pause, input, open, options, key, editQuery, close };
 }
 
 const selectCurrent = async (app: Awaited<ReturnType<typeof mountSearch>>) => {
