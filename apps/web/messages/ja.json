@@ -688,6 +688,8 @@
   "candidate_selection_invalid": "再確認が必要な候補があるか、項目の上限を超えています。",
   "candidate_confirm_reject": "主張を削除せずに提案を却下します。確定時に権限を確認します。",
   "candidate_confirm_replace": "この項目の選択全体を、表示された値と優先度で置き換えます。未選択の値は選択から外れます。確定時に権限を確認します。",
+  "candidate_confirm_head": "現在の選択ヘッド: {head}。",
+  "candidate_statement_identity": "選択済みステートメント: {id}",
   "candidate_selection_confirmed": "公開ページで値の選択と優先度を確認できました。",
   "candidate_draft_stale": "比較内容が変更されました。選択案は保持されています。再読み込みして比較し、新しい要求を明示的に確定してください。",
   "candidate_compare_hint": "開示された提案を比較します。承認、却下、公開値の選択は別々の判断です。",

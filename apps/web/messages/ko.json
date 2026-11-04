@@ -688,6 +688,8 @@
   "candidate_selection_invalid": "다시 검토해야 할 항목이 있거나 이 필드의 개수 제한을 초과했습니다.",
   "candidate_confirm_reject": "주장을 삭제하지 않고 제안을 거절합니다. 확인할 때 권한을 검사합니다.",
   "candidate_confirm_replace": "전체 필드 선택을 여기에 표시된 값과 우선순위로 교체합니다. 체크하지 않은 값은 선택에서 제외됩니다. 확인할 때 권한을 검사합니다.",
+  "candidate_confirm_head": "현재 선택 헤드: {head}.",
+  "candidate_statement_identity": "선택된 진술: {id}",
   "candidate_selection_confirmed": "공개 읽기에서 선택한 값과 우선순위를 확인했습니다.",
   "candidate_draft_stale": "비교 내용이 변경되었습니다. 선택 초안은 보존되었습니다. 새로고침하고 다시 비교한 후 새 요청을 명시적으로 확인하세요.",
   "candidate_compare_hint": "공개된 제안을 비교하세요. 수락, 거절, 공개 값 선택은 별개의 결정입니다.",

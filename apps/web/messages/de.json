@@ -688,6 +688,8 @@
   "candidate_selection_invalid": "Einige Werte müssen erneut geprüft werden oder überschreiten die Feldgrenze.",
   "candidate_confirm_reject": "Lehne den Vorschlag ab, ohne die Aussage zu löschen. Deine Berechtigung wird beim Bestätigen geprüft.",
   "candidate_confirm_replace": "Ersetze die gesamte Feldauswahl durch die hier gezeigten Werte und Ränge. Nicht markierte Werte werden abgewählt. Deine Berechtigung wird beim Bestätigen geprüft.",
+  "candidate_confirm_head": "Aktueller Auswahlstand: {head}.",
+  "candidate_statement_identity": "Ausgewählte Aussage: {id}",
   "candidate_selection_confirmed": "Die öffentliche Ansicht bestätigt die Auswahl und ihre Ränge.",
   "candidate_draft_stale": "Der Vergleich hat sich geändert. Dein Entwurf bleibt erhalten. Lade neu, vergleiche erneut und bestätige ausdrücklich eine neue Anfrage.",
   "candidate_compare_hint": "Vergleiche die offengelegten Vorschläge. Annahme, Ablehnung und öffentliche Auswahl sind getrennte Entscheidungen.",

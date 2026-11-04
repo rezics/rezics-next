@@ -4,8 +4,11 @@ import { candidateFixture, candidateProperty } from '../src/kernel/fake/subject-
 import {
   candidateContext,
   candidateIsPublic,
+  candidateViewerActionsFor,
+  nativeOperationAvailability,
   publicCandidateSelection,
   readCandidates,
+  readCandidateAuthority,
   selectCandidate,
   type CandidateCommand,
 } from '../src/subject/candidates';
@@ -24,6 +27,56 @@ function command(
     key: crypto.randomUUID(),
   };
 }
+
+test('candidate action hydration keeps exact resources and separates denial from unavailable', async () => {
+  const allowedFixture = candidateFixture();
+  const allowed = await readCandidateAuthority(allowedFixture.client, 'Bearer reviewer', candidateContext, [
+    allowedFixture.id,
+  ]);
+  const allowedActions = candidateViewerActionsFor(allowed, allowedFixture.id);
+  expect(allowedFixture.calls[0]?.body).toEqual({
+    resources: [
+      { type: 'semantic.context', id: candidateContext },
+      { type: 'semantic.subject', id: allowedFixture.id },
+    ],
+  });
+  expect(nativeOperationAvailability(allowedActions.context, 'context:accept', 'subject.accept_candidate')).toBe(
+    'allowed',
+  );
+  expect(nativeOperationAvailability(allowedActions.context, 'context:adopt', 'subject.adopt')).toBe('allowed');
+
+  const deniedFixture = candidateFixture('actions-denied');
+  const denied = await readCandidateAuthority(deniedFixture.client, 'Bearer reviewer', candidateContext, [
+    deniedFixture.id,
+  ]);
+  expect(denied.components.context.state).toBe('available');
+  expect(nativeOperationAvailability(denied.components.context, 'context:adopt', 'subject.adopt')).toBe('denied');
+
+  const unavailableFixture = candidateFixture('actions-unavailable');
+  const unavailable = await readCandidateAuthority(
+    unavailableFixture.client,
+    'Bearer reviewer',
+    candidateContext,
+    [unavailableFixture.id],
+  );
+  expect(unavailable.components.context).toEqual({ state: 'unavailable', reason: 'unavailable' });
+  expect(nativeOperationAvailability(unavailable.components.context, 'context:adopt', 'subject.adopt')).toBe(
+    'unavailable',
+  );
+
+  const concealedFixture = candidateFixture('concealed');
+  const concealed = await readCandidateAuthority(
+    concealedFixture.client,
+    'Bearer reviewer',
+    candidateContext,
+    [concealedFixture.id],
+  );
+  expect(concealed.disclosure).toBe('unreadable');
+  expect(candidateViewerActionsFor(concealed, concealedFixture.id).subject).toEqual({
+    state: 'unavailable',
+    reason: 'not-found',
+  });
+});
 
 test('an authorized person reviews an actual imported subject candidate accepts or adopts through the existing native APIs and sees the selected public subject result with honest conflict denial and pending outcomes', async () => {
   const fixture = candidateFixture();
@@ -178,6 +231,29 @@ test('a reviewer explicitly selects valid values and ranks through existing APIs
     }),
   ).toMatchObject({ ok: false, reason: 'invalid' });
   expect(fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(posts);
+});
+
+test('an opposite native adoption acknowledgment remains unavailable instead of confirming selection', async () => {
+  const fixture = candidateFixture('malformed-ack');
+  const initial = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, candidateProperty);
+  if (!initial.ok || !initial.page) throw new Error('Expected exact imported candidate');
+  const candidate = initial.page.candidates[0]!;
+  const accepted = await selectCandidate(
+    fixture.client,
+    'Bearer reviewer',
+    command(fixture, 'accept', candidate.head),
+  );
+  expect(accepted).toMatchObject({ ok: true, kind: 'accepted' });
+  const current = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, candidateProperty);
+  if (!current.ok || !current.page) throw new Error('Expected accepted candidate');
+
+  const outcome = await selectCandidate(
+    fixture.client,
+    'Bearer reviewer',
+    command(fixture, 'adopt', current.page.adoption!.head),
+  );
+  expect(outcome).toMatchObject({ ok: false, reason: 'unavailable' });
+  expect(fixture.calls.filter((call) => call.path.endsWith(':adopt'))).toHaveLength(1);
 });
 
 test('a reviewer preserves a stale ranked selection draft and reloads comparison before an explicit new confirmation and key', async () => {

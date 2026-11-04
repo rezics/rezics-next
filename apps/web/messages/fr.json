@@ -688,6 +688,8 @@
   "candidate_selection_invalid": "Certains choix doivent être revérifiés ou dépassent la limite du champ.",
   "candidate_confirm_reject": "Refusez cette suggestion sans supprimer l’assertion. Vos droits seront vérifiés à la confirmation.",
   "candidate_confirm_replace": "Remplacez toute la sélection du champ par les valeurs et rangs affichés. Les valeurs non cochées ne seront plus sélectionnées. Vos droits seront vérifiés à la confirmation.",
+  "candidate_confirm_head": "Version actuelle de la sélection : {head}.",
+  "candidate_statement_identity": "Énoncé sélectionné : {id}",
   "candidate_selection_confirmed": "La lecture publique confirme la sélection et ses rangs.",
   "candidate_draft_stale": "Le contenu comparé a changé. Votre brouillon est conservé. Rechargez, comparez à nouveau, puis confirmez explicitement une nouvelle requête.",
   "candidate_compare_hint": "Comparez les suggestions divulguées. Acceptation, refus et sélection publique sont des décisions distinctes.",

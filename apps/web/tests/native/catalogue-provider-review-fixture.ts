@@ -21,6 +21,7 @@ export type CatalogueProviderReviewFixture = {
   alice: { accountId: string; email: string };
   context: { id: string; label: string };
   books: ProviderReviewBook[];
+  revokeGlobalAdoption(accountId: string): Promise<void>;
   stop(): Promise<void>;
 };
 
@@ -139,6 +140,28 @@ export async function createCatalogueProviderReviewFixture(
       },
       status: 201,
     });
+    await nativeJson(stack, 'governor', '/v1/grants', {
+      method: 'POST',
+      key: crypto.randomUUID(),
+      body: {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: alice.accountId },
+        actions: ['context:accept'],
+        valid: '(,)',
+      },
+      status: 201,
+    });
+    await nativeJson(stack, 'governor', '/v1/grants', {
+      method: 'POST',
+      key: crypto.randomUUID(),
+      body: {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: editor.accountId },
+        actions: ['context:adopt'],
+        valid: '(,)',
+      },
+      status: 201,
+    });
     const token = crypto.randomUUID().slice(0, 8);
     const label = `olrev${token} editors`;
     const createdContext = await nativeJson<{ context: { id: string } }>(stack, 'alice', '/v1/contexts', {
@@ -235,6 +258,18 @@ export async function createCatalogueProviderReviewFixture(
       alice: { accountId: alice.accountId, email: alice.email },
       context: { id: createdContext.context.id, label },
       books,
+      revokeGlobalAdoption: async (accountId) => {
+        await nativeJson(stack!, 'governor', '/v1/grants:revoke', {
+          method: 'POST',
+          key: crypto.randomUUID(),
+          body: {
+            resource: { route: 0, id: GLOBAL_CONTEXT },
+            subject: { kind: 'account', id: accountId },
+            actions: ['context:adopt'],
+            valid: '(,)',
+          },
+        });
+      },
       stop,
     };
   } catch (error) {

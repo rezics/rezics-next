@@ -688,6 +688,8 @@
   "candidate_selection_invalid": "部分選項需要重新核對，或超出了此欄位的數量限制。",
   "candidate_confirm_reject": "拒絕此建議並保留原斷言。確認時會檢查你的權限。",
   "candidate_confirm_replace": "以此處顯示的值和優先級替換整個欄位的選用內容。未勾選的值將不再選用。確認時會檢查你的權限。",
+  "candidate_confirm_head": "目前選用版本：{head}。",
+  "candidate_statement_identity": "已選敘述：{id}",
   "candidate_selection_confirmed": "公開讀取已確認此選用清單及其優先級。",
   "candidate_draft_stale": "比較內容已變更，選用草稿已保留。請重新載入並比較，再明確確認新請求。",
   "candidate_compare_hint": "比較已揭露的建議。接受、拒絕和公開選用是獨立的決定。",

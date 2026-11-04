@@ -5,6 +5,8 @@ import {
   candidateContext,
   candidateFailure,
   candidateHasPayload,
+  candidateViewerActionsFor,
+  readCandidateAuthority,
   selectCandidate,
   type CandidateCommand,
   type CandidateRead,
@@ -34,7 +36,7 @@ export async function readContextCuration(
   try {
     const { id, context, property, slot, cursor, session } = address;
     const headers = { authorization, ...(session ? { 'rezics-session-token': session } : {}) };
-    const [scope, reading, current, competition, definitions] = await Promise.all([
+    const [scope, reading, current, competition, definitions, authority] = await Promise.all([
       client.contexts({ id: context }).get({ headers }),
       client.subjects({ id }).get({ query: { context }, headers }),
       client.subjects({ id }).get(session ? { headers: { 'rezics-session-token': session } } : undefined),
@@ -45,10 +47,13 @@ export async function readContextCuration(
           })
         : undefined,
       release,
+      readCandidateAuthority(client, authorization, context, [id]),
     ]);
     if (!scope.data || scope.status !== 200) return candidateFailure(scope.status);
     if (!reading.data || reading.status !== 200) return candidateFailure(reading.status);
     if (!current.data || current.status !== 200) return candidateFailure(current.status);
+    if (authority.disclosure === 'unreadable')
+      return { ok: false, reason: 'unavailable', clearPrivate: true };
     if (competition && (!competition.data || competition.status !== 200)) return candidateFailure(competition.status);
     if (
       scope.data.context.id !== context ||
@@ -95,6 +100,7 @@ export async function readContextCuration(
     return {
       ok: true,
       public: current.data,
+      actions: candidateViewerActionsFor(authority, id),
       page,
       fields,
       names: Object.fromEntries(
