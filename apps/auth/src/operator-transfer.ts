@@ -189,6 +189,7 @@ export async function refreshTransferAdvice(attempt: TransferAttempt): Promise<T
     if (page.review.kind === 'refused') return { kind: 'failure', reason: 'denied' };
     if (page.review.kind === 'changed' || page.review.kind === 'missing')
       return { kind: 'failure', reason: 'conflict' };
+    if (page.review.kind === 'source') return { kind: 'failure', reason: 'conflict' };
     return { kind: 'failure', reason: 'unavailable' };
   }
   if (
