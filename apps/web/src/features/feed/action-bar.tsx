@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { CheckIcon, EllipsisIcon, ReplyIcon, Share2Icon } from 'lucide-react';
+import { CheckIcon, EllipsisIcon, LibraryBigIcon, ReplyIcon, Share2Icon } from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Input } from '@rezics/ui/shadcn/input';

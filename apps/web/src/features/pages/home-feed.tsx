@@ -664,7 +664,7 @@ export function HomeFeedConsumer({
       expectedScope={homeWorkLibraryScope}
       signedIn={signedIn}
       enabled
-      projection={homeWorkLibrary}
+      {...(homeWorkLibrary ? { projection: homeWorkLibrary } : {})}
     >
       <HomeFeed
         result={snapshot.result}
