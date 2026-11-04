@@ -47,7 +47,10 @@ test('rejected choices survive failed and successful reads until explicit save o
       phase: 'review',
       known: fixture.current(),
       pending: null,
-      draft: { spoilerLevel: 1, suitability: 'show' },
+      draft:
+        scenario === 'conflict'
+          ? { spoilerLevel: 1, suitability: 'show' }
+          : { spoilerLevel: 1, suitability: 'blur' },
     });
     expect(readingNeedsNavigationDecision(editor.snapshot())).toBe(true);
     expect(fixture.calls).toHaveLength(1);
