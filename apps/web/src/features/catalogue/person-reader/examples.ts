@@ -1,11 +1,15 @@
 import { fromPlainText } from '@rezics/document';
+import definitions from '../../../kernel/recorded/definitions-release.json';
 import { peopleProfileFixture } from '../../../kernel/fake/catalogue-people-profile';
-import type { PersonStatement } from './model';
+import type { PersonStatement, PersonDefinitions } from './model';
 
 /** Illustrative admitted responses, not a native configuration or publication. */
 export function personReaderExample(state: 'admitted' | 'empty' | 'withheld' | 'unsupported' = 'admitted') {
   const fixture = peopleProfileFixture('ready', 'en', 'person');
   const { release, person: read } = fixture;
+  release.properties['schema:startDate'] = definitions.release.properties[
+    'schema:startDate'
+  ] as unknown as PersonDefinitions['properties'][string];
   const occupation = '00000000-0000-4000-8000-00000000d201';
   const language = '00000000-0000-4000-8000-00000000d202';
   const document = '00000000-0000-4000-8000-00000000d203';

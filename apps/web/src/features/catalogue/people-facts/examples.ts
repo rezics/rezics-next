@@ -30,5 +30,5 @@ export function peopleFactsExample(character = false) {
   }
   read.subject.statements[property] = rows;
   read.subject.release = definitions.digest;
-  return { ...fixture, read, property, rows, release: definitions as unknown as PersonDefinitions };
+  return { ...fixture, read, property, rows, release: definitions.release as unknown as PersonDefinitions };
 }

@@ -1,6 +1,7 @@
 import { profileFieldFacts, personEvidenceFits, type PersonStatement } from '../person-reader/model';
 import type { ProfileReading } from '../person-reader/reader';
 import { valueRequest, valueExplanationHref } from '../value-explanation';
+import type { ValuePage } from '../value-explanation';
 
 export const factVisitBounds = { bytes: 1024 * 1024, fields: 64, facts: 4096, rows: 20, filter: 128, href: 4096 };
 export type FactProjection = { fields: Record<string, PersonStatement[]>; bytes: number; entries: number };
@@ -11,12 +12,13 @@ export function admitFacts(reading: ProfileReading, ids: readonly string[]): Fac
   const related: Record<string, unknown> = {};
   const definitions: Record<string, unknown> = {};
   let entries = 0;
+  let factsCount = 0;
   const unique = [...new Set(ids)];
   if (unique.length > factVisitBounds.fields) return;
   for (const id of unique) {
     const facts = profileFieldFacts(reading.release, reading.public, id, reading.locale);
-    entries += facts.length;
-    if (entries > factVisitBounds.facts || facts.some((fact) => !personEvidenceFits(fact))) return;
+    factsCount += facts.length;
+    if (factsCount > factVisitBounds.facts || facts.some((fact) => !personEvidenceFits(fact))) return;
     fields[id] = facts;
     definitions[id] = reading.release.properties[id];
     for (const fact of facts) {
@@ -58,3 +60,24 @@ export function factAddress(reading: ProfileReading, statement: PersonStatement)
 }
 
 export const factFieldAnchor = (id: string) => `profile-fact-${encodeURIComponent(id)}`;
+
+/** A fresh selected assertion cannot leave the previous row's withdrawn target or document behind. */
+export function sameFactReading(reading: ProfileReading, statement: PersonStatement, page: ValuePage): boolean {
+  if (JSON.stringify(statement) !== JSON.stringify(page.statement)) return false;
+  for (const part of [
+    statement,
+    ...statement.qualifiers,
+    ...statement.references.flatMap((reference) => reference.parts),
+  ]) {
+    if (part.value.type !== 'value') continue;
+    if (part.property.data_type === 'wikibase-item' && typeof part.value.content === 'string') {
+      if (
+        JSON.stringify(reading.public.related[part.value.content]) !== JSON.stringify(page.related[part.value.content])
+      )
+        return false;
+    }
+    if (part.property.data_type === 'document' && JSON.stringify(reading.documents) !== JSON.stringify(page.documents))
+      return false;
+  }
+  return true;
+}
