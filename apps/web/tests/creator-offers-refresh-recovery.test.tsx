@@ -227,7 +227,14 @@ async function mount() {
   const submitCallback = () => {
     const form = host.querySelector('form')!;
     const key = Object.getOwnPropertyNames(form).find((name) => name.startsWith('__reactProps$'))!;
-    return (form as unknown as Record<string, { onSubmit(event: { preventDefault(): void }): unknown }>)[key]!.onSubmit;
+    const handler = key
+      ? (form as unknown as Record<string, { onSubmit?: (event: { preventDefault(): void }) => unknown }>)[key]
+          ?.onSubmit
+      : undefined;
+    return handler ?? ((event: { preventDefault(): void }) => {
+      event.preventDefault();
+      form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    });
   };
   const submit = (twice = false) =>
     act(async () => {

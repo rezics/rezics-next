@@ -174,6 +174,7 @@ function CreatorRead({
   });
   const guard: CreatorOfferGuard = origin;
   const refreshFailure = useCreatorIntent<boolean>(guard, 'offer-refresh-failed');
+  const [manualRefreshPending, setManualRefreshPending] = useState(false);
   const query = useQuery<Outcome | null>({
     ...personalRead,
     queryKey: ['creator-offers-current', subject, locale, address, origin.id],
@@ -200,6 +201,14 @@ function CreatorRead({
     outcome: initialData,
     value: initialData?.kind === 'accepted' ? initialData.value : undefined,
   }));
+  const refreshCurrent = async () => {
+    setManualRefreshPending(true);
+    try {
+      await query.refetch();
+    } finally {
+      setManualRefreshPending(false);
+    }
+  };
   // A loader refresh is not a new admitted origin. Keep its observed rows/edition and
   // command operands mounted, even if that refresh omits a row or temporarily fails.
   if (origin.isCurrent() && query.data && query.data !== display.outcome) {
@@ -232,7 +241,7 @@ function CreatorRead({
       <CreatorOffersPage
         data={data}
         guard={guard}
-        onRefresh={() => void query.refetch()}
+        onRefresh={() => void refreshCurrent()}
         onConfirm={async (id) => {
           const refreshed = await query.refetch({ cancelRefetch: true });
           const outcome = refreshed.data;
@@ -243,7 +252,7 @@ function CreatorRead({
             ? (latest.page.offers.find((offer) => offer.id === id) ?? null)
             : null;
         }}
-        refreshing={query.isFetching}
+        refreshing={query.isFetching || manualRefreshPending}
         locale={locale}
         offerPageAvailable={offerPageAvailable ?? false}
         {...(address.kind === 'list' && address.cursor ? { cursor: address.cursor } : {})}
@@ -264,8 +273,8 @@ function CreatorRead({
           <Button
             variant="outline"
             className="min-h-11"
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
+            disabled={query.isFetching || manualRefreshPending}
+            onClick={() => void refreshCurrent()}
           >
             {m.creator_offers_refresh()}
           </Button>

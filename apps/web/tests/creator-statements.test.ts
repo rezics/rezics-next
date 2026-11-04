@@ -75,9 +75,12 @@ describe('Creators can inspect private royalty statements, source lines and exte
     expect(paid).toContain('does not confirm that you received the payment');
   });
 
-  test('unsafe or unknown money shows unavailable rather than a guessed amount', () => {
+  test('malformed amounts stay unavailable while missing recorded units preserve the raw amount', () => {
+    expect(formatMinorAmount('en', 'zzz', 675)).toBe('Recorded amount 675 ZZZ; unit meaning is unknown.');
+    expect(renderToString(createElement(StatementAmount, { currency: 'zzz', value: 675, locale: 'en' }))).toContain(
+      'Recorded amount 675 ZZZ; unit meaning is unknown.',
+    );
     for (const [currency, value] of [
-      ['zzz', 675],
       ['us', 675],
       ['usd', Number.MAX_SAFE_INTEGER + 1],
       ['usd', 1.5],
