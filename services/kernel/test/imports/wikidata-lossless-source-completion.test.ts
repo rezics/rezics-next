@@ -165,14 +165,13 @@ test('ordinary Wikidata acquisition retains complete values through independent 
     // A source binding cannot be redirected to a different actual holder, even for an admitted value.
     const other = runtime.importer.session.bindings.claim({ source: 'wikidata', external_id: neighbour.id });
     if (other?.state !== 'bound' || proposal.op !== 'propose') throw new Error('Missing actual neighbouring binding');
+    const mismatchedCommand = { ...proposal, key: randomUUID(), subject: other.subject };
     const mismatch: Exchange = {
       ...proposalExchange,
       request: {
         ...proposalExchange.request,
-        body: { commands: [{ ...proposal, key: randomUUID(), subject: other.subject }] },
-        serializedBody: JSON.stringify({
-          commands: [{ ...proposal, key: 'controlled-binding-mismatch', subject: other.subject }],
-        }),
+        body: { commands: [mismatchedCommand] },
+        serializedBody: JSON.stringify({ commands: [mismatchedCommand] }),
       },
     };
     const rejected = await replayExchange(mismatch);
