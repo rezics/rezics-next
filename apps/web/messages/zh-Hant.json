@@ -8773,5 +8773,22 @@
   "concept_tagged_works_continuation_failed": "無法取得下一頁結果。已顯示的作品仍會保留。",
   "concept_tagged_works_retry": "重試此結果頁",
   "concept_tagged_works_lagging": "Search 更新期間，作品清單可能不完整。",
-  "concept_tagged_works_next": "顯示更多作品"
+  "concept_tagged_works_next": "顯示更多作品",
+  "producer_history_back": "返回製作組織",
+  "producer_history_inspect": "查看關係",
+  "producer_history_unavailable": "無法載入此歷史頁面。請重試同一頁，或主動從第一頁重新開始。",
+  "producer_history_reader_stale": "此次讀取已失效。請重新開始以請求新的第一頁。無法還原原來的片段。",
+  "producer_history_loading_page": "正在載入原生分頁的下一頁。上一頁已不再是目前內容。",
+  "producer_history_retry": "重試此頁",
+  "producer_history_restart": "從第一頁重新開始",
+  "producer_history_later_page": "目前後續頁",
+  "producer_history_first_page": "目前第一頁",
+  "producer_history_correction_context": "更正對象",
+  "producer_history_holder": "陳述持有者：",
+  "producer_history_inverse": "相關組織持有關於此製作組織的陳述。",
+  "producer_history_forward": "此製作組織持有關於相關組織的陳述。",
+  "producer_history_correction_retired": "更正讀取已失效",
+  "producer_history_retired_explanation": "此更正已沒有目前有效的讀取。已傳送的命令可能已經生效，結果也可能尚不明確。不會從此失效的更正重新傳送任何命令。",
+  "producer_history_slice_lost": "此處已無法使用原來的片段。請重新讀取歷史，再主動開始另一項更正。",
+  "producer_history_retired_close": "關閉已失效的更正"
 }

@@ -8773,5 +8773,22 @@
   "concept_tagged_works_continuation_failed": "Die nächste Ergebnisseite ist nicht verfügbar. Bereits angezeigte Werke bleiben erhalten.",
   "concept_tagged_works_retry": "Diese Ergebnisseite erneut laden",
   "concept_tagged_works_lagging": "Die Werkliste kann unvollständig sein, solange die Suche aktualisiert wird.",
-  "concept_tagged_works_next": "Weitere Werke anzeigen"
+  "concept_tagged_works_next": "Weitere Werke anzeigen",
+  "producer_history_back": "Zurück zum Produzenten",
+  "producer_history_inspect": "Beziehung ansehen",
+  "producer_history_unavailable": "Diese Verlaufsseite konnte nicht geladen werden. Versuche dieselbe Seite erneut oder beginne bewusst mit der ersten Seite.",
+  "producer_history_reader_stale": "Diese Ansicht ist nicht mehr aktuell. Fordere mit einem Neustart eine neue erste Seite an. Der vorherige Ausschnitt lässt sich nicht wiederherstellen.",
+  "producer_history_loading_page": "Die nächste native Seite wird geladen. Die vorherige Seite ist nicht mehr aktuell.",
+  "producer_history_retry": "Diese Seite erneut versuchen",
+  "producer_history_restart": "Bei der ersten Seite neu beginnen",
+  "producer_history_later_page": "Aktuelle Folgeseite",
+  "producer_history_first_page": "Aktuelle erste Seite",
+  "producer_history_correction_context": "Kontext der Korrektur",
+  "producer_history_holder": "Träger der Aussage:",
+  "producer_history_inverse": "Die zugehörige Organisation trägt die Aussage über diesen Produzenten.",
+  "producer_history_forward": "Dieser Produzent trägt die Aussage über die zugehörige Organisation.",
+  "producer_history_correction_retired": "Korrekturansicht nicht mehr aktuell",
+  "producer_history_retired_explanation": "Diese Korrektur hat keine aktuelle Ansicht mehr. Ein bereits gesendeter Befehl kann wirksam geworden sein; das Ergebnis kann unbekannt sein. Aus dieser Korrektur wird nichts erneut gesendet.",
+  "producer_history_slice_lost": "Der ursprüngliche Ausschnitt ist hier nicht mehr verfügbar. Lies den Verlauf erneut, bevor du bewusst eine weitere Korrektur beginnst.",
+  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen"
 }

@@ -8773,5 +8773,22 @@
   "concept_tagged_works_continuation_failed": "La página siguiente de resultados no está disponible. Se conservan las obras mostradas.",
   "concept_tagged_works_retry": "Reintentar esta página de resultados",
   "concept_tagged_works_lagging": "La lista de obras puede estar incompleta mientras se actualiza Search.",
-  "concept_tagged_works_next": "Mostrar más obras"
+  "concept_tagged_works_next": "Mostrar más obras",
+  "producer_history_back": "Volver al productor",
+  "producer_history_inspect": "Examinar relación",
+  "producer_history_unavailable": "No se pudo cargar esta página del historial. Reintenta la misma página o vuelve deliberadamente a la primera.",
+  "producer_history_reader_stale": "Esta lectura ya no está vigente. Reinicia para solicitar una primera página nueva. No se puede restaurar el segmento anterior.",
+  "producer_history_loading_page": "Cargando la siguiente página nativa. La página anterior ya no está vigente.",
+  "producer_history_retry": "Reintentar esta página",
+  "producer_history_restart": "Reiniciar desde la primera página",
+  "producer_history_later_page": "Página de continuación actual",
+  "producer_history_first_page": "Primera página actual",
+  "producer_history_correction_context": "Contexto de la corrección",
+  "producer_history_holder": "Titular de la declaración:",
+  "producer_history_inverse": "La organización relacionada es titular de la declaración sobre este productor.",
+  "producer_history_forward": "Este productor es titular de la declaración sobre la organización relacionada.",
+  "producer_history_correction_retired": "Lectura de la corrección retirada",
+  "producer_history_retired_explanation": "Esta corrección ya no tiene una lectura vigente. Una orden ya enviada puede haber surtido efecto; su resultado puede ser desconocido. No se reenviará nada desde esta corrección retirada.",
+  "producer_history_slice_lost": "El segmento original ya no está disponible aquí. Vuelve a leer antes de iniciar deliberadamente otra corrección.",
+  "producer_history_retired_close": "Cerrar corrección retirada"
 }

@@ -1,15 +1,11 @@
-import { catalogueEditor, useEditorLifetime } from '../catalogue/editor-lifetime';
-import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
-import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { ListRowLink } from '@rezics/ui/list-row';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
-import { CandidateValue } from './data';
+import { catalogueEditor, CatalogueCurrentReading, useEditorLifetime } from '../catalogue/editor-lifetime';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { ViewHeading } from './view-heading';
 import { coverSrc } from '../../media/cover-src';
 import { subjectHref } from '../../subject/subject-href';
@@ -19,48 +15,33 @@ import { RelationEditor } from '../catalogue/relation-editor';
 import { useConsentFocus } from '../catalogue/statement-consent-focus';
 import {
   producerHistoryCorrection,
-  type ProducerHistoryMeaning,
   type ProducerHistoryRead,
   type ProducerHistoryRow,
-  type ProducerHistoryStream,
 } from '../catalogue/producer-history';
+import { useProducerHistorySlice, type HistoryIntent } from './producer-history-reading/model';
+import { HistoryRow } from './producer-history-reading/row';
+import { actionClass, linkClass, focusClass, meaningLabel } from './producer-history-reading/presentation';
 
 export type ProducerHistoryTransport = {
   read: (stream?: string, cursor?: string, session?: string) => Promise<ProducerHistoryRead>;
   relation: (holder: string) => RelationTransport;
 };
-
 type Correction = {
-  key: string;
+  instance: number;
   id: string;
   statement: RelationDraft;
   slot?: RelationSlot;
   positionEditable: boolean;
   session?: string | undefined;
-};
-type OpenDraft = Correction & {
-  instance: number;
+  origin: HistoryIntent;
+  occurrence: number | undefined;
+  revision: number;
+  holderLabel: string;
+  holderLanguage: string | null;
   returnFocus: HTMLElement;
   confirmClose: boolean;
+  retired: boolean;
 };
-
-const actionClass =
-  'h-auto min-h-8 max-w-full whitespace-normal [overflow-wrap:anywhere] py-1.5 max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
-const linkClass =
-  'block w-fit max-w-full font-sans font-semibold underline max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
-
-function meaningLabel(meaning: ProducerHistoryMeaning, locale: string) {
-  const o = { locale: locale as never };
-  return meaning === 'parent'
-    ? m.producer_history_parent({}, o)
-    : meaning === 'predecessor'
-      ? m.producer_history_predecessor({}, o)
-      : meaning === 'successor'
-        ? m.producer_history_successor({}, o)
-        : meaning === 'subsidiary'
-          ? m.producer_history_subsidiary({}, o)
-          : m.producer_history_credited_role({}, o);
-}
 
 export const ProducerHistoryPage = catalogueEditor(ProducerHistoryPageLive);
 
@@ -79,348 +60,332 @@ function ProducerHistoryPageLive({
 }) {
   const streamId = useId();
   const lifetime = useEditorLifetime();
-  const o = { locale: locale as never };
-  const query = useQuery({
-    queryKey: [...['producer-history', id, locale], lifetime.generation],
-    queryFn: () => transport.read(),
-    initialData: initial,
-    retry: false,
-    staleTime: Infinity,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
-  const [page, setPage] = useState<Extract<ProducerHistoryRead, { ok: true }>>();
-  const [failure, setFailure] = useState<Extract<ProducerHistoryRead, { ok: false }>>();
-  const [busy, setBusy] = useState(false);
-  const [drafts, setDrafts] = useState<OpenDraft[]>([]);
-  const [selected, setSelected] = useState('');
-  const nextDraftInstance = useRef(0);
-  const readFailure = useRef<HTMLParagraphElement>(null);
-  const sliceStatus = useRef<HTMLParagraphElement>(null);
-  const running = useRef(false);
-  const session = useRef<string | undefined>(undefined);
-  const cursor = useRef<string | undefined>(undefined);
-  const sliceRevision = useRef(0);
-  const read = page ?? (query.data?.ok ? query.data : undefined);
-  const error = failure ?? (!page && query.data && !query.data.ok ? query.data : undefined);
-  const concealed = !!error || (!page && query.isError);
-  const stream = read?.stream;
-  const slice = useCatalogueLifetime(JSON.stringify([stream?.key, cursor.current, sliceRevision.current]), lifetime);
-  const title = pickText(read?.public.subject.labels ?? {}, locale);
-  const origin = subjectHref({ id, label: title.text }, locale).href;
+  const reader = useProducerHistorySlice({ id, locale, transport, initial });
+  const { slice, read } = reader;
+  const lease = useCatalogueLifetime(String(slice.revision), lifetime);
+  const [selected, setSelected] = useState<{ revision: number; index: number }>();
+  const [draft, setDraft] = useState<Correction>();
   const [part, setPart] = useState<EntityPickerSubject[]>([]);
+  const nextInstance = useRef(0);
+  const sliceHeading = useRef<HTMLHeadingElement>(null);
   const readFocus = useConsentFocus();
-  const readSequence = useRef(0);
-  const focusAfterClose = useRef<HTMLElement | undefined>(undefined);
+  const focusAfterClose = useRef<{ target: HTMLElement; revision: number } | undefined>(undefined);
+  const o = { locale: locale as never };
+  const stream = read?.stream;
+  const title = pickText(read?.public.subject.labels ?? {}, locale);
+  // The address is route intent. A failure never keeps the previous producer label or body.
+  const origin = subjectHref({ id, label: title.text }, locale).href;
+  const failure = slice.phase === 'failed' ? slice.failure : undefined;
+  const busy = slice.phase === 'loading';
+  const selectedIndex = selected?.revision === slice.revision ? selected.index : undefined;
+  const correctionCurrent = !!draft && !draft.retired && draft.revision === slice.revision && !!read;
   useLayoutEffect(() => {
-    const target = focusAfterClose.current;
-    if (!target) return;
+    const intent = focusAfterClose.current;
     focusAfterClose.current = undefined;
-    if (target.isConnected) target.focus();
-  }, [drafts]);
-  async function load(key = stream?.key, next?: string, event?: MouseEvent<HTMLButtonElement>) {
-    if (!slice.active()) return;
+    if (!intent || !lease.active() || intent.revision !== slice.revision) return;
+    if (intent.target.isConnected) intent.target.focus();
+    else sliceHeading.current?.focus();
+  }, [draft, lease, slice.revision]);
+
+  function selection() {
+    const row = selectedIndex === undefined ? undefined : read?.rows[selectedIndex];
+    return row && selectedIndex !== undefined
+      ? { index: selectedIndex, holder: row.holder, statement: row.statementId }
+      : undefined;
+  }
+  function load(intent: HistoryIntent, event?: MouseEvent<HTMLButtonElement>) {
+    if (!lifetime.active()) return;
     readFocus.cancel();
-    if (running.current) return;
-    if (key !== stream?.key || next !== cursor.current) {
-      slice.retire();
-      sliceRevision.current++;
-    }
-    const sequence = ++readSequence.current;
-    const revision = sliceRevision.current;
-    const opener = event?.currentTarget;
+    lease.retire();
+    setSelected(undefined);
+    setPart([]);
+    // Retirement is permanent for this editor instance, even after equal successful admission.
+    setDraft((current) => (current ? { ...current, retired: true } : undefined));
+    const pending = reader.request(intent);
+    const revision = reader.currentRevision();
     let complete = false;
-    let outcome: 'slice' | 'failure' = 'slice';
     readFocus.begin(
       event,
-      () => lifetime.active() && readSequence.current === sequence && sliceRevision.current === revision,
-      () => {
-        const survives =
-          opener?.isConnected && !opener.disabled && !opener.closest('[hidden], [inert], [aria-hidden="true"]');
-        if (survives) return opener;
-        const boundary = outcome === 'slice' ? sliceStatus.current : readFailure.current;
-        return boundary?.closest('[hidden]') ? null : boundary;
-      },
+      () => reader.owned(revision),
+      () => sliceHeading.current,
       () => complete,
     );
-    running.current = true;
-    setBusy(true);
-    try {
-      const value = await transport.read(
-        key,
-        next,
-        session.current ?? (query.data?.ok ? query.data.session : undefined),
-      );
-      if (!lifetime.active()) return;
-      if (!value.ok) {
-        outcome = 'failure';
-        setFailure(value);
-        return;
-      }
-      setPage(value);
-      session.current = value.session ?? session.current;
-      cursor.current = next;
-      setFailure(undefined);
-      setPart([]);
-      setSelected('');
-    } catch {
-      if (!lifetime.active()) return;
-      outcome = 'failure';
-      setFailure({ ok: false, reason: 'unavailable' });
-    } finally {
-      if (!lifetime.active()) return;
+    void pending.finally(() => {
       complete = true;
-      running.current = false;
-      setBusy(false);
-    }
-  }
-  function open(row: ProducerHistoryRow, selectedStream: ProducerHistoryStream, returnFocus: HTMLElement) {
-    if (!slice.active()) return;
-    const correction = producerHistoryCorrection(row, selectedStream);
-    if (!correction) return;
-    const key = `${row.holder}:${row.statementId}`;
-    const instance = drafts.find((draft) => draft.key === key)?.instance ?? ++nextDraftInstance.current;
-    setDrafts((previous) =>
-      previous.some((draft) => draft.key === key)
-        ? [...previous]
-        : [...previous, { ...correction, key, session: read?.session, instance, returnFocus, confirmClose: false }],
-    );
-  }
-  function add(returnFocus: HTMLElement) {
-    if (!slice.active() || !stream || !part[0]) return;
-    const holder = stream.direction === 'forward' ? id : part[0].id;
-    const target = stream.direction === 'forward' ? part[0].id : id;
-    const key = `${holder}:${stream.property}:${target}`;
-    const instance = drafts.find((draft) => draft.key === key)?.instance ?? ++nextDraftInstance.current;
-    setDrafts((previous) =>
-      previous.some((draft) => draft.key === key)
-        ? [...previous]
-        : [
-            ...previous,
-            {
-              key,
-              id: holder,
-              positionEditable: false,
-              session: read?.session,
-              statement: {
-                property: { id: stream.property, data_type: 'wikibase-item' },
-                value: { type: 'value', content: target },
-                qualifiers: [],
-                references: [],
-              },
-              instance,
-              returnFocus,
-              confirmClose: true,
-            },
-          ],
-    );
-  }
-  function closeDraft(instance: number) {
-    setDrafts((previous) => {
-      const closing = previous.find((draft) => draft.instance === instance);
-      if (!closing) return previous;
-      focusAfterClose.current = closing.returnFocus;
-      return previous.filter((draft) => draft.instance !== instance);
     });
   }
+  function inspect(index: number, button: HTMLButtonElement) {
+    if (!lease.active() || !read?.rows[index]) return;
+    readFocus.cancel();
+    setSelected({ revision: slice.revision, index });
+    // Selection is synchronous: focus cannot outlive this slice or move after a later request.
+    if (button.ownerDocument.activeElement === button)
+      button.closest('li')?.querySelector<HTMLElement>('h2, h3')?.focus();
+  }
+  function open(row: ProducerHistoryRow, index: number, button: HTMLButtonElement) {
+    if (!lease.active() || !stream || draft) return;
+    const correction = producerHistoryCorrection(row, stream);
+    if (!correction) return;
+    setSelected({ revision: slice.revision, index });
+    const holder =
+      row.holder === id
+        ? title
+        : {
+            text: row.summary?.label?.value ?? m.subject_value_unlabelled({}, o),
+            lang: row.summary?.label?.language ?? null,
+          };
+    setDraft({
+      ...correction,
+      instance: ++nextInstance.current,
+      session: read?.session,
+      origin: reader.intent(stream.key, slice.intent.cursor, { index, holder: row.holder, statement: row.statementId }),
+      occurrence: index,
+      revision: slice.revision,
+      holderLabel: holder.text || m.subject_value_unlabelled({}, o),
+      holderLanguage: holder.lang,
+      returnFocus: button,
+      confirmClose: false,
+      retired: false,
+    });
+  }
+  function add(button: HTMLButtonElement) {
+    if (!lease.active() || !stream || !part[0] || draft) return;
+    const target = part[0];
+    const holder = stream.direction === 'forward' ? id : target.id;
+    setDraft({
+      instance: ++nextInstance.current,
+      id: holder,
+      positionEditable: false,
+      session: read?.session,
+      statement: {
+        property: { id: stream.property, data_type: 'wikibase-item' },
+        value: { type: 'value', content: stream.direction === 'forward' ? target.id : id },
+        qualifiers: [],
+        references: [],
+      },
+      origin: reader.intent(stream.key, slice.intent.cursor),
+      occurrence: undefined,
+      revision: slice.revision,
+      holderLabel: stream.direction === 'forward' ? title.text : target.title,
+      holderLanguage: stream.direction === 'forward' ? title.lang : null,
+      returnFocus: button,
+      confirmClose: true,
+      retired: false,
+    });
+  }
+  function closeDraft() {
+    if (!draft || !lifetime.active()) return;
+    readFocus.cancel();
+    if (correctionCurrent) focusAfterClose.current = { target: draft.returnFocus, revision: draft.revision };
+    setDraft(undefined);
+  }
   const failed =
-    error?.reason === 'denied'
-      ? m.candidate_denied({}, o)
-      : error?.reason === 'stale'
-        ? m.producer_history_stale({}, o)
-        : error?.reason === 'invalid'
+    failure?.reason === 'unavailable'
+      ? m.producer_history_unavailable({}, o)
+      : failure?.reason === 'stale'
+        ? m.producer_history_reader_stale({}, o)
+        : failure?.reason === 'invalid'
           ? m.candidate_invalid({}, o)
-          : m.producer_history_concealed({}, o);
+          : m.candidate_denied({}, o);
   return (
     <article
-      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
-      aria-busy={busy || query.isPending}
+      className={`mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere] [&_:is(a,button,select):focus-visible]:outline-2 [&_:is(a,button,select):focus-visible]:outline-offset-2 [&_:is(a,button,select):focus-visible]:outline-ring`}
+      aria-busy={busy}
     >
       <ViewHeading label={m.producer_history_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.producer_history_intro({}, o)}</p>
-      {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}
-      {concealed && (
-        <p ref={readFailure} role="alert" tabIndex={-1}>
-          {failed}
+      <a className={linkClass} href={origin}>
+        {m.producer_history_back({}, o)}
+      </a>
+      {read && (
+        <p lang={title.lang ?? undefined} className="font-sans text-xl font-semibold">
+          {title.text || m.subject_value_unlabelled({}, o)}
         </p>
       )}
-      <div hidden={concealed} className="space-y-6">
-        {read && (
-          <>
-            <a className={`${linkClass} text-xl`} lang={title.lang ?? undefined} href={origin}>
-              {title.text || m.subject_value_unlabelled({}, o)}
-            </a>
-            {!!read.unreleased.length && (
-              <p role="status">
-                {m.producer_history_unreleased({}, o)}{' '}
-                {read.unreleased.map((item) => meaningLabel(item.meaning, locale)).join(' · ')}
-              </p>
-            )}
-            {!read.streams.length && (
-              <p ref={sliceStatus} role="status" tabIndex={-1}>
-                {m.producer_history_no_stream({}, o)}
-              </p>
-            )}
-            {stream && (
-              <>
-                <Field>
-                  <FieldLabel htmlFor={streamId}>{m.producer_history_relation({}, o)}</FieldLabel>
-                  <NativeSelect
-                    id={streamId}
-                    className="min-w-0 max-w-full max-md:[&_select]:min-h-11 pointer-coarse:[&_select]:min-h-11"
-                    value={stream.key}
-                    disabled={busy}
-                    onChange={(event) => void load(event.target.value)}
-                  >
-                    {read.streams.map((item) => (
-                      <NativeSelectOption key={item.key} value={item.key}>
-                        {meaningLabel(item.meaning, locale)}
-                        {item.label.text ? ` · ${item.label.text}` : ''}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </Field>
-                <p ref={sliceStatus} role="status" tabIndex={-1}>
-                  {meaningLabel(stream.meaning, locale)}
-                </p>
-                {!read.caughtUp && <p role="status">{m.producer_history_incomplete({}, o)}</p>}
-                {!read.rows.length && <p>{m.producer_history_empty({}, o)}</p>}
-                <ul>
-                  {read.rows.map((row, index) => {
-                    const stale = selected && selected !== row.statementId;
-                    return (
-                      <li key={`${row.holder}:${row.statementId}`} data-slot="list-row">
-                        <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
-                          {row.summary && (
-                            <ListRowLink
-                              href={`${subjectHref({ id: row.summary.id, label: row.summary.label?.value ?? '' }, locale).href}/producer`}
-                              lang={row.summary.label?.language}
-                              aria-labelledby={`${streamId}-org-${index}`}
-                            >
-                              {row.summary.label?.value || m.subject_value_unlabelled({}, o)}
-                            </ListRowLink>
-                          )}
-                          <ContentItemHeading
-                            id={`${streamId}-org-${index}`}
-                            lang={row.summary?.label?.language}
-                            className="font-sans text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
-                          >
-                            {row.summary
-                              ? row.summary.label?.value || m.subject_value_unlabelled({}, o)
-                              : m.producer_history_concealed({}, o)}
-                          </ContentItemHeading>
-                          {row.statement ? (
-                            <div className="space-y-3 text-sm">
-                              <CandidateValue snak={row.statement} related={row.related} locale={locale} />
-                              {row.statement.qualifiers.map((snak, qualifier) => (
-                                <div key={qualifier}>
-                                  <p
-                                    lang={read.labels[snak.property.id]?.lang ?? undefined}
-                                    className="text-muted-foreground"
-                                  >
-                                    {read.labels[snak.property.id]?.text || m.producer_history_dates({}, o)}
-                                  </p>
-                                  <CandidateValue snak={snak} related={row.related} locale={locale} />
-                                </div>
-                              ))}
-                              <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
-                                <h3 className="font-medium">{m.producer_history_sources({}, o)}</h3>
-                                {row.statement.references.length ? (
-                                  row.statement.references.map((reference, referenceIndex) => (
-                                    <div key={referenceIndex} className="space-y-2">
-                                      {reference.parts.map((snak, at) => (
-                                        <CandidateValue key={at} snak={snak} related={row.related} locale={locale} />
-                                      ))}
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p>{m.sources_no_citations({}, o)}</p>
-                                )}
-                              </section>
-                              {producerHistoryCorrection(row, stream) && (
-                                <Button
-                                  className={actionClass}
-                                  variant="outline"
-                                  disabled={!!selected && selected !== row.statementId}
-                                  onClick={(event) => {
-                                    if (selected && selected !== row.statementId) return;
-                                    setSelected(row.statementId);
-                                    open(row, stream, event.currentTarget);
-                                  }}
-                                >
-                                  {stale ? m.producer_history_stale({}, o) : m.producer_history_correct({}, o)}
-                                </Button>
-                              )}
-                            </div>
-                          ) : (
-                            <p>{m.producer_history_concealed({}, o)}</p>
-                          )}
-                          <a className={actionClass + ' inline-flex items-center underline'} href={origin}>
-                            {m.producer_history_return({}, o)}
-                          </a>
-                        </ContentItemFrame>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="flex flex-wrap gap-2">
-                  {read.next && (
-                    <Button
-                      className={actionClass}
-                      variant="outline"
-                      disabled={busy}
-                      onClick={(event) => void load(stream.key, read.next ?? undefined, event)}
-                    >
-                      {m.producer_history_more({}, o)}
-                    </Button>
-                  )}
-                  <Button
-                    className={actionClass}
-                    variant="outline"
-                    disabled={busy}
-                    onClick={(event) => void load(stream.key, undefined, event)}
-                  >
-                    {m.candidate_reload({}, o)}
-                  </Button>
-                </div>
-                <section className="space-y-3 rounded-lg border border-border p-4">
-                  <h2 className="font-sans text-lg font-semibold">{m.producer_history_correct({}, o)}</h2>
-                  <EntityPicker
-                    label={m.producer_history_follow({}, o)}
-                    search={search}
-                    src={coverSrc}
-                    value={part}
-                    onValueChange={(items) => slice.active() && setPart(items)}
-                  />
-                  <Button
-                    className={actionClass}
-                    variant="outline"
-                    disabled={!part.length}
-                    onClick={(event) => add(event.currentTarget)}
-                  >
-                    {m.producer_history_draft({}, o)}
-                  </Button>
-                </section>
-              </>
-            )}
-          </>
+      <div className="space-y-3">
+        {failure && <p role="alert">{failed}</p>}
+        {busy && (
+          <p role="status">
+            {slice.intent.cursor ? m.producer_history_loading_page({}, o) : m.candidate_loading({}, o)}
+          </p>
         )}
-        {drafts.map((draft) => (
-          <section key={draft.instance} className="space-y-3 border-t border-border pt-6">
+        {failure && (
+          <div className="flex flex-wrap gap-2">
+            {failure.reason === 'unavailable' && (
+              <Button className={actionClass} variant="outline" onClick={(event) => load(slice.intent, event)}>
+                {m.producer_history_retry({}, o)}
+              </Button>
+            )}
+            <Button className={actionClass} variant="outline" onClick={(event) => load(reader.restart(), event)}>
+              {m.producer_history_restart({}, o)}
+            </Button>
+          </div>
+        )}
+        {!!reader.streams.length && (
+          <Field>
+            <FieldLabel htmlFor={streamId}>{m.producer_history_relation({}, o)}</FieldLabel>
+            <NativeSelect
+              id={streamId}
+              className="min-w-0 max-w-full [&_select]:min-h-11"
+              value={reader.key ?? ''}
+              onChange={(event) => load(reader.intent(event.target.value, undefined, selection()))}
+            >
+              {reader.streams.map((item) => (
+                <NativeSelectOption key={item.key} value={item.key}>
+                  {meaningLabel(item.meaning, locale)}
+                  {item.label.text ? ` · ${item.label.text}` : ''}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+        )}
+      </div>
+      {read && (
+        <section className="space-y-4" aria-labelledby={`${streamId}-slice`}>
+          <h2
+            id={`${streamId}-slice`}
+            ref={sliceHeading}
+            tabIndex={-1}
+            className={`font-sans text-xl font-semibold ${focusClass}`}
+          >
+            {stream ? meaningLabel(stream.meaning, locale) : m.producer_history_no_stream({}, o)}
+          </h2>
+          <p role="status">
+            {slice.intent.cursor ? m.producer_history_later_page({}, o) : m.producer_history_first_page({}, o)}
+          </p>
+          {!!read.unreleased.length && (
+            <p>
+              {m.producer_history_unreleased({}, o)}{' '}
+              {read.unreleased.map((item) => meaningLabel(item.meaning, locale)).join(' · ')}
+            </p>
+          )}
+          {stream && (
+            <>
+              {!read.caughtUp && <p role="status">{m.producer_history_incomplete({}, o)}</p>}
+              {!read.rows.length && <p>{m.producer_history_empty({}, o)}</p>}
+              <ul>
+                {read.rows.map((row, index) => (
+                  <HistoryRow
+                    key={`${slice.revision}:${index}`}
+                    row={row}
+                    stream={stream}
+                    read={read}
+                    locale={locale}
+                    headingId={`${streamId}-org-${index}`}
+                    selected={selectedIndex === index}
+                    correctionLocked={!!draft && (draft.retired || draft.occurrence !== index)}
+                    select={(button) => inspect(index, button)}
+                    correct={(button) => open(row, index, button)}
+                  />
+                ))}
+              </ul>
+              <div className="flex flex-wrap gap-2">
+                {read.next && (
+                  <Button
+                    className={actionClass}
+                    variant="outline"
+                    onClick={(event) => load(reader.intent(stream.key, read.next ?? undefined, selection()), event)}
+                  >
+                    {m.producer_history_more({}, o)}
+                  </Button>
+                )}
+                <Button
+                  className={actionClass}
+                  variant="outline"
+                  onClick={(event) => load(reader.intent(stream.key, slice.intent.cursor, selection()), event)}
+                >
+                  {m.candidate_reload({}, o)}
+                </Button>
+                <Button className={actionClass} variant="outline" onClick={(event) => load(reader.restart(), event)}>
+                  {m.producer_history_restart({}, o)}
+                </Button>
+              </div>
+              <section className="space-y-3 rounded-lg border border-border p-4">
+                <h2 className="font-sans text-lg font-semibold">{m.producer_history_correct({}, o)}</h2>
+                <EntityPicker
+                  label={m.producer_history_follow({}, o)}
+                  search={search}
+                  src={coverSrc}
+                  value={part}
+                  onValueChange={(items) => lease.active() && setPart(items)}
+                />
+                <Button
+                  className={actionClass}
+                  variant="outline"
+                  disabled={!part.length || !!draft}
+                  onClick={(event) => add(event.currentTarget)}
+                >
+                  {m.producer_history_draft({}, o)}
+                </Button>
+              </section>
+            </>
+          )}
+        </section>
+      )}
+      {draft && (
+        <section
+          className="space-y-3 border-t border-border pt-6"
+          aria-label={m.producer_history_correction_context({}, o)}
+        >
+          {correctionCurrent ? (
+            <>
+              <h2 className="font-sans text-lg font-semibold">{m.producer_history_correction_context({}, o)}</h2>
+              <p>
+                {m.producer_history_holder({}, o)}{' '}
+                <span lang={draft.holderLanguage ?? undefined}>{draft.holderLabel}</span>
+              </p>
+              <p>
+                {stream && meaningLabel(stream.meaning, locale)} · {stream?.label.text} ·{' '}
+                {stream?.direction === 'inverse'
+                  ? m.producer_history_inverse({}, o)
+                  : m.producer_history_forward({}, o)}
+              </p>
+              <Button
+                className={actionClass}
+                variant="outline"
+                onClick={() => {
+                  if (lease.active()) sliceHeading.current?.focus();
+                }}
+              >
+                {m.producer_history_return({}, o)}
+              </Button>
+            </>
+          ) : (
+            <>
+              <h2 className="font-sans text-lg font-semibold">{m.producer_history_correction_retired({}, o)}</h2>
+              <p role="status">{m.producer_history_retired_explanation({}, o)}</p>
+              <p>{m.producer_history_slice_lost({}, o)}</p>
+              <Button className={actionClass} variant="outline" onClick={closeDraft}>
+                {m.producer_history_retired_close({}, o)}
+              </Button>
+              {!busy && (
+                <Button className={actionClass} variant="outline" onClick={(event) => load(reader.restart(), event)}>
+                  {m.producer_history_restart({}, o)}
+                </Button>
+              )}
+            </>
+          )}
+          <CatalogueCurrentReading
+            visible={correctionCurrent}
+            ready={correctionCurrent}
+            revision={`${draft.instance}:${draft.retired ? 'retired' : draft.revision}`}
+          >
             <RelationEditor
+              key={draft.instance}
               id={draft.id}
               locale={locale}
               transport={transport.relation(draft.id)}
               search={search}
               composition={draft}
               requireCloseConfirmation={draft.confirmClose}
-              onClose={() => closeDraft(draft.instance)}
-              onSelected={() => load(stream?.key, cursor.current)}
+              onClose={closeDraft}
+              onSelected={() => {
+                if (correctionCurrent && lease.active()) load(draft.origin);
+              }}
             />
-          </section>
-        ))}
-      </div>
+          </CatalogueCurrentReading>
+        </section>
+      )}
     </article>
   );
 }

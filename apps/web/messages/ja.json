@@ -8773,5 +8773,22 @@
   "concept_tagged_works_continuation_failed": "次の結果ページを利用できません。表示済みの作品は保持されています。",
   "concept_tagged_works_retry": "この結果ページを再試行",
   "concept_tagged_works_lagging": "Searchの更新中は作品一覧が不完全な場合があります。",
-  "concept_tagged_works_next": "さらに作品を表示"
+  "concept_tagged_works_next": "さらに作品を表示",
+  "producer_history_back": "制作組織に戻る",
+  "producer_history_inspect": "関係を確認",
+  "producer_history_unavailable": "この履歴ページを読み込めませんでした。同じページを再試行するか、最初のページから読み直してください。",
+  "producer_history_reader_stale": "この閲覧内容は最新ではありません。最初のページから読み直してください。以前の範囲は復元できません。",
+  "producer_history_loading_page": "次のネイティブページを読み込み中です。前のページは最新ではありません。",
+  "producer_history_retry": "このページを再試行",
+  "producer_history_restart": "最初のページから読み直す",
+  "producer_history_later_page": "現在の続きのページ",
+  "producer_history_first_page": "現在の最初のページ",
+  "producer_history_correction_context": "訂正の対象",
+  "producer_history_holder": "文の保持者：",
+  "producer_history_inverse": "関連組織が、この制作組織についての文を保持しています。",
+  "producer_history_forward": "この制作組織が、関連組織についての文を保持しています。",
+  "producer_history_correction_retired": "訂正の閲覧内容は失効しました",
+  "producer_history_retired_explanation": "この訂正には現在有効な閲覧内容がありません。送信済みの操作はすでに反映されている可能性があり、結果が不明な場合があります。この失効した訂正から再送することはありません。",
+  "producer_history_slice_lost": "元の範囲はここでは利用できません。履歴を読み直してから、改めて訂正を開始してください。",
+  "producer_history_retired_close": "失効した訂正を閉じる"
 }

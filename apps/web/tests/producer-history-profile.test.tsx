@@ -197,7 +197,7 @@ test('producer history page names unreleased fields, similar organizations, cont
     expect(
       [...host.querySelectorAll('button')].some((button) => button.textContent === m.producer_history_more()),
     ).toBe(true);
-    expect([...host.querySelectorAll('a')].some((link) => link.textContent === m.producer_history_return())).toBe(true);
+    expect([...host.querySelectorAll('a')].some((link) => link.textContent === m.producer_history_back())).toBe(true);
     const correct = [...host.querySelectorAll('button')].find(
       (button) => button.textContent === m.producer_history_correct(),
     )!;

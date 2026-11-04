@@ -8865,5 +8865,22 @@
   "concept_tagged_works_continuation_failed": "The next result page is unavailable. Existing works are retained.",
   "concept_tagged_works_retry": "Retry this result page",
   "concept_tagged_works_lagging": "The work list may be incomplete while Search updates.",
-  "concept_tagged_works_next": "Show more works"
+  "concept_tagged_works_next": "Show more works",
+  "producer_history_back": "Back to producer",
+  "producer_history_inspect": "Inspect relation",
+  "producer_history_unavailable": "This history page could not be loaded. Retry the same page or deliberately restart from the first page.",
+  "producer_history_reader_stale": "This reading is no longer current. Restart to request a new first page. The former slice cannot be restored.",
+  "producer_history_loading_page": "Loading the next native page. The previous page is no longer current.",
+  "producer_history_retry": "Retry this page",
+  "producer_history_restart": "Restart from first page",
+  "producer_history_later_page": "Current continuation page",
+  "producer_history_first_page": "Current first page",
+  "producer_history_correction_context": "Correction context",
+  "producer_history_holder": "Statement holder:",
+  "producer_history_inverse": "The related organization holds the statement about this producer.",
+  "producer_history_forward": "This producer holds the statement about the related organization.",
+  "producer_history_correction_retired": "Correction reading retired",
+  "producer_history_retired_explanation": "This correction no longer has a current reading. A command already sent may still have taken effect; its outcome may be unknown. Nothing will be resent from this retired correction.",
+  "producer_history_slice_lost": "The original slice is no longer available here. Read again before deliberately starting another correction.",
+  "producer_history_retired_close": "Dismiss retired correction"
 }
