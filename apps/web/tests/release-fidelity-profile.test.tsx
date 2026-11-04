@@ -94,7 +94,10 @@ test('a concrete edition shows work identity, language edition, two directed rel
   const replaced = await fixture.read(page.streams.find((stream) => stream.property === replacedByProperty)!.key);
   expect(replaced.ok && replaced.stream?.property).toBe(replacedByProperty);
   expect(page.statusProperty).toBe('schema:creativeWorkStatus');
-  expect(page.work.completeness).toMatchObject({ id: '00000000-0000-4000-8000-00000000a115', label: { text: 'Complete' } });
+  expect(page.work.completeness).toMatchObject({
+    id: '00000000-0000-4000-8000-00000000a115',
+    label: { text: 'Complete' },
+  });
   expect(page.regionProperty).toBeUndefined();
 });
 

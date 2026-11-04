@@ -289,7 +289,9 @@ export function fileProfileReleased(release: Definitions): boolean {
 }
 
 /** Completeness of this exact release for the linked work; never a work-level development status. */
-export function workCompletenessQualifier(statement: Statement | undefined): Statement['qualifiers'][number] | undefined {
+export function workCompletenessQualifier(
+  statement: Statement | undefined,
+): Statement['qualifiers'][number] | undefined {
   return statement?.qualifiers.find((part) => part.property.id === WORK_COMPLETENESS_QUALIFIER);
 }
 
