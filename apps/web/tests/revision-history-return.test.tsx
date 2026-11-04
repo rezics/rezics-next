@@ -196,7 +196,7 @@ async function mount(initialUrl: string) {
       );
     },
     validateSearch: (search: Record<string, unknown>) => search,
-  }).update({ id: '/threads/$id_/$slug' } as never);
+  });
   ExactRoute.update({
     id: '/posts/$id/revisions/$revisionId',
     path: 'posts/$id/revisions/$revisionId',
@@ -295,7 +295,6 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
       )!,
     );
     await act(async () => historyResolved);
-    console.log('return-debug', view.router.state.location.href, view.host.textContent);
     expect(view.router.state.location.href).toContain('/threads/');
     expect(view.router.state.location.href).toContain('historyReturn=');
     await historyRead;

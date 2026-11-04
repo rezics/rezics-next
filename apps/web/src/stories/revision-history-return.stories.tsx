@@ -84,7 +84,7 @@ function ReturnJourney({ lostReceipt = false }: { lostReceipt?: boolean }) {
       getParentRoute: () => root,
       path: 'threads/$id/$slug',
       component: ThreadHistoryRoute,
-    }).update({ id: '/threads/$id_/$slug' } as never);
+    });
     const exact = createRoute({
       getParentRoute: () => root,
       path: 'posts/$id/revisions/$revisionId',
