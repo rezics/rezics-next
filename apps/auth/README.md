@@ -644,6 +644,12 @@ Sign-up makes no kernel reads. A successful submit is one browser `POST /signup`
 - **Bound:** 2 Auth requests and 0 kernel reads
 - **Growth check:** `tests/passkeys-cost.test.ts`: a passkey step-up makes two Auth requests however many passkeys the person has
 
+### Interrupted step-up review
+
+- **Touches:** one bounded `POST /recovery/page` per review or Retry; an exact retained account or management continuation adds one bounded `GET /session`. Deliberate Continue repeats those same reads and uses the existing exact local return-marker transition before navigation.
+- **Bound:** at most 1 recovery-page read and 1 exact session read per review attempt, 0 kernel reads, 0 authentication or account-command requests. A separate password confirmation uses 1 Auth request; a fresh passkey confirmation uses the existing 2.
+- **Recovery:** current advice and exact continuation selectors determine whether Continue is offered. Unavailable, stale or replaced reads never restore former account detail or erase an unknown send.
+
 ### Passkey list
 
 - **Touches:** one `GET /passkeys`, which returns only the signed-in person's passkeys, beside the page's `GET /session`
@@ -695,6 +701,8 @@ Decision: opening advice uses a dedicated native management observation; the exa
 The Auth host installs `POST /account-management/operators/opening-page` from the native account bindings. Its closed current response identifies the acting human, installed actor target, installed operator kind, reservation/version and supported `opening` action. Missing authority returns refused; missing infrastructure returns unavailable. A single ten-second deadline covers one authentication, two bounded native transfer-state reads and one full-key operator-kind read. The two relation observations must agree. The endpoint performs no command, approval or credential staging; the page consumes one observation and preserves its exact tuple for explicit opening review. Public labels remain undisclosed under the manage-only profile; submission still needs the existing fresh-human approval and opening command.
 
 Step-up rereads the exact retained account or organization operation after authentication and again after native session observation. A replaced, missing or malformed continuation refuses the old return, preserves replacement storage and asks the person to review the action again; authentication does not execute it.
+
+When a cached step-up page returns, its secret-bearing form and credential ceremony retire. The mounted page keeps only a generic unsent, refused, acknowledged or unresolved classification; it uses no browser storage. It reads current step-up advice before offering a deliberate continuation or a separate fresh confirmation. A current actor is an observation, not proof that an earlier request caused it. Review never authenticates, executes the account action or navigates automatically. A replaced or unavailable continuation remains unresolved and can be left without implying cancellation.
 
 Recovery and step-up read `POST /recovery/page` with only `stage` (`start`, `complete` or `step-up`).
 The native producer returns installed handler methods, stage actions, native password limits, and whether to return

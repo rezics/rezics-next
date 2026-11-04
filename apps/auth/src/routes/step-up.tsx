@@ -11,7 +11,8 @@ import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { passkeysSupported } from '../passkeys';
 import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
-import { useRecoveryPage } from '../recovery-page';
+import { useStepUpAdvice, useStepUpReturnReview, type StepUpHistory } from '../step-up-return';
+import { StepUpReturnView, StepUpHistoryNotice } from '../step-up-return-view';
 import { ErrorAlert } from '../alert';
 import {
   AlertDialog,
@@ -27,6 +28,10 @@ const emailId = 'step-up-email';
 const emailErrorId = 'step-up-email-error';
 const passwordId = 'step-up-password';
 const passwordErrorId = 'step-up-password-error';
+
+function clearStepUpFields() {
+  for (const field of document.querySelectorAll<HTMLInputElement>('#step-up-email, #step-up-password')) field.value = '';
+}
 
 export const Route = createFileRoute('/step-up')({
   head: () => ({ meta: [{ title: `${m.auth_step_up_heading()} · REZICS` }] }),
@@ -88,17 +93,36 @@ function StepUpPage() {
   const href = useLocation({ select: (location) => location.href });
   const [generation, setGeneration] = useState(0);
   const [suspended, setSuspended] = useState(false);
+  const [history, setHistory] = useState<StepUpHistory | null>(null);
+  const historyRef = useRef<StepUpHistory | null>(null);
+  const unresolvedRef = useRef(false);
+  const [freshHref, setFreshHref] = useState<string | null>(href);
+  const clearForm = useRef<() => void>(() => {});
+  const remember = useCallback((next: StepUpHistory, unresolvedBefore = unresolvedRef.current) => {
+    if (next === 'unknown') unresolvedRef.current = true;
+    else if (next === 'refused' || next === 'acknowledged') unresolvedRef.current = unresolvedBefore;
+    const value = unresolvedRef.current ? 'unknown' : next;
+    historyRef.current = value;
+    setHistory(value);
+  }, []);
+  const registerClear = useCallback((clear: () => void) => {
+    clearForm.current = clear;
+  }, []);
   const journey = useMemo(() => new ConfirmationJourney(), [href, generation]);
   useLayoutEffect(() => {
     journey.activate();
     const hide = () => {
       journey.retire();
+      clearForm.current();
+      clearStepUpFields();
+      setFreshHref(null);
       setSuspended(true);
     };
     const show = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
       journey.retire();
       setGeneration((value) => value + 1);
+      setFreshHref(null);
       setSuspended(false);
     };
     window.addEventListener('pagehide', hide);
@@ -112,12 +136,37 @@ function StepUpPage() {
   return suspended ? (
     <AuthPage heading={m.auth_step_up_heading()} />
   ) : (
-    <StepUpForm key={`${href}:${generation}`} journey={journey} />
+    <StepUpForm
+      key={`${href}:${generation}`}
+      journey={journey}
+      href={href}
+      history={history}
+      fresh={freshHref === href}
+      remember={remember}
+      startFresh={() => setFreshHref(href)}
+      registerClear={registerClear}
+    />
   );
 }
 
-function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
-  const advice = useRecoveryPage('step-up');
+function StepUpForm({
+  journey,
+  href,
+  history,
+  fresh,
+  remember,
+  startFresh,
+  registerClear,
+}: {
+  journey: ConfirmationJourney;
+  href: string;
+  history: StepUpHistory | null;
+  fresh: boolean;
+  remember: (phase: StepUpHistory, unresolvedBefore?: boolean) => void;
+  startFresh: () => void;
+  registerClear: (clear: () => void) => void;
+}) {
+  const advice = useStepUpAdvice();
   const page = advice.state.kind === 'ready' ? advice.state.page : null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -133,13 +182,21 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
   const emailValue = useRef('');
   const passwordValue = useRef('');
   const confirming = useRef(false);
+  const returnStatus = useRef<HTMLParagraphElement>(null);
   const router = useRouter({ warn: false });
+  const isCurrent = useCallback(() => journey.isCurrent(), [journey]);
+  const query = useMemo(() => window.location.search, [href]);
+  const origin = useMemo(() => window.location.origin, [href]);
+  const returning = history !== null && !fresh;
+  const returnReview = useStepUpReturnReview(query, origin, returning, advice.state, isCurrent);
+  const [continuing, setContinuing] = useState(false);
+  const continuingRef = useRef(false);
   const shouldWarn = useCallback(
     () =>
       journey.isCurrent() &&
       !journey.completed &&
-      Boolean(emailValue.current.trim() || passwordValue.current || confirming.current),
-    [journey],
+      (history === 'unknown' || Boolean(emailValue.current.trim() || passwordValue.current || confirming.current)),
+    [history, journey],
   );
   const blocker = useBlocker({
     shouldBlockFn: ({ next }) => shouldWarn() && next.pathname !== '/step-up',
@@ -148,6 +205,27 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
   });
   const blockerRef = useRef(blocker);
   blockerRef.current = blocker;
+
+  const clearSecrets = useCallback(() => {
+    emailValue.current = '';
+    passwordValue.current = '';
+    setEmail('');
+    setPassword('');
+    confirming.current = false;
+    clearStepUpFields();
+  }, []);
+  useLayoutEffect(() => {
+    registerClear(clearSecrets);
+    return () => registerClear(() => {});
+  }, [clearSecrets, registerClear]);
+
+  useLayoutEffect(() => {
+    if (advice.state.kind !== 'ready') {
+      clearSecrets();
+      setEmailError('');
+      setPasswordError('');
+    }
+  }, [advice.state, clearSecrets]);
 
   useLayoutEffect(() => {
     if (blocker.status === 'blocked' && !shouldWarn()) {
@@ -199,34 +277,69 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
     if (blocker.status === 'blocked') blocker.reset();
   };
   const leave = () => {
+    clearSecrets();
     journey.retire();
     if (blocker.status === 'blocked') blocker.proceed();
   };
   const focusForm = () => {
+    if (returning) {
+      returnStatus.current?.focus();
+      return;
+    }
     if (emailError) emailInput.current?.focus();
     else if (passwordError) document.getElementById(passwordId)?.focus();
     else emailInput.current?.focus();
   };
 
   useLayoutEffect(() => {
-    if (emailError) emailInput.current?.focus();
+    if (returning) {
+      if (['unavailable', 'changed', 'account-changed'].includes(returnReview.state.kind)) alert.current?.focus();
+      else returnStatus.current?.focus();
+    }
+    else if (emailError) emailInput.current?.focus();
     else if (passwordError) document.getElementById(passwordId)?.focus();
     else if (message) alert.current?.focus();
-  }, [emailError, passwordError, message]);
+  }, [advice.state, emailError, message, passwordError, returnReview.state, returning]);
 
   useEffect(() => setPasskeys(passkeysSupported()), []);
+
+  const observerForAttempt = () => {
+    const unresolvedBefore = history === 'unknown';
+    return {
+      onDispatch: () => remember('unknown', unresolvedBefore),
+      onAcknowledged: () => remember('acknowledged', unresolvedBefore),
+      onRefused: () => remember('refused', unresolvedBefore),
+    };
+  };
+
+  async function continueFromReview() {
+    if (continuingRef.current || returnReview.state.kind !== 'continue' || !journey.isCurrent()) return;
+    continuingRef.current = true;
+    setContinuing(true);
+    const result = await returnReview.recheck();
+    if (!journey.isCurrent()) return;
+    continuingRef.current = false;
+    setContinuing(false);
+    if (result?.kind !== 'continue') return;
+    if (blockerRef.current.status === 'blocked') blockerRef.current.reset();
+    journey.completed = true;
+    journey.retire();
+    window.location.assign(result.target);
+  }
 
   async function submitPasskey() {
     if (!page?.actions.authenticate || !page.methods.passkey || !passkeys) return;
     const completion = journey.begin('passkey');
     if (!completion) return;
+    const observer = observerForAttempt();
+    remember('unsent', history === 'unknown');
     setPending(true);
     setPasskeyPending(true);
     confirming.current = true;
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    const outcome = await confirmStepUpWithPasskey(completion.query, completion.origin, completion.isCurrent);
+    const outcome = await confirmStepUpWithPasskey(completion.query, completion.origin, completion.isCurrent, observer);
     if (!completion.finish(outcome.ok)) return;
     if (outcome.ok) {
       if (blockerRef.current.status === 'blocked') blockerRef.current.reset();
@@ -251,13 +364,15 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
     if (invalidEmail || invalidPassword) return;
     const completion = journey.begin('password');
     if (!completion) return;
+    const observer = observerForAttempt();
+    remember('unsent', history === 'unknown');
     setPending(true);
     setPasskeyPending(false);
     confirming.current = true;
     setMessage('');
     setEmailError('');
     setPasswordError('');
-    const outcome = await confirmStepUp(email, password, completion.query, completion.origin, completion.isCurrent);
+    const outcome = await confirmStepUp(email, password, completion.query, completion.origin, completion.isCurrent, observer);
     if (!completion.finish(outcome.ok)) return;
     passwordValue.current = '';
     setPassword('');
@@ -275,6 +390,21 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
   return (
     <AuthPage heading={m.auth_step_up_heading()}>
       <>
+        {returning ? (
+          <StepUpReturnView
+            history={history!}
+            review={returnReview.state}
+            canAuthenticate={Boolean(page?.actions.authenticate && (page.methods.password || (passkeys && page.methods.passkey)))}
+            continuing={continuing}
+            statusRef={returnStatus}
+            alertRef={alert}
+            onRetry={advice.retry}
+            onContinue={() => void continueFromReview()}
+            onAuthenticate={startFresh}
+          />
+        ) : (
+          <>
+            {history ? <StepUpHistoryNotice history={history} /> : null}
         {advice.state.kind === 'loading' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
         {advice.state.kind === 'unavailable' ? (
           <>
@@ -356,6 +486,8 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
             </Button>
           ) : null}
         </form>
+          </>
+        )}
         <AlertDialog
           open={blocker.status === 'blocked'}
           onOpenChange={(open) => {
