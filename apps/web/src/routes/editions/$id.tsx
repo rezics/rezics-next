@@ -1,13 +1,13 @@
 import { createFileRoute, useLoaderData, useLocation, useParams, useRouter, useRouterState } from '@tanstack/react-router';
 import { readContentEdition } from '../../content-editions/edition-read';
 import { ContentEditionPage, type ContentEditionReturnOrigin } from '../../content-editions/edition-view';
-import { useBuyerCurrentOrigin } from '../../checkout/buyer-current-origin';
 import {
+  useBuyerCurrentOrigin,
   purchaseReaderOriginFromState,
   purchaseReaderOriginHref,
   purchaseReaderOriginIsCurrent,
   type PurchaseReaderOrigin,
-} from '../../checkout/purchase-return';
+} from '../../checkout/reader-origin';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { pageHead } from '../../shell/head';
