@@ -157,11 +157,11 @@ export function useConceptVisit({
     stopFocus.current = undefined;
     if (!pending || pending.moved || !admission.active()) return;
     const active = document.activeElement;
-    if (active === pending.trigger || (!pending.trigger?.isConnected && active === document.body))
-      statusRef.current?.focus();
+    if (active === pending.trigger || active === document.body) statusRef.current?.focus();
   }, [state.completed, admission]);
 
-  async function run(destination: Destination, explicit: boolean) {
+  async function run(destination: Destination, explicit: boolean, expected?: VisitState) {
+    if (expected && stateRef.current !== expected) return;
     if (busy.current || !mounted.current || !admission.active() || !validConceptCursor(destination.input.cursor))
       return;
     busy.current = true;
@@ -187,7 +187,9 @@ export function useConceptVisit({
     }
     if (!mounted.current || !admission.active() || sequence.current !== request) return;
     busy.current = false;
-    setState(publish(source, result, destination, id, role));
+    const published = publish(source, result, destination, id, role);
+    stateRef.current = published;
+    setState(published);
   }
 
   useEffect(() => {
@@ -215,6 +217,7 @@ export function useConceptVisit({
           index: state.index - 1,
         },
         true,
+        state,
       ),
     next: () =>
       hierarchy?.next &&
@@ -225,17 +228,19 @@ export function useConceptVisit({
           mode: 'next',
         },
         true,
+        state,
       ),
-    retry: () => state.failed && run(state.failed, true),
+    retry: () => state.failed && run(state.failed, true, state),
     refresh: () =>
       state.failed
-        ? run(state.failed, true)
+        ? run(state.failed, true, state)
         : run(
             {
               input: { cursor: state.read?.narrower.cursor, session: state.read?.session },
               mode: 'refresh',
             },
             true,
+            state,
           ),
   };
 }
