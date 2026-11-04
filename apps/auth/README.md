@@ -321,11 +321,25 @@ only after a valid handle is entered; password guidance is shown before the Secu
 
 ## Organization membership
 
-`/organizations/members` offers Reload after an unavailable initial read. Recovery retries session discovery only
-until an initiating account is known; subsequent reads retain that account and organization. Leaving or changing
-organizations ends pending browser continuations before they can install a review or start another request.
-An already dispatched change continues independently; its stored command, exact operands and original key remain
-available for explicit confirmation and native reconciliation. Failed identity confirmation keeps the current review usable.
+`/organizations/members` reads a dedicated native page bound to the current viewer and organization. Each page shows
+at most 20 rows from a bounded candidate seek. Each row shows a disclosed public display name or handle with an
+explicit identity fallback, and keeps the account ID behind an explicit disclosure. The viewer's current role and the
+page's native per-action advice control which choices are shown. Members never see the owner editor; self-leave appears only when its native advice
+allows it, otherwise its absence is explained. A last-owner observation disables the affected owner action with an
+explanation. Roster unavailability is displayed separately from a ready empty page. Reload starts a new read and
+retires the old controls; the next-page cursor is opaque and viewer/organization-bound.
+
+The browser sends only the organization and cursor to Auth. Auth binds the fresh human management proof to the
+dedicated Kernel page source. The roster and its action advice are observations only. Before a selected change, the
+existing exact member read still supplies reservation/version metadata, then native approval, command authorization,
+retry identity and reconciliation remain in force. A stale page cannot authorize a write; after command completion
+the route reads the page again so current roles and advice replace old controls. An unavailable dependency never
+becomes an empty roster.
+
+Leaving or changing organizations ends pending browser continuations before they can install a review or start
+another request. An already dispatched change continues independently; its stored command, exact operands and
+original key remain available for explicit confirmation and native reconciliation. Failed identity confirmation
+keeps the current review usable.
 
 Decision: membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss bypasses the choice. Browser reload/close warns only while this work exists; reauthentication remains in-page and secrets remain ephemeral.
 
