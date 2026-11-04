@@ -289,6 +289,9 @@ function dateContent(command: BatchCommand) {
 }
 
 test('default seed without binding files rereads catalogue state and exposes selected dates', async () => {
+  const startedAt = performance.now();
+  const mark = (stage: string) => console.error(`${stage}: ${Math.round(performance.now() - startedAt)}ms`);
+  mark('start');
   const directory = await mkdtemp(join(tmpdir(), 'showcase-vndb-releases-'));
   const created = new Map<string, string>();
   let journal: ShowcaseJournal | undefined;
@@ -324,6 +327,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
     expect(plan.entities.vndb.some((row) => row.key === 'r3')).toBe(false);
     const firstCommands: BatchCommand[] = [];
     journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+    mark('journal');
     const basePort = localReviewPort(firstCommands, created);
     const baseBatch = basePort.batch.bind(basePort);
     const attempted: BatchCommand[] = [];
@@ -349,10 +353,12 @@ test('default seed without binding files rereads catalogue state and exposes sel
       lost = error instanceof Error && error.message === 'lost delivery';
     }
     expect(lost).toBe(true);
+    mark('lost scheme send');
     const sealedBeforeRetry = journal.preparedCommands().map((row) => row.command);
     expect(sealedBeforeRetry).toEqual(attempted);
     const reviewPort = recoveryPort;
     const schemes = await prepareShowcaseVndbReleaseClassifications({ plan, port: reviewPort, journal, stage: 'schemes' });
+    mark('scheme recovery');
     expect(attempted.slice(0, sealedBeforeRetry.length)).toEqual(
       attempted.slice(sealedBeforeRetry.length, sealedBeforeRetry.length * 2),
     );
@@ -367,6 +373,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       journal,
       stage: 'concepts',
     });
+    mark('concept preparation');
     expect(classifications.bindings.concepts.map((item) => item.code).sort()).toEqual([
       'cd',
       'dvd',
@@ -395,6 +402,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       ),
     ).toBe(true);
     const overflow = await planVndbReleasePlatforms(tables, ['r1'], new Map([['r1', 1]]));
+    mark('overflow plan');
     expect(overflow.byRelease.get('r1')).toEqual({
       platforms: [{ code: 'mac', path: '/releases_platforms/r1/platform' }],
       media: [],
@@ -409,6 +417,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       groups: classifications.groups,
       extras: extras(),
     });
+    mark('first seed');
     expect(first.converterRevision).toBe(converter_revision);
     expect(first.bindings.releaseDigest).toBe(bundledDigest);
     expect(first.bindings.concepts.some((row) => row.id === statusId && row.code === '1')).toBe(true);
@@ -567,6 +576,7 @@ test('default seed without binding files rereads catalogue state and exposes sel
       port: port(againCommands, true, created),
       extras: extras(),
     });
+    mark('rerun seed');
     expect(again.identities.find((row) => row.key === 'v1')?.subjectId).toBe(workId);
     expect(again.identities.find((row) => row.key === 'r1')?.subjectId).toBe(releaseId);
     expect(again.bindings.concepts.some((row) => row.id === statusId)).toBe(true);
