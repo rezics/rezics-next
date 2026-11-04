@@ -49,13 +49,7 @@ export function AccountHomeView({
             <dl className="auth-account-home-email">
               <div>
                 <dt>{m.auth_home_email()}</dt>
-                <dd>
-                  {state.email ? (
-                    <bdi dir="auto">{state.email}</bdi>
-                  ) : (
-                    m.auth_home_identity_missing_email()
-                  )}
-                </dd>
+                <dd>{state.email ? <bdi dir="auto">{state.email}</bdi> : m.auth_home_identity_missing_email()}</dd>
               </div>
             </dl>
           ) : null}

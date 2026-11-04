@@ -114,9 +114,9 @@ test('the admitted identity read keeps its closed result states and same-origin 
   expect(requests).toHaveLength(7);
   expect(String(requests[0]!.input)).toBe('/account-identity');
   expect(requests.every(({ init }) => init?.method === 'POST' && init.credentials === 'same-origin')).toBe(true);
-  expect(requests.every(({ init }) => init?.cache === 'no-store' && init.redirect === 'error' && init.body === '{}')).toBe(
-    true,
-  );
+  expect(
+    requests.every(({ init }) => init?.cache === 'no-store' && init.redirect === 'error' && init.body === '{}'),
+  ).toBe(true);
 });
 
 test('signed-out, denied, unavailable and missing-email states stay distinct', async () => {
