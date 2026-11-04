@@ -17,8 +17,10 @@ Long, append-only documents dilute the current rules.
 | Reference | Owner documents, module READMEs, runbooks, skill stages | Tracked files | Read on demand, by section | [Budgets](#budgets) |
 | Memory | Local facts: accounts, allowances, hosts, credential locations, people, machine quirks | The supermanager's memory directory | Index loaded natively | Index 12,000; total 60,000 |
 
-Session-start totals: worker 20,000 bytes, manager 30,000, researcher 15,000, supermanager 30,000. Budgets bound
-what loads at session start. An agent may read further when its question needs it; nothing mandates a whole-file read
+Session-start totals: worker 20,000 bytes, manager 30,000, researcher 15,000, supermanager 30,000. These numbers are
+starting values for removing contradictions, history and repetition. They are not a claim about current models'
+context limits. Prompt manifests calibrate them on the models REZICS runs: a budget changes when measured outcomes
+say so. Budgets bound what loads at session start. An agent may read further when its question needs it; nothing mandates a whole-file read
 of a reference.
 
 Until the role templates exist, [agent conduct](agent-conduct.md) is the role text for every role.

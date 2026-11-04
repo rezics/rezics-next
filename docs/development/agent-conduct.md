@@ -86,6 +86,9 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   hypotheses, the requirements every candidate is tested against, and the deliverables. Researchers measure where
   they can. They cite only sources they retrieved, track their confidence, and end with what would change the
   recommendation.
+- Models change in months. Evidence about model behaviour, such as context limits, instruction following or prompt
+  style, counts only from the last four months: current vendor guidance for the models REZICS runs, and measurements
+  on those models. Older papers and guides are background. They never set a number or decide a design.
 - The owner compares the reports and records the decision in the owner document before briefing implementation.
   The owner is the Goal's manager, or the supermanager for a cross-cutting design. Implementation briefs link the
   decision.
