@@ -8,6 +8,7 @@ export const releaseUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9
 export const RELEASE_ASSOCIATION_LIMIT = 20;
 export const RELEASE_ASSOCIATION_MAX = 100;
 export const WORK_PROPERTY = 'schema:exampleOfWork';
+export const WORK_COMPLETENESS_QUALIFIER = 'wdt:P31';
 export const CONTAINED_WORK_PROPERTY = 'bf:hasPart';
 const termProperties = new Set(['schema:name', 'schema:description', 'schema:alternateName']);
 const identifierDatatypes = new Set(['external-id', 'url']);
@@ -285,6 +286,11 @@ export function fileProfileReleased(release: Definitions): boolean {
   return Object.keys(release.types).some(
     (type) => isCatalogueFileType(release, type) || isReleaseGroupType(release, type),
   );
+}
+
+/** Completeness of this exact release for the linked work; never a work-level development status. */
+export function workCompletenessQualifier(statement: Statement | undefined): Statement['qualifiers'][number] | undefined {
+  return statement?.qualifiers.find((part) => part.property.id === WORK_COMPLETENESS_QUALIFIER);
 }
 
 export function unknownProvenance(statement: Statement): string[] {

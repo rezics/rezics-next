@@ -99,6 +99,18 @@ slots:
       relation_group: classification
       inverse: rezics:taggedSubject
       relation_order: name
+  creativeWorkStatus:
+    slot_uri: schema:creativeWorkStatus
+    description: >-
+      Development or publication status of this exact work or release, represented by a classification
+      concept. Completeness of a particular release for a work lives on the work association, not here.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:creativeWorkWithStatus
+      relation_order: name
   closeMatch:
     slot_uri: skos:closeMatch
     description: A distinct concept with a closely corresponding meaning; never equivalence or filter expansion.

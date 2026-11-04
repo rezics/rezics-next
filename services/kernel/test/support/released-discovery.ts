@@ -34,7 +34,6 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, QueryResult, QueryResultRow } from 'pg';
 import type { HttpResponse, Persona, StatementInput, Subject } from '../../../../specs/semantic-driver.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import type { Access } from '../../src/request/access.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { systemClock, type KernelClock } from '../../src/clock.ts';
 import { isRelationProperty } from '../../src/semantic/item.ts';
@@ -291,8 +290,8 @@ export async function createReleasedDiscoveryFixture(
         ...config,
         ...(config.onAccessReady || native
           ? {
-              onAccessReady(access: Access) {
-                config.onAccessReady?.(access);
+              onAccessReady(access, viewerActions) {
+                config.onAccessReady?.(access, viewerActions);
                 native?.onAccessReady(access);
               },
             }
@@ -317,6 +316,7 @@ export async function createReleasedDiscoveryFixture(
     },
   );
   try {
+    await driver.grant('steward', ['gate:definition_publication'], driver.globalContext);
     const [alice, bob, outsider, unscoped] = await Promise.all([
       driver.fixtures.person('discovery-alice'),
       driver.fixtures.person('discovery-bob'),
