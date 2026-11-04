@@ -67,6 +67,7 @@ Generated Auth signing, website, importer, and staging keys and the persona pass
 `.temp/local-stack/` with private file permissions. Kernel `.env` retains separate session, receipt, write-rate, route and rating
 keys across restarts, and supplies the local Auth issuer, audience and JWKS URL to both API and worker. Native Auth and the worker share Kernel's purpose-separated reference seal ring.
 `apps/web/.dev.vars` contains the local website client key and loopback bindings. All generated files are ignored.
+Generated bindings use literal dotenv quoting so the website JWK remains valid JSON.
 Local setup owns `apps/web/.dev.vars`; keep deployment secrets in deployment configuration. Production entrypoints
 never import the development host or create these grants.
 
