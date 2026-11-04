@@ -66,7 +66,7 @@ async function pageSnapshot(
   client: Parameters<ViewerActionResource['read']>[0],
   ids: readonly string[],
   at: string,
-): Promise<Map<string, Snapshot>> {
+): Promise<Map<string, LocatedSnapshot>> {
   const selected = ids.flatMap((id) => {
     const route = routeOf(id);
     return route === null ? [] : [{ id, route }];
@@ -77,7 +77,7 @@ async function pageSnapshot(
     ids: selected.map(({ id }) => id),
     at,
   });
-  return new Map(rows.flatMap((row) => (row.space_id === null ? [] : [[row.space_id, row] as const])));
+  return new Map(rows.filter(isLocatedSnapshot).map((row) => [row.space_id, row] as const));
 }
 
 function spaceResource(
@@ -136,8 +136,14 @@ function realmResource(
           const native = await prepared.read(client, ids, at, time);
           return Object.fromEntries(
             expected.map(({ realmId, snapshot }) => {
-              const source = current.get(snapshot.space_id);
-              return [realmId, native[realmId] === true && sameSpace(source, snapshot) && sameRealm(source, snapshot)];
+              const source = snapshot.space_id === null ? undefined : current.get(snapshot.space_id);
+              return [
+                realmId,
+                snapshot.space_id !== null &&
+                  native[realmId] === true &&
+                  sameSpace(source, snapshot) &&
+                  sameRealm(source, snapshot),
+              ];
             }),
           );
         },
@@ -190,7 +196,7 @@ export async function followingSpaceTargets(
         at,
       }),
     );
-    for (const row of rows) if (isLocatedSnapshot(row)) snapshots.set(row.space_id, row);
+    for (const row of rows.filter(isLocatedSnapshot)) snapshots.set(row.space_id, row);
   }
 
   const expectedByRealm = new Map<string, LocatedSnapshot>();
@@ -258,17 +264,17 @@ export async function followingSpaceTargets(
   for (const spaceId of uniqueIds) {
     const snapshot = snapshots.get(spaceId);
     const spaceResult = actionResults.get(key(SPACE_RESOURCE, spaceId));
-    const readable = snapshot !== undefined && success(spaceResult);
-    const target = readable ? { id: spaceId, type: 'space' as const, label: snapshot.title } : null;
+    const readable = snapshot !== undefined && snapshot.title !== null && success(spaceResult);
+    const target = readable ? { id: spaceId, type: 'space' as const, label: snapshot.title! } : null;
     let destination: FollowingSpaceDestination = { kind: 'unavailable' };
     let actions: FollowingSpaceActions = { status: 'unavailable' };
-    if (readable && snapshot.address !== null) {
+    if (snapshot !== undefined && readable && snapshot.address !== null) {
       const claim = JSON.stringify([spaceId, snapshot.address]);
       if (activeAddressClaims.has(claim)) {
         destination = { kind: 'space', spaceId, address: snapshot.address };
         actions = actionProjection(SPACE_RESOURCE, spaceId, spaceResult);
       }
-    } else if (readable && snapshot.realm_id !== null) {
+    } else if (snapshot !== undefined && readable && snapshot.realm_id !== null) {
       const realmResult = actionResults.get(key(REALM_RESOURCE, snapshot.realm_id));
       if (success(realmResult)) {
         destination = { kind: 'realm', realmId: snapshot.realm_id };
