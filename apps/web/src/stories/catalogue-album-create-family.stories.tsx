@@ -70,8 +70,10 @@ function AlbumCreateFamily({
     () =>
       fixtures.map((fixture) => {
         const gate = admissionGates.get(fixture);
+        const { eligibility, ...baseTransport } = fixture.transport;
+        void eligibility;
         return {
-          ...fixture.transport,
+          ...baseTransport,
           load: async () => {
             if (fixture.calls.some((call) => call.method === 'POST')) {
               if (metadataFailure) return { ok: false as const, reason: 'unavailable' as const };
