@@ -393,7 +393,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       const failure = await action();
       if (started !== view.current || !failure) return;
       showFailure(failure);
-      if (failure.reason === 'unavailable') offerReadRetry(action);
+      if (failure.reason === 'unavailable' && !retryRead.current) offerReadRetry(action);
     });
   }
   async function readCurrent(value: TransferAttempt) {
