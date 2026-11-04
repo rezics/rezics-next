@@ -49,7 +49,7 @@ export function feedConversationActivity(summary: unknown): ConversationActivity
 }
 
 /** Additive activity on the existing native page uses the same closed display rules as Feed. */
-export function readingConversationActivity(page: unknown): ConversationActivityDisplay {
+export function readingConversationActivity(page: ReadingPageResponse): ConversationActivityDisplay {
   if (!record(page) || !Object.hasOwn(page, 'conversationActivity'))
     return { state: 'unavailable', retryable: true };
   return conversationActivity(page.conversationActivity);
@@ -58,3 +58,5 @@ export function readingConversationActivity(page: unknown): ConversationActivity
 export function formatConversationReplyCount(count: ConversationReplyCount, locale: string): string {
   return `${new Intl.NumberFormat(locale).format(count.value)}${count.kind === 'lower-bound' ? '+' : ''}`;
 }
+import type { ReadingPageResponse } from '@rezics/client';
+
