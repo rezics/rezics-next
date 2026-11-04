@@ -4,6 +4,7 @@ import {
   createPreferenceCommands,
   notificationAllowed,
   projectReadingAdvice,
+  projectShelfAdvice,
   readAccountPreferences,
   type Shelf,
 } from '../../src/access/preferences.ts';
@@ -105,6 +106,9 @@ test('preferences read stays constant as accounts with stored preferences grow',
         spoilerLevel: 1,
         suitability: 'show',
       });
+      expect(projectShelfAdvice(values.shelf).effective).toEqual(maximalShelf());
+      expect(projectShelfAdvice(values.shelf).defaults).toEqual({});
+      expect(projectShelfAdvice(values.shelf).limits.maxLayouts).toBe(32);
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
@@ -241,6 +245,7 @@ test('preference page projection stays constant as unrelated preference rows and
         allowed: false,
         reason: 'not_authorized',
       });
+      expect(projectShelfAdvice(values.shelf).supported.tableColumns).toContain('rating');
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);

@@ -85,6 +85,10 @@ test('defaults require no preference row, and unchanged writes keep version zero
   const read = await call(owner.accountId, owner.bearer);
   expect(read.response.status).toBe(200);
   expect(read.value).toEqual(shown({ version: 0 }));
+  expect(read.value.shelfAdvice.defaults).toEqual({});
+  expect(read.value.shelfAdvice.effective).toEqual({});
+  expect(read.value.shelfAdvice.limits.maxLayouts).toBe(32);
+  expect(read.value.shelfAdvice.supported.layouts).toEqual(['grid', 'list', 'table']);
   const same = await call(owner.accountId, owner.bearer, { expectedVersion: 0, spoilerLevel: 0, suitability: 'blur' });
   expect(same.response.status).toBe(200);
   expect(same.value).toEqual(read.value);
@@ -288,6 +292,7 @@ test('a shelf is empty until saved, merges by part and entry, and null removes',
   expect((await call(person.accountId, person.bearer)).value).toEqual(removed.value);
   const cleared = await call(person.accountId, person.bearer, { expectedVersion: 3, shelf: null });
   expect(cleared.value).toEqual(shown({ version: 4 }));
+  expect(cleared.value.shelfAdvice.effective).toEqual({});
   expect((await shelfRow(person.accountId)).rows[0].shelf).toEqual({});
 });
 

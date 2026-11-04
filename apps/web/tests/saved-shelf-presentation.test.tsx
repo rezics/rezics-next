@@ -134,6 +134,7 @@ test('native shelf defaults resolve within limits, URL choices win, and replaced
 });
 
 test('mounted Settings shelf editing uses native versioned adapters and retains conflict and uncertain drafts', async () => {
+  const { withShelfAdvice } = await import('../src/settings/preferences');
   const accountId = 'alice';
   const csrfToken = 'a'.repeat(22);
   const accessToken = 'reader-access-token';
@@ -246,11 +247,22 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     const request = new Request(input, init);
     const url = new URL(request.url);
     if (url.pathname !== '/v1/accounts/alice/preferences') return Response.json({ code: 'not_found' }, { status: 404 });
-    if (request.method === 'GET') return Response.json(current, { headers: { 'cache-control': 'private, no-store' } });
+    const observed = (body: Record<string, unknown>) => {
+      const shelf = (body.shelf ?? {}) as typeof initialShelf;
+      const page = withShelfAdvice({
+        spoilerLevel: body.spoilerLevel as 0 | 1 | 2,
+        suitability: body.suitability as 'blur' | 'show',
+        version: body.version as number,
+        shelf,
+      });
+      return { ...body, ...page.advice };
+    };
+    if (request.method === 'GET')
+      return Response.json(observed(current), { headers: { 'cache-control': 'private, no-store' } });
     const body = (await request.json()) as Record<string, unknown>;
     const key = request.headers.get('idempotency-key');
     patches.push({ body, key });
-    if (key && receipts.has(key)) return Response.json(receipts.get(key));
+    if (key && receipts.has(key)) return Response.json(observed(receipts.get(key)!));
     if (conflictNext) {
       conflictNext = false;
       current = { ...current, version: 5, notifications: { reply: true, mention: false } };
@@ -270,7 +282,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       await new Promise<void>((resolve) => {
         resolveSave = resolve;
       });
-    return Response.json(receipt, { headers: { 'cache-control': 'private, no-store' } });
+    return Response.json(observed(receipt), { headers: { 'cache-control': 'private, no-store' } });
   }) as typeof fetch;
 
   try {
@@ -359,7 +371,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     function MountedCard() {
       const [version, setVersion] = useState(initialPreferences.version);
       return createElement(ShelfPreferencesCard, {
-        initial: initialPreferences.shelf ?? {},
+        initial: initialPreferences,
         version,
         csrfToken,
         io,

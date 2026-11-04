@@ -1,0 +1,77 @@
+import { expect, mock, test } from 'bun:test';
+import { withShelfAdvice, type PreferenceChange, type ReadingPreferences } from '../src/settings/preferences';
+
+const start = await import('../.storybook/react-start');
+mock.module('@tanstack/react-start', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const owner = { canRead: () => true, canWrite: () => true, version: () => 1, onVersionChange() {} };
+
+test('missing or denied shelf advice cannot edit, while an original uncertain command stays put', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const { ownerMayChangeShelf } = await import('../src/settings/preferences');
+  const commands: Readonly<PreferenceChange>[] = [];
+  const readable: ReadingPreferences = {
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 1,
+    shelf: { layouts: { all: 'list' }, gridSize: 'large' },
+  };
+  const missing = new ShelfPreferenceDraftRecovery(
+    readable,
+    {
+      read: async () => ({ signedIn: true, preferences: readable, securityHref: null }),
+      save: async (input) => {
+        commands.push(input);
+        return { ok: false, reason: 'unavailable' };
+      },
+    },
+    owner,
+  );
+  missing.edit({ layout: 'table' }, 'layout');
+  await missing.submit();
+  expect(commands).toHaveLength(0);
+  expect(ownerMayChangeShelf(readable.advice)).toBe(false);
+
+  const denied = withShelfAdvice(readable, false);
+  const locked = new ShelfPreferenceDraftRecovery(
+    denied,
+    {
+      read: async () => ({ signedIn: true, preferences: denied, securityHref: null }),
+      save: async (input) => {
+        commands.push(input);
+        return { ok: true, preferences: denied };
+      },
+    },
+    owner,
+  );
+  locked.edit({ layout: 'grid' }, 'layout');
+  await locked.submit(true);
+  expect(commands).toHaveLength(0);
+  expect(ownerMayChangeShelf(denied.advice)).toBe(false);
+
+  const writable = withShelfAdvice(readable);
+  let advice: ReadingPreferences = writable;
+  const pending = new ShelfPreferenceDraftRecovery(
+    writable,
+    {
+      read: async () => ({ signedIn: true, preferences: advice, securityHref: null }),
+      save: async (input) => {
+        commands.push(input);
+        return { ok: false, reason: 'unavailable' };
+      },
+    },
+    owner,
+  );
+  pending.edit({ layout: 'table' }, 'layout');
+  await pending.submit();
+  expect(pending.snapshot().phase).toBe('uncertain');
+  const original = commands[0];
+  advice = readable;
+  await pending.reload();
+  expect(pending.snapshot().pending?.input).toBe(original);
+  expect(pending.snapshot().phase).toBe('uncertain');
+  await pending.retry();
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toBe(original);
+});

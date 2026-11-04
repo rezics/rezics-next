@@ -5,7 +5,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { PersonalLibraryPage } from '../library/entries-page';
 import type { PersonalLibraryView } from '../library/entries-read';
 import { resolveShelfPresentation } from '../library/shelf-preferences';
-import type { ShelfPreferencePatch, ShelfPreferences } from '../settings/preferences';
+import { withShelfAdvice, type ShelfPreferencePatch, type ShelfPreferences } from '../settings/preferences';
 import { ShelfPreferencesCard } from '../settings/shelf-preferences';
 import { SettingsSessionContext, SettingsSessionOwner } from '../settings/settings-session-owner';
 import type { ReadingIO } from '../settings/reading-preferences';
@@ -131,12 +131,12 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
       read: async () => ({
         signedIn: true,
         accountId,
-        preferences: {
+        preferences: withShelfAdvice({
           spoilerLevel: 0,
           suitability: 'blur',
           version: current.current.version,
           shelf: current.current.shelf,
-        },
+        }),
         notifications: { reply: true, mention: true },
         securityHref: null,
       }),
@@ -149,7 +149,7 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
         setSaved(next);
         return {
           ok: true,
-          preferences: { spoilerLevel: 0, suitability: 'blur', ...next },
+          preferences: withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', ...next }),
         };
       },
     };
@@ -164,7 +164,7 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
               {m.settings_heading()}
             </h1>
             <ShelfPreferencesCard
-              initial={saved.shelf}
+              initial={withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', ...saved })}
               version={saved.version}
               csrfToken={token}
               io={io.current}

@@ -13,12 +13,15 @@ export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export {
   decodePreferenceAdvice,
   decodePreferencePage,
+  decodePreferenceShelfAdvice,
   decodePreferenceValues,
   PREFERENCE_READING_DEFAULTS,
+  PREFERENCE_SHELF_LIMITS,
   type PreferenceActionAdvice,
   type PreferencePageAdvice,
   type PreferencePageValues,
   type PreferenceReadingPage,
+  type PreferenceShelfAdvice,
   type PreferenceSpoilerLevel,
   type PreferenceSuitability,
 } from './preference-page.ts';

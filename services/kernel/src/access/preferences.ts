@@ -114,6 +114,34 @@ export type PreferenceReadingAdvice = {
     defaults: { spoilerLevel: 0; suitability: 'blur' };
   };
 };
+export const SHELF_ADVICE_DEFAULTS: Readonly<Shelf> = Object.freeze({});
+export type PreferenceShelfAdvice = {
+  supported: {
+    layouts: Array<(typeof SHELF_LAYOUTS)[number]>;
+    tabs: Array<(typeof SHELF_TABS)[number]>;
+    sortFields: Array<(typeof SHELF_SORT_FIELDS)[number]>;
+    sortDirections: Array<(typeof SHELF_SORT_DIRECTIONS)[number]>;
+    gridSizes: Array<(typeof SHELF_GRID_SIZES)[number]>;
+    tableColumns: Array<(typeof SHELF_TABLE_COLUMNS)[number]>;
+  };
+  limits: {
+    maxLayouts: typeof SHELF_MAX_LAYOUTS;
+    scopeMaxLength: typeof SHELF_SCOPE_MAX_LENGTH;
+    scopePattern: typeof SHELF_SCOPE_PATTERN;
+  };
+  effective: Shelf;
+  defaults: Shelf;
+};
+export type PreferencePageObservation = PreferenceReadingAdvice & { shelfAdvice: PreferenceShelfAdvice };
+
+function copyShelf(shelf: Shelf): Shelf {
+  return {
+    ...(shelf.layouts !== undefined ? { layouts: { ...shelf.layouts } } : {}),
+    ...(shelf.sorts !== undefined ? { sorts: structuredClone(shelf.sorts) } : {}),
+    ...(shelf.gridSize !== undefined ? { gridSize: shelf.gridSize } : {}),
+    ...(shelf.tableColumns !== undefined ? { tableColumns: [...shelf.tableColumns] } : {}),
+  };
+}
 
 /** Display guidance for Reading. Command authorization still runs at write time. */
 export function projectReadingAdvice(
@@ -131,6 +159,27 @@ export function projectReadingAdvice(
       effective: { spoilerLevel: values.spoilerLevel, suitability: values.suitability },
       defaults: { spoilerLevel: READING_DEFAULTS.spoilerLevel, suitability: READING_DEFAULTS.suitability },
     },
+  };
+}
+
+/** Stored-value catalogues, empty native defaults, and the current shelf. Edit/reset use shared update advice. */
+export function projectShelfAdvice(shelf: Shelf): PreferenceShelfAdvice {
+  return {
+    supported: {
+      layouts: [...SHELF_LAYOUTS],
+      tabs: [...SHELF_TABS],
+      sortFields: [...SHELF_SORT_FIELDS],
+      sortDirections: [...SHELF_SORT_DIRECTIONS],
+      gridSizes: [...SHELF_GRID_SIZES],
+      tableColumns: [...SHELF_TABLE_COLUMNS],
+    },
+    limits: {
+      maxLayouts: SHELF_MAX_LAYOUTS,
+      scopeMaxLength: SHELF_SCOPE_MAX_LENGTH,
+      scopePattern: SHELF_SCOPE_PATTERN,
+    },
+    effective: copyShelf(shelf),
+    defaults: { ...SHELF_ADVICE_DEFAULTS },
   };
 }
 export type PreferenceChange = {
@@ -204,14 +253,15 @@ export function withPreferencePage<T extends Pick<AccountPreferences, 'notificat
   return { ...preferences, page: projectPreferencePage(preferences, actions) };
 }
 
-/** One 200 envelope: catalogue `page` plus Reading viewer/actions. */
+/** One 200 envelope: catalogue `page` plus Reading and shelf observation on the shared viewer/actions. */
 export function withReadingPreferencePage(
   preferences: AccountPreferences,
   input: { writable: boolean } = { writable: true },
-): AccountPreferences & { page: PreferencePage } & PreferenceReadingAdvice {
+): AccountPreferences & { page: PreferencePage } & PreferencePageObservation {
   return {
     ...withPreferencePage(preferences),
     ...projectReadingAdvice(preferences, input),
+    shelfAdvice: projectShelfAdvice(preferences.shelf),
   };
 }
 

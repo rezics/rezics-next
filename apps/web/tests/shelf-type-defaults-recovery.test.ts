@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import type { PreferenceChange, ReadingPreferences } from '../src/settings/preferences';
+import { withShelfAdvice, type PreferenceChange, type ReadingPreferences } from '../src/settings/preferences';
 
 const start = await import('../.storybook/react-start');
 mock.module('@tanstack/react-start', () => start);
@@ -13,17 +13,18 @@ test('a type command keeps its payload and key through unknown readback; clean s
   let current = true;
   let saves = 0;
   const commands: Readonly<PreferenceChange>[] = [];
-  const initial: ReadingPreferences = {
+  const initial: ReadingPreferences = withShelfAdvice({
     spoilerLevel: 1,
     suitability: 'show',
     version,
     shelf: { layouts: { all: 'list', [book]: 'grid', [movie]: 'table' }, gridSize: 'large' },
-  };
-  const receipt: ReadingPreferences = {
-    ...initial,
+  });
+  const receipt: ReadingPreferences = withShelfAdvice({
+    spoilerLevel: 1,
+    suitability: 'show',
     version: 2,
     shelf: { ...initial.shelf, layouts: { all: 'list', [movie]: 'table' } },
-  };
+  });
   let readback = initial;
   const draft = new ShelfPreferenceDraftRecovery(
     initial,
@@ -51,11 +52,12 @@ test('a type command keeps its payload and key through unknown readback; clean s
   expect(draft.snapshot().phase).toBe('uncertain'); // Stale readback is never a confirmed save.
   expect(commands[1]).toBe(commands[0]);
   expect(commands[0]?.shelf).toEqual({ layouts: { [book]: null } });
-  readback = {
-    ...receipt,
+  readback = withShelfAdvice({
+    spoilerLevel: 1,
+    suitability: 'show',
     version: 3,
     shelf: { ...receipt.shelf, layouts: { ...receipt.shelf?.layouts, [book]: 'table' }, gridSize: 'small' },
-  };
+  });
   await draft.retry();
   expect(commands[2]).toBe(commands[0]);
   expect(draft.snapshot().phase).toBe('review');
@@ -78,7 +80,7 @@ test('the native merged map bound includes preserved scopes, while removing one 
   );
   const commands: Readonly<PreferenceChange>[] = [];
   const draft = new ShelfPreferenceDraftRecovery(
-    { spoilerLevel: 0, suitability: 'blur', version: 0, shelf: { layouts } },
+    withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 0, shelf: { layouts } }),
     {
       read: async () => ({ signedIn: false }),
       save: async (input) => {
