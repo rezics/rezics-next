@@ -308,7 +308,7 @@ revision.
 Decision: Game-template `游玩人数` admits only an entire-field unqualified
 positive integer or inclusive range; a lone count invents no minimum.
 
-Bangumi revision `bangumi@11` converts pinned Game infobox `平台` and `游戏引擎`
+Current Bangumi revision `bangumi@13` converts pinned Game infobox `平台` and `游戏引擎`
 on type 4 through the same bound proposal path, preserving Game names, Game
 player-count, Book grain and TVAnime work-evidence mapping. Each exact list or
 scalar item
@@ -320,7 +320,7 @@ is an admitted BCP 47 value; engine version/platform/edition text is withheld
 because `wdt:P408` has no qualifiers. Top-level `subject.platform` is unchanged.
 Unchanged dump bytes refresh under this revision without inventing a native
 record revision.
-Decision: Game environment admission stays on the combined `bangumi@11` revision so
+Decision: Game environment admission stays on the combined `bangumi@13` revision so
 unchanged dumps offer the new facts; names, dates, player count, book grain,
 cover and source-link support are preserved. No infobox-field scheme URI is
 minted.
