@@ -88,7 +88,9 @@ test('Following feed projects native counts and only the current viewer slot for
     const empty = await page(world.other.bearer);
     expect(empty.feedItems).toHaveLength(2);
     const threadCard = empty.feedItems.find((item) => item.key.kind === 'thread')!;
-    const postCard = empty.feedItems.find((item) => item.key.kind === 'post')!;
+    const postCard = empty.feedItems.find((item) => item.key.kind === 'post');
+    if (!postCard || postCard.key.owner !== 'content' || postCard.key.kind !== 'post')
+      throw new Error('Following post card missing');
     expect(postCard.summary.parentContext).toMatchObject({
       kind: 'reply',
       parent: {
