@@ -31,7 +31,7 @@ disposal, and is removed by terminal owner erasure.
 
 ## Installed native journey
 
-`services/kernel/db/library/migrations/20261104060000_copy_loans.sql` installs owner-scoped immutable loan rows, the
+`services/kernel/db/library/migrations/20261104105358_copy_loans.sql` installs owner-scoped immutable loan rows, the
 owner membership generation, a unique partial index enforcing one open loan per exact copy, and seek indexes for
 open due-date order, returned history and owner erasure. The generated `services/kernel/db/library/schema.sql` is
 derived from this migration. The copy ID is intentionally not a foreign key so returned history survives copy
