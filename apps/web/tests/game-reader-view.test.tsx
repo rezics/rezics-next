@@ -139,7 +139,9 @@ test('unqualified selected membership supports public release navigation and ret
       destination.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
     });
     destination.blur();
-    await act(async () => window.dispatchEvent(new Event('focus')));
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+    });
     expect(document.activeElement).toBe(destination);
     expect(mounted.host.textContent).toContain(fixture.publicRead.subject.labels.en);
     expect(fixture.calls).toHaveLength(2);
