@@ -244,7 +244,11 @@ export async function readWorkbench(
 
 const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
 
-function nativeSource(client: KernelClient, authorization: string, origin: PrivateReaderOrigin | null): WorkbenchNativeSource {
+function nativeSource(
+  client: KernelClient,
+  authorization: string,
+  origin: PrivateReaderOrigin | null,
+): WorkbenchNativeSource {
   const headers = auth(authorization);
   return {
     history: historySource(client, authorization),
@@ -267,11 +271,16 @@ function nativeSource(client: KernelClient, authorization: string, origin: Priva
     },
     async boardAppeals(boardId, cursor, inspect) {
       const page = await readModerationAppealPage(
-        client, { boardId, ...(cursor ? { cursor } : {}), ...(inspect ? { inspect } : {}) },
-        authorization, origin?.subject ?? '', origin,
+        client,
+        { boardId, ...(cursor ? { cursor } : {}), ...(inspect ? { inspect } : {}) },
+        authorization,
+        origin?.subject ?? '',
+        origin,
       );
       if (page.state !== 'ready')
-        throw new WorkbenchReadFailure(page.state === 'closed' ? 'denied' : page.state === 'stale' ? 'stale' : 'unavailable');
+        throw new WorkbenchReadFailure(
+          page.state === 'closed' ? 'denied' : page.state === 'stale' ? 'stale' : 'unavailable',
+        );
       return page;
     },
     async catalogueReports(cursor, selection) {

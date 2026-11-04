@@ -225,21 +225,43 @@ export async function readModerationAppealPage(
         boardAppeals: async (id, cursor, inspect) => {
           const result = await client.boards({ id }).appeals.get({
             ...headers,
-            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(inspect ? { inspect } : {}) },
+            query: {
+              limit: MODERATION_APPEALS_PAGE_SIZE,
+              ...(cursor ? { cursor } : {}),
+              ...(inspect ? { inspect } : {}),
+            },
           });
           const page = appealResult(result);
           return inspect
-            ? admitAppealInspection(page, inspect, authorization, viewerId, readerOrigin, new Headers(result.headers).get('rezics-session-token'))
+            ? admitAppealInspection(
+                page,
+                inspect,
+                authorization,
+                viewerId,
+                readerOrigin,
+                new Headers(result.headers).get('rezics-session-token'),
+              )
             : page;
         },
         threadAppeals: async (id, cursor, inspect) => {
           const result = await client.threads({ id }).appeals.get({
             ...headers,
-            query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}), ...(inspect ? { inspect } : {}) },
+            query: {
+              limit: MODERATION_APPEALS_PAGE_SIZE,
+              ...(cursor ? { cursor } : {}),
+              ...(inspect ? { inspect } : {}),
+            },
           });
           const page = appealResult(result);
           return inspect
-            ? admitAppealInspection(page, inspect, authorization, viewerId, readerOrigin, new Headers(result.headers).get('rezics-session-token'))
+            ? admitAppealInspection(
+                page,
+                inspect,
+                authorization,
+                viewerId,
+                readerOrigin,
+                new Headers(result.headers).get('rezics-session-token'),
+              )
             : page;
         },
       },

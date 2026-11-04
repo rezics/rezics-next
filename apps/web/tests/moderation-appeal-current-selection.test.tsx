@@ -108,13 +108,14 @@ async function mount(
   host = document.createElement('main');
   document.body.append(host);
   root = createRoot(host);
-  const render = (source: typeof read) => act(async () =>
-    root!.render(
-      <QueryClientProvider client={cache}>
-        <WorkbenchPage page={prepared} search={search} onSearch={() => {}} read={source} onRefresh={refresh} />
-      </QueryClientProvider>,
-    ),
-  );
+  const render = (source: typeof read) =>
+    act(async () =>
+      root!.render(
+        <QueryClientProvider client={cache}>
+          <WorkbenchPage page={prepared} search={search} onSearch={() => {}} read={source} onRefresh={refresh} />
+        </QueryClientProvider>,
+      ),
+    );
   replaceSource = () => render(async () => page('unavailable'));
   await render(read);
 }
@@ -179,7 +180,10 @@ test('pointer retry and moved focus do not steal focus; session replacement fenc
     if (mode === 'moved') elsewhere.focus();
     if (mode === 'session' || mode === 'account') {
       await act(async () => {
-        cache.setQueryData(['session'], { ...session, ...(mode === 'account' ? { subject: 'foreign' } : { csrfToken: 'replacement' }) });
+        cache.setQueryData(['session'], {
+          ...session,
+          ...(mode === 'account' ? { subject: 'foreign' } : { csrfToken: 'replacement' }),
+        });
       });
       await flush();
     }
@@ -187,7 +191,8 @@ test('pointer retry and moved focus do not steal focus; session replacement fenc
     await act(async () => finish(page('ready', true)));
     expect(document.activeElement).not.toBe(host.querySelector('article'));
     if (mode === 'moved') expect(document.activeElement).toBe(elsewhere);
-    if (mode === 'session' || mode === 'account' || mode === 'source') expect(host.textContent).not.toContain('Reviewed.');
+    if (mode === 'session' || mode === 'account' || mode === 'source')
+      expect(host.textContent).not.toContain('Reviewed.');
     await act(async () => root!.unmount());
     root = undefined;
     cache.clear();
@@ -227,20 +232,35 @@ test('an uncertain selected resolution fences refresh and retries its original c
   expect(sent[0]).toMatchObject({ id: selected.id, statement: 'Review this.', outcome: 'uphold' });
 });
 
-
 test('mounted exact retry receives the installed composed operation outside the retained page', async () => {
   const { createKernelClient } = await import('@rezics/client');
   const { readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
   const source = { partition: 0, epoch: 1, position: '12' };
   const requests: string[] = [];
-  const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
-    requests.push(new Request(input, init).url);
-    if (requests.length < 3) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
-    return Response.json({ appeals: [], next: 'sparse-next', provenance: { actorId: session.subject, session: { clientId: 'web', authnEpoch: 1 }, source },
-      selectedAppeal: { ...selected, source, resolution: { outcome: 'upheld', statement: 'Native retained outcome.', resolvedAt: selected.createdAt },
-        resolutionCommand: { operationId: 'moderation_appeal.resolve', method: 'POST', path: '/v1/moderation-appeals/appeal:resolve' } } },
-      { headers: { 'rezics-session-token': 'opaque-native' } });
-  } });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      requests.push(new Request(input, init).url);
+      if (requests.length < 3) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
+      return Response.json(
+        {
+          appeals: [],
+          next: 'sparse-next',
+          provenance: { actorId: session.subject, session: { clientId: 'web', authnEpoch: 1 }, source },
+          selectedAppeal: {
+            ...selected,
+            source,
+            resolution: { outcome: 'upheld', statement: 'Native retained outcome.', resolvedAt: selected.createdAt },
+            resolutionCommand: {
+              operationId: 'moderation_appeal.resolve',
+              method: 'POST',
+              path: '/v1/moderation-appeals/appeal:resolve',
+            },
+          },
+        },
+        { headers: { 'rezics-session-token': 'opaque-native' } },
+      );
+    },
+  });
   const credential = `Bearer ${btoa('{}')}.${btoa(JSON.stringify({ sub: session.subject, client_id: 'web', authn_epoch: 1 }))}.signature`;
   const read = (input: typeof search) => readWorkbenchPage(client, input, credential, origin);
   await mount(await read(search), read);
