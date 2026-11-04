@@ -1292,9 +1292,10 @@ function CollectionPageLifetime({
       ...(undoEpisodes.length ? { undo: undoEpisodes } : {}),
     };
     if (
-      step.kind === 'metadata' ||
-      step.kind === 'remove-batch' ||
-      (step.kind === 'member' && step.operation.operation.kind === 'remove')
+      revision !== undefined &&
+      (step.kind === 'metadata' ||
+        step.kind === 'remove-batch' ||
+        (step.kind === 'member' && step.operation.operation.kind === 'remove'))
     )
       run.currentRevision = revision;
     if (step.kind === 'transfer' && 'destinationRevision' in result) {
@@ -2540,15 +2541,19 @@ function CollectionPageLifetime({
             currentBasis={conflictBasis}
             rebaseIssue={rebaseIssue}
             recoverCurrent={!activeSave?.transfer}
-            onRetry={activeSave ? () => void save(undefined, true, Boolean(activeSave.transfer)) : undefined}
-            onReadCurrent={activeSave && !activeSave.transfer ? () => void readCurrentConflictBasis() : undefined}
-            onDiscard={activeSave && !activeSave.transfer ? discardDraftForCurrentBasis : undefined}
-            onDiscardUnavailable={
-              activeSave && !activeSave.transfer && rebaseIssue ? discardUnavailableDraftOperation : undefined
-            }
-            onReviewCurrent={
-              activeSave && !activeSave.transfer ? () => reviewRemainingAgainstCurrent() : undefined
-            }
+            {...(activeSave
+              ? { onRetry: () => void save(undefined, true, Boolean(activeSave.transfer)) }
+              : {})}
+            {...(activeSave && !activeSave.transfer
+              ? {
+                  onReadCurrent: () => void readCurrentConflictBasis(),
+                  onDiscard: discardDraftForCurrentBasis,
+                  onReviewCurrent: () => reviewRemainingAgainstCurrent(),
+                }
+              : {})}
+            {...(activeSave && !activeSave.transfer && rebaseIssue
+              ? { onDiscardUnavailable: discardUnavailableDraftOperation }
+              : {})}
           />
         ) : null}
         {!editing && ownerCurrent && saveRunView?.complete ? (
