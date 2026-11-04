@@ -8,6 +8,7 @@ import {
 } from './profile-data';
 import { profileReadFailure, type EditableProfileFailure } from './editable-profile-source';
 import { isPlatformClosedError } from '../kernel/platform-closed';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 
 export type ProfileScope = 'profile' | 'views';
 export type ProfileAttempt = Readonly<{
@@ -33,6 +34,8 @@ export type ProfileEditorState = {
   readAuthority: 'pending' | 'allowed' | 'denied';
   /** Presentation only: current reads are shared by both callers, independently of the last command's scope. */
   readStatus?: 'checking' | 'confirming' | 'failed' | undefined;
+  commandRetryAt: number;
+  readRetryAt: number;
   failure?: (EditableProfileFailure & { message: string }) | undefined;
 };
 
@@ -40,6 +43,10 @@ function failureMetadata(error: unknown): EditableProfileFailure | undefined {
   return (
     profileReadFailure(error) ?? (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
   );
+}
+
+function extendRetryDeadline(current: number, retryAfter: string | undefined): number {
+  return Math.max(current, preferenceRetryDeadline(retryAfter));
 }
 
 function frozen<T extends object>(value: T): T {
@@ -112,6 +119,8 @@ export class ProfileEditor {
       phase: initial ? 'idle' : 'loading',
       scope: 'profile',
       readAuthority: initial ? 'allowed' : 'pending',
+      commandRetryAt: 0,
+      readRetryAt: 0,
     };
   }
   snapshot = () => this.state;
@@ -149,6 +158,8 @@ export class ProfileEditor {
       phase: 'unavailable',
       readAuthority: 'pending',
       readStatus: undefined,
+      commandRetryAt: 0,
+      readRetryAt: 0,
       failure: undefined,
     });
     this.listeners.clear();
@@ -181,6 +192,7 @@ export class ProfileEditor {
     this.update({
       phase: this.state.attempt ? 'uncertain' : 'unavailable',
       readStatus: 'failed',
+      readRetryAt: extendRetryDeadline(this.state.readRetryAt, failure?.retryAfter),
       failure: failure ? { ...failure, message: '' } : undefined,
       ...(denied ? { readAuthority: 'denied' as const } : {}),
     });
@@ -223,7 +235,7 @@ export class ProfileEditor {
     this.update({ phase: this.state.attempt ? 'uncertain' : 'idle' });
   }
   async submit(scope: ProfileScope) {
-    if (!this.canWrite() || this.state.readAuthority !== 'allowed') return;
+    if (!this.canWrite() || this.state.commandRetryAt > Date.now() || this.state.readAuthority !== 'allowed') return;
     const { known, draft, attempt, phase } = this.state;
     if (this.pending || !known || !draft || attempt || ['saving', 'reloading', 'unavailable'].includes(phase)) return;
     const after: ProfileValues =
@@ -252,7 +264,13 @@ export class ProfileEditor {
     await this.send(false);
   }
   async retry() {
-    if (!this.canWrite() || this.pending || !this.state.attempt || ['saving', 'reloading'].includes(this.state.phase))
+    if (
+      !this.canWrite() ||
+      this.state.commandRetryAt > Date.now() ||
+      this.pending ||
+      !this.state.attempt ||
+      ['saving', 'reloading'].includes(this.state.phase)
+    )
       return;
     await this.send(true);
   }
@@ -274,7 +292,11 @@ export class ProfileEditor {
     } catch (error) {
       if (!this.current()) return;
       const failure = failureMetadata(error);
-      this.update({ phase: 'uncertain', failure: failure ? { ...failure, message: '' } : undefined });
+      this.update({
+        phase: 'uncertain',
+        commandRetryAt: extendRetryDeadline(this.state.commandRetryAt, failure?.retryAfter),
+        failure: failure ? { ...failure, message: '' } : undefined,
+      });
       return;
     }
     if (!this.current()) return;
@@ -283,6 +305,7 @@ export class ProfileEditor {
       this.update({
         phase: uncertain ? 'uncertain' : 'refused',
         attempt: uncertain ? attempt : null,
+        commandRetryAt: extendRetryDeadline(this.state.commandRetryAt, result.failure?.retryAfter),
         failure: { ...result.failure, status: result.status, message: result.message },
       });
       return;
@@ -352,7 +375,13 @@ export class ProfileEditor {
     if (this.current() && this.state.readAuthority === 'allowed') this.io.confirmed?.(current);
   }
   async reload() {
-    if (!this.current() || this.pending || ['saving', 'reloading'].includes(this.state.phase)) return;
+    if (
+      !this.current() ||
+      this.state.readRetryAt > Date.now() ||
+      this.pending ||
+      ['saving', 'reloading'].includes(this.state.phase)
+    )
+      return;
     if (!this.state.attempt) this.laterEdits = {};
     this.pending = true;
     this.update({ phase: 'reloading', readStatus: 'checking', failure: undefined });

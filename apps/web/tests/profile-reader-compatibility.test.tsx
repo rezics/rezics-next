@@ -100,8 +100,8 @@ function successRead(value: ProfileValues): ProfileReadResult {
   return { ok: true, profile: value };
 }
 
-function failedRead(status: number): ProfileReadResult {
-  return { ok: false, status, failure: { status } };
+function failedRead(status: number, retryAfter?: string): ProfileReadResult {
+  return { ok: false, status, failure: { status, ...(retryAfter ? { retryAfter } : {}) } };
 }
 
 function session(subject: string, csrfToken: string | null) {
@@ -315,12 +315,38 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(readOnlyEditor.snapshot()).toBe(readOnlyState);
     expect(saveRequests).toHaveLength(0);
 
+    const capturedReadOnlyReload = readOnlyEditor.reload.bind(readOnlyEditor);
     const firstReload = readRequests.length;
     await click(button(m.settings_profile_reload_current()));
     await until(() => readRequests.length === firstReload + 1, 'the safe read-only reload');
-    await resolveRead(firstReload, successRead(nativeProfile));
+    await resolveRead(firstReload, failedRead(503, '60'));
+    await until(() => readOnlyEditor.snapshot().readRetryAt > Date.now(), 'the read-only Retry-After wait');
+    const readRetryAt = readOnlyEditor.snapshot().readRetryAt;
     expect(readOnlyEditor.snapshot().known).toEqual(nativeProfile);
     expect(saveRequests).toHaveLength(0);
+    expect(host.textContent?.split(m.settings_retry_wait()).length).toBeGreaterThan(2);
+    const reloadButtons = [...host.querySelectorAll('button')].filter(
+      (item) => item.textContent?.trim() === m.settings_profile_reload_current(),
+    );
+    expect(reloadButtons.length).toBeGreaterThan(1);
+    expect(reloadButtons.every((item) => item.disabled)).toBe(true);
+    const actualNow = Date.now;
+    let remountedMarkup = '';
+    try {
+      Date.now = () => readRetryAt;
+      remountedMarkup = renderToStaticMarkup(
+        createElement(PublicViewsCard, { editor: readOnlyEditor, writable: false, readable: true }),
+      );
+    } finally {
+      Date.now = actualNow;
+    }
+    expect(remountedMarkup).not.toContain(m.settings_retry_wait());
+    expect(new window.DOMParser().parseFromString(remountedMarkup, 'text/html').querySelector('button')?.disabled).toBe(
+      false,
+    );
+    await capturedReadOnlyReload();
+    expect(readRequests).toHaveLength(firstReload + 1);
+    expect(readOnlyEditor.snapshot().readRetryAt).toBe(readRetryAt);
     expect(
       JSON.stringify(
         client
@@ -334,6 +360,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await until(() => readRequests.length === firstReload + 2, 'a fresh writable observation');
     expect(readOnlyEditor.snapshot().known).toBeNull();
     expect(readOnlyEditor.snapshot().draft).toBeNull();
+    expect(readOnlyEditor.snapshot().readRetryAt).toBe(0);
+    const readsAfterRetirement = readRequests.length;
+    await capturedReadOnlyReload();
+    expect(readRequests).toHaveLength(readsAfterRetirement);
     const writableEditor = editor();
     expect(writableEditor).not.toBe(readOnlyEditor);
     expect(currentReadable).toBe(true);
@@ -535,10 +565,11 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       ok: false,
       status: 503,
       message: 'late failure from a retired owner',
-      failure: { status: 503 },
+      failure: { status: 503, retryAfter: '120' },
     });
     expect(tokenThreeEditor.snapshot().known).toBeNull();
     expect(tokenThreeEditor.snapshot().failure).toBeUndefined();
+    expect(tokenThreeEditor.snapshot().commandRetryAt).toBe(0);
     expect(tokenFourEditor.snapshot().failure).toBeUndefined();
     await resolveRead(beforeFailureCredential, successRead(nativeProfile));
     await until(() => tokenFourEditor.snapshot().readAuthority === 'allowed', 'the fresh owner after late failure');

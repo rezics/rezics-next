@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
+import { EditableProfileReadError } from '../src/settings/editable-profile-source';
 import {
   ProfileEditor,
   profileFieldErrors,
@@ -271,6 +272,7 @@ test('refusals preserve drafts and unresolved reloads preserve the original atte
   editor.edit({ biography: 'Keep my work' });
   await editor.submit('profile');
   expect(editor.snapshot().phase).toBe('refused');
+  expect(editor.snapshot().commandRetryAt).toBe(0);
   await editor.reload();
   expect(editor.snapshot().draft?.biography).toBe('Keep my work');
   const lost = new ProfileEditor(
@@ -288,6 +290,63 @@ test('refusals preserve drafts and unresolved reloads preserve the original atte
   await lost.reload();
   expect(lost.snapshot().attempt).toBe(attempt);
   expect(lost.snapshot().phase).toBe('uncertain');
+});
+
+test('Profile Retry-After deadlines stay independent and captured actions wait for expiry', async () => {
+  const originalNow = Date.now;
+  let now = 1_700_000_000_000;
+  Date.now = () => now;
+  try {
+    const attempts: ProfileAttempt[] = [];
+    let reads = 0;
+    const editor = new ProfileEditor({
+      save: async (attempt) => {
+        attempts.push(attempt);
+        return attempts.length === 1
+          ? { ok: false, status: 503, message: 'Unavailable', failure: { status: 503, retryAfter: '120' } }
+          : attempts.length === 3
+            ? { ok: false, status: 429, message: 'Wait', failure: { status: 429, retryAfter: '30' } }
+            : { ok: true, profile: attempt.after };
+      },
+      read: () =>
+        ++reads === 1
+          ? Promise.reject(new EditableProfileReadError(503, { status: 503, retryAfter: '5' }))
+          : Promise.resolve(initial()),
+    }, initial());
+    editor.edit({ displayName: 'Submitted name' });
+    await editor.submit('profile');
+    const original = editor.snapshot().attempt, commandRetryAt = now + 120_000;
+    expect(editor.snapshot().commandRetryAt).toBe(commandRetryAt);
+    editor.edit({ displayName: 'Later draft' });
+    const retry = editor.retry.bind(editor), reload = editor.reload.bind(editor);
+    await reload();
+    const readRetryAt = now + 5_000;
+    expect(editor.snapshot().readRetryAt).toBe(readRetryAt);
+    await Promise.all([reload(), retry()]);
+    expect([reads, attempts.length]).toEqual([1, 1]);
+    now = readRetryAt;
+    await editor.reload();
+    expect([reads, editor.snapshot().commandRetryAt]).toEqual([2, commandRetryAt]);
+    await retry();
+    expect(attempts).toHaveLength(1);
+    now = commandRetryAt;
+    await retry();
+    expect(attempts[1]).toBe(original);
+    expect(editor.snapshot().draft?.displayName).toBe('Later draft');
+    editor.edit({ biography: 'First draft' });
+    await editor.submit('profile');
+    const submit = editor.submit.bind(editor), submitRetryAt = now + 30_000;
+    expect(editor.snapshot().commandRetryAt).toBe(submitRetryAt);
+    editor.edit({ biography: 'Later draft' });
+    await submit('profile');
+    expect([attempts.length, editor.snapshot().draft?.biography]).toEqual([3, 'Later draft']);
+    editor.retire();
+    expect([editor.snapshot().commandRetryAt, editor.snapshot().readRetryAt]).toEqual([0, 0]);
+    await submit('profile');
+    expect(attempts).toHaveLength(3);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('pending writes prevent concurrent duplicate submission and later edits clear success', async () => {
