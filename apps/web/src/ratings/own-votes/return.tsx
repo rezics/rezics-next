@@ -184,6 +184,10 @@ export function useOwnVotesReturnReceipt(historyKey: string, cursor: string | nu
   const state = useContext(OwnVotesReturnContext);
   const receipt = state.receipt;
   const onRatings = routePath(pathname) === '/library/ratings';
+  const currentOwner =
+    receipt?.phase === 'refreshing' || receipt?.phase === 'resolved'
+      ? receipt.owner.canRead()
+      : receipt?.owner.eligible();
   const valid =
     !!receipt &&
     onRatings &&
@@ -192,7 +196,7 @@ export function useOwnVotesReturnReceipt(historyKey: string, cursor: string | nu
     receipt.owner.cursor === cursor &&
     receipt.owner.locale === locale &&
     receipt.owner.source.length > 0 &&
-    receipt.owner.eligible();
+    currentOwner;
   useEffect(() => {
     if (receipt && onRatings && receipt.phase !== 'bfcache-away' && !valid) state.clear(receipt.id);
   }, [receipt, valid, onRatings, state]);
