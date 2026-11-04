@@ -111,7 +111,10 @@ export function MangaReader({
   const state = states.every(({ status }) => status === states[0]?.status) ? states[0]!.status : 'mixed';
   const rows = retired ? [] : mangaReaderRows(current, definitions, locale, reader);
   const measures = retired ? [] : mangaReaderMeasures(current, definitions, reader);
-  const groups = new Map<string, { property: string; relation: string; kind: 'contents' | 'editions'; direction: string; rows: MangaReaderRow[] }>();
+  const groups = new Map<
+    string,
+    { property: string; relation: string; kind: 'contents' | 'editions'; direction: string; rows: MangaReaderRow[] }
+  >();
   for (const row of rows) {
     const key = `${row.property}:${row.direction}`;
     const group = groups.get(key) ?? {
@@ -144,7 +147,12 @@ export function MangaReader({
         focused.current = event.target;
       }}
     >
-      <h2 ref={heading} id="manga-reader-title" tabIndex={-1} className="text-xl leading-snug font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-2xl">
+      <h2
+        ref={heading}
+        id="manga-reader-title"
+        tabIndex={-1}
+        className="text-xl leading-snug font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-2xl"
+      >
         {m.manga_reader_title({}, options(locale))}
       </h2>
       {retired ? (
@@ -170,7 +178,10 @@ export function MangaReader({
           </p>
           <ul className="space-y-1 text-sm text-muted-foreground">
             {states.map(({ key, label, status }) => (
-              <li key={key} role="status">{label ? `${label}: ` : ''}{statusText(status, locale)}</li>
+              <li key={key} role="status">
+                {label ? `${label}: ` : ''}
+                {statusText(status, locale)}
+              </li>
             ))}
           </ul>
           <p className="text-sm text-muted-foreground">{m.manga_reader_chapters_unsupported({}, options(locale))}</p>
@@ -221,7 +232,9 @@ export function MangaReader({
                           {(type || row.notes.length > 0) && (
                             <ul className="pl-3 text-sm text-muted-foreground">
                               {type ? <li>{type}</li> : null}
-                              {row.notes.map((note) => <li key={`${row.key}:${note}`}>{note}</li>)}
+                              {row.notes.map((note) => (
+                                <li key={`${row.key}:${note}`}>{note}</li>
+                              ))}
                             </ul>
                           )}
                         </li>

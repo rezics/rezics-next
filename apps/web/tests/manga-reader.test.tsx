@@ -62,7 +62,14 @@ function forwardRow(target: string, label: string, type: string, property: strin
     related: {},
     type,
     label,
-    summary: { id: target, type, types: [type], label: { value: label, language: 'en' }, creativeWork: true, cover: null },
+    summary: {
+      id: target,
+      type,
+      types: [type],
+      label: { value: label, language: 'en' },
+      creativeWork: true,
+      cover: null,
+    },
   };
 }
 
@@ -114,9 +121,13 @@ test('the composed Manga window separates volumes, generic parts and editions by
       ],
       { count: { value: 2, relation: 'exact' } },
     ),
-    window('chapters', 'bf:hasPart', 'inverse', [
-      inverseRow(chapterId, 'Chapter 1: Harbour at Dawn', 'schema:CreativeWork', 'bf:hasPart', 'statement-chapter-1'),
-    ], { count: { value: 3, relation: 'lower_bound' }, next: 'native:chapter-window' }),
+    window(
+      'chapters',
+      'bf:hasPart',
+      'inverse',
+      [inverseRow(chapterId, 'Chapter 1: Harbour at Dawn', 'schema:CreativeWork', 'bf:hasPart', 'statement-chapter-1')],
+      { count: { value: 3, relation: 'lower_bound' }, next: 'native:chapter-window' },
+    ),
     window('editions', 'schema:workExample', 'forward', [
       forwardRow(editionId, 'First print', 'bf:Instance', 'schema:workExample', 'statement-edition'),
     ]),
@@ -182,7 +193,9 @@ test('an exact volume retains its disclosed parent and edition identities withou
 test('unsupported, withheld, failed, empty and continued windows stay distinct and relation admission is bounded', () => {
   const statuses = (value: readonly ProfileRelationWindow[]) => mangaReaderWindowStatus(value, definitions);
   expect(statuses([])).toBe('unsupported');
-  expect(statuses([window('withheld', 'schema:isPartOf', 'inverse', [], { status: 403, valid: false })])).toBe('withheld');
+  expect(statuses([window('withheld', 'schema:isPartOf', 'inverse', [], { status: 403, valid: false })])).toBe(
+    'withheld',
+  );
   expect(statuses([window('failed', 'schema:isPartOf', 'inverse', [], { status: 503, valid: false })])).toBe(
     'unavailable',
   );
@@ -191,8 +204,21 @@ test('unsupported, withheld, failed, empty and continued windows stay distinct a
     'empty-continued',
   );
 
-  const ordinary = inverseRow(volumeOneId, 'Volume 1', 'schema:PublicationVolume', 'schema:isPartOf', 'native-statement');
-  expect(mangaReaderRows([window('unknown-order', 'schema:isPartOf', 'inverse', [ordinary])], definitions, 'en', defaultReader)[0]?.notes).toEqual([]);
+  const ordinary = inverseRow(
+    volumeOneId,
+    'Volume 1',
+    'schema:PublicationVolume',
+    'schema:isPartOf',
+    'native-statement',
+  );
+  expect(
+    mangaReaderRows(
+      [window('unknown-order', 'schema:isPartOf', 'inverse', [ordinary])],
+      definitions,
+      'en',
+      defaultReader,
+    )[0]?.notes,
+  ).toEqual([]);
   const mismatched = { ...ordinary, property: 'bf:hasPart' };
   expect(statuses([window('foreign', 'schema:isPartOf', 'inverse', [mismatched])])).toBe('unavailable');
 
@@ -210,7 +236,14 @@ test('unsupported, withheld, failed, empty and continued windows stay distinct a
   expect(mangaReaderRows([admitted], definitions, 'en', defaultReader)).toHaveLength(20);
   expect(mangaReaderMeasures([window('unknown-count', 'schema:isPartOf', 'inverse', rows)], definitions)).toEqual([]);
   expect(statuses([window('oversize', 'schema:isPartOf', 'inverse', [...rows, ordinary])])).toBe('unavailable');
-  expect(mangaReaderRows([window('oversize', 'schema:isPartOf', 'inverse', [...rows, ordinary])], definitions, 'en', defaultReader)).toEqual([]);
+  expect(
+    mangaReaderRows(
+      [window('oversize', 'schema:isPartOf', 'inverse', [...rows, ordinary])],
+      definitions,
+      'en',
+      defaultReader,
+    ),
+  ).toEqual([]);
 });
 
 test('replacement of the current source, release, viewer, context, locale, view or opaque window retires the visit', () => {
@@ -254,9 +287,11 @@ test('a changed viewer or source hides old links and returning to the prior obse
     subject: mangaSubject(seriesId, 'schema:ComicSeries', 'The Harbour Atlas'),
     locale: 'en',
     view: 'overview',
-    windows: [window('parts', 'schema:isPartOf', 'inverse', [
-      inverseRow(volumeOneId, 'Volume 1', 'schema:PublicationVolume', 'schema:isPartOf', 'statement-retired'),
-    ])],
+    windows: [
+      window('parts', 'schema:isPartOf', 'inverse', [
+        inverseRow(volumeOneId, 'Volume 1', 'schema:PublicationVolume', 'schema:isPartOf', 'statement-retired'),
+      ]),
+    ],
     definitions,
     reader: defaultReader,
     observation: observation(),

@@ -117,9 +117,10 @@ export function profileRelationWindows(page: {
     if (seen.has(identity)) continue;
     seen.add(identity);
     const next = body && typeof body.next === 'string' ? body.next : undefined;
-    const nativeCount = body && isRecord(body.count) && typeof body.count.value === 'number'
-      ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, admittedRows.length)
-      : undefined;
+    const nativeCount =
+      body && isRecord(body.count) && typeof body.count.value === 'number'
+        ? countFromLinks({ value: body.count.value, exact: body.count.exact === true }, admittedRows.length)
+        : undefined;
     pages.push({
       node: typeof node.props.id === 'string' ? node.props.id : '',
       property,

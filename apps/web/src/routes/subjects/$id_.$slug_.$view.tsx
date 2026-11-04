@@ -70,7 +70,10 @@ const readView = createServerFn({ method: 'GET', strict: false })
       !('search' in input) ||
       typeof input.search !== 'string' ||
       input.search.length >
-        subjectRouteSearchLimit(input.search, 'cursor' in input && typeof input.cursor === 'string' ? input.cursor : undefined)
+        subjectRouteSearchLimit(
+          input.search,
+          'cursor' in input && typeof input.cursor === 'string' ? input.cursor : undefined,
+        )
     )
       throw notFound();
     const cursor = validateViewCursor('cursor' in input ? input.cursor : undefined);

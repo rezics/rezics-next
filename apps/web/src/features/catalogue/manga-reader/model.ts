@@ -54,10 +54,7 @@ export function isMangaReaderType(type: string): type is MangaReaderType {
 }
 
 /** A source, release, locale, context or already-supplied reader replacement retires the captured visit. */
-export function mangaReaderRetired(
-  captured: MangaReaderObservation,
-  current: MangaReaderObservation,
-): boolean {
+export function mangaReaderRetired(captured: MangaReaderObservation, current: MangaReaderObservation): boolean {
   return (
     captured.source !== current.source ||
     captured.release !== current.release ||
@@ -79,9 +76,7 @@ function relationGroup(window: ProfileRelationWindow, definitions: Record<string
 
 function directedLabel(window: ProfileRelationWindow, definitions: Record<string, RelationDefinition>) {
   const definition = definitions[window.property];
-  return window.direction === 'forward'
-    ? definition?.forwardLabel || definition?.label || ''
-    : definition?.label || '';
+  return window.direction === 'forward' ? definition?.forwardLabel || definition?.label || '' : definition?.label || '';
 }
 
 function assertionOf(row: Record<string, unknown>, direction: 'forward' | 'inverse') {
@@ -203,10 +198,7 @@ export function mangaReaderWindowStatus(
   if (
     selected.some(
       (window) =>
-        window.status !== 200 ||
-        !window.valid ||
-        window.rows.length > WORK_PARTS_PAGE_CAP ||
-        !admittedRows(window),
+        window.status !== 200 || !window.valid || window.rows.length > WORK_PARTS_PAGE_CAP || !admittedRows(window),
     )
   )
     return 'unavailable';
@@ -225,9 +217,7 @@ export function mangaReaderWindowScope(
   definitions: Record<string, RelationDefinition>,
   view: string,
 ): ProfileRelationWindow[] {
-  if (view === 'contents')
-    return windows.filter((window) => relationGroup(window, definitions) === 'contents');
-  if (view === 'editions')
-    return windows.filter((window) => relationGroup(window, definitions) === 'editions');
+  if (view === 'contents') return windows.filter((window) => relationGroup(window, definitions) === 'contents');
+  if (view === 'editions') return windows.filter((window) => relationGroup(window, definitions) === 'editions');
   return windows.filter((window) => !!relationGroup(window, definitions));
 }

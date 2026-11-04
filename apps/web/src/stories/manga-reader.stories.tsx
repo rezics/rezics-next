@@ -19,7 +19,14 @@ const definitions: Record<string, RelationDefinition> = {
   'schema:workExample': { label: 'Work', forwardLabel: 'Edition', group: 'association', symmetric: false },
 };
 
-function inverseItem(id: string, label: string, property: string, statementId: string, type: string, position?: string) {
+function inverseItem(
+  id: string,
+  label: string,
+  property: string,
+  statementId: string,
+  type: string,
+  position?: string,
+) {
   return {
     subject: id,
     property,
@@ -126,10 +133,23 @@ export const SeriesWithVolumesAndGenericChapterRelation: Story = {
     observation: observation(seriesId),
     recoveryHref,
     windows: [
-      window('volumes', 'schema:isPartOf', 'inverse', [
-        inverseItem(volumeId, 'Volume 1', 'schema:isPartOf', 'assertion-volume-1', 'schema:PublicationVolume', '1'),
-        inverseItem(secondVolumeId, 'Volume 2', 'schema:isPartOf', 'assertion-volume-2', 'schema:PublicationVolume', '2'),
-      ], { count: { value: 2, relation: 'exact' } }),
+      window(
+        'volumes',
+        'schema:isPartOf',
+        'inverse',
+        [
+          inverseItem(volumeId, 'Volume 1', 'schema:isPartOf', 'assertion-volume-1', 'schema:PublicationVolume', '1'),
+          inverseItem(
+            secondVolumeId,
+            'Volume 2',
+            'schema:isPartOf',
+            'assertion-volume-2',
+            'schema:PublicationVolume',
+            '2',
+          ),
+        ],
+        { count: { value: 2, relation: 'exact' } },
+      ),
       window('generic-parts', 'bf:hasPart', 'inverse', [
         inverseItem(chapterId, 'Harbour at Dawn', 'bf:hasPart', 'assertion-chapter-1', 'schema:CreativeWork', '01'),
       ]),
@@ -185,7 +205,12 @@ export const SparseContinuedEmptyWindow: Story = {
     reader: defaultReader,
     observation: observation(seriesId, 'contents'),
     recoveryHref,
-    windows: [window('parts', 'schema:isPartOf', 'inverse', [], { next: 'native:opaque-window', count: { value: 6, relation: 'lower_bound' } })],
+    windows: [
+      window('parts', 'schema:isPartOf', 'inverse', [], {
+        next: 'native:opaque-window',
+        count: { value: 6, relation: 'lower_bound' },
+      }),
+    ],
   },
 };
 

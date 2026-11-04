@@ -36,7 +36,8 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null && (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f]/u.test(cursor))) ||
-      (property !== null && (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f]/u.test(property)))
+      (property !== null &&
+        (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f]/u.test(property)))
     )
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
