@@ -8,7 +8,7 @@ import {
   type CopyArchiveProgressGrowthFixture,
 } from './support/copy-archive-progress-growth-fixture.ts';
 
-const reviewPool = 48;
+const reviewPool = 80;
 let f: CopyArchiveProgressGrowthFixture;
 const applied: { reviewId: string; sessionId: string }[] = [];
 
@@ -25,8 +25,8 @@ afterAll(async () => {
   await f?.close();
 });
 
-test('scalar apply stays constant at Native64/512/4096 unrelated same-owner Session/unit/History rows', async () => {
-  const reviews = [...f.applyOwner.reviews];
+test.serial('scalar apply stays constant at Native64/512/4096 unrelated same-owner Session/unit/History rows', async () => {
+  const reviews = f.applyOwner.reviews;
   const report = await f.measure('archive progress scalar apply', f.applyOwner, 'aa000001', async (actor) => {
     const reviewId = reviews.shift();
     if (!reviewId || !f.applyOwner.uploadId) throw new Error('Apply review pool exhausted');
@@ -40,7 +40,7 @@ test('scalar apply stays constant at Native64/512/4096 unrelated same-owner Sess
   expectNoGrownScans(report);
 }, 600_000);
 
-test('lost-ack retry reloads bounded operands and replays the original receipt at Native64/512/4096', async () => {
+test.serial('lost-ack retry reloads bounded operands and replays the original receipt at Native64/512/4096', async () => {
   const reviews = f.applyOwner.reviews;
   let current: { reviewId: string; key: string } | undefined;
   const report = await f.measure(
@@ -75,7 +75,7 @@ test('lost-ack retry reloads bounded operands and replays the original receipt a
   expectNoGrownScans(report);
 }, 600_000);
 
-test('progressResult readback is measured apart from apply and stays bounded at Native64/512/4096', async () => {
+test.serial('progressResult readback is measured apart from apply and stays bounded at Native64/512/4096', async () => {
   const target = applied[0];
   if (!target || !f.applyOwner.uploadId) throw new Error('Apply did not leave a Session to read back');
   const report = await f.measure('archive progress result readback', f.applyOwner, 'aa000003', async (actor) => {
@@ -89,7 +89,7 @@ test('progressResult readback is measured apart from apply and stays bounded at 
   expectNoGrownScans(report);
 }, 600_000);
 
-test('native rejection records stale after rollback at Native64/512/4096', async () => {
+test.serial('native rejection records stale after rollback at Native64/512/4096', async () => {
   await f.activate(f.staleDigest);
   const reviews = [...f.rejectOwner.reviews];
   try {
@@ -113,7 +113,7 @@ async function cleanupPerson(person: CopyArchiveProgressGrowthFixture['applyOwne
   return person;
 }
 
-test('owner-remove all-application page deletes 100 children and retains known remainder at Native64/512/4096', async () => {
+test.serial('owner-remove all-application page deletes 100 children and retains known remainder at Native64/512/4096', async () => {
   const person = f.cleanupOwners.applications;
   let retained: string[] = [];
   const report = await f.measure(
@@ -151,7 +151,7 @@ test('owner-remove all-application page deletes 100 children and retains known r
   expectNoGrownScans(report);
 }, 600_000);
 
-test('owner-remove page shares the 100-child budget across tables at Native64/512/4096', async () => {
+test.serial('owner-remove page shares the 100-child budget across tables at Native64/512/4096', async () => {
   const person = f.cleanupOwners.crossing;
   let remainingApply: string[] = [];
   const report = await f.measure(
@@ -180,7 +180,7 @@ test('owner-remove page shares the 100-child budget across tables at Native64/51
   expectNoGrownScans(report);
 }, 600_000);
 
-test('exhausted final owner-remove page deletes remaining children plus the root at Native64/512/4096', async () => {
+test.serial('exhausted final owner-remove page deletes remaining children plus the root at Native64/512/4096', async () => {
   const person = f.cleanupOwners.finalPage;
   const report = await f.measure(
     'archive progress cleanup exhausted final page',
@@ -209,7 +209,7 @@ test('exhausted final owner-remove page deletes remaining children plus the root
   expectNoGrownScans(report);
 }, 600_000);
 
-test('expired owner-remove continues through the shared child budget until the root at Native64/512/4096', async () => {
+test.serial('expired owner-remove continues through the shared child budget until the root at Native64/512/4096', async () => {
   const person = f.cleanupOwners.continuation;
   const report = await f.measure(
     'archive progress cleanup repeated continuation',
