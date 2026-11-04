@@ -21,7 +21,11 @@ export function searchWindowFocus() {
       const document = source.ownerDocument;
       if (document.activeElement !== source) return;
       const pending: Intent = {
-        request, cursor, action, source, moved: false,
+        request,
+        cursor,
+        action,
+        source,
+        moved: false,
         stop: () => document.removeEventListener('focusin', moved, true),
       };
       function moved(event: FocusEvent) {
@@ -34,13 +38,22 @@ export function searchWindowFocus() {
     settle(request: string, cursor: string | null, navigation: HTMLElement | null, region: HTMLElement | null) {
       const pending = intent;
       if (!pending) return;
-      if (pending.request !== request) { retire(); return; }
+      if (pending.request !== request) {
+        retire();
+        return;
+      }
       if (pending.cursor !== cursor) return;
       const document = pending.source.ownerDocument;
       const active = document.activeElement;
-      const owns = !pending.moved && (active === pending.source || active === document.body || active === document.documentElement);
-      const action = navigation?.querySelector<HTMLElement>(`[data-window-action="${pending.action}"]:not([aria-disabled="true"])`);
-      const recovery = region?.querySelector<HTMLElement>('[data-search-recovery] button:not(:disabled), [data-search-recovery] a[href]:not([aria-disabled="true"])');
+      const owns =
+        !pending.moved &&
+        (active === pending.source || active === document.body || active === document.documentElement);
+      const action = navigation?.querySelector<HTMLElement>(
+        `[data-window-action="${pending.action}"]:not([aria-disabled="true"])`,
+      );
+      const recovery = region?.querySelector<HTMLElement>(
+        '[data-search-recovery] button:not(:disabled), [data-search-recovery] a[href]:not([aria-disabled="true"])',
+      );
       retire();
       if (owns) (action ?? recovery ?? region)?.focus();
     },

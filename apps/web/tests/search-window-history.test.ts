@@ -1,18 +1,36 @@
 import { expect, test } from 'bun:test';
-import { admitSearchWindow, emptySearchWindows, restoreSearchWindows, SEARCH_WINDOW_LIMIT, searchWindowNextAllowed, searchWindowPosition } from '../src/search/search-window/history';
+import {
+  admitSearchWindow,
+  emptySearchWindows,
+  restoreSearchWindows,
+  SEARCH_WINDOW_LIMIT,
+  searchWindowNextAllowed,
+  searchWindowPosition,
+} from '../src/search/search-window/history';
 import { discoverySearchHref, searchLoaderDeps } from '../src/search/search-params';
 
-const state = searchLoaderDeps({ q: '星の旅', kinds: ['work', 'character', 'person', 'collection'], language: ['ja', 'zh-Hant'], 'f.type': ['native-type'], 'r.year': JSON.stringify({ gte: '1990', lte: '2020' }), condition: JSON.stringify({ type: { in: ['native-type'] } }) });
+const state = searchLoaderDeps({
+  q: '星の旅',
+  kinds: ['work', 'character', 'person', 'collection'],
+  language: ['ja', 'zh-Hant'],
+  'f.type': ['native-type'],
+  'r.year': JSON.stringify({ gte: '1990', lte: '2020' }),
+  condition: JSON.stringify({ type: { in: ['native-type'] } }),
+});
 const first = discoverySearchHref('zh-Hant', state);
 
 test('admitted addresses give bounded deliberate return with exact predicates and an explicit first window', () => {
   let history = admitSearchWindow(emptySearchWindows(first), undefined);
-  for (let number = 2; number <= 16; number++) history = admitSearchWindow(history, `opaque +/=${number}`, number === 2 ? null : `opaque +/=${number - 1}`);
+  for (let number = 2; number <= 16; number++)
+    history = admitSearchWindow(history, `opaque +/=${number}`, number === 2 ? null : `opaque +/=${number - 1}`);
   expect(history.windows).toHaveLength(SEARCH_WINDOW_LIMIT);
   const position = searchWindowPosition(history, 'opaque +/=16');
   expect(position.previous).toEqual({ cursor: 'opaque +/=15', number: 15 });
   expect(position.clipped).toBe(true);
-  const returned = new URL(discoverySearchHref('zh-Hant', { ...state, cursor: position.previous!.cursor! }), 'https://search.test');
+  const returned = new URL(
+    discoverySearchHref('zh-Hant', { ...state, cursor: position.previous!.cursor! }),
+    'https://search.test',
+  );
   expect(returned.searchParams.get('cursor')).toBe('opaque +/=15');
   returned.searchParams.delete('cursor');
   expect(returned.pathname + returned.search).toBe(first);
@@ -32,5 +50,7 @@ test('unknown cursors and repeated native addresses never fabricate a previous w
   expect(searchWindowNextAllowed(third, 'second', 'third')).toBe(true);
   expect(admitSearchWindow(third, 'second')).toBe(third);
   expect(restoreSearchWindows({ ...third, windows: [...third.windows, third.windows[1]] }, first).windows).toEqual([]);
-  expect(restoreSearchWindows({ ...third, windows: [{ cursor: 'x'.repeat(4865), number: 2 }] }, first).windows).toEqual([]);
+  expect(restoreSearchWindows({ ...third, windows: [{ cursor: 'x'.repeat(4865), number: 2 }] }, first).windows).toEqual(
+    [],
+  );
 });

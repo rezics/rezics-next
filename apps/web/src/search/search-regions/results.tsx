@@ -286,7 +286,6 @@ export function SearchResultsRegion({
           </>
         )}
       </section>
-
     </>
   );
 }
