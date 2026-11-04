@@ -1474,6 +1474,21 @@ No measurement, cardinality or existing Book/anime/filter profile changes follow
 explicit Importer operator tool; it contains citations and explicit metadata
 rights, not native IDs or publication authority. Released data and both web
 definition recordings are generated through the normal release/record scripts.
+The reviewed inventory includes the VNDB development-status scheme
+(`https://vndb.org/development-status`, codes 0/1/2), the VNDB release-completeness
+scheme (`https://rezics.com/schemes/vndb/release-types`, complete/partial/trial;
+the importer does not publish a scheme URI for `releases_vn.rtype`, so this
+platform scheme URI is the reversible binding used by native seed/adoption), and
+the Bangumi episode-type scheme (`https://rezics.com/schemes/bangumi/episode-types`,
+codes 0–6). Seeds carry `schema:url` for importer bindings and `schema:sameAs` for
+the existing correspondence pattern. Unreviewed provider codes are not published.
+
+`schema:creativeWorkStatus` is admitted only on `schema:VideoGame` (and thus
+`wd:Q689445`), `wd:Q20631656`, `rezics:AnimeRelease` and `bf:Instance`. It is a
+Concept classification, never a date and never a CreativeWork-wide property.
+Completeness of a particular software release for its work is `wdt:P31` on
+`schema:exampleOfWork`. `wdt:P155` may target a `VideoGameRelease` as well as a
+`CreativeWork`; `VideoGameRelease` is not a `CreativeWork`.
 
 ## Versioned catalogue distribution
 

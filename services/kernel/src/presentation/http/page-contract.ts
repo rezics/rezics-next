@@ -36,6 +36,27 @@ export const PageResponseSchema = t.Object(
     document: t.Any(),
     views: t.Optional(t.Array(t.String())),
     reads: t.Record(t.String(), readResult),
+    viewer: t.Optional(
+      t.Object(
+        {
+          kind: t.Union([t.Literal('anonymous'), t.Literal('account')]),
+          account: t.Optional(t.String()),
+        },
+        closed,
+      ),
+    ),
+    actions: t.Optional(
+      t.Record(
+        t.String(),
+        t.Union([
+          t.Literal('allowed'),
+          t.Literal('denied'),
+          t.Literal('unavailable'),
+          t.Literal('unsupported'),
+          t.Literal('withheld'),
+        ]),
+      ),
+    ),
   },
   closed,
 );

@@ -1,9 +1,14 @@
 import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
+import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  CommandUnavailableError,
+  requireAccessDeadline,
+} from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
@@ -12,6 +17,40 @@ import { readItemDetails } from '../semantic/subject.ts';
 import statesRead from '../semantic/subject-summary-states.sql';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { activeProfile } from './profiles.ts';
+
+export type PageViewer =
+  | { kind: 'anonymous' }
+  | { kind: 'account'; account: string };
+export type PageActionState = 'allowed' | 'denied' | 'unavailable' | 'unsupported' | 'withheld';
+
+/** Native Access under the actual caller; never a Type descriptor or frontend role. */
+export async function subjectPageViewerState(input: {
+  access: Access;
+  pool: Pool;
+  actor: Actor;
+  deadline: number;
+  subject: string;
+}): Promise<{ viewer: PageViewer; actions: Record<string, PageActionState> }> {
+  const viewer: PageViewer =
+    input.actor.kind === 'account' ? { kind: 'account', account: input.actor.accountId } : { kind: 'anonymous' };
+  const route = routeOf(input.subject);
+  if (route === null) return { viewer, actions: { propose: 'unavailable' } };
+  try {
+    const check = await accessCheck(
+      input.access,
+      input.actor,
+      'statement:propose',
+      { route, id: input.subject },
+      { pool: input.pool, deadline: input.deadline },
+    );
+    const allowed = await withReadTransaction(input.pool, (client) => check(client), input.deadline);
+    return { viewer, actions: { propose: allowed ? 'allowed' : 'denied' } };
+  } catch (error) {
+    if (error instanceof CommandUnavailableError || error instanceof AccessUnavailableError)
+      return { viewer, actions: { propose: 'unavailable' } };
+    return { viewer, actions: { propose: 'unavailable' } };
+  }
+}
 
 /** The ordinary native page's template order and offered views, shared with pages.read. */
 export function semanticPageView(

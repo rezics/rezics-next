@@ -87,6 +87,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
       'rezics:summaryOf',
       'schema:author',
       'schema:contributor',
+      'schema:creativeWorkStatus',
       'schema:datePublished',
       'schema:director',
       'schema:exampleOfWork',
@@ -151,6 +152,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     multivalued: false,
     targets: ['schema:CreativeWork'],
     mappings: ['wd:P629'],
+    qualifiers: ['schema:sameAs', 'wdt:P31', 'wdt:P648'],
   });
   expect(properties['schema:isbn']).toMatchObject({
     datatype: 'external-id',

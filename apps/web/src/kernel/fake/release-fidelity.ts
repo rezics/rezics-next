@@ -11,6 +11,7 @@ export const releaseSubject = '00000000-0000-4000-8000-00000000a101';
 export const releaseWork = '00000000-0000-4000-8000-00000000a102';
 export const releaseAlt = '00000000-0000-4000-8000-00000000a103';
 export const releaseSuperseded = '00000000-0000-4000-8000-00000000a104';
+export const releaseCompleteness = '00000000-0000-4000-8000-00000000a115';
 export const basedOnProperty = 'schema:isBasedOn';
 export const replacedByProperty = 'wdt:P1366';
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
@@ -189,6 +190,14 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
         'wikibase-item',
         { type: 'value', content: releaseWork },
         digest,
+        {
+          qualifiers: [
+            {
+              property: { id: 'wdt:P31', data_type: 'wikibase-item' as const },
+              value: { type: 'value' as const, content: releaseCompleteness },
+            },
+          ],
+        },
       ),
     ];
     publicRead.subject.statements['schema:inLanguage'] = [
@@ -244,6 +253,7 @@ export function releaseFidelityFixture(scenario: ReleaseFidelityScenario = 'read
     else
       publicRead.related = {
         [releaseWork]: { type: 'schema:Book', labels: { en: 'The Traveller', ja: '旅人' } },
+        [releaseCompleteness]: { type: 'skos:Concept', labels: { en: 'Complete' } },
       };
   }
   const relatedId = (index: number) => `00000000-0000-4000-8000-${(0xa103 + index).toString(16).padStart(12, '0')}`;

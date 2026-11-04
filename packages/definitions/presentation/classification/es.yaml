@@ -7,6 +7,7 @@ properties:
   skos:broader: 'tiene concepto más amplio'
   foaf:focus: 'sujeto representado'
   schema:keywords: 'palabras clave'
+  schema:creativeWorkStatus: 'estado de la obra'
   schema:genre: 'género'
   skos:closeMatch: 'concepto cercano'
 inverseProperties:
@@ -16,6 +17,7 @@ inverseProperties:
   foaf:focus: 'Conceptos que representan este sujeto'
   schema:genre: 'Obras de este género'
   schema:keywords: 'Sujetos con esta etiqueta'
+  schema:creativeWorkStatus: 'Obras con este estado'
   skos:closeMatch: 'Conceptos cercanos'
 typeDescriptions:
   skos:Concept: 'Un concepto de clasificación usado como género, etiqueta, función u otra categoría; puede representar un sujeto mediante su foco.'
@@ -26,5 +28,6 @@ propertyDescriptions:
   skos:broader: 'Un concepto más amplio en la jerarquía, como ficción sobre ciencia ficción.'
   foaf:focus: 'El sujeto del catálogo que este concepto de clasificación representa.'
   schema:keywords: 'Un concepto de etiqueta que clasifica el sujeto; no una cadena separada por comas ni una etiqueta personal de biblioteca.'
+  schema:creativeWorkStatus: 'Un concepto de estado de desarrollo o publicación de esta obra o edición; la integridad de una edición concreta respecto a la obra es un calificador de esa asociación.'
   schema:genre: 'Un concepto de género que clasifica esta obra, como ciencia ficción.'
   skos:closeMatch: 'Otro concepto de significado muy cercano; no implica equivalencia ni ampliación automática de filtros.'

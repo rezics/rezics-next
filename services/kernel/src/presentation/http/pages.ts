@@ -40,7 +40,7 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { semanticPageView } from '../semantic-page.ts';
+import { semanticPageView, subjectPageViewerState } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -434,6 +434,10 @@ export function pageRoutes<App>(
           ? Object.keys(initialSubject.subject.statements)
           : [];
       const plannedDocuments = documentRead(resolved.document, subject?.id ?? null, properties, selected?.context.id);
+      const resolvedAccess =
+        typeof access === 'function'
+          ? access({ actions: actionCatalogue(routed) })
+          : (access ?? createAccess({ actions: actionCatalogue(routed) }));
       return pageAnswer({
         release: (await activeRelease(pool))?.release,
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
@@ -494,6 +498,10 @@ export function pageRoutes<App>(
         probes,
         budget,
         probeSession,
+        access: resolvedAccess,
+        actor,
+        pool,
+        deadline: job.deadline,
         ...(languages === undefined ? {} : { languages }),
       });
     },
@@ -520,6 +528,10 @@ async function pageAnswer(input: {
   continuation?: PageContinuation;
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
+  access: import('../../request/access.ts').Access;
+  actor: import('../../request/access.ts').Actor;
+  pool: Pool;
+  deadline: number;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -647,6 +659,16 @@ async function pageAnswer(input: {
         : result;
   }
 
+  const authority =
+    input.subject === null
+      ? undefined
+      : await subjectPageViewerState({
+          access: input.access,
+          pool: input.pool,
+          actor: input.actor,
+          deadline: input.deadline,
+          subject: input.subject,
+        });
   return respond(
     200,
     {
@@ -659,6 +681,7 @@ async function pageAnswer(input: {
       document: input.resolved.document,
       ...(input.views === null ? {} : { views: input.views }),
       reads,
+      ...(authority === undefined ? {} : { viewer: authority.viewer, actions: authority.actions }),
     },
     readSession,
     true,

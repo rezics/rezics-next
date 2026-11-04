@@ -26,6 +26,7 @@ classes:
       Sources: https://schema.org/VideoGame and https://www.wikidata.org/wiki/Q7889.
     slots:
       - alternateName
+      - creativeWorkStatus
     annotations:
       library:
         id: game.playing
@@ -89,6 +90,8 @@ classes:
       - releaseType
       - distributionFormat
       - vndbId
+      - follows
+      - creativeWorkStatus
     annotations:
       library:
         id: game.release
@@ -274,7 +277,9 @@ slots:
   follows:
     slot_uri: wdt:P155
     description: A prior work or release that this work or release follows.
-    range: CreativeWork
+    any_of:
+      - range: CreativeWork
+      - range: VideoGameRelease
     multivalued: true
     exact_mappings:
       - wd:P155
