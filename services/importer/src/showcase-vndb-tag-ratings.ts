@@ -1,13 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { SourceVocabularyBindings } from '@rezics/conversion';
-import {
-  vndbPublicTagConceptUri,
-  vndbPublicTagScheme,
-  vndbPublicTagTaxonomy,
-  type VndbPublicTagCategory,
-} from '../../../packages/conversion/src/support.ts';
-import type { AdmittedPublicTag } from './vndb-public-tags.ts';
-import { vndbTagsRatingEndpoint } from '../../../packages/conversion/src/vndb-vocabulary.ts';
+import type { AdmittedPublicTag, VndbPublicTagCategory } from './vndb-public-tags.ts';
+import { vndbTagsRatingEndpoint } from '@rezics/conversion/vndb-vocabulary';
 
 export const showcaseVndbTagRatingLimits = Object.freeze({
   works: 96,
@@ -27,6 +21,12 @@ export type VndbTagRatingBinding = Readonly<{
   schemeId: string;
   conceptUri: string;
   schemeUri: string;
+}>;
+
+export type VndbTagRatingIdentity = Readonly<{
+  conceptUri(category: VndbPublicTagCategory, tagId: string): string;
+  schemeUri(category: VndbPublicTagCategory): string;
+  taxonomy(category: VndbPublicTagCategory): string;
 }>;
 
 export type VndbTagRatingFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -57,9 +57,10 @@ export type VndbTagRatingAcquisition = Readonly<{
 function currentBinding(
   bindings: SourceVocabularyBindings,
   row: AdmittedPublicTag,
+  identity: VndbTagRatingIdentity,
 ): VndbTagRatingBinding | undefined {
-  const taxonomy = vndbPublicTagTaxonomy(row.category);
-  const schemeUri = vndbPublicTagScheme(row.category);
+  const taxonomy = identity.taxonomy(row.category);
+  const schemeUri = identity.schemeUri(row.category);
   const concept = bindings.concepts.find((item) => item.taxonomy === taxonomy && item.code === row.tag);
   if (!concept) return;
   const scheme = bindings.schemes.find((item) => item.taxonomy === taxonomy);
@@ -76,7 +77,7 @@ function currentBinding(
     category: row.category,
     conceptId: concept.id,
     schemeId: scheme.id,
-    conceptUri: vndbPublicTagConceptUri(row.category, row.tag),
+    conceptUri: identity.conceptUri(row.category, row.tag),
     schemeUri,
   };
 }
@@ -141,6 +142,7 @@ export async function acquireShowcaseVndbTagRatings(input: {
   selectedVids: readonly string[];
   admitted: readonly AdmittedPublicTag[];
   bindings: SourceVocabularyBindings;
+  identity: VndbTagRatingIdentity;
   fetch?: VndbTagRatingFetch;
 }): Promise<VndbTagRatingAcquisition> {
   const fetcher: VndbTagRatingFetch = input.fetch ?? ((url, init) => fetch(url, init));
@@ -166,7 +168,7 @@ export async function acquireShowcaseVndbTagRatings(input: {
     const admitted = rowsByWork.get(workId) ?? [];
     const bindings: VndbTagRatingBinding[] = [];
     for (const row of admitted.slice(0, showcaseVndbTagRatingLimits.tagsPerWork)) {
-      const binding = currentBinding(input.bindings, row);
+      const binding = currentBinding(input.bindings, row, input.identity);
       if (binding) bindings.push(binding);
     }
     const localOverflow = admitted.length > showcaseVndbTagRatingLimits.tagsPerWork;

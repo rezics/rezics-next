@@ -29,6 +29,7 @@ import {
   acquireShowcaseVndbTagRatings,
   showcaseVndbTagRatingLimits,
   type VndbTagRatingFetch,
+  type VndbTagRatingIdentity,
   type VndbTagRatingObservation,
 } from './showcase-vndb-tag-ratings.ts';
 import { vndbLimits } from '@rezics/conversion/vndb';
@@ -54,6 +55,11 @@ type Provider = 'bangumi' | 'vndb';
 const workId = /^v[1-9][0-9]*$/u;
 const tagId = /^g[1-9][0-9]{0,9}$/u;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+const tagRatingIdentity: VndbTagRatingIdentity = {
+  conceptUri: vndbPublicTagConceptUri,
+  schemeUri: vndbPublicTagScheme,
+  taxonomy: vndbPublicTagTaxonomy,
+};
 
 export type ShowcaseTagVocabularyRecord = Readonly<{
   kind: 'scheme' | 'concept';
@@ -488,6 +494,7 @@ export async function prepareShowcaseTags(input: {
     selectedVids: input.selectedVids,
     admitted: planned.admitted,
     bindings,
+    identity: tagRatingIdentity,
     ...(input.fetch ? { fetch: input.fetch } : {}),
   });
   return {
@@ -518,6 +525,7 @@ export async function importShowcaseTags(input: {
     selectedVids: input.selectedVids,
     admitted: planned.admitted,
     bindings,
+    identity: tagRatingIdentity,
     ...(input.fetch ? { fetch: input.fetch } : {}),
   });
   input.manifest?.recordVocabulary?.(planned.vocabulary);
