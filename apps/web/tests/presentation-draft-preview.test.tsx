@@ -256,7 +256,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         await render();
         await capture();
         expect(calls).toHaveLength(0);
-        expect(controls().getByRole('alert').textContent).toContain(m.draft_preview_subject_invalid({}, { locale }));
+        expect(controls().getByRole('alert').textContent).toContain(m.draft_preview_address_required({}, { locale }));
         const address = controls().getByRole('textbox', { name: m.draft_preview_subject_id({}, { locale }) });
         await act(async () => user.type(address, recorded.subject.id));
         await select(controls().getByRole('combobox', { name: m.draft_preview_view({}, { locale }) }), 'details');

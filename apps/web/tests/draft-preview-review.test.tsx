@@ -191,8 +191,12 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await act(async () => user.keyboard('{Enter}'));
       expect(calls).toHaveLength(0);
       expect(field(m.draft_preview_subject_id({}, { locale: 'en' })).getAttribute('aria-invalid')).toBe('true');
-      expect(controls().getByText(m.draft_preview_subject_invalid({}, { locale: 'en' }))).toBeTruthy();
       const subjectField = field(m.draft_preview_subject_id({}, { locale: 'en' }));
+      expect(controls().getByText(m.draft_preview_address_required({}, { locale: 'en' }))).toBeTruthy();
+      await act(async () => user.type(subjectField, 'not-a-uuid'));
+      await submit(captureLabel);
+      expect(calls).toHaveLength(0);
+      expect(controls().getByText(m.draft_preview_subject_invalid({}, { locale: 'en' }))).toBeTruthy();
       await act(async () => user.clear(subjectField));
       await act(async () => user.type(subjectField, subjectId));
       const realmField = field(m.presentation_preview_realm({}, { locale: 'en' }));
