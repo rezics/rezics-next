@@ -328,7 +328,7 @@ function GameWindow({
                     <p className="text-sm text-muted-foreground">
                       {page.next ? m.game_reader_more_available({}, o) : m.album_tracks_complete({}, o)}
                     </p>
-                    {!page.caughtUp ? <p role="status">{m.work_parts_lag({}, o)}</p> : null}
+                    {!page.caughtUp ? <p role="status">{m.work_parts_pending({}, o)}</p> : null}
                     {page.next ? (
                       <button
                         type="button"

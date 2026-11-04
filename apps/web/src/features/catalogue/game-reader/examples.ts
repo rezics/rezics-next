@@ -106,6 +106,8 @@ export function gameExample(scenario: GameExample = 'work', locale = 'en') {
         : [
             {
               subject: editionId,
+              type: 'wd:Q20631656',
+              label: { language: 'en', value: 'Harbour trial · Japanese Windows' },
               property: editionProperty,
               statement: association.id,
               assertion: association,
