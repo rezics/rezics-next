@@ -34,17 +34,13 @@ test('installed native cards render through the generated reader and original ac
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { readSubjectCommunity, composedCommunityRegion } = await import('../src/features/pages/subject-community');
-  const {
-    SubjectCommunityRegion,
-    SubjectCommunityContext,
-    SubjectCommunityRefreshContext,
-    SubjectCommunityVerificationContext,
-  } = await import('../src/features/pages/subject-community-view');
+  const { SubjectCommunityRegion, SubjectCommunityContext, SubjectCommunityVerificationContext } =
+    await import('../src/features/pages/subject-community-view');
   const { communitySubject, communityThread, communityThreadPage } =
     await import('../src/kernel/fake/subject-community');
   const { GLOBAL } = await import('../src/features/pages/subject-ratings');
   const { m } = await import('../src/paraglide/messages.js');
-  const row = structuredClone(communityThread('review'));
+  const row = communityThread('review');
   if (row.firstPost.availability !== 'available') throw new Error('Expected opening post');
   const post = row.firstPost;
   const imageId = '01a1a000-0000-7000-8000-000000000098';
@@ -93,7 +89,6 @@ test('installed native cards render through the generated reader and original ac
             { action: 'reaction:set', operationId: 'thread.set_reaction', state: 'available' },
             { action: 'reaction:set', operationId: 'thread.clear_reaction', state: 'available' },
             { action: 'thread:watch', operationId: 'thread.watch', state: 'available' },
-            { action: 'thread:watch', operationId: 'thread.unwatch', state: 'available' },
             { action: 'report:create', operationId: 'report.create', state: 'available' },
           ],
         },
@@ -153,8 +148,8 @@ test('installed native cards render through the generated reader and original ac
     threads: [
       {
         postRevisionId: post.revisionId,
+        card: undefined,
         nativeCard: { author: null, comments: { count: { value: 0 } } },
-        actions: { watch: { state: 'current', watching: false } },
       },
     ],
   });
@@ -164,9 +159,6 @@ test('installed native cards render through the generated reader and original ac
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   let actionCalls = 0;
-  let refreshCompletion: Promise<void> = Promise.resolve();
-  let refreshCurrentAdvice = async () => {};
-  const refreshAction = () => refreshCurrentAdvice();
   const show = () =>
     act(async () =>
       root.render(
@@ -175,7 +167,6 @@ test('installed native cards render through the generated reader and original ac
             value={{ sitekey: '', scriptUrl: 'https://verification.invalid' }}
           >
             <SubjectCommunityContext.Provider value={data}>
-            <SubjectCommunityRefreshContext.Provider value={refreshAction}>
               <SubjectCommunityRegion
                 id="native"
                 kind="review"
@@ -199,7 +190,7 @@ test('installed native cards render through the generated reader and original ac
                 preparedWatch={{
                   set: async () => {
                     actionCalls++;
-                    return { kind: 'confirmed' };
+                    return { kind: 'unknown' };
                   },
                   read: async () => {
                     actionCalls++;
@@ -207,7 +198,6 @@ test('installed native cards render through the generated reader and original ac
                   },
                 }}
               />
-            </SubjectCommunityRefreshContext.Provider>
             </SubjectCommunityContext.Provider>
           </SubjectCommunityVerificationContext.Provider>
         </QueryClientProvider>,
@@ -234,33 +224,8 @@ test('installed native cards render through the generated reader and original ac
       button.textContent?.includes(m.subject_spoiler_show()),
     )!;
     await act(async () => reveal.click());
-    const watch = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === m.thread_watch_watch());
-    expect(watch).toBeDefined();
-    await act(async () => watch!.click());
-    expect(host.textContent).toContain(m.thread_watch_confirm_started());
-    const refresh = Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === m.thread_watch_refresh_advice(),
-    );
-    expect(refresh).toBeDefined();
-    refreshCurrentAdvice = () => {
-      refreshCompletion = (async () => {
-        card.watch.watching = true;
-        data = await readSubjectCommunity(kernel, communitySubject.id, ['review'], true, undefined, 'reader');
-      })();
-      return refreshCompletion;
-    };
-    await act(async () => refresh!.click());
-    await refreshCompletion;
-    await show();
-    expect(host.querySelector('button')?.textContent).not.toBe(m.thread_watch_retry_exact());
-    const stop = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === m.thread_watch_stop());
-    expect(stop).toBeDefined();
-    await act(async () => stop!.click());
-    expect(host.textContent).toContain(m.thread_watch_confirm_stopped());
     expect(host.querySelector('img')?.getAttribute('alt')).toBe('Original document image');
     expect(host.querySelector('[lang="fr"] [data-content-item-slot="preview"]')).not.toBeNull();
-    expect(actionCalls).toBe(2);
-    expect(requests).toHaveLength(2);
     (host.querySelector('h3 a') as HTMLElement).focus();
     post.revisionId = imageId;
     data = { ...data, regions: { review: project() } };
@@ -280,8 +245,8 @@ test('installed native cards render through the generated reader and original ac
         .click(),
     );
     expect(host.querySelector('img')).toBeNull();
-    expect(requests).toHaveLength(2);
-    expect(actionCalls).toBe(2);
+    expect(requests).toHaveLength(1);
+    expect(actionCalls).toBe(0);
   } finally {
     await act(async () => root.unmount());
     host.remove();

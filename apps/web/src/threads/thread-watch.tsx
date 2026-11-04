@@ -95,6 +95,7 @@ export function ThreadWatch(props: ThreadWatchProps) {
           </p>
           {visit.ready &&
           view.phase === 'confirmed' &&
+          !adviceRefreshBusy &&
           visit.canBegin() &&
           (typeof props.initialWatching !== 'boolean' || view.watching === props.initialWatching) ? (
             <Button type="button" size="sm" className={actionClass} onClick={visit.begin}>

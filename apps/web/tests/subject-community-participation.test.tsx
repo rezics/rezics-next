@@ -181,7 +181,23 @@ test('community actions require exact current thread advice and matched operatio
   ).toBeUndefined();
 });
 
-function watchView(preparedWatch: ThreadWatchNative) {
+function watchView(
+  preparedWatch: ThreadWatchNative,
+  watching = false,
+  source = 'native-source',
+  refreshAdvice?: () => Promise<void>,
+) {
+  const operations = exactActions.map((operation) =>
+    operation.operationId === 'thread.watch'
+      ? { ...operation, state: watching ? 'not_applicable' : 'available' }
+      : operation.operationId === 'thread.unwatch'
+        ? { ...operation, state: watching ? 'available' : 'not_applicable' }
+        : operation,
+  );
+  const watch = projectCommunityActionAdvice(nativeAdvice(operations, { state: 'current', watching }), {
+    threadId,
+    postRevisionId,
+  })?.watch;
   return (
     <QueryClientProvider client={client}>
       <SubjectCommunityInteractions
@@ -193,16 +209,17 @@ function watchView(preparedWatch: ThreadWatchNative) {
           createdAt: '2026-11-02T00:00:00.000Z',
           summary: 'Excerpt',
           licence: 'MIT',
-          actions: { reply: null, reaction: null, watch: { state: 'current', watching: false }, overflow: false },
+          actions: { reply: null, reaction: null, watch, overflow: false },
         }}
         subject={{ id: 'subject', label: 'Subject' }}
         locale="en"
         href="/en/threads/thread/review"
         contextId="context-one"
         reader="reader-one"
-        source="native-source"
+        source={source}
         reactionsAsOf={null}
         preparedWatch={preparedWatch}
+        {...(refreshAdvice ? { refreshAdvice } : {})}
       />
     </QueryClientProvider>
   );
@@ -284,6 +301,63 @@ test('native watch baseline skips per-card reads and a point read cannot settle 
       (button) => button.textContent === m.thread_watch_stop(),
     ),
   ).toBe(false);
+});
+
+test('native card watch can acknowledge, refresh current advice, and deliberately stop', async () => {
+  const reads: string[] = [];
+  const commands: ThreadWatchCommand[] = [];
+  const native: ThreadWatchNative = {
+    async read(request) {
+      reads.push(`${request.threadId}/${request.viewerId}`);
+      return { kind: 'unavailable' };
+    },
+    async set(command) {
+      commands.push(command);
+      return { kind: 'confirmed' };
+    },
+  };
+  const refreshed = deferred<void>();
+  let refreshes = 0;
+  const refreshAdvice = async () => {
+    refreshes++;
+    await refreshed.promise;
+  };
+  let source = 'native-source';
+  await act(async () => root.render(watchView(native, false, source, refreshAdvice)));
+  const action = (label: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === label);
+  const watch = action(m.thread_watch_watch());
+  expect(watch).toBeDefined();
+  await act(async () => {
+    watch!.click();
+    await tick();
+  });
+  expect(host.textContent).toContain(m.thread_watch_confirm_started());
+  const refresh = action(m.thread_watch_refresh_advice());
+  expect(refresh).toBeDefined();
+  await act(async () => {
+    refresh!.click();
+    await tick();
+  });
+  expect(host.querySelector('[aria-live="polite"]')?.textContent).toContain(m.thread_watch_confirm_started());
+  expect(host.querySelector('[aria-live="polite"]')?.textContent).toContain(m.thread_watch_refreshing());
+  expect(action(m.thread_watch_watch())).toBeUndefined();
+  expect(action(m.thread_watch_stop())).toBeUndefined();
+  refreshed.resolve(undefined);
+  await act(async () => refreshed.promise);
+  source = 'native-source-refreshed';
+  await act(async () => root.render(watchView(native, true, source, refreshAdvice)));
+  const stop = action(m.thread_watch_stop());
+  expect(stop).toBeDefined();
+  expect(window.document.activeElement).toBe(stop);
+  await act(async () => {
+    stop!.click();
+    await tick();
+  });
+  expect(host.textContent).toContain(m.thread_watch_confirm_stopped());
+  expect(commands.map((command) => command.watching)).toEqual([true, false]);
+  expect(reads).toEqual([]);
+  expect(refreshes).toBe(1);
 });
 
 test('community reaction keeps the exact command through uncertainty and reconciles with one fresh point read', async () => {
