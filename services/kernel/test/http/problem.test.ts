@@ -36,6 +36,19 @@ test('RealmLastOwnerError has an exact evidence-free nonretryable409 response an
   );
 });
 
+test('annotation correction limit keeps its published nonretryable conflict title', async () => {
+  const response = problemResponse(new ProblemError('library_entry_annotation_correction_limit'), {
+    method: 'PATCH',
+    id: 'entry-annotation',
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    title: 'Library Entry Annotation Correction Limit Reached',
+    code: 'library_entry_annotation_correction_limit',
+    retryable: false,
+  });
+});
+
 test('last-owner mapping cannot acquire evidence or a read effect status from problem options', async () => {
   const response = problemResponse(
     new ProblemError('realm_last_owner', {
