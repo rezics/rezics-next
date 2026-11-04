@@ -4,7 +4,7 @@
 
 **Decision:** Within each native page, the first row for a Collection ID wins; every successful page replaces the current 20-row window.
 
-**Decision:** Retry-After deadlines belong to their exact command or read request; a cursor-free restart is independent of a failed next-page cursor, and expiry enables explicit recovery without triggering it.
+**Decision:** One mounted Collection privacy viewer keeps the longest Retry-After deadline for its list endpoint across cursors; Retry retains the failed request and Restart stays cursor-free, with expiry enabling deliberate recovery only. Row reads and commands keep independent deadlines.
 
 **Decision:** Profile and public-view commands share one response-time admission deadline, separate from the current-read deadline; section changes, remounts and local edits cannot shorten it, and expiry only enables deliberate recovery.
 

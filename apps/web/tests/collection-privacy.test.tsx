@@ -1,9 +1,36 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { QueryClient } from '@tanstack/react-query';
-import { createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { OwnedCollection } from '../src/settings/preferences';
 import { CollectionPrivacyEditor } from '../src/settings/collection-privacy-recovery';
+import { m } from '../src/paraglide/messages.js';
+
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://site.test/en/settings' });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  Element: window.Element,
+  Node: window.Node,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const { createRoot } = await import('react-dom/client');
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -13,8 +40,32 @@ mock.module('../src/session/query', () => ({
   sessionCsrfToken: () => 'test-token',
   useSession: () => ({ state: 'signed-in', csrfToken: 'test-token' }),
 }));
-const { CollectionRow } = await import('../src/settings/collection-privacy');
+const { CollectionRow, CollectionPrivacyView } = await import('../src/settings/collection-privacy');
 const { SettingsSessionOwner } = await import('../src/settings/settings-session-owner');
+
+afterAll(async () => {
+  await window.happyDOM.close();
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+async function mounted(content: ReactNode, run: (host: HTMLDivElement) => Promise<void> | void) {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(content);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await run(host);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+}
 
 const privateCurated: OwnedCollection = {
   id: 'private-curated',
@@ -84,4 +135,30 @@ test('a retired viewer cannot restore its old credential after A to B to A', () 
   client.setQueryData(queryKey, accountA);
   expect(owner.credential()).toBeNull();
   client.clear();
+});
+
+test('both rendered list recovery controls honor a failed continuation wait', async () => {
+  const reads: (string | null)[] = [];
+  await mounted(
+    createElement(CollectionPrivacyView, {
+      io,
+      read: async (cursor) => {
+        reads.push(cursor);
+        return reads.length === 1
+          ? { ok: true, value: { collections: [privateCurated], next: 'next' } }
+          : { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '60' } };
+      },
+    }),
+    async (host) => {
+      const button = (name: string) =>
+        [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === name);
+      await act(async () => {
+        button(m.settings_privacy_load_more())!.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(reads).toEqual([null, 'next']);
+      expect(button(m.settings_retry())?.disabled).toBe(true);
+      expect(button(m.settings_privacy_refresh_list())?.disabled).toBe(true);
+    },
+  );
 });
