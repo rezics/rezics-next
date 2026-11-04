@@ -555,39 +555,44 @@ test('successful same-subject CSRF refresh keeps exact marker intent and origina
   const view = await screen();
   try {
     let confirmed = false;
-    view.respond((cursor) => ({
-      signedIn: true,
-      state: 'ready',
-      items: (cursor === fourth
-        ? ['unloaded-fourth']
-        : cursor === third
-          ? ['later-loaded']
-          : cursor
-            ? ['older', 'oldest']
-            : ['newest']
-      ).map((id) => notice(id, !confirmed || id.startsWith('unloaded') || id === 'later-loaded')),
-      next: cursor === fourth ? null : cursor === third ? fourth : cursor ? third : continuation,
-    }));
+    const pageFor = (cursor?: string) => {
+      const ids =
+        cursor === fourth
+          ? ['unloaded-fourth']
+          : cursor === third
+            ? ['later-loaded']
+            : cursor
+              ? ['older', 'oldest']
+              : ['newest'];
+      const next = cursor === fourth ? null : cursor === third ? fourth : cursor ? third : continuation;
+      return readyInboxPage(
+        ids.map((id) => notice(id, !confirmed || id.startsWith('unloaded') || id === 'later-loaded')),
+        next,
+        'alice',
+      );
+    };
+    view.respond(pageFor);
     await view.click(m.inbox_load_more());
     await tick();
     expect(view.rows()).toEqual([
-      ['newest', 'true'],
       ['older', 'true'],
       ['oldest', 'true'],
     ]);
     const owner = currentInboxViewer(view.client)!;
     await view.click(m.inbox_triage_mark());
     const original = { ...view.commands[0]!.data };
+    expect(original.through).toBe('older');
     await act(async () => view.commands[0]!.work.reject(new Error('response lost')));
     await tick();
     expect(view.host.textContent).toContain(m.inbox_seen_unknown());
     expect(view.host.textContent).not.toContain(m.inbox_triage_marked());
-    // Page loading is deliberate and cannot expand the original marker's eligible set.
+    // Later pages replace the retained window and cannot join the original eligible set.
     await view.click(m.inbox_load_more());
     await tick();
+    expect(view.rows().map(([id]) => id)).toEqual(['later-loaded']);
     await view.click(m.inbox_load_more());
     await tick();
-    expect(view.rows().map(([id]) => id)).toEqual(['newest', 'older', 'oldest', 'later-loaded', 'unloaded-fourth']);
+    expect(view.rows().map(([id]) => id)).toEqual(['unloaded-fourth']);
     const exactRetry = view.retain(m.inbox_retry());
     const beforeRefresh = view.commands.length;
     sessionToken = 'refreshed-token';
@@ -614,28 +619,12 @@ test('successful same-subject CSRF refresh keeps exact marker intent and origina
       for (const pending of view.countCalls) pending.resolve(count(2));
     });
     await tick();
-    // All originally loaded pages reconcile, and post-attempt loads cannot join an exact retry.
-    expect(view.rows()).toEqual([
-      ['newest', 'false'],
-      ['older', 'false'],
-      ['oldest', 'false'],
-      ['later-loaded', 'true'],
-      ['unloaded-fourth', 'true'],
-    ]);
+    // The current page is a later arrival, so a fresh read keeps it unread.
+    expect(view.rows()).toEqual([['unloaded-fourth', 'true']]);
     expect(view.host.textContent).toContain(m.inbox_triage_marked());
     await view.click(m.inbox_triage_filter_unread());
-    expect(view.rows()).toEqual([
-      ['later-loaded', 'true'],
-      ['unloaded-fourth', 'true'],
-    ]);
-    expect(view.pageCalls.map(({ cursor }) => cursor)).toEqual([
-      undefined,
-      continuation,
-      third,
-      fourth,
-      fourth,
-      fourth,
-    ]);
+    await tick();
+    expect(view.pageCalls.at(-1)).toEqual({ selection: 'unread' });
     expect(view.commands).toHaveLength(2);
   } finally {
     await view.close();
@@ -701,22 +690,22 @@ test('current page timestamp corrections retain exact shared ContentItem announc
     let createdAt = notice('linked').createdAt;
     const plainNotice = notice('plain');
     delete plainNotice.href;
-    const response = (): InboxPage => ({
-      signedIn: true,
-      state: 'ready',
-      next: null,
-      items: [
-        { ...notice('linked'), createdAt },
-        plainNotice,
-        {
-          ...notice('hidden'),
-          unavailable: true,
-          text: 'must stay hidden',
-          actorName: 'Private name',
-          href: '/private',
-        },
-      ],
-    });
+    const response = (): InboxPage =>
+      readyInboxPage(
+        [
+          { ...notice('linked'), createdAt },
+          plainNotice,
+          {
+            ...notice('hidden'),
+            unavailable: true,
+            text: 'must stay hidden',
+            actorName: 'Private name',
+            href: '/private',
+          },
+        ],
+        null,
+        'alice',
+      );
     view.respond(response);
     const owner = currentInboxViewer(view.client)!;
     await act(async () => {
@@ -819,7 +808,6 @@ test('refreshing a successful continuation retires older pages and preserves an 
     await view.click(m.inbox_load_more());
     await tick();
     expect(view.rows()).toEqual([
-      ['newest', 'true'],
       ['older', 'true'],
       ['oldest', 'true'],
     ]);

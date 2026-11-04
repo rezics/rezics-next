@@ -319,7 +319,7 @@ export function ViewerInboxPage({
   const readable = readableInboxPage(received);
   const visibleItems = readable?.items ?? [];
   const page = pageQuery.data?.signedIn && pageQuery.data.state === 'ready' ? pageQuery.data : null;
-  const admittedMarkSeen = page?.actions.markSeen ?? null;
+  const admittedMarkSeen = page?.actions?.markSeen ?? null;
   const operationState = pageQuery.data?.signedIn && pageQuery.data.state !== 'ready' ? pageQuery.data : null;
   const waiting = usePreferenceRetry(operationState?.failure);
   const seenWaiting = usePreferenceRetry(seenFailure);
