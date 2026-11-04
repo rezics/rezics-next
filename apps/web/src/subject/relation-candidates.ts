@@ -214,12 +214,21 @@ function statementInput(draft: RelationDraft): RelationStatementInput {
 
 /** Native structure caps and the ordinary 1 MiB command envelope apply before private intent hydration. */
 export function relationDraftWithinBounds(draft: RelationDraft): boolean {
-  if (!Array.isArray(draft.qualifiers) || draft.qualifiers.length > 16 ||
-    !Array.isArray(draft.references) || draft.references.length > 16 ||
-    draft.references.some((reference) => !Array.isArray(reference?.parts) || reference.parts.length < 1 || reference.parts.length > 16)) return false;
+  if (
+    !Array.isArray(draft.qualifiers) ||
+    draft.qualifiers.length > 16 ||
+    !Array.isArray(draft.references) ||
+    draft.references.length > 16 ||
+    draft.references.some(
+      (reference) => !Array.isArray(reference?.parts) || reference.parts.length < 1 || reference.parts.length > 16,
+    )
+  )
+    return false;
   try {
     return new TextEncoder().encode(JSON.stringify({ statement: statementInput(draft) })).byteLength <= 1_048_576;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 export async function readRelationEditor(
@@ -254,8 +263,12 @@ export async function readRelationEditor(
   return {
     ...result,
     viewer: 'signed-in',
-    authority: await readCandidateAuthority(client, authorization, candidateContext,
-      [id, slot?.target, slot?.key].filter((value): value is string => value !== undefined)),
+    authority: await readCandidateAuthority(
+      client,
+      authorization,
+      candidateContext,
+      [id, slot?.target, slot?.key].filter((value): value is string => value !== undefined),
+    ),
     descriptor: exact.descriptor,
     fields,
     names: Object.fromEntries(Object.entries(exact.descriptor.properties).map(([id, value]) => [id, value.labels])),

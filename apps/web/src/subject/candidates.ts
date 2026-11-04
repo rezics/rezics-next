@@ -65,9 +65,7 @@ export type CandidateResult =
 
 export const candidateContext = '00000000-0000-8000-8000-000000000000';
 
-export type CandidateActions =
-  | { state: 'available'; context: string; operations: string[] }
-  | { state: 'unavailable' };
+export type CandidateActions = { state: 'available'; context: string; operations: string[] } | { state: 'unavailable' };
 export type CandidateAuthority = {
   actions: CandidateActions;
   disclosure: 'available' | 'unreadable' | 'unavailable';
@@ -93,8 +91,7 @@ export async function readCandidateAuthority(
       { resources: references },
       { headers: { authorization }, fetch: { cache: 'no-store' } },
     );
-    if (result.status !== 200 || !result.data || result.data.resources.length !== references.length)
-      return unavailable;
+    if (result.status !== 200 || !result.data || result.data.resources.length !== references.length) return unavailable;
     const resources = references.map(({ type, id }) =>
       result.data!.resources.filter((resource) => resource.type === type && resource.id === id),
     );
@@ -114,9 +111,11 @@ export async function readCandidateAuthority(
       actions: {
         state: 'available',
         context,
-        operations: [...new Set(entries.flatMap((entry) =>
-          entry.operations.filter((operation) => bindings[operation] === entry.action),
-        ))],
+        operations: [
+          ...new Set(
+            entries.flatMap((entry) => entry.operations.filter((operation) => bindings[operation] === entry.action)),
+          ),
+        ],
       },
       disclosure: resources.slice(1).some(([resource]) => !resource || !('viewerActions' in resource))
         ? 'unreadable'
