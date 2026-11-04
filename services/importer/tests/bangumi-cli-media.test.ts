@@ -176,6 +176,10 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
       ),
     ).toBe(true);
     const initialCommands = commands.length;
+    console.log(
+      'initial summary',
+      JSON.stringify(commands.filter((command) => command.source.field_group === 'summary')),
+    );
     await invoke(raw);
     expect(commands.slice(initialCommands)).toEqual([]);
     const changed = structuredClone(raw);
