@@ -93,7 +93,7 @@ test('restore rereads current withholding and never promotes mutation output int
   ).toMatchObject({
     ok: true,
     operation: 'restore',
-    current: { subject: 'available', candidate: 'unconfirmed', selected: false },
+    current: { subject: 'unavailable', candidate: 'unconfirmed', selected: null },
   });
   expect(() => contributionInput({ ...input, source: null })).toThrow();
   expect(() => contributionInput({ ...input, operation: 'purge' })).toThrow();

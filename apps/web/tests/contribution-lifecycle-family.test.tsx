@@ -279,7 +279,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
     await confirm(panel('second'), m.contribution_restore());
     await until(() => panel('second').textContent!.includes(m.contribution_restored()));
     expect([...panel('second').querySelectorAll('h3')].map((node) => node.textContent)).toEqual([
-      m.contribution_subject_available(),
+      m.contribution_read_unavailable(),
       m.contribution_candidate_unconfirmed(),
       m.contribution_unselected(),
     ]);
