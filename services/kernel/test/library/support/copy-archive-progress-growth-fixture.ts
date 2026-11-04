@@ -314,11 +314,11 @@ export async function createCopyArchiveProgressGrowthFixture() {
       try {
         const page = await service.remove(person.actor, person.uploadId);
         if (page.complete) {
-          person.uploadId = undefined;
+          delete person.uploadId;
           return;
         }
       } catch {
-        person.uploadId = undefined;
+        delete person.uploadId;
         return;
       }
     }

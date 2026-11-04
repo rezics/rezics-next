@@ -196,7 +196,7 @@ test('exhausted final owner-remove page deletes remaining children plus the root
         [actor.accountId, person.uploadId],
       );
       expect(root.rowCount).toBe(0);
-      person.uploadId = undefined;
+      delete person.uploadId;
       return page;
     },
     {
@@ -223,7 +223,7 @@ test('expired owner-remove continues through the shared child budget until the r
       expect(second.complete).toBe(true);
       expect(second.removed).toBeGreaterThan(0);
       expect(second.removed).toBeLessThanOrEqual(CLEANUP_CHILD_BUDGET);
-      person.uploadId = undefined;
+      delete person.uploadId;
       return { first, second };
     },
     {
