@@ -305,7 +305,9 @@ describe('Exact current direct Global exposure management authority reads bounde
       );
     }
     await pool.query(
-      'UPDATE access.principal_assignment SET valid = tstzrange(NULL, $2::timestamptz) WHERE principal_id = $1',
+      `UPDATE access.principal_assignment
+       SET revoked_at = $2::timestamptz, valid = valid * tstzrange(NULL, $2::timestamptz, '[)')
+       WHERE principal_id = $1`,
       [fixture.principalId, instant.toISOString()],
     );
     await expect(nativeRead(await identity(fixture.actorId, [action], delegatedRequest))).rejects.toMatchObject({
