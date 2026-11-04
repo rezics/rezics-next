@@ -41,6 +41,15 @@ for (const view of ['overview', 'posts'] as const) {
     window.document.body.append(host);
     const root = createRoot(host as unknown as HTMLElement);
     let page = view === 'overview' ? fixtures.profilePage({ verified: true }) : fixtures.contributionPage('posts');
+    const avatar = fixtures.profilePage({ verified: true });
+    const nativeProfile = Object.values(avatar.reads).flatMap((read) => {
+      const body = read.body as { accounts?: Array<{ avatar?: unknown }> };
+      return body?.accounts ?? [];
+    })[0];
+    for (const read of Object.values(page.reads)) {
+      const body = read.body as { accounts?: Array<{ avatar?: unknown }> };
+      for (const account of body?.accounts ?? []) account.avatar = nativeProfile?.avatar;
+    }
     runtime.markCoversWithheld(page.reads);
     const publicReads = JSON.stringify(page.reads);
     let handle = 'mira';
@@ -119,9 +128,7 @@ for (const view of ['overview', 'posts'] as const) {
       await waitForStatus('unavailable');
       expect(status().textContent).toContain('unavailable');
       safe();
-      const publicLink = Array.from(host.querySelectorAll<HTMLAnchorElement>('a[href*="/@mira"]')).find(
-        (link) => !link.closest('ul[data-slot$="-items"]'),
-      )!;
+      const publicLink = host.querySelector<HTMLAnchorElement>('[data-slot="view-tabs"] a[href]')!;
       expect(publicLink).not.toBeNull();
       const recovery = host.querySelector('[data-slot="contribution-return-recovery"]');
       if (view === 'posts') expect(recovery).not.toBeNull();

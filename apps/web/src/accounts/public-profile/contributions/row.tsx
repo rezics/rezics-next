@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
-import { ProfileReadingCover as Cover } from '../reader-presentation/view';
+import { Cover, ReadingDisclosureScope } from '@rezics/ui/cover';
 import { DocumentValue, readableDocument } from '../../../features/pages/values';
 import type { OverviewValue } from '../../../features/pages/overview';
 import { isRecord } from '../../../features/pages/shared';
@@ -51,9 +51,9 @@ export function ContributionRow(props: {
   kind: ContributionKind;
   value: OverviewValue;
 }) {
-  const [visit, setVisit] = useState({ item: props.item, value: props.value, generation: 0 });
-  if (visit.item !== props.item || visit.value !== props.value) {
-    setVisit({ item: props.item, value: props.value, generation: visit.generation + 1 });
+  const [visit, setVisit] = useState({ item: props.item, locale: props.value.locale, generation: 0 });
+  if (visit.item !== props.item || visit.locale !== props.value.locale) {
+    setVisit({ item: props.item, locale: props.value.locale, generation: visit.generation + 1 });
     return null;
   }
   return <ContributionVisit key={visit.generation} {...props} />;
@@ -105,6 +105,7 @@ function ContributionVisit({
   value: OverviewValue;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const disclosure = useContext(ReadingDisclosureScope);
   const locale = locales.find((candidate) => candidate === value.locale) ?? 'en';
   const options = { locale };
   const id = key(item.id) ? item.id : '';
@@ -182,7 +183,7 @@ function ContributionVisit({
           {kind === 'review' ? (
             <>
               {review ? (
-                <PublicReviewDetails context={review} locale={locale} />
+                <PublicReviewDetails key={disclosure} context={review} locale={locale} />
               ) : (
                 <ContextUnavailable locale={locale} />
               )}
@@ -248,7 +249,12 @@ function ContributionVisit({
           ) : null}
           {kind === 'reply' && key(item.threadId) ? (
             parent ? (
-              <PublicReplyParent context={parent} locale={locale} thread={threadAddress(item.threadId, thread.title)} />
+              <PublicReplyParent
+                key={disclosure}
+                context={parent}
+                locale={locale}
+                thread={threadAddress(item.threadId, thread.title)}
+              />
             ) : item.parentId !== null ? (
               <ContextUnavailable locale={locale} />
             ) : null
