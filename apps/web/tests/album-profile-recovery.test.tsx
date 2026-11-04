@@ -123,7 +123,8 @@ test('Album recovery retires every current surface and retains private drafts an
       (control as unknown as Record<string, { onChange?: (event: { target: { value: string } }) => void }>)[key]
         ?.onChange;
     if (!callback) throw new Error('Expected a mounted term edit callback');
-    return callback;
+    return (event: { target: { value: string } }) =>
+      callback({ ...event, currentTarget: event.target } as { target: { value: string } });
   };
   const field = (property: string) => within(host).getByRole('region', { name: property });
   const show = (csrfToken = 'first', subject = 'viewer') =>
