@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { NoticeActorObservationReader } from './notice-actor-context.ts';
 import { readAccount } from '../access/account-data.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -23,6 +24,7 @@ export type InboxDependencies = Readonly<{
   routeKey: Uint8Array;
   deadline?: number;
   now?: () => Date;
+  noticeActorObservations?: NoticeActorObservationReader;
 }>;
 
 export const INBOX_SELECTIONS = ['all', 'unread'] as const;
@@ -129,6 +131,7 @@ export async function assertCurrentInboxViewer(dependencies: InboxDependencies, 
 function dependenciesForDisclosure(dependencies: InboxDependencies) {
   return {
     pool: dependencies.pool,
+    noticeActorObservations: dependencies.noticeActorObservations,
     access: dependencies.access,
     tokens: dependencies.tokens,
     routeKey: dependencies.routeKey,

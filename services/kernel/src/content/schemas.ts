@@ -582,7 +582,7 @@ export const PostPageResponseSchema = t.Object(
   },
   closed,
 );
-const historyAvatar = t.Union([
+export const AvatarSummarySchema = t.Union([
   t.Object(
     {
       media: ContentIdSchema,
@@ -613,7 +613,7 @@ const historyAuthor = t.Union([
       state: t.Literal('available'),
       displayName: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
       handle: t.Union([t.String({ maxLength: 64 }), t.Null()]),
-      avatar: historyAvatar,
+      avatar: AvatarSummarySchema,
     },
     closed,
   ),
