@@ -169,7 +169,7 @@ test('native kind forms own each field once; hydration retains choices and recov
         (button) => button.textContent === 'Save reviewed choices',
       ),
     ).toBe(false);
-    expect(host.textContent).toContain('Review action unavailable');
+    expect(host.textContent).toContain('Current account access does not allow this retained operation');
     expect(calls).toHaveLength(1);
     currentReadPage = currentPage;
     await click('Reload');
