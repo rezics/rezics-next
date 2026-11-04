@@ -23,14 +23,14 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/review-destination-journey.test.tsx
   tests:
     - The receiver calls the installed public native route and derives its response type from that declaration.
-    - "Runtime validation, private transport options, cancellation, sparse continuation, exact-cursor retry, and deliberate sole-choice inspection remain intact."
+    - 'Runtime validation, private transport options, cancellation, sparse continuation, exact-cursor retry, and deliberate sole-choice inspection remain intact.'
 ---
 
 # Finish the installed review destination receiver
