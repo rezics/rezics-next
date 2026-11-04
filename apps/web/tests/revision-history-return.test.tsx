@@ -82,8 +82,16 @@ mock.module('../src/content-editions/edition-create-actions', () => ({
 }));
 
 const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRouteWithContext, createRoute, createRouter, Outlet, RouterProvider, useRouter } =
-  await import('@tanstack/react-router');
+const {
+  createMemoryHistory,
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+  useLocation,
+  useRouter,
+} = await import('@tanstack/react-router');
 const { createRoot } = await import('react-dom/client');
 const { PostHistory } = await import('../src/threads/post-history');
 const { exactRevisionRoute } = await import('../src/threads/exact-revision-href');
@@ -157,12 +165,16 @@ async function mount(initialUrl: string) {
     getParentRoute: () => rootRoute,
     path: 'threads/$id_/$slug',
     component: function ThreadHistory() {
+      const location = useLocation();
       const navigate = useRouter();
       return (
         <PostHistory
           postId={selected.id}
           threadId={selected.threadId}
-          returnOrigin={{ pathname: window.location.pathname, search: window.location.search }}
+          returnOrigin={{
+            pathname: window.location.pathname,
+            search: new URL(location.publicHref, 'https://site.test').search,
+          }}
           navigateToExactRevision={(identity, historyReturn) => {
             void navigate.navigate(exactRevisionRoute(identity, historyReturn));
           }}
