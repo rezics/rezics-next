@@ -66,12 +66,7 @@ export class SignupReturnController {
   }
 
   noteAuthorityChange(previous: string | null, current: string): SignupReturnState {
-    if (
-      this.#summary &&
-      previous?.startsWith('account:') &&
-      current.startsWith('account:') &&
-      previous !== current
-    )
+    if (this.#summary && previous?.startsWith('account:') && current.startsWith('account:') && previous !== current)
       this.#currentViewerChanged = true;
     return this.state;
   }

@@ -235,9 +235,9 @@ test('an already-unknown attempt returns generically without its exact-retry act
   expect(p.host.textContent).toContain('Your earlier account creation may have completed');
   expect(p.host.textContent).not.toContain('Reader_1');
   expect(p.host.textContent).not.toContain('reader@example.test');
-  expect([...p.host.querySelectorAll('button')].some((item) => item.textContent?.includes('Retry original attempt'))).toBe(
-    false,
-  );
+  expect(
+    [...p.host.querySelectorAll('button')].some((item) => item.textContent?.includes('Retry original attempt')),
+  ).toBe(false);
   expect(p.calls.map((call) => call.path)).toEqual(['/signup']);
 });
 

@@ -26,7 +26,8 @@ export function SignupReturnView({
   useLayoutEffect(() => heading.current?.focus(), [page.kind, state.status]);
 
   const summary = state.summary;
-  const outcome = summary?.kind === 'created' ? m.auth_signup_return_created_body() : m.auth_signup_return_unknown_body();
+  const outcome =
+    summary?.kind === 'created' ? m.auth_signup_return_created_body() : m.auth_signup_return_unknown_body();
   const checking = state.status === 'restoring';
   const unavailable = state.status === 'unavailable' || page.kind === 'unavailable';
 
@@ -35,22 +36,30 @@ export function SignupReturnView({
       <section className="auth-login-form" aria-busy={checking}>
         {checking ? (
           <>
-            <h2 ref={heading} tabIndex={-1}>{m.auth_signup_return_checking_heading()}</h2>
+            <h2 ref={heading} tabIndex={-1}>
+              {m.auth_signup_return_checking_heading()}
+            </h2>
             <p role="status">{m.auth_signup_return_checking()}</p>
             {summary ? <p>{outcome}</p> : null}
             <SignupReturnLinks query={query} follow={follow} />
           </>
         ) : unavailable ? (
           <ErrorAlert>
-            <h2 ref={heading} tabIndex={-1}>{m.auth_signup_return_unavailable_heading()}</h2>
+            <h2 ref={heading} tabIndex={-1}>
+              {m.auth_signup_return_unavailable_heading()}
+            </h2>
             <p>{m.auth_signup_return_unavailable_body()}</p>
             {summary ? <p>{outcome}</p> : null}
-            <Button type="button" onClick={retry}>{m.auth_signup_return_retry_read()}</Button>
+            <Button type="button" onClick={retry}>
+              {m.auth_signup_return_retry_read()}
+            </Button>
             <SignupReturnLinks query={query} follow={follow} />
           </ErrorAlert>
         ) : page.kind === 'already-signed-in' ? (
           <>
-            <h2 ref={heading} tabIndex={-1}>{m.auth_signup_return_current_session_heading()}</h2>
+            <h2 ref={heading} tabIndex={-1}>
+              {m.auth_signup_return_current_session_heading()}
+            </h2>
             <p role="status">
               {state.currentViewerChanged
                 ? m.auth_signup_return_viewer_changed()
@@ -61,7 +70,9 @@ export function SignupReturnView({
               <a href={signInTarget(query, window.location.origin)}>{m.auth_signup_return_continue_current()}</a>
             </nav>
             <SignupReturnLinks query={query} follow={follow} />
-            <Button type="button" onClick={acknowledge}>{m.auth_signup_return_acknowledge()}</Button>
+            <Button type="button" onClick={acknowledge}>
+              {m.auth_signup_return_acknowledge()}
+            </Button>
           </>
         ) : (
           <>
@@ -73,7 +84,9 @@ export function SignupReturnView({
             {summary ? <p role="status">{outcome}</p> : null}
             <SignupReturnLinks query={query} follow={follow} />
             {page.kind === 'registration' && page.actions.register ? (
-              <Button type="button" onClick={acknowledge}>{m.auth_signup_return_acknowledge()}</Button>
+              <Button type="button" onClick={acknowledge}>
+                {m.auth_signup_return_acknowledge()}
+              </Button>
             ) : null}
           </>
         )}
@@ -82,11 +95,21 @@ export function SignupReturnView({
   );
 }
 
-function SignupReturnLinks({ query, follow }: { query: string; follow: (event: MouseEvent<HTMLAnchorElement>) => void }) {
+function SignupReturnLinks({
+  query,
+  follow,
+}: {
+  query: string;
+  follow: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
   return (
     <nav className="auth-signup-links" aria-label={m.auth_signup_sign_in()}>
-      <a href={`/login${query}`} onClick={follow}>{m.auth_signup_sign_in()}</a>
-      <a href={`/recovery${query}`} onClick={follow}>{m.auth_signup_recovery()}</a>
+      <a href={`/login${query}`} onClick={follow}>
+        {m.auth_signup_sign_in()}
+      </a>
+      <a href={`/recovery${query}`} onClick={follow}>
+        {m.auth_signup_recovery()}
+      </a>
     </nav>
   );
 }

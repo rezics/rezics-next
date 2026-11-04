@@ -40,7 +40,13 @@ test('known terminal refusals and handle correction do not become return warning
   const refusedDispatch = refused.dispatch('token')!;
   refused.resolve(refusedDispatch.attempt, {
     ok: false,
-    failure: { kind: 'conflict', status: 409, code: 'registration_conflict', retryAfter: null, message: 'Unavailable.' },
+    failure: {
+      kind: 'conflict',
+      status: 409,
+      code: 'registration_conflict',
+      retryAfter: null,
+      message: 'Unavailable.',
+    },
   });
   expect(refused.phase.kind).toBe('refused');
   expect(summarizeSignupOutcome(refused.phase)).toBeNull();
@@ -52,7 +58,13 @@ test('known terminal refusals and handle correction do not become return warning
   const correctionDispatch = correction.dispatch('token')!;
   correction.resolve(correctionDispatch.attempt, {
     ok: false,
-    failure: { kind: 'handle-unavailable', status: 409, code: 'handle_unavailable', retryAfter: null, message: 'Taken.' },
+    failure: {
+      kind: 'handle-unavailable',
+      status: 409,
+      code: 'handle_unavailable',
+      retryAfter: null,
+      message: 'Taken.',
+    },
   });
   expect(summarizeSignupOutcome(correction.phase)).toBeNull();
   correction.updateDraft('handle', 'Reader_2');

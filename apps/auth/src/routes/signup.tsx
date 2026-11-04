@@ -15,7 +15,13 @@ import {
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
-import { explainSignIn, normalizeSignupHandle, submitSignup, type SignupBody, type SignupPasswordLimits } from '../signup';
+import {
+  explainSignIn,
+  normalizeSignupHandle,
+  submitSignup,
+  type SignupBody,
+  type SignupPasswordLimits,
+} from '../signup';
 import { signIn, signInTarget } from '../sign-in';
 import { readRegistrationPage, type RegistrationPage } from '../registration-page';
 import { SignupReturnView } from '../signup-return-view';
@@ -221,9 +227,7 @@ function SignupPage() {
   const finishRead = useCallback(
     (readId: number, failed: boolean) => {
       if (history.location.pathname !== '/signup') return;
-      const changed = failed
-        ? returnController.adviceUnavailable(readId)
-        : returnController.adviceReturned(readId);
+      const changed = failed ? returnController.adviceUnavailable(readId) : returnController.adviceReturned(readId);
       if (changed) setReturnState(returnController.state);
     },
     [history, returnController],
@@ -282,7 +286,7 @@ function SignupPage() {
       const next = createJourney(
         history.location.search,
         !hasSummary,
-        hasSummary ? null : freshAfterReturn ?? previous?.freshAfterReturn ?? null,
+        hasSummary ? null : (freshAfterReturn ?? previous?.freshAfterReturn ?? null),
       );
       currentJourney.current = next;
       setJourney(next);
