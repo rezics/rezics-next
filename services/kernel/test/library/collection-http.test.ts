@@ -316,7 +316,7 @@ test('metadata history keeps addressed private revisions owner-only, bounded and
     }),
   );
   const page = await json<{
-    items: { revision: number; changedFields: string[] }[];
+    items: { revision: number; recordedAt: string; changedFields: string[] }[];
     coverage: { coverage: string };
   }>(await request('GET', `${history(shelf.id)}?limit=2`));
   expect(page.coverage.coverage).toBe('complete');
