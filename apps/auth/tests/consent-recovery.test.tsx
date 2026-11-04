@@ -53,11 +53,13 @@ test('mounted history survives loss of current review, replacement, new acknowle
   const click = (label: string) => flush(() => button(label).click());
   const answer = (status: number, value: unknown = body) =>
     flush(() => calls.at(-1)!.resolve(Response.json(value, { status })));
+  let historyVisible = true;
   const privateGone = () => {
     for (const text of ['former@example.test', 'former-actor', 'Private former target', 'offline_access'])
       expect(host.innerHTML).not.toContain(text);
     expect(button('Approve')).toBeUndefined();
-    expect(host.textContent).toContain(unknown);
+    if (historyVisible) expect(host.textContent).toContain(unknown);
+    else expect(host.textContent).not.toContain(unknown);
   };
   const retry = async () => {
     const count = calls.length;
@@ -134,6 +136,7 @@ test('mounted history survives loss of current review, replacement, new acknowle
     expect(document.activeElement).toBe(host.querySelector('[aria-label="Review permissions"]'));
     await click('Approve');
     await click('Hide this explanation');
+    historyVisible = false;
     expect(button('Approve').disabled).toBe(true);
     expect(host.textContent).not.toContain(unknown);
     expect(dom.sessionStorage.length).toBe(2);

@@ -43,9 +43,7 @@ async function mount() {
   const click = (label: string) => flush(() => button(label).click());
   const answer = (value: unknown, status = 200) => flush(() => calls.at(-1)!.resolve(Response.json(value, { status })));
   const go = async (href: string) => {
-    await flush(() => {
-      void router.navigate({ href });
-    });
+    await flush(() => history.push(href));
     if (button('Leave')) await click('Leave');
   };
   const notices = () => [...host.querySelectorAll('section[tabindex="-1"]')];
@@ -129,8 +127,10 @@ test('same-client scope changes, invalid queries, Back/Forward, locale and cache
     expect(v.host.textContent).toContain('a@example.test');
     await v.click('Approve');
     await v.answer({}, 503);
-    await v.go('/consent?client_id=a&client_id=b&scope=openid');
     const count = v.calls.length;
+    await v.go('/consent?client_id=a&client_id=b&scope=openid');
+    expect(v.calls).toHaveLength(count);
+    expect(v.history.location.href).toContain('client_id=a&client_id=b');
     expect(v.host.textContent).not.toContain('a@example.test');
     expect(v.host.textContent).not.toContain('Application a');
     expect(v.notices()).toHaveLength(1);
