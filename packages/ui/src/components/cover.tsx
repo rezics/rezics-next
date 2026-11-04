@@ -1,5 +1,5 @@
 import { EyeIcon, ImageIcon } from 'lucide-react';
-import { useCallback, useMemo, type CSSProperties } from 'react';
+import { createContext, useContext, useCallback, useMemo, type CSSProperties } from 'react';
 import { AspectRatio } from '../shadcn/aspect-ratio.tsx';
 import { Button } from '../shadcn/button.tsx';
 import { cn } from '../utils.ts';
@@ -54,6 +54,9 @@ export function coverImagePreload(
     imagesizes: coverSizes(size),
   };
 }
+
+/** A caller's current reading response owns explicit disclosure without remounting public navigation. */
+export const ReadingDisclosureScope = createContext('public');
 
 export const coverLabels = {
   withheld: 'Sensitive cover',
@@ -129,7 +132,8 @@ export function Cover({
   const image = cover && usableCoverVariants(cover.variants).length > 0 && variants.length > 0 ? cover : null;
   const hasImage = image !== null;
   const lifetime = useIncarnationState<Status>(incarnation, () => ({ outcome: null, backdrop: null }));
-  const reveal = useIncarnationState(incarnation, () => false);
+  const disclosure = useContext(ReadingDisclosureScope);
+  const reveal = useIncarnationState(`${disclosure}:${incarnation}`, () => false);
   const fallbackFormat = variants.some((variant) => variant.format === 'webp') ? 'webp' : 'avif';
   const fallback = image ? resolvedCoverFallback(variants, fallbackFormat, size) : null;
 

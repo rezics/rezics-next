@@ -1,16 +1,9 @@
-import { createContext, useContext, type ComponentProps } from 'react';
-import { Cover } from '@rezics/ui/cover';
+import { ReadingDisclosureScope } from '@rezics/ui/cover';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type { ProfileReading } from './adapter';
 
-export const ProfileReadingResponse = createContext('public');
-
-/** Reset only cover disclosure; public links and contribution return hosts keep their mounted identity. */
-export function ProfileReadingCover(props: ComponentProps<typeof Cover>) {
-  const response = useContext(ProfileReadingResponse);
-  return <Cover key={response} {...props} />;
-}
+export const ProfileReadingResponse = ReadingDisclosureScope;
 
 /** A stable trigger retains focus naturally; completion never focuses a reader who has moved elsewhere. */
 export function ProfileReadingStatus({ reading, locale }: { reading: ProfileReading; locale: string }) {

@@ -1,11 +1,18 @@
 import { checkDocument, type DocumentSnapshot } from '@rezics/document';
-import { Cover, type CoverRatio, type CoverSubject, type CoverSummary } from '@rezics/ui/cover';
+import {
+  Cover,
+  ReadingDisclosureScope,
+  useIncarnationState,
+  type CoverRatio,
+  type CoverSubject,
+  type CoverSummary,
+} from '@rezics/ui/cover';
 import { DocumentBody } from '../../document-body';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { Eye } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { foreignLanguageName } from '../../subject/language';
@@ -41,7 +48,8 @@ export function SpoilerGate({
   hideLabel?: string | undefined;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const disclosure = useContext(ReadingDisclosureScope);
+  const { value: open, setValue: setOpen } = useIncarnationState(disclosure, () => false);
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="space-y-2">
       <CollapsibleTrigger
@@ -105,9 +113,11 @@ export function DocumentValue({
   locale?: string;
   labels: ValueLabels;
 }) {
+  const disclosure = useContext(ReadingDisclosureScope);
   return (
     <div lang={lang} className="max-w-prose">
       <DocumentBody
+        key={disclosure}
         document={document}
         {...(locale === undefined ? {} : { locale })}
         labels={{ revealSpoiler: labels.documentSpoiler }}

@@ -1,5 +1,5 @@
 import { Render } from '@puckeditor/core/rsc';
-import { createElement, Fragment, type ComponentProps, type ComponentType, type ReactNode } from 'react';
+import { createElement, Fragment, useMemo, type ComponentProps, type ComponentType, type ReactNode } from 'react';
 
 /** Structurally the composition registry: a type and the props that hold nested nodes. */
 export type PageDefinition = {
@@ -95,9 +95,9 @@ function renderComponent({ component, slots }: PageRenderer) {
   };
 }
 
-function renderRoot(page: PageDocument, root: PageRoot | undefined) {
+function renderRoot(pageRoot: PageDocument['root'], root: PageRoot | undefined) {
   return ({ children }: { children?: ReactNode }) =>
-    root ? createElement(root, { ...page.root.props, children }) : createElement(Fragment, null, children);
+    root ? createElement(root, { ...pageRoot.props, children }) : createElement(Fragment, null, children);
 }
 
 export function CompositionRender({
@@ -111,21 +111,25 @@ export function CompositionRender({
   components: PageComponents;
   root?: PageRoot;
 }) {
-  const renderers = pageRenderers(definitions, components);
+  // Stable component types preserve mounted public links and return recovery during private reader updates.
+  const { renderers, config } = useMemo(() => {
+    const renderers = pageRenderers(definitions, components);
+    const configComponents: Record<
+      string,
+      { fields: Record<string, { type: 'slot' }>; render: (props: Record<string, unknown>) => ReactNode }
+    > = Object.create(null);
+    for (const [type, renderer] of renderers) {
+      const fields: Record<string, { type: 'slot' }> = Object.create(null);
+      for (const slot of renderer.slots) fields[slot] = { type: 'slot' };
+      configComponents[type] = { fields, render: renderComponent(renderer) };
+    }
+    // Puck's config type includes editor props. This registry only supplies the render map.
+    const config = {
+      components: configComponents,
+      root: { render: renderRoot(document.root, root) },
+    } as ComponentProps<typeof Render>['config'];
+    return { renderers, config };
+  }, [definitions, components, root, document.root]);
   const content = prune(document.content, renderers);
-  const configComponents: Record<
-    string,
-    { fields: Record<string, { type: 'slot' }>; render: (props: Record<string, unknown>) => ReactNode }
-  > = Object.create(null);
-  for (const [type, renderer] of renderers) {
-    const fields: Record<string, { type: 'slot' }> = Object.create(null);
-    for (const slot of renderer.slots) fields[slot] = { type: 'slot' };
-    configComponents[type] = { fields, render: renderComponent(renderer) };
-  }
-  // Puck's config type includes editor props. This registry only supplies the render map.
-  const config = {
-    components: configComponents,
-    root: { render: renderRoot(document, root) },
-  } as ComponentProps<typeof Render>['config'];
   return createElement(Render, { config, data: { root: document.root, content } });
 }
