@@ -249,7 +249,11 @@ export function DiscoveryResults({
               <DiscoveryPublicRow
                 key={discoveryKey(hit)}
                 hit={hit}
-                actions={hit.summary.kind === 'space' || hit.summary.kind === 'collection' ? renderPersonal?.(hit, hit.summary.value.title) : undefined}
+                actions={
+                  hit.summary.kind === 'space' || hit.summary.kind === 'collection'
+                    ? renderPersonal?.(hit, hit.summary.value.title)
+                    : undefined
+                }
                 entry={
                   state.page.spaceEntries?.reader === null
                     ? state.page.spaceEntries.rows.find((row) => row.id === hit.key.id)

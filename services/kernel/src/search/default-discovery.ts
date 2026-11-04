@@ -807,7 +807,9 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             deadline: context.deadline,
             read: (ids) =>
               readSpaceDiscoveryEntryBatch(config, context.actor, ids, context.deadline, config.spaceEntryActions),
-            follow: config.spaceEntryFollow ?? spaceEntryFollowing((actor, targets, deadline) => readFollowDiscovery(config, actor, targets, deadline)),
+            follow:
+              config.spaceEntryFollow ??
+              spaceEntryFollowing((actor, targets, deadline) => readFollowDiscovery(config, actor, targets, deadline)),
           });
           const finalPresentation = await readListPresentationFacts(
             {

@@ -385,7 +385,12 @@ export function useDiscoveryPersonalResults(input: {
     source?.status === 'ready'
       ? (() => {
           const { spaceEntries, ...page } = source.page;
-          return { ...page, ...(spaceEntries?.reader === null ? { spaceEntries } : {}), viewerFacts: null, collectionFollows: { state: 'unavailable' as const, reason: 'identity' as const } };
+          return {
+            ...page,
+            ...(spaceEntries?.reader === null ? { spaceEntries } : {}),
+            viewerFacts: null,
+            collectionFollows: { state: 'unavailable' as const, reason: 'identity' as const },
+          };
         })()
       : undefined;
   const display: DiscoveryState | undefined =
