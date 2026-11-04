@@ -263,7 +263,9 @@ silently truncating them. The main caps are:
   snapshot no larger than 32 KiB.
 - VNDB: 64 KiB projection, at most 64 titles, 64 alias lines, and 32 external
   links; at most 162 commands (1 identifier + 64 names + 64 alternate names +
-  32 URLs + 1 original language).
+  32 URLs + 1 original language). A VideoGameRelease title projection reuses
+  those title/alias/byte caps and at most 129 commands (1 identifier + 64 names
+  + 64 Romanized alternate names).
 - Open Library: 2 MiB projection, at most 64 entries per collection and 64
   combined author/work relations, at most 1 MiB of unlicensed prose retained as
   metadata, and at most 100 commands.
@@ -316,6 +318,18 @@ omission, null distinction, digest stability, and strict invalid controls. The
 frozen native COPY acceptance verifies staged empty-cell composition and public
 bulk effects. This narrow result does not establish every discovery,
 statistics, or publication capability.
+
+### VNDB release titles
+
+`cross-media-entities@3` projects admitted `releases_titles` rows onto
+`wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
+`schema:alternateName` with the existing Latn tag. `mtl` is retained technical
+metadata and never ranks labels or supplies a translation credit. A second name
+in one language is an alias, not an overwrite. Exact-empty latin is unadmitted
+on this table and does not inherit the `vn_titles` empty-cell decision. Title
+language is not a whole-release `schema:inLanguage` fact. Scalar `{id,title}`
+payloads remain the untagged legacy envelope for sealed journals. Date, status
+and completeness stay on the release-fidelity vocabulary path.
 
 ### VNDB native alternate-name contract
 

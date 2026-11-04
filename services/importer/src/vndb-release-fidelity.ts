@@ -5,6 +5,7 @@ import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/con
 import type { Owner } from './record-bindings.ts';
 import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
+  collectSelectedReleaseTitles,
   crossMediaAliases,
   emptyCrossMediaPlan,
   seedCrossMedia,
@@ -263,7 +264,7 @@ export async function planVndbReleaseFidelity(
     links.set(id, [...(links.get(id) ?? []), { vid, completeness }]);
   }
   const releases = new Map<string, Row>();
-  const releaseTitles = new Map<string, string>();
+  const releaseTitleRows: Row[] = [];
   for await (const row of input.rows('vndb', 'releases')) {
     const id = String(row.id ?? '');
     if (!releaseIds.has(id)) continue;
@@ -271,8 +272,8 @@ export async function planVndbReleaseFidelity(
   }
   for await (const row of input.rows('vndb', 'releases_titles')) {
     const id = String(row.id ?? '');
-    if (!releaseIds.has(id) || releaseTitles.has(id)) continue;
-    if (typeof row.title === 'string' && row.title) releaseTitles.set(id, row.title);
+    if (!releaseIds.has(id)) continue;
+    releaseTitleRows.push(row);
   }
   for await (const row of input.rows('vndb', 'releases_supersedes')) {
     const id = String(row.id ?? '');
@@ -306,10 +307,14 @@ export async function planVndbReleaseFidelity(
       gap('releases', { id }, 'Missing selected VNDB release');
       continue;
     }
+    const bound = collectSelectedReleaseTitles(id, releaseTitleRows);
+    for (const extra of bound.overflow) gap('releases_titles', extra, 'Release titles exceed the bounded import cap');
+    for (const extra of bound.duplicates) gap('releases_titles', extra, 'Duplicate selected VNDB release title');
+    if (!bound.titles.length) gap('releases_titles', { id }, 'Missing selected VNDB release title');
     const payload: Row = {
       ...row,
       id,
-      ...(releaseTitles.get(id) ? { title: releaseTitles.get(id) } : {}),
+      ...(bound.titles.length ? { releases_titles: bound.titles } : {}),
     };
     const releaseLinks = links.get(id) ?? [];
     facts.releases.set(id, { released: row.released, links: releaseLinks });

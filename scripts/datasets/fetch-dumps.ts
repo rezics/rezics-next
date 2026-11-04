@@ -37,6 +37,7 @@ export const VNDB_DUMP_TABLES = [
   'releases',
   'releases_producers',
   'releases_supersedes',
+  'releases_titles',
   'releases_vn',
   'staff',
   'staff_alias',

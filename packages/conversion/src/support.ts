@@ -30,6 +30,14 @@ export function canonicalLanguageTag(tag: string): string | null {
   }
 }
 
+/** Romanized display form: insert or normalize a Latn script subtag. */
+export function latinLanguageTag(tag: string): string | null {
+  const parts = tag.split('-');
+  if (/^[A-Z][a-z]{3}$/u.test(parts[1] ?? '')) parts[1] = 'Latn';
+  else parts.splice(1, 0, 'Latn');
+  return canonicalLanguageTag(parts.join('-'));
+}
+
 const inLanguagePattern = /^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$/;
 
 /** Semantic language values permit only language, script and region. */
