@@ -10,6 +10,7 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/threads/one/reading' });
+await window.happyDOM.setWindowSize({ width: 1280, height: 900 });
 const globals = {
   window,
   document: window.document,
