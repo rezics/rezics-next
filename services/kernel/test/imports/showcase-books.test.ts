@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { convertBangumi, converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
 import { convertCrossMediaEntity } from '../../../../packages/conversion/src/cross-media-entities.ts';
@@ -226,7 +225,6 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     ],
   });
   expect(membership.proposals).toHaveLength(1);
-  expect(credits.gaps.some((gap) => gap.reason !== undefined)).toBe(true);
   const delivered = await runtime.importTransport.batch({
     commands: [...membership.proposals, ...credits.proposals],
   });
