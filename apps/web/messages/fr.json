@@ -8433,5 +8433,15 @@
   "board_watch_retry_exact": "Réessayer exactement cette modification",
   "board_watch_check_again": "Vérifier l’état actuel",
   "board_watch_inspect_conflict": "Vérifiez l’état actuel avant toute autre modification.",
-  "board_watch_sending": "Envoi de la modification du suivi…"
+  "board_watch_sending": "Envoi de la modification du suivi…",
+  "realm_question_management_link": "Gérer les questions de notation",
+  "realm_question_management_meaning": "Signification immuable",
+  "realm_question_management_definition_revision": "Révision de définition {revision}",
+  "realm_question_management_caption_revision": "Révision du libellé {revision}",
+  "realm_question_management_lifecycle_revision": "Révision du cycle de vie {revision}",
+  "realm_question_management_active": "Active",
+  "realm_question_management_retired": "Retirée",
+  "realm_question_management_units": "Unités de notation enregistrées",
+  "realm_question_management_zero": "Zéro est une note valide. Aucune note signifie aucune réponse.",
+  "realm_question_management_display_step": "Pas d’affichage {step}"
 }

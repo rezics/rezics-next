@@ -8433,5 +8433,15 @@
   "board_watch_retry_exact": "같은 변경 다시 시도",
   "board_watch_check_again": "현재 상태 확인",
   "board_watch_inspect_conflict": "다른 변경을 하기 전에 현재 상태를 확인하세요.",
-  "board_watch_sending": "구독 변경 전송 중…"
+  "board_watch_sending": "구독 변경 전송 중…",
+  "realm_question_management_link": "평가 질문 관리",
+  "realm_question_management_meaning": "변경할 수 없는 의미",
+  "realm_question_management_definition_revision": "정의 개정 {revision}",
+  "realm_question_management_caption_revision": "표시 이름 개정 {revision}",
+  "realm_question_management_lifecycle_revision": "수명 주기 개정 {revision}",
+  "realm_question_management_active": "활성",
+  "realm_question_management_retired": "종료됨",
+  "realm_question_management_units": "저장된 평가 단위",
+  "realm_question_management_zero": "0은 유효한 점수입니다. 점수가 없으면 응답이 없는 것입니다.",
+  "realm_question_management_display_step": "표시 간격 {step}"
 }

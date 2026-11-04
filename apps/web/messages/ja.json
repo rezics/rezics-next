@@ -8433,5 +8433,15 @@
   "board_watch_retry_exact": "同じ変更を再試行",
   "board_watch_check_again": "現在の状態を確認",
   "board_watch_inspect_conflict": "別の変更を行う前に現在の状態を確認してください。",
-  "board_watch_sending": "ウォッチ変更を送信中…"
+  "board_watch_sending": "ウォッチ変更を送信中…",
+  "realm_question_management_link": "評価質問を管理",
+  "realm_question_management_meaning": "変更できない意味",
+  "realm_question_management_definition_revision": "定義の改訂 {revision}",
+  "realm_question_management_caption_revision": "表示名の改訂 {revision}",
+  "realm_question_management_lifecycle_revision": "ライフサイクルの改訂 {revision}",
+  "realm_question_management_active": "有効",
+  "realm_question_management_retired": "終了",
+  "realm_question_management_units": "保存された評価単位",
+  "realm_question_management_zero": "0 は有効なスコアです。スコアがない場合は回答がありません。",
+  "realm_question_management_display_step": "表示刻み {step}"
 }

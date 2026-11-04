@@ -8545,5 +8545,15 @@
   "board_watch_retry_exact": "Retry this exact change",
   "board_watch_check_again": "Check current status",
   "board_watch_inspect_conflict": "Review the current status before making another change.",
-  "board_watch_sending": "Sending watch change…"
+  "board_watch_sending": "Sending watch change…",
+  "realm_question_management_link": "Manage rating questions",
+  "realm_question_management_meaning": "Immutable meaning",
+  "realm_question_management_definition_revision": "Definition revision {revision}",
+  "realm_question_management_caption_revision": "Caption revision {revision}",
+  "realm_question_management_lifecycle_revision": "Lifecycle revision {revision}",
+  "realm_question_management_active": "Active",
+  "realm_question_management_retired": "Retired",
+  "realm_question_management_units": "Stored rating units",
+  "realm_question_management_zero": "Zero is a valid score. No score means no response.",
+  "realm_question_management_display_step": "Display step {step}"
 }

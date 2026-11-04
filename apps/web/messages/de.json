@@ -8433,5 +8433,15 @@
   "board_watch_retry_exact": "Dieselbe Änderung erneut versuchen",
   "board_watch_check_again": "Aktuellen Status prüfen",
   "board_watch_inspect_conflict": "Prüfe den aktuellen Status, bevor du eine weitere Änderung vornimmst.",
-  "board_watch_sending": "Watch-Änderung wird gesendet…"
+  "board_watch_sending": "Watch-Änderung wird gesendet…",
+  "realm_question_management_link": "Bewertungsfragen verwalten",
+  "realm_question_management_meaning": "Unveränderliche Bedeutung",
+  "realm_question_management_definition_revision": "Definitionsrevision {revision}",
+  "realm_question_management_caption_revision": "Beschriftungsrevision {revision}",
+  "realm_question_management_lifecycle_revision": "Lebenszyklusrevision {revision}",
+  "realm_question_management_active": "Aktiv",
+  "realm_question_management_retired": "Stillgelegt",
+  "realm_question_management_units": "Gespeicherte Bewertungseinheiten",
+  "realm_question_management_zero": "Null ist eine gültige Bewertung. Ohne Bewertung liegt keine Antwort vor.",
+  "realm_question_management_display_step": "Anzeigeschritt {step}"
 }
