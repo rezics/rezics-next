@@ -98,11 +98,7 @@ function isViewerAction(value: unknown): value is { action: string; operations: 
 function actionState(current: SubjectRead): ConceptViewerActions {
   if (!('viewerActions' in current) || !isRecord(current.viewerActions)) return { state: 'unavailable' };
   const state = current.viewerActions;
-  if (
-    state.state !== 'available' ||
-    !Array.isArray(state.actions) ||
-    !state.actions.every(isViewerAction)
-  )
+  if (state.state !== 'available' || !Array.isArray(state.actions) || !state.actions.every(isViewerAction))
     return { state: 'unavailable' };
   return { state: 'available', account: current.account, actions: state.actions };
 }
@@ -143,7 +139,9 @@ export async function readSourceConcept(
         aliases: [],
         definition: null,
         schemes: [],
-        codes: input.role ? [{ property: 'role', label: input.role, labelLang: null, value: input.role, unknown: true }] : [],
+        codes: input.role
+          ? [{ property: 'role', label: input.role, labelLang: null, value: input.role, unknown: true }]
+          : [],
         broader: { rows: [], withheld: 0 },
         narrower: { state: 'unsupported', rows: [], next: null, exactEmpty: false },
         viewerActions,
@@ -155,7 +153,10 @@ export async function readSourceConcept(
     const retired = release.digest ? current.data.subject.release !== release.digest : null;
     const aliases = Object.entries(current.data.subject.aliases)
       .flatMap(([lang, values]) => values.map((text) => ({ text, lang })))
-      .filter((alias, index, list) => list.findIndex((entry) => entry.text === alias.text && entry.lang === alias.lang) === index);
+      .filter(
+        (alias, index, list) =>
+          list.findIndex((entry) => entry.text === alias.text && entry.lang === alias.lang) === index,
+      );
     const definition = pickText(current.data.subject.descriptions, locale);
     const schemes: ConceptSchemeRef[] = [];
     const schemeIds = new Set<string>();

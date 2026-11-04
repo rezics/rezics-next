@@ -82,7 +82,9 @@ test('mounted source Concept visit reads native identity and hierarchy, recovers
   expect(native.subject.statements['skos:inScheme']?.[0]?.value.content).toBe(scheme);
   expect(native.subject.statements['skos:broader']?.[0]?.value.content).toBe(parent);
   expect(native.subject.statements['wdt:P3180']?.[0]?.value.content).toMatch(/^v[1-9][0-9]*$/);
-  const linkRead = await fixture.stack.kernel(`/v1/subjects/${source}/links?property=skos:broader&limit=20&language=en`);
+  const linkRead = await fixture.stack.kernel(
+    `/v1/subjects/${source}/links?property=skos:broader&limit=20&language=en`,
+  );
   expect(linkRead.status).toBe(200);
   const nativeLinks = (await linkRead.json()) as {
     links: { subject: string; property: string; statement: string }[];
@@ -113,9 +115,13 @@ test('mounted source Concept visit reads native identity and hierarchy, recovers
   const hierarchy = page.locator('section[aria-labelledby="concept-narrower-heading"]');
   await ui(hierarchy.getByRole('alert')).toBeVisible();
   await hierarchy.getByRole('button', { name: 'Retry this page', exact: true }).click();
-  await ui(hierarchy.getByRole('link', { name: new RegExp(`Native narrower ${marker}`) }).first()).toBeVisible({ timeout: 60_000 });
+  await ui(hierarchy.getByRole('link', { name: new RegExp(`Native narrower ${marker}`) }).first()).toBeVisible({
+    timeout: 60_000,
+  });
   await ui(hierarchy.getByRole('button', { name: 'More hierarchy', exact: true })).toBeEnabled();
-  const firstPageLabels = await hierarchy.getByRole('link', { name: new RegExp(`Native narrower ${marker}`) }).allTextContents();
+  const firstPageLabels = await hierarchy
+    .getByRole('link', { name: new RegExp(`Native narrower ${marker}`) })
+    .allTextContents();
 
   await fixture.stack.injectKernelFailureOnce({
     method: 'GET',
@@ -125,11 +131,17 @@ test('mounted source Concept visit reads native identity and hierarchy, recovers
   });
   await hierarchy.getByRole('button', { name: 'More hierarchy', exact: true }).click();
   await ui(hierarchy.getByRole('alert')).toBeVisible();
-  expect(await hierarchy.getByRole('link', { name: new RegExp(`Native narrower ${marker}`) }).allTextContents()).toEqual(firstPageLabels);
+  expect(
+    await hierarchy.getByRole('link', { name: new RegExp(`Native narrower ${marker}`) }).allTextContents(),
+  ).toEqual(firstPageLabels);
   const linkRequests = () =>
     fixture.stack
       .kernelRequests()
-      .filter((request) => request.method === 'GET' && new URL(request.url, fixture.stack.kernelOrigin).pathname === `/v1/subjects/${source}/links`)
+      .filter(
+        (request) =>
+          request.method === 'GET' &&
+          new URL(request.url, fixture.stack.kernelOrigin).pathname === `/v1/subjects/${source}/links`,
+      )
       .map((request) => new URL(request.url, fixture.stack.kernelOrigin).searchParams.get('cursor'));
   const failedCursor = linkRequests().at(-1);
   expect(failedCursor).toBeTruthy();

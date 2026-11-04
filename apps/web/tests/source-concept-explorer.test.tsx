@@ -85,25 +85,28 @@ function client(mode: 'ok' | 'unreadable' | 'retired', linksStatus = 200) {
     subjects: ({ id }: { id: string }) => ({
       get: async () => (mode === 'unreadable' ? { status: 404 } : { status: 200, data: item(mode) }),
       links: {
-        get: async ({ query }: { query: { cursor?: string } }) => linksStatus === 200 ? ({
-          status: 200,
-          data: {
-            links: [
-              {
-                subject: '00000000-0000-4000-8000-00000000c005',
-                statement: '00000000-0000-4000-8000-00000000e025',
-                summary: {
-                  id: '00000000-0000-4000-8000-00000000c005',
-                  type: 'skos:Concept',
-                  label: { value: 'Heroine', language: 'en' },
+        get: async ({ query }: { query: { cursor?: string } }) =>
+          linksStatus === 200
+            ? {
+                status: 200,
+                data: {
+                  links: [
+                    {
+                      subject: '00000000-0000-4000-8000-00000000c005',
+                      statement: '00000000-0000-4000-8000-00000000e025',
+                      summary: {
+                        id: '00000000-0000-4000-8000-00000000c005',
+                        type: 'skos:Concept',
+                        label: { value: 'Heroine', language: 'en' },
+                      },
+                      related: {},
+                    },
+                  ],
+                  next: query.cursor ? null : 'concept-next',
+                  freshness: { caught_up: true },
                 },
-                related: {},
-              },
-            ],
-            next: query.cursor ? null : 'concept-next',
-            freshness: { caught_up: true },
-          },
-        }) : ({ status: linksStatus, data: { code: 'dependency_unavailable' } }),
+              }
+            : { status: linksStatus, data: { code: 'dependency_unavailable' } },
       },
     }),
   } as unknown as KernelClient;

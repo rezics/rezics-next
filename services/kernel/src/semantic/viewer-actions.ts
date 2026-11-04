@@ -119,7 +119,8 @@ export async function readSubjectCorrectionActions(input: {
   if (
     !mounted.length ||
     mounted.some(
-      (binding) => binding.authority !== 'resource' || binding.fixedResourceId !== undefined || binding.accountAuthority,
+      (binding) =>
+        binding.authority !== 'resource' || binding.fixedResourceId !== undefined || binding.accountAuthority,
     )
   )
     return { state: 'unavailable' };
@@ -188,6 +189,8 @@ export async function readSubjectCorrectionActions(input: {
       ),
     };
   } catch {
-    return witness.state === 'concealed' || witness.state === 'stale' ? { state: witness.state } : { state: 'unavailable' };
+    return witness.state === 'concealed' || witness.state === 'stale'
+      ? { state: witness.state }
+      : { state: 'unavailable' };
   }
 }

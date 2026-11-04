@@ -35,7 +35,15 @@ function neighbourHref(row: ConceptHierarchyRow, locale: string, returnTo?: stri
   return returnTo ? `${base}?${new URLSearchParams({ returnTo })}` : base;
 }
 
-function HierarchyLinks({ rows, locale, returnTo }: { rows: ConceptHierarchyRow[]; locale: string; returnTo?: string }) {
+function HierarchyLinks({
+  rows,
+  locale,
+  returnTo,
+}: {
+  rows: ConceptHierarchyRow[];
+  locale: string;
+  returnTo?: string;
+}) {
   return (
     <ul className="list-disc space-y-1 pl-5">
       {rows.map((row) => (
@@ -90,7 +98,7 @@ export function SourceConceptView({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  const read = withdrawn ? undefined : page ?? (query.data?.ok ? query.data : undefined);
+  const read = withdrawn ? undefined : (page ?? (query.data?.ok ? query.data : undefined));
   const error: CandidateFailure | undefined = withdrawn
     ? (withdrawnError ?? candidateFailure(503))
     : !read && query.data && !query.data.ok
@@ -105,9 +113,12 @@ export function SourceConceptView({
       (item) => item.action === 'statement:propose' && item.operations.includes('subject.propose'),
     );
 
-  useEffect(() => () => {
-    requestRef.current++;
-  }, []);
+  useEffect(
+    () => () => {
+      requestRef.current++;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (focusStatus) statusRef.current?.focus();
@@ -155,12 +166,10 @@ export function SourceConceptView({
       setPageError(undefined);
       if (mode === 'previous' && index !== undefined) setHistoryIndex(index);
       else if (mode === 'next') {
-        const nextHistory = history.addresses[historyIndex + 1] === cursor
-          ? history
-          : appendChangePage(
-              { ...history, addresses: history.addresses.slice(0, historyIndex + 1) },
-              cursor ?? '',
-            );
+        const nextHistory =
+          history.addresses[historyIndex + 1] === cursor
+            ? history
+            : appendChangePage({ ...history, addresses: history.addresses.slice(0, historyIndex + 1) }, cursor ?? '');
         setHistory(nextHistory);
         setHistoryIndex(nextHistory.addresses.indexOf(cursor));
       }
@@ -186,7 +195,9 @@ export function SourceConceptView({
 
   const hierarchy = read?.narrower;
   const failedCursor = pageError ? pageError.cursor : hierarchy?.cursor;
-  const failedInitial = pageError ? pageError.cursor === undefined : hierarchy?.state === 'unavailable' || hierarchy?.state === 'preparing';
+  const failedInitial = pageError
+    ? pageError.cursor === undefined
+    : hierarchy?.state === 'unavailable' || hierarchy?.state === 'preparing';
   const previous = historyIndex > 0 ? history.addresses[historyIndex - 1] : undefined;
   const hasPrevious = historyIndex > 0;
   const nextCursor = hierarchy?.next ?? null;
@@ -241,7 +252,9 @@ export function SourceConceptView({
       {read && (
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>{title.text || id}</h2>
+            <h2 className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>
+              {title.text || id}
+            </h2>
             <p>
               {m.concept_explore_identity({}, o)}: <code>{read.public.subject.id}</code>
             </p>
@@ -266,7 +279,8 @@ export function SourceConceptView({
                 <strong>{m.concept_explore_aliases({}, o)}:</strong>{' '}
                 {read.aliases.map((alias, index) => (
                   <span key={`${alias.lang}:${alias.text}`} lang={alias.lang ?? undefined}>
-                    {index ? ' · ' : ''}{alias.text}
+                    {index ? ' · ' : ''}
+                    {alias.text}
                   </span>
                 ))}
               </p>
@@ -282,17 +296,22 @@ export function SourceConceptView({
                     {read.schemes.map((scheme) => (
                       <li key={scheme.id}>
                         {scheme.readable && scheme.conceptPage ? (
-                          <a className={linkClass} href={
-                            `${catalogueEntries.concepts({ id: scheme.id, label: scheme.label, locale }).href}${
+                          <a
+                            className={linkClass}
+                            href={`${catalogueEntries.concepts({ id: scheme.id, label: scheme.label, locale }).href}${
                               returnTo ? `?${new URLSearchParams({ returnTo })}` : ''
-                            }`
-                          } lang={scheme.lang ?? undefined}>
+                            }`}
+                            lang={scheme.lang ?? undefined}
+                          >
                             {scheme.label || scheme.id}
                           </a>
                         ) : scheme.readable ? (
-                          <a className={linkClass} href={`${subjectHref({ id: scheme.id, label: scheme.label }, locale).href}${
-                            returnTo ? `?${new URLSearchParams({ returnTo })}` : ''
-                          }`}>
+                          <a
+                            className={linkClass}
+                            href={`${subjectHref({ id: scheme.id, label: scheme.label }, locale).href}${
+                              returnTo ? `?${new URLSearchParams({ returnTo })}` : ''
+                            }`}
+                          >
                             {scheme.label || scheme.id}
                           </a>
                         ) : (
@@ -312,11 +331,10 @@ export function SourceConceptView({
                   <ul className="list-disc space-y-1 pl-5">
                     {read.codes.map((code) => (
                       <li key={`${code.property}:${code.value}`}>
-                        <span lang={code.unknown ? undefined : code.labelLang ?? undefined}>
+                        <span lang={code.unknown ? undefined : (code.labelLang ?? undefined)}>
                           {code.unknown ? m.concept_explore_unknown_role({}, o) : code.label}
                         </span>{' '}
-                        <code>{code.property}</code>:{' '}
-                        <code>{code.value}</code>
+                        <code>{code.property}</code>: <code>{code.value}</code>
                       </li>
                     ))}
                   </ul>
@@ -370,7 +388,11 @@ export function SourceConceptView({
                   <p>{m.concept_explore_page_empty({}, o)}</p>
                 ) : null}
                 {pageError && (
-                  <p role="alert">{pageError.preparing ? m.concept_explore_hierarchy_preparing({}, o) : m.concept_explore_hierarchy_unavailable({}, o)}</p>
+                  <p role="alert">
+                    {pageError.preparing
+                      ? m.concept_explore_hierarchy_preparing({}, o)
+                      : m.concept_explore_hierarchy_unavailable({}, o)}
+                  </p>
                 )}
                 {(failedInitial || pageError) && hierarchy?.state !== 'unsupported' && (
                   <Button
@@ -403,11 +425,16 @@ export function SourceConceptView({
                     {m.concept_explore_more({}, o)}
                   </Button>
                   <span className="text-sm text-muted-foreground">
-                    {m.concept_explore_page_position({ current: historyIndex + 1, retained: history.addresses.length }, o)}
+                    {m.concept_explore_page_position(
+                      { current: historyIndex + 1, retained: history.addresses.length },
+                      o,
+                    )}
                   </span>
                 </div>
                 {oversizedCursor && <p role="status">{m.concept_explore_cursor_too_large({}, o)}</p>}
-                {history.truncated && <p role="status">{m.concept_explore_history_truncated({ limit: changePageHistoryLimit }, o)}</p>}
+                {history.truncated && (
+                  <p role="status">{m.concept_explore_history_truncated({ limit: changePageHistoryLimit }, o)}</p>
+                )}
                 <p ref={statusRef} role="status" tabIndex={-1} aria-live="polite">
                   {busy ? m.concept_explore_loading({}, o) : m.concept_explore_page_ready({}, o)}
                 </p>
