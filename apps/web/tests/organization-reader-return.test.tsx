@@ -61,7 +61,8 @@ async function mounted(
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  // These entries stand in for the mounted Subject/session query observers; cleanup explicitly clears them.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   try {
     await run({
       host,
