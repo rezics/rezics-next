@@ -160,6 +160,11 @@ test('Multilingual terms show actionable field-specific corrections without chan
       const mode = (field: TermField, value: string) => select(`terms-${field}-mode`, value);
       const language = (value: string) => select('terms-language', value);
       const save = () => click(m.catalogue_terms_save({}, options));
+      for (let attempt = 0; attempt < 50 && button(m.catalogue_terms_save({}, options)).disabled; attempt++)
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      expect(button(m.catalogue_terms_save({}, options)).disabled).toBe(false);
       const described = (id: string) => {
         const ids = control(id).getAttribute('aria-describedby')?.split(' ') ?? [];
         expect(ids.length).toBeGreaterThan(0);

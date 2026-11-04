@@ -20,7 +20,6 @@ export type TermsSnapshot = {
   href: string;
   profileHref?: string;
   session?: string;
-  authority?: TermsPageAuthority;
 };
 export type TermsRead = { state: 'ready'; snapshot: TermsSnapshot } | { state: 'concealed' | 'denied' | 'unavailable' };
 export type TermsCommand = { id: string; etag: string; key: string; patch: TermsPatch; session?: string };

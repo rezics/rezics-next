@@ -19,8 +19,9 @@ import {
 import { patchSubjectTerms, readSubjectTerms, readTermsPageAuthority } from './subject-terms-request';
 
 function currentViewer(request: Request, stale: boolean): TermsViewerState {
+  if (stale) return 'signed-out';
   if (viewerCredential(request)) return 'signed-in';
-  if (stale || cookie(request, SESSION_COOKIE) === undefined) return 'signed-out';
+  if (cookie(request, SESSION_COOKIE) === undefined) return 'signed-out';
   return 'unavailable';
 }
 
@@ -47,7 +48,7 @@ export const loadCatalogueTerms = createServerFn({ method: 'GET', strict: false 
       if ((sessionSubject(request) ?? null) !== data.expectedReader) return { state: 'denied' };
       if (data.expectedReader === null && data.session) return { state: 'denied' };
       const client = kernelClient();
-      const authorization = viewerCredential(request) ?? undefined;
+      const authorization = data.expectedReader === null ? undefined : (viewerCredential(request) ?? undefined);
       const read = await readSubjectTerms(
         client,
         data.id,
@@ -76,7 +77,9 @@ export const readCatalogueTermsAuthority = createServerFn({ method: 'GET', stric
     try {
       const stale = await prepareSession(request, env as Partial<SessionEnv>);
       if ((sessionSubject(request) ?? null) !== data.expectedReader) return unavailableTermsAuthority;
-      const authorization = viewerCredential(request) ?? undefined;
+      const credential = viewerCredential(request) ?? undefined;
+      if (data.expectedReader === null && credential) return unavailableTermsAuthority;
+      const authorization = data.expectedReader === null ? undefined : credential;
       return readTermsPageAuthority(kernelClient(), currentViewer(request, stale), authorization);
     } catch {
       return unavailableTermsAuthority;

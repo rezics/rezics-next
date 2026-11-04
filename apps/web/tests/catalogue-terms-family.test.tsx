@@ -159,7 +159,9 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     const nameB = fieldset(b, m.catalogue_create_label());
     await select(nameA, m.catalogue_terms_action(), 'set');
     await select(nameB, m.catalogue_terms_action(), 'set');
-    await settle(() => b.textContent?.includes(m.catalogue_terms_action_unavailable()) ?? false);
+    await settle(
+      () => !button(a, m.catalogue_terms_save()).disabled && (b.textContent?.includes(m.catalogue_terms_action_unavailable()) ?? false),
+    );
     await replace(nameB, m.catalogue_create_label(), 'Draft during access outage');
     expect(button(b, m.catalogue_terms_save()).disabled).toBe(true);
     await click(b, m.catalogue_terms_retry_access());
@@ -169,6 +171,14 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await click(b, m.catalogue_terms_retry_access());
     expect(button(b, m.catalogue_terms_save()).disabled).toBe(false);
     expect(control(nameB, m.catalogue_create_label()).value).toBe('Draft during access outage');
+    second.setScenario('action-denied');
+    await click(b, m.catalogue_terms_save());
+    expect(second.calls).toHaveLength(1);
+    expect(button(b, m.catalogue_terms_save()).disabled).toBe(true);
+    expect(b.textContent).toContain(m.catalogue_terms_read_only());
+    expect(control(nameB, m.catalogue_create_label()).value).toBe('Draft during access outage');
+    second.setScenario('uncertain');
+    await click(b, m.catalogue_terms_retry_access());
     const nameId = control(nameA, m.catalogue_create_label()).id;
     await replace(nameA, m.catalogue_create_label(), '');
     await click(a, m.catalogue_terms_save());
@@ -378,10 +388,12 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       'route',
       'workspace',
       'comparison',
+      'action',
     ]) {
       const reads: [string, string | undefined][] = [];
       const commands: import('../src/features/catalogue/subject-terms').TermsCommand[] = [];
       let finish!: (read: import('../src/features/catalogue/subject-terms').TermsRead) => void;
+      let finishAuthority!: (authority: import('../src/features/catalogue/subject-terms').TermsPageAuthority) => void;
       let reject!: (error: Error) => void;
       const delayed = new Promise<import('../src/features/catalogue/subject-terms').TermsRead>((resolve, fail) => {
         finish = resolve;
@@ -392,10 +404,18 @@ test('independent Terms forms retain stable associations, multilingual drafts an
           reads.push([id, session]);
           return reads.length === 1 ? recoveryInitial : delayed;
         },
-        readAuthority: async () => ({
-          viewer: 'signed-in',
-          actions: { state: 'ready', actions: [{ action: 'statement:propose', operations: ['subject.terms'] }] },
-        }),
+        readAuthority: () =>
+          mode === 'action'
+            ? new Promise((resolve) => {
+                finishAuthority = resolve;
+              })
+            : Promise.resolve({
+                viewer: 'signed-in',
+                actions: {
+                  state: 'ready',
+                  actions: [{ action: 'statement:propose', operations: ['subject.terms'] }],
+                },
+              }),
         submit: async (command) => {
           commands.push(structuredClone(command));
           return mode === 'comparison'
@@ -422,6 +442,29 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       await act(async () => showRecovery());
       await settle(() => !!host.querySelector('fieldset'));
       const page = host.querySelector('article')!;
+      if (mode === 'action') {
+        expect(button(page, m.catalogue_terms_save()).disabled).toBe(true);
+        visit = {
+          ...visit,
+          transport: {
+            ...transport,
+            readAuthority: async () => ({ viewer: 'signed-in', actions: { state: 'ready', actions: [] } }),
+          },
+        };
+        await act(async () => showRecovery());
+        await settle(() => page.textContent?.includes(m.catalogue_terms_read_only()) ?? false);
+        await act(async () => {
+          finishAuthority({
+            viewer: 'signed-in',
+            actions: { state: 'ready', actions: [{ action: 'statement:propose', operations: ['subject.terms'] }] },
+          });
+          await Promise.resolve();
+        });
+        expect(page.textContent).toContain(m.catalogue_terms_read_only());
+        expect(button(page, m.catalogue_terms_save()).disabled).toBe(true);
+        expect(commands).toHaveLength(0);
+        continue;
+      }
       expect(document.activeElement).not.toBe(page.querySelector('[tabindex="-1"]'));
       const name = fieldset(page, m.catalogue_create_label());
       await select(name, m.catalogue_terms_action(), 'set');

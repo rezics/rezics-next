@@ -87,6 +87,7 @@ type LocalTermsDecision = {
 
 type TermsReadVisit = {
   id: string;
+  sequence: number;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: TermsTransport;
@@ -148,6 +149,7 @@ function SubjectTermsPageLive({
     retryAction.current = null;
     currentVisit.current = {
       id,
+      sequence: (previousVisit?.sequence ?? 0) + 1,
       locale,
       session,
       transport,
@@ -245,6 +247,7 @@ function SubjectTermsPageLive({
       locale,
       session,
       lifetime.generation,
+      visit.sequence,
       authoritySnapshot?.subject.id,
       authoritySnapshot?.etag,
     ],
@@ -253,7 +256,8 @@ function SubjectTermsPageLive({
       etag: authoritySnapshot!.etag,
       authority: transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority,
     }),
-    enabled: !!authoritySnapshot,
+    enabled:
+      typeof window !== 'undefined' && !!authoritySnapshot && !saved && !authoritySnapshot.profileHref,
     retry: false,
     staleTime: Infinity,
     gcTime: 0,
@@ -264,7 +268,7 @@ function SubjectTermsPageLive({
     if (authorityOverride?.visit === visit && authorityOverride.snapshot === snapshot) return authorityOverride.authority;
     const observed = authorityQuery.data;
     if (observed?.id === snapshot.subject.id && observed.etag === snapshot.etag) return observed.authority;
-    return snapshot.authority ?? unavailableTermsAuthority;
+    return unavailableTermsAuthority;
   }
   const origin = useMemo(
     () => ({}),
@@ -342,6 +346,7 @@ function SubjectTermsPageLive({
     if (
       !snapshot ||
       authorityChecking ||
+      authorityQuery.isFetching ||
       running.current ||
       !lifetime.active() ||
       currentVisit.current !== visit ||
@@ -361,7 +366,12 @@ function SubjectTermsPageLive({
         return;
       setAuthorityOverride({ visit, snapshot, authority: next });
     } catch {
-      if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
+      if (
+        lifetime.active() &&
+        currentVisit.current === visit &&
+        currentReadScope.current === readScope &&
+        (stale ? comparison?.state === 'ready' && comparison.snapshot === snapshot : base === snapshot)
+      )
         setAuthorityOverride({ visit, snapshot, authority: unavailableTermsAuthority });
     } finally {
       if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
@@ -413,7 +423,6 @@ function SubjectTermsPageLive({
   const uncertain = (unknownPending && pending.current !== null) || (failure?.reason === 'unavailable' && pending.current !== null);
   const authority = authoritySnapshot ? authorityFor(authoritySnapshot) : unavailableTermsAuthority;
   const correctionAllowed = !!authoritySnapshot && termsCorrectionAllowed(authority, authoritySnapshot);
-  const unknownSealedCommand = unknownPending && pending.current !== null;
   const isCurrentDecision = (decision: LocalTermsDecision) => {
     const latest = current.current;
     return (
@@ -1084,14 +1093,14 @@ function SubjectTermsPageLive({
       )}
       {base && row && (
         <>
-          {session !== 'signed-in' && (
+          {session !== 'signed-in' && !base.profileHref && (
             <p role="status">
               {session === 'signed-out'
                 ? m.catalogue_terms_sign_in({}, options)
                 : session === 'unavailable'
                   ? m.catalogue_create_unavailable({}, options)
                   : m.catalogue_create_loading({}, options)}
-              {session === 'signed-out' && (
+              {session === 'signed-out' && !base.profileHref && (
                 <>
                   {' '}
                   <a
@@ -1104,7 +1113,7 @@ function SubjectTermsPageLive({
               )}
             </p>
           )}
-          {session === 'signed-in' && authority.viewer === 'signed-out' && (
+          {!saved && session === 'signed-in' && authority.viewer === 'signed-out' && !base.profileHref && (
             <p role="status">
               {m.catalogue_terms_sign_in({}, options)}{' '}
               <a
@@ -1115,7 +1124,15 @@ function SubjectTermsPageLive({
               </a>
             </p>
           )}
-          {session === 'signed-in' &&
+          {!saved && base.profileHref && !correctionAllowed && (
+            <p role="status">
+              {m.catalogue_terms_read_only({}, options)}{' '}
+              <a className={linkClassName} href={base.profileHref}>
+                {m.catalogue_terms_profile({}, options)}
+              </a>
+            </p>
+          )}
+          {!saved && !base.profileHref && session === 'signed-in' &&
             (authority.viewer === 'unavailable' || authority.actions.state === 'unavailable') && (
               <section role="status" className="flex min-w-0 flex-wrap items-center gap-2">
                 <p>{m.catalogue_terms_action_unavailable({}, options)}</p>
@@ -1123,14 +1140,16 @@ function SubjectTermsPageLive({
                   className={actionClassName}
                   type="button"
                   variant="outline"
-                  disabled={authorityChecking || busy}
+                  disabled={authorityChecking || authorityQuery.isFetching || busy}
                   onClick={() => void retryAuthority()}
                 >
-                  {authorityChecking ? m.catalogue_create_loading({}, options) : m.catalogue_terms_retry_access({}, options)}
+                  {authorityChecking || authorityQuery.isFetching
+                    ? m.catalogue_create_loading({}, options)
+                    : m.catalogue_terms_retry_access({}, options)}
                 </Button>
               </section>
             )}
-          {session === 'signed-in' &&
+          {!saved && !base.profileHref && session === 'signed-in' &&
             authority.viewer === 'signed-in' &&
             authority.actions.state === 'ready' &&
             !correctionAllowed && (

@@ -26,7 +26,8 @@ export type TermsScenario =
   | 'concealed'
   | 'read-unavailable'
   | 'reader-denied'
-  | 'action-unavailable';
+  | 'action-unavailable'
+  | 'action-denied';
 
 /** Native-shaped samples only: this isolated request seam is not native execution proof. */
 export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale = 'en') {
@@ -123,6 +124,8 @@ export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale 
     readAuthority: async (): Promise<TermsPageAuthority> =>
       active === 'action-unavailable'
         ? { viewer: 'signed-in', actions: { state: 'unavailable' } }
+        : active === 'action-denied'
+          ? { viewer: 'signed-in', actions: { state: 'ready', actions: [] } }
         : active === 'signed-out'
           ? { viewer: 'signed-out', actions: { state: 'ready', actions: [] } }
           : {

@@ -35,12 +35,22 @@ export async function readTermsPageAuthority(
     if (result.status === 401) return { viewer: 'signed-out', actions: { state: 'ready', actions: [] } };
     if (result.error || result.status !== 200)
       return { viewer, actions: { state: 'unavailable' } };
-    const resource = result.data?.resources.find(
-      (entry) => entry.type === 'semantic.context' && entry.id === PAGE_GLOBAL_CONTEXT,
-    );
-    if (!resource || !('viewerActions' in resource)) return { viewer, actions: { state: 'unavailable' } };
+    const resources = result.data?.resources;
+    if (!Array.isArray(resources) || resources.length !== 1) return { viewer, actions: { state: 'unavailable' } };
+    const resource = resources[0];
+    if (
+      !resource ||
+      resource.type !== 'semantic.context' ||
+      resource.id !== PAGE_GLOBAL_CONTEXT ||
+      !('viewerActions' in resource) ||
+      !Array.isArray(resource.viewerActions)
+    )
+      return { viewer, actions: { state: 'unavailable' } };
     const allowed = resource.viewerActions.some(
-      (entry) => entry.action === termsOperation.action && entry.operations.includes(termsOperation.operation),
+      (entry) =>
+        entry?.action === termsOperation.action &&
+        Array.isArray(entry.operations) &&
+        entry.operations.includes(termsOperation.operation),
     );
     return {
       viewer,
