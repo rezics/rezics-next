@@ -1575,7 +1575,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: { 200: loanListResponse, ...loanWriteFailures },
-        detail: detail('copy-loan.list', 'copy:list'),
+        detail: detail('copy_loan.list', 'copy:list'),
       },
       async ({ actor, query, admission, job, request, set }) => {
         const owner = account(actor);
@@ -1651,7 +1651,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           201: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
           ...loanWriteFailures,
         },
-        detail: detail('copy-loan.create', 'copy:create', true),
+        detail: detail('copy_loan.create', 'copy:create', true),
       },
       async ({ actor, body, headers, admission, job, request, set, session }) => {
         account(actor);
@@ -1684,7 +1684,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
           ...loanWriteFailures,
         },
-        detail: detail('copy-loan.extend', 'copy:update', true),
+        detail: detail('copy_loan.extend', 'copy:update', true),
       },
       async ({ actor, params, body, headers, admission, job, request, set, session }) => {
         account(actor);
@@ -1718,7 +1718,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
           ...loanWriteFailures,
         },
-        detail: detail('copy-loan.return', 'copy:update', true),
+        detail: detail('copy_loan.return', 'copy:update', true),
       },
       async ({ actor, params, body, headers, admission, job, request, set, session }) => {
         account(actor);
