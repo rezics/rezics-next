@@ -72,7 +72,25 @@ export async function readHomeFeedPage(
       (!authorization &&
         (page.sources.following !== 'not_requested' ||
           page.sources.continue !== 'not_requested' ||
-          page.feedItems.some((item) => item.source !== 'discovery')))
+          page.feedItems.some((item) => {
+            if (item.source !== 'discovery') return true;
+            const summary = item.summary;
+            if ('viewerReaction' in summary && summary.viewerReaction != null) return true;
+            // Reject private advice in public reads even before the next official publication.
+            if ('reactionAdvice' in summary) {
+              const advice = summary.reactionAdvice;
+              if (advice && typeof advice === 'object' && 'state' in advice && advice.state === 'current') return true;
+            }
+            if ('subjectReactions' in summary) {
+              const projection = summary.subjectReactions;
+              if (projection && typeof projection === 'object' && 'viewer' in projection) {
+                const viewer = projection.viewer;
+                if (viewer && typeof viewer === 'object' && 'state' in viewer && viewer.state === 'available')
+                  return true;
+              }
+            }
+            return false;
+          })))
     )
       return { state: 'unavailable', code: 'invalid_feed_response' };
     return { state: 'ready', page };
