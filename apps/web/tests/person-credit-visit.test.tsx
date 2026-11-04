@@ -141,7 +141,8 @@ test('current Person credit returns from work, Character and Sources with exact 
     await act(async () => {
       await import('../src/features/catalogue/credit-inspection/session');
     });
-    const dialog = window.document.querySelector('[role="dialog"]')!;
+    const dialog = window.document.querySelector('[role="dialog"]');
+    if (!dialog) throw new Error(`Credit inspection did not open: ${window.document.body.innerHTML}`);
     expect(dialog.textContent).toContain(labels['wdt:P1932']);
     expect(dialog.textContent).toContain('Original credit');
     expect(dialog.textContent).toContain('The traveler');

@@ -183,8 +183,6 @@ export function creditCorrection(credit: CreditAssertion, visit: CreditVisit, re
   const current = read.public.subject.statements[statement.property.id]?.find((entry) => entry.id === statement.id);
   if (
     !current ||
-    read.public.subject.release !== statement.rezics.release ||
-    (read.descriptor !== undefined && read.descriptor.releaseDigest !== statement.rezics.release) ||
     current.rezics.revision !== statement.rezics.revision ||
     current.rezics.release !== statement.rezics.release ||
     publicIdentity(current) !== publicIdentity(statement)
