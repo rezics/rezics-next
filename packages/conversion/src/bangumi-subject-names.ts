@@ -262,7 +262,7 @@ export function extractBangumiSubjectProfile(
         values: [],
         unsupported: false,
       };
-      if (key === '中文名' || key === '别名') {
+      if (key === '中文名' || key === '别名' || (tvAnime && key === '官方网站')) {
         if (value) {
           active.form = 'scalar';
           active.values.push(value);
