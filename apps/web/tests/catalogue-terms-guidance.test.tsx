@@ -205,11 +205,18 @@ test('Multilingual terms show actionable field-specific corrections without chan
       }
 
       const queuedChange = (element: object, value: string) => {
-        const props = Object.getOwnPropertyNames(element)
+        const keys = Object.getOwnPropertyNames(element);
+        const props = keys
           .filter((key) => key.startsWith('__reactProps$'))
           .map((key) => Reflect.get(element, key) as { onChange?: (event: unknown) => unknown } | undefined)
           .find((candidate) => typeof candidate?.onChange === 'function');
-        const onChange = props?.onChange;
+        const fiberKey = keys.find((key) => key.startsWith('__reactFiber$'));
+        const fiber = fiberKey
+          ? (Reflect.get(element, fiberKey) as
+              | { memoizedProps?: { onChange?: (event: unknown) => unknown }; pendingProps?: { onChange?: (event: unknown) => unknown } }
+              | undefined)
+          : undefined;
+        const onChange = props?.onChange ?? fiber?.memoizedProps?.onChange ?? fiber?.pendingProps?.onChange;
         if (!onChange) throw new Error('Expected a mounted Terms control change handler');
         const currentTarget = element as { value: string };
         return () => {

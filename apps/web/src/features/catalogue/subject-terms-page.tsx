@@ -191,6 +191,7 @@ function SubjectTermsPageLive({
   const [saved, setSaved] = useState<Extract<TermsResult, { ok: true }>>();
   const [authorityOverride, setAuthorityOverride] = useState<{
     visit: TermsReadVisit;
+    scope: object;
     snapshot: TermsSnapshot;
     authority: TermsPageAuthority;
   }>();
@@ -277,7 +278,12 @@ function SubjectTermsPageLive({
     refetchOnReconnect: false,
   });
   function authorityFor(snapshot: TermsSnapshot): TermsPageAuthority {
-    if (authorityOverride?.visit === visit && authorityOverride.snapshot === snapshot) return authorityOverride.authority;
+    if (
+      authorityOverride?.visit === visit &&
+      authorityOverride.scope === readScope &&
+      authorityOverride.snapshot === snapshot
+    )
+      return authorityOverride.authority;
     const observed = authorityQuery.data;
     if (observed?.id === snapshot.subject.id && observed.etag === snapshot.etag) return observed.authority;
     return unavailableTermsAuthority;
@@ -376,7 +382,7 @@ function SubjectTermsPageLive({
         (!stale && base !== snapshot)
       )
         return;
-      setAuthorityOverride({ visit, snapshot, authority: next });
+      setAuthorityOverride({ visit, scope: readScope, snapshot, authority: next });
     } catch {
       if (
         lifetime.active() &&
@@ -384,7 +390,7 @@ function SubjectTermsPageLive({
         currentReadScope.current === readScope &&
         (stale ? comparison?.state === 'ready' && comparison.snapshot === snapshot : base === snapshot)
       )
-        setAuthorityOverride({ visit, snapshot, authority: unavailableTermsAuthority });
+        setAuthorityOverride({ visit, scope: readScope, snapshot, authority: unavailableTermsAuthority });
     } finally {
       if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
         setAuthorityChecking(false);
@@ -778,7 +784,7 @@ function SubjectTermsPageLive({
         (!stale && base !== snapshot)
       )
         return;
-      setAuthorityOverride({ visit, snapshot, authority: freshAuthority });
+      setAuthorityOverride({ visit, scope: readScope, snapshot, authority: freshAuthority });
       if (!termsCorrectionAllowed(freshAuthority, snapshot)) return;
 
       if (stale && confirmed && !pending.current) {
@@ -861,10 +867,10 @@ function SubjectTermsPageLive({
               currentVisit.current === visit &&
               currentReadScope.current === readScope
             )
-              setAuthorityOverride({ visit, snapshot, authority: refreshed });
+              setAuthorityOverride({ visit, scope: readScope, snapshot, authority: refreshed });
           } catch {
             if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
-              setAuthorityOverride({ visit, snapshot, authority: unavailableTermsAuthority });
+              setAuthorityOverride({ visit, scope: readScope, snapshot, authority: unavailableTermsAuthority });
           }
         }
       }
