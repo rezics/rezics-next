@@ -391,7 +391,7 @@ test('Open Library account-key CLI imports refreshes reopens and safely stops th
     refresh = tsv(changed);
   const feed: Feed = {
     source: 'openlibrary',
-    converter: 'open-library@3',
+    converter: 'open-library@4',
     first: bytes,
     refreshed: refresh,
     malformed: tsv([unsealed[1]]) + '/type/edition\tbroken\n',
@@ -402,7 +402,7 @@ test('Open Library account-key CLI imports refreshes reopens and safely stops th
     oldValue: { language: 'und', text: edition.title },
     newValue: { language: 'und', text: changed[1]!.title },
     newRevision: '12',
-    citation: (key) => `https://openlibrary.org${key}`,
+    citation: (key) => `https://openlibrary.org${key}.json`,
     members: [
       {
         key: work.key,

@@ -74,7 +74,7 @@ const feeds: { source: SourceId; input: ConversionInput; citation: string }[] = 
         title: work.title,
       },
     },
-    citation: `https://openlibrary.org${work.key}`,
+    citation: `https://openlibrary.org${work.key}.json`,
   },
   {
     source: 'wikidata',

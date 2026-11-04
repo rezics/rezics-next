@@ -138,7 +138,7 @@ test('Open Library native book edition ISBN rights and cover fields survive real
         expect(view.revisions.some((r) => r.proposalIds.includes(proposal.id))).toBe(true);
         const parts = proposal.references.flatMap((r) => r.parts);
         for (const [property, value] of [
-          ['schema:url', `https://openlibrary.org${record.key}`],
+          ['schema:url', `https://openlibrary.org${record.key}.json`],
           ['wdt:P648', record.key.split('/').at(-1)!],
           ['schema:version', String(record.revision)],
           ['schema:dateModified', date(`+${record.last_modified.value.slice(0, 10)}T00:00:00Z`, 11)],

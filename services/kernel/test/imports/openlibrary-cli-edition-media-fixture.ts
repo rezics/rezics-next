@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair } from 'jose';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
@@ -21,10 +22,24 @@ import { openApiObserver } from './api-observer.ts';
 import { identitySupport } from './identity-fixture.ts';
 import workSource from '../../../../specs/fixtures/imports/open-library/work.json';
 import editionSource from '../../../../specs/fixtures/imports/open-library/edition.json';
+import pageEditionSource from '../../../../specs/fixtures/imports/open-library/edition-number-of-pages.json';
+import pageRefreshSource from '../../../../specs/fixtures/imports/open-library/edition-number-of-pages-refresh.synthetic.json';
+import pageFenceSource from '../../../../specs/fixtures/imports/open-library/edition-number-of-pages-fence.synthetic.json';
+import pageWorkSource from '../../../../specs/fixtures/imports/open-library/work-number-of-pages.json';
 
 type Candidate = { id: string; statement: Statement; revision: number; retracted: number | null };
-type Exchange = { source: string; path: string; key: string | null; bytes: string; status: number; body: string };
+type Exchange = { source: string; method: string; path: string; key: string | null; bytes: string; status: number; body: string };
 type Journal = { key: string; bytes: string; acknowledgement: string | null };
+type OpenLibraryRow = {
+  type: { key: string };
+  key: string;
+  revision: number;
+  last_modified: { value: string };
+};
+type InvokeOptions = {
+  loseResponse?: (exchange: Exchange) => boolean;
+  onLost?: (exchange: Exchange) => void;
+};
 const own = 'edition-books';
 const foreign = 'independent-books';
 const relation = 'schema:exampleOfWork';
@@ -42,7 +57,7 @@ export async function runOpenLibraryEditionMediaJourney() {
     }
   };
   try {
-    directory = await mkdtemp('/dev/shm/openlibrary-edition-cli-');
+    directory = await mkdtemp(join(tmpdir(), 'openlibrary-edition-cli-'));
     const state = join(directory, 'state.sqlite');
     const keyPath = join(directory, 'account.jwk');
     const identity = runtime.identity;
@@ -77,6 +92,10 @@ export async function runOpenLibraryEditionMediaJourney() {
       languages: [{ key: '/languages/eng' }],
       covers: [900000002, 900000003, -1],
     };
+    const pageEdition = structuredClone(pageEditionSource.record);
+    const pageEditionRefresh = structuredClone(pageRefreshSource.record);
+    const pageEditionFenced = structuredClone(pageFenceSource.record);
+    const pageWork = structuredClone(pageWorkSource.record);
     const unrelatedWork = { ...work, covers: [] };
     const coverUrls = [...work.covers, ...edition.covers]
       .filter((id) => id !== -1)
@@ -93,7 +112,7 @@ export async function runOpenLibraryEditionMediaJourney() {
     let sealed = false;
     const coordinators: { source: string; converterModule: string; decoderModule: string }[] = [];
 
-    async function invoke(source: string, records: readonly (typeof work | typeof edition)[]) {
+    async function invoke(source: string, records: readonly OpenLibraryRow[], options: InvokeOptions = {}) {
       const dump = join(directory!, `${source}.tsv`);
       const bytes =
         records
@@ -176,21 +195,28 @@ export async function runOpenLibraryEditionMediaJourney() {
             }
             const response = await runtime.replay(request);
             const body = await response.clone().text();
-            exchanges.push({
+            const exchange = {
               source,
+              method: request.method,
               path: url.pathname,
               key: request.headers.get('idempotency-key'),
               bytes,
               status: response.status,
               body,
-            });
+            } satisfies Exchange;
+            exchanges.push(exchange);
             if (url.pathname === '/v1/media:importFromUrl' && response.status === 202)
               acceptedMedia.add((JSON.parse(body) as MediaImportAccepted).media.id);
+            if (options.loseResponse?.(exchange)) {
+              options.onLost?.(exchange);
+              throw new TypeError('Connection closed after the committed response was lost');
+            }
             return response;
           }) as typeof fetch,
         },
       );
-      expect(result.code, JSON.stringify(result)).toBe(0);
+      if (options.onLost) expect(result.code, JSON.stringify(result)).not.toBe(0);
+      else expect(result.code, JSON.stringify(result)).toBe(0);
       expect(result.openHandles).toBe(0);
       for (const exchange of exchanges.slice(start)) {
         expect(exchange.status, `${exchange.path}: ${exchange.body}`).toBeLessThan(400);
@@ -246,15 +272,15 @@ export async function runOpenLibraryEditionMediaJourney() {
       expect(binding).toEqual({ state: 'bound', subject: reply.value.id });
       return reply.value.id;
     }
-    async function bootstrap() {
+    async function bootstrapFor(source: string, externalId: string) {
       const create = commands().find(
-        (c) => c.op === 'create' && c.source.source === own && c.source.external_id === edition.key,
+        (c) => c.op === 'create' && c.source.source === source && c.source.external_id === externalId,
       )!;
       const journal = local(
         (db) =>
           db
             .query('SELECT key,bytes,acknowledgement FROM binding_journal WHERE source=? AND external_id=? AND key=?')
-            .get(own, edition.key, create.key) as Journal,
+            .get(source, externalId, create.key) as Journal,
       );
       const receipt = await runtime.receipt(create.key);
       expect(receipt).toBeString();
@@ -273,6 +299,41 @@ export async function runOpenLibraryEditionMediaJourney() {
       expect(persisted.rows).toHaveLength(1);
       return { journal, receipt, persisted: persisted.rows[0] };
     }
+    const bootstrap = () => bootstrapFor(own, edition.key);
+    async function pageProposal(source: string, externalId: string, amount: string) {
+      const command = commands().find(
+        (candidate): candidate is Extract<BatchCommand, { op: 'propose' }> =>
+          candidate.op === 'propose' &&
+          candidate.source.source === source &&
+          candidate.source.external_id === externalId &&
+          candidate.statement.property.id === 'schema:numberOfPages' &&
+          candidate.statement.value.type === 'value' &&
+          typeof candidate.statement.value.content === 'object' &&
+          candidate.statement.value.content !== null &&
+          (candidate.statement.value.content as { amount?: unknown }).amount === amount,
+      );
+      if (!command) throw new Error(`Missing ${amount} page-count proposal`);
+      const journal = local(
+        (db) =>
+          db
+            .query('SELECT key,bytes,acknowledgement FROM binding_journal WHERE source=? AND external_id=? AND key=?')
+            .get(source, externalId, command.key) as Journal,
+      );
+      const receipt = await runtime.receipt(command.key);
+      expect(receipt).toBeString();
+      expect(journal.acknowledgement).not.toBeNull();
+      return { command, journal, receipt };
+    }
+    const pageCountCommand = (exchange: Exchange, amount: string) =>
+      (JSON.parse(exchange.bytes) as BatchWriteRequest).commands.find(
+        (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+          command.op === 'propose' &&
+          command.statement.property.id === 'schema:numberOfPages' &&
+          command.statement.value.type === 'value' &&
+          typeof command.statement.value.content === 'object' &&
+          command.statement.value.content !== null &&
+          (command.statement.value.content as { amount?: unknown }).amount === amount,
+      );
     async function candidates(id: string, property: string, target?: string) {
       const response = await editor.http(
         `/v1/subjects/${id}/candidates?${new URLSearchParams({ property, context: GLOBAL_CONTEXT, limit: '100', ...(target ? { target } : {}) })}`,
@@ -308,6 +369,11 @@ export async function runOpenLibraryEditionMediaJourney() {
       expect(response.status, JSON.stringify(body)).toBe(200);
       return body.subject;
     }
+    const pageAmount = (candidate: Candidate) => {
+      const value = candidate.statement.value;
+      if (value.type !== 'value' || typeof value.content !== 'object' || value.content === null) return undefined;
+      return (value.content as { amount?: unknown }).amount;
+    };
 
     await invoke(foreign, [unrelatedWork]);
     const foreignWorkId = claim(foreign, work.key);
@@ -338,6 +404,42 @@ export async function runOpenLibraryEditionMediaJourney() {
     const resolved = await candidates(editionId, relation, workId);
     expect(resolved).toHaveLength(1);
     expect(resolved[0]!.statement.value).toEqual({ type: 'value', content: workId });
+
+    // The observed source pair joins the same alias snapshot as the original
+    // synthetic lifecycle. A second ordinary run resolves its exact work link.
+    const pageRows = [edition, work, pageEdition, pageWork];
+    const pageImport = await invoke(own, pageRows);
+    const pageResolve = await invoke(own, pageRows);
+    expect(pageImport.code).toBe(0);
+    expect(pageResolve.code).toBe(0);
+    const pageEditionId = claim(own, pageEdition.key);
+    const pageWorkId = claim(own, pageWork.key);
+    const pageBootstrapBefore = await bootstrapFor(own, pageEdition.key);
+    const pageCountCandidates = await candidates(pageEditionId, 'schema:numberOfPages');
+    const pageCount96 = pageCountCandidates.find((candidate) => pageAmount(candidate) === '+96');
+    expect(pageCount96).toBeDefined();
+    expect(pageCount96!.statement.value).toEqual({
+      type: 'value',
+      content: { amount: '+96', unit: '1' },
+    });
+    expect(pageCount96!.statement.references[0]?.parts).toEqual(
+      expect.arrayContaining([
+        { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://openlibrary.org/books/OL7353617M.json' } },
+        { property: { id: 'wdt:P648' }, value: { type: 'value', content: 'OL7353617M' } },
+        { property: { id: 'schema:version' }, value: { type: 'value', content: '28' } },
+      ]),
+    );
+    const pageWorkRead = await subject(pageWorkId);
+    expect(pageWorkRead.type).toBe('schema:Book');
+    expect(pageWorkRead.statements).not.toHaveProperty('schema:numberOfPages');
+    expect(pageWorkRead.statements).not.toHaveProperty('schema:wordCount');
+    const refusedSelection = await editor.http(`/v1/subjects/${pageEditionId}/candidates/${pageCount96!.id}:accept`, {
+      context: GLOBAL_CONTEXT,
+      expected_head: null,
+    });
+    expect(refusedSelection.status, JSON.stringify(refusedSelection.body)).toBe(403);
+    expect((await subject(pageEditionId)).statements).not.toHaveProperty('schema:numberOfPages');
+
     const grant = await editor.http('/v1/grants', {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'account', id: identity.governance.accountId },
@@ -348,6 +450,100 @@ export async function runOpenLibraryEditionMediaJourney() {
     await select(editionId, relation, resolved, workId);
     for (const property of ['schema:author', 'schema:isbn', 'schema:inLanguage', 'schema:image'])
       await select(editionId, property, await candidates(editionId, property));
+    const pageWorkRelation = await candidates(pageEditionId, relation, pageWorkId);
+    expect(pageWorkRelation).toHaveLength(1);
+    await select(pageEditionId, relation, pageWorkRelation, pageWorkId);
+    await select(pageEditionId, 'schema:numberOfPages', [pageCount96!]);
+    const firstPageSelection = await subject(pageEditionId);
+    const pageCountBeforeRefresh = firstPageSelection.statements['schema:numberOfPages']?.[0]?.value.content;
+    const pageWorkRelationValue = firstPageSelection.statements[relation]?.[0]?.value.content;
+    const mediaReceiptsBeforeRefresh = exchanges
+      .filter((exchange) => exchange.path === '/v1/media:importFromUrl')
+      .map(({ method, key, bytes, status, body }) => ({ method, key, bytes, status, body }));
+    expect(pageCountBeforeRefresh).toEqual({
+      amount: '+96',
+      unit: '1',
+    });
+
+    const pageProposal96Before = await pageProposal(own, pageEdition.key, '+96');
+    const pageRefreshRows = [edition, work, pageEditionRefresh, pageWork];
+    const lostResponses: Exchange[] = [];
+    const lostRefresh = await invoke(own, pageRefreshRows, {
+      loseResponse: (exchange) => pageCountCommand(exchange, '+104') !== undefined,
+      onLost: (exchange) => lostResponses.push(exchange),
+    });
+    expect(lostRefresh.code).not.toBe(0);
+    expect(lostResponses.length).toBeGreaterThan(0);
+    const committedLostExchange = lostResponses[0]!;
+    const committedLostCommand = pageCountCommand(committedLostExchange, '+104');
+    if (!committedLostCommand) throw new Error('Lost response did not contain the changed page-count operation');
+    expect(committedLostCommand.op).toBe('propose');
+    const committedResult = (JSON.parse(committedLostExchange.body) as BatchWriteResult).results.find(
+      (entry) => entry.key === committedLostCommand.key,
+    );
+    expect(committedResult).toBeDefined();
+    expect([200, 201]).toContain(committedResult!.status);
+    expect(await runtime.receipt(committedLostCommand.key)).toBeString();
+    const reopenExchangeStart = exchanges.length;
+    const reopenedRefresh = await invoke(own, pageRefreshRows);
+    const replayedExchange = exchanges
+      .slice(reopenExchangeStart)
+      .find((exchange) => exchange.path === '/v1/subjects:batchWrite' && pageCountCommand(exchange, '+104'));
+    expect(reopenedRefresh.code).toBe(0);
+    expect(replayedExchange).toBeDefined();
+    expect(replayedExchange!.method).toBe(committedLostExchange.method);
+    expect(replayedExchange!.path).toBe(committedLostExchange.path);
+    expect(replayedExchange!.key).toBe(committedLostExchange.key);
+    expect(replayedExchange!.bytes).toBe(committedLostExchange.bytes);
+    expect(pageCountCommand(replayedExchange!, '+104')).toEqual(committedLostCommand);
+    expect(claim(own, pageEdition.key)).toBe(pageEditionId);
+    const pageProposal104BeforeFence = await pageProposal(own, pageEdition.key, '+104');
+    const pageCountAfterProposal = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value.content;
+    expect(pageCountAfterProposal).toEqual({
+      amount: '+96',
+      unit: '1',
+    });
+    const pageCount104 = (await candidates(pageEditionId, 'schema:numberOfPages')).find(
+      (candidate) => pageAmount(candidate) === '+104',
+    );
+    expect(pageCount104).toBeDefined();
+    await select(pageEditionId, 'schema:numberOfPages', [pageCount104!]);
+    const pageCountAfterRefreshSelection = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value.content;
+    expect(pageCountAfterRefreshSelection).toEqual({
+      amount: '+104',
+      unit: '1',
+    });
+    const pageFence = await editor.http('/v1/sourceFences:takedown', {
+      source: own,
+      externalId: pageEdition.key,
+      fieldGroup: 'facts',
+      reason: 'Preserve the current edition page-count selection',
+    });
+    expect(pageFence.status, JSON.stringify(pageFence.body)).toBe(200);
+    const fencedPageRefresh = await invoke(own, [edition, work, pageEditionFenced, pageWork]);
+    expect(fencedPageRefresh.code).toBe(0);
+    expect(claim(own, pageEdition.key)).toBe(pageEditionId);
+    const factsFenceRejected120 = !(await candidates(pageEditionId, 'schema:numberOfPages')).some(
+      (candidate) => pageAmount(candidate) === '+120',
+    );
+    expect(factsFenceRejected120).toBe(true);
+    const pageCountAfterFactsFence = (await subject(pageEditionId)).statements['schema:numberOfPages']?.[0]?.value.content;
+    expect(pageCountAfterFactsFence).toEqual({
+      amount: '+104',
+      unit: '1',
+    });
+    const pageBootstrapAfter = await bootstrapFor(own, pageEdition.key);
+    const pageProposal96After = await pageProposal(own, pageEdition.key, '+96');
+    const pageProposal104After = await pageProposal(own, pageEdition.key, '+104');
+    expect(pageBootstrapAfter).toEqual(pageBootstrapBefore);
+    expect(pageProposal96After).toEqual(pageProposal96Before);
+    expect(pageProposal104After).toEqual(pageProposal104BeforeFence);
+    expect(
+      exchanges
+        .filter((exchange) => exchange.path === '/v1/media:importFromUrl')
+        .map(({ method, key, bytes, status, body }) => ({ method, key, bytes, status, body })),
+    ).toEqual(mediaReceiptsBeforeRefresh);
+
     const links = linkProjection(runtime.database.pool);
     let caughtUp = false;
     for (let batch = 0; batch < 16; batch++) {
@@ -417,7 +613,7 @@ export async function runOpenLibraryEditionMediaJourney() {
       reason: 'Cover rights complaint',
     });
     expect(fenced.status, JSON.stringify(fenced.body)).toBe(200);
-    const fencedReopen = await invoke(own, [edition, work]);
+    const fencedReopen = await invoke(own, [edition, work, pageEditionFenced, pageWork]);
     const afterFence = await subject(editionId);
     for (const download of downloads) {
       const response = await editor.http(download.path);
@@ -508,6 +704,27 @@ export async function runOpenLibraryEditionMediaJourney() {
       nativeEntryRevisionAfter,
       originalBootstrapBefore,
       originalBootstrapAfter,
+      pageImport,
+      pageResolve,
+      lostRefresh,
+      reopenedRefresh,
+      fencedPageRefresh,
+      pageEditionId,
+      pageWorkId,
+      pageEditionType: firstPageSelection.type,
+      pageWorkType: pageWorkRead.type,
+      pageWorkRelation: pageWorkRelationValue,
+      pageCountBeforeRefresh,
+      pageCountAfterProposal,
+      pageCountAfterRefreshSelection,
+      pageCountAfterFactsFence,
+      factsFenceRejected120,
+      pageBootstrapBefore,
+      pageBootstrapAfter,
+      pageProposal96Before,
+      pageProposal96After,
+      pageProposal104BeforeFence,
+      pageProposal104After,
       close,
     };
   } catch (error) {

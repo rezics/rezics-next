@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runImportCli } from '../src/cli.ts';
 import editionSource from '../../../specs/fixtures/imports/open-library/edition.json';
@@ -9,7 +10,7 @@ import editionSource from '../../../specs/fixtures/imports/open-library/edition.
 // in kernel/test/imports/openlibrary-cli-edition-media-fixture.ts.
 for (const failure of ['truncated row', 'mismatched identity', 'invalid ISBN'] as const) {
   test(`Open Library CLI seals the whole cover-bearing TSV before effects: ${failure}`, async () => {
-    const directory = await mkdtemp('/dev/shm/openlibrary-cli-admission-');
+    const directory = await mkdtemp(join(tmpdir(), 'openlibrary-cli-admission-'));
     try {
       const path = join(directory, 'account.jwk');
       const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });

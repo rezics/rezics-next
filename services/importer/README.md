@@ -1600,6 +1600,12 @@ outside this mapping.
 - Bound: existing input/page/projection/public envelope and retry bounds, O(input bytes+(S+D)(1+q)logR) with bounded q. No catalogue/history scan or invented PostgreSQL units.
 - Growth check: existing local counted ceilings and canonical/derived native suites remain unchanged. This connected outcome adds no growth series or replacement counters.
 
+### Import Open Library edition page counts
+
+- Touches: one native `number_of_pages` field from an Open Library edition TSV row, the existing `open-library@4` converter, and ordinary proposal, editor selection and public-read paths on the same `bf:Instance`.
+- Bound: Source bytes: one five-column TSV row remains capped at 256 KiB by default, with the sanitized projection capped at 2 MiB. Per-edition preparation: one bounded allowlist pass and source digest; the count adds one scalar and no relation or catalogue lookup. Native calls: author/work resolution remains at most 64 configured-source point reads per record; the count adds one proposal within the existing 100-command batch ceiling and no extra API call.
+- Growth check: `packages/conversion/tests/open-library-page-count.test.ts` covers the observed citation, released quantity validation, digest change and malformed/missing values. `../kernel/test/imports/openlibrary-cli-edition-media.test.ts` extends the real five-column CLI journey with proposal-only import, separate selection, changed-count replay, current refusal and facts fencing; native execution remains deferred to integration, with no new growth series.
+
 ### Native mixed Wikidata acquisition
 
 - Touches: each existing bounded JSON line plus type, identity and optional native revision validation; only admitted Q items stage indexed source rows and public effects.

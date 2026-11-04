@@ -1,0 +1,23 @@
+{
+  "_fixture": {
+    "kind": "observed-bounded-source-fields",
+    "source_url": "https://openlibrary.org/books/OL7353617M.json",
+    "revision": 28,
+    "last_modified": "2025-12-15T09:37:45.661490"
+  },
+  "record": {
+    "type": { "key": "/type/edition" },
+    "key": "/books/OL7353617M",
+    "revision": 28,
+    "last_modified": { "type": "/type/datetime", "value": "2025-12-15T09:37:45.661490" },
+    "title": "Fantastic Mr. Fox",
+    "authors": [{ "key": "/authors/OL34184A" }],
+    "works": [{ "key": "/works/OL45804W" }],
+    "publish_date": "October 1, 1988",
+    "publishers": ["Puffin"],
+    "languages": [{ "key": "/languages/eng" }],
+    "isbn_10": ["0140328726"],
+    "isbn_13": ["9780140328721"],
+    "number_of_pages": 96
+  }
+}

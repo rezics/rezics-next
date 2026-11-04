@@ -222,7 +222,7 @@ test('one operator imports two configured feeds with the same native work keys w
         property: { id: 'schema:url' },
         value: {
           type: 'value',
-          content: `https://openlibrary.org${command.source.external_id}`,
+          content: `https://openlibrary.org${command.source.external_id}.json`,
         },
       });
       expect(parts).toContainEqual({
