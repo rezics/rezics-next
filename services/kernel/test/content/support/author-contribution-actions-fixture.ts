@@ -49,7 +49,7 @@ export async function createAuthorContributionActionsFixture() {
       Object.freeze(input.references);
       Object.freeze(input);
       const read = (bearer?: string) => f.call('POST', `/v1/accounts/${f.author.accountId}/contribution-actions`, {
-        bearer, body: input,
+        ...(bearer === undefined ? {} : { bearer }), body: input,
       });
       return { page, input, read };
     };

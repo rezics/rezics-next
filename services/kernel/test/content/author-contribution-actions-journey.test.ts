@@ -71,8 +71,9 @@ test('unavailable aggregates and absent own slots stay unknown; same-input retry
     }
   } finally { await observer.close(); }
   const retained = JSON.stringify(selected.input);
+  const { viewerActionRuntime: _viewerActionRuntime, ...nativeSources } = f.dependencies;
   const unavailableAdvice = await readAuthorContributionActions(
-    { ...f.dependencies, viewerActionRuntime: undefined }, f.author.accountId, selected.input,
+    nativeSources, f.author.accountId, selected.input,
     f.system.actors.other.actor, Date.now() + 120_000,
   );
   expect(unavailableAdvice.value.actions).toMatchObject({ state: 'unavailable', retryable: true, references: [] });
