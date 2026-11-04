@@ -334,6 +334,15 @@ test('unknown history survives exact later acknowledgement and matching state wi
   const saved = membership.readMembershipCommand();
   expect(saved && saved !== 'invalid' && saved.unresolved).toBe(true);
   execute = async () => Response.json({ accountId: member });
+  const normal = globalThis.fetch;
+  globalThis.fetch = (async (input, init) =>
+    String(input).endsWith('/member')
+      ? Response.json({
+          organizationId: org,
+          memberAccountId: member,
+          membership: { role: 'owner', reservationId: reservation },
+        })
+      : normal(input, init)) as typeof fetch;
   await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
   await click(m.auth_members_retry_exact());
   expect(host.textContent).toContain(m.auth_members_acknowledged());
@@ -355,6 +364,7 @@ test('restoration creates a new read generation; released old page never replace
   );
   await click(m.auth_inventory_reload());
   await flush(() => transition('pagehide'));
+  expect(document.activeElement?.id).toBe('membership-current-heading');
   list.mockResolvedValueOnce({ kind: 'denied' });
   await flush(() => transition('pageshow'));
   const reads = list.mock.calls.length;

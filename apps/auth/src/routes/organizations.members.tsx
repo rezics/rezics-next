@@ -344,6 +344,9 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   useLayoutEffect(() => {
     if (reauth && recoveryVisible) emailInput.current?.focus();
   }, [reauth, recoveryVisible]);
+  useLayoutEffect(() => {
+    if (revoked && !recoveryVisible && !history.length) document.getElementById('membership-current-heading')?.focus();
+  }, [revoked, recoveryVisible, history.length]);
   const focusRecovery = useCallback(() => {
     (
       recoveryHeading.current ??
