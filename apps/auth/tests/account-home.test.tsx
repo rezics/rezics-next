@@ -189,9 +189,9 @@ test('Retry focuses status, and pagehide/return clears and renews the observatio
   );
   await flush();
   expect(returning.host.textContent).toContain('before@example.test');
-  await flush(() => window.dispatchEvent(new Event('pagehide')));
+  await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
   expect(returning.host.textContent).not.toContain('before@example.test');
-  const pageshow = new Event('pageshow');
+  const pageshow = new dom.Event('pageshow');
   Object.defineProperty(pageshow, 'persisted', { value: true });
   await flush(() => window.dispatchEvent(pageshow));
   expect(reads).toBe(2);
