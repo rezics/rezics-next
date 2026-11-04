@@ -4,6 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
 import type { EditableCollectionPage } from '../src/library/collection-load';
+import { collectionPageAddress } from '../src/library/collection-presentation';
+import { collectionComparisonReturnState } from '../src/library/collection-comparison/return';
+import {
+  collectionPageIsFiltered,
+  collectionPositionScope,
+  collectionReadingPageKey,
+} from '../src/library/collection-public-reading/position';
 
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
 mock.module('../src/library/collection-edit', () => {
@@ -76,11 +83,12 @@ const page: EditableCollectionPage = {
 async function render(
   layout?: 'list' | 'grid',
   search: { cursor?: string; filters?: Record<string, string | string[]> } = {},
+  sourcePage: EditableCollectionPage = page,
 ) {
   const route = createRootRoute({
     component: () =>
       createElement(CollectionPage, {
-        page,
+        page: sourcePage,
         cursor: search.cursor,
         ...(layout ? { layout } : {}),
         ...(search.filters ? { search: search.filters } : {}),
@@ -88,7 +96,11 @@ async function render(
   });
   const router = createRouter({
     routeTree: route,
-    history: createMemoryHistory({ initialEntries: [`/en/collections/${collectionId}`] }),
+    history: createMemoryHistory({
+      initialEntries: [
+        collectionPageAddress('en', sourcePage.id, search.cursor, search.filters, layout ?? 'list'),
+      ],
+    }),
   });
   await router.load();
   return renderToString(
@@ -155,6 +167,125 @@ test('grid layout keeps each note under its own card and exposes the list link',
   );
   expect(list.pathname).toBe(`/en/collections/${collectionId}`);
   expect(list.searchParams.has('layout')).toBe(false);
+});
+
+test('mixed reading keeps occurrence positions and notes independent and returns to the captured layout', async () => {
+  const exactCollectionId = '8bb45f1b-9a84-47b0-805a-7f60bbbd0891';
+  const firstOccurrenceId = 'f2cb92b9-951d-4ea0-9492-6cb86a55cb31';
+  const secondOccurrenceId = '93e72e42-4304-4f08-95da-f51cc4d45e0a';
+  const thirdOccurrenceId = '0caf16a9-df2f-4eb5-8a7d-b3d81b25c039';
+  const fourthOccurrenceId = '540bdd34-3caf-4d78-a137-6e473d6c256f';
+  const unavailableOccurrenceId = 'ed5a9655-85f1-4b4e-98d7-24199116ab7f';
+  const repeatedSubject = {
+    id: 'bec68753-5b2e-4435-b057-84cb4f065716',
+    type: 'schema:Book',
+    types: ['schema:Book'],
+    label: 'Same work',
+    cover: null,
+    typeLabel: 'Book',
+  };
+  const exactPage: EditableCollectionPage = {
+    ...page,
+    id: exactCollectionId,
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+    firstPage: false,
+    filterActive: true,
+    memberCount: 5,
+    members: [
+      { id: firstOccurrenceId, note: 'Curator note for the first occurrence.', addedAt: stamp, subject: repeatedSubject },
+      { id: secondOccurrenceId, note: 'Curator note for the second occurrence.', addedAt: stamp, subject: repeatedSubject },
+      {
+        id: thirdOccurrenceId,
+        note: null,
+        addedAt: stamp,
+        subject: {
+          id: '3bb862be-7066-47c3-8aae-4a7cb842c6bf',
+          type: 'schema:Movie',
+          types: ['schema:Movie'],
+          label: null,
+          cover: null,
+          typeLabel: 'Film',
+        },
+      },
+      {
+        id: fourthOccurrenceId,
+        note: null,
+        addedAt: stamp,
+        subject: {
+          id: 'ad0d4794-cafa-46e9-b196-99c897c515bd',
+          type: 'schema:Thing',
+          types: ['schema:Thing'],
+          label: 'Unclassified work',
+          cover: null,
+          typeLabel: null,
+        },
+      },
+      { id: unavailableOccurrenceId, note: 'A note for an unavailable occurrence.', addedAt: stamp, subject: null },
+    ],
+  };
+  const search = { cursor: 'cursor-exact-page', filters: { 'f.schema:genre': ['novel'] } };
+  for (const layout of ['list', 'grid'] as const) {
+    const html = await render(layout, search, exactPage);
+    expect(html).toContain('Filtered continued page · positions are local to this page.');
+    expect(html).toContain('data-collection-presentation="ordered"');
+    expect(html).toContain(`data-collection-layout="${layout}"`);
+    expect(html).toContain('Mixed');
+    expect(html).toContain('Book');
+    expect(html).toContain('Film');
+    expect(html).toContain('Type unavailable in this reading.');
+    expect(html).toContain('Position 5 on this page');
+    expect(html).toContain(`id="collection-member-${unavailableOccurrenceId}"`);
+    expect(html).toContain('A note for an unavailable occurrence.');
+    expect(html).not.toMatch(/global rank/i);
+
+    const subjectLinks = [...html.matchAll(/href="([^"]*\/subjects\/[^\"]+)"/g)].map((match) =>
+      new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.test'),
+    );
+    const repeatedLinks = subjectLinks.filter((link) => link.pathname.includes(repeatedSubject.id));
+    expect(repeatedLinks).toHaveLength(2);
+    expect(repeatedLinks.map((link) => link.searchParams.get('via'))).toEqual([
+      `${collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, layout)}#collection-member-${firstOccurrenceId}`,
+      `${collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, layout)}#collection-member-${secondOccurrenceId}`,
+    ]);
+    expect(html).toContain('Curator note for the first occurrence.');
+    expect(html).toContain('Curator note for the second occurrence.');
+    expect(subjectLinks).toHaveLength(4);
+  }
+  expect(collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members.slice(0, 1), true, true)).toBe(
+    'missing',
+  );
+  expect(collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members, true, true)).toBe(
+    'present',
+  );
+  expect(collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members, false, true)).toBe(
+    'waiting',
+  );
+  expect(collectionPositionScope({ firstPage: true }, false)).toBe('first');
+  expect(collectionPositionScope({ firstPage: false }, false)).toBe('continued');
+  expect(collectionPositionScope({ firstPage: true }, true)).toBe('filtered-first');
+  expect(collectionPositionScope({ firstPage: false }, true)).toBe('filtered-continued');
+  expect(collectionPageIsFiltered(exactPage, search.filters)).toBe(true);
+  const listKey = collectionReadingPageKey(
+    collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, 'list'),
+    collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, 'list'),
+    exactPage.revision,
+    exactPage.members,
+  );
+  const gridKey = collectionReadingPageKey(
+    collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, 'grid'),
+    collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, 'list'),
+    exactPage.revision,
+    exactPage.members,
+  );
+  const laterKey = collectionReadingPageKey(
+    collectionPageAddress('en', exactCollectionId, 'another-cursor', search.filters, 'grid'),
+    collectionPageAddress('en', exactCollectionId, 'another-cursor', search.filters, 'list'),
+    exactPage.revision,
+    exactPage.members,
+  );
+  expect(gridKey).toBe(listKey);
+  expect(laterKey).not.toBe(listKey);
 });
 
 test('curator, member count and updated time share one metadata line', async () => {
