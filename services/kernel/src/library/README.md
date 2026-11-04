@@ -1657,6 +1657,14 @@ or repeated subjects until refresh. Use the accounts-owned `src/tokens/list-curs
 Bind route, viewer and the entire effective query, including page size, as associated data, and retain partition
 epoch validation. Library owns no cursor cryptography.
 
+Title-order key policy: use Semantic's existing `languageRanges` and `chooseLabel` selection, then the versioned
+`sortName` key (`semantic-sort-name-v1`) as UTF-8 bytes of its first 256 normalized codepoints. This is deterministic
+for the installed Unicode implementation, not a universal human collation. Missing labels remain explicitly
+uncovered; when installed, they sort last in either direction, with directional Subject-ID ties. The key helper is
+available in `shelf-title-key.ts`, but no title index, source-basis fence, maintenance installation, or successful
+title-ordered page is installed yet. Do not advertise title as a supported preference until that producer is ready.
+The native 64/512/4096 derivative and full-caller cost measurements remain unrun and belong to the continuation.
+
 ## FULL personal shelf row facts
 
 Both the compatibility `/v1/libraryEntries` page and native ordered shelf pages use the shared

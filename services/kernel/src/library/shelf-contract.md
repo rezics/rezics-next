@@ -496,3 +496,17 @@ tabs still contribute to both all-entry rollups; their stored state and profile 
 indexed access path, explicit installation, identity-currentness port and cursor rules. Existing date semantics
 and defaults remain unchanged. An unbound Content identity-currentness producer returns preparing/unavailable;
 installing the score index alone does not enable a successful personal-score page.
+
+## Title key policy and installation status
+
+The title key uses the same disclosed Semantic label selection as the page (`languageRanges` followed by
+`chooseLabel`, including original-language, English, and deterministic language fallback). The versioned
+`semantic-sort-name-v1` key is the UTF-8 byte sequence of `sortName(label)` truncated to 256 codepoints. It is a
+reproducible key for this policy, not a universal human collation. Missing or empty labels are explicit missing-title
+coverage and sort after labelled rows in both directions; Subject-ID ties follow the selected direction. A change to
+label selection or key normalization requires a new policy version, a rebuilt materialized basis, and cursor retirement.
+
+This source currently exposes the key derivation only. The title order enum, language-bound cursor, owner-lifetime and
+title-basis binding, index readiness DTO, bounded producer, and page reader are not installed. Until those pieces can
+prove current disclosed source material for the entire selected shelf, title ordering must return a typed preparing or
+unavailable state and must not return a successful empty or date-ordered page.
