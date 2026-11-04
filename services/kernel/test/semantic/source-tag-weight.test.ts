@@ -159,6 +159,7 @@ test('missing, empty, suppressed and malformed source outcomes stay distinct; in
   const wrongEndpoint = produceVndbSourceTagWeightCandidate({
     ...base,
     endpoint: 'https://vndb.org/api/vn' as typeof vndbTagsRatingEndpoint,
+    snapshot: sourceSnapshot,
   });
 
   expect(absent.state).toBe('absent');

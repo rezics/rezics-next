@@ -57,7 +57,7 @@ test('the native value remains exact, bounded to (0,3], and does not admit anoth
     code: 'invalid_format',
   });
   const wrongDigest = structuredClone(statement('+2.4'));
-  wrongDigest.references[0].parts[1].value.content = `unversioned:sha256:${'a'.repeat(63)}`;
+  wrongDigest.references[0]!.parts[1]!.value.content = `unversioned:sha256:${'a'.repeat(63)}`;
   expect(checkStatementInput(wrongDigest, bundledRelease).violations).toContainEqual({
     pointer: '/statement/references/0/parts/1/value/content',
     code: 'invalid_format',

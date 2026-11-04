@@ -597,7 +597,7 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       const body = (
         <>
           {value}
-          {!TAG_PROPERTY_SET.has(property.id) && <SourceTagWeight statement={statement} locale={options.locale} />}
+          {!TAG_PROPERTY_SET.has(property) && <SourceTagWeight statement={statement} locale={options.locale} />}
           {qualifiers.length > 0 && (
             <dl className="ms-4 min-w-0 space-y-2 text-sm text-muted-foreground">
               {qualifiers.map(({ qualifier, shownValue }, index) => {

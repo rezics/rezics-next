@@ -213,14 +213,15 @@ test('source-weighted tag page rows, target disclosure and response bytes stay f
       )?.body;
       expect(read?.related[tag]?.labels.en).toBe('Measured VNDB concept');
       const statements = read?.subject.statements as Record<string, any[]>;
-      expect(statements['schema:keywords']).toHaveLength(2);
-      expect(statements['schema:keywords'].some((statement) =>
+      const keywordStatements = statements['schema:keywords'] ?? [];
+      expect(keywordStatements).toHaveLength(2);
+      expect(keywordStatements.some((statement) =>
         statement.qualifiers.some((part: any) => part.property.id === 'rezics:sourceTagWeight'),
       )).toBe(true);
       const associationFacts = {
         statements: {
           genre: statements['schema:genre'] ?? [],
-          keywords: statements['schema:keywords'],
+          keywords: keywordStatements,
         },
         related: Object.fromEntries(
           [tag, unweighted].map((id) => [id, read.related[id]]).filter(([, value]) => value !== undefined),
@@ -231,7 +232,7 @@ test('source-weighted tag page rows, target disclosure and response bytes stay f
       return {
         responseBytes: Buffer.byteLength(JSON.stringify(response.body), 'utf8'),
         sourceEvidenceBytes,
-        weightedFacts: statements['schema:keywords'].filter((statement) =>
+        weightedFacts: keywordStatements.filter((statement) =>
           statement.qualifiers.some((part: any) => part.property.id === 'rezics:sourceTagWeight'),
         ).length,
         targets: Object.keys(associationFacts.related).length,
