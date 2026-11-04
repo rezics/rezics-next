@@ -16,7 +16,11 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const release = withConcreteReleaseDescriptors(bundledRelease);
 const digest = 'sha256:catalogue-file-create-eligibility';
-type Viewer = { state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable'; subject: string | null; csrfToken: string | null };
+type Viewer = {
+  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  subject: string | null;
+  csrfToken: string | null;
+};
 const signedIn: Viewer = { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-alice' };
 let viewer: Viewer = signedIn;
 let observe: () => Promise<CreateAuthority> = async () => allowedCreateAuthority;
@@ -325,11 +329,7 @@ async function fileCreateSession() {
   };
 }
 
-async function chooseTypeAndName(
-  page: Awaited<ReturnType<typeof fileCreateSession>>,
-  type: string,
-  label: string,
-) {
+async function chooseTypeAndName(page: Awaited<ReturnType<typeof fileCreateSession>>, type: string, label: string) {
   await act(async () =>
     page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), type),
   );
@@ -437,7 +437,9 @@ test('allowed File and FileGroup creates return the ordinary file reader', async
     await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })));
     await page.waitFor(() => expect(page.host.querySelector('[data-catalogue-file-create-review]')).not.toBeNull());
     await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })));
-    await page.waitFor(() => expect(page.canvas.getByRole('link', { name: page.m.catalogue_create_open() })).toBeDefined());
+    await page.waitFor(() =>
+      expect(page.canvas.getByRole('link', { name: page.m.catalogue_create_open() })).toBeDefined(),
+    );
     expect(commands).toHaveLength(1);
     expect(commands[0]!.item.type).toBe('schema:MediaObject');
     expect(page.canvas.getByRole('link', { name: page.m.catalogue_create_open() }).getAttribute('href')).toBe(
@@ -501,9 +503,7 @@ test('viewer replacement drops a late allowed observation; uncertain retry keeps
     );
     pending?.(allowedCreateAuthority);
     await act(async () => undefined);
-    expect(page.canvas.getByRole('alert').textContent).toContain(
-      page.m.identity_intake_authority_refused_permission(),
-    );
+    expect(page.canvas.getByRole('alert').textContent).toContain(page.m.identity_intake_authority_refused_permission());
     expect(
       (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -542,7 +542,9 @@ test('viewer replacement drops a late allowed observation; uncertain retry keeps
     await act(async () =>
       retryPage.user.click(retryPage.canvas.getByRole('button', { name: retryPage.m.catalogue_create_submit() })),
     );
-    await retryPage.waitFor(() => expect(retryPage.host.querySelector('[data-catalogue-file-create-review]')).not.toBeNull());
+    await retryPage.waitFor(() =>
+      expect(retryPage.host.querySelector('[data-catalogue-file-create-review]')).not.toBeNull(),
+    );
     await act(async () =>
       retryPage.user.click(retryPage.canvas.getByRole('button', { name: retryPage.m.catalogue_create_submit() })),
     );
