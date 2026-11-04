@@ -20,6 +20,7 @@ import { readAuthoredFieldHistorySource } from './authored-fields-history.ts';
 import { validateContentDocument } from './document.ts';
 import append from './append-authored-field.sql';
 import read from './read-authored-field.sql';
+import readBounded from './read-authored-field-bounded.sql';
 import initializeAuthoredFieldOwner from '../access/resource-initialization.sql';
 import erase from './erase-authored-field.sql';
 import authorizeErase from './authored-fields-history-author.sql';
@@ -61,6 +62,8 @@ export type AuthoredFieldView = AuthoredFieldResult &
     language: string;
     availability: 'available' | 'erased';
     body: Buffer | null;
+    /** True only for bounded reads whose bytes were withheld before returning to the caller. */
+    bodyTooLarge?: boolean;
   }>;
 
 /** Append in semantic's authorized subject or declared-anchor creation command.
@@ -237,6 +240,34 @@ export async function readAuthoredField(
     revision: row.revision,
     authorAccountId: row.author_account_id,
     body: row.body === null ? null : Buffer.from(row.body),
+    licence: row.licence,
+    language: row.language,
+    availability: row.availability as AuthoredFieldView['availability'],
+  };
+}
+
+/** Exact Content-owner read that withholds an oversized body in SQL before it reaches the application. */
+export async function readAuthoredFieldBounded(
+  client: Pick<PoolClient, 'query'>,
+  route: number,
+  id: string,
+  maximumBytes: number,
+): Promise<AuthoredFieldView | null> {
+  if (routeOf(id) !== route) throw new RangeError('Authored document ID must carry the supplied route');
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) throw new RangeError('Invalid document byte limit');
+  const rows = await readBounded.run(client, { route, id, maximum_bytes: maximumBytes });
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    digest: row.digest,
+    subject: row.subject,
+    anchor: row.anchor,
+    candidate: row.candidate,
+    revision: row.revision,
+    authorAccountId: row.author_account_id,
+    body: row.body === null ? null : Buffer.from(row.body),
+    bodyTooLarge: row.bodyTooLarge,
     licence: row.licence,
     language: row.language,
     availability: row.availability as AuthoredFieldView['availability'],
