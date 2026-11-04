@@ -596,7 +596,7 @@ export function SubjectPage({
   /** The validated Subject visit return address, when supplied by a Recording journey. */
   returnTo?: string;
   /** This Subject visit's supported address, including search and fragment state. */
-  currentHref?: string;
+  currentHref?: string | undefined;
   /** The views to offer, from `subjectTabs` of the subject's overview. */
   tabs?: readonly ViewTab[];
   tabLabels?: ViewTabLabels;

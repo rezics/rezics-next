@@ -69,8 +69,8 @@ function createReading(
     cache,
     observation,
     session,
-    retired: false,
-    active: false,
+    retired: false as boolean,
+    active: false as boolean,
     selection: undefined as Selection | undefined,
     receipt: undefined as Receipt | undefined,
     recovery: undefined as Recovery | undefined,
@@ -99,8 +99,8 @@ export function useCatalogueFileReading(input: {
   source: object;
   descriptor: string;
   cacheSource?: object;
-  currentHref?: string;
-  recoverCurrentPage?: () => Promise<void>;
+  currentHref?: string | undefined;
+  recoverCurrentPage?: (() => Promise<void>) | undefined;
 }) {
   const client = useContext(QueryClientContext);
   const observation = client ? browserObservation(client) : undefined;
