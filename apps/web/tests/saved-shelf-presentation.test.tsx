@@ -333,7 +333,11 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
     ).toEqual(['creator', 'rating', 'started']);
     expect(
       initial.signedIn && 'preferences' in initial ? unsupportedShelfSorts(initial.preferences.shelf!) : [],
-    ).toEqual([{ tab: 'planned', field: 'title' }]);
+    ).toEqual([
+      { tab: 'all', field: 'rating' },
+      { tab: 'completed', field: 'rating' },
+      { tab: 'planned', field: 'title' },
+    ]);
     const initialPreferences = initial.signedIn && 'preferences' in initial ? initial.preferences : undefined;
     if (!initialPreferences) throw new Error('Native preference fixture did not load');
     const io = preferences.shelf;
