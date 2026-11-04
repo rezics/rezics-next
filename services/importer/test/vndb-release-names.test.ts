@@ -84,9 +84,8 @@ test('selected-family and date-fidelity planners bind only selected multilingual
       'r1\ten\tt\tHarbor Soft\t\\N',
       'r1\tja\tf\t港の題名\tMinato no Daimei',
       'r1\tja\tf\t港別題\t\\N',
-      'r2\ten\tt\tReplacement release\t\\N',
     ];
-    const supersessions = [{ id: 'r2', rid: 'r1' }];
+    const supersessions = [{ id: 'r1', rid: 'r2' }];
     const tables = await authoredCopy(directory, releaseTitles, supersessions);
     const fidelity = await planVndbReleaseFidelity(tables);
     const release = fidelity.entities.vndb.find((row) => row.key === 'r1');
@@ -104,10 +103,10 @@ test('selected-family and date-fidelity planners bind only selected multilingual
     expect(fidelity.gaps.some((gap) => gap.reason === 'Missing selected VNDB release title')).toBe(true);
     expect(fidelity.edges.filter((edge) => edge.table === 'releases_supersedes')).toMatchObject([
       {
-        holder: 'r2',
-        target: 'r1',
+        holder: 'r1',
+        target: 'r2',
         property: 'rezics:releaseSupersedes',
-        record: { id: 'r2', rid: 'r1' },
+        record: { id: 'r1', rid: 'r2' },
         fields: ['releases_supersedes.id', 'releases_supersedes.rid'],
       },
     ]);
@@ -153,10 +152,10 @@ test('selected-family and date-fidelity planners bind only selected multilingual
       ),
     ).toBe(true);
     const supersession = proposed.find((command) => command.statement.property.id === 'rezics:releaseSupersedes');
-    expect(supersession?.source.external_id).toBe('r2');
+    expect(supersession?.source.external_id).toBe('r1');
     expect(supersession?.statement.value.type).toBe('value');
     expect(supersession?.statement.references.flatMap((reference) => reference.parts.map((part) => part.value.content)))
-      .toContain('https://vndb.org/r2');
+      .toContain('https://vndb.org/r1');
     expect(
       proposed.some(
         (command) =>
