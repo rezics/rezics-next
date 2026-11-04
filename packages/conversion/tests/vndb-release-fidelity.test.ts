@@ -33,7 +33,11 @@ const registration = () =>
 test('production VNDB release caller admits exact, month and year dates, TBA, unknown and absent dates, and two completeness states', () => {
   const convert = registration();
   const bound = convert.convert(
-    { external_id: 'r1', record_revision: null, record: { id: 'r1', title: 'Authored exact release', released: '20200229' } },
+    {
+      external_id: 'r1',
+      record_revision: null,
+      record: { id: 'r1', title: 'Authored exact release', released: '20200229' },
+    },
     {
       source: convert.source,
       subjectId: releaseId,
@@ -79,19 +83,27 @@ test('production VNDB release caller admits exact, month and year dates, TBA, un
     { time: '+2020-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
   ]);
   expect(
-    bound.proposals.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:exampleOfWork'),
+    bound.proposals.filter(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:exampleOfWork',
+    ),
   ).toHaveLength(2);
   expect(JSON.stringify(bound.proposals)).not.toContain('wdt:P155');
   expect(bound.sourceVocabularyGaps).toMatchObject([
     { path: '/releases/r4/released', code: 'TBA', reason: 'property_not_admitted', property: 'schema:keywords' },
     { path: '/releases/r5/released', code: 'unknown', reason: 'property_not_admitted', property: 'schema:keywords' },
-    { path: '/releases/r6/released', code: 'absent', reason: 'unsupported_source_case', property: 'schema:datePublished' },
+    {
+      path: '/releases/r6/released',
+      code: 'absent',
+      reason: 'unsupported_source_case',
+      property: 'schema:datePublished',
+    },
     { path: '/releases_vn/r1/v1', code: 'complete', reason: 'qualifier_not_admitted', property: 'wdt:P31' },
     { path: '/releases_vn/r2/v1', code: 'partial', reason: 'qualifier_not_admitted', property: 'wdt:P31' },
   ]);
-  expect(convertCrossMediaEntity({ external_id: 'r1', record_revision: null, record: { id: 'r1', title: 'Authored' } }).proposals).toHaveLength(
-    1,
-  );
+  expect(
+    convertCrossMediaEntity({ external_id: 'r1', record_revision: null, record: { id: 'r1', title: 'Authored' } })
+      .proposals,
+  ).toHaveLength(1);
 });
 
 test('unsupported completeness, missing Concepts and withheld release states remain visible review gaps', () => {
@@ -147,6 +159,8 @@ test('unsupported completeness, missing Concepts and withheld release states rem
     { path: '/vn/v1/devstatus', code: '1', reason: 'missing_scheme' },
   ]);
   expect(
-    missing.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:keywords'),
+    missing.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:keywords',
+    ),
   ).toBe(false);
 });

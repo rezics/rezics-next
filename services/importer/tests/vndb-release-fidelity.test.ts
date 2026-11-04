@@ -27,9 +27,15 @@ async function authoredCopy(directory: string, released = '20200229') {
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25 00:00:00+00'],
     releases: [
       'id\treleased',
-      [`r1\t${released}`, 'r2\t20200300', 'r3\t20200000', 'r4\t99999999', 'r5\t00000000', 'r6\t\\N', 'r7\t20210101'].join(
-        '\n',
-      ),
+      [
+        `r1\t${released}`,
+        'r2\t20200300',
+        'r3\t20200000',
+        'r4\t99999999',
+        'r5\t00000000',
+        'r6\t\\N',
+        'r7\t20210101',
+      ].join('\n'),
     ],
     releases_titles: [
       'id\tlang\tofficial\ttitle\tlatin',
@@ -45,9 +51,15 @@ async function authoredCopy(directory: string, released = '20200229') {
     ],
     releases_vn: [
       'id\tvid\trtype',
-      ['r1\tv1\tcomplete', 'r2\tv1\tpartial', 'r3\tv1\tcomplete', 'r4\tv1\tcomplete', 'r5\tv1\tcomplete', 'r6\tv1\tcomplete', 'r7\tv1\tbundle'].join(
-        '\n',
-      ),
+      [
+        'r1\tv1\tcomplete',
+        'r2\tv1\tpartial',
+        'r3\tv1\tcomplete',
+        'r4\tv1\tcomplete',
+        'r5\tv1\tcomplete',
+        'r6\tv1\tcomplete',
+        'r7\tv1\tbundle',
+      ].join('\n'),
     ],
     releases_supersedes: ['id\trid', 'r1\tr2'],
   };
@@ -164,18 +176,20 @@ test('operator plans authored VNDB COPY releases without mixing work and release
     expect(
       proposed.some(
         (command) =>
-          command.statement.property.id === 'schema:datePublished' && JSON.stringify(content(command)).includes('"precision":10'),
+          command.statement.property.id === 'schema:datePublished' &&
+          JSON.stringify(content(command)).includes('"precision":10'),
       ),
     ).toBe(true);
     expect(
       proposed.some(
         (command) =>
-          command.statement.property.id === 'schema:datePublished' && JSON.stringify(content(command)).includes('"precision":9'),
+          command.statement.property.id === 'schema:datePublished' &&
+          JSON.stringify(content(command)).includes('"precision":9'),
       ),
     ).toBe(true);
-    expect(proposed.some((command) => command.statement.property.id === 'schema:keywords' && content(command) === statusId)).toBe(
-      true,
-    );
+    expect(
+      proposed.some((command) => command.statement.property.id === 'schema:keywords' && content(command) === statusId),
+    ).toBe(true);
     expect(proposed.some((command) => command.statement.property.id === 'schema:exampleOfWork')).toBe(true);
     expect(JSON.stringify(proposed)).not.toContain('wdt:P155');
     const count = commands.length;
@@ -200,9 +214,9 @@ test('operator plans authored VNDB COPY releases without mixing work and release
         (command) =>
           command.op === 'propose' &&
           command.statement.property.id === 'schema:datePublished' &&
-          JSON.stringify(command.statement.value.type === 'value' ? command.statement.value.content : undefined).includes(
-            '+2020-03-01T00:00:00Z',
-          ),
+          JSON.stringify(
+            command.statement.value.type === 'value' ? command.statement.value.content : undefined,
+          ).includes('+2020-03-01T00:00:00Z'),
       ),
     ).toBe(true);
     subjects[statusId] = { subject: { id: statusId, type: 'skos:Concept', statements: {} } };

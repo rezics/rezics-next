@@ -29,7 +29,15 @@ async function authoredCopy(directory: string, released = '20200229') {
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25 00:00:00+00'],
     releases: [
       'id\treleased',
-      [`r1\t${released}`, 'r2\t20200300', 'r3\t20200000', 'r4\t99999999', 'r5\t00000000', 'r6\t\\N', 'r7\t20210101'].join('\n'),
+      [
+        `r1\t${released}`,
+        'r2\t20200300',
+        'r3\t20200000',
+        'r4\t99999999',
+        'r5\t00000000',
+        'r6\t\\N',
+        'r7\t20210101',
+      ].join('\n'),
     ],
     releases_titles: [
       'id\tlang\tofficial\ttitle\tlatin',
@@ -45,9 +53,15 @@ async function authoredCopy(directory: string, released = '20200229') {
     ],
     releases_vn: [
       'id\tvid\trtype',
-      ['r1\tv1\tcomplete', 'r2\tv1\tpartial', 'r3\tv1\tcomplete', 'r4\tv1\tcomplete', 'r5\tv1\tcomplete', 'r6\tv1\tcomplete', 'r7\tv1\tbundle'].join(
-        '\n',
-      ),
+      [
+        'r1\tv1\tcomplete',
+        'r2\tv1\tpartial',
+        'r3\tv1\tcomplete',
+        'r4\tv1\tcomplete',
+        'r5\tv1\tcomplete',
+        'r6\tv1\tcomplete',
+        'r7\tv1\tbundle',
+      ].join('\n'),
     ],
     releases_supersedes: ['id\trid', 'r1\tr2'],
   };
@@ -149,7 +163,11 @@ test('production operator imports authored VNDB release dates, states and work c
             property: { id: 'schema:url' },
             value: { type: 'value', content: developmentStatusSchemeUri },
             references: [
-              { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: developmentStatusSchemeUri } }] },
+              {
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: developmentStatusSchemeUri } },
+                ],
+              },
             ],
           },
         },
@@ -171,7 +189,10 @@ test('production operator imports authored VNDB release dates, states and work c
             references: [
               {
                 parts: [
-                  { property: { id: 'schema:url' }, value: { type: 'value', content: developmentStatusConceptUri('1') } },
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: developmentStatusConceptUri('1') },
+                  },
                 ],
               },
             ],
@@ -195,7 +216,10 @@ test('production operator imports authored VNDB release dates, states and work c
             references: [
               {
                 parts: [
-                  { property: { id: 'schema:url' }, value: { type: 'value', content: developmentStatusConceptUri('1') } },
+                  {
+                    property: { id: 'schema:url' },
+                    value: { type: 'value', content: developmentStatusConceptUri('1') },
+                  },
                 ],
               },
             ],
@@ -301,7 +325,9 @@ test('production operator imports authored VNDB release dates, states and work c
       bindings,
       destination: { origin: 'https://kernel.import.test' },
     });
-    expect(again.readings.map((row) => row.externalId).sort()).toEqual(first.readings.map((row) => row.externalId).sort());
+    expect(again.readings.map((row) => row.externalId).sort()).toEqual(
+      first.readings.map((row) => row.externalId).sort(),
+    );
     expect(idOf(again.readings.find((row) => row.externalId === 'r1')!)).toBe(exactId);
     const successor = await importVndbReleaseFidelity({
       tables: await authoredCopy(directory, '20200301'),

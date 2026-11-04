@@ -195,7 +195,9 @@ export function vndbReleaseVocabularyAdmission(
 }
 
 /** Select admitted works and their source releases from a bounded authored dump. One source release stays one native release. */
-export async function planVndbReleaseFidelity(input: CrossMediaTables): Promise<CrossMediaPlan & { facts: VndbReleaseFacts }> {
+export async function planVndbReleaseFidelity(
+  input: CrossMediaTables,
+): Promise<CrossMediaPlan & { facts: VndbReleaseFacts }> {
   const plan: CrossMediaPlan = {
     records: { bangumi: [], vndb: [] },
     entities: { bangumi: [], vndb: [] },
@@ -285,11 +287,7 @@ export async function planVndbReleaseFidelity(input: CrossMediaTables): Promise<
   for await (const row of input.rows('vndb', 'releases_supersedes')) {
     const id = String(row.id ?? '');
     if (!releaseIds.has(id) && !releaseIds.has(String(row.rid ?? ''))) continue;
-    gap(
-      'releases_supersedes',
-      row,
-      'Release-to-release supersession is not representable on the shared follows term',
-    );
+    gap('releases_supersedes', row, 'Release-to-release supersession is not representable on the shared follows term');
   }
   for (const id of vnIds) {
     const row = vns.get(id),
@@ -298,7 +296,11 @@ export async function planVndbReleaseFidelity(input: CrossMediaTables): Promise<
       gap('vn', { id }, `Missing selected VNDB record: ${id}`);
       continue;
     }
-    const vn: Row = { id, olang: row.olang, ...(row.alias === null || row.alias === undefined ? {} : { alias: row.alias }) };
+    const vn: Row = {
+      id,
+      olang: row.olang,
+      ...(row.alias === null || row.alias === undefined ? {} : { alias: row.alias }),
+    };
     facts.works.set(id, { devstatus: decodeVndbDevstatus(row.devstatus) });
     plan.records.vndb.push({
       source: 'vndb',
