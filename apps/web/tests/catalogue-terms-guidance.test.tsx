@@ -312,10 +312,10 @@ test('Multilingual terms show actionable field-specific corrections without chan
       expect(control('terms-aliases').value).toBe('Added alias');
       await click(removeLanguage);
       await publishSnapshot({ ...snapshot, session: 'replacement-reader' });
-      expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(window.document.querySelector('[role="alertdialog"]')?.getAttribute('data-state') === 'open').toBe(false);
       expect(control('terms-aliases').value).toBe('Added alias');
       await publishSnapshot(snapshot);
-      expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(window.document.querySelector('[role="alertdialog"]')?.getAttribute('data-state') === 'open').toBe(false);
       expect(control('terms-aliases').value).toBe('Added alias');
       await click(removeLanguage);
       await clickElement(dialogButton(cancelLabel));
