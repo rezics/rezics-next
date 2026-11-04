@@ -58,6 +58,9 @@ producer population to be complete, replay to be current, all reconciliation par
 physical UUID to remain unchanged. Only then does an observed alias switch make the candidate active; the former
 generation becomes retiring after that observation.
 
+Empty native partitions register replay with the Core checkpoint sentinel `(epoch NULL, position 0)`. Nonempty
+partitions retain their actual epoch and position; subsequent relay advances use the ordinary checkpoint CAS.
+
 ## Retirement
 
 The old generation continues receiving relays until it is no longer active. Retirement stops its relays, verifies and

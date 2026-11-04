@@ -671,7 +671,8 @@ export async function allocateDiscovery(
       );
       await client.query(
         `INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position)
-        SELECT partition_no,$1,epoch,position FROM core.partition ON CONFLICT DO NOTHING`,
+        SELECT partition_no,$1,CASE WHEN position=0 THEN NULL ELSE epoch END,position
+        FROM core.partition ON CONFLICT DO NOTHING`,
         [consumer],
       );
       await client.query('COMMIT');
