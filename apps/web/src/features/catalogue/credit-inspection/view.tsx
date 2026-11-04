@@ -19,7 +19,7 @@ function DisclosedTarget({ children, ...props }: LinkProps) {
 }
 
 export function CreditInspection({ credit, visit, title, propertyLabel, locale, onClose, metadata,
-  transport, signedIn, search, isCurrent,
+  transport, signedIn, search, isCurrent, returnFocus,
 }: {
   credit: CreditAssertion;
   visit: CreditVisit;
@@ -32,6 +32,7 @@ export function CreditInspection({ credit, visit, title, propertyLabel, locale, 
   signedIn: boolean;
   search: EntityPickerSearch;
   isCurrent: () => boolean;
+  returnFocus?: (() => HTMLElement | null) | undefined;
 }) {
   const lifetime = useCatalogueLifetime(JSON.stringify([credit, visit, locale]));
   const current = () => lifetime.active() && isCurrent();
@@ -91,7 +92,7 @@ export function CreditInspection({ credit, visit, title, propertyLabel, locale, 
   }
   const failedDetail = detail && detail.kind !== 'ready';
   return <Dialog open onOpenChange={(open) => { if (!open && !editing && current()) onClose(); }}>
-    <DialogContent showCloseButton={false} className="sm:max-w-2xl">
+    <DialogContent showCloseButton={false} finalFocus={returnFocus} className="sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle>{m.credit_inspect({}, o)}: {title}</DialogTitle>
         <DialogDescription>{m.credit_original({}, o)}</DialogDescription>

@@ -213,7 +213,8 @@ export function CoverList({
   const inspector = liveInspection ? <Suspense fallback={<p role="status">{m.candidate_loading({}, { locale: value.locale as never })}</p>}><CreditInspectionSession key={liveInspection.identity} id={liveInspection.visit.person}
     address={visitIdentity} credit={liveInspection.credit} visit={liveInspection.visit}
     title={liveInspection.title} propertyLabel={liveInspection.visit.propertyLabel}
-    locale={value.locale} onClose={closeInspection} /></Suspense> : null;
+    locale={value.locale} onClose={closeInspection}
+    returnFocus={() => visitOwner.current === owner && liveInspection.trigger.isConnected ? liveInspection.trigger : null} /></Suspense> : null;
   const credits = !!creditVisit || items.some((item) => (item.qualified?.length ?? 0) > 0);
   const occurrences = new Map<string, number>();
   const cards = items.map((item) => {
