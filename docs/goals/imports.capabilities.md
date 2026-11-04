@@ -1125,3 +1125,25 @@ and Organization, refresh by digest, and respect the summary fence` in
 `services/kernel/test/imports/bangumi-people-biography.test.ts`. The kernel
 journey is authored, but its native execution is deferred to integration; no
 native pass is claimed.
+
+## Default Bangumi anime Episodes
+
+The explicit local `seed:dev` step runs the existing reviewed-catalogue publisher first and passes its acknowledged
+native subject IDs to the default cross-media seed. Only selected type-2 anime parents contribute Episode rows. Each
+admitted row retains `episode:<id>`, source citation, direct Episode metadata, and its exact `episode.subject_id`
+parent relation. Current disclosed public reads verify the existing episode-type scheme and Concepts before kind
+admission; retracted or unavailable bindings withhold only the kind statement. The importer composes the Episode
+adapter with any caller vocabulary hooks and keeps each adapter's diagnostics.
+
+Decision: the local showcase imports one `BATCH_LIMIT` Episode window per selected franchise and reports every
+additional selected source key as an explicit omission.
+
+- Touches: selected anime Episodes and parent edges, the existing reviewed type scheme and seven Concepts, current
+  public source-kind bindings, and the bounded seed result.
+- Bound: one delivery window per selected franchise; overflow gaps carry exact `episode:<id>` keys and stop at the
+  fixed 4,096 omission-diagnostic limit. Binding reads are fixed at one scheme plus seven Concepts, with no label or
+  catalogue scan.
+- Growth check: importer `showcase-bangumi-episodes.test.ts` pins selected identity, withholding, hook composition and
+  overflow. Kernel `showcase-bangumi-episodes.test.ts` pins independent acceptance/adoption, exact public parent/kind
+  reads, binding retraction and resumable identity. Existing episode ordinal/date/duration/summary scenarios remain
+  the mapper proof; no separate mapper matrix is added.
