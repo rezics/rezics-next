@@ -221,7 +221,7 @@ test('default local adapter keeps character kinds separate from each anime appea
     );
     expect(
       workTwoResult.sourceVocabularyGaps?.find((gap) => gap.reason === 'missing_concept'),
-    ).toMatchObject({ path: '/subject-characters/1/type', code: '2', property: appearanceRolesUri });
+    ).toMatchObject({ path: '/subject-characters/1/type', code: '2', property: 'skos:Concept' });
     expect(
       workTwoResult.proposals.some(
         (command) => command.op === 'propose' && command.statement.property.id === 'schema:character',

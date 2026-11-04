@@ -187,7 +187,7 @@ test('selected anime character vocabulary is separately adopted and refreshed th
         path: '/subject-characters/1/type',
         code: '2',
         reason: 'missing_concept',
-        property: 'subject-characters.type',
+        property: 'skos:Concept',
       }),
     );
 
