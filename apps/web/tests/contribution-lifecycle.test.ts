@@ -3,6 +3,8 @@ import { createKernelClient } from '@rezics/client';
 import { contributionFixture } from '../src/kernel/fake/contribution-lifecycle';
 import {
   changeContribution,
+  confirmedContributionOperation,
+  readContributionAvailability,
   contributionInput,
   type ContributionCommand,
 } from '../src/features/catalogue/contribution-lifecycle';
@@ -72,7 +74,7 @@ test('native denial, unserved lifecycle and expiry are truthful outcomes indepen
     const input = command(fixture, scenario === 'expired' ? 'restore' : 'delete');
     expect(await fixture.transport.change(input)).toEqual({
       ok: false,
-      reason: scenario === 'unavailable' ? 'unavailable' : scenario,
+      reason: scenario === 'unavailable' ? 'unavailable' : scenario === 'expired' ? 'conflict' : scenario,
     });
     expect(fixture.calls).toHaveLength(1);
   }
@@ -91,7 +93,7 @@ test('restore rereads current withholding and never promotes mutation output int
   ).toMatchObject({
     ok: true,
     operation: 'restore',
-    current: { subject: 'available', candidate: 'unconfirmed', selected: false },
+    current: { subject: 'unavailable', candidate: 'unconfirmed', selected: null },
   });
   expect(() => contributionInput({ ...input, source: null })).toThrow();
   expect(() => contributionInput({ ...input, operation: 'purge' })).toThrow();
@@ -149,7 +151,7 @@ test('missing native binding stays unavailable, and a restore acknowledgement ca
     operation: 'restore',
     current: { subject: 'unavailable', candidate: 'unconfirmed', selected: null },
   });
-  expect(calls).toEqual(['POST', 'POST', 'GET', 'GET']);
+  expect(calls).toEqual(['POST', 'POST', 'GET']);
   expect(JSON.stringify(restored)).not.toContain('1946');
   expect(JSON.stringify(restored)).not.toContain('statement');
   malformedRead = true;
@@ -216,8 +218,30 @@ test.each(['delete', 'restore'] as const)(
       expect(calls[1]).toEqual(calls[0]);
       expect(calls.slice(2).map(({ method, session }) => ({ method, session }))).toEqual([
         { method: 'GET', session: 'native-session' },
-        { method: 'GET', session: 'native-session' },
       ]);
     }
   },
 );
+
+test('fresh operations require current native action evidence and concealed reads disclose no tombstone', async () => {
+  for (const candidate of ['available', 'deleted'] as const) {
+    const current = { subject: 'available' as const, candidate, selected: false };
+    expect(confirmedContributionOperation(current)).toBeNull();
+    expect(confirmedContributionOperation({ ...current, actions: { state: 'unavailable' } })).toBeNull();
+    expect(confirmedContributionOperation({ ...current, actions: { state: 'available', operations: [] } })).toBeNull();
+    const operation = candidate === 'deleted' ? 'restore' : 'delete';
+    expect(
+      confirmedContributionOperation({ ...current, actions: { state: 'available', operations: [operation] } }),
+    ).toBe(operation);
+  }
+  const fixture = contributionFixture();
+  const client = createKernelClient('https://hidden.test', {
+    fetch: (async () => Response.json({ code: 'not_found' }, { status: 404 })) as typeof fetch,
+  });
+  expect(await readContributionAvailability(client, 'Bearer fixture', fixture.address)).toMatchObject({
+    subject: 'unavailable',
+    candidate: 'unconfirmed',
+    selected: null,
+    actions: { state: 'unavailable' },
+  });
+});

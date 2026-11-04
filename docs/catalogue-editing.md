@@ -647,7 +647,15 @@ Own-contribution withdrawal and restore
 now bind the generated candidate `delete` and `$restoreDeleted.post` methods. Their closed
 `{subject, candidate, deleted}` result must match both requested UUIDs and the requested deletion state before
 success and a current read. Current availability comes only from that read; an absent bounded candidate row proves
-neither deletion nor ownership, grants or a restore deadline. Native outcome checks and promotion to main remain
+neither deletion nor ownership, grants or a restore deadline. The shared result panel first reads the exact
+`GET /v1/subjects/:id/candidates/:candidate/lifecycle` metadata under the original viewer and candidate lifetime.
+It offers fresh operations only from current native allowed operations; action dependency failure keeps read retry
+available. Unknown command delivery retains its immutable operation, identity and key independently of fresh
+availability. Native 409 conflict is not treated as proof of retention expiry. Withdrawal confirmation explains that accepted
+revisions and independent Context decisions remain; current selection is read separately.
+Decision: exact contribution availability returns identity, lifecycle and separately bounded Global selection;
+failed action hydration remains unavailable and suppresses fresh mutations. Selection uses only current adoption
+metadata or exact compact assertion metadata, never a deleted statement payload. Native outcome checks and promotion to main remain
 separate; type checking alone does not prove those outcomes.
 
 Web owns the normal next visual review using the unchanged `pages-catalogue-changes--` IDs: `revisions`,

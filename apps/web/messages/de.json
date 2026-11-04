@@ -3347,7 +3347,7 @@
   "contribution_invalid": "Die Anfrage wurde nicht angenommen. Prüfe sie vor einer erneuten Bestätigung.",
   "contribution_conflict": "Der Beitrag hat sich geändert. Lade den aktuellen Stand vor einer erneuten Bestätigung.",
   "contribution_unavailable": "Der Beitragsdienst ist nicht verfügbar oder das Ergebnis ist ungewiss. Wiederhole dieselbe Anfrage zur Klärung.",
-  "contribution_confirm_delete": "Nur diesen Beitrag zurückziehen? Er wird nicht mehr verfügbar sein. Das Thema und andere Beiträge bleiben bestehen.",
+  "contribution_confirm_delete": "Nur diesen Beitrag zurückziehen? Er wird nicht mehr verfügbar sein. Das Thema und andere Beiträge bleiben bestehen. Akzeptierte Revisionen und eigenständige redaktionelle Entscheidungen in Kontexten werden nicht gelöscht.",
   "contribution_confirm_restore": "Diesen Beitrag gemäß den aktuellen Rechten und Verfügbarkeitsregeln wiederherstellen? Eine frühere Auswahl wird nicht wieder eingesetzt.",
   "contribution_retry": "Dieselbe Anfrage wiederholen",
   "contribution_confirm": "Bestätigen",

@@ -3347,7 +3347,7 @@
   "contribution_invalid": "リクエストは受け付けられませんでした。内容を確認してから再度確定してください。",
   "contribution_conflict": "投稿が変更されています。現在の状態を読み取ってから再度確定してください。",
   "contribution_unavailable": "投稿サービスを利用できないか、結果が不明です。同じリクエストを再試行して確認してください。",
-  "contribution_confirm_delete": "この投稿だけを取り下げますか？投稿は利用できなくなります。対象の項目と他の投稿は残ります。",
+  "contribution_confirm_delete": "この投稿だけを取り下げますか？投稿は利用できなくなります。対象の項目と他の投稿は残ります。承認済みの版や、各コンテキストの独立した編集上の判断は消去されません。",
   "contribution_confirm_restore": "現在の権限と利用条件でこの投稿を復元しますか？以前の選択には戻りません。",
   "contribution_retry": "同じリクエストを再試行",
   "contribution_confirm": "確定",

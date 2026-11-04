@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, useState, type ReactNode } from 'react';
 import { contributionFixture } from '../src/kernel/fake/contribution-lifecycle';
 import type {
+  ContributionAvailability,
   ContributionAddress,
   ContributionCommand,
   ContributionResult,
@@ -100,6 +101,23 @@ test('own-contribution family preserves independent panels, exact recovery and r
     await click(button(dialog(), m.contribution_confirm()));
   };
   const cleared = new Map<string, number>();
+  // Existing command/focus scenarios start with explicit native authority evidence.
+  function useAdmittedTransport(transport: ContributionTransport): ContributionTransport {
+    const [reading] = useState(() => ({ initial: true }));
+    return {
+      change: transport.change,
+      read: async (target) => {
+        if (!reading.initial) return transport.read(target);
+        reading.initial = false;
+        return {
+          subject: 'available',
+          candidate: 'available',
+          selected: false,
+          actions: { state: 'available', operations: ['delete'] },
+        };
+      },
+    };
+  }
   function Panel({
     name,
     address,
@@ -114,6 +132,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
     locale?: string;
   }) {
     const [privateVisible, setPrivateVisible] = useState(true);
+    const observed = useAdmittedTransport(transport);
     return (
       <div data-panel={name}>
         {privateVisible && <p data-private>Original private comparison {name}</p>}
@@ -124,7 +143,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
           <ContributionLifecycle
             address={address}
             locale={locale}
-            transport={transport}
+            transport={observed}
             onClear={() => {
               cleared.set(name, (cleared.get(name) ?? 0) + 1);
               setPrivateVisible(false);
@@ -153,6 +172,59 @@ test('own-contribution family preserves independent panels, exact recovery and r
   );
   try {
     setLocale('en', { reload: false });
+    // Loading has no default operation. Failed action hydration keeps an exact read retry.
+    let releaseInitial!: (value: ContributionAvailability) => void;
+    let initialReads = 0;
+    let initialEffects = 0;
+    const initial: ContributionTransport = {
+      read: () => {
+        initialReads++;
+        return new Promise((resolve) => {
+          releaseInitial = resolve;
+        });
+      },
+      change: async () => {
+        initialEffects++;
+        return { ok: false, reason: 'unavailable' };
+      },
+    };
+    await render(
+      <ContributionLifecycle
+        key="initial"
+        address={first.address}
+        locale="en"
+        transport={initial}
+        onClear={() => {}}
+      />,
+    );
+    await until(() => initialReads === 1);
+    expect(host.textContent).toContain(m.contribution_loading());
+    expect(host.textContent).not.toContain(m.contribution_withdraw());
+    expect(host.textContent).not.toContain(m.contribution_restore());
+    await act(async () =>
+      releaseInitial({
+        subject: 'available',
+        candidate: 'available',
+        selected: true,
+        actions: { state: 'unavailable' },
+      }),
+    );
+    expect(host.textContent).toContain(m.ctxw_actions_unavailable());
+    expect(host.textContent).toContain(m.candidate_selected());
+    expect(host.textContent).not.toContain(m.contribution_withdraw());
+    await click(button(host, m.contribution_refresh()));
+    await until(() => initialReads === 2);
+    await act(async () =>
+      releaseInitial({
+        subject: 'available',
+        candidate: 'available',
+        selected: true,
+        actions: { state: 'available', operations: [] },
+      }),
+    );
+    expect(host.textContent).not.toContain(m.contribution_withdraw());
+    expect(host.textContent).not.toContain(m.ctxw_actions_unavailable());
+    expect(initialEffects).toBe(0);
     await render(pair());
     for (const name of ['first', 'second']) {
       const region = panel(name).querySelector('section')!;
@@ -169,6 +241,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
       expect(region.textContent).not.toContain(m.contribution_deleted());
       expect([...region.querySelectorAll('button')].map((node) => node.textContent)).toEqual([
         m.contribution_withdraw(),
+        m.contribution_refresh(),
       ]);
       targetClasses(region);
     }
@@ -212,7 +285,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
     expect(commands[1]).toBe(commands[0]);
     expect(commands[1]).toEqual(frozen);
     expect(first.calls[1]).toEqual(first.calls[0]);
-    expect(first.calls.map((call) => call.method)).toEqual(['DELETE', 'DELETE', 'GET', 'GET']);
+    expect(first.calls.map((call) => call.method)).toEqual(['DELETE', 'DELETE', 'GET']);
     expect(cleared.get('first')).toBe(1);
     expect(panel('first').querySelector('[data-private]')).toBeNull();
     expect(panel('second').querySelector('[data-private]')).not.toBeNull();
@@ -237,8 +310,8 @@ test('own-contribution family preserves independent panels, exact recovery and r
     await until(() => panel('first').textContent!.includes(m.contribution_restored()));
     expect(commands[2]).toMatchObject({ ...first.address, operation: 'restore', session: 'contribution-session' });
     expect(commands[2]!.key).not.toBe(frozen.key);
-    expect(first.calls.map((call) => call.method)).toEqual(['DELETE', 'DELETE', 'GET', 'GET', 'POST', 'GET', 'GET']);
-    expect(first.calls[4]).toMatchObject({ session: 'contribution-session', body: {}, key: commands[2]!.key });
+    expect(first.calls.map((call) => call.method)).toEqual(['DELETE', 'DELETE', 'GET', 'POST', 'GET']);
+    expect(first.calls[3]).toMatchObject({ session: 'contribution-session', body: {}, key: commands[2]!.key });
     expect([...panel('first').querySelectorAll('h3')].map((node) => node.textContent)).toEqual([
       m.contribution_subject_available(),
       m.contribution_candidate_available(),
@@ -248,12 +321,9 @@ test('own-contribution family preserves independent panels, exact recovery and r
     expect(cleared.get('first')).toBe(1);
     await click(button(panel('first'), m.contribution_refresh()));
     await until(
-      () => first.calls.length === 9 && panel('first').querySelector('section')?.getAttribute('aria-busy') === 'false',
+      () => first.calls.length === 6 && panel('first').querySelector('section')?.getAttribute('aria-busy') === 'false',
     );
-    expect(first.calls.slice(7).map((call) => [call.method, call.session])).toEqual([
-      ['GET', 'contribution-session'],
-      ['GET', 'contribution-session'],
-    ]);
+    expect(first.calls.slice(5).map((call) => [call.method, call.session])).toEqual([['GET', 'contribution-session']]);
     expect(panel('first').textContent).not.toContain(m.contribution_restored());
     expect(second.calls).toHaveLength(0);
     await confirm(panel('second'));
@@ -261,19 +331,18 @@ test('own-contribution family preserves independent panels, exact recovery and r
     await confirm(panel('second'), m.contribution_restore());
     await until(() => panel('second').textContent!.includes(m.contribution_restored()));
     expect([...panel('second').querySelectorAll('h3')].map((node) => node.textContent)).toEqual([
-      m.contribution_subject_available(),
+      m.contribution_read_unavailable(),
       m.contribution_candidate_unconfirmed(),
-      m.contribution_unselected(),
     ]);
     expect(panel('second').textContent).not.toContain(m.contribution_candidate_available());
     expect(panel('second').querySelector('[data-private]')).toBeNull();
-    expect(second.calls.map((call) => call.method)).toEqual(['DELETE', 'GET', 'GET', 'POST', 'GET', 'GET']);
+    expect(second.calls.map((call) => call.method)).toEqual(['DELETE', 'GET', 'POST', 'GET']);
     expect(panel('second').textContent).not.toContain(m.contribution_withdraw());
     await click(button(panel('second'), m.contribution_refresh()));
     expect(panel('second').textContent).not.toContain(m.contribution_withdraw());
     expect(panel('second').textContent).not.toContain(m.contribution_restored());
     expect(second.calls.filter((call) => call.method !== 'GET')).toHaveLength(2);
-    expect(first.calls).toHaveLength(9);
+    expect(first.calls).toHaveLength(6);
 
     // Conflict alone unlocks an explicit availability read; no presentation read is automatic.
     let reads = 0;
@@ -320,7 +389,12 @@ test('own-contribution family preserves independent panels, exact recovery and r
               : {
                   ok: true,
                   operation: command.operation,
-                  current: { subject: 'available', candidate: 'deleted', selected: false },
+                  current: {
+                    subject: 'available',
+                    candidate: 'deleted',
+                    selected: false,
+                    actions: { state: 'available', operations: ['delete', 'restore'] },
+                  },
                 };
         },
         read: async () => {
@@ -331,20 +405,35 @@ test('own-contribution family preserves independent panels, exact recovery and r
       await render(<Panel key={candidate} name="recovery" address={first.address} transport={recovery} />);
       await confirm(panel('recovery'));
       // Another action restores, then withdraws; only the current reading chooses the next action.
-      observation = { subject: 'available', candidate: 'available', selected: null };
+      observation = {
+        subject: 'available',
+        candidate: 'available',
+        selected: null,
+        actions: { state: 'available', operations: ['delete'] },
+      };
       await click(button(panel('recovery'), m.contribution_refresh()));
       expect(button(panel('recovery'), m.contribution_withdraw()).disabled).toBe(false);
       for (const copy of [m.contribution_deleted(), m.contribution_restored(), m.contribution_unselected()])
         expect(panel('recovery').textContent).not.toContain(copy);
       expect(panel('recovery').querySelector('[data-private]')).toBeNull();
-      observation = { subject: 'available', candidate: 'deleted', selected: false };
+      observation = {
+        subject: 'available',
+        candidate: 'deleted',
+        selected: false,
+        actions: { state: 'available', operations: ['delete', 'restore'] },
+      };
       const oldWithdraw = queued(button(panel('recovery'), m.contribution_withdraw()));
       await click(button(panel('recovery'), m.contribution_refresh()));
       await act(async () => oldWithdraw());
       expect(dialog()).toBeNull();
       expect(panel('recovery').textContent).toContain(m.contribution_deleted());
       await confirm(panel('recovery'), m.contribution_restore());
-      observation = { subject: 'available', candidate: 'unconfirmed', selected: false };
+      observation = {
+        subject: 'available',
+        candidate: 'unconfirmed',
+        selected: false,
+        actions: { state: 'available', operations: ['delete', 'restore'] },
+      };
       await click(button(panel('recovery'), m.contribution_refresh()));
       expect(panel('recovery').textContent).not.toContain(m.contribution_restore());
       expect(panel('recovery').textContent).not.toContain(m.contribution_deleted());
@@ -352,7 +441,12 @@ test('own-contribution family preserves independent panels, exact recovery and r
       observation = { subject: 'unavailable', candidate, selected: null };
       await click(button(panel('recovery'), m.contribution_refresh()));
       expect(panel('recovery').textContent).not.toContain(m.contribution_restore());
-      observation = { subject: 'available', candidate, selected: false };
+      observation = {
+        subject: 'available',
+        candidate,
+        selected: false,
+        actions: { state: 'available', operations: ['delete', 'restore'] },
+      };
       await click(button(panel('recovery'), m.contribution_refresh()));
       expect(panel('recovery').textContent).not.toContain(m.contribution_restored());
       expect(panel('recovery').textContent!.includes(m.contribution_deleted())).toBe(candidate === 'deleted');
@@ -401,13 +495,14 @@ test('own-contribution family preserves independent panels, exact recovery and r
       };
       function Holder() {
         const [retired, retire] = useState(false);
+        const observed = useAdmittedTransport(transport);
         return retired ? (
           <input aria-label="Replacement draft" />
         ) : (
           <ContributionLifecycle
             address={first.address}
             locale="en"
-            transport={transport}
+            transport={observed}
             onClear={() => {
               if (mode === 'retired') retire(true);
               if (mode === 'throws') throw new Error('Clear failed after confirmation');
@@ -440,7 +535,12 @@ test('own-contribution family preserves independent panels, exact recovery and r
       const success: ContributionResult = {
         ok: true,
         operation: 'delete',
-        current: { subject: 'available', candidate: 'deleted', selected: false },
+        current: {
+          subject: 'available',
+          candidate: 'deleted',
+          selected: false,
+          actions: { state: 'available', operations: ['delete', 'restore'] },
+        },
       };
       await act(async () =>
         release(
@@ -479,7 +579,12 @@ test('own-contribution family preserves independent panels, exact recovery and r
           release({
             ...success,
             operation: 'restore',
-            current: { subject: 'available', candidate: 'available', selected: false },
+            current: {
+              subject: 'available',
+              candidate: 'available',
+              selected: false,
+              actions: { state: 'available', operations: ['delete', 'restore'] },
+            },
           }),
         );
         expect(document.activeElement?.textContent).toBe(m.contribution_restored());
@@ -511,7 +616,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
         scenario === 'denied'
           ? m.contribution_denied()
           : scenario === 'expired'
-            ? m.contribution_expired()
+            ? m.contribution_conflict()
             : m.contribution_invalid();
       await until(() => panel(scenario).textContent!.includes(copy));
       expect(panel(scenario).querySelector('[role="alert"]')?.textContent).toBe(copy);
@@ -525,13 +630,13 @@ test('own-contribution family preserves independent panels, exact recovery and r
         expect(panel(scenario).textContent).not.toContain(m.contribution_restore());
         expect(cleared.get(scenario)).toBe(1);
         expect(fixture.calls.map((call) => call.method)).toEqual(
-          scenario === 'denied' ? ['DELETE'] : ['DELETE', 'GET', 'GET', 'POST'],
+          scenario === 'denied' ? ['DELETE'] : ['DELETE', 'GET', 'POST'],
         );
       }
       if (scenario === 'expired') {
         await click(button(panel(scenario), m.contribution_refresh()));
-        expect(panel(scenario).textContent).not.toContain(m.contribution_restore());
-        expect(panel(scenario).querySelector('[role="alert"]')?.textContent).toBe(copy);
+        expect(button(panel(scenario), m.contribution_restore()).disabled).toBe(false);
+        expect(panel(scenario).querySelector('[role="alert"]')).toBeNull();
       }
     }
 
@@ -617,7 +722,7 @@ test('own-contribution family preserves independent panels, exact recovery and r
     expect(panel('new-reader').textContent).not.toContain(m.contribution_read_unavailable());
     expect(panel('new-reader').querySelector('[data-private]')).not.toBeNull();
     expect(document.activeElement).toBe(outside);
-    expect(refreshFixture.calls.map((call) => call.method)).toEqual(['DELETE', 'GET', 'GET']);
+    expect(refreshFixture.calls.map((call) => call.method)).toEqual(['DELETE', 'GET']);
 
     // Pending success, denial and rejection cannot clear a replacement or steal focus.
     for (const result of ['success', 'denied', 'throw'] as const) {
@@ -664,7 +769,12 @@ test('own-contribution family preserves independent panels, exact recovery and r
               : {
                   ok: true,
                   operation: 'delete',
-                  current: { subject: 'available', candidate: 'deleted', selected: false },
+                  current: {
+                    subject: 'available',
+                    candidate: 'deleted',
+                    selected: false,
+                    actions: { state: 'available', operations: ['delete', 'restore'] },
+                  },
                 },
           );
       });
