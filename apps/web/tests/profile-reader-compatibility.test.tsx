@@ -547,6 +547,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(writableEditor.snapshot().phase).toBe('saved');
 
     // The production avatar component owns and cancels its own upload promise on credential replacement.
+    await until(() => host.querySelector<HTMLInputElement>('input[type="file"]')?.disabled === false, 'avatar advice');
     const fileInput = host.querySelector<HTMLInputElement>('input[type="file"]');
     expect(fileInput?.disabled).toBe(false);
     const gif = new window.File(['gif bytes'], 'selected-avatar.gif', { type: 'image/gif' });
