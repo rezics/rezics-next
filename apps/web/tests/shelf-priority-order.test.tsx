@@ -15,12 +15,22 @@ const { resolveShelfPresentation } = await import('../src/library/shelf-preferen
 
 test('priority addresses default to rank 1 first and retain the exact filtered continuation in either direction', () => {
   expect(shelfSort({ orderBy: 'priority' })).toEqual({ orderBy: 'priority', direction: 'asc' });
-  expect(resolveShelfPresentation({ orderBy: 'priority', cursor: 'original' },
-    { sorts: { all: { field: 'added', direction: 'desc' } } }).sort).toEqual({ orderBy: 'priority', direction: 'asc' });
+  expect(
+    resolveShelfPresentation(
+      { orderBy: 'priority', cursor: 'original' },
+      { sorts: { all: { field: 'added', direction: 'desc' } } },
+    ).sort,
+  ).toEqual({ orderBy: 'priority', direction: 'asc' });
   for (const direction of ['asc', 'desc'] as const) {
     const address = validateShelfSearch({
-      type: 'schema:Book', state: 'reading.arc-1', orderBy: 'priority', direction,
-      cursor: 'opaque:+/next?x', layout: 'table', size: 'l', columns: 'title,status',
+      type: 'schema:Book',
+      state: 'reading.arc-1',
+      orderBy: 'priority',
+      direction,
+      cursor: 'opaque:+/next?x',
+      layout: 'table',
+      size: 'l',
+      columns: 'title,status',
     });
     expect(address.orderBy).toBe('priority');
     const resolved = resolveShelfPresentation(address, undefined);
@@ -32,8 +42,9 @@ test('priority addresses default to rank 1 first and retain the exact filtered c
     const html = renderToStaticMarkup(createElement(ShelfScoreUnavailable, { locale: 'en', view: address }));
     expect(html).toContain('data-shelf-priority-state="unavailable"');
     expect(html).toContain('Priority order is not available yet.');
-    const links = [...html.matchAll(/href="([^"]+)"/g)].map((match) =>
-      new URL(match[1]!.replaceAll('&amp;', '&'), 'https://site.test'));
+    const links = [...html.matchAll(/href="([^"]+)"/g)].map(
+      (match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://site.test'),
+    );
     const restart = validateShelfSearch(Object.fromEntries(links[0]!.searchParams));
     expect(restart).toEqual({ ...address, cursor: undefined });
     const date = validateShelfSearch(Object.fromEntries(links[1]!.searchParams));
@@ -47,8 +58,17 @@ test('unpublished priority input never substitutes dates or another native read'
   const fetch = mock(() => Promise.resolve(Response.json({ libraryEntries: [], next: null })));
   const client = createKernelClient('https://api.test', { fetch });
   for (const direction of ['asc', 'desc'] as const) {
-    await expect(readEntryPage(client, 'Bearer owner', 'original', 'reading.arc-1', 20,
-      { orderBy: 'priority', direction }, 'schema:Book')).rejects.toMatchObject({ state: 'priority-unavailable' });
+    await expect(
+      readEntryPage(
+        client,
+        'Bearer owner',
+        'original',
+        'reading.arc-1',
+        20,
+        { orderBy: 'priority', direction },
+        'schema:Book',
+      ),
+    ).rejects.toMatchObject({ state: 'priority-unavailable' });
   }
   expect(fetch).not.toHaveBeenCalled();
 });

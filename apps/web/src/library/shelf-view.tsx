@@ -1218,7 +1218,11 @@ export function ShelfOrderUnavailable({ locale, view }: { locale: string; view: 
   const { cursor: _cursor, ...restart } = view;
   const dateOrder = shelfSort(view.state ? { state: view.state } : {});
   return (
-    <div data-shelf-score-state={priority ? undefined : "unavailable"} data-shelf-priority-state={priority ? "unavailable" : undefined} className="flex min-w-0 flex-col items-start gap-3">
+    <div
+      data-shelf-score-state={priority ? undefined : 'unavailable'}
+      data-shelf-priority-state={priority ? 'unavailable' : undefined}
+      className="flex min-w-0 flex-col items-start gap-3"
+    >
       <p role="alert">{priority ? m.library_priority_unavailable() : m.library_score_unavailable()}</p>
       <div className="flex max-w-full flex-wrap gap-2">
         <a

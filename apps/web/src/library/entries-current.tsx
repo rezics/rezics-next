@@ -246,14 +246,17 @@ export function SortControls({
           onChange={(event) => {
             if (!(isCurrent?.() ?? true)) return;
             const orderBy = validateShelfSearch({ orderBy: event.target.value }).orderBy;
-            if (orderBy && orderBy !== 'personalScore' && orderBy !== 'priority') setSelection({ ...selection, orderBy });
+            if (orderBy && orderBy !== 'personalScore' && orderBy !== 'priority')
+              setSelection({ ...selection, orderBy });
           }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
           <option value="lastActivity">{m.library_sort_activity()}</option>
           <option value="createdAt">{m.library_sort_created()}</option>
           <option value="finishedAt">{m.library_sort_finished()}</option>
-          <option value="priority" disabled>{m.library_rich_entry_priority()}</option>
+          <option value="priority" disabled>
+            {m.library_rich_entry_priority()}
+          </option>
           <option value="personalScore" disabled>
             {m.library_score_order()}
           </option>
@@ -273,8 +276,20 @@ export function SortControls({
           }}
           className="min-h-11 max-w-full rounded-md border bg-background p-2"
         >
-          <option value="desc">{priorityOrder ? m.library_priority_descending() : scoreOrder ? m.library_score_highest() : m.library_sort_newest()}</option>
-          <option value="asc">{priorityOrder ? m.library_priority_ascending() : scoreOrder ? m.library_score_lowest() : m.library_sort_oldest()}</option>
+          <option value="desc">
+            {priorityOrder
+              ? m.library_priority_descending()
+              : scoreOrder
+                ? m.library_score_highest()
+                : m.library_sort_newest()}
+          </option>
+          <option value="asc">
+            {priorityOrder
+              ? m.library_priority_ascending()
+              : scoreOrder
+                ? m.library_score_lowest()
+                : m.library_sort_oldest()}
+          </option>
         </select>
       </label>
       <Button type="submit" variant="outline" className="min-h-11">
