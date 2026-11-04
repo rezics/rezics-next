@@ -1,3 +1,5 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { readExposure } from '../../src/access/gates/catalogue.ts';
 import { expect, test } from 'bun:test';
 import { prepareQueryShare } from '../../src/search/query-share.ts';
 
@@ -55,10 +57,11 @@ const pool = createPool(process.env.DATABASE_URL!);
 const opening = Bun.randomUUIDv7();
 beforeAll(async () => {
   for (const group of ['search', 'search_advanced'])
-    await pool.query(
-      `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ($1, tstzrange('2000-01-01', NULL, '[)'), $2)`,
-      [group, opening],
-    );
+    if (!(await readExposure(pool, group, new Date(), Date.now() + 10000)).open)
+      await pool.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ($1, tstzrange('2000-01-01', NULL, '[)'), $2)`,
+        [group, opening],
+      );
 });
 afterAll(async () => {
   await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
@@ -88,7 +91,7 @@ const search: SearchService = {
     return { subjects: [], as_of: new Date().toISOString() };
   },
 };
-const app = createKernel({ pool, access, routeKey: new Uint8Array(32), search });
+const app = createKernel({ pool, access, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys(), search });
 test('mounted preparation executes native admission and a recipient denial cannot acquire a portable query', async () => {
   const send = () =>
     app.handle(
