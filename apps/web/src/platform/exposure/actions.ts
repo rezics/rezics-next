@@ -46,7 +46,7 @@ export const readPlatformExposureBound = createServerFn({ method: 'GET' })
     return readExposureBound(data, {
       prepare: prepareViewerRequest,
       credential: viewerCredential,
-      subject: sessionSubject,
+      subject: (request) => sessionSubject(request) ?? null,
       configured: configured(),
       read: (authorization, query) => loadExposure(kernelClient(), authorization, query),
     });
