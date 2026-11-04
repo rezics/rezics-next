@@ -35,6 +35,16 @@ function isGroup(value: unknown): value is RelationGroup {
  * A property with no relation definition yet falls back to its label and the `other` group; one the release does not
  * know is absent.
  */
+/** Forward copy/release-to-work controls: complete-empty stays visible; a counted but hidden member is withheld. */
+export function copyWorkDisclosureControl(input: {
+  items: readonly unknown[];
+  count?: { value: number } | null | undefined;
+}): 'available' | 'empty' | 'withheld' {
+  if (input.items.length > 0) return 'available';
+  if (input.count && input.count.value > 0) return 'withheld';
+  return 'empty';
+}
+
 export function relationDefinitions(
   release: { properties: Record<string, unknown> },
   properties: Iterable<string>,
