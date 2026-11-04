@@ -292,7 +292,7 @@ test('Actual server exports certify only the exact native preparation, preserve 
     expect(calls).toHaveLength(count);
     preparation = 'unavailable';
     await expect(actions.readCopiesCurrent({ data: {} })).rejects.toMatchObject({
-      problem: { code: 'dependency_unavailable' },
+      code: 'session_unavailable',
     });
     expect(await actions.readCopyDetailCurrent({ data: { id: id(1) } })).toMatchObject({
       sessionSubject: null,
@@ -347,6 +347,7 @@ test('The actual Copies route retires retained private rows and editor state on 
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createRouter, createRootRoute, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { Route } = await import('../src/routes/library/copies');
   const { requireSignedIn } = await import('../src/session/guard');
   const notices = await import('../src/library/copies-undo');
@@ -408,6 +409,17 @@ test('The actual Copies route retires retained private rows and editor state on 
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
   const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let enrolledAdmission = true;
+  const exposureLifetime = viewerExposureLifetime(client);
+  const admitCurrent = () => {
+    const snapshot = exposureLifetime.getSnapshot();
+    if (snapshot.state === 'signed-in')
+      client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+        subject: snapshot.observation.subject,
+        admitted: enrolledAdmission ? ['personal_library'] : [],
+      });
+  };
+  const releaseAdmission = exposureLifetime.subscribe(admitCurrent);
   // Foreign unpartitioned private data is never a fallback.
   client.setQueryData(['copies'], response('FOREIGN').page);
   const router = createRouter({
@@ -434,8 +446,9 @@ test('The actual Copies route retires retained private rows and editor state on 
     });
   const show = async (session: { state: string; subject?: string; csrfToken: string | null }, admitted = true) => {
     await act(async () => {
+      enrolledAdmission = admitted;
       client.setQueryData(['session'], session);
-      client.setQueryData(['exposure', 'viewer'], admitted ? ['personal_library'] : []);
+      admitCurrent();
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
         const html = renderToString(tree());
@@ -828,6 +841,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());
+    releaseAdmission();
     client.clear();
     host.remove();
     for (const spy of [read, detail, edition, write, create, remove, restore, notice, loader, address])
