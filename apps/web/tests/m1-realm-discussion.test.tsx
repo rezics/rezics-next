@@ -86,12 +86,18 @@ test('public Realm destinations and the native discussion reader preserve their 
 
     const threadPage = await withStoryRequest(() =>
       readThreadPage({ data: { id: threadRecording.thread.id, credentialMode: 'anonymous' } }),
-    );
+    ).catch((error) => {
+      throw new Error('The recorded public thread did not load through its native reader', { cause: error });
+    });
     if ('redirect' in threadPage) throw new Error('The native thread unexpectedly redirected');
     const boardId = threadPage.thread.boardId;
     const boardRead = await withStoryRequest(() =>
       readBoardPage({ data: { id: boardId, sort: 'new', credentialMode: 'anonymous' } }),
-    );
+    ).catch((error) => {
+      throw new Error(`The recorded discussion board ${boardId} did not load through its native reader`, {
+        cause: error,
+      });
+    });
     expect(boardRead.page.threads.threads.some((candidate) => candidate.id === threadPage.thread.id)).toBe(true);
 
     const openingId = threadPage.thread.firstPost.id;
