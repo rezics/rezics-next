@@ -40,7 +40,7 @@ export function inboxPageQuery(
     queryFn: ({ signal }) => forInboxViewer(viewer, () => loadPage(query, signal), signal),
     retry: false,
     gcTime: 0,
-    enabled: personalRead.enabled && viewer.isCurrent(),
+    enabled: typeof window !== 'undefined' && viewer.isCurrent(),
   });
 }
 
@@ -65,7 +65,7 @@ export function unreadCountQueryFor(viewer: InboxViewer | null) {
       if (!viewer) throw new DOMException('Inbox viewer unavailable', 'AbortError');
       return forInboxViewer(viewer, () => readUnreadCount({ signal }), signal);
     },
-    enabled: personalRead.enabled && viewer !== null && viewer.isCurrent(),
+    enabled: typeof window !== 'undefined' && viewer !== null && viewer.isCurrent(),
     gcTime: 0,
   });
 }
