@@ -37,7 +37,9 @@ function ThreadHistoryRoute() {
         threadId={selected.threadId}
         review
         returnOrigin={{
-          pathname: new URL(location.publicHref, 'https://site.test').pathname,
+          pathname: localizeUrl(
+            new URL(`/threads/${encodeURIComponent(selected.threadId)}/prepared`, 'https://site.test'),
+          ).pathname,
           search: new URL(location.publicHref, 'https://site.test').search,
         }}
         navigateToExactRevision={(identity, historyReturn) => {
