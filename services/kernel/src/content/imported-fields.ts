@@ -204,7 +204,7 @@ export async function readImportedFieldBounded(
     candidate: row.candidate,
     revision: row.revision,
     body: row.body === null ? null : Buffer.from(row.body),
-    bodyTooLarge: row.bodyTooLarge,
+    bodyTooLarge: row.bodyTooLarge ?? false,
     availability: row.availability as ImportedFieldView['availability'],
     source: row.source as ImportedSource,
     rights: row.rights as Rights,
