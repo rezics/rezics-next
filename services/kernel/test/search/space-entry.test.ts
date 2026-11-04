@@ -52,7 +52,14 @@ function fixture(carried = true) {
   };
   return { card, page, cards: new Map([[id, card]]) };
 }
-const actor = { kind: 'account' as const, accountId: reader };
+const actor = {
+  kind: 'account' as const,
+  accountId: reader,
+  clientId: reader,
+  scopes: [],
+  requestedBy: null,
+  authnEpoch: 0,
+};
 test('one aggregate observes exact Space following separately from current Realm entry and fences its producer', async () => {
   const f = fixture();
   let seeks = 0,

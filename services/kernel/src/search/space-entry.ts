@@ -9,7 +9,7 @@ import {
   type SpaceEntryFollow,
   type SpaceEntryRow,
 } from '../community/space-discovery-entry-contract.ts';
-import type { DiscoveryPage } from './discovery.ts';
+import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 
 /** Minimal consumer seam until Library publishes the shared follow-discovery producer.
  * It observes only the current reader's exact Space edges, never writes or reads one edge per hit.
@@ -118,10 +118,11 @@ export async function observeSearchSpaceEntries(input: {
   });
   const page: DiscoveryPage = {
     ...input.page,
-    hits: input.page.hits.map((hit) =>
+    hits: input.page.hits.map((hit): DiscoveryUnionHit =>
       hit.summary.kind === 'space'
         ? {
             ...hit,
+            key: { owner: 'community', kind: 'space', route: hit.key.route, id: hit.key.id },
             summary: {
               kind: 'space',
               value: { ...hit.summary.value, presentation: structuredClone(initial.get(hit.key.id)!.presentation) },

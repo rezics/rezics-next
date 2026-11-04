@@ -346,7 +346,7 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
       unavailable();
     page.spaceEntries.rows.forEach((row, index) => {
       const hit = spaces[index]!;
-      if (hit.summary.kind !== 'space') unavailable();
+      if (hit.summary.kind !== 'space') return unavailable();
       const value = hit.summary.value;
       if (
         row.id !== hit.key.id ||
