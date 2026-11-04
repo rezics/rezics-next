@@ -1,5 +1,6 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { AuthButton as Button } from '../button';
@@ -9,6 +10,15 @@ import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { loadManagementSession, type ManagementSessionResult } from '../management-operations';
 import { normalizeSignupHandle } from '../signup';
+import {
+  dismissAutomatedCreationReturnHistory,
+  emptyAutomatedCreationReturnHistory,
+  observeAutomatedCreationContinuation,
+  recordAutomatedCreationReturnFact,
+  type AutomatedCreationReturnHistory,
+  type AutomatedCreationReturnFact,
+} from '../automated-creation-return';
+import { AutomatedCreationReturnView } from '../automated-creation-return-view';
 import {
   createAutomatedAttempt,
   discardAutomatedReview,
@@ -95,6 +105,7 @@ function notice(kind: string): string {
   if (kind === 'step-up') return m.auth_automated_step_up();
   if (kind === 'refused') return m.auth_automated_refused();
   if (kind === 'unknown') return m.auth_automated_unknown();
+  if (kind === 'blocked') return m.auth_automated_history_blocked();
   if (kind === 'signed-out') return m.auth_account_operation_sign_in_required();
   return m.auth_automated_unavailable();
 }
@@ -110,6 +121,9 @@ function sameCaller(left: Session, right: Session) {
     JSON.stringify(left.amr) === JSON.stringify(right.amr)
   );
 }
+function possiblySent(attempt: AutomatedAttempt | null | 'invalid' | undefined): boolean {
+  return !!attempt && attempt !== 'invalid' && (!!attempt.submitted || !!attempt.reference);
+}
 export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSessionResult } = {}) {
   const router = useRouter({ warn: false });
   const [accountId, setAccountId] = useState('');
@@ -121,20 +135,55 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [retired, setRetired] = useState(false);
   const [status, setStatus] = useState('');
   const [errors, setErrors] = useState({ operator: false, handle: false });
   const [reauth, setReauth] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [created, setCreated] = useState('');
+  const [history, setHistory] = useState<AutomatedCreationReturnHistory>(emptyAutomatedCreationReturnHistory);
+  const [historyDismissed, setHistoryDismissed] = useState(false);
+  const [historyFocusRequest, setHistoryFocusRequest] = useState(0);
   const lock = useRef(false);
   const caller = useRef<Session | null>(null);
   const lifetime = useRef<object | null>(null);
+  const historyRef = useRef(history);
+  const uncertaintySeen = useRef(false);
+  const unresolvedUnknown = useRef(false);
+  const focusAfterRead = useRef(false);
   const [reload, setReload] = useState(0);
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
-  const work = useRef({ accountId, attempt, ready, created, busy, operatorId, handle });
-  work.current = { accountId, attempt, ready, created, busy, operatorId, handle };
+  const work = useRef({ accountId, attempt, draft, page, ready, created, busy, operatorId, handle, email, password });
+  work.current = { accountId, attempt, draft, page, ready, created, busy, operatorId, handle, email, password };
+  function updateHistory(next: AutomatedCreationReturnHistory) {
+    if (next === historyRef.current) return;
+    historyRef.current = next;
+    setHistory(next);
+    setHistoryDismissed(false);
+    setHistoryFocusRequest((value) => value + 1);
+  }
+  function noteFact(fact: AutomatedCreationReturnFact) {
+    if (fact === 'unknown') unresolvedUnknown.current = true;
+    updateHistory(recordAutomatedCreationReturnFact(historyRef.current, fact));
+  }
+  function noteStoredContinuation(saved: AutomatedAttempt | null | 'invalid' | undefined) {
+    if (!possiblySent(saved) || uncertaintySeen.current) return;
+    uncertaintySeen.current = true;
+    const next = observeAutomatedCreationContinuation(historyRef.current, true);
+    if (next.includes('unknown')) unresolvedUnknown.current = true;
+    updateHistory(next);
+  }
+  function dismissHistory() {
+    const next = dismissAutomatedCreationReturnHistory(historyRef.current);
+    if (next === historyRef.current) return;
+    historyRef.current = next;
+    setHistory(next);
+    setHistoryDismissed(true);
+    setHistoryFocusRequest((value) => value + 1);
+    if (status === 'unknown') setStatus('');
+  }
   const protectedWork = () => {
     const value = work.current;
     return (
@@ -144,25 +193,53 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       !!(value.busy || value.attempt || value.operatorId.trim() || value.handle.trim())
     );
   };
-  function retire() {
+  function retire(cached = false, synchronous = true) {
+    const previous = work.current;
     lifetime.current = null;
-    discardAutomatedReview(work.current.attempt);
-    work.current.ready = false;
-    setReady(false);
-    setAttempt(null);
-    setDraft(null);
-    setConfirmed(false);
-    setOperatorId('');
-    setHandle('');
-    setEmail('');
-    setPassword('');
-    setReauth(false);
-  }
-  function revoked(kind: string) {
+    caller.current = null;
+    lock.current = false;
     const saved = restoreAutomatedAttempt();
-    const uncertain = saved && saved !== 'invalid' && (saved.submitted || saved.reference);
-    retire();
-    setStatus(uncertain ? 'unknown' : kind);
+    discardAutomatedReview(previous.attempt);
+    const clear = () => {
+      const previousHistory = historyRef.current;
+      if (possiblySent(previous.attempt) || possiblySent(saved))
+        noteStoredContinuation(possiblySent(saved) ? saved : previous.attempt);
+      else if (previous.attempt || previous.draft || previous.operatorId.trim() || previous.handle.trim())
+        noteFact('interrupted');
+      if (
+        cached &&
+        historyRef.current === previousHistory &&
+        (historyRef.current.length > 0 || historyDismissed)
+      )
+        setHistoryFocusRequest((value) => value + 1);
+      work.current = {
+        accountId: '', attempt: null, draft: null, page: null, ready: false, created: '', busy: false,
+        operatorId: '', handle: '', email: '', password: '',
+      };
+      setAccountId('');
+      setOperatorId('');
+      setHandle('');
+      setPage(null);
+      setAttempt(null);
+      setDraft(null);
+      setConfirmed(false);
+      setBusy(false);
+      setReady(false);
+      setStatus('');
+      setErrors({ operator: false, handle: false });
+      setReauth(false);
+      setEmail('');
+      setPassword('');
+      setCreated('');
+      setRetired(cached);
+    };
+    if (synchronous) flushSync(clear);
+    else clear();
+  }
+  const retireForDeparture = () => retire(true, true);
+  function revoked(kind: string) {
+    retire(false, true);
+    setStatus(kind);
   }
   async function validateCaller() {
     const current = lifetime.current;
@@ -174,13 +251,27 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
         session.kind === 'signed-out' ? 'signed-out' : session.kind === 'unavailable' ? 'unavailable' : 'refused',
       );
   }
+  async function blockFreshCreation(session: Session, current: object, status: 'blocked' | 'refused') {
+    const read = await loadAutomatedCreationPage(session.accountId, null);
+    if (lifetime.current !== current) return;
+    if (read.kind !== 'ready' || read.page.readiness === 'refused') {
+      revoked(read.kind === 'ready' ? 'refused' : read.kind);
+      return;
+    }
+    await validateCaller();
+    if (lifetime.current !== current) return;
+    retire(false, true);
+    setStatus(status);
+  }
   useLayoutEffect(() => {
     const current = {};
+    focusAfterRead.current = reload > 0;
     lifetime.current = current;
     caller.current = null;
     lock.current = false;
     setBusy(false);
     setReady(false);
+    setRetired(false);
     setStatus('');
     setConfirmed(false);
     setReauth(false);
@@ -194,30 +285,37 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     setOperatorId('');
     setHandle('');
     setEmail('');
+    const onPageHide = () => retire(true, true);
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) setReload((value) => value + 1);
     };
-    window.addEventListener('pagehide', retire);
+    window.addEventListener('pagehide', onPageHide);
     window.addEventListener('focus', validateCaller);
     window.addEventListener('pageshow', restore);
     void (async () => {
+      const saved = restoreAutomatedAttempt();
+      noteStoredContinuation(saved);
       const session = initial && reload === 0 ? initial : await loadManagementSession();
       if (lifetime.current !== current) return;
       if (session.kind !== 'ready') {
         setStatus(session.kind);
         return;
       }
-      const saved = restoreAutomatedAttempt();
-      if (saved === 'invalid' || (saved && saved.accountId !== session.accountId)) {
-        setStatus('refused');
-        return;
-      }
+      const currentSaved = restoreAutomatedAttempt();
       caller.current = session;
       setAccountId(session.accountId);
+      if (
+        currentSaved === 'invalid' ||
+        (currentSaved && currentSaved.accountId !== session.accountId) ||
+        JSON.stringify(currentSaved) !== JSON.stringify(saved)
+      ) {
+        await blockFreshCreation(session, current, unresolvedUnknown.current ? 'blocked' : 'refused');
+        return;
+      }
       // Every visit, including restoration, starts with native page advice. It has no command effect.
-      const read = await loadAutomatedCreationPage(session.accountId, saved?.operator.id ?? null);
+      const read = await loadAutomatedCreationPage(session.accountId, currentSaved?.operator.id ?? null);
       if (lifetime.current !== current) return;
-      if (JSON.stringify(restoreAutomatedAttempt()) !== JSON.stringify(saved)) {
+      if (JSON.stringify(restoreAutomatedAttempt()) !== JSON.stringify(currentSaved)) {
         revoked('refused');
         return;
       }
@@ -231,25 +329,35 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       }
       await validateCaller();
       if (lifetime.current !== current) return;
+      if (unresolvedUnknown.current && !currentSaved) {
+        retire(false, true);
+        setStatus('blocked');
+        return;
+      }
       setPage(read.page);
-      setAttempt(saved);
-      setReauth(!!saved && read.page.readiness === 'authentication-needed');
-      setStatus(read.page.readiness === 'authentication-needed' ? 'step-up' : saved?.submitted ? 'unknown' : '');
+      setAttempt(currentSaved);
+      setReauth(!!currentSaved && read.page.readiness === 'authentication-needed');
+      setStatus(read.page.readiness === 'authentication-needed' ? 'step-up' : currentSaved?.submitted ? 'unknown' : '');
       setReady(true);
     })();
     return () => {
-      retire();
-      window.removeEventListener('pagehide', retire);
+      retire(false, false);
+      window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('focus', validateCaller);
       window.removeEventListener('pageshow', restore);
     };
   }, [initial, reload]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (status) feedback.current?.focus();
   }, [status]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (attempt || draft) confirmation.current?.focus();
   }, [attempt, draft]);
+  useLayoutEffect(() => {
+    if (!ready || !focusAfterRead.current) return;
+    focusAfterRead.current = false;
+    if (!attempt && !draft) document.getElementById('automated-operator')?.focus();
+  }, [attempt, draft, ready]);
 
   // Approval references may change; the exact parties, key and business body cannot.
   function currentWork() {
@@ -312,6 +420,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       return;
     }
     const selection = Object.freeze({ accountId, operatorId: operatorId.trim(), handle: normalized! });
+    work.current = { ...work.current, operatorId: selection.operatorId, handle: selection.handle };
     setOperatorId(selection.operatorId);
     setHandle(selection.handle);
     // Ordinary sessions can authenticate before any privileged selected-operator read.
@@ -347,6 +456,16 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
       await validateCaller();
       if (!isCurrent()) return;
       const result = await submitAutomatedAttempt(attempt, isCurrent);
+      if (result.kind === 'complete') {
+        uncertaintySeen.current = true;
+        noteFact('acknowledged');
+      } else {
+        noteStoredContinuation(restoreAutomatedAttempt());
+        if (result.kind === 'unknown') {
+          uncertaintySeen.current = true;
+          noteFact('unknown');
+        }
+      }
       if (!isCurrent()) return;
       await validateCaller();
       if (!isCurrent()) return;
@@ -383,6 +502,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     setConfirmed(false);
     setStatus('');
     const secret = password;
+    work.current = { ...work.current, email: '', password: '' };
     setPassword('');
     setEmail('');
     try {
@@ -419,15 +539,35 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
     : draft;
   return (
     <AuthPage heading={m.auth_automated_heading()}>
-      {router ? <DepartureDecision protectedWork={protectedWork} validate={validateCaller} retire={retire} /> : null}
-      <div className="space-y-5" aria-busy={busy}>
+      {router && !retired ? (
+        <DepartureDecision protectedWork={protectedWork} validate={validateCaller} retire={retireForDeparture} />
+      ) : null}
+      {retired ? (
+        <div className="space-y-5">
+          <AutomatedCreationReturnView
+            history={history}
+            dismissed={historyDismissed}
+            focusRequest={historyFocusRequest}
+            onDismiss={dismissHistory}
+          />
+          <div className="flex flex-wrap gap-4">
+            <a href="/security">{m.auth_security_heading()}</a>
+            <a href="/">{m.auth_home_heading()}</a>
+          </div>
+        </div>
+      ) : <div className="space-y-5" aria-busy={busy}>
         <p>{m.auth_automated_intro()}</p>
+        <AutomatedCreationReturnView
+          history={history}
+          dismissed={historyDismissed}
+          focusRequest={historyFocusRequest}
+          onDismiss={dismissHistory}
+        />
         {busy ? (
           <p role="status" aria-live="polite">
             {m.auth_automated_pending()}
           </p>
         ) : null}
-        {attempt?.submitted && status !== 'unknown' && !created ? <p>{m.auth_automated_unknown()}</p> : null}
         {status ? (
           <ErrorAlert ref={feedback} tabIndex={-1}>
             {notice(status)}
@@ -438,16 +578,27 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
             {!status ? <p role="status">{m.auth_inventory_loading()}</p> : null}
             {status === 'signed-out' ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
             {status ? (
-              <Button type="button" onClick={() => setReload((value) => value + 1)}>
+              <Button
+                type="button"
+                onClick={() => {
+                  setRetired(false);
+                  setReload((value) => value + 1);
+                }}
+              >
                 {m.auth_account_delete_retry()}
               </Button>
             ) : null}
+            <div className="flex flex-wrap gap-4">
+              <a href="/security">{m.auth_security_heading()}</a>
+              <a href="/">{m.auth_home_heading()}</a>
+            </div>
           </div>
         ) : created ? (
           <div role="status" className="space-y-3">
             <p className="break-all">{m.auth_automated_created({ account: created })}</p>
             <p>{m.auth_automated_result()}</p>
             <a href="/security">{m.auth_security_heading()}</a>
+            <a href="/">{m.auth_home_heading()}</a>
           </div>
         ) : !selection ? (
           <form noValidate onSubmit={(event) => void review(event)} className="space-y-4">
@@ -462,6 +613,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
                 aria-invalid={errors.operator}
                 aria-describedby={errors.operator ? 'automated-operator-error' : undefined}
                 onChange={(event) => {
+                  work.current = { ...work.current, operatorId: event.target.value };
                   setOperatorId(event.target.value);
                   setErrors((value) => ({ ...value, operator: false }));
                 }}
@@ -481,6 +633,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
                 aria-invalid={errors.handle}
                 aria-describedby={`automated-handle-help${errors.handle ? ' automated-handle-error' : ''}`}
                 onChange={(event) => {
+                  work.current = { ...work.current, handle: event.target.value };
                   setHandle(event.target.value);
                   setErrors((value) => ({ ...value, handle: false }));
                 }}
@@ -526,7 +679,10 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
                     required
                     disabled={busy}
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      work.current = { ...work.current, email: event.target.value };
+                      setEmail(event.target.value);
+                    }}
                   />
                 </Field>
                 <Field>
@@ -537,7 +693,10 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
                     required
                     disabled={busy}
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) => {
+                      work.current = { ...work.current, password: event.target.value };
+                      setPassword(event.target.value);
+                    }}
                   />
                 </Field>
                 <Button type="submit" disabled={busy}>
@@ -563,7 +722,7 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
             )}
           </section>
         )}
-      </div>
+      </div>}
     </AuthPage>
   );
 }

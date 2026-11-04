@@ -103,6 +103,19 @@ test('Stay preserves the exact review and confirmation; Leave discards an unsent
   await page.click('Leave');
   expect(restoreAutomatedAttempt()).toBeNull();
 });
+test('Escape from the departure prompt stays on the exact review and restores keyboard focus', async () => {
+  const page = await start();
+  await page.review();
+  const checkbox = page.host.querySelector<HTMLInputElement>('#automated-confirm')!;
+  await flush(() => checkbox.focus());
+  const attempt = restoreAutomatedAttempt();
+  await page.navigate();
+  const dialog = page.host.querySelector<HTMLDialogElement>('dialog')!;
+  await flush(() => dialog.dispatchEvent(new dom.Event('cancel', { cancelable: true })));
+  expect(restoreAutomatedAttempt()).toEqual(attempt);
+  expect(page.host.querySelector<HTMLInputElement>('#automated-confirm')!.checked).toBe(false);
+  expect(document.activeElement).toBe(checkbox);
+});
 test('Leave retains an unresolved command and retires its late approval before replacement work', async () => {
   const page = await start();
   await page.review();

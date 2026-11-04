@@ -146,7 +146,7 @@ test('invalid fields attach advice without reading the operator; native refusal 
     await page.render(<></>);
   }
 });
-test('same-account authority replacement retires a late execution without publishing its result', async () => {
+test('native acknowledgement survives authority replacement without publishing private result details', async () => {
   saveAutomatedAttempt(createAutomatedAttempt(human, operator, 'robot-one')!);
   const session = { ...body };
   const page = await open(<AutomatedAccountCreatePage />, session);
@@ -155,7 +155,8 @@ test('same-account authority replacement retires a late execution without publis
   session.authn_epoch++;
   await flush(() => page.calls[1]!.resolve(Response.json({ accountId: operator.id })));
   expect(page.host.textContent).not.toContain('The native creation workflow returned account');
-  expect(page.host.textContent).toContain('The result is uncertain');
+  expect(page.host.textContent).toContain('The native creation workflow acknowledged completion.');
+  expect(page.host.textContent).not.toContain('The result is uncertain');
   expect(restoreAutomatedAttempt()).toMatchObject({ submitted: true });
   expect(page.host.querySelector('#automated-confirm')).toBeNull();
 });
