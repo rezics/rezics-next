@@ -1,13 +1,22 @@
-import { ContentItem } from '@rezics/ui/content-item';
-import { Cover } from '@rezics/ui/cover';
-import { m } from '../paraglide/messages.js';
-import type { Locale } from '../paraglide/runtime.js';
-import { ReviewContextDetails } from './review-context-details';
-import { localizedLabel, SubjectMeta } from './results';
-import { coverSrc } from '../media/cover-src';
-import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
-import { discoveryCollectionHref, discoveryReviewHref, discoverySpaceHref } from './discovery-public-links';
-import type { PublicCollectionSummary, PublicDiscoveryHit, PublicReviewSummary, PublicSpaceSummary } from './discovery';
+import { ContentItem } from "@rezics/ui/content-item";
+import { Cover } from "@rezics/ui/cover";
+import { m } from "../paraglide/messages.js";
+import type { Locale } from "../paraglide/runtime.js";
+import { ReviewContextDetails } from "./review-context-details";
+import { localizedLabel, SubjectMeta } from "./results";
+import { coverSrc } from "../media/cover-src";
+import { subjectHref, type SubjectHrefInput } from "../subject/subject-href";
+import {
+  discoveryCollectionHref,
+  discoveryReviewHref,
+  discoverySpaceHref,
+} from "./discovery-public-links";
+import type {
+  PublicCollectionSummary,
+  PublicDiscoveryHit,
+  PublicReviewSummary,
+  PublicSpaceSummary,
+} from "./discovery";
 
 function options(locale: string) {
   return { locale: locale as Locale };
@@ -39,7 +48,9 @@ function PublicCollectionRow({
             subject={{
               id,
               title: summary.title,
-              types: summary.card.presentationKind ? [summary.card.presentationKind] : [],
+              types: summary.card.presentationKind
+                ? [summary.card.presentationKind]
+                : [],
             }}
             cover={summary.card.cover}
             src={coverSrc}
@@ -51,12 +62,16 @@ function PublicCollectionRow({
       metadata={
         <span>
           {kind}
-          {summary.card.membershipKind === 'curated'
+          {summary.card.membershipKind === "curated"
             ? ` · ${m.library_collection_item_count({ count: summary.card.memberCount }, options(locale))}`
-            : ''}
+            : ""}
         </span>
       }
-      preview={summary.description ? <p className="line-clamp-2 break-words">{summary.description}</p> : undefined}
+      preview={
+        summary.description ? (
+          <p className="line-clamp-2 break-words">{summary.description}</p>
+        ) : undefined
+      }
     />
   );
 }
@@ -78,14 +93,16 @@ function ReviewRow({
 }) {
   const reviewContext = summary.reviewContext;
   const target =
-    reviewContext?.state === 'available' && reviewContext.target.state === 'available'
+    reviewContext?.state === "available" &&
+    reviewContext.target.state === "available"
       ? reviewContext.target.subject
       : null;
   // An enriched withheld state never falls back to the earlier title-only slot.
   const reviewedSubject = reviewContext
     ? target && { id: target.id, title: target.label?.value ?? null }
     : summary.subject;
-  const reviewedTitle = reviewedSubject?.title || m.subject_value_unlabelled({}, options(locale));
+  const reviewedTitle =
+    reviewedSubject?.title || m.subject_value_unlabelled({}, options(locale));
   const context = (
     <div className="min-w-0 space-y-1">
       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -95,20 +112,34 @@ function ReviewRow({
             className="inline-flex min-h-11 items-center underline underline-offset-4 [overflow-wrap:anywhere]"
             lang={target?.label?.language}
             href={
-              subjectHrefFor?.({ id: reviewedSubject.id, label: reviewedTitle }) ??
-              subjectHref({ id: reviewedSubject.id, label: reviewedTitle }, locale).href
+              subjectHrefFor?.({
+                id: reviewedSubject.id,
+                label: reviewedTitle,
+              }) ??
+              subjectHref(
+                { id: reviewedSubject.id, label: reviewedTitle },
+                locale,
+              ).href
             }
           >
             {reviewedTitle}
           </a>
         ) : reviewContext ? (
-          <span>{m.discussion_provenance_details_subject_unavailable({}, options(locale))}</span>
+          <span>
+            {m.discussion_provenance_details_subject_unavailable(
+              {},
+              options(locale),
+            )}
+          </span>
         ) : null}
       </span>
       {target ? (
         <>
           <SubjectMeta
-            type={localizedLabel(targetTypes?.[target.type] ?? { en: target.type }, locale)}
+            type={localizedLabel(
+              targetTypes?.[target.type] ?? { en: target.type },
+              locale,
+            )}
             year={undefined}
             locale={locale}
           />
@@ -119,8 +150,13 @@ function ReviewRow({
       ) : null}
     </div>
   );
-  const authorName = summary.author?.displayName || (summary.author?.handle ? `@${summary.author.handle}` : undefined);
-  const authorHandle = summary.author?.displayName && summary.author.handle ? `@${summary.author.handle}` : undefined;
+  const authorName =
+    summary.author?.displayName ||
+    (summary.author?.handle ? `@${summary.author.handle}` : undefined);
+  const authorHandle =
+    summary.author?.displayName && summary.author.handle
+      ? `@${summary.author.handle}`
+      : undefined;
 
   return (
     <ContentItem
@@ -132,7 +168,11 @@ function ReviewRow({
         target ? (
           <div className="w-[72px] sm:w-24">
             <Cover
-              subject={{ id: target.id, title: reviewedTitle, types: target.types }}
+              subject={{
+                id: target.id,
+                title: reviewedTitle,
+                types: target.types,
+              }}
               cover={target.cover}
               src={coverSrc}
               size="fill"
@@ -145,32 +185,44 @@ function ReviewRow({
         authorName ? (
           <span>
             {authorName}
-            {authorHandle ? ` ${authorHandle}` : ''}
+            {authorHandle ? ` ${authorHandle}` : ""}
           </span>
         ) : undefined
       }
       preview={
         <div className="min-w-0 space-y-3">
-          {summary.excerpt ? (
-            reviewContext?.state === 'available' && reviewContext.spoiler ? (
-              <details key={`${id}:${summary.source?.openingRevisionId}`}>
+          {summary.excerpt &&
+          (!reviewContext || reviewContext.state === "available") ? (
+            reviewContext?.state === "available" && reviewContext.spoiler ? (
+              <details
+                key={`${id}:${summary.source?.openingRevisionId}:${summary.source?.sourceVersion}:${locale}`}
+              >
                 <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4">
                   {m.subject_spoiler_show({}, options(locale))}
                 </summary>
-                <p lang={reviewContext.language ?? undefined} className="line-clamp-3 break-words">
+                <p
+                  lang={reviewContext.language ?? undefined}
+                  className="line-clamp-3 break-words"
+                >
                   {summary.excerpt}
                 </p>
               </details>
             ) : (
               <p
-                lang={reviewContext?.state === 'available' ? (reviewContext.language ?? undefined) : undefined}
+                lang={
+                  reviewContext?.state === "available"
+                    ? (reviewContext.language ?? undefined)
+                    : undefined
+                }
                 className="line-clamp-3 break-words"
               >
                 {summary.excerpt}
               </p>
             )
           ) : null}
-          {reviewContext ? <ReviewContextDetails context={reviewContext} locale={locale} /> : null}
+          {reviewContext ? (
+            <ReviewContextDetails context={reviewContext} locale={locale} />
+          ) : null}
         </div>
       }
     />
@@ -201,7 +253,11 @@ function SpaceRow({
         </span>
       }
       metadata={<span className="break-all">{summary.address}</span>}
-      preview={summary.summary ? <p className="line-clamp-2 break-words">{summary.summary}</p> : undefined}
+      preview={
+        summary.summary ? (
+          <p className="line-clamp-2 break-words">{summary.summary}</p>
+        ) : undefined
+      }
     />
   );
 }
@@ -223,9 +279,16 @@ export function DiscoveryPublicRow({
   const { id } = hit.key;
   const summary = hit.summary;
   switch (summary.kind) {
-    case 'collection':
-      return <PublicCollectionRow id={id} summary={summary.value} kind={kind} locale={locale} />;
-    case 'review':
+    case "collection":
+      return (
+        <PublicCollectionRow
+          id={id}
+          summary={summary.value}
+          kind={kind}
+          locale={locale}
+        />
+      );
+    case "review":
       return (
         <ReviewRow
           id={id}
@@ -236,7 +299,9 @@ export function DiscoveryPublicRow({
           targetTypes={targetTypes}
         />
       );
-    case 'space':
-      return <SpaceRow id={id} summary={summary.value} kind={kind} locale={locale} />;
+    case "space":
+      return (
+        <SpaceRow id={id} summary={summary.value} kind={kind} locale={locale} />
+      );
   }
 }
