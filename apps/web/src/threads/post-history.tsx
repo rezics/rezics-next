@@ -129,7 +129,7 @@ function HistoryDisclosure({
   pathname: string;
   locationSearch: string;
   returnIntent: HistoryReturnIntent | undefined;
-  navigateToExactRevision: PostHistoryProps['navigateToExactRevision'];
+  navigateToExactRevision?: PostHistoryProps['navigateToExactRevision'];
 }) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [continuationStatus, setContinuationStatus] = useState<string | null>(null);
@@ -146,9 +146,9 @@ function HistoryDisclosure({
   const keyboardActivation = useRef<HTMLButtonElement | undefined>(undefined);
   const continuationIntent = useRef<ContinuationIntent | undefined>(undefined);
   const continuationBoundary = useRef<ContinuationBoundary | undefined>(undefined);
-  const returnAttempt = useRef<{ target: HistoryReturnTarget; revisionId: string }>();
+  const returnAttempt = useRef<{ target: HistoryReturnTarget; revisionId: string } | undefined>(undefined);
   const returnFocusOwned = useRef(false);
-  const startedReturn = useRef<string>();
+  const startedReturn = useRef<string | undefined>(undefined);
   const {
     open,
     loading,
