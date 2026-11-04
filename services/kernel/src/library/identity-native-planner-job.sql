@@ -37,7 +37,8 @@ WITH admitted AS MATERIALIZED (
   AND d.cancelled_transaction_id IS NULL AND i.prearm_cancelled_transaction_id IS NULL
  FOR SHARE OF g,b,d
 )
-SELECT j.recorded_transaction_id::text AS transaction_id,j.scope_digest,
+SELECT j.recorded_transaction_id::text AS transaction_id,
+ CASE WHEN j.scope_digest ~ '^[0-9a-f]{64}$' THEN j.scope_digest ELSE NULL END AS scope_digest,
  jsonb_build_array(j.prearm_transaction_id,j.claim_transaction_id,(SELECT jsonb_agg(f.fence ORDER BY f.terminal) FROM fences f)) AS writer_fence
 FROM admitted j
 WHERE (SELECT count(*) FROM inputs) BETWEEN 1 AND 2

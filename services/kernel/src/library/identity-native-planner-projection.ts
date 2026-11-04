@@ -4,28 +4,11 @@ import { sql as currentSQL } from './identity-native-planner-current.sql';
 import { sql as sealSQL } from './identity-scope-effects-seal.sql';
 import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 
-/** Bound an exact fragment in a compiled native statement without changing its parameter order or marker. */
-function projectNativeSQL(sql: string, projections: readonly (readonly [string, string])[]): string {
-  let projected = sql;
-  for (const [selected, bounded] of projections) {
-    const at = projected.indexOf(selected);
-    if (at === -1 || projected.indexOf(selected, at + selected.length) !== -1)
-      throw new Error(`Native Library projection requires exactly one ${selected}`);
-    projected = projected.replace(selected, bounded);
-  }
-  return projected;
-}
-
 /** The SQL source owns the bounds so compiled formatting does not shape the native projection. */
 export const libraryIdentityBoundedPlanSQL = planSQL;
 
-// The actual admission producer writes a SHA256 hex digest. Do not return arbitrary stored text.
-export const libraryIdentityBoundedJobSQL = projectNativeSQL(jobSQL, [
-  [
-    'j.scope_digest,\n jsonb_build_array',
-    `CASE WHEN j.scope_digest ~ '^[0-9a-f]{64}$' THEN j.scope_digest ELSE NULL END AS scope_digest,\n jsonb_build_array`,
-  ],
-]);
+/** Keep the compiled admission SQL itself within the source-owned digest bound. */
+export const libraryIdentityBoundedJobSQL = jobSQL;
 
 /** Inclusive JSON projection from schema widths: four <=2048-byte JSON values, UTF8 scope <=256,
  * UUIDs, signed bigint decimal widths and the retained native state (two UUIDs/two <=256-byte bases).
