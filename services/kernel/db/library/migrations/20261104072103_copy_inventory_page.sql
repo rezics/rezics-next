@@ -1,3 +1,5 @@
+-- migrate:up
+
 CREATE INDEX copy_account_kind_created
   ON library.copy (route, account_id, kind, created_at, copy_id)
   WHERE deletion_id IS NULL AND kind IS NOT NULL;
