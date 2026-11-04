@@ -781,7 +781,7 @@ uses five metadata-only native envelopes and the ordinary account-key CLI: an ex
 subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@8` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+`bangumi@9` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
 five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
@@ -1438,6 +1438,23 @@ bounds belong to the linked owners; conversion itself has no purge work.
   converter-revision refresh and changed totals with stable work identity. The
   focused kernel case checks public acceptance/adoption, citation, facts fencing
   and idempotent reopen. No PostgreSQL growth series is added.
+
+### Import authored Bangumi Game player count
+
+- Touches: one admitted type-4 Game infobox on the ordinary Bangumi JSON-lines
+  registration, the shared `bangumi@9` converter, and ordinary public
+  batch/fence/candidate paths on that VideoGame. Selected-family seed reuses the
+  same converter; this adds no publisher.
+- Bound: at most 64 infobox keys, 8 examined count occurrences and one player
+  count fact plus at most one qualifier inside the existing 64 KiB projection,
+  command and journal budgets. Mode-qualified, reversed, zero, decimal and
+  malformed fields withhold only that count. No extra reads or release
+  identities.
+- Growth check: the focused importer case checks a stated range, a
+  mode-qualified omission, converter-revision refresh and a corrected same
+  UUID with stable work identity. The focused kernel case checks public
+  inspect/accept/adopt/current read, citation and facts fencing. No PostgreSQL
+  growth series is added.
 
 ### Bangumi creator and voice credits
 
@@ -2193,6 +2210,7 @@ for these source Concepts.
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
 `cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
+`cross-media-entities@8` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2228,6 +2246,31 @@ date is not completion or access authority.
   JSON-lines proposals, unknown totals, schedule/custom omissions, converter
   refresh and changed totals with stable identity. The connected ordinary caller
   is `services/kernel/test/imports/bangumi-television-run.test.ts`; native
+  execution remains controller-owned.
+
+### Bangumi Game player count
+
+Ordinary Bangumi JSON-lines registration converts pinned Game infobox
+`游玩人数` on type 4 through `bangumi@9`, advancing the `bangumi@8` TVAnime
+original-run mapping. Selected-family seed uses that same converter under its
+existing combined `cross-media-entities@8` registration; this journey adds no
+publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
+or condition qualification withholds the whole occurrence. Names, dates,
+platforms, developer/voice credits and websites retain their owners.
+Decision: Game-template `游玩人数` admits only an entire-field unqualified
+positive integer or inclusive range; a lone count invents no minimum.
+
+- Touches: one ordinary or selected type-4 Game record, at most one
+  `schema:numberOfPlayers` statement with at most one `schema:minValue`
+  qualifier, and the existing Bangumi citation on that VideoGame.
+- Bound: the existing 65,536-character infobox cap, 64 parsed field
+  occurrences, 8 examined count occurrences, 16 diagnostics, and the current
+  source journal and batch limits; raw source values never enter diagnostics.
+- Growth check: `services/importer/tests/bangumi-game-player-count.test.ts`
+  covers ordinary and selected-family proposals, a mode-qualified omission,
+  converter refresh and a malformed-to-corrected same UUID. The connected
+  selected-family caller is
+  `services/kernel/test/imports/bangumi-game-player-count.test.ts`; native
   execution remains controller-owned.
 
 ### Bangumi creator and voice credits

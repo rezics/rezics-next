@@ -11,6 +11,7 @@ import { ConversionError, type ConversionInput, type ConvertedRecord } from './i
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
+import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -23,7 +24,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@8';
+export const converter_revision = 'bangumi@9';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -307,6 +308,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
   }
   const television = bangumiTelevisionRun(record);
+  const playerCount = bangumiGamePlayerCount(record);
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -348,6 +350,12 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     }
     for (const item of television.facts)
       proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
+    for (const item of playerCount.facts) {
+      const statement: BatchStatement = item.qualifier
+        ? { ...fact(item.property, item.content), qualifiers: [item.qualifier] }
+        : fact(item.property, item.content);
+      proposals.push(propose(statement, 'facts', item.field));
+    }
     if (document) {
       proposals.push({
         ...propose(fact('schema:abstract', { language: 'und', document }), 'summary', 'summary'),
@@ -405,8 +413,13 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
     diagnostics: [
-      ...retainedFieldDiagnostics(record, extractedNames.diagnostics, television.handledInfobox),
+      ...retainedFieldDiagnostics(
+        record,
+        extractedNames.diagnostics,
+        television.handledInfobox || playerCount.handledInfobox,
+      ),
       ...television.diagnostics,
+      ...playerCount.diagnostics,
     ],
     coverAssets,
     mediaImportIntents,

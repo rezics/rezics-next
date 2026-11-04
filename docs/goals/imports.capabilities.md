@@ -1292,6 +1292,33 @@ bun run --cwd services/kernel check test/imports/bangumi-television-run.test.ts
 
 This delivery does not claim that native command passed.
 
+## Bangumi Game player count
+
+Decision: Game-template `游玩人数` admits only an entire-field unqualified
+positive integer or inclusive range. A range stores its upper endpoint as
+`schema:numberOfPlayers` and its lower endpoint as `schema:minValue`; a lone
+count invents no minimum. Mode, platform, edition or condition text withholds
+the whole occurrence.
+Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
+unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
+
+`bangumi@9` converts pinned Game `游玩人数` through the ordinary Bangumi
+registration used by JSON-lines dumps and the selected family, preserving
+`bangumi@8` original-run mapping. Native read is on the acknowledged VideoGame.
+DoujinGame templates, quantity uncertainty bounds and inferred minimums stay
+outside this mapping.
+
+The authored focused scenarios are:
+
+- `ordinary and selected-family Game callers propose a stated range, withhold a mode-qualified count, and refresh a corrected same UUID` in the importer workspace.
+- `selected Game player-count range is independently adopted and current, and a facts fence keeps a later range off that UUID` in the Kernel workspace. Native execution is deferred to the controller after integration.
+
+```sh
+bun run --cwd services/kernel check test/imports/bangumi-game-player-count.test.ts
+```
+
+This delivery does not claim that native command passed.
+
 ## VNDB character names and qualified aliases
 
 Decision: language-less aliases use `und`; explicit Romanized cells use the
