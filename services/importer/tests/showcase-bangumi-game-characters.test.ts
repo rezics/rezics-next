@@ -55,6 +55,7 @@ function sourceTables(order: unknown): CrossMediaTables {
     'bangumi/person-characters': [
       { subject_id: 103, person_id: 1001, character_id: 902, creditedAs: 'Voice A' },
       { subject_id: 103, person_id: 1002, character_id: 903, creditedAs: 'Voice B' },
+      { subject_id: 103, person_id: 1004, character_id: 904, creditedAs: 'Unpaired Voice' },
       { subject_id: 201, person_id: 1003, character_id: 902, creditedAs: 'Unrelated Voice' },
     ],
     'bangumi/character': [
@@ -66,6 +67,7 @@ function sourceTables(order: unknown): CrossMediaTables {
       { id: 1001, name: 'Voice A', type: 1 },
       { id: 1002, name: 'Voice B', type: 1 },
       { id: 1003, name: 'Unrelated Voice', type: 1 },
+      { id: 1004, name: 'Unpaired Voice', type: 1 },
     ],
     'vndb/vn': ['v1', 'v2', 'v3'].map((id) => ({ id, olang: 'ja', alias: null })),
     'vndb/vn_titles': [
@@ -102,6 +104,7 @@ test('selected Game rows keep role and exact Character-qualified performer evide
   expect(drafts.map(({ work, person, character }) => [work, person, character])).toEqual([
     ['103', 'person:1001', 'character:902'], ['103', 'person:1002', 'character:903'],
   ]);
+  expect(plan.entities.bangumi.some((record) => record.key === 'person:1004')).toBe(false);
 
   const appearance = plan.gameCharacterAppearances![0]!;
   const origin = bangumiAppearanceSource(crossMediaAliases.bangumi, appearance);
