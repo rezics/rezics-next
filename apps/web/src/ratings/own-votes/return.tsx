@@ -217,7 +217,12 @@ export function useOwnVotesReturn({
   isCurrent: () => boolean;
   refresh: () => Promise<unknown>;
   receipt: OwnVotesReturnReceipt | null;
-  onResolved: (outcome: OwnVotesReturnOutcome, index: Map<string, OwnVoteEntry>, page: OwnVotesPage) => void;
+  onResolved: (
+    outcome: OwnVotesReturnOutcome,
+    index: Map<string, OwnVoteEntry>,
+    page: OwnVotesPage,
+    read: OwnVotesRead,
+  ) => void;
   onFocus: (outcome: OwnVotesReturnOutcome) => void;
 }) {
   const router = useRouter({ warn: false });
@@ -323,7 +328,7 @@ export function useOwnVotesReturn({
             : { kind: 'missing', pair: returnReceipt.pair };
           const focusVersion = state.resolve(returnReceipt.id);
           if (focusVersion === null) return;
-          onResolved(outcome, index, read.page);
+          onResolved(outcome, index, read.page, read);
           requestAnimationFrame(() => {
             if (
               state.owns(returnReceipt.id, returnReceipt.owner, 'resolved') &&
@@ -342,7 +347,7 @@ export function useOwnVotesReturn({
       }
       const focusVersion = state.resolve(returnReceipt.id);
       if (focusVersion === null) return;
-      onResolved(outcome, indexOwnVotes(read.page), read.page);
+      onResolved(outcome, indexOwnVotes(read.page), read.page, read);
       requestAnimationFrame(() => {
         if (
           state.owns(returnReceipt.id, returnReceipt.owner, 'resolved') &&

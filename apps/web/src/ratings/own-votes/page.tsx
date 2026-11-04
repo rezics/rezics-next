@@ -45,8 +45,12 @@ export function CurrentViewerOwnVotesPage({
     return origin.refresh();
   }, [receipt, origin, initial]);
   const heading = useRef<HTMLHeadingElement>(null);
-  const [returnOutcome, setReturnOutcome] = useState<OwnVotesReturnOutcome | null>(null);
-  const [returnIndex, setReturnIndex] = useState<{ page: OwnVotesPage; index: Map<string, OwnVoteEntry> } | null>(null);
+  const [returnResult, setReturnResult] = useState<{
+    outcome: OwnVotesReturnOutcome;
+    index: Map<string, OwnVoteEntry>;
+    page: OwnVotesPage;
+    responseIdentity: string;
+  } | null>(null);
   const returnVisit = useOwnVotesReturn({
     visitKey: origin.viewKey,
     cursor: origin.cursor,
@@ -56,8 +60,7 @@ export function CurrentViewerOwnVotesPage({
     refresh,
     receipt,
     onResolved: (outcome, index, page) => {
-      setReturnOutcome(outcome);
-      setReturnIndex({ page, index });
+      setReturnResult({ outcome, index, page, responseIdentity: origin.responseIdentity() });
     },
     onFocus: (outcome) => {
       if (outcome.kind === 'found') {
@@ -72,6 +75,8 @@ export function CurrentViewerOwnVotesPage({
   });
   const state = returnVisit.pending ? (returnVisit.failed ? 'unavailable' : 'preparing') : origin.state;
   const page = returnVisit.pending ? null : origin.page;
+  const admittedReturn =
+    returnResult?.responseIdentity === origin.responseIdentity() && returnResult.page === page ? returnResult : null;
   return (
     <OwnVotesWorkspace
       key={origin.viewKey}
@@ -86,8 +91,8 @@ export function CurrentViewerOwnVotesPage({
       execute={executeOwnVoteIntent}
       review={({ data }) => voteReadbackForIntent(data.intent, data.after)}
       returnPending={returnVisit.pending && !returnVisit.failed}
-      returnOutcome={returnOutcome}
-      {...(returnIndex?.page === page ? { returnIndex: returnIndex.index } : {})}
+      returnOutcome={admittedReturn?.outcome ?? null}
+      {...(admittedReturn ? { returnIndex: admittedReturn.index } : {})}
       onDeparturePair={returnVisit.inspect}
     />
   );
