@@ -90,8 +90,13 @@ test('failed and uncertain native sign-out recover independently without replay 
     await act(async () =>
       root.render(
         <QueryClientProvider client={managedClient}>
-          <AccountSafetySection state="signed-in" accountId="alice" csrfToken={null}
-            securityHref="https://auth.test/security" onReload={async () => {}} />
+          <AccountSafetySection
+            state="signed-in"
+            accountId="alice"
+            csrfToken={null}
+            securityHref="https://auth.test/security"
+            onReload={async () => {}}
+          />
         </QueryClientProvider>,
       ),
     );
@@ -103,10 +108,14 @@ test('failed and uncertain native sign-out recover independently without replay 
       return event.defaultPrevented;
     };
     let liveNavigationAllowed = false;
-    security.addEventListener('click', (event) => {
-      liveNavigationAllowed = !event.defaultPrevented;
-      event.preventDefault();
-    }, { once: true });
+    security.addEventListener(
+      'click',
+      (event) => {
+        liveNavigationAllowed = !event.defaultPrevented;
+        event.preventDefault();
+      },
+      { once: true },
+    );
     visit(security, 'click');
     expect(liveNavigationAllowed).toBe(true);
     await act(async () => {
