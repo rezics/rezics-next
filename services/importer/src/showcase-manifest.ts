@@ -5,7 +5,7 @@ import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/con
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
-import { createSourceRegistration } from './source-registry.ts';
+import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource } from './cross-media-bindings.ts';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
@@ -415,7 +415,10 @@ export function buildShowcaseManifest(input: {
             ...(subject?.id ? { containerId: subject.id } : {}),
           })
         : undefined;
-    const registration = createSourceRegistration(provider, { source: alias, converterRevision: entityRevision });
+    const registration = createSourceRegistration(provider, {
+      source: alias,
+      converterRevision: provider === 'bangumi' ? crossMediaBangumiRevision : entityRevision,
+    });
     const conversion = registration.convert(
       { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
       { source: alias, ...(mediaContext ?? {}) },
