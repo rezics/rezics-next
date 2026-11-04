@@ -6,9 +6,19 @@ properties:
   schema:weight: masse
   wdt:P1853: groupe sanguin
   wdt:P6296: identifiant de personnage Bangumi
+  rezics:relatedCharacterIdentity: identité de personnage liée
+  wdt:P26: conjoint
+  wdt:P3373: frère ou sœur
+  wdt:P22: père
+  wdt:P25: mère
+  wdt:P451: partenaire
+  rezics:characterRival: rival
 inverseProperties:
   schema:gender: 'Sujets de ce genre'
   wdt:P1853: 'Sujets de ce groupe sanguin'
+  rezics:relatedCharacterIdentity: identité liée de
+  wdt:P22: père de
+  wdt:P25: mère de
 typeDescriptions:
   wd:Q95074: 'Un personnage fictif identifiable, y compris une machine, un vaisseau ou une organisation fictive ; apparitions et crédits vocaux sont portés par les œuvres.'
 propertyDescriptions:
@@ -17,3 +27,10 @@ propertyDescriptions:
   schema:weight: 'La masse indiquée, en quantité non négative de kilogrammes (wd:Q11570) ou de grammes (wd:Q41803), en conservant l’unité.'
   wdt:P1853: 'Le groupe sanguin explicitement indiqué sous forme de concept, par exemple A ; une valeur inconnue reste inconnue.'
   wdt:P6296: 'L’identifiant numérique positif de personnage Bangumi ; ni identifiant de titre ou de personne ni URL de page.'
+  rezics:relatedCharacterIdentity: 'Un autre personnage auquel cette identité est associée ; ce n’est ni une fusion, ni une redirection, ni une instance de classe, ni une biographie combinée, ni le rôle d’apparition main.'
+  wdt:P26: 'Un autre personnage indiqué comme conjoint, avec un niveau de divulgâchage facultatif.'
+  wdt:P3373: 'Un autre personnage indiqué comme frère ou sœur, avec un niveau de divulgâchage facultatif.'
+  wdt:P22: 'Le personnage indiqué comme père, avec un niveau de divulgâchage facultatif.'
+  wdt:P25: 'Le personnage indiqué comme mère, avec un niveau de divulgâchage facultatif.'
+  wdt:P451: 'Un autre personnage indiqué comme partenaire ou amant, avec un niveau de divulgâchage facultatif.'
+  rezics:characterRival: 'Un autre personnage indiqué comme rival ou ennemi ; ce n’est pas un rôle d’apparition.'

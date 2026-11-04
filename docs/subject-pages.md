@@ -1409,9 +1409,15 @@ Changing the character, the selected work, the release or refusing the current r
 action authority before recovery. The Character identity editor keeps its existing groups; this reading does not fork
 the descriptor producer or the generic relation editor.
 
-Decision: appearance-specific age, role and main marks stay on the work's appearance statement; VNDB age-at-appearance
-and main-character linkage and Bangumi direct character-to-character types remain named unavailable until the current
-release admits them.
+Decision: appearance-specific age, role and main marks stay on the work's appearance statement. The current release
+admits appearance age (`wdt:P3629` in years) on that statement, the Character identity association
+(`rezics:relatedCharacterIdentity`, VNDB `chars.main`) and spouse, sibling, father, mother, partner and rival
+relations targeting Character. The appearance role code `main` remains a protagonist role. Older releases still name
+age-at-appearance, main-character linkage or character-to-character properties unavailable when they omit them.
+Unknown Bangumi relation codes stay unsupported provenance. Character pages reuse the existing viewer/actions
+envelope and add released identity meanings plus unavailable configuration; they do not introduce a second
+permission engine. Viewer-bearing `POST /v1/pages:read` stays private,
+no-store; public facts remain independently comparable after omitting viewer.
 
 ## Scores on pages
 

@@ -65,6 +65,9 @@ notes:
     use the same dispatch. The association mappings name TVSeries as a concrete example, not CreativeWork's shared slots.
   - Character kind codes are keyword concepts; appearance role codes qualify schema:character with wdt:P3831.
     No character-kind or appearance-role code creates a catalogue type.
+  - Direct character-to-character relations use spouse, sibling, father, mother, partner or rival when a source
+    code has that meaning and a Character target. Unknown Bangumi relation codes remain omitted provenance; no
+    catch-all property absorbs arbitrary codes. The additional person-relations file stays outside this inventory.
   - Subject relation decisions cite subject-relations.jsonlines pairs from the verified pinned asset, not live pages.
     A citation fragment names subject_id then related_subject_id; recordCheck records both rows, with null for a
     missing reciprocal row. Subjects and their titles were checked in subject.jsonlines of the same asset.

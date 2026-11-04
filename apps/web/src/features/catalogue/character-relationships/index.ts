@@ -4,6 +4,8 @@ export {
   voiceCharacterSlot,
   spoilerProperty,
   appearanceRoleProperty,
+  identityProperty,
+  appearanceAgeProperty,
   characterAssociationStreams,
   unavailableConfigurations,
   associationLabels,

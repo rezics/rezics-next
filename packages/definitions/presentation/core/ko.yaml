@@ -52,6 +52,7 @@ properties:
   schema:character: '등장하는 캐릭터'
   wdt:P179: '시리즈'
   rezics:spoilerLevel: '스포일러 수준'
+  wdt:P3629: '등장 시점의 나이'
   schema:alternateName: 다른 이름
   rezics:representativeEdition: '대표 판본'
   rezics:crossMediaCounterpart: '다른 매체의 대응 작품'
@@ -141,7 +142,8 @@ propertyDescriptions:
   wdt:P1932: '출처에서 진술 대상을 부른 정확한 표기입니다. 예를 들어 크레딧에 나온 이름을 기록합니다.'
   wdt:P3831: '구체적인 제작진 직무나 등장 역할을 나타내는 개념입니다. 자유롭게 적은 크레딧 이름과는 다릅니다.'
   wdt:P453: '이 음성 크레딧에서 연기한 허구의 캐릭터입니다.'
-  schema:character: '이 작품에 등장하는 캐릭터입니다. 역할, 이야기 구간, 스포일러 수준을 한정할 수 있습니다.'
+  schema:character: '이 작품에 등장하는 캐릭터입니다. 역할, 크레디트 이름, 스포일러, 구간, 나이, 전거를 한정할 수 있습니다.'
+  wdt:P3629: '이 등장에만 해당하는 나이를 0 이상 연수(wd:Q577)로 적습니다. 출처 전체의 나이는 이 한정자가 아닙니다.'
   wdt:P179: '이 구성원이 속한 시리즈입니다. 위치 한정자로 시리즈 내 번호를 기록합니다.'
   rezics:spoilerLevel: '단위 없는 정수로 나타낸 공개 수준입니다. 0은 스포일러 없음, 1은 가벼운 내용, 2는 중대한 내용입니다.'
   schema:alternateName: '다른 제목이나 별칭을 언어가 지정된 텍스트로 기록합니다. 원래 표기와 언어를 유지합니다.'

@@ -20,8 +20,28 @@ const characterProperties = [
   'wdt:P1853',
   'wdt:P3180',
   'wdt:P6296',
+  'rezics:relatedCharacterIdentity',
+  'wdt:P26',
+  'wdt:P3373',
+  'wdt:P22',
+  'wdt:P25',
+  'wdt:P451',
+  'rezics:characterRival',
 ];
-const newProperties = ['schema:gender', 'schema:height', 'schema:weight', 'wdt:P1853', 'wdt:P6296'];
+const newProperties = [
+  'schema:gender',
+  'schema:height',
+  'schema:weight',
+  'wdt:P1853',
+  'wdt:P6296',
+  'rezics:relatedCharacterIdentity',
+  'wdt:P26',
+  'wdt:P3373',
+  'wdt:P22',
+  'wdt:P25',
+  'wdt:P451',
+  'rezics:characterRival',
+];
 
 type Decision = {
   status: string;
@@ -83,7 +103,7 @@ test('a fictional character is a catalogue profile that works reference by quali
   expect(properties['schema:character']).toMatchObject({
     datatype: 'wikibase-item',
     targets: [character],
-    qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3831', 'wdt:P518'],
+    qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3629', 'wdt:P3831', 'wdt:P518'],
     mappings: ['wd:P674'],
   });
   expect(properties['wdt:P725']!.qualifiers).toEqual(
@@ -106,6 +126,20 @@ test('a fictional character is a catalogue profile that works reference by quali
   for (const term of ['schema:height', 'schema:weight'])
     expect(properties[term]).toMatchObject({ datatype: 'quantity', minimum: 0 });
   expect(properties['wdt:P6296']).toMatchObject({ datatype: 'external-id', mappings: ['wd:P6296'] });
+  expect(properties['rezics:relatedCharacterIdentity']).toMatchObject({
+    datatype: 'wikibase-item',
+    targets: [character],
+    qualifiers: ['rezics:spoilerLevel'],
+    relation: { group: 'association', inverse: 'rezics:relatedCharacterIdentityOf' },
+  });
+  expect(properties['wdt:P3629']).toMatchObject({
+    datatype: 'quantity',
+    minimum: 0,
+    units: ['http://www.wikidata.org/entity/Q577'],
+  });
+  expect(properties['schema:character']!.qualifiers).toContain('wdt:P3629');
+  expect(properties['wdt:P26']!.relation).toMatchObject({ group: 'association', symmetric: true });
+  expect(properties['rezics:characterRival']!.relation).toMatchObject({ group: 'association', symmetric: true });
   expect(types[character]!.facets).toEqual([
     'schema:keywords',
     'schema:gender',

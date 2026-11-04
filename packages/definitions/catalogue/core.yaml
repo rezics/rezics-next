@@ -712,11 +712,24 @@ slots:
       - wd:P674
     annotations:
       datatype: wikibase-item
-      qualifiers: detailedRole creditedAs spoilerLevel appliesToPart
+      qualifiers: detailedRole creditedAs spoilerLevel appliesToPart appearanceAge
       relation_group: appearance
       inverse: rezics:appearsIn
       relation_order: name
       relation_filter: [wdt:P3831, wdt:P518]
+  appearanceAge:
+    slot_uri: wdt:P3629
+    description: >-
+      The character's stated age on this exact work appearance, with its unit. It stays on the appearance
+      statement with role, credited name, spoiler, part and references. A source-wide character age is not
+      this qualifier. Source and mapping: https://www.wikidata.org/wiki/Property:P3629.
+    range: integer
+    minimum_value: 0
+    exact_mappings:
+      - wd:P3629
+    annotations:
+      datatype: quantity
+      units: wd:Q577
   spoilerLevel:
     slot_uri: rezics:spoilerLevel
     description: Disclosure level from 0 (no spoiler) through 2 (major spoiler).
