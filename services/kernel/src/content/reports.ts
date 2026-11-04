@@ -878,11 +878,7 @@ export async function readReportTargetInspection(
       const post = result.value;
       reportedRevision = {
         state:
-          post?.availability === 'available'
-            ? 'available'
-            : post?.availability === 'erased'
-              ? 'erased'
-              : 'unavailable',
+          post?.availability === 'available' ? 'available' : post?.availability === 'erased' ? 'erased' : 'unavailable',
         value: post?.availability === 'available' ? post : null,
         destination: null,
       };

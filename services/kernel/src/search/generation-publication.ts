@@ -25,12 +25,7 @@ import type {
   PublicFilterConsumerUnavailable,
 } from './public-filter-consumer-contract.ts';
 import type { SearchWriterPublicationFence, SearchWriterPublicationGuard } from './writer-guard.ts';
-import type {
-  DiscoveryConsumerCaptureInput,
-  DiscoveryKey,
-  DiscoveryRegistry,
-  DiscoveryUnionKey,
-} from './discovery.ts';
+import type { DiscoveryConsumerCaptureInput, DiscoveryKey, DiscoveryRegistry, DiscoveryUnionKey } from './discovery.ts';
 import { createDiscoveryProjection, validateAccountPage } from './account-discovery.ts';
 import { parseDiscoveryHitIdentity, discoveryDocumentId, validateDiscoveryDocument } from './discovery-documents.ts';
 import {
@@ -861,20 +856,10 @@ export function createSearchGenerationPublication(
         await remember(job, before, client);
         const discoveryKeys =
           job.family === 'discovery'
-            ? group.keys.filter(
-                (key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts',
-              )
+            ? group.keys.filter((key): key is DiscoveryKey => key.owner === 'semantic' || key.owner === 'accounts')
             : undefined;
         if (discoveryKeys && discoveryKeys.length !== group.keys.length) throw new Pending('source_pending');
-        await reconcile(
-          job,
-          group.partition,
-          group.ids,
-          discoveryKeys,
-          BigInt(before.position),
-          context,
-          meter,
-        );
+        await reconcile(job, group.partition, group.ids, discoveryKeys, BigInt(before.position), context, meter);
         if (!same(before, await head(group.partition))) throw new Pending('source_pending');
       }
       job.engine_after = (next as Record<string, unknown> | undefined) ?? null;

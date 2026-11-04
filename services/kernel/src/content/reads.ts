@@ -2513,10 +2513,10 @@ async function readExactPublishedRulesInternal(
               signature: JSON.stringify([selected ?? null, revision ?? null, thread ?? null, board ?? null]),
               title: null,
               authorId: null,
-            threadId: null,
+              threadId: null,
               boardId: null,
               boardTitle: null,
-            mediaIds: [],
+              mediaIds: [],
               currentRevision: false,
               revisionAllowed: false,
             });
