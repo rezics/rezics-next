@@ -3,6 +3,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { useFeatureSlots } from '../../shell/feature-slots';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
+import { subjectHref } from '../../subject/subject-href';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { CharacterRelationshipsGroups } from './character-relationships';

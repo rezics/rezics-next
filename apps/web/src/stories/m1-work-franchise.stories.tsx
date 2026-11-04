@@ -1,3 +1,4 @@
+import type { Release } from '@rezics/definitions';
 import publicBookMetadata from '../../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json';
 import recordedRelease from '../kernel/recorded/definitions-release.json';
 import { SubjectConceptTags } from '../features/pages/subject-slots';
@@ -143,7 +144,7 @@ function SuppliedTagEvidenceStory() {
           <SubjectConceptTags
             subject={subject}
             related={related}
-            definitions={recordedRelease.release}
+            definitions={recordedRelease.release as unknown as Release}
             locale={locale}
             spoilerThreshold={0}
             currentHref={route}

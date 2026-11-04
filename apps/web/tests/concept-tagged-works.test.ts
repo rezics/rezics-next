@@ -1,3 +1,4 @@
+import type { Release } from '@rezics/definitions';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -17,7 +18,8 @@ const conceptId = '00000000-0000-4000-8000-000000000041';
 const schemeId = '00000000-0000-4000-8000-000000000042';
 const otherConceptId = '00000000-0000-4000-8000-000000000043';
 const workId = '00000000-0000-4000-8000-000000000044';
-const admission = conceptWorksAdmission(recording.release, true);
+const released = recording.release as unknown as Release;
+const admission = conceptWorksAdmission(released, true);
 const schemes = [{ id: schemeId, label: 'Genre', lang: 'en', readable: true, conceptPage: true }];
 
 function conceptLeaf(filter: FilterDocument): Extract<FilterDocument, { statement: unknown }> | undefined {
@@ -83,7 +85,7 @@ test('a disclosed work tag opens the mounted Concept host with its released role
     createElement(SubjectConceptTags, {
       subject,
       related,
-      definitions: recording.release,
+      definitions: released,
       locale: 'en',
       spoilerThreshold: 1,
     }),
@@ -280,7 +282,7 @@ test('work-tag visits keep the supported original window and focus while the des
         [conceptId]: { type: 'skos:Concept', labels: { en: 'Fantasy' }, redirect: schemeId },
       } as unknown as Related,
       locale: 'en',
-      definitions: recording.release,
+      definitions: released,
       spoilerThreshold: 1,
       currentHref: source,
     }),

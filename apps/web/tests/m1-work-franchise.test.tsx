@@ -1,3 +1,4 @@
+import type { Release } from '@rezics/definitions';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -247,7 +248,8 @@ test('Subject composition joins the VN, anime and book with localized, disclosed
 // Captured provider evidence supplies the decimal token; association ids here belong only to this test read.
 const capturedWeights = (await import('../../../services/kernel/test/fixtures/vndb-source-weight-v17.json')).default;
 const publicBook = (await import('../../../specs/fixtures/imports/bangumi/public-book-meta-tags.json')).default;
-const releasedTags = (await import('../src/kernel/recorded/definitions-release.json')).default.release;
+const releasedTags = (await import('../src/kernel/recorded/definitions-release.json')).default
+  .release as unknown as Release;
 const { SubjectConceptTags } = await import('../src/features/pages/subject-slots');
 const { readWorkTags, workTagWeight } = await import('../src/features/pages/showcase-work/tags');
 const tagQualifier = (property: string, content: unknown, datatype = 'quantity') => ({
