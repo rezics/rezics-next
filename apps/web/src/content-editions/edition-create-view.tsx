@@ -278,6 +278,7 @@ export function EditionPublication({
   const [origin, setOrigin] = useState<CreatorEditionOriginResolution | null>(null);
   const originEditionId = state.edition?.editionId ?? initialEditionId ?? null;
   const originSource = useRef<{ token: string; identity: string } | null>(null);
+  const originCredential = useRef(session.csrfToken);
   const sourceIdentity =
     state.identity ? `${state.identity.postId}:${state.identity.revisionId}` : initialSource ? `${initialSource.postId}:${initialSource.revisionId}` : null;
   useEffect(() => {
@@ -296,6 +297,12 @@ export function EditionPublication({
       setOrigin({ kind: 'lost', reason: 'replaced' });
     }
   }, [originToken, sourceIdentity]);
+  useEffect(() => {
+    if (originCredential.current === session.csrfToken) return;
+    originCredential.current = session.csrfToken;
+    retireCreatorEditionOrigin(originToken);
+    if (originToken) setOrigin({ kind: 'lost', reason: 'account' });
+  }, [originToken, session.csrfToken]);
   useEffect(() => {
     if (!originToken) {
       setOrigin(null);
@@ -318,17 +325,35 @@ export function EditionPublication({
     );
   }, [originToken, originAccountId, originEditionId, state.edition]);
 
+  function currentOriginReceipt() {
+    if (origin?.kind !== 'current' || !originToken || !originAccountId) return null;
+    if (originCredential.current !== session.csrfToken) {
+      retireCreatorEditionOrigin(originToken);
+      setOrigin({ kind: 'lost', reason: 'account' });
+      return null;
+    }
+    if (state.edition && !bindCreatorEditionOriginEdition(originToken, state.edition.editionId)) {
+      setOrigin({ kind: 'lost', reason: 'edition' });
+      return null;
+    }
+    const resolution = readCreatorEditionOrigin(originToken, originAccountId, originEditionId);
+    if (resolution.kind !== 'current') setOrigin(resolution);
+    return resolution.kind === 'current' ? resolution.receipt : null;
+  }
+
   function returnToInventory() {
-    if (origin?.kind !== 'current' || !router) return;
+    const receipt = currentOriginReceipt();
+    if (!receipt || !router) return;
     departure.requestNavigation(() => {
-      void router.navigate({ href: creatorEditionOriginReturnHref(origin.receipt) });
+      void router.navigate({ href: creatorEditionOriginReturnHref(receipt) });
     });
   }
 
   function restartInventory() {
     if (!router) return;
     if (origin?.kind === 'current' && originToken) {
-      const receipt = restartCreatorEditionOrigin(originToken);
+      const current = currentOriginReceipt();
+      const receipt = current && restartCreatorEditionOrigin(originToken);
       if (receipt) {
         departure.requestNavigation(() => {
           void router.navigate({ href: creatorEditionOriginReturnHref(receipt) });
@@ -356,10 +381,8 @@ export function EditionPublication({
     const canonical = event.currentTarget.getAttribute('href');
     if (!canonical) return;
     event.preventDefault();
-    const destination =
-      origin?.kind === 'current' && originToken
-        ? addCreatorEditionOriginToken(canonical, originToken)
-        : canonical;
+    const receipt = currentOriginReceipt();
+    const destination = receipt && originToken ? addCreatorEditionOriginToken(canonical, originToken) : canonical;
     departure.requestNavigation(() => {
       void router.navigate({ href: destination });
     });

@@ -115,6 +115,7 @@ export function CreatorOfferOriginScope({
 function CreatorOfferOriginPanelSlot() {
   const context = useContext(CreatorOfferOriginContext);
   const router = useRouter({ warn: false });
+  const session = useSession();
   const requestNavigation = useCreatorOfferDraftNavigation();
   if (!context?.resolution) return null;
 
@@ -122,9 +123,19 @@ function CreatorOfferOriginPanelSlot() {
     if (requestNavigation) void requestNavigation(href);
     else if (router) void router.navigate({ href });
   };
+  const currentReceipt = () => {
+    if (context.resolution?.kind !== 'current') return null;
+    const resolution = readCreatorEditionOrigin(
+      context.token,
+      session.subject,
+      context.resolution.receipt.editionId,
+    );
+    return resolution.kind === 'current' ? resolution.receipt : null;
+  };
   const restart = () => {
-    if (context.resolution?.kind === 'current') {
-      const receipt = restartCreatorEditionOrigin(context.token);
+    if (context.resolution.kind === 'current') {
+      const current = currentReceipt();
+      const receipt = current && restartCreatorEditionOrigin(context.token);
       if (receipt) {
         navigate(creatorEditionOriginReturnHref(receipt));
         return;
@@ -137,7 +148,10 @@ function CreatorOfferOriginPanelSlot() {
       resolution={context.resolution}
       onReturn={
         context.resolution.kind === 'current'
-          ? () => navigate(creatorEditionOriginReturnHref(context.resolution.receipt))
+          ? () => {
+              const receipt = currentReceipt();
+              if (receipt) navigate(creatorEditionOriginReturnHref(receipt));
+            }
           : undefined
       }
       onRestart={restart}

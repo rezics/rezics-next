@@ -2,7 +2,7 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
-import type { EditionMetadata } from '../src/content-editions/edition-api';
+import type { CreatorEditionsPage } from '../src/content-editions/creator-editions';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({
@@ -61,9 +61,12 @@ afterAll(async () => {
   }
 });
 
-function tree(router: ReturnType<typeof createRouter>, client: InstanceType<typeof QueryClient>, page: {
-  kind: 'ready'; editions: EditionMetadata[]; next: string | null;
-}, cursor?: string) {
+function tree(
+  router: ReturnType<typeof createRouter>,
+  client: InstanceType<typeof QueryClient>,
+  page: CreatorEditionsPage,
+  cursor?: string,
+) {
   return (
     <RouterContextProvider router={router}>
       <QueryClientProvider client={client}>
@@ -115,6 +118,10 @@ test('continued inventory resumes its exact Edition and returns to only that re-
       routeTree: rootRoute,
       history: createMemoryHistory({ initialEntries: [returnHref] }),
     });
+    await act(async () => root.render(tree(returnRouter, client, { kind: 'loading' }, 'continued/+=')));
+    expect(host.textContent).toContain(m.creator_edition_origin_checking());
+    expect(readCreatorEditionOrigin(token, accountId, exactEditionId).kind).toBe('current');
+
     await act(async () => root.render(tree(returnRouter, client, page, 'continued/+=')));
     expect(document.activeElement?.id).toBe(`creator-edition-${exactEditionId}`);
     expect(host.textContent).toContain(m.creator_edition_origin_present());
