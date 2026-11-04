@@ -1,9 +1,13 @@
-import type { KernelClient } from '@rezics/client';
+import type { Kernel, KernelClient } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { preparedRatingReader } from './subject-ratings';
 import { isRecord } from './shared';
+
+type BallotHandle = ReturnType<ReturnType<KernelClient['subjects']>['classification-associations']>;
+type GeneratedClassificationRoute = Kernel['~Routes']['v1']['subjects'][':id']['classification-associations'][':associationId'];
+type GeneratedBallotInput = GeneratedClassificationRoute['assessment']['put']['body'];
 
 export const CLASSIFICATION_BALLOT_SET = 'classification_ballot:set';
 export const CLASSIFICATION_BALLOT_READ_OWN = 'classification_ballot:read-own';
@@ -12,12 +16,7 @@ export const CLASSIFICATION_BALLOT_MINIMUM = 5;
 export const CLASSIFICATION_ASSESSMENT_PROVIDERS = ['vndb', 'bangumi'] as const;
 export const CONCEPT_TYPE = 'skos:Concept';
 
-type BallotHandle = ReturnType<ReturnType<KernelClient['subjects']>['classification-associations']>;
-type BallotResponse<Call extends (...args: never[]) => unknown> = NonNullable<
-  Awaited<ReturnType<Call>> extends { data: infer Data } ? Data : never
->;
-
-export type ClassificationAssessment = Parameters<BallotHandle['assessment']['put']>[0]['assessment'];
+export type ClassificationAssessment = GeneratedBallotInput['assessment'];
 export type ClassificationProvider = (typeof CLASSIFICATION_ASSESSMENT_PROVIDERS)[number];
 export type ClassificationQualifier = Readonly<{
   property: string;
@@ -50,9 +49,9 @@ export type ClassificationAssociationSelection =
   | ClassificationAssociationIdentity
   | { kind: 'unavailable'; reason: 'realm' | 'redirect' | 'not_classification' | 'concealed' };
 
-export type ClassificationOwnState = Readonly<BallotResponse<BallotHandle['assessment']['get']>>;
-export type ClassificationSetResult = Readonly<BallotResponse<BallotHandle['assessment']['put']>>;
-export type ClassificationAggregate = Readonly<BallotResponse<BallotHandle['aggregate']['get']>>;
+export type ClassificationOwnState = Readonly<GeneratedClassificationRoute['assessment']['get']['response'][200]>;
+export type ClassificationSetResult = Readonly<GeneratedClassificationRoute['assessment']['put']['response'][200]>;
+export type ClassificationAggregate = Readonly<GeneratedClassificationRoute['aggregate']['get']['response'][200]>;
 
 export type ClassificationOwnOutcome =
   | { kind: 'preparing' }
@@ -237,7 +236,7 @@ export function disclosedClassificationAssociations(input: {
   return selected;
 }
 
-/** Use the publisher's mounted methods while preserving unavailable handling for a missing producer. */
+/** Use installed generated methods and mounted response schemas for the Subject ballot receiver. */
 export function classificationBallotHandle(
   client: KernelClient,
   subjectId: string,
