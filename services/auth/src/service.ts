@@ -21,6 +21,7 @@ import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
 import { securityInventory, type SecurityInventoryInput } from './security-inventory.ts';
 import { readNativeAccountIdentity } from './account-identity.ts';
+import { signInPage, type SignInPageViewer } from './signin-page.ts';
 import {
   securityPageInput,
   securityPageQuery,
@@ -2011,9 +2012,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       const url = new URL(request.url);
       const inventoryRead = request.method === 'GET' && (url.pathname === '/clients' || url.pathname === '/consents');
       const identityRead = url.pathname === '/account-identity';
+      const signInPageRead = url.pathname === '/signin/page';
       const respond = (data: unknown, status = 200) => {
         const response = json(data, status);
-        if (inventoryRead || identityRead) response.headers.set('cache-control', 'private, no-store');
+        if (inventoryRead || identityRead || signInPageRead) response.headers.set('cache-control', 'private, no-store');
         return response;
       };
       const deadline = Date.now() + 3000;
@@ -2031,6 +2033,29 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             throw new Denied(403);
           fields(await bodyOf(request), []);
           return respond(await readAccountIdentity(request.headers));
+        }
+        if (signInPageRead) {
+          if (
+            request.method !== 'POST' ||
+            request.headers.get('origin') !== options.issuer ||
+            request.headers.get('sec-fetch-site') === 'cross-site' ||
+            request.headers.has('authorization')
+          )
+            throw new Denied(403);
+          const body = await bodyOf(request);
+          fields(body, ['query']);
+          if (typeof body.query !== 'string') throw new Denied(400);
+          let viewer: SignInPageViewer;
+          try {
+            const identity = await readAccountIdentity(request.headers);
+            viewer = { kind: 'signed-in', account_id: identity.account_id, email: identity.email };
+          } catch (error) {
+            if (!(error instanceof Denied) || error.status !== 401) throw error;
+            viewer = { kind: 'signed-out' };
+          }
+          const page = signInPage(body.query, options.issuer, viewer);
+          if (!page) throw new Denied(400);
+          return respond(page);
         }
         if (inventoryRead) {
           const input = { ...securityPageQuery(url.searchParams), headers: request.headers };
