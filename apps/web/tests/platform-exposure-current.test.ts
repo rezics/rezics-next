@@ -13,7 +13,6 @@ import {
 } from '../src/platform/exposure/data';
 import { PlatformExposurePage } from '../src/platform/exposure/page';
 import { ExposureOperation } from '../src/platform/exposure/operation';
-import * as exposureData from '../src/platform/exposure/data';
 
 const at = '2026-10-31T00:00:00.123456Z';
 const row = { group: 'collections', open: true, at };
@@ -71,6 +70,9 @@ function fixture() {
     },
     setManagementStatus(status: 400 | 401 | 403 | 503) {
       managementStatus = status;
+    },
+    denyRead() {
+      managementStatus = 403;
     },
     malformedDiscovery() {
       discoveryMalformed = true;
@@ -134,7 +136,7 @@ test('delivered configuration shows actual open closed and native at with explic
   expect(denied.status).toBe('denied');
   expect(markup(denied)).not.toContain(at);
   expect(markup(denied)).not.toContain('search');
-  expect(markup(denied)).toContain('Public status: unknown');
+  expect(markup(denied)).toContain('Public status remains unknown');
 });
 
 test('closed current wire rejects excess rows malformed pages and selections without private observations', async () => {
@@ -237,14 +239,15 @@ test('production reader envelope binds the actual same prepared request and keep
       return 'actual-reader-subject';
     },
   }));
-  mock.module('../src/kernel/client', () => ({ kernelClient: () => ({}) }));
-  mock.module('../src/platform/exposure/data', () => ({
-    ...exposureData,
-    loadExposure: async (_client: unknown, authorization: string) => {
-      observed.authorization = authorization;
-      return page;
-    },
-  }));
+  const kernel = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input, init) => {
+      const path = new URL(new Request(input, init).url).pathname;
+      if (path === '/v1/openapi.json') return Response.json(document);
+      if (path === '/v1/platform/exposure/management') return Response.json(page.current);
+      throw new Error(`Unexpected request: ${path}`);
+    }) as typeof fetch,
+  });
+  mock.module('../src/kernel/client', () => ({ kernelClient: () => kernel }));
 
   try {
     const { readPlatformExposureBound } = await import('../src/platform/exposure/actions');
