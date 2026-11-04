@@ -112,6 +112,11 @@ test('production operator imports two VNDB staff aliases through ordinary accept
     const scenarioId = (createdConcepts.results[0] as { value: { id: string } }).value.id;
     const designId = (createdConcepts.results[1] as { value: { id: string } }).value.id;
     const directorId = (createdConcepts.results[2] as { value: { id: string } }).value.id;
+    const conceptFacts: { code: string; id: string; digest: string }[] = [
+      { code: 'scenario', id: scenarioId, digest: 'b'.repeat(64) },
+      { code: 'chardesign', id: designId, digest: 'c'.repeat(64) },
+      { code: 'director', id: directorId, digest: 'd'.repeat(64) },
+    ];
     const propose = await runtime.importTransport.batch({
       commands: [
         {
@@ -127,23 +132,22 @@ test('production operator imports two VNDB staff aliases through ordinary accept
             ],
           },
         },
-        ...[
-          ['scenario', scenarioId, 'b'],
-          ['chardesign', designId, 'c'],
-          ['director', directorId, 'd'],
-        ].flatMap(([code, id, digest]) => [
+        ...conceptFacts.flatMap((item) => [
           {
             op: 'propose' as const,
-            key: `authored-${code}-url`,
-            source: { ...authored, external_id: code, digest: digest.repeat(64) },
-            subject: id,
+            key: `authored-${item.code}-url`,
+            source: { ...authored, external_id: item.code, digest: item.digest },
+            subject: item.id,
             statement: {
               property: { id: 'schema:url' },
-              value: { type: 'value', content: creditTypeConceptUri(code) },
+              value: { type: 'value', content: creditTypeConceptUri(item.code) },
               references: [
                 {
                   parts: [
-                    { property: { id: 'schema:url' }, value: { type: 'value', content: creditTypeConceptUri(code) } },
+                    {
+                      property: { id: 'schema:url' },
+                      value: { type: 'value', content: creditTypeConceptUri(item.code) },
+                    },
                   ],
                 },
               ],
@@ -151,16 +155,19 @@ test('production operator imports two VNDB staff aliases through ordinary accept
           },
           {
             op: 'propose' as const,
-            key: `authored-${code}-scheme`,
-            source: { ...authored, external_id: code, digest: digest.repeat(64) },
-            subject: id,
+            key: `authored-${item.code}-scheme`,
+            source: { ...authored, external_id: item.code, digest: item.digest },
+            subject: item.id,
             statement: {
               property: { id: 'skos:inScheme' },
               value: { type: 'value', content: schemeId },
               references: [
                 {
                   parts: [
-                    { property: { id: 'schema:url' }, value: { type: 'value', content: creditTypeConceptUri(code) } },
+                    {
+                      property: { id: 'schema:url' },
+                      value: { type: 'value', content: creditTypeConceptUri(item.code) },
+                    },
                   ],
                 },
               ],
