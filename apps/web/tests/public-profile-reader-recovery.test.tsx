@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
+import { createRouter, createRootRoute, createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { readerTestRuntime as runtime } from './agent-reader-lifetime.test';
 
 // Exercise the real caller adapter and public composition; only the existing native transport is deferred.
@@ -70,8 +71,25 @@ for (const view of ['overview', 'posts'] as const) {
           })
         : createElement('p', null, 'Public page unavailable');
     }
+    let refresh = () => {};
+    function Harness() {
+      const [, force] = useState(0);
+      refresh = () => force((value) => value + 1);
+      return createElement(QueryClientProvider, { client }, createElement(Caller));
+    }
+    const router = createRouter({
+      routeTree: createRootRoute({ component: Harness }),
+      history: createMemoryHistory({
+        initialEntries: [window.location.pathname + window.location.search + window.location.hash],
+      }),
+    });
+    let mounted = false;
     const render = async () => {
-      await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Caller))));
+      if (!mounted) {
+        await router.load();
+        await act(async () => root.render(createElement(RouterProvider, { router })));
+        mounted = true;
+      } else await act(async () => refresh());
       await runtime.settle();
     };
     const nextRead = async (count: number) => {
@@ -80,6 +98,9 @@ for (const view of ['overview', 'posts'] as const) {
       return runtime.nativeReads[count - 1]!;
     };
     const status = () => host.querySelector('[data-slot="profile-reading"] [role="status"]')!;
+    const waitForStatus = async (text: string) => {
+      for (let attempt = 0; attempt < 30 && !status()?.textContent?.includes(text); attempt++) await runtime.settle();
+    };
     const retry = () => host.querySelector<HTMLButtonElement>('[data-slot="profile-reading"] button')!;
     const safe = () => expect(host.querySelector('[data-slot="cover"][data-state="withheld"]')).not.toBeNull();
     const clickRetry = async () => {
@@ -95,7 +116,7 @@ for (const view of ['overview', 'posts'] as const) {
       safe();
       expect(status().textContent).toContain('Reading your preferences');
       first.work.resolve({ status: 503, error: { code: 'unavailable' }, headers: new Headers() });
-      await runtime.settle();
+      await waitForStatus('unavailable');
       expect(status().textContent).toContain('unavailable');
       safe();
       const publicLink = host.querySelector<HTMLAnchorElement>('a[href*="/@mira"]')!;
@@ -111,7 +132,7 @@ for (const view of ['overview', 'posts'] as const) {
       // Moving focus while retry is pending must win over its completion.
       publicLink.focus();
       recovered.work.resolve(runtime.result('show'));
-      await runtime.settle();
+      await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');
       expect(host.querySelector('[data-slot="cover"][data-state="withheld"]')).toBeNull();
       expect(window.document.activeElement).toBe(publicLink);
@@ -122,7 +143,7 @@ for (const view of ['overview', 'posts'] as const) {
       const cautious = await nextRead(3);
       safe();
       cautious.work.resolve(runtime.result('blur'));
-      await runtime.settle();
+      await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');
       expect(window.document.activeElement).toBe(trigger);
       safe();
@@ -133,7 +154,7 @@ for (const view of ['overview', 'posts'] as const) {
       const failedRetry = await nextRead(4);
       safe(); // Explicit content reveals retire with the response, even before the new read completes.
       failedRetry.work.resolve({ status: 503, error: { code: 'unavailable' }, headers: new Headers() });
-      await runtime.settle();
+      await waitForStatus('unavailable');
       safe();
       expect(status().textContent).toContain('unavailable');
       await clickRetry();
@@ -147,7 +168,7 @@ for (const view of ['overview', 'posts'] as const) {
       await runtime.settle();
       safe();
       replacement.work.resolve(runtime.result('blur'));
-      await runtime.settle();
+      await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');
       safe();
       // Native prepared identity, rather than browser intent, decides whether a response matches.
@@ -155,7 +176,7 @@ for (const view of ['overview', 'posts'] as const) {
       await clickRetry();
       const mismatch = await nextRead(7);
       mismatch.work.resolve(runtime.result('show'));
-      await runtime.settle();
+      await waitForStatus('do not match');
       safe();
       expect(status().textContent).toContain('do not match');
       runtime.setReader('reader-b');

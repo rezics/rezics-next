@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
+import preferenceRecording from '../src/kernel/recorded/settings-preferences.json';
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -195,7 +196,12 @@ function markCoversWithheld(value: unknown): void {
 function result(suitability: 'blur' | 'show'): PreferenceResult {
   return {
     status: 200,
-    data: { spoilerLevel: 0, suitability, version: 1 },
+    data: {
+      ...structuredClone(preferenceRecording),
+      spoilerLevel: 0,
+      suitability,
+      reading: { ...preferenceRecording.reading, effective: { spoilerLevel: 0, suitability } },
+    },
     headers: new Headers(),
   };
 }
@@ -222,6 +228,7 @@ test('public account readers retire old admissions across sign-out, replacement,
     readerModule,
     subjectModule,
     fixtures,
+    routeSupport,
   ] = await Promise.all([
     import('react-dom/client'),
     import('@tanstack/react-query'),
@@ -230,6 +237,7 @@ test('public account readers retire old admissions across sign-out, replacement,
     import('../src/features/pages/agent-reader'),
     import('../src/features/pages/subject'),
     import('../src/stories/pages/accounts-public-profile/fixtures'),
+    import('../src/features/pages/route-support'),
   ]);
 
   const page = fixtures.profilePage({ verified: true });
@@ -253,7 +261,7 @@ test('public account readers retire old admissions across sign-out, replacement,
             useAgentReaderResult: readerModule.useAgentReaderResult,
             agentReaderQuery: queryModule.agentReaderQuery,
             SubjectPage: subjectModule.SubjectPage,
-            messages: subjectModule.subjectPageMessages,
+            messages: routeSupport.subjectPageMessages,
           }),
         ),
       ),
@@ -292,7 +300,7 @@ test('public account readers retire old admissions across sign-out, replacement,
         useAgentReaderResult: readerModule.useAgentReaderResult,
         agentReaderQuery: queryModule.agentReaderQuery,
         SubjectPage: subjectModule.SubjectPage,
-        messages: subjectModule.subjectPageMessages,
+        messages: routeSupport.subjectPageMessages,
       }),
     );
     targetRoot.render(strict ? createElement(StrictMode, null, tree) : tree);
