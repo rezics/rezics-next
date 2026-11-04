@@ -183,11 +183,12 @@ export const NewThreadLong: Story = {
     let first = true;
     let uncertain = true;
     let byteCount = 0;
+    let rejected = false;
     const mediaId = '0192f3a0-6c1e-7b2a-9d4e-000000000086';
     const containerId = '0192f3a0-6c1e-7b2a-9d4e-000000000087';
     globalThis.fetch = (async (input, init) => {
       const path = new URL(String(input), window.location.href).pathname;
-      if (path !== '/media' && path !== `/media/${mediaId}`) return original(input, init);
+      if (path !== '/media' && !path.startsWith(`/media/${mediaId.slice(0, -1)}`)) return original(input, init);
       if (init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         byteCount = body.byteCount;
@@ -197,14 +198,14 @@ export const NewThreadLong: Story = {
         } else if (uncertain) {
           uncertain = false;
           throw new TypeError('Reservation response unavailable');
-        }
+        } else rejected = true;
       }
       if (init?.method === 'PUT') return new Response(null, { status: 204 });
       return Response.json({
         media: {
-          id: mediaId,
+          id: rejected ? `${mediaId.slice(0, -1)}8` : mediaId,
           containerId,
-          state: init?.method === 'POST' ? 'reserved' : 'available',
+          state: init?.method === 'POST' ? 'reserved' : rejected ? 'rejected' : 'available',
           mediaType: 'image/png',
           byteCount,
         },
@@ -236,7 +237,11 @@ export const NewThreadLong: Story = {
     await waitFor(() => expect(view.getByRole('button', { name: m.thread_write_send() })).toBeEnabled());
     const second = await attach('second.png');
     await expect(await second.findByRole('button', { name: m.editor_retry_upload() })).toBeEnabled();
-    // Leave the real recovery control visible; deliberate retry uses the retained command.
+    await expect(view.getByText(m.thread_attachment_reservation_unknown())).toBeVisible();
+    await attach('rejected.png');
+    await expect(await view.findByText(m.editor_upload_rejected())).toBeVisible();
+    await expect(view.getByRole('button', { name: m.thread_attachment_replace() })).toBeEnabled();
+    await expect(view.getByRole('button', { name: m.thread_write_send() })).toBeDisabled();
   },
 };
 export const NewThreadDeparture: Story = {

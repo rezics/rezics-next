@@ -8579,5 +8579,20 @@
   "moderation_directory_return_hint": "Beim Zurückkehren wird deine ursprüngliche Übersichtsseite erneut geprüft.",
   "moderation_directory_ready": "Wähle eine Warteschlange, die du derzeit öffnen darfst.",
   "moderation_directory_retired": "Dieser private Besuch der Übersicht ist beendet. Starte neu, um deine aktuellen Warteschlangen zu prüfen.",
-  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen."
+  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen.",
+  "thread_attachment_image": "Bildanhang",
+  "thread_attachment_reserving": "Dieses Bild wird reserviert…",
+  "thread_attachment_transferring": "Bilddaten werden übertragen…",
+  "thread_attachment_processing": "Warten auf die Bildverarbeitung…",
+  "thread_attachment_inserting": "Das akzeptierte Bild wird zum Entwurf hinzugefügt…",
+  "thread_attachment_insertion_failed": "Das Bild wurde akzeptiert, konnte aber nicht zu diesem Entwurf hinzugefügt werden.",
+  "thread_attachment_known_unknown": "Das Verarbeitungsergebnis des ursprünglichen Bildes ist unbekannt.",
+  "thread_attachment_reservation_unknown": "Das Ergebnis der ursprünglichen Reservierung ist unbekannt.",
+  "thread_attachment_insertion_retry": "Erneutes Versuchen fügt das akzeptierte Bild an der beibehaltenen Position ein. Ein neuer Upload ist nicht nötig.",
+  "thread_attachment_exact_retry": "Erneutes Versuchen wiederholt nur die ursprüngliche Reservierung dieses Bildes und erstellt keine Ersatzreservierung.",
+  "thread_attachment_resume": "Erneutes Versuchen prüft das ursprüngliche Bild und sendet dessen Daten nur bei Bedarf.",
+  "thread_attachment_replace_advice": "Wähle eine neue Datei als Ersatz. Beschreibung und Position bleiben erhalten.",
+  "thread_attachment_no_recovery": "Die genaue Wiederaufnahme ist nicht verfügbar. Du kannst diesen lokalen Anhang entfernen; das Verlassen bricht die Serveranfrage nicht ab.",
+  "thread_attachment_replace": "Bild ersetzen",
+  "thread_attachment_local_remove": "Das Entfernen betrifft nur diesen lokalen Anhang. Ein Upload auf dem Server wird dadurch weder abgebrochen noch gelöscht."
 }

@@ -8579,5 +8579,20 @@
   "moderation_directory_return_hint": "返回时将重新检查原来的目录页面。",
   "moderation_directory_ready": "请选择您目前有权打开的队列。",
   "moderation_directory_retired": "本次私人目录访问已结束。请重新开始以检查目前可用的队列。",
-  "moderation_directory_expired": "此目录页面已过期。请重新发现队列以检查目前的访问权限。"
+  "moderation_directory_expired": "此目录页面已过期。请重新发现队列以检查目前的访问权限。",
+  "thread_attachment_image": "图片附件",
+  "thread_attachment_reserving": "正在为这张图片取得预留…",
+  "thread_attachment_transferring": "正在传送图片数据…",
+  "thread_attachment_processing": "正在等待图片处理…",
+  "thread_attachment_inserting": "正在将已接受的图片加入草稿…",
+  "thread_attachment_insertion_failed": "图片已被接受，但未能加入这份草稿。",
+  "thread_attachment_known_unknown": "原图片的处理结果仍未确定。",
+  "thread_attachment_reservation_unknown": "原预留操作的结果仍未确定。",
+  "thread_attachment_insertion_retry": "重试会将已接受的图片加入原来的位置，无须重新上传。",
+  "thread_attachment_exact_retry": "重试只会重发这张图片原来的预留操作，不会建立替代预留。",
+  "thread_attachment_resume": "重试会检查原图片，并仅在需要时传送原来的数据。",
+  "thread_attachment_replace_advice": "请选择新文件来替换此附件，说明和位置会保留。",
+  "thread_attachment_no_recovery": "目前无法恢复原操作。你可以移除此本地附件；离开不会取消服务器上的请求。",
+  "thread_attachment_replace": "替换图片",
+  "thread_attachment_local_remove": "移除只影响这个本地附件，不会取消或删除服务器上的上传。"
 }

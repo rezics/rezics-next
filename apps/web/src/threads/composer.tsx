@@ -7,7 +7,7 @@ import {
   type DocumentNode,
   type DocumentSnapshot,
 } from '@rezics/document';
-import { RichTextEditor, type RichTextEditorLabels, type UploadState } from '@rezics/ui';
+import { RichTextEditor, type RichTextEditorLabels, type UploadState, type UploadAttachment } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Label } from '@rezics/ui/shadcn/label';
@@ -20,6 +20,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type FormEvent,
   type ReactNode,
   type RefObject,
@@ -31,6 +32,8 @@ import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from './acti
 import { checkDraftMediaStates, type DraftMediaState } from './media-state';
 import { imageSources, replyImageLimit, UploadRefusal } from './upload';
 import { ReplyImageUploadRecovery, ReplyUploadRecoveryRefusal, type ReplyUploadTarget } from './media-upload-recovery';
+import { ComposerAttachmentEpisode } from './thread-upload-episode/attachments';
+import { ComposerAttachmentRow } from './thread-upload-episode/attachment-row';
 import { ExistingReviewNotice } from './write-prompts';
 import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from './authoring-departure';
@@ -123,7 +126,6 @@ type PendingComposerFocus = {
 function useComposerUpload(
   target: ReplyUploadTarget | undefined,
   owned: RefObject<Set<string>>,
-  refusal: RefObject<UploadRefusal | null>,
   lifetime: ComposerLifetime,
 ) {
   const client = useContext(QueryClientContext);
@@ -139,6 +141,15 @@ function useComposerUpload(
     };
   };
   const [recovery] = useState(() => new ReplyImageUploadRecovery(() => current.current()));
+  const [attachments] = useState(
+    () =>
+      new ComposerAttachmentEpisode(
+        recovery,
+        () => current.current(),
+        () => lifetime.current(),
+      ),
+  );
+  useSyncExternalStore(attachments.subscribe, attachments.snapshot, attachments.snapshot);
   const copies = useRef(new Map<string, { controller: AbortController; target: string; file?: File }>());
   const removeCopy = (source: string) => {
     copies.current.get(source)?.controller.abort();
@@ -152,27 +163,24 @@ function useComposerUpload(
     const owner = lifetime.controller.signal;
     const retire = () => {
       for (const source of copies.current.keys()) removeCopy(source);
-      recovery.clear();
+      attachments.clear();
     };
     owner.addEventListener('abort', retire, { once: true });
     return () => {
       owner.removeEventListener('abort', retire);
       retire();
     };
-  }, [recovery, lifetime]);
-  const upload = async (file: File, signal: AbortSignal) => {
+  }, [recovery, attachments, lifetime]);
+  const upload = async (file: File, signal: AbortSignal, occurrence?: UploadAttachment) => {
     const owner = lifetime.controller.signal;
     if (!lifetime.current(owner)) throw new DOMException('Editor retired', 'AbortError');
-    refusal.current = null;
-    try {
-      const uploaded = await recovery.upload(file, AbortSignal.any([signal, owner]));
-      if (!lifetime.current(owner)) throw new DOMException('Editor retired', 'AbortError');
-      owned.current.add(uploaded.src);
-      return uploaded;
-    } catch (error) {
-      if (lifetime.current(owner) && error instanceof UploadRefusal) refusal.current = error;
-      throw error;
-    }
+    const boundedSignal = AbortSignal.any([signal, owner]);
+    const uploaded = occurrence
+      ? await attachments.upload(occurrence, boundedSignal)
+      : await recovery.upload(file, boundedSignal);
+    if (!lifetime.current(owner)) throw new DOMException('Editor retired', 'AbortError');
+    owned.current.add(uploaded.src);
+    return uploaded;
   };
   const copy = async (source: string, id: string) => {
     const owner = lifetime.controller.signal;
@@ -194,7 +202,15 @@ function useComposerUpload(
   };
   return {
     upload,
-    retire: () => recovery.clear(),
+    retire: () => attachments.clear(),
+    renderUpload: (attachment: UploadAttachment, actions: import('@rezics/ui').UploadAttachmentActions) => (
+      <ComposerAttachmentRow
+        attachment={attachment}
+        observation={attachments.observation(attachment)}
+        actions={actions}
+        current={() => lifetime.current()}
+      />
+    ),
     copy,
     removeCopy,
     copySources: () => copies.current.keys(),
@@ -458,25 +474,6 @@ export function mediaIssueList(
   );
 }
 
-function uploadRefusalText(refusal: UploadRefusal): string {
-  if (refusal instanceof ReplyUploadRecoveryRefusal)
-    return refusal.recovery === 'target-changed' ? m.thread_media_target_changed() : m.thread_media_choose_again();
-  switch (refusal.reason) {
-    case 'closed':
-      return m.editor_upload_closed();
-    case 'type':
-      return m.editor_upload_type();
-    case 'too-large':
-      return m.editor_upload_too_large();
-    case 'rejected':
-      return m.editor_upload_rejected();
-    case 'rate-limited':
-      return m.editor_upload_rate_limited({ seconds: refusal.retryAfter ?? 1 });
-    default:
-      return m.editor_upload_unavailable();
-  }
-}
-
 function editorLabels(): RichTextEditorLabels {
   return {
     toolbar: m.editor_toolbar(),
@@ -628,7 +625,6 @@ function PostComposerContent<T, Context = undefined>({
   const ownedMediaIds = useRef(new Set<string>());
   const reuploading = useRef(new Map(initialForeignSources.map((source) => [source, Symbol(source)])));
   const initialUploadsStarted = useRef(false);
-  const refusalRef = useRef<UploadRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const sessionClient = useContext(QueryClientContext);
@@ -676,7 +672,7 @@ function PostComposerContent<T, Context = undefined>({
     () => lifetime.retire(),
   );
   const uploadTarget = containerId ?? (boardId ? { newThread: { boardId, idempotencyKey } } : undefined);
-  const mediaUpload = useComposerUpload(uploadTarget, ownedMediaIds, refusalRef, lifetime);
+  const mediaUpload = useComposerUpload(uploadTarget, ownedMediaIds, lifetime);
   const upload = uploadTarget ? mediaUpload.upload : undefined;
   const { check: checkMedia, checking } = useDraftMediaCheck(
     bodyRef,
@@ -1031,12 +1027,11 @@ function PostComposerContent<T, Context = undefined>({
     if (plainEditorVisible) setBody(next);
   }
 
-  function handleUploadState(state: UploadState, count: number) {
+  function handleUploadState(state: UploadState, count: number, attachments?: number) {
     if (!lifetime.current()) return;
-    editorPendingRef.current = count;
+    // Every admitted occurrence, including a failed one, must be resolved or deliberately removed.
+    editorPendingRef.current = attachments ?? (state === 'failed' ? Math.max(1, count) : count);
     updatePending();
-    if (state === 'pending') setUploadNotice(null);
-    if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
   }
 
   async function submit(event?: FormEvent) {
@@ -1212,7 +1207,7 @@ function PostComposerContent<T, Context = undefined>({
                 </Button>
               </>
             }
-            {...(upload ? { upload, onUploadState: handleUploadState } : {})}
+            {...(upload ? { upload, renderUpload: mediaUpload.renderUpload, onUploadState: handleUploadState } : {})}
           />
         </div>
       </div>
@@ -1406,7 +1401,6 @@ function InlinePostEditorContent({
   const foreignPendingRef = useRef(0);
   const ownedMediaIds = useRef(new Set(initialMediaIds));
   const reuploading = useRef(new Map<string, symbol>());
-  const refusalRef = useRef<UploadRefusal | null>(null);
   const editIntent = useRef(new ReplyIntent(idempotencyKey));
   const sessionClient = useContext(QueryClientContext);
   const session = sessionClient?.getQueryData(sessionQuery.queryKey);
@@ -1437,7 +1431,7 @@ function InlinePostEditorContent({
     onCancel,
     () => lifetime.retire(),
   );
-  const mediaUpload = useComposerUpload(containerId, ownedMediaIds, refusalRef, lifetime);
+  const mediaUpload = useComposerUpload(containerId, ownedMediaIds, lifetime);
   const upload = mediaUpload.upload;
   const { check: checkMedia, checking } = useDraftMediaCheck(
     bodyRef,
@@ -1720,12 +1714,11 @@ function InlinePostEditorContent({
     setUploadNotice(null);
   }
 
-  function handleUploadState(state: UploadState, count: number) {
+  function handleUploadState(state: UploadState, count: number, attachments?: number) {
     if (!lifetime.current()) return;
-    editorPendingRef.current = count;
+    // Every admitted occurrence, including a failed one, must be resolved or deliberately removed.
+    editorPendingRef.current = attachments ?? (state === 'failed' ? Math.max(1, count) : count);
     updatePending();
-    if (state === 'pending') setUploadNotice(null);
-    if (state === 'failed') setUploadNotice(uploadRefusalText(refusalRef.current ?? new UploadRefusal('unavailable')));
   }
 
   if (!lifetime.current())
@@ -1812,6 +1805,7 @@ function InlinePostEditorContent({
             lookupMention={lookupPostMention}
             className="thread-post-editor"
             upload={upload}
+            renderUpload={mediaUpload.renderUpload}
             onUploadState={handleUploadState}
           />
         )}

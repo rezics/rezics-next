@@ -39,7 +39,14 @@ import {
   type LinkVisitRange,
 } from './editor-link.tsx';
 import { ImageInsert, withImageView } from './editor-image.tsx';
-import { editorUploads, type ImageUploader, type UploadEntry, type UploadState } from './editor-uploads.ts';
+import {
+  editorUploads,
+  type ImageUploader,
+  type UploadEntry,
+  type UploadState,
+  type UploadAttachment,
+  type UploadAttachmentActions,
+} from './editor-uploads.ts';
 import { availableCommands, imageCommand, runEditorCommand } from './editor-commands.ts';
 import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
 
@@ -72,7 +79,9 @@ export interface RichTextEditorProps {
   maxLength?: number;
   upload?: ImageUploader;
   lookupMention?: MentionSource;
-  onUploadState?: (state: UploadState, count: number) => void;
+  onUploadState?: (state: UploadState, count: number, attachments?: number) => void;
+  /** Caller presentation uses this editor's existing insertion, retry and dismissal owner. */
+  renderUpload?: (attachment: UploadAttachment, actions: UploadAttachmentActions) => ReactNode;
   /** Synchronous invalidation before the debounced, validated onChange snapshot. */
   onSnapshotPending?: () => void;
   /** Unnormalized editor nodes for explicit local recovery; never a submit-ready snapshot. */
@@ -233,6 +242,7 @@ export function RichTextEditor({
   maxLength,
   upload,
   onUploadState,
+  renderUpload,
   onSnapshotPending,
   onSnapshotError,
   lookupMention,
@@ -313,7 +323,10 @@ export function RichTextEditor({
   const imagePositionRef = useRef<number | null>(null);
   const [uploadEntries, setUploadEntries] = useState<UploadEntry[]>([]);
   const uploadEntriesRef = useRef<UploadEntry[]>([]);
-  const uploadStatus = useRef<{ state: UploadState; count: number }>({ state: 'ready', count: 0 });
+  const uploadStatus = useRef<{ state: UploadState; count: number; attachments?: number }>({
+    state: 'ready',
+    count: 0,
+  });
   const [uploadMessage, setUploadMessage] = useState('');
   const [touchSheetOpen, setTouchSheetOpen] = useState(false);
   const uploads = useRef<ReturnType<typeof editorUploads> | null>(null);
@@ -817,9 +830,13 @@ export function RichTextEditor({
         uploadEntriesRef.current = entries;
         setUploadEntries(entries);
         if (state === 'pending') setUploadMessage('');
-        if (uploadStatus.current.state !== state || uploadStatus.current.count !== count) {
-          uploadStatus.current = { state, count };
-          latest.current.onUploadState?.(state, count);
+        if (
+          uploadStatus.current.state !== state ||
+          uploadStatus.current.count !== count ||
+          uploadStatus.current.attachments !== entries.length
+        ) {
+          uploadStatus.current = { state, count, attachments: entries.length };
+          latest.current.onUploadState?.(state, count, entries.length);
         }
       },
       () => {
@@ -940,7 +957,7 @@ export function RichTextEditor({
     ) : null;
 
   return (
-    <div ref={menuContainer} className={cn('relative min-w-0', className)}>
+    <div ref={menuContainer} data-slot="rich-text-editor" className={cn('relative min-w-0', className)}>
       <EditorSurface
         editor={editor}
         label={label}
@@ -1046,35 +1063,55 @@ export function RichTextEditor({
           />
         </>
       ) : null}
-      <div role="status" aria-label={resolvedLabels.uploading} aria-live="polite">
-        {uploadEntries
-          .filter((entry) => entry.phase !== 'failed')
-          .map((entry) => (
-            <p key={entry.id}>
-              {resolvedLabels.uploading}: {entry.file.name}
-            </p>
-          ))}
-      </div>
-      {uploadEntries
-        .filter((entry) => entry.phase === 'failed')
-        .map((entry) => (
-          <div key={entry.id} role="alert" aria-label={resolvedLabels.uploadFailed}>
-            <p>
-              {resolvedLabels.uploadFailed}: {entry.file.name}
-            </p>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!editable}
-              onClick={() => uploads.current?.retry(entry.id)}
-            >
-              {resolvedLabels.retryUpload}
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => uploads.current?.dismiss(entry.id)}>
-              {resolvedLabels.dismissUpload}
-            </Button>
+      {renderUpload ? (
+        uploadEntries.map((entry) => (
+          <div key={entry.id}>
+            {renderUpload(entry, {
+              retry: () => {
+                if (isCurrent()) uploads.current?.retry(entry.id);
+              },
+              dismiss: () => {
+                if (isCurrent()) uploads.current?.dismiss(entry.id);
+              },
+              replace: (file) => {
+                if (isCurrent()) uploads.current?.replace(entry.id, file);
+              },
+            })}
           </div>
-        ))}
+        ))
+      ) : (
+        <>
+          <div role="status" aria-label={resolvedLabels.uploading} aria-live="polite">
+            {uploadEntries
+              .filter((entry) => entry.phase !== 'failed')
+              .map((entry) => (
+                <p key={entry.id}>
+                  {resolvedLabels.uploading}: {entry.file.name}
+                </p>
+              ))}
+          </div>
+          {uploadEntries
+            .filter((entry) => entry.phase === 'failed')
+            .map((entry) => (
+              <div key={entry.id} role="alert" aria-label={resolvedLabels.uploadFailed}>
+                <p>
+                  {resolvedLabels.uploadFailed}: {entry.file.name}
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!editable}
+                  onClick={() => uploads.current?.retry(entry.id)}
+                >
+                  {resolvedLabels.retryUpload}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => uploads.current?.dismiss(entry.id)}>
+                  {resolvedLabels.dismissUpload}
+                </Button>
+              </div>
+            ))}
+        </>
+      )}
       {uploadMessage ? (
         <p role="status" aria-label={resolvedLabels.image}>
           {uploadMessage}

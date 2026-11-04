@@ -8579,5 +8579,20 @@
   "moderation_directory_return_hint": "返回時將重新檢查原來的目錄頁面。",
   "moderation_directory_ready": "請選擇您目前有權開啟的佇列。",
   "moderation_directory_retired": "本次私人目錄存取已結束。請重新開始以檢查目前可用的佇列。",
-  "moderation_directory_expired": "此目錄頁面已過期。請重新探索佇列以檢查目前的存取權限。"
+  "moderation_directory_expired": "此目錄頁面已過期。請重新探索佇列以檢查目前的存取權限。",
+  "thread_attachment_image": "圖片附件",
+  "thread_attachment_reserving": "正在為這張圖片取得預留…",
+  "thread_attachment_transferring": "正在傳送圖片資料…",
+  "thread_attachment_processing": "正在等待圖片處理…",
+  "thread_attachment_inserting": "正在將已接受的圖片加入草稿…",
+  "thread_attachment_insertion_failed": "圖片已獲接受，但未能加入這份草稿。",
+  "thread_attachment_known_unknown": "原圖片的處理結果仍未確定。",
+  "thread_attachment_reservation_unknown": "原預留操作的結果仍未確定。",
+  "thread_attachment_insertion_retry": "重試會將已接受的圖片加入原來的位置，無須重新上傳。",
+  "thread_attachment_exact_retry": "重試只會重送這張圖片原來的預留操作，不會建立替代預留。",
+  "thread_attachment_resume": "重試會檢查原圖片，並僅在需要時傳送原來的資料。",
+  "thread_attachment_replace_advice": "請選擇新檔案來替換此附件，說明和位置會保留。",
+  "thread_attachment_no_recovery": "目前無法恢復原操作。你可以移除此本機附件；離開不會取消伺服器上的請求。",
+  "thread_attachment_replace": "替換圖片",
+  "thread_attachment_local_remove": "移除只影響這個本機附件，不會取消或刪除伺服器上的上傳。"
 }

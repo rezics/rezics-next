@@ -8579,5 +8579,20 @@
   "moderation_directory_return_hint": "Votre page d’annuaire d’origine sera vérifiée à nouveau à votre retour.",
   "moderation_directory_ready": "Choisissez une file que vous avez actuellement le droit d’ouvrir.",
   "moderation_directory_retired": "Cette visite privée de l’annuaire est terminée. Recommencez pour vérifier vos files actuelles.",
-  "moderation_directory_expired": "Cette page d’annuaire a expiré. Recommencez pour vérifier l’accès actuel aux files."
+  "moderation_directory_expired": "Cette page d’annuaire a expiré. Recommencez pour vérifier l’accès actuel aux files.",
+  "thread_attachment_image": "Image jointe",
+  "thread_attachment_reserving": "Réservation de cette image…",
+  "thread_attachment_transferring": "Transfert des données de l’image…",
+  "thread_attachment_processing": "En attente du traitement de l’image…",
+  "thread_attachment_inserting": "Ajout de l’image acceptée à votre brouillon…",
+  "thread_attachment_insertion_failed": "L’image a été acceptée, mais n’a pas pu être ajoutée à ce brouillon.",
+  "thread_attachment_known_unknown": "Le résultat du traitement de l’image d’origine est inconnu.",
+  "thread_attachment_reservation_unknown": "Le résultat de la réservation d’origine est inconnu.",
+  "thread_attachment_insertion_retry": "Réessayer ajoute cette image acceptée à sa position conservée, sans nouvel envoi.",
+  "thread_attachment_exact_retry": "Réessayer répète uniquement la réservation d’origine de cette image, sans réservation de remplacement.",
+  "thread_attachment_resume": "Réessayer vérifie l’image d’origine et ne renvoie ses données que si nécessaire.",
+  "thread_attachment_replace_advice": "Choisissez un nouveau fichier pour remplacer cette pièce jointe. Sa description et sa position seront conservées.",
+  "thread_attachment_no_recovery": "La reprise exacte est indisponible. Vous pouvez retirer cette pièce jointe locale ; quitter n’annule pas la requête au serveur.",
+  "thread_attachment_replace": "Remplacer l’image",
+  "thread_attachment_local_remove": "Le retrait ne concerne que cette pièce jointe locale. Il n’annule ni n’efface un envoi au serveur."
 }

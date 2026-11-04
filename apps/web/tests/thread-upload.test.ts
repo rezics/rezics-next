@@ -322,12 +322,12 @@ test('one episode shares a disclosed future container and repeats the exact unce
   const uncertain = calls.at(-1)!.init;
   await recovery.upload(second, signal());
   const posts = calls.filter(({ init }) => init.method === 'POST');
-  expect(JSON.parse(String(posts[2]!.init.body))).toMatchObject({ containerId: 'private-thread' });
-  expect(posts[3]!.init.body).toBe(uncertain.body);
-  expect(new Headers(posts[3]!.init.headers).get('idempotency-key')).toBe(
+  expect(JSON.parse(String(posts[1]!.init.body))).toMatchObject({ containerId: 'private-thread' });
+  expect(posts[2]!.init.body).toBe(uncertain.body);
+  expect(new Headers(posts[2]!.init.headers).get('idempotency-key')).toBe(
     new Headers(uncertain.headers).get('idempotency-key'),
   );
-  expect(posts.filter(({ init }) => JSON.parse(String(init.body)).newThread)).toHaveLength(2);
+  expect(posts.filter(({ init }) => JSON.parse(String(init.body)).newThread)).toHaveLength(1);
 });
 
 test('unknown 409 identity stays unknown across exact retries and independent composers', async () => {
@@ -380,4 +380,60 @@ test('retired and aborted late reservations cannot refill recovery identity, inc
   await refusal(recovery.upload(file, signal()));
   expect(calls).toHaveLength(2);
   expect(JSON.parse(String(calls[1]!.init.body))).not.toHaveProperty('containerId');
+});
+
+test('reply stage observations follow actual transport boundaries and known-media resume never reserves again', async () => {
+  const stages: string[] = [];
+  const recovery = new ReplyImageUploadRecovery(() => ({
+    target: 'original-thread',
+    session: { subject: 'writer', csrfToken: 'site-csrf' },
+  }));
+  let lost = true;
+  intercept((_path, init) => {
+    if (init.method === 'POST') {
+      expect(stages.at(-1)).toBe('reservation');
+      return media('reserved');
+    }
+    if (init.method === 'PUT') {
+      expect(stages.at(-1)).toBe('transfer');
+      if (lost) throw new Error('lost byte receipt');
+      return new Response(null, { status: 204 });
+    }
+    expect(stages.at(-1)).toBe('processing');
+    return media(lost ? 'reserved' : 'available');
+  });
+  expect(await refusal(recovery.upload(file, signal(), (stage) => stages.push(stage)))).toMatchObject({ mediaId });
+  expect(stages).toEqual(['reservation', 'transfer']);
+  lost = false;
+  stages.length = 0;
+  await recovery.upload(file, signal(), (stage) => stages.push(stage));
+  expect(stages).toEqual(['processing']);
+  expect(calls.filter(({ init }) => init.method === 'POST')).toHaveLength(1);
+});
+
+test('disclosed future-thread 409 retains its admitted container command through an uncertain response', async () => {
+  const recovery = new ReplyImageUploadRecovery(() => ({
+    target: { newThread: { boardId: 'board', idempotencyKey: 'draft' } },
+    session: { subject: 'writer', csrfToken: 'site-csrf' },
+  }));
+  let lose = true;
+  intercept((_path, init) => {
+    if (init.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      if (body.newThread) return Response.json({ containerId: 'disclosed-container' }, { status: 409 });
+      if (lose) {
+        lose = false;
+        throw new Error('lost admitted reserve');
+      }
+      return media('reserved');
+    }
+    return init.method === 'PUT' ? new Response(null, { status: 204 }) : media('available');
+  });
+  await refusal(recovery.upload(file, signal()));
+  await recovery.upload(file, signal());
+  expect(calls[2]!.init.body).toBe(calls[1]!.init.body);
+  expect(new Headers(calls[2]!.init.headers).get('idempotency-key')).toBe(
+    new Headers(calls[1]!.init.headers).get('idempotency-key'),
+  );
+  expect(JSON.parse(String(calls[2]!.init.body))).toMatchObject({ containerId: 'disclosed-container' });
 });

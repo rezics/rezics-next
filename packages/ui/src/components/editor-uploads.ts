@@ -6,7 +6,19 @@ import { editorSnapshot } from './rich-text-editor-snapshot.ts';
 
 /** src is an opaque media id; resolving it to a URL belongs to the document renderer. */
 export type UploadedImage = { src: string; width?: number; height?: number };
-export type ImageUploader = (file: File, signal: AbortSignal) => Promise<UploadedImage>;
+/** Local occurrence identity is stable across retry and never identifies native media. */
+export type UploadAttachment = Readonly<{
+  id: string;
+  file: File;
+  alt: string;
+  phase: 'pending' | 'stored' | 'failed';
+}>;
+export type UploadAttachmentActions = {
+  retry: () => void;
+  dismiss: () => void;
+  replace: (file: File) => void;
+};
+export type ImageUploader = (file: File, signal: AbortSignal, occurrence?: UploadAttachment) => Promise<UploadedImage>;
 export type UploadState = 'ready' | 'pending' | 'failed';
 export const imageTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif'];
 
@@ -83,7 +95,7 @@ export function editorUploads(
     entry.phase = 'pending';
     report();
     try {
-      const image = await uploader(entry.file, controller.signal);
+      const image = await uploader(entry.file, controller.signal, entry);
       if (!current()) return;
       if (
         typeof image.src !== 'string' ||
@@ -91,27 +103,35 @@ export function editorUploads(
         [image.width, image.height].some((size) => size !== undefined && (!Number.isSafeInteger(size) || size <= 0))
       )
         throw new Error('Invalid uploaded image');
-      const inserted = editor
-        .chain()
-        .insertContentAt(
-          Math.min(entry.tracked.get(), editor.state.doc.content.size),
-          {
-            type: 'image',
-            attrs: {
-              id: entry.id,
-              src: image.src,
-              alt: entry.alt,
-              width: image.width ?? null,
-              height: image.height ?? null,
+      // A failed publication may already contain this accepted occurrence. Retry
+      // publication rather than inserting a second image with the same identity.
+      let existing = false;
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === 'image' && node.attrs.id === entry.id && node.attrs.src === image.src) existing = true;
+      });
+      const inserted =
+        existing ||
+        editor
+          .chain()
+          .insertContentAt(
+            Math.min(entry.tracked.get(), editor.state.doc.content.size),
+            {
+              type: 'image',
+              attrs: {
+                id: entry.id,
+                src: image.src,
+                alt: entry.alt,
+                width: image.width ?? null,
+                height: image.height ?? null,
+              },
             },
-          },
-          { updateSelection: false },
-        )
-        .command(({ tr }) => {
-          editorSnapshot(tr.doc, profile);
-          return true;
-        })
-        .run();
+            { updateSelection: false },
+          )
+          .command(({ tr }) => {
+            editorSnapshot(tr.doc, profile);
+            return true;
+          })
+          .run();
       if (!current()) return;
       let present = false;
       editor.state.doc.descendants((node) => {
@@ -127,7 +147,7 @@ export function editorUploads(
     }
     report();
   }
-  return {
+  const manager = {
     add(files: File[], position: number, alt = '') {
       if (!active() || !editor.isEditable || !editor.schema.nodes.image) return;
       const uploader = upload();
@@ -175,7 +195,34 @@ export function editorUploads(
     },
     dismiss(id: string) {
       const entry = entries.get(id);
-      if (entry) remove(entry);
+      if (entry && active() && editor.isEditable) {
+        remove(entry);
+        const positions: { from: number; to: number }[] = [];
+        editor.state.doc.descendants((node, position) => {
+          if (node.type.name === 'image' && node.attrs.id === entry.id)
+            positions.push({ from: position, to: position + node.nodeSize });
+        });
+        if (positions.length) {
+          const transaction = editor.state.tr;
+          for (const position of positions.reverse()) transaction.delete(position.from, position.to);
+          editor.view.dispatch(transaction);
+          publish();
+        }
+      }
+      report();
+    },
+    replace(id: string, file: File) {
+      const entry = entries.get(id);
+      if (!entry || !active() || !editor.isEditable) return;
+      if (!imageTypes.includes(file.type)) {
+        rejected('unsupportedImage');
+        return;
+      }
+      const position = trackPosition(editor, entry.tracked.get());
+      const alt = entry.alt;
+      manager.dismiss(id);
+      manager.add([file], position.get(), alt);
+      position.stop();
       report();
     },
     destroy() {
@@ -184,4 +231,5 @@ export function editorUploads(
       entries.clear();
     },
   };
+  return manager;
 }
