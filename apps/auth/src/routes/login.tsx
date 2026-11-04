@@ -58,8 +58,8 @@ function LoginPage() {
   const { journey, records, dismiss } = useLoginJourney();
   const current = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    if (!journey) current.current?.focus();
-  }, [journey]);
+    if (!journey && !records.length) current.current?.focus();
+  }, [journey, records.length]);
   return (
     <AuthPage heading={m.auth_login_heading()}>
       <LoginReturnView

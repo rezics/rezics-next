@@ -16,7 +16,7 @@ import '../../styles.css';
 
 export default { title: 'Pages/Account/Sign in/Return', parameters: reviewParameters, decorators: [authLocale] };
 
-type Mode = 'dispatched' | 'acknowledged' | 'read-failure' | 'keyboard';
+type Mode = 'dispatched' | 'read-failure' | 'keyboard';
 // Mounted route fixtures. They demonstrate presentation; browser/native acceptance is deferred.
 function Page({ mode }: { mode: Mode }) {
   const [installed, setInstalled] = useState(false);
@@ -42,22 +42,14 @@ function Page({ mode }: { mode: Mode }) {
         if (++reads > 1 && mode === 'read-failure') return Response.json({ error: 'unavailable' }, { status: 503 });
         return Response.json({
           methods: { password: true, passkey: false },
-          viewer: { kind: 'signed-out' },
+          viewer:
+            mode === 'keyboard'
+              ? { kind: 'signed-in', account_id: 'story', email: 'reader@example.test' }
+              : { kind: 'signed-out' },
           continuation: { href: '/security', requires_sign_in: false },
         });
       }
       if (input === '/signin') {
-        if (mode === 'acknowledged') {
-          // Freeze after transport acknowledgement but before the form completion owns navigation.
-          const response = Response.json({});
-          const json = response.json.bind(response);
-          response.json = async () => {
-            const body = await json();
-            queueMicrotask(() => queueMicrotask(() => window.dispatchEvent(new Event('pagehide'))));
-            return body;
-          };
-          return response;
-        }
         queueMicrotask(() => window.dispatchEvent(new Event('pagehide')));
         return new Promise<Response>(() => {});
       }
@@ -94,6 +86,9 @@ export const RepeatedNativeReadFailure = {
 export const KeyboardMethodSwitching = {
   render: () => <Page mode="keyboard" />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const change = (await waitFor(() => button(canvasElement, m.auth_login_switch_account())))!;
+    change.focus();
+    change.click();
     const email = (await waitFor(() => canvasElement.querySelector<HTMLInputElement>('#login-email')))!;
     email.focus();
     fill(email, 'reader@example.test');

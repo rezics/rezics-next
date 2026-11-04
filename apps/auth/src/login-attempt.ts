@@ -122,7 +122,7 @@ export function useLoginJourney() {
       else leave();
     });
     const restore = (event: PageTransitionEvent) => {
-      if (event.persisted && window.location.pathname === '/login') replace(true);
+      if (event.persisted && history.location.pathname === '/login') replace(true);
     };
     // React must remove credential and private choice DOM before this event returns to the browser.
     const hide = () => flushSync(leave);
