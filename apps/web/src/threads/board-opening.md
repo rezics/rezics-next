@@ -107,14 +107,16 @@ preview bounds and author-declared spoiler reveal behavior when composing the ad
 
 Decision: Board previews show one admitted opening image and keep spoiler text and that image behind an explicit reveal when the preview contains spoiler marks; native counts lacking either vote operand use chips rather than a derived vote score.
 
-Decision: Community membership advice supplies no Realm visibility, so the membership owner receives `unknown` visibility with the exact join/leave advice; signed-in Board reactions remain unavailable until their owner admits a viewer slot and reconciliation.
+Decision: Community membership advice supplies no Realm visibility, so the membership owner receives `unknown` visibility with the exact join/leave advice; signed-in Board reactions are admitted only for native allowed advice, a current viewer slot, and the reader bound to the current Board page, then settle through the owner's exact target readback.
 
 Authors are scoped to each card's separate thread/opening projections. A disclosed identity elsewhere in the response
 does not fill a withheld projection. Media comes only from the same opening response and the opening post's declared
 media IDs; no presentation or author requests are issued. Explicit pin refresh uses the same generated opening method
 and replaces context, cards, advice, media and authors together. Pin commands, unknown-command retry and invalidating
-revision handling remain in the pin owner. The reaction owner receives the exact native target and sign-in advice;
-`personalReady: false` and `settleWithRead: false` remain the signed-in gate, including successful readable responses.
+revision handling remain in the pin owner. The reaction owner receives the exact native target and sign-in advice.
+Missing reader, page currentness, native permission or a current viewer slot leaves the reaction unavailable. An
+admitted write always settles through the owner's exact current read, which must meet the selected count watermark
+when one was supplied; the owner keeps the original retry operands and discards late reads after source retirement.
 
 A thread return descriptor may retain the disclosed row ID for focus. It carries no title, author or credentials.
 Returning reads the current Board source before focusing that surviving row, or the feed heading if it disappeared.

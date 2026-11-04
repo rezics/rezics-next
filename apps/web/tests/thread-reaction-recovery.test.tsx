@@ -4,6 +4,8 @@ import { act, type ComponentProps } from 'react';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import { changeReactionRequest, readReactionRequest, type ChangeReactionInput } from '../src/threads/reaction-request';
+import { boardOpeningCard } from '../src/threads/board-opening-fixtures';
+import { boardOpeningReaction } from '../src/threads/board-opening';
 import type { SessionEnv } from '../src/session/client';
 
 const { Window } = await import(
@@ -83,6 +85,16 @@ async function settle(call: Call, result: unknown = { ok: true }) {
     else call.resolve(result);
   });
 }
+function boardReaction(isCurrent: () => boolean = () => true) {
+  const card = boardOpeningCard(1);
+  card.actions.react = 'allowed';
+  card.interaction = {
+    ...card.interaction,
+    counts: { state: 'as-of', values: { like: 3 }, source: { epoch: 2, position: '12' } },
+    viewer: { state: 'current', reaction: null },
+  };
+  return boardOpeningReaction(card, true, { key: 'board-visit', reader: 'reader', isCurrent });
+}
 afterEach(async () => {
   if (root) await act(async () => root!.unmount());
   root = undefined;
@@ -96,6 +108,28 @@ afterAll(async () => {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
   }
+});
+
+test('a replaced Board reader discards the late mutation before its current-target readback', async () => {
+  let current = true;
+  await paint(boardReaction(() => current));
+  await click(m.reaction_like());
+  current = false;
+  await settle(writes[0]!);
+  expect(writes[0]!.data).toMatchObject({ target: 'thread', kind: 'like', expectedReader: 'reader' });
+  expect(reads).toHaveLength(0);
+});
+
+test('a failed Board readback retries the exact target and reader without repeating the acknowledged write', async () => {
+  await paint(boardReaction());
+  await click(m.reaction_like());
+  await settle(writes[0]!);
+  expect(reads[0]!.data).toEqual(writes[0]!.data);
+  await settle(reads[0]!, { ok: false, reason: 'unavailable' });
+  await click(m.editorial_retry());
+  expect(writes).toHaveLength(1);
+  expect(reads[1]!.data).toEqual(writes[0]!.data);
+  await settle(reads[1]!, { ok: true, counts: { like: 4 }, value: 'like', reactionsAsOf: { epoch: 2, position: '13' } });
 });
 
 for (const clear of [false, true])
