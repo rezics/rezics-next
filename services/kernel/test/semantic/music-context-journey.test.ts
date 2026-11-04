@@ -154,24 +154,32 @@ test('a reader follows a sourced music event through native review and a bounded
     expect(hidden.status, JSON.stringify(hidden.body)).toBe(200);
     const concealed = await driver.request('anonymous', 'GET', `/v1/subjects/${event.id}`);
     expect(concealed.status).toBe(200);
-    expect(concealed.body.subject.statements['schema:location'] ?? []).toEqual([]);
-    expect(concealed.body.subject.statements['schema:startDate']).toHaveLength(1);
-    expect(concealed.body.subject.statements['wdt:P1303']).toHaveLength(1);
+    const concealedSubject = concealed.body.subject as {
+      statements: Record<string, unknown[]>;
+      type: string;
+      release: string;
+    };
+    expect(concealedSubject.statements['schema:location'] ?? []).toEqual([]);
+    expect(concealedSubject.statements['schema:startDate']).toHaveLength(1);
+    expect(concealedSubject.statements['wdt:P1303']).toHaveLength(1);
 
     const published = await driver.request('steward', 'POST', '/v1/definitions/releases', { release: closedRelease() }, key());
     expect(published.status, JSON.stringify(published.body)).toBe(201);
-    const old = await driver.request('anonymous', 'GET', `/v1/definitions/releases/${published.body.digest}`);
+    const publishedDigest = published.body.digest as string;
+    const old = await driver.request('anonymous', 'GET', `/v1/definitions/releases/${publishedDigest}`);
     expect(old.status).toBe(200);
-    expect(old.body.digest).not.toBe(bundledDigest);
-    expect(old.body.release.types['schema:MusicEvent']).toBeUndefined();
-    expect(old.body.release.types['schema:Book']).toBeDefined();
+    const oldRelease = old.body.release as Release;
+    expect(old.body.digest as string).not.toBe(bundledDigest);
+    expect(oldRelease.types['schema:MusicEvent']).toBeUndefined();
+    expect(oldRelease.types['schema:Book']).toBeDefined();
     const current = await driver.request('anonymous', 'GET', '/v1/definitions/active');
-    expect(current.body.digest).toBe(bundledDigest);
-    expect(releaseDigest(old.body.release as Release)).toBe(published.body.digest);
+    expect(current.body.digest as string).toBe(bundledDigest);
+    expect(releaseDigest(oldRelease)).toBe(publishedDigest);
     const still = await driver.request('anonymous', 'GET', `/v1/subjects/${event.id}`);
     expect(still.status).toBe(200);
-    expect(still.body.subject.type).toBe('schema:MusicEvent');
-    expect(still.body.subject.release).toBe(bundledDigest);
+    const stillSubject = still.body.subject as { type: string; release: string };
+    expect(stillSubject.type).toBe('schema:MusicEvent');
+    expect(stillSubject.release).toBe(bundledDigest);
   } finally {
     await driver.close();
   }
