@@ -2,6 +2,8 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { readSubjectSuggestions, SUGGESTION_LIMIT } from '../search/suggestions';
 import { withVerificationDeadline } from './verification-request-deadline';
@@ -9,7 +11,7 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { requestLanguages } from '../kernel/languages';
 import { readVerificationEligibility, readVerificationTitle } from './verification-core';
-import type { VerificationInput } from './verification-core';
+import type { VerificationInput, VerificationSearchFailure } from './verification-core';
 import { validateVerificationDraft } from './verification-validation';
 
 function uuid(value: unknown): value is string {
@@ -66,6 +68,54 @@ async function viewer() {
   return { request, authorization, accountId };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function safeSearchCode(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value) ? value : undefined;
+}
+
+function verificationSubjectSearchFailure(error: unknown): VerificationSearchFailure {
+  let statusValue: unknown;
+  let problem: Record<string, unknown> | undefined;
+  let retryAfter: string | undefined;
+  if (error instanceof MediaProblem) {
+    statusValue = error.problem.status;
+    problem = error.problem;
+    try {
+      const header = new Headers(error.headers).get('retry-after');
+      if (header !== null && header.length <= 128) retryAfter = header;
+    } catch {
+      // Malformed headers are not part of the private response contract.
+    }
+  } else if (isPlatformClosedError(error)) {
+    statusValue = error.status;
+    if (isRecord(error.problem)) problem = error.problem;
+  }
+  const status =
+    typeof statusValue === 'number' && Number.isInteger(statusValue) && statusValue >= 100 && statusValue <= 599
+      ? statusValue
+      : 0;
+  const code = safeSearchCode(problem?.code);
+  const closed = isPlatformClosedError(error) || isPlatformClosedProblem(status, problem);
+  const kind = closed ? 'closed' : status >= 400 && status < 500 ? 'refused' : 'unavailable';
+  const message =
+    kind === 'closed'
+      ? m.settings_verification_search_closed()
+      : kind === 'refused'
+        ? m.settings_verification_search_refused()
+        : m.settings_verification_search_unavailable();
+  return {
+    kind,
+    status,
+    message,
+    ...(code === undefined ? {} : { code }),
+    ...(typeof problem?.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
+    ...(retryAfter === undefined ? {} : { retryAfter }),
+  };
+}
+
 export const readVerificationState = createServerFn({ method: 'GET' })
   .validator(expectedAccount)
   .handler(async ({ data: expectedAccountId }) => {
@@ -115,10 +165,10 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data: query }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    if (!query.trim()) return [];
-    const { request, authorization } = await viewer();
+    if (!query.trim()) return { ok: true as const, value: [] };
     try {
-      return await withVerificationDeadline(async (signal) => {
+      const { request, authorization } = await viewer();
+      const value = await withVerificationDeadline(async (signal) => {
         const client = kernelClient();
         const result = await readSubjectSuggestions(
           client,
@@ -167,9 +217,9 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
           return [];
         });
       }, request.signal);
-    } catch {
-      // The chooser exposes only its existing failed state and explicit Retry.
-      throw new Error(m.settings_verification_search_failed());
+      return { ok: true as const, value };
+    } catch (error) {
+      return { ok: false as const, failure: verificationSubjectSearchFailure(error) };
     }
   });
 

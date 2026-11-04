@@ -10,7 +10,11 @@ Embedded inventory, detail, action-entry and rename-entry reads use a ten-second
 
 Applicant verification requests use the same ten-second account budget, including headers and bodies, with caller cancellation and explicit recovery only. The private status read carries the native `{ verificationRequest, viewerActions }` envelope; Request and Withdraw follow returned admission plus local CSRF and lifetime, never browser-inferred state. A readable status may admit no command. Unavailable or malformed advice is never no request and never unlocks Request. Review and command readback never await optional subject titles: a separate cancellable title read enhances the existing generic label and cannot empty an admitted request. Subject suggestions require a fresh caller-bound eligibility release; unavailable reads remain retryable failures, never empty or definitive ineligibility. Withdrawal confirmation binds the current request identity, state and advice; a newer request or pending-to-approving transition needs a fresh decision. Uncertain commands retain their exact original input and key, and cancellation grants no replay or completion authority. Reviewer transport remains separate.
 
+Subject lookup carries a private success/failure envelope with a safe localized message and supported native status details. A valid native Retry-After becomes a response-time deadline: edits retain only the current term, and retry remains deliberate after expiry. Refusal, closed service and unavailable reads stay visible failures; only a successful eligible suggestion can be selected.
+
 **Decision:** Private verification status uses owner verification authority for request and withdraw advice; a missing authority handle returns the latest request with empty viewerActions and never treats that read as no request.
+
+**Decision:** Subject search maps native 403 `platform_closed` to closed, other native 4xx responses to refused, and malformed, deadline, transport or server failures to unavailable; valid Retry-After gates only a deliberate retry.
 
 ## Profile avatar
 
