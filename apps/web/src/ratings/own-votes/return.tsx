@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useRouter } from '@tanstack/react-router';
+import { useRouter, useRouterState } from '@tanstack/react-router';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { OwnVotesRead } from './actions';
 import { indexOwnVotes, votePairKey, type VotePair } from './inventory';
@@ -172,10 +172,13 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
 }
 
 export function useOwnVotesReturnReceipt(historyKey: string, cursor: string | null, locale: string) {
+  const pathname = useRouterState({ select: (routerState) => routerState.location.pathname });
   const state = useContext(OwnVotesReturnContext);
   const receipt = state.receipt;
+  const onRatings = routePath(pathname) === '/library/ratings';
   const valid =
     !!receipt &&
+    onRatings &&
     receipt.phase !== 'bfcache-away' &&
     receipt.historyKey === historyKey &&
     receipt.owner.cursor === cursor &&
@@ -183,9 +186,9 @@ export function useOwnVotesReturnReceipt(historyKey: string, cursor: string | nu
     receipt.owner.source.length > 0 &&
     receipt.owner.eligible();
   useEffect(() => {
-    if (receipt && !valid) state.clear(receipt.id);
-  }, [receipt, valid, state]);
-  return valid ? receipt : null;
+    if (receipt && onRatings && receipt.phase !== 'bfcache-away' && !valid) state.clear(receipt.id);
+  }, [receipt, valid, onRatings, state]);
+  return onRatings && valid ? receipt : null;
 }
 
 export function useOwnVotesReturn({
