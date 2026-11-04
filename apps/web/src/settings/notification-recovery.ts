@@ -11,19 +11,25 @@ import { optionalNotifications, preferencePageAllows } from './preferences';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 
 type Snapshot = { notifications: NotificationPreferences; version: number; page: PreferencePage };
-type Attempt = { input: NotificationChange; draft: NotificationPreferences };
+type Attempt = Readonly<{ input: NotificationChange; draft: Readonly<NotificationPreferences> }>;
+type ReadOrigin = 'refresh' | 'review' | 'replay' | 'reacquire';
 export type NotificationEditorState = {
   known: Snapshot;
+  /** Advice is usable only while it belongs to a confirmed current read or same-envelope write result. */
+  currentAdvice: PreferencePage | null;
   draft: NotificationPreferences;
   pending: Attempt | null;
   /** Only deliberate choices belong to a recovery write; null retains Restore defaults. */
   intent: NotificationPatch | undefined;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'review' | 'reloading' | 'failed';
   /** A current read can fail independently of an earlier write or a retained review draft. */
-  readOrigin: 'refresh' | 'review' | 'replay' | null;
-  reason?: string | undefined;
-  failure?: NativePreferenceFailure | undefined;
-  retryAt: number;
+  readOrigin: ReadOrigin | null;
+  readReason?: string | undefined;
+  readFailure?: NativePreferenceFailure | undefined;
+  readRetryAt: number;
+  commandReason?: string | undefined;
+  commandFailure?: NativePreferenceFailure | undefined;
+  commandRetryAt: number;
 };
 export type NotificationEditorIO = {
   save: (input: NotificationChange) => Promise<NotificationWriteResult>;
@@ -54,6 +60,23 @@ export function admittedNotificationPatch(
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
+export function notificationOriginalAllowed(
+  input: Pick<NotificationChange, 'notifications'> | null,
+  page: PreferencePage | null,
+): boolean {
+  if (!input || !page) return false;
+  const patch = input.notifications;
+  if (patch === null) return preferencePageAllows(page, 'reset');
+  if (!preferencePageAllows(page, 'edit')) return false;
+  const admitted = admittedNotificationPatch(patch, page);
+  return (
+    admitted !== undefined &&
+    admitted !== null &&
+    Object.keys(admitted).length === Object.keys(patch).length &&
+    Object.entries(admitted).every(([kind, enabled]) => patch[kind] === enabled)
+  );
+}
+
 function snapshotFrom(page: PreferencePage): Snapshot {
   return { notifications: optionalNotifications(page), version: page.version, page };
 }
@@ -71,9 +94,27 @@ export class NotificationEditor {
   private versionFloor = 0;
   private disposed = false;
   dispose = () => {
+    if (this.disposed) return;
     this.disposed = true;
+    this.state = {
+      known: { notifications: {}, version: 0, page: { version: 0, kinds: [], actions: [] } },
+      currentAdvice: null,
+      draft: {},
+      pending: null,
+      intent: undefined,
+      phase: 'failed',
+      readOrigin: null,
+      readRetryAt: 0,
+      commandRetryAt: 0,
+    };
+    this.listeners.clear();
   };
-  private live = () => !this.disposed && this.isCurrent();
+  private live = () => {
+    if (this.disposed) return false;
+    if (this.isCurrent()) return true;
+    this.dispose();
+    return false;
+  };
   constructor(
     initial: PreferencePage,
     private io: NotificationEditorIO,
@@ -85,12 +126,14 @@ export class NotificationEditor {
     const known = snapshotFrom(initial);
     this.state = {
       known,
+      currentAdvice: initialFailed ? null : initial,
       draft: { ...known.notifications },
       pending: null,
       intent: undefined,
       phase: initialFailed ? 'failed' : 'idle',
       readOrigin: null,
-      retryAt: 0,
+      readRetryAt: 0,
+      commandRetryAt: 0,
     };
   }
   snapshot = () => this.state;
@@ -102,23 +145,21 @@ export class NotificationEditor {
   };
   private update(patch: Partial<NotificationEditorState>) {
     if (!this.live()) return;
-    this.state = {
-      ...this.state,
-      ...patch,
-      // Observe delay-seconds once, without restarting or discarding the wait on local draft actions.
-      ...(patch.failure ? { retryAt: preferenceRetryDeadline(patch.failure.retryAfter) } : {}),
-    };
+    this.state = { ...this.state, ...patch };
     this.listeners.forEach((listener) => listener());
   }
-  private waiting() {
-    return Date.now() < this.state.retryAt;
+  private waitingForCommand() {
+    return Date.now() < this.state.commandRetryAt;
+  }
+  private waitingForRead() {
+    return Date.now() < this.state.readRetryAt;
   }
   private minimumVersion(version = 0) {
     this.versionFloor = Math.max(this.versionFloor, version, this.sharedVersion(), this.state.known.version);
     return this.versionFloor;
   }
   private confirm(known: Snapshot) {
-    this.update({ known });
+    this.update({ known, currentAdvice: known.page });
     if (this.live()) this.io.confirmed?.(known.version);
   }
   private adoptPage(page: PreferencePage, preserveDraft: boolean, phase: NotificationEditorState['phase']) {
@@ -135,27 +176,54 @@ export class NotificationEditor {
     const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
     this.confirm(known);
     this.update({
+      currentAdvice: page,
       pending: null,
       draft,
       intent,
       phase: edited ? 'review' : phase === 'conflict' ? 'idle' : phase,
-      reason: undefined,
-      failure: undefined,
+      readReason: undefined,
+      readFailure: undefined,
+      readRetryAt: 0,
+      commandReason: undefined,
+      commandFailure: undefined,
+      commandRetryAt: 0,
       readOrigin: null,
+    });
+  }
+  private reviewPending(page: PreferencePage) {
+    const known = snapshotFrom(page);
+    const draft = Object.fromEntries(
+      Object.entries(known.notifications).map(([kind, enabled]) => [
+        kind,
+        kind in this.state.draft ? this.state.draft[kind]! : enabled,
+      ]),
+    );
+    const intent = admittedNotificationPatch(this.state.intent, page);
+    this.confirm(known);
+    this.update({
+      currentAdvice: page,
+      draft,
+      intent,
+      phase: 'review',
+      readOrigin: null,
+      readReason: undefined,
+      readFailure: undefined,
+      readRetryAt: 0,
     });
   }
   async edit(kind: string, enabled: boolean, version: number) {
     if (!this.live() || !this.canWrite()) return;
-    if (!preferencePageAllows(this.state.known.page, 'edit') || !admittedOptionalKind(this.state.known.page, kind))
-      return;
+    const page = this.state.currentAdvice ?? this.state.known.page;
+    if (!admittedOptionalKind(page, kind)) return;
     if (!(kind in this.state.draft)) return;
     if (this.state.intent === undefined && this.state.draft[kind] === enabled) return;
     this.minimumVersion(version);
     const local =
       this.state.pending ||
+      !this.state.currentAdvice ||
       ['conflict', 'review', 'reloading'].includes(this.state.phase) ||
       (this.state.readOrigin !== null && this.state.phase === 'failed');
-    if (!local && this.waiting()) return;
+    if (!local && (!preferencePageAllows(page, 'edit') || this.waitingForCommand())) return;
     this.update({
       draft: { ...this.state.draft, [kind]: enabled },
       intent: { ...this.state.intent, [kind]: enabled },
@@ -167,7 +235,8 @@ export class NotificationEditor {
   }
   async restore(version: number) {
     if (!this.live() || !this.canWrite()) return;
-    if (!preferencePageAllows(this.state.known.page, 'reset')) return;
+    const page = this.state.currentAdvice;
+    if (!page || !preferencePageAllows(page, 'reset')) return;
     this.minimumVersion(version);
     if (
       this.state.pending ||
@@ -176,14 +245,15 @@ export class NotificationEditor {
       (this.state.readOrigin !== null && this.state.phase === 'failed')
     )
       return;
-    if (this.waiting()) return;
+    if (this.waitingForCommand()) return;
     this.update({ intent: null });
     await this.start(null, version);
   }
   async submit(version: number) {
     if (!this.live() || !this.canWrite()) return;
     this.minimumVersion(version);
-    if (this.state.pending || this.state.phase !== 'review') return;
+    if (this.state.pending || this.state.phase !== 'review' || this.waitingForCommand() || !this.state.currentAdvice)
+      return;
     if (this.state.intent === undefined) {
       this.useCurrent();
       return;
@@ -192,40 +262,65 @@ export class NotificationEditor {
   }
   private async start(notifications: NotificationPatch, version: number) {
     if (!this.live() || !this.canWrite()) return;
-    if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
+    if (this.waitingForCommand() || this.state.pending || this.state.phase === 'reloading') return;
+    const page = this.state.currentAdvice;
+    if (!page) return;
     // Reading's version is a floor for a new read, never a baseline for these retained values.
     if (this.minimumVersion(version) > this.state.known.version) {
-      this.update({ phase: 'conflict', readOrigin: null, reason: undefined, failure: undefined });
+      this.update({
+        phase: 'conflict',
+        readOrigin: null,
+        readReason: undefined,
+        readFailure: undefined,
+        commandReason: undefined,
+        commandFailure: undefined,
+      });
       return;
     }
-    const admitted = admittedNotificationPatch(notifications, this.state.known.page);
+    const admitted = admittedNotificationPatch(notifications, page);
     if (admitted === undefined) return;
-    if (!preferencePageAllows(this.state.known.page, admitted === null ? 'reset' : 'edit')) return;
+    if (!preferencePageAllows(page, admitted === null ? 'reset' : 'edit')) return;
     const input = Object.freeze({
       expectedVersion: this.state.known.version,
       notifications: admitted === null ? null : Object.freeze({ ...admitted }),
       idempotencyKey: crypto.randomUUID(),
     });
-    this.update({ pending: { input, draft: { ...this.state.draft } }, phase: 'saving', failure: undefined });
+    this.update({
+      pending: Object.freeze({ input, draft: Object.freeze({ ...this.state.draft }) }),
+      phase: 'saving',
+      commandReason: undefined,
+      commandFailure: undefined,
+    });
     await this.send(false);
   }
   async retry() {
     if (!this.live() || !this.canWrite()) return;
-    if (this.waiting() || !this.state.pending || this.state.phase === 'saving' || this.state.phase === 'reloading')
-      return;
+    const page = this.state.currentAdvice;
+    if (
+      this.waitingForCommand() ||
+      !this.state.pending ||
+      (this.state.phase !== 'uncertain' && this.state.phase !== 'review') ||
+      !page ||
+      !notificationOriginalAllowed(this.state.pending.input, page)
+    ) return;
     await this.send(true);
   }
   private async send(recovering: boolean) {
     if (!this.live() || !this.canWrite()) return;
     const attempt = this.state.pending;
     if (!attempt) return;
-    this.update({ phase: 'saving', readOrigin: null, reason: undefined, failure: undefined });
+    this.update({
+      phase: 'saving',
+      readOrigin: null,
+      commandReason: undefined,
+      commandFailure: undefined,
+    });
     let result: NotificationWriteResult;
     try {
       result = await this.io.save(attempt.input);
       if (!this.live() || !this.canWrite()) return;
     } catch {
-      this.update({ phase: 'uncertain', reason: 'unavailable' });
+      this.update({ phase: 'uncertain', commandReason: 'unavailable', commandFailure: undefined });
       return;
     }
     if (!result.ok) {
@@ -233,18 +328,24 @@ export class NotificationEditor {
         this.adoptPage(result.page, true, 'conflict');
         return;
       }
+      const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed' || result.reason === 'conflict';
+      const command = {
+        commandReason: result.reason,
+        commandFailure: result.failure,
+        commandRetryAt: preferenceRetryDeadline(result.failure?.retryAfter),
+        ...(retireAdvice ? { currentAdvice: null } : {}),
+      };
       if (
         result.reason === 'unavailable' ||
         result.reason === 'preparing' ||
         (recovering && result.reason !== 'conflict')
       ) {
-        this.update({ phase: 'uncertain', reason: result.reason, failure: result.failure });
+        this.update({ ...command, phase: 'uncertain' });
       } else {
         this.update({
+          ...command,
           pending: null,
           phase: result.reason === 'conflict' ? 'conflict' : 'failed',
-          reason: result.reason,
-          failure: result.failure,
         });
       }
       return;
@@ -253,7 +354,7 @@ export class NotificationEditor {
       !Number.isSafeInteger(result.version) ||
       result.version < Math.max(attempt.input.expectedVersion, this.state.known.version)
     ) {
-      this.update({ phase: 'uncertain', reason: 'unavailable' });
+      this.update({ phase: 'uncertain', commandReason: 'unavailable', commandFailure: undefined });
       return;
     }
     const receipt = snapshotFrom(result.page);
@@ -273,6 +374,13 @@ export class NotificationEditor {
         draft,
         intent: stale || edited ? admittedNotificationPatch(this.state.intent, receipt.page) : undefined,
         phase: stale ? 'conflict' : edited ? 'review' : 'saved',
+        readOrigin: null,
+        readReason: undefined,
+        readFailure: undefined,
+        readRetryAt: 0,
+        commandReason: undefined,
+        commandFailure: undefined,
+        commandRetryAt: 0,
       });
       return;
     }
@@ -281,14 +389,17 @@ export class NotificationEditor {
     const current = await this.readCurrent();
     if (!this.live()) return;
     if (!current || current.version < this.minimumVersion()) {
-      this.update({ phase: 'uncertain', ...(!current ? {} : { reason: 'unavailable', failure: undefined }) });
+      this.update({
+        phase: 'uncertain',
+        ...(!current ? {} : { currentAdvice: null, readReason: 'unavailable', readFailure: undefined }),
+      });
       return;
     }
     if (
       current.version < receipt.version ||
       (current.version === receipt.version && !sameNotifications(current.notifications, receipt.notifications))
     ) {
-      this.update({ phase: 'uncertain', reason: 'unavailable' });
+      this.update({ phase: 'uncertain', currentAdvice: null, readReason: 'unavailable', readFailure: undefined });
       return;
     }
     const edited = !sameNotifications(this.state.draft, attempt.draft);
@@ -298,6 +409,7 @@ export class NotificationEditor {
   }
   private async readCurrent(): Promise<Snapshot | null> {
     if (!this.live()) return null;
+    this.update({ currentAdvice: null, readReason: undefined, readFailure: undefined });
     try {
       const page = await this.io.read();
       if (!this.live()) return null;
@@ -310,7 +422,7 @@ export class NotificationEditor {
         page.preferences.version < this.minimumVersion()
       ) {
         this.update({
-          reason: !page.signedIn
+          readReason: !page.signedIn
             ? 'forbidden'
             : 'failure' in page && page.failure.code === 'platform_closed'
               ? 'closed'
@@ -319,20 +431,25 @@ export class NotificationEditor {
                 : 'state' in page && page.state === 'closed'
                   ? 'closed'
                   : 'unavailable',
-          failure: page.signedIn && 'failure' in page ? page.failure : undefined,
+          readFailure: page.signedIn && 'failure' in page ? page.failure : undefined,
+          readRetryAt: preferenceRetryDeadline(
+            page.signedIn && 'failure' in page ? page.failure.retryAfter : undefined,
+          ),
         });
         return null;
       }
       return snapshotFrom(page.page);
     } catch {
-      this.update({ reason: 'unavailable', failure: undefined });
+      this.update({ readReason: 'unavailable', readFailure: undefined, readRetryAt: 0 });
       return null;
     }
   }
   async reload() {
     if (!this.live()) return;
-    if (this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
+    if (this.waitingForRead() || this.state.phase === 'saving' || this.state.phase === 'reloading') return;
+    const pending = this.state.pending;
     const preserve =
+      pending !== null ||
       this.state.intent !== undefined ||
       !sameNotifications(this.state.draft, this.state.known.notifications) ||
       this.state.phase === 'conflict' ||
@@ -341,31 +458,40 @@ export class NotificationEditor {
     const draftAtRead = this.state.draft;
     this.update({
       phase: 'reloading',
-      readOrigin: preserve ? 'review' : 'refresh',
-      reason: undefined,
-      failure: undefined,
+      readOrigin: pending ? 'reacquire' : preserve ? 'review' : 'refresh',
+      readReason: undefined,
+      readFailure: undefined,
     });
     const current = await this.readCurrent();
     if (!this.live()) return;
     if (!current || current.version < this.minimumVersion()) {
-      this.update({ phase: 'failed', ...(!current ? {} : { reason: 'unavailable', failure: undefined }) });
+      this.update({
+        phase: pending ? 'uncertain' : 'failed',
+        ...(!current ? {} : { currentAdvice: null, readReason: 'unavailable', readFailure: undefined }),
+      });
+      return;
+    }
+    if (pending) {
+      this.reviewPending(current.page);
       return;
     }
     this.adoptPage(current.page, preserve || this.state.draft !== draftAtRead, 'idle');
   }
   useCurrent() {
     if (!this.live()) return;
-    if (this.state.pending || this.state.readOrigin !== null) return;
+    if (this.state.pending || this.state.readOrigin !== null || !this.state.currentAdvice) return;
     if (this.minimumVersion() > this.state.known.version) {
-      this.update({ phase: 'conflict', reason: undefined, failure: undefined });
+      this.update({ phase: 'conflict', readReason: undefined, readFailure: undefined });
       return;
     }
     this.update({
       draft: { ...this.state.known.notifications },
       intent: undefined,
       phase: 'idle',
-      reason: undefined,
-      failure: undefined,
+      readReason: undefined,
+      readFailure: undefined,
+      commandReason: undefined,
+      commandFailure: undefined,
     });
   }
 }

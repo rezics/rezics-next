@@ -9,6 +9,7 @@ import { WatchNotificationGuide } from './watch-notification-guide';
 import { readSettingsPage, saveNotifications } from './actions';
 import {
   NotificationEditor,
+  notificationOriginalAllowed,
   notificationsNeedNavigationDecision,
   type NotificationEditorIO,
 } from './notification-recovery';
@@ -77,7 +78,9 @@ export function NotificationsCard({
     () => isCurrent() && notificationsNeedNavigationDecision(editor.snapshot()),
     editor,
   );
-  const waiting = usePreferenceRetry(state.failure, state.retryAt);
+  const commandWaiting = usePreferenceRetry(state.commandFailure, state.commandRetryAt);
+  const readWaiting = usePreferenceRetry(state.readFailure, state.readRetryAt);
+  const waiting = commandWaiting || readWaiting;
   useLayoutEffect(() => {
     // A reader may have changed the native checkbox while the bundle was loading.
     // Capture those choices before replacing it with the controlled shared switch.
@@ -92,16 +95,20 @@ export function NotificationsCard({
   const readFailed = state.readOrigin !== null && (state.phase === 'failed' || state.phase === 'uncertain');
   const needsReload = !readFailed && (state.phase === 'conflict' || state.phase === 'failed');
   const localEdit = !!state.pending || readFailed || ['conflict', 'review', 'reloading'].includes(state.phase);
-  const canEdit = preferencePageAllows(state.known.page, 'edit');
-  const rowDisabled = disabled || (waiting && !localEdit) || !canEdit;
+  const canEdit = state.currentAdvice ? preferencePageAllows(state.currentAdvice, 'edit') : false;
+  const canDraft = localEdit && preferencePageAllows(state.known.page, 'edit');
+  const canRetryOriginal = notificationOriginalAllowed(state.pending?.input ?? null, state.currentAdvice);
+  const rowDisabled = disabled || (commandWaiting && !localEdit) || (!canEdit && !canDraft);
   const restoreDisabled =
-    waiting ||
+    commandWaiting ||
     disabled ||
     !!state.pending ||
     state.phase === 'conflict' ||
     readFailed ||
-    !preferencePageAllows(state.known.page, 'reset');
-  const compulsory = state.known.page.kinds.filter((entry) => !entry.optional);
+    !state.currentAdvice ||
+    !preferencePageAllows(state.currentAdvice, 'reset');
+  const catalogue = state.currentAdvice ?? state.known.page;
+  const compulsory = catalogue.kinds.filter((entry) => !entry.optional);
   const waitDescription = waiting ? `${ids}-retry-wait` : undefined;
 
   return (
@@ -111,7 +118,9 @@ export function NotificationsCard({
           <h2 id="settings-notifications-heading">{m.settings_notifications_heading()}</h2>
         </CardTitle>
         <CardDescription>{m.settings_notifications_text()}</CardDescription>
-        {!canEdit ? <CardDescription>{m.settings_notifications_read_only()}</CardDescription> : null}
+        {state.currentAdvice && !canEdit ? (
+          <CardDescription>{m.settings_notifications_read_only()}</CardDescription>
+        ) : null}
         <CardDescription>
           {localEdit || state.intent !== undefined
             ? m.settings_notifications_draft_help()
@@ -127,7 +136,7 @@ export function NotificationsCard({
                 const id = `${ids}-${encodeURIComponent(kind)}`;
                 const formId = `${id}-form`;
                 const name = notificationName(kind);
-                const policy = state.known.page.kinds.find((entry) => entry.kind === kind);
+                const policy = catalogue.kinds.find((entry) => entry.kind === kind);
                 return (
                   <form
                     key={kind}
@@ -255,93 +264,24 @@ export function NotificationsCard({
           {readFailed ? (
             <Alert
               variant="destructive"
-              data-response-status={state.failure?.status ?? ''}
-              data-response-code={state.failure?.code ?? ''}
-              data-retry-after={state.failure?.retryAfter}
+              data-response-status={state.readFailure?.status ?? ''}
+              data-response-code={state.readFailure?.code ?? ''}
+              data-retry-after={state.readFailure?.retryAfter}
             >
               <AlertTitle>{m.settings_notifications_read_failed()}</AlertTitle>
               <AlertDescription className="space-y-3">
                 <p>
-                  {state.reason === 'closed'
+                  {state.readReason === 'closed'
                     ? m.settings_notifications_read_closed()
-                    : state.reason === 'forbidden'
+                    : state.readReason === 'forbidden'
                       ? m.settings_notifications_read_denied()
                       : m.settings_notifications_read_unavailable()}
                 </p>
-                {!state.pending ? (
-                  <Button
-                    className={preferenceActionClassName}
-                    type="button"
-                    variant="outline"
-                    disabled={waiting || busy || !hydrated}
-                    aria-describedby={waitDescription}
-                    onClick={() => void editor.reload()}
-                  >
-                    {m.settings_reload()}
-                  </Button>
-                ) : null}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {uncertain ? (
-            <Alert
-              data-response-status={state.failure?.status ?? ''}
-              data-response-code={state.failure?.code ?? ''}
-              data-retry-after={state.failure?.retryAfter}
-            >
-              <AlertTitle>{m.settings_notifications_uncertain_title()}</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>{m.settings_notifications_uncertain_text()}</p>
-                {!readFailed && state.reason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
-                {!readFailed && state.reason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
-                {!readFailed && state.reason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
                 <Button
                   className={preferenceActionClassName}
                   type="button"
                   variant="outline"
-                  disabled={waiting || disabled}
-                  aria-describedby={waitDescription}
-                  onClick={() => void editor.retry()}
-                >
-                  {m.settings_notifications_retry_original()}
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : needsReload ? (
-            <Alert
-              variant={state.phase === 'failed' ? 'destructive' : 'default'}
-              data-response-status={state.failure?.status ?? ''}
-              data-response-code={state.failure?.code ?? ''}
-              data-retry-after={state.failure?.retryAfter}
-            >
-              <AlertTitle>
-                {state.phase === 'conflict'
-                  ? m.settings_conflict_title()
-                  : state.failure?.code === 'platform_closed'
-                    ? m.settings_closed_title()
-                    : state.reason === 'preparing'
-                      ? m.settings_preparing_title()
-                      : state.reason === 'unavailable'
-                        ? m.settings_unavailable_title()
-                        : m.settings_failed_title()}
-              </AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>
-                  {state.phase === 'conflict'
-                    ? m.settings_conflict_text()
-                    : state.failure?.code === 'platform_closed'
-                      ? m.settings_closed_text()
-                      : state.reason === 'preparing'
-                        ? m.settings_preparing_text()
-                        : state.reason === 'unavailable'
-                          ? m.settings_unavailable_text()
-                          : m.settings_failed_text()}
-                </p>
-                <Button
-                  className={preferenceActionClassName}
-                  type="button"
-                  variant="outline"
-                  disabled={waiting || busy}
+                  disabled={readWaiting || busy || !hydrated}
                   aria-describedby={waitDescription}
                   onClick={() => void editor.reload()}
                 >
@@ -350,7 +290,137 @@ export function NotificationsCard({
               </AlertDescription>
             </Alert>
           ) : null}
-          {state.phase === 'review' ? (
+          {uncertain ? (
+            <Alert
+              data-response-status={state.commandFailure?.status ?? ''}
+              data-response-code={state.commandFailure?.code ?? ''}
+              data-retry-after={state.commandFailure?.retryAfter}
+            >
+              <AlertTitle>{m.settings_notifications_uncertain_title()}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>{m.settings_notifications_uncertain_text()}</p>
+                {!readFailed && state.commandReason === 'closed' ? <p>{m.settings_closed_text()}</p> : null}
+                {!readFailed && state.commandReason === 'preparing' ? <p>{m.settings_preparing_text()}</p> : null}
+                {!readFailed && state.commandReason === 'unavailable' ? <p>{m.settings_unavailable_text()}</p> : null}
+                <Button
+                  className={preferenceActionClassName}
+                  type="button"
+                  variant="outline"
+                  disabled={commandWaiting || disabled || !canRetryOriginal}
+                  aria-describedby={waitDescription}
+                  onClick={() => void editor.retry()}
+                >
+                  {m.settings_notifications_retry_original()}
+                </Button>
+                {!readFailed && !state.currentAdvice ? (
+                  <Button
+                    className={preferenceActionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={readWaiting || busy || !hydrated}
+                    aria-describedby={waitDescription}
+                    onClick={() => void editor.reload()}
+                  >
+                    {m.settings_reload()}
+                  </Button>
+                ) : null}
+              </AlertDescription>
+            </Alert>
+          ) : needsReload ? (
+            <Alert
+              variant={state.phase === 'failed' ? 'destructive' : 'default'}
+              data-response-status={state.commandFailure?.status ?? ''}
+              data-response-code={state.commandFailure?.code ?? ''}
+              data-retry-after={state.commandFailure?.retryAfter}
+            >
+              <AlertTitle>
+                {state.phase === 'conflict'
+                  ? m.settings_conflict_title()
+                  : state.commandFailure?.code === 'platform_closed'
+                    ? m.settings_closed_title()
+                    : state.commandReason === 'preparing'
+                      ? m.settings_preparing_title()
+                      : state.commandReason === 'unavailable'
+                        ? m.settings_unavailable_title()
+                        : m.settings_failed_title()}
+              </AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>
+                  {state.phase === 'conflict'
+                    ? m.settings_conflict_text()
+                    : state.commandFailure?.code === 'platform_closed'
+                      ? m.settings_closed_text()
+                      : state.commandReason === 'preparing'
+                        ? m.settings_preparing_text()
+                        : state.commandReason === 'unavailable'
+                          ? m.settings_unavailable_text()
+                          : m.settings_failed_text()}
+                </p>
+                <Button
+                  className={preferenceActionClassName}
+                  type="button"
+                  variant="outline"
+                  disabled={readWaiting || busy || !hydrated}
+                  aria-describedby={waitDescription}
+                  onClick={() => void editor.reload()}
+                >
+                  {m.settings_reload()}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {state.phase === 'review' && state.pending ? (
+            <Alert data-response-status={state.commandFailure?.status ?? ''}>
+              <AlertTitle>{m.settings_notifications_review_title()}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>{m.settings_notifications_review_text()}</p>
+                <ul className="space-y-1">
+                  {Object.entries(state.known.notifications).map(([kind, enabled]) => (
+                    <li key={kind}>
+                      {notificationName(kind)}:{' '}
+                      {enabled ? m.settings_notifications_on() : m.settings_notifications_off()}
+                    </li>
+                  ))}
+                </ul>
+                <p>{m.settings_notifications_uncertain_text()}</p>
+                <ul aria-label={m.settings_notifications_retry_original()} className="space-y-1">
+                  {state.pending.input.notifications === null ? (
+                    <li>{m.settings_notifications_restore()}</li>
+                  ) : (
+                    Object.entries(state.pending.input.notifications).map(([kind, enabled]) => (
+                      <li key={kind}>
+                        {notificationName(kind)}:{' '}
+                        {enabled ? m.settings_notifications_on() : m.settings_notifications_off()}
+                      </li>
+                    ))
+                  )}
+                </ul>
+                <div className="flex min-w-0 flex-wrap gap-2">
+                  <Button
+                    className={preferenceActionClassName}
+                    type="button"
+                    disabled={commandWaiting || disabled || !canRetryOriginal}
+                    aria-describedby={waitDescription}
+                    onClick={() => void editor.retry()}
+                  >
+                    {m.settings_notifications_retry_original()}
+                  </Button>
+                  {!canRetryOriginal ? (
+                    <Button
+                      className={preferenceActionClassName}
+                      type="button"
+                      variant="outline"
+                      disabled={readWaiting || disabled || !hydrated}
+                      aria-describedby={waitDescription}
+                      onClick={() => void editor.reload()}
+                    >
+                      {m.settings_reload()}
+                    </Button>
+                  ) : null}
+                </div>
+              </AlertDescription>
+            </Alert>
+          ) : state.phase === 'review' ? (
             <Alert>
               <AlertTitle>{m.settings_notifications_review_title()}</AlertTitle>
               <AlertDescription className="space-y-3">
@@ -367,20 +437,20 @@ export function NotificationsCard({
                   <Button
                     className={preferenceActionClassName}
                     type="button"
-                    disabled={waiting || disabled}
+                    disabled={commandWaiting || disabled}
                     aria-describedby={waitDescription}
                     onClick={() => void editor.submit(version)}
                   >
                     {state.intent === null ? m.settings_notifications_restore() : m.settings_notifications_save_draft()}
                   </Button>
-                  <Button
+                  {!state.pending ? <Button
                     className={preferenceActionClassName}
                     type="button"
                     variant="outline"
                     onClick={() => editor.useCurrent()}
                   >
                     {m.settings_notifications_use_current()}
-                  </Button>
+                  </Button> : null}
                 </div>
               </AlertDescription>
             </Alert>
@@ -390,7 +460,7 @@ export function NotificationsCard({
               className={preferenceActionClassName}
               type="button"
               variant="ghost"
-              disabled={waiting || !hydrated || busy}
+              disabled={readWaiting || !hydrated || busy}
               aria-describedby={waitDescription}
               onClick={() => void editor.reload()}
             >

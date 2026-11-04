@@ -7,8 +7,11 @@ import {
   changeNotifications,
   loadSettingsPage,
   optionalNotifications,
+  type NotificationChange,
   type NotificationPreferences,
   type PreferencePage,
+  type NotificationWriteResult,
+  type SettingsPage,
 } from '../src/settings/preferences';
 import { NotificationEditor } from '../src/settings/notification-recovery';
 
@@ -264,8 +267,8 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
         phase: 'failed',
         pending: null,
         draft: { ...optional, reply: false },
-        retryAt: now + 30_000,
-        failure: { status: 422, code: 'invalid_request', retryAfter, requestId: 'native-refusal' },
+        commandRetryAt: now + 30_000,
+        commandFailure: { status: 422, code: 'invalid_request', retryAfter, requestId: 'native-refusal' },
       });
       await editor.edit('mention', false, 7);
       await editor.restore(7);
@@ -307,12 +310,17 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     let step = 0;
     const transport = harness(() => {
       step++;
-      if (step === 1 || step === 3)
+      if (step === 1)
         return Response.json(
           { code: 'dependency_unavailable', retryable: true, request_id: `native-${step}` },
-          { status: 503, headers: { 'retry-after': step === 1 ? '30' : '20' } },
+          { status: 503, headers: { 'retry-after': '30' } },
         );
       if (step === 2 || step === 4) return Response.json(receipt);
+      if (step === 3)
+        return Response.json(
+          { code: 'platform_closed', retryable: false, request_id: `native-${step}` },
+          { status: 403, headers: { 'retry-after': '20' } },
+        );
       const version = step === 5 ? 9 : 10;
       const notifications =
         step === 5
@@ -332,10 +340,9 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     await editor.edit('mention', false, 7);
     await editor.restore(7);
     await editor.submit(7);
-    await editor.reload();
     await editor.retry();
     expect(transport.calls).toHaveLength(1);
-    expect(editor.snapshot().retryAt).toBe(now + 20_000);
+    expect(editor.snapshot().commandRetryAt).toBe(now + 20_000);
     expect(editor.snapshot().pending).toBe(pending);
     now += 20_000;
     expect(transport.calls).toHaveLength(1);
@@ -345,8 +352,12 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       phase: 'uncertain',
       known: { notifications: optional, version: 7 },
       draft: { ...optional, reply: false, mention: false },
-      failure: { status: 503, retryAfter: '20', requestId: 'native-3' },
+      readReason: 'closed',
+      readFailure: { status: 403, code: 'platform_closed', retryAfter: '20', requestId: 'native-3' },
     });
+    expect(editor.snapshot().currentAdvice).toBeNull();
+    expect(editor.snapshot().readRetryAt).toBe(now + 20_000);
+    expect(editor.snapshot().commandRetryAt).toBe(Date.parse('2026-10-31T00:00:00Z') + 30_000);
     expect(editor.snapshot().pending).toBe(pending);
     expect(confirmed).toEqual([]);
     await editor.edit('thread_watch', false, 7);
@@ -356,32 +367,46 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     await editor.reload();
     expect(transport.calls).toHaveLength(3);
     now += 20_000;
+    await editor.reload();
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      known: { version: 8 },
+      pending,
+    });
     await editor.retry();
     expect(editor.snapshot()).toMatchObject({
       phase: 'review',
       pending: null,
-      known: { notifications: optional, version: 9 },
+      known: { notifications: optional, version: 10 },
       draft: { ...optional, reply: false, mention: false },
     });
-    for (const index of [1, 3]) {
+    for (const index of [1, 4]) {
       expect(transport.calls[index]!.headers.get('idempotency-key')).toBe(
         transport.calls[0]!.headers.get('idempotency-key'),
       );
       expect(await transport.calls[index]!.clone().text()).toBe(await transport.calls[0]!.clone().text());
     }
     await editor.edit('thread_watch', false, 9);
-    expect(transport.calls).toHaveLength(5);
+    expect(transport.calls).toHaveLength(6);
     await editor.submit(9);
-    expect(await transport.calls[5]!.json()).toEqual({
-      expectedVersion: 9,
+    expect(await transport.calls[6]!.json()).toEqual({
+      expectedVersion: 10,
       notifications: { reply: false, mention: false, thread_watch: false },
     });
-    expect(transport.calls[5]!.headers.get('idempotency-key')).not.toBe(
+    expect(transport.calls[6]!.headers.get('idempotency-key')).not.toBe(
       transport.calls[0]!.headers.get('idempotency-key'),
     );
-    expect(transport.calls.map((call) => call.method)).toEqual(['PATCH', 'PATCH', 'GET', 'PATCH', 'GET', 'PATCH']);
-    expect(transport.sessionReads()).toBe(6);
-    expect(confirmed).toEqual([9, 10]);
+    expect(transport.calls.map((call) => call.method)).toEqual([
+      'PATCH',
+      'PATCH',
+      'GET',
+      'GET',
+      'PATCH',
+      'GET',
+      'PATCH',
+    ]);
+    expect(transport.sessionReads()).toBe(7);
+    expect(confirmed).toEqual([8, 10, 10]);
     expect(editor.snapshot()).toMatchObject({
       phase: 'saved',
       draft: { ...optional, reply: false, mention: false, thread_watch: false },
@@ -389,6 +414,161 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
   } finally {
     clock.mockRestore();
   }
+});
+
+test('a shorter current-read refusal keeps the original wait and current advice can only restrict its replay', async () => {
+  let now = Date.parse('2026-10-31T00:00:00Z');
+  const clock = spyOn(Date, 'now').mockImplementation(() => now);
+  try {
+    const settings = (notifications: NotificationPreferences, version: number, writable = true): SettingsPage => {
+      const nativePage = settingsPreferencePage(notifications, version);
+      const currentPage = writable ? nativePage : { ...nativePage, actions: [] };
+      return {
+        signedIn: true,
+        preferences: { spoilerLevel: 1, suitability: 'blur', version },
+        notifications: optionalNotifications(currentPage),
+        page: currentPage,
+        securityHref: null,
+      };
+    };
+    const writes: NotificationChange[] = [];
+    let reads = 0;
+    const saved = { ...optional, reply: false };
+    const editor = new NotificationEditor(page, {
+      save: async (input) => {
+        writes.push(input);
+        return writes.length === 1
+          ? {
+              ok: false,
+              reason: 'unavailable',
+              failure: { status: 503, code: 'dependency_unavailable', retryAfter: '120' },
+            }
+          : { ok: true, notifications: saved, version: 8, page: settingsPreferencePage(saved, 8) };
+      },
+      read: async () => {
+        reads++;
+        if (reads === 1)
+          return {
+            signedIn: true,
+            state: 'unavailable',
+            failure: { status: 403, code: 'forbidden', retryable: false, retryAfter: '20' },
+            securityHref: null,
+          };
+        if (reads === 4) return settings(saved, 8);
+        return settings(optional, 7, reads !== 2);
+      },
+    });
+    await editor.edit('reply', false, 7);
+    const pending = editor.snapshot().pending!;
+    const original = pending.input;
+    const commandDeadline = Date.parse('2026-10-31T00:00:00Z') + 120_000;
+    const retryFromRetainedCallback = () => editor.retry();
+    expect(editor.snapshot().commandRetryAt).toBe(commandDeadline);
+    await retryFromRetainedCallback();
+    expect(writes).toHaveLength(1);
+
+    await editor.reload();
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'uncertain',
+      currentAdvice: null,
+      pending,
+      readReason: 'forbidden',
+      readRetryAt: now + 20_000,
+      commandRetryAt: commandDeadline,
+    });
+    await editor.edit('mention', false, 7);
+    expect(editor.snapshot().pending?.input).toBe(original);
+    expect(editor.snapshot().commandRetryAt).toBe(commandDeadline);
+    expect(editor.snapshot().readRetryAt).toBe(now + 20_000);
+    await retryFromRetainedCallback();
+    await editor.reload();
+    expect(reads).toBe(1);
+
+    now += 19_999;
+    await editor.reload();
+    expect(reads).toBe(1);
+    now++;
+    await editor.reload();
+    expect(reads).toBe(2);
+    expect(editor.snapshot()).toMatchObject({ phase: 'review', pending, known: { version: 7 } });
+    expect(editor.snapshot().currentAdvice?.actions).toEqual([]);
+    expect(editor.snapshot().commandRetryAt).toBe(commandDeadline);
+
+    now += 100_000;
+    await retryFromRetainedCallback();
+    expect(writes).toHaveLength(1);
+    expect(editor.snapshot().pending?.input).toBe(original);
+    await editor.reload();
+    expect(reads).toBe(3);
+    expect(editor.snapshot().currentAdvice?.actions).toHaveLength(2);
+    expect(editor.snapshot().commandRetryAt).toBe(commandDeadline);
+    await retryFromRetainedCallback();
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toBe(original);
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      pending: null,
+      known: { version: 8, notifications: saved },
+      draft: { ...optional, reply: false, mention: false },
+    });
+    expect(reads).toBe(4);
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+test('disposal clears retained notification state and ignores late reads, writes and callbacks', async () => {
+  let finishWrite!: (result: NotificationWriteResult) => void;
+  const writes: NotificationChange[] = [];
+  const writer = new NotificationEditor(page, {
+    save: (input) => {
+      writes.push(input);
+      return new Promise<NotificationWriteResult>((resolve) => {
+        finishWrite = resolve;
+      });
+    },
+    read: async () => ({ signedIn: false }),
+  });
+  const saving = writer.edit('reply', false, 7);
+  const retainedRetry = () => writer.retry();
+  writer.dispose();
+  expect(writer.snapshot()).toMatchObject({
+    currentAdvice: null,
+    pending: null,
+    intent: undefined,
+    known: { notifications: {} },
+    draft: {},
+  });
+  finishWrite({
+    ok: true,
+    notifications: { ...optional, reply: false },
+    version: 8,
+    page: settingsPreferencePage({ ...optional, reply: false }, 8),
+  });
+  await saving;
+  await retainedRetry();
+  expect(writer.snapshot()).toMatchObject({ currentAdvice: null, pending: null, known: { notifications: {} } });
+  expect(writes).toHaveLength(1);
+
+  let finishRead!: (result: SettingsPage) => void;
+  let reads = 0;
+  const reader = new NotificationEditor(page, {
+    save: async () => ({ ok: false, reason: 'unavailable' }),
+    read: () => {
+      reads++;
+      return new Promise<SettingsPage>((resolve) => {
+        finishRead = resolve;
+      });
+    },
+  });
+  const reloading = reader.reload();
+  const retainedReload = () => reader.reload();
+  reader.dispose();
+  finishRead({ signedIn: false });
+  await reloading;
+  await retainedReload();
+  expect(reads).toBe(1);
+  expect(reader.snapshot()).toMatchObject({ currentAdvice: null, known: { notifications: {} }, draft: {} });
 });
 
 test('conflict returns the current page, prunes forbidden kinds and keeps a still-valid draft for review', async () => {

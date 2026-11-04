@@ -66,21 +66,30 @@ test('native kind forms own each field once; hydration retains choices and recov
   const initialPage = settingsPage(initial, 7);
   const currentPage = settingsPage(current, 9);
   const calls: NotificationChange[] = [];
+  let refuseCurrentRead = false;
   const io = {
     save: async (input: NotificationChange) => {
       calls.push(input);
       if (calls.length === 1) return { ok: false as const, reason: 'invalid' as const };
       if (calls.length === 3) throw new Error('response lost');
-      if (calls.length === 5) return { ok: false as const, reason: 'conflict' as const, page: currentPage };
+      if (calls.length === 6) return { ok: false as const, reason: 'conflict' as const, page: currentPage };
       return { ok: true as const, version: 9, notifications: current, page: currentPage };
     },
-    read: async () => ({
-      signedIn: true as const,
-      preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 9 },
-      notifications: current,
-      page: currentPage,
-      securityHref: null,
-    }),
+    read: async () =>
+      refuseCurrentRead
+        ? {
+            signedIn: true as const,
+            state: 'unavailable' as const,
+            failure: { status: 403, code: 'forbidden', retryable: false, requestId: 'current-read' },
+            securityHref: null,
+          }
+        : {
+            signedIn: true as const,
+            preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 9 },
+            notifications: current,
+            page: currentPage,
+            securityHref: null,
+          },
   };
   const card = (
     <NotificationsCard
@@ -143,9 +152,24 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Save reviewed choices');
     expect(calls[1]!.notifications).toEqual({ reply: false });
     await click('Restore defaults');
+    refuseCurrentRead = true;
     await click('Retry original save');
     expect(calls[3]).toBe(calls[2]);
     expect(calls[3]!.notifications).toBeNull();
+    expect(host.textContent).toContain('This sign-in does not have access to read notification settings');
+    expect(host.querySelector('[data-response-status="403"]')).not.toBeNull();
+    expect(
+      [...host.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Retry original save' && !button.closest('[hidden]'),
+      )?.disabled,
+    ).toBe(true);
+    refuseCurrentRead = false;
+    await click('Reload');
+    expect(host.textContent).toContain('Review current settings');
+    expect(host.textContent).toContain('Restore defaults');
+    await click('Retry original save');
+    expect(calls[4]).toBe(calls[2]);
+    expect(calls[4]!.notifications).toBeNull();
     expect(host.textContent).toContain('Saved');
     await click('Restore defaults');
     await click('Reload');
@@ -155,7 +179,7 @@ test('native kind forms own each field once; hydration retains choices and recov
       ),
     ).toHaveLength(1);
     await click('Restore defaults');
-    expect(calls[5]!.notifications).toBeNull();
+    expect(calls[6]!.notifications).toBeNull();
   } finally {
     if (root) await act(async () => root!.unmount());
     for (const [key, descriptor] of previous)

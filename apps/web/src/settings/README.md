@@ -32,6 +32,10 @@ policy and draft. Uncertain saves keep the original patch and key. A confirmed m
 **Decision:** Notification edit/reset advice follows the current `account:update` observation; commands still recheck
 authority before receipt lookup.
 
+**Decision:** A failed current read retires action advice but keeps the last confirmed catalogue/values and unresolved
+command available for inspection; local drafts stay local, and a successful reacquisition must be reviewed before the
+original can be replayed.
+
 ## Reading
 
 `/settings#reading` inspects the confirmed spoiler and suitability pair, changes an allowed setting, and recovers a
