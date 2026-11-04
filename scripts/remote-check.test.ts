@@ -892,6 +892,8 @@ if (script.includes('/proc/loadavg')) {
   console.log('ZSTD ' + (config.zstd === false ? '0' : '1'));
 } else if (script.includes('REMOTE_CHECK_GITHUB_FETCH')) {
   log({ kind: 'github-fetch', script, slotHeld: slotHeld() });
+  console.log('REMOTE_CHECK_PHASE\\tshared-store lock/fetch\\t1200000000');
+  console.log('REMOTE_CHECK_PHASE\\tcheckout\\t340000000');
   process.exit(config.gitFetchExit ?? 0);
 } else if (script.includes('systemd-run')) {
   const runNumber = count('run');
@@ -3236,6 +3238,10 @@ test.each([
     expect(result.stderr.match(/check-git: Writing objects: 100%/g)).toHaveLength(1);
     expect(result.stderr).toMatch(/remote-check: Git snapshot staging \d+\.\d+ s on a/);
     expect(result.stderr).toMatch(/remote-check: GitHub fetch \d+\.\d+ s on a/);
+    if (gitFetchExit === 0) {
+      expect(result.stderr).toContain('remote-check: shared-store lock/fetch 1.200 s on a');
+      expect(result.stderr).toContain('remote-check: checkout 0.340 s on a');
+    }
     if (gitFetchExit === 0) expect(result.stderr).toContain('overlay after GitHub fetch');
     else expect(result.stderr).toContain('full tree');
     const remaining = git('--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/').stdout.trim();
