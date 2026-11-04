@@ -600,11 +600,15 @@ function PersonalMembership({
         await router.invalidate();
         if (!current()) return;
         if (result.kind === 'settled' && cycle.target && result.viewer && result.viewer.state !== 'pending') {
+          const key = realmMembershipQuery(realm.id, subject, cycle.caller).queryKey;
+          // Query's structural sharing may commit a different object from fetchQuery's returned value.
+          const observed = client.getQueryData(key);
           const receiptCurrent = () =>
             cycle.caller.isCurrent() &&
             (!lifetime || lifetime.current()) &&
+            observed?.state === cycle.target &&
             hasCurrentRealmMembership(client, realm.id, subject, cycle.caller) &&
-            client.getQueryData(realmMembershipQuery(realm.id, subject, cycle.caller).queryKey) === result.viewer;
+            client.getQueryData(key) === observed;
           setCompleted({
             realmId: realm.id,
             action: cycle.target === 'member' ? 'join' : 'leave',
