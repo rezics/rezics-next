@@ -26,8 +26,8 @@ estimate:
   files: 10
 acceptance:
   tests:
-    - "Home explains admitted curator/public presentation and carried Realm identity/purpose, distinguishing missing, withheld, unavailable and admitted empty context through native bounded summaries."
-    - "An admitted signed-in viewer follows or removes the exact Collection/Space edge using existing writers and native current state; unresolved writes, unavailable disclosure, credential replacement and feed replacement cannot expose stale private actions or target a replacement owner."
+    - 'Home explains admitted curator/public presentation and carried Realm identity/purpose, distinguishing missing, withheld, unavailable and admitted empty context through native bounded summaries.'
+    - 'An admitted signed-in viewer follows or removes the exact Collection/Space edge using existing writers and native current state; unresolved writes, unavailable disclosure, credential replacement and feed replacement cannot expose stale private actions or target a replacement owner.'
 ---
 
 # Complete native public-owner understanding and follow actions in Home
