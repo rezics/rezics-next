@@ -135,8 +135,8 @@ async function show() {
   });
   const destination = createRoute({
     getParentRoute: () => parent,
-    path: '/en/collections/$id',
-    component: () => <p>Native collection</p>,
+    path: '/en/subjects/$id/$slug',
+    component: () => <p>Native subject</p>,
   });
   router = createRouter({
     routeTree: parent.addChildren([route, destination]),
@@ -195,11 +195,11 @@ test('forward, deliberate return and native open/back re-read one address and re
   expect(reads.at(-1)!.params.cursor).toBeUndefined();
   expect(host.textContent).toContain('Window 1');
   expect(host.querySelector('[data-search-window-current]')!.textContent).toContain('Mira');
-  const collection = host.querySelector<HTMLAnchorElement>('a[href*="/collections/"]')!;
+  const subject = host.querySelector<HTMLAnchorElement>('a[href*="/subjects/"]')!;
   await act(async () => {
-    await router.navigate({ href: collection.getAttribute('href')! });
+    await router.navigate({ href: subject.getAttribute('href')! });
   });
-  expect(host.textContent).toContain('Native collection');
+  expect(host.textContent).toContain('Native subject');
   await act(async () => {
     router.history.back();
     await window.happyDOM.whenAsyncComplete();
