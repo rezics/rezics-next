@@ -3894,6 +3894,8 @@ Decision: The shared batch accepts at most 20 deduplicated exact thread/post ref
 their Subject key, Home retains its own parent/review context, concealment withholds an entry, and readable changes
 fail closed for retry.
 
+Decision: the thread reading receiver and its public response alias use the emitted mounted reading-page declaration, including the existing native post locator; broader client mirrors remain until the full source publication succeeds.
+
 ### Cost: selected current-thread cards
 
 - Let R<=20 be raw selected references, H<=R distinct parent threads, P<=R selected posts, B<=H represented places,
@@ -3920,8 +3922,6 @@ fail closed for retry.
   hydration. It reserves 32 KiB per author and 16 KiB per reaction target; source bodies and every nested native
   query remain charged even though they are not serialized in this projection. Cross-home observations are
   independent. A later command remains the final authority check.
-
-Decision: the thread reading receiver and its public response alias use the emitted mounted reading-page declaration, including the existing native post locator; broader client mirrors remain until the full source publication succeeds.
 
 ## Home and Subject conversation activity
 
