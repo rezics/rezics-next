@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act, createElement, type ComponentProps } from 'react';
 import * as start from '../.storybook/react-start';
 import { createKernelClient, type PersonalEntry } from '@rezics/client';
-import { annotationWrite, annotationIssues } from '../src/library/rich-private-entry/contract';
+import { annotationWrite, annotationIssues, renewAnnotationDraft } from '../src/library/rich-private-entry/contract';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -129,7 +129,13 @@ async function reader() {
   const change = async (element: Element, value: string) => {
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
     const properties = (element as unknown as Record<string, { onChange: (event: unknown) => void }>)[key]!;
-    await act(async () => properties.onChange({ currentTarget: { value } }));
+    await act(async () => {
+      if (properties) properties.onChange({ currentTarget: { value } });
+      else {
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set?.call(element, value);
+        element.dispatchEvent(new window.Event('change', { bubbles: true }));
+      }
+    });
   };
   const reply = async (index: number, outcome: Outcome) =>
     act(async () => {
@@ -251,6 +257,22 @@ test('edit and review: exact values, native bounds, clear versus unchanged, corr
     expect(annotationWrite({ ...entry, note: null, priority: null }, { note: '', priority: '' }, guard)).toBeNull();
     expect(annotationWrite(entry, { note: text, priority: '7' }, guard)?.note).toEqual({ op: 'set', value: text });
     expect(annotationWrite(entry, { note: 'é'.repeat(2049), priority: '7' }, guard)).toBeNull();
+    expect(
+      renewAnnotationDraft(
+        entry,
+        { ...entry, note: 'fresh', priority: 3 },
+        { note: entry.note!, priority: '101' },
+        guard,
+      ),
+    ).toEqual({ note: 'fresh', priority: '101' });
+    expect(
+      renewAnnotationDraft(
+        entry,
+        { ...entry, note: 'fresh', priority: 3 },
+        { note: 'é'.repeat(2049), priority: '7' },
+        guard,
+      ),
+    ).toEqual({ note: 'é'.repeat(2049), priority: '3' });
     expect(r.writes).toHaveLength(0);
     expect(r.sources).toHaveLength(0);
     expect(r.reads()).toBe(reads);
