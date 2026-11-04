@@ -439,16 +439,17 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     .map((item) => item.text)
     .filter(Boolean)
     .join('\n\n');
-  const taskGuidance = !research && !verification
-    ? [
-        view.mergeRule,
-        view.premiseCheck,
-        view.acceptanceTests,
-        view.decisionFollowThrough,
-        view.devInfrastructure,
-        view.researchNeeded,
-      ]
-    : [];
+  const taskGuidance =
+    !research && !verification
+      ? [
+          view.mergeRule,
+          view.premiseCheck,
+          view.acceptanceTests,
+          view.decisionFollowThrough,
+          view.devInfrastructure,
+          view.researchNeeded,
+        ]
+      : [];
   const extras = [
     view.unfinished,
     view.testCommands,

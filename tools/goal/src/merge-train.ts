@@ -1020,7 +1020,11 @@ function acceptAlreadyPresent(result: GateOutcome, commit: string, paths: readon
   );
 }
 
-export function devMayRepairFrozenAcceptance(target: IntegrationTarget, taskKind?: string, controlPlane = false): boolean {
+export function devMayRepairFrozenAcceptance(
+  target: IntegrationTarget,
+  taskKind?: string,
+  controlPlane = false,
+): boolean {
   return target === 'integration' && !controlPlane && taskKind !== 'verification';
 }
 
@@ -2244,10 +2248,7 @@ export class MergeTrain {
           const logPath = logPaths.get(entry.id)!;
           const result = createResult(entry, logPath);
           const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId, o.policy?.storage);
-          const mayRepairFrozen = devMayRepairFrozenAcceptance(
-            lane === 'dev' ? 'integration' : 'main',
-            recorded.kind,
-          );
+          const mayRepairFrozen = devMayRepairFrozenAcceptance(lane === 'dev' ? 'integration' : 'main', recorded.kind);
           try {
             o.fence.assertCurrent(request);
           } catch (error) {

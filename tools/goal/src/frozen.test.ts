@@ -88,7 +88,8 @@ describe('frozen acceptance files', () => {
         'Frozen acceptance file changed: tests/acceptance.test.ts',
       );
       const infoEvents = h.inbox.filter(
-        (event) => event.taskId === real.id && event.kind === 'info' && event.summary.includes('tests/acceptance.test.ts'),
+        (event) =>
+          event.taskId === real.id && event.kind === 'info' && event.summary.includes('tests/acceptance.test.ts'),
       );
       expect(infoEvents).toHaveLength(1);
       expect(infoEvents[0]!.managerId).toBe(real.brief.manager ?? real.brief.goal);

@@ -201,8 +201,12 @@ test('a worker writes acceptance tests the contract names and waits for queued c
   expect(prompt).not.toContain('never edit a frozen file');
   expect(prompt).not.toContain('must not be edited');
   expect(prompt).not.toContain('must not be edited');
-  expect(prompt).toContain('Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions.');
-  expect(prompt).toContain('fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines)');
+  expect(prompt).toContain(
+    'Update and list tests if a contract change alters asserted behaviour; keep unchanged assertions.',
+  );
+  expect(prompt).toContain(
+    'fewest tests that pin user-visible behaviour and edge cases (fewer test lines than product lines)',
+  );
   expect(prompt).toContain('Wait for a long command, even one queued for a test slot');
 });
 
@@ -264,7 +268,9 @@ test('minimal verification permits a focused check and keeps acceptance deferred
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
     const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
-    expect(prompt).toContain('Acceptance, native, browser and root checks run after integration; you need not run them.');
+    expect(prompt).toContain(
+      'Acceptance, native, browser and root checks run after integration; you need not run them.',
+    );
     expect(prompt).toContain(
       'Run a focused check yourself only when you cannot finish the outcome without seeing it, for example a page you changed.',
     );
