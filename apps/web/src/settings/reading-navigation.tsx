@@ -183,9 +183,9 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
           ? m.settings_notifications_leave_title()
           : kinds.has('collection-privacy')
             ? m.settings_privacy_leave_title()
-          : shelf
-            ? m.settings_shelf_leave_title()
-            : m.settings_verification_leave_title()
+            : shelf
+              ? m.settings_shelf_leave_title()
+              : m.settings_verification_leave_title()
     : combined
       ? m.settings_drafts_leave_title()
       : reading
@@ -196,7 +196,7 @@ export function SettingsNavigationProvider({ children }: { children: ReactNode }
       ? m.settings_watches_leave_description()
       : shelf && kinds.size === 1
         ? m.settings_shelf_leave_description()
-      : m.settings_other_drafts_leave_description()
+        : m.settings_other_drafts_leave_description()
     : combined
       ? m.settings_drafts_leave_description()
       : reading
