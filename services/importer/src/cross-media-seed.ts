@@ -657,6 +657,7 @@ export async function planCrossMediaSeed(
           sourceSubject: String(sid),
           sourceEndpoint: String(rid),
           mappingRevision,
+          ...(typeof row.order === 'number' && Number.isSafeInteger(row.order) ? { order: row.order } : {}),
           evidence,
         },
       };
@@ -2894,6 +2895,51 @@ export async function runCrossMediaSeedCli(
           .sort(),
       },
     };
+    const { importShowcaseBooks, showcaseBooksToCrossMediaPlan } = await import('./showcase-books.ts');
+    const books = await importShowcaseBooks({
+      tables: input,
+      path: statePath,
+      port,
+      destination: { origin: api },
+    });
+    const bookCross = showcaseBooksToCrossMediaPlan(books.planned);
+    for (const target of [plan, publicationPlan]) {
+      const existingRecordKeys = new Set(
+        [...target.records.bangumi, ...target.entities.bangumi].map((row) => `${row.source}\0${row.key}`),
+      );
+      target.records.bangumi.push(
+        ...bookCross.records.bangumi.filter((row) => !existingRecordKeys.has(`${row.source}\0${row.key}`)),
+      );
+      target.entities.bangumi.push(
+        ...bookCross.entities.bangumi.filter((row) => !existingRecordKeys.has(`${row.source}\0${row.key}`)),
+      );
+      const existingMemberKeys = new Set(target.members.map((row) => `${row.source}\0${row.key}`));
+      target.members.push(...bookCross.members.filter((row) => !existingMemberKeys.has(`${row.source}\0${row.key}`)));
+      const existingCreditKeys = new Set(
+        target.credits.map((row) => `${row.kind}\0${row.work}\0${row.person}\0${row.roleCode}`),
+      );
+      target.credits.push(
+        ...bookCross.credits.filter(
+          (row) => !existingCreditKeys.has(`${row.kind}\0${row.work}\0${row.person}\0${row.roleCode}`),
+        ),
+      );
+      const existingEdgeKeys = new Set(
+        target.edges.map((row) => `${row.source}\0${row.holder}\0${row.target}\0${row.property}`),
+      );
+      target.edges.push(
+        ...bookCross.edges.filter(
+          (row) => !existingEdgeKeys.has(`${row.source}\0${row.holder}\0${row.target}\0${row.property}`),
+        ),
+      );
+    }
+    const publicationReadings = [...combinedResult.readings];
+    const seenReadings = new Set(publicationReadings.map((row) => row.source + separator + row.externalId));
+    for (const reading of books.readings) {
+      const key = reading.source + separator + reading.externalId;
+      if (seenReadings.has(key)) continue;
+      seenReadings.add(key);
+      publicationReadings.push(reading);
+    }
     const vocabularyRequirements = [
       ...(result.creditVocabularyRequirements ?? []),
       ...(bangumiVocabularyRequirements ?? []),
@@ -2901,7 +2947,7 @@ export async function runCrossMediaSeedCli(
     if (journal && publicClient)
       showcase = await publishShowcase({
         plan: publicationPlan,
-        result: combinedResult,
+        result: { ...combinedResult, readings: publicationReadings },
         aliases: crossMediaAliases,
         journal,
         review: importPort,
@@ -2921,6 +2967,14 @@ export async function runCrossMediaSeedCli(
           },
           ...(bangumiGenrePublication ? { bangumiGenreDiagnostics: bangumiGenrePublication.diagnostics } : {}),
           ...(showcase ? { showcase } : {}),
+          books: {
+            family: books.family,
+            selected: books.selected,
+            conversions: books.conversions,
+            identities: books.identities,
+            gaps: books.gaps,
+            creditGaps: books.creditGaps,
+          },
           sourceDigests: Object.fromEntries(input.digests),
         },
         null,
@@ -2930,7 +2984,7 @@ export async function runCrossMediaSeedCli(
     process.stdout.write(
       showcase
         ? 'Imported ' +
-            combinedResult.readings.length +
+            (combinedResult.readings.length + books.readings.length) +
             ' records; publication ' +
             showcase.status +
             '; ' +
@@ -2939,13 +2993,14 @@ export async function runCrossMediaSeedCli(
             resultPath +
             '\n'
         : 'Imported ' +
-            combinedResult.readings.length +
+            (combinedResult.readings.length + books.readings.length) +
             ' records; ' +
             (combinedResult.gaps.length +
               combinedResult.characterDiagnostics.length +
               combinedResult.vndbCreditDiagnostics.length +
               combinedResult.episodeDiagnostics.length +
-              publicTags.gaps.length) +
+              publicTags.gaps.length +
+              books.gaps.length) +
             ' review gaps. Result: ' +
             resultPath +
             '\n',
