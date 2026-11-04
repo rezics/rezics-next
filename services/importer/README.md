@@ -1524,6 +1524,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: O(file bytes) stream plus O((W+T+A+P+V) log R) importer work for selected works W, closed dictionary T, associations A, parent edges P≤256 and vocabulary records V≤512. Dictionary schemes publish before Concepts; current type/`schema:url`/`skos:inScheme` and taxonomy-parent `skos:broader` are reread before association admission. Deduplicated current reads stay inside their existing freshness lifetime. Unrelated VN/character/trait rows are not materialized. No catalogue scan or identity merge.
 - Growth check: `tests/showcase-character-vocabulary.test.ts` covers default dictionary publication without a UUID file, spoiler-qualified associations, lying/release-qualified withholding, retracted URI/inScheme/parent contradiction and parent-closure overflow, plus refresh identity. The connected native file `services/kernel/test/imports/showcase-character-vocabulary.test.ts` is registered and not executed in this attempt.
 
+### Default VNDB release platform and medium showcase seed
+
+- Touches: association rows owned by the at most 64 selected release IDs, at most two source ConceptSchemes and the finite selected platform/medium Concepts, their source URI and `skos:inScheme` proposals in the shared ShowcaseJournal, current native type/URI/inScheme reads, and the shared manifest/publishShowcase plus ordinary Release association path. Existing date, state and other provider bindings remain composed through the same release adapter.
+- Bound: source tables stream by file size; retained association evidence is at most 4,096 distinct rows total and at most the remaining source-vocabulary row budget on each Release. Concept preparation stays within the common vocabulary budget. Each native dependency UUID is read once per binding preparation; no catalogue or native-history scan is added.
+- Growth check: `tests/showcase-vndb-releases.test.ts` covers default selected rows, journal-created dependencies, duplicate/unsupported/wrong-owner associations, independent platform/media facts, overflow, preserved release values and work membership. `tests/vndb-release-platforms.test.ts` retains source-refresh coverage. The receiving native test remains integration evidence and is not run in this attempt.
+
 ### Import VNDB character height and weight
 
 - Touches: the selected-family `chars` COPY row already acquired for appearance, existing identity bootstrap/proposals, and independent accept/adopt/read of `schema:height` and `schema:weight`.
@@ -2194,6 +2200,18 @@ reviewed inventory has no released-state Concepts; a current development-status
 binding publishes work keywords. Decision: do not remap TBA/unknown onto
 `schema:creativeWorkStatus`. Decision: default seed rereads reviewed-catalogue
 development-status identities rather than inventing a second state publisher.
+
+The default selected-family path also reads `releases_platforms` and
+`releases_media` only for admitted release IDs. It prepares stable source-scheme
+and source-code Concept dependencies in the same journal, submits their source
+evidence to the existing manifest/publisher, and rereads current native type,
+URI and `skos:inScheme` before the release mapper admits each independent
+association. Duplicate source rows collapse; unsupported, conflicting, overflow
+or withdrawn dependencies remain bounded omissions. The release projection
+includes exact admitted associations so a changed dump refreshes through the
+existing converter digest. Decision: selected release platform and medium
+Concepts use stable VNDB code URIs and exact source codes as English labels;
+association admission requires current native type, URI and `inScheme` readback.
 
 Selected-family `chars` rows already reach `convertCrossMediaEntity`. Revision
 `cross-media-entities@4` publishes admitted height and weight from those COPY

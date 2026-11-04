@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
+import { sourceVocabularyLimits } from '@rezics/conversion/source-vocabulary';
 import { vndbLimits } from '@rezics/conversion/vndb';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { SourceVocabularyGap } from '@rezics/conversion';
@@ -84,6 +85,12 @@ import { acquireBangumiCoverSources } from './showcase-media.ts';
 import { createSourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
+import {
+  planVndbReleasePlatforms,
+  vndbReleaseAssociationReleaseCap,
+  vndbReleasePlatformPayload,
+  type VndbReleasePlatformFacts,
+} from './vndb-release-platforms.ts';
 import {
   composeVocabularyAdmissions,
   discoverShowcaseBangumiEpisodes,
@@ -286,6 +293,8 @@ export type CrossMediaPlan = {
   relationSnapshotComplete: boolean;
   /** Selected-family VNDB release dates/states for the common showcase publisher. */
   releaseFacts?: CrossMediaReleaseFacts;
+  /** Exact selected VNDB release platform and medium rows for source-vocabulary admission. */
+  releasePlatforms?: ReadonlyMap<string, VndbReleasePlatformFacts>;
   coverSources?: readonly BangumiCoverSource[];
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
@@ -1181,8 +1190,20 @@ export async function planCrossMediaSeed(
   const releases = new Set<string>(),
     chars = new Set<string>(),
     aliases = new Set<string>();
-  for await (const row of input.rows('vndb', 'releases_vn'))
-    if (selection?.includeReleases !== false && vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
+  let releaseOverflowReported = false;
+  for await (const row of input.rows('vndb', 'releases_vn')) {
+    if (selection?.includeReleases === false || !vnIds.has(text(row, 'vid'))) continue;
+    const id = text(row, 'id');
+    if (releases.has(id)) continue;
+    if (releases.size >= vndbReleaseAssociationReleaseCap) {
+      if (!releaseOverflowReported) {
+        gap('vndb', 'releases_vn', { id }, 'Selected VNDB releases exceed the bounded import cap');
+        releaseOverflowReported = true;
+      }
+      continue;
+    }
+    releases.add(id);
+  }
   for await (const row of input.rows('vndb', 'releases_vn')) {
     if (!releases.has(text(row, 'id'))) continue;
     edge({
@@ -1837,6 +1858,29 @@ export async function planCrossMediaSeed(
   } else {
     for (const family of Object.keys(patterns) as Franchise[])
       ensure(anime.has(family) && plan.franchises[family].vndb.length, `Missing anime/VN pair for ${family}`);
+  }
+  const selectedReleaseIds = plan.entities.vndb
+    .map((row) => row.key)
+    .filter((id) => /^r[1-9][0-9]*$/u.test(id))
+    .sort();
+  const selectedReleaseSet = new Set(selectedReleaseIds);
+  const releaseLinks = new Map<string, number>();
+  for (const draft of plan.edges)
+    if (draft.source === 'vndb' && draft.table === 'releases_vn' && selectedReleaseSet.has(draft.holder))
+      releaseLinks.set(draft.holder, (releaseLinks.get(draft.holder) ?? 0) + 1);
+  const availableVocabularyRows = new Map(
+    selectedReleaseIds.map((id) => [
+      id,
+      Math.max(0, sourceVocabularyLimits.rows - 1 - (releaseLinks.get(id) ?? 0)),
+    ]),
+  );
+  const releasePlatformPlan = await planVndbReleasePlatforms(input, selectedReleaseIds, availableVocabularyRows);
+  plan.releasePlatforms = releasePlatformPlan.byRelease;
+  plan.gaps.push(...releasePlatformPlan.gaps);
+  for (const row of plan.entities.vndb) {
+    const facts = releasePlatformPlan.byRelease.get(row.key);
+    if (!facts) continue;
+    row.payload = { ...(row.payload as object), ...vndbReleasePlatformPayload(row.key, facts) };
   }
   for (const provider of ['bangumi', 'vndb'] as const) {
     const registration = createSourceRegistration(provider, {
@@ -2815,7 +2859,11 @@ export async function runCrossMediaSeedCli(
   });
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
-  const { parseVndbReleaseStateBindings, seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
+  const {
+    parseVndbReleaseStateBindings,
+    prepareShowcaseVndbReleaseClassifications,
+    seedShowcaseVndbReleases,
+  } = await import('./showcase-vndb-releases.ts');
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -2924,8 +2972,20 @@ export async function runCrossMediaSeedCli(
     ReturnType<typeof prepareShowcaseVndbCreditVocabulary>
   >['requirements'] = [];
   let vndbCreditVocabularyIssues: Awaited<ReturnType<typeof prepareShowcaseVndbCreditVocabulary>>['issues'] = [];
+  let releaseClassificationPreparation: Awaited<ReturnType<typeof prepareShowcaseVndbReleaseClassifications>> = {
+    requirements: [],
+    bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+    groups: [],
+  };
   let creditResolution: BangumiCreditVocabularyResolution | undefined;
   try {
+    if (journal && publicClient)
+      releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
+        plan,
+        port,
+        journal,
+        stage: 'schemes',
+      });
     const reviewedSubjects = options.reviewedCatalogueSubjects;
     const reviewedSelection = Boolean(options.selection && reviewedSubjects);
     const {
@@ -3019,8 +3079,11 @@ export async function runCrossMediaSeedCli(
       plan: publicationPlan,
       path: statePath,
       port,
+      bindings: releaseClassificationPreparation.bindings,
       destination: { origin: api },
-      ...(vndbReleaseStateBindings?.groups.length ? { groups: vndbReleaseStateBindings.groups } : {}),
+      ...((vndbReleaseStateBindings?.groups.length || releaseClassificationPreparation.groups.length)
+        ? { groups: [...(vndbReleaseStateBindings?.groups ?? []), ...releaseClassificationPreparation.groups] }
+        : {}),
       extras: {
         ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
         vndbCharacterProfileBindings: characterProfileBindings,
@@ -3051,6 +3114,98 @@ export async function runCrossMediaSeedCli(
       },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
+    let releaseClassificationRequirements = releaseClassificationPreparation.requirements;
+    if (journal && publicClient) {
+      if (releaseClassificationRequirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [
+            ...(result.creditVocabularyRequirements ?? []),
+            ...releaseClassificationRequirements,
+          ],
+        });
+      releaseClassificationPreparation = await prepareShowcaseVndbReleaseClassifications({
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'concepts',
+      });
+      releaseClassificationRequirements = releaseClassificationPreparation.requirements;
+      if (releaseClassificationRequirements.length)
+        await publishShowcase({
+          plan: publicationPlan,
+          result,
+          aliases: crossMediaAliases,
+          journal,
+          review: importPort,
+          publicClient,
+          vocabularyRequirements: [
+            ...(result.creditVocabularyRequirements ?? []),
+            ...releaseClassificationRequirements,
+          ],
+        });
+      const currentReleaseClassifications = await prepareShowcaseVndbReleaseClassifications({
+        plan: publicationPlan,
+        port,
+        journal,
+        stage: 'concepts',
+      });
+      const sameBindings =
+        JSON.stringify(currentReleaseClassifications.bindings) ===
+        JSON.stringify(releaseClassificationPreparation.bindings);
+      releaseClassificationPreparation = currentReleaseClassifications;
+      releaseClassificationRequirements = currentReleaseClassifications.requirements;
+      if (!sameBindings) {
+        publicationPlan = structuredClone(plan);
+        result = await seedShowcaseVndbReleases({
+          tables: input,
+          plan: publicationPlan,
+          path: statePath,
+          port,
+          bindings: currentReleaseClassifications.bindings,
+          destination: { origin: api },
+          ...(vndbReleaseStateBindings?.groups.length
+            ? { groups: [...vndbReleaseStateBindings.groups, ...currentReleaseClassifications.groups] }
+            : currentReleaseClassifications.groups.length
+              ? { groups: currentReleaseClassifications.groups }
+              : {}),
+          extras: {
+            ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
+            vndbCharacterProfileBindings: characterProfileBindings,
+            ...(episodeCatalogueSubjects ? { episodeCatalogueSubjects } : {}),
+            ...(vocabularyAdmissions.length ? { vocabularyAdmissions } : {}),
+            bangumiGenrePort: importPort,
+            ...(journal && publicClient
+              ? {
+                  readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
+                  prepareBangumiCreatorCreditBindings: async ({ result: baseResult, drafts, read }) => {
+                    const prepared = await prepareBangumiCreatorCreditBindings({
+                      plan,
+                      result: baseResult,
+                      drafts,
+                      port,
+                      journal,
+                      review: importPort,
+                      publicClient,
+                      ...(priorShowcase ? { prior: priorShowcase } : {}),
+                      subjectTypes: [2],
+                      read,
+                    });
+                    creditResolution = prepared;
+                    return prepared;
+                  },
+                }
+              : {}),
+          },
+          ...(characterBindings === undefined ? {} : { characterBindings }),
+        });
+      }
+    }
     let publicTags: Awaited<ReturnType<typeof importShowcaseTags>> | Awaited<ReturnType<typeof prepareShowcaseTags>>;
     if (preparedPublicTags) {
       publicTags = preparedPublicTags;
@@ -3077,7 +3232,11 @@ export async function runCrossMediaSeedCli(
             journal,
             review: importPort,
             publicClient,
-            vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...schemes.requirements],
+            vocabularyRequirements: [
+              ...(result.creditVocabularyRequirements ?? []),
+              ...releaseClassificationRequirements,
+              ...schemes.requirements,
+            ],
           });
         const concepts = await prepareShowcaseVndbPublicTagVocabulary({
           tables: input,
@@ -3095,7 +3254,11 @@ export async function runCrossMediaSeedCli(
             journal,
             review: importPort,
             publicClient,
-            vocabularyRequirements: [...(result.creditVocabularyRequirements ?? []), ...concepts.requirements],
+            vocabularyRequirements: [
+              ...(result.creditVocabularyRequirements ?? []),
+              ...releaseClassificationRequirements,
+              ...concepts.requirements,
+            ],
           });
         tagVocabularyRequirements = concepts.requirements;
         knownTagBindings = knownShowcaseTagBindings(
@@ -3231,6 +3394,7 @@ export async function runCrossMediaSeedCli(
         publicClient,
         vocabularyRequirements: [
           ...(result.creditVocabularyRequirements ?? []),
+          ...releaseClassificationRequirements,
           ...tagVocabularyRequirements,
           ...schemes.requirements,
         ],
@@ -3250,6 +3414,7 @@ export async function runCrossMediaSeedCli(
         publicClient,
         vocabularyRequirements: [
           ...(result.creditVocabularyRequirements ?? []),
+          ...releaseClassificationRequirements,
           ...tagVocabularyRequirements,
           ...concepts.requirements,
         ],
@@ -3319,6 +3484,7 @@ export async function runCrossMediaSeedCli(
             publicClient,
             vocabularyRequirements: [
               ...(result.creditVocabularyRequirements ?? []),
+              ...releaseClassificationRequirements,
               ...(bangumiVocabularyRequirements ?? []),
               ...tagVocabularyRequirements,
               ...schemes.requirements,
@@ -3341,6 +3507,7 @@ export async function runCrossMediaSeedCli(
             publicClient,
             vocabularyRequirements: [
               ...(result.creditVocabularyRequirements ?? []),
+              ...releaseClassificationRequirements,
               ...(bangumiVocabularyRequirements ?? []),
               ...tagVocabularyRequirements,
               ...concepts.requirements,
@@ -3496,6 +3663,7 @@ export async function runCrossMediaSeedCli(
     const vocabularyRequirements = [
       ...(result.creditVocabularyRequirements ?? []),
       ...(books?.creditVocabularyRequirements ?? []),
+      ...releaseClassificationRequirements,
       ...(bangumiVocabularyRequirements ?? []),
       ...tagVocabularyRequirements,
       ...characterVocabularyRequirements,

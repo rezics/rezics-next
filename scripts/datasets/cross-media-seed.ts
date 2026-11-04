@@ -10,7 +10,7 @@ import { fetchCrossMediaDumps } from './fetch-dumps.ts';
 export const developmentShowcaseSelection = {
   bangumi: [10380, 84148, 51],
   vndb: ['v2002', 'v4'],
-  includeReleases: false,
+  includeReleases: true,
   peoplePerProvider: 64,
 } as const;
 

@@ -25,7 +25,8 @@ export type VndbReleasePlatformPlan = Readonly<{
 
 const RELEASE_ID = /^r[1-9][0-9]*$/u;
 const CODE = /^[a-z][a-z0-9]{0,15}$/u;
-const RELEASE_CAP = 64;
+export const vndbReleaseAssociationReleaseCap = 64;
+const RELEASE_CAP = vndbReleaseAssociationReleaseCap;
 const ASSOCIATION_CAP = sourceVocabularyLimits.rows;
 const SOURCE_ROW_CAP = RELEASE_CAP * ASSOCIATION_CAP;
 const GAP_CAP = sourceVocabularyLimits.gaps;

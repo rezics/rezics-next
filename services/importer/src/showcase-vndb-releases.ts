@@ -1,9 +1,33 @@
-import { bundledDigest } from '@rezics/definitions/bundled';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import {
+  BATCH_LIMIT,
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchReference,
+  type BatchStatement,
+} from '@rezics/definitions/bulk';
+import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings, SourceVocabularyGap, SourceVocabularyRequest } from '@rezics/conversion';
+import { sourceVocabularyLimits } from '@rezics/conversion/source-vocabulary';
 import reviewedVocabulary from '../../../packages/definitions/src/reviewed-vocabulary.json';
+import {
+  commandKey,
+  sourceDigest,
+  sourceEnvelope,
+  vndbReleaseMediumConceptUri,
+  vndbReleaseMediumSchemeUri,
+  vndbReleasePlatformConceptUri,
+  vndbReleasePlatformSchemeUri,
+} from '../../../packages/conversion/src/support.ts';
 import type { ImporterOptions } from './importer.ts';
 import type { ImportConversion } from './import-contract.ts';
+import {
+  showcaseDigest,
+  showcaseLimits,
+  showcaseVocabularyExternalId,
+  type ShowcaseVocabularyRequirement,
+} from './showcase-manifest.ts';
+import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
   planCrossMediaSeed,
   seedCrossMedia,
@@ -14,6 +38,13 @@ import {
   type CrossMediaSeedResult,
   type CrossMediaTables,
 } from './cross-media-seed.ts';
+import {
+  planVndbReleasePlatforms,
+  vndbReleaseAssociationReleaseCap,
+  vndbReleaseClassificationTaxonomies,
+  vndbReleasePlatformPayload,
+  type VndbReleasePlatformFacts,
+} from './vndb-release-platforms.ts';
 import {
   decodeVndbDevstatus,
   decodeVndbReleased,
@@ -67,6 +98,7 @@ export type ShowcaseVndbReleaseIdentity = {
 export type ShowcaseVndbReleasePreparation = {
   plan: CrossMediaPlan;
   facts: VndbReleaseFacts;
+  releasePlatforms: ReadonlyMap<string, VndbReleasePlatformFacts>;
   bindings: SourceVocabularyBindings;
   requirements: ShowcaseVndbReleaseRequirement[];
   groups: VndbReleaseBindingGroup[];
@@ -83,6 +115,345 @@ export type ShowcaseVndbReleaseResult = VndbReleaseFidelityResult & {
 
 export function emptyShowcaseVndbReleaseBindings(): SourceVocabularyBindings {
   return { releaseDigest: bundledDigest, schemes: [], concepts: [] };
+}
+
+const releaseClassificationRevision = 'vndb-release-classification-vocabulary@1';
+
+type ReleaseClassificationNeed = Readonly<{
+  taxonomy: string;
+  sourceKey: string;
+  sourceUri: string;
+  citation: string;
+  associationPath: string;
+  ownerKey: string;
+  code?: string;
+}>;
+
+const releaseClassificationSchemes = [
+  {
+    taxonomy: vndbReleaseClassificationTaxonomies()[0]!,
+    schemeUri: vndbReleasePlatformSchemeUri,
+    schemeKey: vndbReleaseClassificationTaxonomies()[0]!,
+    conceptUri: vndbReleasePlatformConceptUri,
+    schemeLabel: 'VNDB release platforms',
+  },
+  {
+    taxonomy: vndbReleaseClassificationTaxonomies()[1]!,
+    schemeUri: vndbReleaseMediumSchemeUri,
+    schemeKey: vndbReleaseClassificationTaxonomies()[1]!,
+    conceptUri: vndbReleaseMediumConceptUri,
+    schemeLabel: 'VNDB release media',
+  },
+] as const;
+
+function releaseClassificationNeeds(
+  platforms: ReadonlyMap<string, VndbReleasePlatformFacts>,
+): { schemes: ReleaseClassificationNeed[]; concepts: ReleaseClassificationNeed[] } {
+  const concepts = new Map<string, ReleaseClassificationNeed>();
+  const schemes = new Map<string, ReleaseClassificationNeed>();
+  const schemeFor = new Map(releaseClassificationSchemes.map((entry) => [entry.taxonomy, entry]));
+  for (const [ownerKey, facts] of [...platforms].sort(([left], [right]) => left.localeCompare(right))) {
+    for (const [kind, associations] of [
+      ['platform', facts.platforms],
+      ['medium', facts.media],
+    ] as const) {
+      const taxonomy =
+        kind === 'platform' ? releaseClassificationSchemes[0].taxonomy : releaseClassificationSchemes[1].taxonomy;
+      const definition = schemeFor.get(taxonomy)!;
+      for (const association of associations) {
+        const sourceUri = definition.conceptUri(association.code);
+        const citation = vndbRecordUrl(ownerKey);
+        const schemeKey = definition.schemeKey;
+        if (!schemes.has(taxonomy))
+          schemes.set(taxonomy, {
+            taxonomy,
+            sourceKey: schemeKey,
+            sourceUri: definition.schemeUri,
+            citation,
+            associationPath: association.path,
+            ownerKey,
+          });
+        const sourceKey = `${taxonomy}:${association.code}`;
+        const key = `${taxonomy}\0${association.code}`;
+        if (!concepts.has(key))
+          concepts.set(key, {
+            taxonomy,
+            sourceKey,
+            sourceUri,
+            citation,
+            associationPath: association.path,
+            ownerKey,
+            code: association.code,
+          });
+      }
+    }
+  }
+  return {
+    schemes: [...schemes.values()].sort((left, right) => left.taxonomy.localeCompare(right.taxonomy)),
+    concepts: [...concepts.values()].sort(
+      (left, right) => left.taxonomy.localeCompare(right.taxonomy) || left.code!.localeCompare(right.code!),
+    ),
+  };
+}
+
+function classificationSource(need: ReleaseClassificationNeed) {
+  return sourceEnvelope(
+    {
+      source: 'vndb_cross_media',
+      external_id: showcaseVocabularyExternalId(need.sourceKey),
+      record_revision: null,
+      converter_revision: releaseClassificationRevision,
+      digest: sourceDigest({
+        taxonomy: need.taxonomy,
+        sourceKey: need.sourceKey,
+        sourceUri: need.sourceUri,
+        citation: need.citation,
+        associationPath: need.associationPath,
+        adapterRevision: releaseClassificationRevision,
+      }),
+    },
+    'facts',
+  );
+}
+
+function classificationReferences(sourceUri: string, citation: string): BatchReference[] {
+  return [
+    {
+      parts: [sourceUri, citation].map((content) => ({
+        property: { id: 'schema:url' },
+        value: { type: 'value' as const, content },
+      })),
+    },
+  ];
+}
+
+function classificationCommands(input: {
+  need: ReleaseClassificationNeed;
+  nativeType: 'skos:ConceptScheme' | 'skos:Concept';
+  labels: Record<string, string>;
+  subjectId?: string;
+  schemeId?: string;
+}): BatchCommand[] {
+  const source = classificationSource(input.need);
+  const create: BatchCommand = {
+    op: 'create',
+    key: `vndb-release-classification-vocabulary:${commandKey([
+      JSON.stringify(source),
+      'create',
+      input.nativeType,
+      JSON.stringify(input.labels),
+    ])}`,
+    source,
+    subject: { type: input.nativeType, labels: input.labels },
+  };
+  if (!input.subjectId) return [create];
+  const references = classificationReferences(input.need.sourceUri, input.need.citation);
+  const statements: BatchStatement[] = [
+    {
+      property: { id: 'schema:url' },
+      value: { type: 'value', content: input.need.sourceUri },
+      references,
+    },
+  ];
+  if (input.nativeType === 'skos:Concept' && input.schemeId)
+    statements.push({
+      property: { id: 'skos:inScheme' },
+      value: { type: 'value', content: input.schemeId },
+      references,
+    });
+  return statements.map((statement) => ({
+    op: 'propose' as const,
+    key: `vndb-release-classification-vocabulary:${commandKey([
+      JSON.stringify(source),
+      input.subjectId!,
+      'propose',
+      JSON.stringify(statement),
+    ])}`,
+    source,
+    subject: input.subjectId!,
+    statement,
+  }));
+}
+
+function isReleaseClassificationCommand(command: BatchCommand): boolean {
+  return (
+    command.source.source === 'vndb_cross_media' &&
+    command.source.converter_revision === releaseClassificationRevision
+  );
+}
+
+async function sendReleaseClassificationPages(
+  port: Pick<CrossMediaPort, 'batch'>,
+  commands: readonly BatchCommand[],
+): Promise<void> {
+  for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
+    const page = commands.slice(offset, offset + BATCH_LIMIT);
+    if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
+      throw new TypeError('VNDB release classification commands failed portable validation');
+    await port.batch({ commands: [...page] });
+  }
+}
+
+async function sendMissingReleaseClassificationCommands(input: {
+  port: Pick<CrossMediaPort, 'batch'>;
+  journal: ShowcaseJournal;
+  commands: readonly BatchCommand[];
+}): Promise<void> {
+  const pending = input.journal.preparedCommands().flatMap((row) =>
+    isReleaseClassificationCommand(row.command) ? [row.command] : [],
+  );
+  if (pending.length) await sendReleaseClassificationPages(input.port, pending);
+  const sealed = new Map<string, string>();
+  const created = new Set<string>();
+  for (const row of [...input.journal.acknowledgedCommands(), ...input.journal.preparedCommands()]) {
+    if (!isReleaseClassificationCommand(row.command)) continue;
+    sealed.set(row.command.key, row.commandDigest);
+    if (row.command.op === 'create') created.add(row.command.source.external_id);
+  }
+  const commands = input.commands.filter((command) => {
+    const digest = sealed.get(command.key);
+    if (digest !== undefined) {
+      if (digest !== showcaseDigest(command))
+        throw new TypeError('VNDB release classification ACK changed its command body');
+      return false;
+    }
+    return command.op !== 'create' || !created.has(command.source.external_id);
+  });
+  if (commands.length) await sendReleaseClassificationPages(input.port, commands);
+}
+
+function acknowledgedReleaseClassificationCreates(journal: ShowcaseJournal): Map<string, string> {
+  return new Map(
+    journal
+      .acknowledgedCommands()
+      .flatMap((row) =>
+        row.command.op === 'create' &&
+        row.subjectId &&
+        isReleaseClassificationCommand(row.command)
+          ? [[row.command.source.external_id, row.subjectId] as const]
+          : [],
+      ),
+  );
+}
+
+function releaseClassificationGroups(
+  needs: ReturnType<typeof releaseClassificationNeeds>,
+  journal: ShowcaseJournal,
+): VndbReleaseBindingGroup[] {
+  const creates = acknowledgedReleaseClassificationCreates(journal);
+  return releaseClassificationSchemes.flatMap((definition) => {
+    const schemeNeed = needs.schemes.find((item) => item.taxonomy === definition.taxonomy);
+    if (!schemeNeed) return [];
+    const schemeId = creates.get(showcaseVocabularyExternalId(schemeNeed.sourceKey));
+    if (!schemeId) return [];
+    const concepts = needs.concepts.flatMap((item) => {
+      if (item.taxonomy !== definition.taxonomy || !item.code) return [];
+      const id = creates.get(showcaseVocabularyExternalId(item.sourceKey));
+      return id ? [{ code: item.code, id }] : [];
+    });
+    return [{ taxonomy: definition.taxonomy, uri: definition.schemeUri, schemeId, concepts }];
+  });
+}
+
+/** Stage only selected release classification Concepts in the common showcase journal. */
+export async function prepareShowcaseVndbReleaseClassifications(input: {
+  plan: CrossMediaPlan;
+  port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'>;
+  journal: ShowcaseJournal;
+  stage: 'schemes' | 'concepts';
+}): Promise<{
+  requirements: ShowcaseVocabularyRequirement[];
+  bindings: SourceVocabularyBindings;
+  groups: VndbReleaseBindingGroup[];
+}> {
+  const needs = releaseClassificationNeeds(input.plan.releasePlatforms ?? new Map());
+  const schemeRequirements = needs.schemes.map((need) => ({
+    provider: 'vndb' as const,
+    ownerKey: need.ownerKey,
+    sourceKey: need.sourceKey,
+    source: classificationSource(need),
+    sourceUri: need.sourceUri,
+    nativeType: 'skos:ConceptScheme' as const,
+  }));
+  const commands = needs.schemes.flatMap((need) =>
+    classificationCommands({
+      need,
+      nativeType: 'skos:ConceptScheme',
+      labels: { en: releaseClassificationSchemes.find((item) => item.taxonomy === need.taxonomy)!.schemeLabel },
+    }),
+  );
+  await sendMissingReleaseClassificationCommands({ port: input.port, journal: input.journal, commands });
+  const schemeCreates = acknowledgedReleaseClassificationCreates(input.journal);
+  const schemeProposals = needs.schemes.flatMap((need) => {
+    const subjectId = schemeCreates.get(showcaseVocabularyExternalId(need.sourceKey));
+    return subjectId
+      ? classificationCommands({
+          need,
+          nativeType: 'skos:ConceptScheme',
+          labels: { en: releaseClassificationSchemes.find((item) => item.taxonomy === need.taxonomy)!.schemeLabel },
+          subjectId,
+        })
+      : [];
+  });
+  await sendMissingReleaseClassificationCommands({ port: input.port, journal: input.journal, commands: schemeProposals });
+  let groups = releaseClassificationGroups(needs, input.journal);
+  let bindings = await readVndbReleaseBindings(input.port, groups);
+  if (input.stage === 'schemes' || !needs.concepts.length)
+    return { requirements: schemeRequirements, bindings, groups };
+
+  const currentSchemes = new Map(bindings.schemes.map((scheme) => [scheme.taxonomy, scheme.id]));
+  const conceptNeeds = needs.concepts.filter((need) => currentSchemes.has(need.taxonomy));
+  const limit = Math.min(
+    sourceVocabularyLimits.concepts,
+    Math.max(0, showcaseLimits.vocabulary - schemeRequirements.length),
+  );
+  const selectedConceptNeeds = conceptNeeds.slice(0, limit);
+  const conceptCommands = selectedConceptNeeds.flatMap((need) =>
+    classificationCommands({
+      need,
+      nativeType: 'skos:Concept',
+      labels: { en: need.code! },
+    }),
+  );
+  await sendMissingReleaseClassificationCommands({ port: input.port, journal: input.journal, commands: conceptCommands });
+  const creates = acknowledgedReleaseClassificationCreates(input.journal);
+  const conceptProposals = selectedConceptNeeds.flatMap((need) => {
+    const subjectId = creates.get(showcaseVocabularyExternalId(need.sourceKey));
+    const schemeId = currentSchemes.get(need.taxonomy);
+    return subjectId && schemeId
+      ? classificationCommands({
+          need,
+          nativeType: 'skos:Concept',
+          labels: { en: need.code! },
+          subjectId,
+          schemeId,
+        })
+      : [];
+  });
+  await sendMissingReleaseClassificationCommands({
+    port: input.port,
+    journal: input.journal,
+    commands: conceptProposals,
+  });
+  const conceptRequirements = selectedConceptNeeds.flatMap((need) => {
+    const schemeId = currentSchemes.get(need.taxonomy);
+    return schemeId
+      ? [
+          {
+            provider: 'vndb' as const,
+            ownerKey: need.ownerKey,
+            sourceKey: need.sourceKey,
+            source: classificationSource(need),
+            sourceUri: need.sourceUri,
+            nativeType: 'skos:Concept' as const,
+            schemeId,
+          },
+        ]
+      : [];
+  });
+  groups = releaseClassificationGroups(needs, input.journal);
+  bindings = await readVndbReleaseBindings(input.port, groups);
+  return { requirements: [...schemeRequirements, ...conceptRequirements], bindings, groups };
 }
 
 function fieldsOf(table: string, record: Row): string[] {
@@ -227,8 +598,9 @@ export function composeShowcaseVndbReleaseAdmission(
   next: Admission | undefined,
   bindings: SourceVocabularyBindings,
   facts: VndbReleaseFacts,
+  releasePlatforms: ReadonlyMap<string, VndbReleasePlatformFacts> = new Map(),
 ): Admission {
-  const release = vndbReleaseVocabularyAdmission(bindings, facts);
+  const release = vndbReleaseVocabularyAdmission(bindings, facts, new Map(), releasePlatforms);
   return {
     request(input) {
       const ours = release.request?.(input);
@@ -389,6 +761,57 @@ function bindingGroups(
   return groups;
 }
 
+function classificationBindingGroups(
+  platforms: ReadonlyMap<string, VndbReleasePlatformFacts>,
+  supplied: readonly VndbReleaseBindingGroup[],
+): VndbReleaseBindingGroup[] {
+  const wanted = new Map<string, Set<string>>();
+  const [platformTaxonomy, mediumTaxonomy] = vndbReleaseClassificationTaxonomies();
+  const add = (taxonomy: string, code: string) => {
+    const codes = wanted.get(taxonomy) ?? new Set<string>();
+    codes.add(code);
+    wanted.set(taxonomy, codes);
+  };
+  for (const facts of platforms.values()) {
+    for (const { code } of facts.platforms) add(platformTaxonomy!, code);
+    for (const { code } of facts.media) add(mediumTaxonomy!, code);
+  }
+  const uriByTaxonomy = new Map([
+    [platformTaxonomy!, vndbReleasePlatformSchemeUri],
+    [mediumTaxonomy!, vndbReleaseMediumSchemeUri],
+  ]);
+  return supplied.flatMap((group) => {
+    const codes = wanted.get(group.taxonomy);
+    if (!codes || uriByTaxonomy.get(group.taxonomy) !== group.uri) return [];
+    const concepts = group.concepts.filter((item) => codes.has(item.code));
+    return concepts.length ? [{ ...group, concepts }] : [];
+  });
+}
+
+async function selectedReleasePlatforms(
+  tables: CrossMediaTables,
+  plan: CrossMediaPlan,
+  facts: VndbReleaseFacts,
+): Promise<ReadonlyMap<string, VndbReleasePlatformFacts>> {
+  if (plan.releasePlatforms) return plan.releasePlatforms;
+  const releaseIds = [...facts.releases.keys()].sort().slice(0, vndbReleaseAssociationReleaseCap);
+  const availableRows = new Map(
+    releaseIds.map((id) => [
+      id,
+      Math.max(0, sourceVocabularyLimits.rows - 1 - (facts.releases.get(id)?.links.length ?? 0)),
+    ]),
+  );
+  const planned = await planVndbReleasePlatforms(tables, releaseIds, availableRows);
+  plan.releasePlatforms = planned.byRelease;
+  plan.gaps.push(...planned.gaps);
+  for (const row of plan.entities.vndb) {
+    const associations = planned.byRelease.get(row.key);
+    if (!associations) continue;
+    row.payload = { ...(row.payload as object), ...vndbReleasePlatformPayload(row.key, associations) };
+  }
+  return planned.byRelease;
+}
+
 export async function prepareShowcaseVndbReleases(input: {
   tables: CrossMediaTables;
   plan: CrossMediaPlan;
@@ -399,24 +822,27 @@ export async function prepareShowcaseVndbReleases(input: {
 }): Promise<ShowcaseVndbReleasePreparation> {
   const collected = await collectSelectedVndbReleaseFacts(input.tables, input.plan);
   const needed = showcaseVndbReleaseRequirements(collected.facts);
+  const releasePlatforms = await selectedReleasePlatforms(input.tables, input.plan, collected.facts);
   const gaps = [...collected.gaps, ...needed.gaps];
-  const groups = bindingGroups(
-    collected.facts,
-    overlayBindingGroups([
-      catalogueVndbReleaseGroups(input.catalogueSubjects, needed.requirements),
-      input.groups ?? [],
-      groupsFromVndbReleaseBindings(input.bindings),
-    ]),
-  );
+  const suppliedGroups = overlayBindingGroups([
+    catalogueVndbReleaseGroups(input.catalogueSubjects, needed.requirements),
+    input.groups ?? [],
+    groupsFromVndbReleaseBindings(input.bindings),
+  ]);
+  const stateGroups = bindingGroups(collected.facts, suppliedGroups);
+  const platformGroups = classificationBindingGroups(releasePlatforms, suppliedGroups);
+  const groups = overlayBindingGroups([stateGroups, platformGroups]);
   const bindings =
     input.port && groups.length
       ? await readVndbReleaseBindings(input.port, groups)
       : emptyShowcaseVndbReleaseBindings();
   input.plan.releaseFacts = collected.facts;
+  input.plan.releasePlatforms = releasePlatforms;
   input.plan.gaps.push(...gaps);
   return {
     plan: input.plan,
     facts: collected.facts,
+    releasePlatforms,
     bindings,
     requirements: needed.requirements,
     groups,
@@ -474,6 +900,7 @@ export async function seedShowcaseVndbReleases(input: {
       input.extras?.vocabularyAdmission,
       prepared.bindings,
       prepared.facts,
+      prepared.releasePlatforms,
     ),
     onConversionOutput(output: ImportConversion) {
       const extra = output as ImportConversion<{ sourceVocabularyGaps?: readonly SourceVocabularyGap[] }>;

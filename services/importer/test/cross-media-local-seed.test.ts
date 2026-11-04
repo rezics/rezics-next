@@ -90,7 +90,9 @@ test('development seed fetches the shared cache once and passes the local person
     expect(option('--client')).toBe('local-cli');
     expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
     expect(args).not.toContain('--vndb-credit-bindings');
-    expect(passedOptions).toMatchObject({ selection: developmentShowcaseSelection });
+    expect(passedOptions).toMatchObject({
+      selection: { ...developmentShowcaseSelection, includeReleases: true },
+    });
   } finally {
     await rm(keyDirectory, { recursive: true, force: true });
   }
