@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useOperation } from '../kernel/exposure';
@@ -174,7 +174,6 @@ function CreatorRead({
   });
   const guard: CreatorOfferGuard = origin;
   const refreshFailure = useCreatorIntent<boolean>(guard, 'offer-refresh-failed');
-  const [manualRefreshPending, setManualRefreshPending] = useState(false);
   const query = useQuery<Outcome | null>({
     ...personalRead,
     queryKey: ['creator-offers-current', subject, locale, address, origin.id],
@@ -201,32 +200,18 @@ function CreatorRead({
     outcome: initialData,
     value: initialData?.kind === 'accepted' ? initialData.value : undefined,
   }));
-  const refreshCurrent = async () => {
-    setManualRefreshPending(true);
-    try {
-      await query.refetch();
-    } finally {
-      setManualRefreshPending(false);
-    }
-  };
   // A loader refresh is not a new admitted origin. Keep its observed rows/edition and
   // command operands mounted, even if that refresh omits a row or temporarily fails.
-  useLayoutEffect(() => {
-    if (!origin.isCurrent() || !query.data || query.data === display.outcome) return;
+  if (origin.isCurrent() && query.data && query.data !== display.outcome) {
     refreshFailure.value = query.data.kind === 'failed';
-    setDisplay((current) =>
-      current.outcome === query.data
-        ? current
-        : {
-            outcome: query.data!,
-            value: query.data!.kind === 'accepted' ? query.data!.value : current.value,
-          },
-    );
-  }, [display.outcome, origin, query.data, refreshFailure]);
+    setDisplay({
+      ...display,
+      outcome: query.data,
+      value: query.data.kind === 'accepted' ? query.data.value : display.value,
+    });
+  }
   if (hydrated && !origin.isCurrent()) return <Notice kind="preparing" address={address} locale={locale} />;
-  useLayoutEffect(() => {
-    if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
-  }, [display.value, origin]);
+  if (display.value && origin.isCurrent()) origin.workspace.read = display.value;
   const data = display.value?.data;
   let content;
   if (!data)
@@ -247,7 +232,7 @@ function CreatorRead({
       <CreatorOffersPage
         data={data}
         guard={guard}
-        onRefresh={() => void refreshCurrent()}
+        onRefresh={() => void query.refetch()}
         onConfirm={async (id) => {
           const refreshed = await query.refetch({ cancelRefetch: true });
           const outcome = refreshed.data;
@@ -258,7 +243,7 @@ function CreatorRead({
             ? (latest.page.offers.find((offer) => offer.id === id) ?? null)
             : null;
         }}
-        refreshing={query.isFetching || manualRefreshPending}
+        refreshing={query.isFetching}
         locale={locale}
         offerPageAvailable={offerPageAvailable ?? false}
         {...(address.kind === 'list' && address.cursor ? { cursor: address.cursor } : {})}
@@ -279,8 +264,8 @@ function CreatorRead({
           <Button
             variant="outline"
             className="min-h-11"
-            disabled={query.isFetching || manualRefreshPending}
-            onClick={() => void refreshCurrent()}
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
           >
             {m.creator_offers_refresh()}
           </Button>
