@@ -1,6 +1,8 @@
 import type { OwnVoteEntry, OwnVotesPage } from './types';
 
 export const OWN_VOTES_OPERATION = 'rating.own_votes_page' as const;
+// This native page still requires personal_library exposure; it is not Library membership.
+export const OWN_VOTES_CONTEXT = { operation: OWN_VOTES_OPERATION, exposure: 'personal_library' } as const;
 export const OWN_VOTES_SOURCE = 'rating.own_votes_page/v1' as const;
 export const OWN_VOTES_PAGE_LIMIT = 20;
 export const OWN_VOTES_CURSOR_LIMIT = 4096;

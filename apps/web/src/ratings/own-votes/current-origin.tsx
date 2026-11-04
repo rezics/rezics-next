@@ -1,17 +1,17 @@
 import { useQuery, useQueryClient, queryOptions } from '@tanstack/react-query';
 import { useMemo, useRef } from 'react';
 import { getLocale } from '../../paraglide/runtime.js';
-import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
+import { useWorkspaceAdmission } from '../../reader/workspace-admission';
 import {
-  assertHistoryCurrent,
-  useHistoryAddress,
-  useHistoryCurrentOrigin,
-  useHistoryReadOrigin,
-} from '../../library/history-current-origin';
+  assertReaderCurrent,
+  useReaderAddress,
+  useReaderCurrentOrigin,
+  useReaderResponseOrigin,
+} from '../../reader/current-origin';
 import { personalRead } from '../../kernel/query';
 import { readOwnVotesForViewer, type OwnVotesRead } from './actions';
 import type { OwnVotesPage } from './types';
-import { OWN_VOTES_OPERATION, OWN_VOTES_SOURCE } from './inventory';
+import { OWN_VOTES_OPERATION, OWN_VOTES_SOURCE, OWN_VOTES_CONTEXT } from './inventory';
 
 const operations = [OWN_VOTES_OPERATION] as const;
 
@@ -28,20 +28,20 @@ export function ownVotesQuery(
       'own-votes',
       subject,
       OWN_VOTES_OPERATION,
-      'personal_library',
+      OWN_VOTES_CONTEXT,
       cursor,
       locale,
       OWN_VOTES_SOURCE,
       originKey,
     ],
     queryFn: async ({ signal }) => {
-      assertHistoryCurrent(current, signal);
+      assertReaderCurrent(current, signal);
       try {
         const result = await readOwnVotesForViewer({ data: cursor === null ? {} : { cursor } });
-        assertHistoryCurrent(current, signal);
+        assertReaderCurrent(current, signal);
         return result;
       } catch (error) {
-        assertHistoryCurrent(current, signal);
+        assertReaderCurrent(current, signal);
         throw error;
       }
     },
@@ -85,11 +85,12 @@ export function useOwnVotesCurrentOrigin(
   const client = useQueryClient();
   const locale = getLocale();
   const cursor = requestedCursor;
-  const address = useHistoryAddress('/library/ratings', cursor ?? undefined, locale);
+  const address = useReaderAddress('/library/ratings', cursor ?? undefined, locale);
   const originAddress = invalidAddress ? `${address.key}:invalid` : address.key;
-  const origin = useHistoryCurrentOrigin(originAddress, operations, initial.subject);
-  const admission = useLibraryWorkspaceAdmission(operations).value;
-  const current = () => address.isCurrent() && origin.current(0);
+  const origin = useReaderCurrentOrigin(originAddress, operations, initial.subject);
+  const admission = useWorkspaceAdmission(operations).value;
+  const reading = origin.readLease(0);
+  const current = () => address.isCurrent() && reading.current();
   const options = ownVotesQuery(origin.subject ?? '', cursor, locale, origin.lifetime(0), current);
   const query = useQuery(
     {
@@ -107,7 +108,7 @@ export function useOwnVotesCurrentOrigin(
     },
     client,
   );
-  const readIsCurrent = useHistoryReadOrigin(client, options.queryKey, (value) => {
+  const readIsCurrent = useReaderResponseOrigin(client, options.queryKey, (value) => {
     return isOwnVotesRead(value) && matches(value, origin.subject, cursor, locale);
   });
   const isCurrent = () => current() && readIsCurrent();

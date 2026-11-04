@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useSession } from '../session/query';
+import { addressLease } from '../reader/lease';
+import { browserObservation } from '../session/observation';
 
 export type CandidateWork = { reader: string; live: () => boolean };
 type Lifetime = CandidateWork & { generation: number; retire: () => void; active: () => boolean };
@@ -28,17 +30,12 @@ function useLifetime(identity: string, reader: string, parent?: CandidateWork | 
   if (!previous.current || previous.current.identity !== identity || previous.current.parent !== parent) {
     const generation = ++nextGeneration;
     previous.current?.value.retire();
-    let retired = false;
+    const lease = addressLease(() => !parent || ('active' in parent && typeof parent.active === 'function' ? parent.active() : parent.live()));
     const value: Lifetime = {
       reader,
       generation,
-      retire: () => {
-        retired = true;
-      },
-      active: () =>
-        !retired &&
-        mounted.current &&
-        (!parent || ('active' in parent ? (parent as Lifetime).active() : parent.live())),
+      retire: lease.retire,
+      active: () => mounted.current && lease.current(),
       live: () => !!reader && value.active(),
     };
     previous.current = { identity, parent, value };
@@ -85,10 +82,10 @@ export function candidateSession<Props extends object>(Component: ComponentType<
   return function CandidateSession(props: Props) {
     const observed = useSession();
     const client = useQueryClient();
-    const store = sessionChanges(client);
-    const revision = useSyncExternalStore(store.subscribe, store.revision, store.revision);
+    const store = browserObservation(client);
+    const revision = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
     const admission = useMemo(
-      () => ({ reader: observed.subject ?? '', live: () => store.revision() === revision }),
+      () => ({ reader: observed.subject ?? '', live: () => store.getSnapshot() === revision }),
       [store, revision, observed.subject],
     );
     return (
@@ -117,55 +114,14 @@ export function useCandidateWork(address: string, fixtureReader?: string) {
   return useLifetime(JSON.stringify([address, reader]), reader, parent);
 }
 
-// Observe the existing session Query at notification time. A batched A-B-A still increments
-// the revision twice; no private payload or credential is cached by this observer.
-const sessionObservers = new WeakMap<QueryClient, ReturnType<typeof observeSession>>();
-function observeSession(client: QueryClient) {
-  const current = () => client.getQueryData<ReturnType<typeof useSession>>(['session']);
-  const snapshot = () => {
-    const data = current();
-    return JSON.stringify([data?.state, data?.subject, data?.csrfToken]);
-  };
-  let last = snapshot();
-  let revision = 0;
-  const listeners = new Set<() => void>();
-  client.getQueryCache().subscribe(() => {
-    const next = snapshot();
-    if (next === last) return;
-    last = next;
-    revision++;
-    for (const listener of listeners) listener();
-  });
-  return {
-    revision: () => revision,
-    current: (reader: string, expected: number) => {
-      const data = current();
-      return !!reader && revision === expected && data?.state === 'signed-in' && data.subject === reader;
-    },
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-}
-function sessionChanges(client: QueryClient) {
-  let store = sessionObservers.get(client);
-  if (!store) {
-    store = observeSession(client);
-    sessionObservers.set(client, store);
-  }
-  return store;
-}
-
-/** A route-return lease survives SPA navigation and retires on any installed session replacement. */
+/** A route-return lease subscribes through the common observation, never a second cache listener. */
 export function captureCandidateSession(client: QueryClient, reader: string): CandidateSessionLease {
-  const store = sessionChanges(client);
-  const revision = store.revision();
+  const store = browserObservation(client);
+  const snapshot = store.getSnapshot();
   return {
     reader,
-    current: () => store.current(reader, revision),
+    current: () => !!reader && snapshot.state === 'signed-in' &&
+      snapshot.observation.subject === reader && store.getSnapshot() === snapshot,
     subscribe: store.subscribe,
   };
 }
