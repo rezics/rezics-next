@@ -1906,14 +1906,6 @@ Run the native acceptance through the worker check queue; landing owns regressio
 bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/provider-cli-native.test.ts
 ```
 
-The source cases were frozen at `637f28a6d1`. On the original base with `wikidata-3`, at tested revision
-`02fa3231fc`, the native command passed all
-three cases with 3,392 assertions (check `db222e74-09b0-47e4-83f6-025e202ba014`), and root typecheck passed
-(check `15bbed60-7e96-4489-9965-ba862c069b0c`). Captured first-input bytes were 1,263 / 762 / 3,105 for
-Bangumi / Open Library / Wikidata, with 3 / 2 / 2 subjects and 17 / 22 / 21 immutable importer receipts after
-refresh. Each source's malformed, truncated and mass-disappearance inputs produced zero public writes and
-preserved its completed baseline. Exact consumed-byte and seal counters are emitted in the native check log.
-
 ### Wikidata released time and quantity
 
 The ordinary JSONL registration uses the exported `wikidata-6` converter. It
