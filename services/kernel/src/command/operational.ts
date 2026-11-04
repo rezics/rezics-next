@@ -288,7 +288,7 @@ export async function runOperationalTransaction<T>(
       }
     } catch (error) {
       if (error instanceof Error && Object.isExtensible(error)) Object.assign(error, { operationKind: kind });
-      // A selected invocation owns one prepaid attempt per phase; never retry/refill here.
+      // A selected invocation owns one attempt per phase; contention does not retry this original.
       if (selected) {
         selected.finish();
         throw error;
