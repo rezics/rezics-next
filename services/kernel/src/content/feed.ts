@@ -373,162 +373,164 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       // One bounded mixed round. Reserve native raw costs, including rejected keys inside owners:
       // discovery <=6D+3, Continue <=39, inbox <=F. Mixed max91; anonymous max123.
       const loadLane = async (lane: Lane) => {
-          if (position[lane] === false) return;
-          try {
-            if (lane === 'discovery') {
-              if (!deps.discovery) throw new ProblemError('dependency_unavailable');
-              const discoveryContext = {
-                access: deps.access,
-                actor,
-                deadline,
-                ...(spacePopulation ? { spacePopulation } : {}),
-              };
-              const page = await deps.discovery(
-                personal ? `account:${actor.accountId}` : 'anonymous',
-                {
-                  representation: 'discovery-v1',
-                  limit: discoveryLimit,
-                  languages: [...languages],
-                  ...(kind === undefined ? {} : { filter: { kind: { in: [kind] } } }),
-                  ...(space ? { spaceId: space.spaceId } : {}),
-                  ...(position.discovery ? { cursor: position.discovery } : {}),
-                },
-                discoveryContext,
-              );
-              discoveryAsOf = page.as_of;
-              lanes.discovery = page.hits.map((hit) => ({ item: feedDiscoveryItem(hit) }));
-              next.discovery = page.next ?? false;
-            } else if (lane === 'continue') {
-              const page = await continued.list(
-                actor,
-                {
-                  limit: FEED_CONTINUE_WIDTH,
-                  view: 'FULL',
-                  ...(space ? { spaceId: space.spaceId } : {}),
-                  ...(space && kind !== undefined ? { kind } : {}),
-                  ...(position.continue ? { cursor: position.continue } : {}),
-                },
-                deadline,
-                languages,
-              );
-              continueFingerprint = fingerprint(page.subjects.map((row) => [row.subjectId, row.lastActivityAt]));
-              if (position.resume && position.resume.fingerprint !== continueFingerprint)
-                throw new ProblemError('stale_cursor');
-              const offset = position.resume
-                ? page.subjects.findIndex(
-                    (row) => fingerprint([row.subjectId, row.lastActivityAt]) === position.resume!.after,
-                  ) + 1
-                : 0;
-              if (position.resume && !offset) throw new ProblemError('stale_cursor');
-              lanes.continue = page.subjects.slice(offset).map((row) => ({
-                after: fingerprint([row.subjectId, row.lastActivityAt]),
-                item: row.subject
-                  ? {
-                      id: `continue:${row.subject.id}`,
-                      source: 'continue',
-                      key: {
-                        owner: 'semantic',
-                        kind: row.subject.type,
-                        route: feedRoute(row.subject.id),
-                        id: row.subject.id,
-                      },
-                      occurredAt: row.lastActivityAt,
-                      summary: row.subject,
-                      continue: row,
-                      destination: { kind: 'subject', id: row.subject.id, title: row.subject.label?.value ?? null },
-                    }
-                  : null,
-              }));
-              next.continue = page.next ?? false;
-              next.resume = null;
-            } else if (actor.kind === 'account') {
-              const page = await activities.pageFollowingActivity(
-                actor.accountId,
-                {
-                  limit: followingLimit,
-                  boundary: position.boundary,
-                  ...(position.following ? { cursor: position.following } : {}),
-                },
-                deadline,
-              );
-              const ids = [
-                ...new Set(
-                  page.activities.flatMap((activity) => [
-                    ...(activity.object.owner === 'semantic' ? [activity.object.id] : []),
-                    ...(activity.target.type === 'subject' ? [activity.target.id] : []),
-                  ]),
-                ),
-              ];
-              const summaries = await readSubjectSummaries({ ...deps, actor, deadline }, ids, { languages });
-              const threadIds = [
-                ...new Set(
-                  page.activities.flatMap((activity) =>
-                    activity.object.owner === 'content' ? [activity.object.threadId] : [],
-                  ),
-                ),
-              ];
-              // The native executor groups complete anchored keys per backend/container and applies
-              // its original opening-post, parent-chain and body/reference final disclosure checks.
-              const disclosed = await discloseThreads(content, threadIds, { actor, deadline });
-              const threads = new Map(threadIds.map((id, index) => [id, disclosed[index]!.value]));
-              const authorIds = new Map<string, string>();
-              lanes.following = await Promise.all(
-                page.activities.map(async (activity) => {
-                  try {
-                    return {
-                      item: await hydrate(
-                        activity,
-                        actor,
-                        deadline,
-                        summaries,
-                        threads,
-                        authorIds,
-                        contextSources,
-                        activitySources,
-                        space,
-                      ),
-                    };
-                  } catch (error) {
-                    if (
-                      error instanceof ContentNotFoundError ||
-                      (error instanceof ProblemError && error.code === 'not_found')
-                    )
-                      return { item: null };
-                    throw error;
+        if (position[lane] === false) return;
+        try {
+          if (lane === 'discovery') {
+            if (!deps.discovery) throw new ProblemError('dependency_unavailable');
+            const discoveryContext = {
+              access: deps.access,
+              actor,
+              deadline,
+              ...(spacePopulation ? { spacePopulation } : {}),
+            };
+            const page = await deps.discovery(
+              personal ? `account:${actor.accountId}` : 'anonymous',
+              {
+                representation: 'discovery-v1',
+                limit: discoveryLimit,
+                languages: [...languages],
+                ...(kind === undefined ? {} : { filter: { kind: { in: [kind] } } }),
+                ...(space ? { spaceId: space.spaceId } : {}),
+                ...(position.discovery ? { cursor: position.discovery } : {}),
+              },
+              discoveryContext,
+            );
+            discoveryAsOf = page.as_of;
+            lanes.discovery = page.hits.map((hit) => ({ item: feedDiscoveryItem(hit) }));
+            next.discovery = page.next ?? false;
+          } else if (lane === 'continue') {
+            const page = await continued.list(
+              actor,
+              {
+                limit: FEED_CONTINUE_WIDTH,
+                view: 'FULL',
+                ...(space ? { spaceId: space.spaceId } : {}),
+                ...(space && kind !== undefined ? { kind } : {}),
+                ...(position.continue ? { cursor: position.continue } : {}),
+              },
+              deadline,
+              languages,
+            );
+            continueFingerprint = fingerprint(page.subjects.map((row) => [row.subjectId, row.lastActivityAt]));
+            if (position.resume && position.resume.fingerprint !== continueFingerprint)
+              throw new ProblemError('stale_cursor');
+            const offset = position.resume
+              ? page.subjects.findIndex(
+                  (row) => fingerprint([row.subjectId, row.lastActivityAt]) === position.resume!.after,
+                ) + 1
+              : 0;
+            if (position.resume && !offset) throw new ProblemError('stale_cursor');
+            lanes.continue = page.subjects.slice(offset).map((row) => ({
+              after: fingerprint([row.subjectId, row.lastActivityAt]),
+              item: row.subject
+                ? {
+                    id: `continue:${row.subject.id}`,
+                    source: 'continue',
+                    key: {
+                      owner: 'semantic',
+                      kind: row.subject.type,
+                      route: feedRoute(row.subject.id),
+                      id: row.subject.id,
+                    },
+                    occurredAt: row.lastActivityAt,
+                    summary: row.subject,
+                    continue: row,
+                    destination: { kind: 'subject', id: row.subject.id, title: row.subject.label?.value ?? null },
                   }
-                }),
-              );
-              // One page batch (at most F distinct identities), with Accounts' own final disclosure.
-              const accounts = await readAccountDiscoverySummaries(
-                { ...deps, actor, deadline },
-                [...new Set(authorIds.values())],
-                { languages },
-              );
-              // Keep the existing final follow disclosure after all owner hydration, including identities.
-              lanes.following = await Promise.all(
-                lanes.following.map(async (candidate, index) => {
-                  const item = candidate.item;
-                  if (!item) return candidate;
-                  if (!(await supported(page.activities[index]!, actor, deadline))) return { item: null };
-                  if (item.key.owner === 'content' && 'createdAt' in item.summary) {
-                    const authorId = authorIds.get(item.id);
-                    const author = authorId ? feedAuthor(accounts.get(authorId)) : undefined;
-                    if (author) item.summary = { ...item.summary, author };
-                  }
-                  return candidate;
-                }),
-              );
-              next.following = page.next ?? false;
-            }
-          } catch (error) {
-            lanes[lane] = [];
-            sources[lane] = sourceState(error);
-            next[lane] = position[lane];
+                : null,
+            }));
+            next.continue = page.next ?? false;
+            next.resume = null;
+          } else if (actor.kind === 'account') {
+            const page = await activities.pageFollowingActivity(
+              actor.accountId,
+              {
+                limit: followingLimit,
+                boundary: position.boundary,
+                ...(position.following ? { cursor: position.following } : {}),
+              },
+              deadline,
+            );
+            const ids = [
+              ...new Set(
+                page.activities.flatMap((activity) => [
+                  ...(activity.object.owner === 'semantic' ? [activity.object.id] : []),
+                  ...(activity.target.type === 'subject' ? [activity.target.id] : []),
+                ]),
+              ),
+            ];
+            const summaries = await readSubjectSummaries({ ...deps, actor, deadline }, ids, { languages });
+            const threadIds = [
+              ...new Set(
+                page.activities.flatMap((activity) =>
+                  activity.object.owner === 'content' ? [activity.object.threadId] : [],
+                ),
+              ),
+            ];
+            // The native executor groups complete anchored keys per backend/container and applies
+            // its original opening-post, parent-chain and body/reference final disclosure checks.
+            const disclosed = await discloseThreads(content, threadIds, { actor, deadline });
+            const threads = new Map(threadIds.map((id, index) => [id, disclosed[index]!.value]));
+            const authorIds = new Map<string, string>();
+            lanes.following = await Promise.all(
+              page.activities.map(async (activity) => {
+                try {
+                  return {
+                    item: await hydrate(
+                      activity,
+                      actor,
+                      deadline,
+                      summaries,
+                      threads,
+                      authorIds,
+                      contextSources,
+                      activitySources,
+                      space,
+                    ),
+                  };
+                } catch (error) {
+                  if (
+                    error instanceof ContentNotFoundError ||
+                    (error instanceof ProblemError && error.code === 'not_found')
+                  )
+                    return { item: null };
+                  throw error;
+                }
+              }),
+            );
+            // One page batch (at most F distinct identities), with Accounts' own final disclosure.
+            const accounts = await readAccountDiscoverySummaries(
+              { ...deps, actor, deadline },
+              [...new Set(authorIds.values())],
+              { languages },
+            );
+            // Keep the existing final follow disclosure after all owner hydration, including identities.
+            lanes.following = await Promise.all(
+              lanes.following.map(async (candidate, index) => {
+                const item = candidate.item;
+                if (!item) return candidate;
+                if (!(await supported(page.activities[index]!, actor, deadline))) return { item: null };
+                if (item.key.owner === 'content' && 'createdAt' in item.summary) {
+                  const authorId = authorIds.get(item.id);
+                  const author = authorId ? feedAuthor(accounts.get(authorId)) : undefined;
+                  if (author) item.summary = { ...item.summary, author };
+                }
+                return candidate;
+              }),
+            );
+            next.following = page.next ?? false;
           }
+        } catch (error) {
+          lanes[lane] = [];
+          sources[lane] = sourceState(error);
+          next[lane] = position[lane];
+        }
       };
       await Promise.all(names.map(loadLane));
       const sourceWitnesses = new Map(
-        names.flatMap((lane) => lanes[lane].flatMap(({ item }) => item ? [[item.id, JSON.stringify(item)] as const] : [])),
+        names.flatMap((lane) =>
+          lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
+        ),
       );
       // Keep rejected candidates in their original slots: they still consume the native
       // raw budget and examined frontier, including Continue's fingerprint/resume keys.
@@ -637,7 +639,8 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           for (const reference of contextReferences) {
             const item = feedItems.find((candidate) => candidate.id === reference.key);
             const context = composed.contexts.get(reference.key);
-            if (context) contextWitnesses.set(reference.key, JSON.stringify({ thread: context.thread, post: context.post }));
+            if (context)
+              contextWitnesses.set(reference.key, JSON.stringify({ thread: context.thread, post: context.post }));
             const thread = context?.thread;
             if (
               !item ||
@@ -812,7 +815,11 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       let viewerPersonalActions: FeedPage['viewerPersonalActions'];
       if (personal && stream === 'home') {
         viewerPersonalActions = await composeFeedViewerPersonalActions(
-          deps, actor, feedItems, deadline, languages,
+          deps,
+          actor,
+          feedItems,
+          deadline,
+          languages,
           async () => {
             // Reopen the exact independent source queries after all foreign work. Their
             // new cursors are observations only: retries retain the original frontier.
@@ -823,8 +830,11 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
               space = await openFollowingSpace(deps, actor, query.spaceId, deadline, now.toISOString());
             for (const lane of selectedLanes) await loadLane(lane);
             Object.assign(next, retainedNext);
-            const current = new Map(selectedLanes.flatMap((lane) =>
-              lanes[lane].flatMap(({ item }) => item ? [[item.id, JSON.stringify(item)] as const] : [])));
+            const current = new Map(
+              selectedLanes.flatMap((lane) =>
+                lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
+              ),
+            );
             for (let index = feedItems.length - 1; index >= 0; index--) {
               const item = feedItems[index]!;
               if (current.get(item.id) !== sourceWitnesses.get(item.id)) {
@@ -834,15 +844,22 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
               }
             }
             if (contextReferences.length) {
-              const finalContexts = await (await prepareFeedContentContext(
-                content, contextReferences.map(({ key, threadId, postId }) => ({ key, threadId, postId })),
-                { actor, deadline }, languages,
-              )).finish();
+              const finalContexts = await (
+                await prepareFeedContentContext(
+                  content,
+                  contextReferences.map(({ key, threadId, postId }) => ({ key, threadId, postId })),
+                  { actor, deadline },
+                  languages,
+                )
+              ).finish();
               for (let index = feedItems.length - 1; index >= 0; index--) {
                 const item = feedItems[index]!;
                 if (!contextWitnesses.has(item.id)) continue;
                 const context = finalContexts.contexts.get(item.id);
-                if (!context || JSON.stringify({ thread: context.thread, post: context.post }) !== contextWitnesses.get(item.id)) {
+                if (
+                  !context ||
+                  JSON.stringify({ thread: context.thread, post: context.post }) !== contextWitnesses.get(item.id)
+                ) {
                   feedItems.splice(index, 1);
                   next[item.source] = position[item.source];
                 }

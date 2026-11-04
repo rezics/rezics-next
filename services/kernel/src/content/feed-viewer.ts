@@ -1,6 +1,7 @@
 import type { Actor } from '../request/access.ts';
 import type { ViewerPersonalActionInput, ViewerPersonalActionsPage } from '../library/viewer-personal-actions.ts';
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
+import { routeOf } from '../route/route.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import type { FeedDependencies } from './feed.ts';
 import type { FeedItem } from './feed-contract.ts';
@@ -8,9 +9,16 @@ import type { FeedItem } from './feed-contract.ts';
 /** Only explicit work cards and original review targets can supply personal operands. */
 export function feedViewerReferences(items: readonly FeedItem[]): ViewerPersonalActionInput[] {
   return items.flatMap((item) => {
-    if (item.key.owner === 'semantic' && 'creativeWork' in item.summary && item.summary.creativeWork &&
-        item.destination.kind === 'subject' && item.summary.id === item.key.id &&
-        item.destination.id === item.key.id && item.key.kind === item.summary.type)
+    if (
+      item.key.owner === 'semantic' &&
+      'creativeWork' in item.summary &&
+      item.summary.creativeWork &&
+      item.destination.kind === 'subject' &&
+      item.summary.id === item.key.id &&
+      item.destination.id === item.key.id &&
+      routeOf(item.key.id) === item.key.route &&
+      item.key.kind === item.summary.type
+    )
       return [{ rowKey: item.id, subjectId: item.key.id, resourceType: item.summary.type }];
     if (item.key.owner !== 'content' || item.key.kind === 'post' || !('reviewContext' in item.summary)) return [];
     const target = item.summary.reviewContext?.target;
@@ -31,7 +39,9 @@ export async function composeFeedViewerPersonalActions(
 ): Promise<ViewerPersonalActionsPage> {
   const references = feedViewerReferences(items);
   const subjects = await readSubjectSummaryObservation(
-    { ...deps, actor, deadline }, [...new Set(references.map((row) => row.subjectId))], { languages },
+    { ...deps, actor, deadline },
+    [...new Set(references.map((row) => row.subjectId))],
+    { languages },
   );
   const rows = references.filter((row) => {
     const subject = subjects.summaries.get(row.subjectId);
@@ -49,9 +59,19 @@ export async function composeFeedViewerPersonalActions(
   const current = new Map(feedViewerReferences(admitted).map((row) => [row.rowKey, row]));
   // The native helper owns standard-question meaning, counted CURRENT votes and
   // mounted action advice. Never derive a score or create denial from other fields.
-  return { ...result, rows: result.rows.filter((row) => {
-    const source = current.get(row.rowKey);
-    return source?.subjectId === row.subjectId && rows.some((input) =>
-      input.rowKey === row.rowKey && input.subjectId === row.subjectId && input.resourceType === source.resourceType);
-  }) };
+  return {
+    ...result,
+    rows: result.rows.filter((row) => {
+      const source = current.get(row.rowKey);
+      return (
+        source?.subjectId === row.subjectId &&
+        rows.some(
+          (input) =>
+            input.rowKey === row.rowKey &&
+            input.subjectId === row.subjectId &&
+            input.resourceType === source.resourceType,
+        )
+      );
+    }),
+  };
 }
