@@ -263,6 +263,11 @@ function ContributionLifecycleLive({
                   ? m.contribution_candidate_available({}, o)
                   : m.contribution_candidate_unconfirmed({}, o)}
             </ContentItemHeading>
+            {current.selected === true && (
+              <ContentItemHeading level={3} className="min-w-0 text-sm font-medium leading-relaxed sm:col-span-2">
+                {m.candidate_selected({}, o)}
+              </ContentItemHeading>
+            )}
             {state === 'restored' && current.selected === false && (
               <ContentItemHeading level={3} className="min-w-0 text-sm font-medium leading-relaxed sm:col-span-2">
                 {m.contribution_unselected({}, o)}
@@ -273,6 +278,11 @@ function ContributionLifecycleLive({
         <div data-content-item-slot="actions" className="flex min-w-0 flex-col gap-3">
           {state === 'deleted' && (
             <p className="text-sm leading-relaxed text-muted-foreground">{m.contribution_window({}, o)}</p>
+          )}
+          {current?.actions?.state === 'unavailable' && !pending.current && (
+            <p role="status" className="text-sm leading-relaxed">
+              {m.ctxw_actions_unavailable({}, o)}
+            </p>
           )}
           {failure && (
             <p
