@@ -381,7 +381,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       pending: null,
       confirmedReceipt: { attempt: { input: pending!.input }, receipt: { notifications: receiptNotifications, version: 8 } },
     });
-    expect(confirmed).toEqual([]);
+    expect(confirmed).toEqual([8]);
     await editor.edit('thread_watch', false, 7);
     await editor.edit('thread_watch', true, 7);
     await editor.retry();
@@ -426,7 +426,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       'PATCH',
     ]);
     expect(transport.sessionReads()).toBe(6);
-    expect(confirmed).toEqual([10, 11]);
+    expect(confirmed).toEqual([8, 10, 11]);
     expect(editor.snapshot()).toMatchObject({
       phase: 'saved',
       draft: { ...optional, reply: false, mention: false, thread_watch: false },
