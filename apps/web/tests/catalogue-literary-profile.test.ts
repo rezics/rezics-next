@@ -47,7 +47,11 @@ test('Book and book-series work editor uses actual released metadata native writ
   expect(result).toEqual({
     ok: true,
     id: literaryWorkId,
-    reader: { state: 'ready', href: `/en/subjects/${literaryWorkId}/an-original-literary-work` },
+    reader: {
+      state: 'ready',
+      href: `/en/subjects/${literaryWorkId}/an-original-literary-work`,
+      identity: { id: literaryWorkId, type: 'schema:Book', label: 'An original literary work' },
+    },
   });
   const writes = fixture.calls.filter((call) => call.path === '/v1/subjects' && call.method === 'POST');
   expect(writes.map((call) => call.key)).toEqual([command.key, command.key]);
