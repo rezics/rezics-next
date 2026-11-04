@@ -43,7 +43,7 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
     const context = { pool: config.pool, deadline };
     const ids = [...new Set(associations.flatMap((a) => [a.subjectId, a.targetId]))];
     const mappings = await identityEpochStore.readMappings(config.pool, ids);
-    const subjects = new Map<string, unknown>();
+    const subjects = new Map<string, string>();
     for (const [index, id] of ids.entries()) {
       const current = await resolveSubject(config, actor, id, undefined, context);
       const mapping = mappings[index];
@@ -52,7 +52,8 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
         await partitionReadClient(client, partitionOf(routeOf(id)!));
         return readItemIdentityVersion(client, id);
       }, deadline);
-      if (version && version.redirect === null) subjects.set(id, { mapping, version });
+      if (version && version.redirect === null)
+        subjects.set(id, classificationDigest([{ ...mapping, epoch: mapping.epoch.toString() }, version]));
     }
     const contexts = new Map<string, Awaited<ReturnType<typeof readContext>>>();
     for (const id of new Set(associations.map((a) => a.contextId))) {
