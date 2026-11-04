@@ -263,6 +263,7 @@ export function accessNativeDeclaration(
     | 'candidates'
     | 'formula'
     | 'account-state'
+    | 'account-profile'
     | 'opening'
     | 'opening-partition'
     | 'opening-moved-target'
@@ -309,6 +310,22 @@ export function accessNativeDeclaration(
         },
         examinedKeys,
       );
+      break;
+    case 'account-profile':
+      // One full-key active unfenced account. Closed private fields, never stored URLs.
+      examinedKeys = points = rows = 1;
+      projection = bytes({
+        id: uuid,
+        kind: 'organization',
+        handle: 'x'.repeat(64),
+        displayName: 'x'.repeat(4096),
+        bio: 'x'.repeat(4096),
+        links: Array.from({ length: 5 }, () => ({ label: 'x'.repeat(64), url: 'x'.repeat(2048) })),
+        avatar: uuid,
+        publicViews: { posts: false, reviews: false, collections: false, realms: false },
+        speakersListed: false,
+        operatorAccountId: uuid,
+      });
       break;
     case 'opening':
       examinedKeys = points = 1; // exact Global group/time exclusion-key probe

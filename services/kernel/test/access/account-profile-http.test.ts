@@ -350,6 +350,20 @@ test('speakersListed is accepted only for an organization', async () => {
   const org = await auth.host.workflows.createOrganization({ key, handle: key, authorization: approval.reference });
   expect((await patch(org, { displayName: 'Organization', speakersListed: true }, other.bearer)).status).toBe(200);
   expect(await profile({ handle: key })).toMatchObject({ displayName: 'Organization', speakersListed: true });
+  const privateOrg = await call('GET', `/v1/accounts/${org.accountId}/profile`, undefined, other.bearer);
+  expect(privateOrg.status).toBe(200);
+  expect(privateOrg.body.editing).toEqual({
+    viewer: { accountId: other.accountId },
+    target: { accountId: org.accountId, kind: 'organization' },
+    fields: {
+      displayName: { applicable: true, maxLength: 4096 },
+      biography: { applicable: true, maxLength: 4096 },
+      avatar: { applicable: true },
+      links: { applicable: true, maxItems: 5, labelMaxLength: 64, urlMaxLength: 2048 },
+      publicViews: { applicable: true, flags: ['posts', 'reviews', 'collections', 'realms'] },
+      speakersListed: { applicable: true },
+    },
+  });
   expect((await patch(org, { speakersListed: false }, other.bearer)).status).toBe(200);
   expect(await profile({ handle: key })).toMatchObject({ speakersListed: false });
 });

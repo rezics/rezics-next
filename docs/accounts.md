@@ -63,12 +63,16 @@ transition. Privacy unlinking and dispute/reassignment procedures in the researc
 read of editable source fields by immutable ID, including accounts without handles. It uses the same native
 authorization as `updateAccount`: `account:update` on the subject, or `account:manage` on an operated actor's
 exact current operator. All actor, client scope, principal, current state and fence operands apply. Unknown or
-denied subjects disclose no profile; there is no self, operator or administrator bypass. The closed `{ profile }`
+denied subjects disclose no profile; there is no self, operator or administrator bypass. The closed `{ profile, editing }`
 contains `id`, `kind`, nullable current `handle`, `displayName`, `bio`, `links`, Content's current avatar summary
-or null, `publicViews` (`posts`, `reviews`, `collections`, `realms`) and organization-only `speakersListed`.
+or null, `publicViews` (`posts`, `reviews`, `collections`, `realms`) and organization-only `speakersListed`, plus a
+viewer/target field-advice observation built from that prepared authority, account kind and command limits.
 Private visibility choices round-trip; missing or malformed flags resolve to false. No credential, email,
 verification evidence, operator proof or stored avatar URL belongs in this projection. GET consumes no write
-operation and does not change PATCH validation, public lookup or discovery. See the [Access read contract][access-public].
+operation and does not change PATCH validation, public lookup or discovery. Advice is not a durable grant. See the
+[Access read contract][access-public].
+
+**Decision:** Private profile GET returns closed `{profile, editing}` from the current prepared `account:update` authority, account kind and field limits; advice is an observation, not a grant, and GET still requires `account:update`.
 
 ### Public identity
 
