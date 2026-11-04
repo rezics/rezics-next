@@ -94,15 +94,19 @@ function CommunityExample({ state }: { state: CommunityState }) {
       : query.data;
   // The unavailable variant removes the optional source; it never turns the Realm board into a Global board.
   const shown = { ...page };
-  if (state === 'source-unavailable') delete shown.realm;
+  if (state === 'source-unavailable') shown.community = { state: 'unavailable', value: null };
   return (
     <BoardCommunity
       page={shown}
       sort="active"
-      participation={
-        <BoardParticipation realm={shown.realm} community={shown.community} returnTo={`/${getLocale()}/boards/${id}`} />
+      participation={<BoardParticipation community={shown.community} returnTo={`/${getLocale()}/boards/${id}`} />}
+      start={
+        <BoardStartThread
+          board={shown.board}
+          advice={shown.actions.createThread}
+          returnTo={`/${getLocale()}/boards/${id}`}
+        />
       }
-      start={<BoardStartThread board={shown.board} realm={shown.realm} returnTo={`/${getLocale()}/boards/${id}`} />}
     />
   );
 }

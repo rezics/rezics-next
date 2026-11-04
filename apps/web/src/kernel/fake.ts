@@ -532,6 +532,7 @@ async function selectRecording(
     const subjectLinks = /^\/v1\/subjects\/([^/]+)\/links$/.exec(pathname);
     if (subjectLinks?.[1] && decodeURIComponent(subjectLinks[1]) === resourceId(recordings.subject, 'subject'))
       return recordings['subject-links'];
+    // Prepared story advice only: authorization-header presence is never evidence of native participation.
     const boardOpening = /^\/v1\/boards\/([^/]+)\/page$/.exec(pathname);
     const boardId = boardOpening?.[1] ? decodeURIComponent(boardOpening[1]) : undefined;
     const boardKey = ['board', 'board-realm'].find((key) => resourceId(recordings[key], 'board') === boardId);

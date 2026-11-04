@@ -24,10 +24,9 @@ The pin and unpin consumer contract, native-order presentation and pending Conte
 
 ## Native Board opening
 
-Content's native opening reader is installed in service source, but its generated `@rezics/client` method and DTO
-are not published. Keep the existing route reader until `boards({ id }).page.get` is generated; do not add a copied
-DTO, cast, or direct request. The source response, current retry/restart contract, and the exact publication gap are
-recorded in [Native Board opening receiver](board-opening.md).
+The generated `BoardPageResponse` and `boards({ id }).page.get` supply each explicit opening and continuation in one
+request. The receiver, scoped author/media projections, action advice and retry/restart contract are documented in
+[Native Board opening receiver](board-opening.md). Native and rendered acceptance remain separate from prepared examples.
 
 ## Board row sharing
 

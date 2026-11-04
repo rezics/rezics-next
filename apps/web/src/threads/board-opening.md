@@ -13,6 +13,9 @@ reaction state, current conversation comment evidence or an explicit unavailable
 Missing reaction count keys stay missing; zero and unavailable remain distinct. A current comment witness carries an
 exact or lower-bound count; Web preserves that operand and does not derive totals from loaded rows. Pin, watch and
 slow-mode commands retain their existing owners.
+reaction state, request-bound exact/lower-bound conversation comments or unavailable comments, and reply/react/share advice. Missing count keys stay missing;
+zero and unavailable remain distinct. Only a current cohort witness supplies a comment count; unavailable witnesses supply no total. Pin, watch and slow-mode
+commands retain their existing owners.
 
 The source query admits `new`, `active` and `hot`, with a cursor of at most 4,096 characters. Content selects at most
 five initial pins and twenty ordinary candidates in native order. Continuation advances the ordinary source, keeps
@@ -96,6 +99,27 @@ witnesses, physical growth, or visual layout. Native persona, source-retirement,
 strict physical-plan runs remain part of controller acceptance. Phone and desktop, theme, keyboard, and locale review
 also remains part of controller acceptance.
 
-The Board activity fields remain unavailable in this response. A01 and A02 Home findings are not satisfied by a
+Board activity is current only when the response carries its request-bound cohort witness; unsupported cohorts stay unavailable. A01 and A02 Home findings are not satisfied by a
 Board page, and A08 is not satisfied by post revision time or the loaded reply window. Keep existing plaintext,
 preview bounds and author-declared spoiler reveal behavior when composing the admitted `ThreadView`.
+
+## Card and command presentation
+
+Decision: Board previews show one admitted opening image and keep spoiler text and that image behind an explicit reveal when the preview contains spoiler marks; native counts lacking either vote operand use chips rather than a derived vote score.
+
+Decision: Community membership advice supplies no Realm visibility, so the membership owner receives `unknown` visibility with the exact join/leave advice; signed-in Board reactions remain unavailable until their owner admits a viewer slot and reconciliation.
+
+Authors are scoped to each card's separate thread/opening projections. A disclosed identity elsewhere in the response
+does not fill a withheld projection. Media comes only from the same opening response and the opening post's declared
+media IDs; no presentation or author requests are issued. Explicit pin refresh uses the same generated opening method
+and replaces context, cards, advice, media and authors together. Pin commands, unknown-command retry and invalidating
+revision handling remain in the pin owner. The reaction owner receives the exact native target and sign-in advice;
+`personalReady: false` and `settleWithRead: false` remain the signed-in gate, including successful readable responses.
+
+A thread return descriptor may retain the disclosed row ID for focus. It carries no title, author or credentials.
+Returning reads the current Board source before focusing that surviving row, or the feed heading if it disappeared.
+The continuation bound is the installed 4,096-character Board cursor limit.
+
+Consumer measurements at selected cohorts 1/10/25 report one request per read, selected rows, serialized response bytes
+and retained rows. Varying unrelated prepared rows tests consumer independence only. It is not a native physical-growth
+measurement. Content persona, revocation, physical-plan and independent-cache first-paint deferrals remain unchanged.

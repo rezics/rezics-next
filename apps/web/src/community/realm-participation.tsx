@@ -24,7 +24,7 @@ export function RealmParticipationView({
   summaryRef,
 }: {
   state: MemberState | 'loading' | 'unavailable';
-  visibility: RealmHome['visibility'];
+  visibility: RealmHome['visibility'] | 'unknown';
   busy?: boolean;
   ready?: boolean;
   refresh?: MembershipRefreshState;
@@ -126,7 +126,7 @@ export function RealmParticipationView({
           ) : null}
           {state === 'none' &&
           !problem &&
-          visibility === 'public' &&
+          (visibility === 'public' || (visibility === 'unknown' && admittedAction === 'join')) &&
           (admittedAction === undefined || admittedAction === 'join') ? (
             <Button
               key="join"

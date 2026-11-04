@@ -1,3 +1,5 @@
+import type { ReceivedBoardOpeningPage } from '../board-opening';
+
 export type BoardPinAction = 'pin' | 'unpin';
 
 /** Content supplies one disclosed pin state and only the commands currently allowed for each row. */
@@ -63,6 +65,7 @@ export type BoardPinBoardRead =
       state: 'ready';
       boardId: string;
       management: 'allowed' | 'denied';
+      opening?: ReceivedBoardOpeningPage;
       pinnedThreads: readonly BoardPinJsonRecord[];
       threads: readonly BoardPinJsonRecord[];
       next: string | null;

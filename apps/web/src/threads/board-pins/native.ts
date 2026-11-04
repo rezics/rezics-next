@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed.ts';
 import type { SessionEnv } from '../../session/client.ts';
 import { prepareSession, viewerCredential } from '../../session/request.ts';
+import { receiveBoardOpeningPage } from '../board-opening';
 import { isInvalidBoardCursor, isMalformedBoardQuery } from '../board-reading';
 import {
   parseBoardPinBoard,
@@ -49,15 +50,6 @@ export function nativeBoardThreadPin(
   return pin;
 }
 
-function queryOf(sort: 'active' | 'hot' | 'new' | undefined, cursor: string | undefined): NativeOptions['query'] {
-  const mapped: 'active' | 'hot' | undefined = sort === 'new' ? undefined : (sort ?? 'active');
-  const query = {
-    ...(cursor ? { cursor } : {}),
-    ...(mapped ? { sort: mapped } : {}),
-  };
-  return Object.keys(query).length ? query : undefined;
-}
-
 function readOutcome(boardId: string, status: number, body: unknown): BoardPinBoardRead {
   if (status === 401 || status === 403) return { state: 'denied' };
   if (isInvalidBoardCursor(status, body)) return { state: 'restart' };
@@ -76,17 +68,19 @@ export async function readBoardPinBoardRequest(
   if (!validBoardPinId(input.boardId) || !originConfigured) return { state: 'unavailable' };
   try {
     await prepareSession(request, sessionEnv);
-    const resource = nativeBoardThreads(client, input.boardId);
-    if (!resource) return { state: 'unavailable' };
+    const resource = client.boards({ id: input.boardId }).page;
     const authorization = viewerCredential(request);
-    const query = queryOf(input.sort, input.cursor);
+    const query = { sort: input.sort ?? 'active', ...(input.cursor === undefined ? {} : { cursor: input.cursor }) };
     const result = await resource.get({
       ...(query ? { query } : {}),
       ...(authorization ? { headers: { authorization } } : {}),
       ...(input.signal ? { fetch: { signal: input.signal } } : {}),
     });
     if (result.error) return readOutcome(input.boardId, result.status, result.error);
-    return readOutcome(input.boardId, result.status, result.data);
+    if (!result.data || result.data.board.id !== input.boardId) return { state: 'unavailable' };
+    const opening = receiveBoardOpeningPage(result.data);
+    const reading = parseBoardPinBoard(input.boardId, { ...opening.threads, authors: opening.authors });
+    return reading.state === 'ready' ? { ...reading, opening } : reading;
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'unavailable' };
     return { state: 'unavailable' };

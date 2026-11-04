@@ -45,7 +45,7 @@ export function BoardParticipation({ community, returnTo }: { community: BoardCo
   if (join.action === null) return null;
   return (
     <RealmMembership
-      realm={{ id: realmId, visibility: join.action === 'leave' ? 'protected' : 'public', viewer: null }}
+      realm={{ id: realmId, visibility: 'unknown', viewer: null }}
       returnTo={returnTo}
       memberLabel={m.board_community_joined()}
       admittedAction={join.action}

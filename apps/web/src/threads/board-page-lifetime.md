@@ -4,10 +4,9 @@ The Board detail loader owns one caller visit from before its existing `boardPag
 The visit captures the QueryClient, Board id, cursor, sort, locale, credential mode and the exact session cache source,
 revision and tuple. Private reads use a visit-specific query key; the public anonymous key remains shared.
 
-The installed Web query still composes the Board read, board-threads page, optional Realm read and batched authors.
-Content's source-side `/v1/boards/:id/page` reader is not yet available through a generated `@rezics/client` method
-or DTO. This lifetime documents the actual current route and does not claim that Web consumes the one-request native
-opening envelope. See [Native Board opening receiver](board-opening.md).
+The installed query consumes one generated `boards({ id }).page.get` response, including Board/community context,
+opening cards, authors, media and current advice. It performs no per-row or optional enrichment reads. See
+[Native Board opening receiver](board-opening.md).
 
 The query wrapper checks the captured route, session, abort state and the exact query object before the original read.
 Once the original envelope returns, it compares the actual reader origin with the immutable expected reader and
@@ -29,7 +28,7 @@ effect replay can reconnect the same visit; a real unmount cannot. An asynchrono
 bound to its exact result, receipt and mounted connection, so an earlier connection cannot unlock a later one.
 
 Thread navigation captures only a bounded same-origin board/sort/continuation return descriptor in history state
-(cursor capped at 32,768 characters; larger frontiers restart without a cursor). Private titles, credentials and
+(cursor capped at 4,096 characters; larger frontiers restart without a cursor). Private titles, credentials and
 moderation content never enter URLs. A missing or foreign descriptor falls back to the existing board crumb. Returning
 loads the current native reading for that board/sort/continuation, or the explicit restart if the cursor is obsolete.
 Watch remains the existing thread toggle. After a pin or slow-mode command, the board reading is reconciled without
@@ -50,7 +49,7 @@ post-mount verification does not prove the first render safe, and this lifetime 
 independent-cache and unobserved-ABA limitation remains.
 
 One selected page retains the active pinned cohort (P<=5) and ordinary page (L=20, Content's default), disclosed author
-IDs (A<=P+L, batched at 100), the opaque cursor and the return descriptor. It does not retain historical pages.
+projections (A<=2(P+L), in the same response), the opaque cursor and the return descriptor. It does not retain historical pages.
 Existing preview processing stays inside its 128-node / 280-character window. Native row/document byte bounds remain
 Content-owned.
 

@@ -26,7 +26,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 /** Only the already-disclosed document's text nodes, never attributes, links, media ids or hidden bodies. */
-export function boardThreadPreview(thread: BoardFeedThread): string | null {
+export function boardThreadPreview(thread: BoardFeedThread, revealSpoilers = false): string | null {
   if (thread.availability !== 'available' || thread.firstPost.availability !== 'available') return null;
   const body: unknown = thread.firstPost.body;
   if (!record(body) || !record(body.doc)) return null;
@@ -37,6 +37,12 @@ export function boardThreadPreview(thread: BoardFeedThread): string | null {
   for (let visited = 0; pending.length && visited < 128 && length < 280; visited += 1) {
     const node = pending.pop();
     if (!record(node)) continue;
+    if (
+      !revealSpoilers &&
+      Array.isArray(node.marks) &&
+      node.marks.some((mark) => record(mark) && mark.type === 'spoiler')
+    )
+      continue;
     if (node.type === 'text' && typeof node.text === 'string') {
       const text = node.text
         .replace(/\s+/gu, ' ')

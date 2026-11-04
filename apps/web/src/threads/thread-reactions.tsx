@@ -90,6 +90,8 @@ export type ThreadReactionsProps = {
   returnTo: string;
   onMutation?: (kind: ReactionKind | null) => Promise<void>;
   personalReady?: boolean;
+  /** Native advice can withhold the signed-out entry without granting a writable viewer slot. */
+  signInAllowed?: boolean;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
   presentation?: 'chips' | 'vote' | 'vote-plain';
   /** Feed callers reconcile one successful explicit write with the existing bounded point reader. */
@@ -183,6 +185,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
     props.target.id,
     props.signedIn,
     props.personalReady ?? true,
+    props.signInAllowed ?? true,
     props.reactionOrigin?.key ?? null,
     props.sourceWatermark,
     hydrated,
@@ -226,6 +229,7 @@ function ReactionCaller({
   locale,
   preparedTransport,
   sourceWatermark,
+  signInAllowed,
   requireWatermark,
 }: ThreadReactionsProps & {
   admitted: boolean;
@@ -501,7 +505,7 @@ function ReactionCaller({
         {...(presentation ? { presentation } : {})}
         onChange={onChange}
         value={resolved ? resolved.snapshot.value : value}
-        {...(signedIn
+        {...(signedIn || signInAllowed === false
           ? {}
           : { signInHref: `${locale ? `/${locale}` : ''}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
       />

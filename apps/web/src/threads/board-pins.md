@@ -8,9 +8,8 @@ array and do not imply the board has no pins. Web never scans ordinary pages to 
 historical cohorts, and never sorts downloaded threads into a second feed. Concealed pins leave no title, placeholder
 or inferred count.
 
-The native opening response now exists in Content source, but Web still consumes the existing board-threads route
-because the generated opening method and DTO are unpublished. The receiver gap and current query are documented in
-[Native Board opening receiver](board-opening.md); this page's cohort and command contracts remain unchanged.
+Web consumes the installed generated Board opening method and DTO. Initial and continued reading, including pin
+refresh, use that response's disclosed card and context projections; see [Native Board opening receiver](board-opening.md).
 
 Readers see a localized pinned section and a pinned badge on those disclosed rows. Empty continuation keeps the
 feed's existing empty and sparse-page meanings. Malformed native pin data is unavailable with an explicit refresh,
@@ -28,7 +27,7 @@ discards that page's continuation authority and offers an explicit restart of th
 does not silently replay a stale frontier or merge two epochs. An initial page with no cursor re-reads that same
 board/sort without a cursor. Expired or foreign cursors use the same restart, not a generic unavailable retry.
 
-The consumer is `BoardPinProducer` in `board-pins/contract.ts`. `readBoard` re-reads the same board-threads GET,
+The consumer is `BoardPinProducer` in `board-pins/contract.ts`. `readBoard` re-reads the same generated Board opening GET,
 including `pinnedThreads` and ordinary continuation, bound to the current sort. After an invalidating command it
 omits the obsolete cursor. `change` binds `boards({ id }).threads({ threadId }).pin` POST `{ pinned }` with the
 original idempotency key. A missing generated method stays unavailable; no endpoint or successful native body is

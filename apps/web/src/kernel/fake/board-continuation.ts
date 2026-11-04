@@ -7,6 +7,7 @@ export const emptyBoardId = '01a17a3b-09a4-7204-87d4-43219f9a15af';
 export const continuationCursor = 'signed+board/next==';
 export const rankRefreshedAt = '2026-10-26T18:22:09.000Z';
 
+// Advice based on a story credential is prepared data, not native participation evidence.
 // Isolated page states derived from the recorded board DTO. They do not prove native disclosure or cursor signing.
 export const routes: FakeRoute[] = [
   {

@@ -1,6 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
-import type { ReactionKind } from '@rezics/ui/reactions';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { FeedActionBar } from '../features/feed/action-bar';
@@ -35,18 +34,18 @@ import {
 } from './board-feed-data';
 import { captureBoardReadingReturn, disclosedBoardAuthorIds } from './board-reading';
 import type { PageAuthors } from '../identity/read';
+import { boardOpeningReaction, type ReceivedBoardOpeningPage } from './board-opening';
+import { NativeDocumentImage } from './document-media-image';
 
 const consumedContinuationStates = new WeakSet<object>();
 let lastObservedHistoryIndex: number | null = null;
-
-function boardReactionCounts(card: BoardOpeningCard | undefined): Partial<Record<ReactionKind, number>> | undefined {
-  if (!card || card.interaction.counts.state !== 'as-of') return undefined;
-  const counts: Partial<Record<ReactionKind, number>> = {};
-  for (const [kind, value] of Object.entries(card.interaction.counts.values)) {
-    if (!Number.isSafeInteger(value) || value < 0) return undefined;
-    counts[kind as ReactionKind] = value;
-  }
-  return counts;
+const readingIdentities = new WeakMap<object, number>();
+let nextReadingIdentity = 0;
+function readingIdentity(value: object | null | undefined): number {
+  if (!value) return 0;
+  let identity = readingIdentities.get(value);
+  if (identity === undefined) readingIdentities.set(value, (identity = ++nextReadingIdentity));
+  return identity;
 }
 
 function ThreadCard({
@@ -70,8 +69,15 @@ function ThreadCard({
 }) {
   const locale = getLocale();
   const available = thread.availability === 'available';
-  const href = threadLocation(locale, { id: thread.id, title: available ? threadTitle(thread) : null });
-  const preview = boardThreadPreview(thread);
+  const href = threadLocation(locale, {
+    id: openingCard?.target.id ?? thread.id,
+    title: available ? threadTitle(thread) : null,
+  });
+  const [revealed, setRevealed] = useState(false);
+  const safePreview = boardThreadPreview(thread);
+  const revealedPreview = boardThreadPreview(thread, true);
+  const hasSpoilers = safePreview !== revealedPreview;
+  const preview = revealed ? revealedPreview : safePreview;
   const title = available ? (thread.title ?? preview ?? m.threads_untitled()) : m.thread_post_deleted();
   const openingUnavailable = available && thread.firstPost.availability !== 'available';
   const previewContent: ReactNode =
@@ -88,13 +94,25 @@ function ThreadCard({
   const comments = openingCard?.comments.state === 'current' ? openingCard.comments : undefined;
   const replyCount = comments?.count;
   const lastActivityAt = comments?.lastActivityAt ?? null;
-  const counts = boardReactionCounts(openingCard);
+  const counts = openingCard?.interaction.counts;
+  const votesCurrent =
+    counts?.state === 'as-of' && counts.values.upvote !== undefined && counts.values.downvote !== undefined;
   const reply =
     openingCard?.actions.reply === 'allowed' || openingCard?.actions.reply === 'sign-in'
       ? { href: `${href}${href.includes('#') ? '' : '#reply'}` }
       : undefined;
-  const reactionValue =
-    openingCard?.interaction.viewer.state === 'current' ? openingCard.interaction.viewer.reaction : null;
+  const author = openingCard
+    ? openingCard.authors.thread.state === 'available'
+      ? openingCard.authors.thread
+      : undefined
+    : authors?.[thread.authorId];
+  const openingAuthor = openingCard?.authors.openingPost;
+  const image =
+    available && thread.firstPost.availability === 'available' && openingCard?.media.state === 'available'
+      ? openingCard.media.images.find(
+          (image) => thread.firstPost.availability === 'available' && thread.firstPost.mediaIds.includes(image.id),
+        )
+      : undefined;
 
   return (
     <ContentItem
@@ -104,13 +122,14 @@ function ThreadCard({
       headingLevel={3}
       titleDataSlot="board-feed-card"
       data-thread-id={thread.id}
+      id={`board-thread-${thread.id}`}
       tabIndex={-1}
       metadata={
         available ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {pin?.pinned ? <BoardPinBadge pinned /> : null}
             <Byline
-              author={authors?.[thread.authorId]}
+              author={author}
               createdAt={thread.createdAt}
               now={now}
               size="sm"
@@ -119,7 +138,34 @@ function ThreadCard({
           </div>
         ) : null
       }
-      preview={previewContent}
+      preview={
+        <>
+          {previewContent}
+          {hasSpoilers ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11"
+              aria-expanded={revealed}
+              onClick={() => setRevealed((value) => !value)}
+            >
+              {revealed ? m.subject_spoiler_hide() : m.thread_reveal_spoiler()}
+            </Button>
+          ) : null}
+          {available &&
+          thread.firstPost.availability === 'available' &&
+          openingAuthor?.state === 'available' &&
+          openingAuthor.id !== thread.authorId ? (
+            <Byline author={openingAuthor} createdAt={thread.firstPost.createdAt} now={now} size="sm" />
+          ) : null}
+          {image && (!hasSpoilers || revealed) ? (
+            <NativeDocumentImage image={image} alt="" locale={locale} inspectable={false} />
+          ) : null}
+          {openingCard?.media.state === 'unavailable' ? (
+            <p className="text-sm text-muted-foreground">{m.content_edition_image_unavailable()}</p>
+          ) : null}
+        </>
+      }
       actions={
         available ? (
           <FeedActionBar
@@ -128,26 +174,35 @@ function ThreadCard({
             href={href}
             signedIn={signedIn}
             origin={origin}
+            reactionPresentation={openingCard && !votesCurrent ? 'chips' : 'vote'}
             {...(replyCount === undefined ? {} : { replyCount })}
-            {...(counts === undefined
-              ? {}
-              : {
-                  reaction: {
-                    target: { kind: 'thread' as const, id: thread.id },
-                    counts,
-                    value: reactionValue,
-                    personalReady: false,
-                    settleWithRead: false,
-                    reactionOrigin: { key: origin.key, reader: null, isCurrent: origin.isCurrent },
-                    sourceWatermark:
-                      openingCard?.interaction.counts.state === 'as-of'
-                        ? openingCard.interaction.counts.source
-                        : undefined,
-                  },
-                })}
+            {...(openingCard ? { reaction: boardOpeningReaction(openingCard, signedIn, origin) } : {})}
             {...(reply ? { reply } : {})}
             overflow={<CopyDiscussionLink href={href} />}
           >
+            {counts?.state === 'unavailable' ? (
+              <span className="text-xs text-muted-foreground">{m.feed_action_votes_unavailable()}</span>
+            ) : null}
+            {counts?.state === 'as-of' && !votesCurrent
+              ? Object.entries(counts.values)
+                  .filter(([, value]) => value === 0)
+                  .map(([kind]) => {
+                    const labels = {
+                      upvote: m.reaction_upvote(),
+                      downvote: m.reaction_downvote(),
+                      like: m.reaction_like(),
+                      love: m.reaction_love(),
+                      laugh: m.reaction_laugh(),
+                      insightful: m.reaction_insightful(),
+                      sad: m.reaction_sad(),
+                    };
+                    return (
+                      <span key={kind} className="text-xs text-muted-foreground">
+                        {labels[kind as keyof typeof labels]} {new Intl.NumberFormat(locale).format(0)}
+                      </span>
+                    );
+                  })
+              : null}
             {signedIn ? null : <CopyDiscussionLink href={href} />}
             {pinControl}
             {lastActivityAt ? (
@@ -181,6 +236,7 @@ type BoardFeedProps = {
   now: string;
   actions?: ReactNode;
   cursor?: string;
+  onOpeningRead?: (page: ReceivedBoardOpeningPage) => void;
   /** Native-format seam inputs for a future Content binding and its focused stories. */
   initialPinRead?: BoardPinReadResult;
   pinProducer?: BoardPinProducer;
@@ -216,7 +272,14 @@ export function BoardFeed(props: BoardFeedProps) {
     producer: pinProducer,
     visit,
   });
-  return <BoardFeedVisit key={key} {...props} pinProducer={pinProducer} visit={visit} />;
+  return (
+    <BoardFeedVisit
+      key={`${key}:${readingIdentity(props.page)}:${readingIdentity(props.openingCards)}:${readingIdentity(props.authors)}`}
+      {...props}
+      pinProducer={pinProducer}
+      visit={visit}
+    />
+  );
 }
 
 function BoardFeedVisit({
@@ -229,6 +292,7 @@ function BoardFeedVisit({
   actions,
   cursor,
   initialPinRead,
+  onOpeningRead,
   pinProducer,
   visit,
 }: BoardFeedProps & {
@@ -244,6 +308,7 @@ function BoardFeedVisit({
   const router = useRouter();
   const [reading, setReading] = useState(page);
   const [authors, setAuthors] = useState(initialAuthors);
+  const [cards, setCards] = useState(openingCards);
   const section = nativePinnedSection(reading.pinnedThreads);
   const ordinarySource = ordinaryBoardThreads(reading);
   const pinVisitKey = boardPinVisitKey({
@@ -266,6 +331,11 @@ function BoardFeedVisit({
     producer: pinProducer,
     visit,
     onBoardRead: (result) => {
+      if (result.opening && onOpeningRead) {
+        onOpeningRead(result.opening);
+        return;
+      }
+      setCards(result.opening?.openingCards);
       const next = applyBoardPinReading(page, result);
       setReading(next);
       const ordinary = ordinaryBoardThreads(next);
@@ -288,6 +358,15 @@ function BoardFeedVisit({
     const currentIndex = state.__TSR_index;
     const previousIndex = lastObservedHistoryIndex;
     lastObservedHistoryIndex = currentIndex;
+    const returnedId = /^#board-thread-([0-9a-f-]+)$/i.exec(
+      location.hash.startsWith('#') ? location.hash : `#${location.hash}`,
+    )?.[1];
+    if (returnedId) {
+      const returned = [...(list.current?.querySelectorAll<HTMLElement>('[data-thread-id]') ?? [])].find(
+        (row) => row.dataset.threadId === returnedId,
+      );
+      (returned ?? heading.current)?.focus();
+    }
     if (continuationState.__boardNextPage !== true || consumedContinuationStates.has(state)) return;
     if (previousIndex !== null && currentIndex > previousIndex) {
       consumedContinuationStates.add(state);
@@ -298,7 +377,7 @@ function BoardFeedVisit({
       const current = browserState as Record<string, unknown>;
       if (current.__boardNextPage === true) window.history.replaceState({ ...current, __boardNextPage: false }, '');
     }
-  }, [location.state]);
+  }, [location.state, location.hash]);
   useLayoutEffect(() => {
     const focused = typeof document === 'undefined' ? null : document.activeElement;
     if (!(focused instanceof HTMLElement) || !list.current?.contains(focused)) return;
@@ -329,7 +408,11 @@ function BoardFeedVisit({
     const href = link.getAttribute('href');
     if (!href || !href.includes('/threads/')) return;
     event.preventDefault();
-    void router.navigate({ href, state: { boardReadingReturn: returnAddress } as never });
+    const focusThreadId = link.closest('[data-thread-id]')?.getAttribute('data-thread-id');
+    void router.navigate({
+      href,
+      state: { boardReadingReturn: { ...returnAddress, ...(focusThreadId ? { focusThreadId } : {}) } } as never,
+    });
   };
   const card = (thread: BoardFeedThread, pinnedRow?: BoardPinThread) => {
     const row =
@@ -355,7 +438,7 @@ function BoardFeedVisit({
       <ThreadCard
         key={`${boardId}:${thread.id}:${thread.availability}`}
         thread={thread}
-        {...(openingCards?.[thread.id] ? { openingCard: openingCards[thread.id] } : {})}
+        {...(cards?.[thread.id] ? { openingCard: cards[thread.id] } : {})}
         authors={authors}
         now={now}
         {...(row === undefined ? {} : { pin: row })}

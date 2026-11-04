@@ -5,8 +5,8 @@ import type { BoardSort } from './board-sort';
 export const BOARD_ORDINARY_PAGE_LIMIT = 20;
 /** `GET /v1/accounts?ids=` admits at most 100 identities. */
 export const BOARD_AUTHOR_BATCH_LIMIT = 100;
-/** Same bound as Home frontiers; larger cursors become an explicit restart. */
-export const BOARD_READING_CURSOR_LIMIT = 32_768;
+/** The installed Board opening cursor bound; larger frontiers become an explicit restart. */
+export const BOARD_READING_CURSOR_LIMIT = 4_096;
 export const BOARD_READING_RETURN_VERSION = 1;
 
 export { BOARD_PINNED_SECTION_LIMIT };
@@ -17,6 +17,7 @@ export type BoardReadingReturn = {
   sort: BoardSort;
   locale: string;
   cursor?: string;
+  focusThreadId?: string;
 };
 
 export class BoardPageCursorError extends Error {
@@ -70,6 +71,7 @@ export function captureBoardReadingReturn(input: {
   sort: BoardSort;
   locale: string;
   cursor?: string;
+  focusThreadId?: string;
 }): BoardReadingReturn | null {
   if (!validBoardPinId(input.boardId) || !input.locale || input.locale.length > 64) return null;
   if (input.sort !== 'active' && input.sort !== 'hot' && input.sort !== 'new') return null;
@@ -83,6 +85,7 @@ export function captureBoardReadingReturn(input: {
     sort: input.sort,
     locale: input.locale,
     ...(cursor === undefined ? {} : { cursor }),
+    ...(validBoardPinId(input.focusThreadId) ? { focusThreadId: input.focusThreadId } : {}),
   };
 }
 
@@ -101,6 +104,7 @@ export function parseBoardReadingReturn(value: unknown): BoardReadingReturn | nu
     sort: value.sort,
     locale: value.locale,
     ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
+    ...(typeof value.focusThreadId === 'string' ? { focusThreadId: value.focusThreadId } : {}),
   });
 }
 
@@ -110,7 +114,8 @@ export function boardReadingHref(reading: BoardReadingReturn): string {
   if (reading.sort !== 'active') params.set('sort', reading.sort);
   if (reading.cursor !== undefined) params.set('cursor', reading.cursor);
   const search = params.toString();
-  return search ? `${path}?${search}` : path;
+  const href = search ? `${path}?${search}` : path;
+  return reading.focusThreadId ? `${href}#board-thread-${reading.focusThreadId}` : href;
 }
 
 export function boardReadingRestartHref(input: { boardId: string; sort: BoardSort; locale: string }): string {

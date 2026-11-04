@@ -11,7 +11,7 @@ const csrf = 'A'.repeat(22);
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const metadata = {
   route: 0,
-  visibility: 'published',
+  visibility: 'published' as const,
   securityRevision: '1',
   createdAt: '2026-10-26T00:00:00.000Z',
 };
@@ -56,11 +56,13 @@ function pageData(size: number, authorCount: number) {
     licence: 'CC-BY-4.0',
     subjectIds: [],
     mediaIds: [],
-    availability: 'available',
+    availability: 'available' as const,
+    revisedAt: null,
+    voteCitation: null,
     body: {
-      version: 'rezics-document-v1',
-      profile: 'blocks',
-      doc: { type: 'doc', content: [] },
+      version: 'rezics-document-v1' as const,
+      profile: 'blocks' as const,
+      doc: { type: 'doc' as const, content: [] },
     },
   }));
   const threads = posts.map((post, index) => ({
@@ -70,9 +72,10 @@ function pageData(size: number, authorCount: number) {
     authorId: post.authorId,
     licence: 'CC-BY-4.0',
     subjectIds: [],
+    kind: 'discussion' as const,
     title: `Thread ${index}`,
-    availability: 'available',
-    firstPost: posts[index],
+    availability: 'available' as const,
+    firstPost: posts[index]!,
   }));
   return { authors, posts, threads, erased: new Set<string>() };
 }
@@ -98,7 +101,9 @@ function recordingClient(
         metrics.K += 1;
         calls.push(url);
         if (url.pathname === `/v1/boards/${boardId}/page`) {
-          const author = (authorId: string) => ({
+          const author = (
+            authorId: string,
+          ): Extract<BoardPageResponse['threads'][number]['authors']['thread'], { state: 'available' }> => ({
             state: 'available',
             id: authorId,
             kind: 'actor',
@@ -106,8 +111,16 @@ function recordingClient(
             displayName: null,
             automated: false,
           });
-          const page = {
-            board: { ...metadata, id: boardId, title: 'Cost board', availability: 'available', realmId: null },
+          const page: BoardPageResponse = {
+            board: {
+              ...metadata,
+              id: boardId,
+              title: 'Cost board',
+              purpose: 'discussion',
+              availability: 'available',
+              realmId: null,
+              community: null,
+            },
             pinnedThreads: [],
             threads: data.threads.map((thread) => ({
               thread,
@@ -127,7 +140,7 @@ function recordingClient(
             reactionsAsOf: null,
             viewer: { participation: 'allowed' },
             actions: { createThread: 'allowed' },
-          } as unknown as BoardPageResponse;
+          };
           return Response.json(page);
         }
         if (url.pathname === `/v1/threads/${threadId}`)

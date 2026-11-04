@@ -44,7 +44,7 @@ export function RealmMembership({
   admittedAction,
   nativeObservation,
 }: {
-  realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
+  realm: Pick<RealmHome, 'id' | 'viewer'> & { visibility: RealmHome['visibility'] | 'unknown' };
   returnTo: string;
   spaceId?: string;
   memberLabel?: string;
@@ -230,7 +230,7 @@ function PersonalMembership({
   memberLabel,
   admittedAction,
 }: {
-  realm: Pick<RealmHome, 'id' | 'visibility' | 'viewer'>;
+  realm: Pick<RealmHome, 'id' | 'viewer'> & { visibility: RealmHome['visibility'] | 'unknown' };
   subject: string;
   csrfToken: string | null;
   spaceId?: string;

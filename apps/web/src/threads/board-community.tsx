@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import {
   CommunityBanner,
@@ -22,7 +22,7 @@ import { boardReadingRestartHref } from './board-reading';
 
 /** One owned community region, reused by the actual route and Patterns. The shell owns surrounding navigation. */
 export function BoardCommunity({
-  page,
+  page: initialPage,
   sort,
   cursor,
   participation,
@@ -33,11 +33,18 @@ export function BoardCommunity({
   page: CommunityBoardPage;
   sort: BoardSort;
   cursor?: string;
-  participation?: ReactNode;
-  start?: ReactNode;
+  participation?: ReactNode | ((page: CommunityBoardPage) => ReactNode);
+  start?: ReactNode | ((page: CommunityBoardPage) => ReactNode);
   overflow?: ReactNode;
   postingInterval?: ReactNode;
 }) {
+  const [replacement, setReplacement] = useState<{
+    source: CommunityBoardPage;
+    page: CommunityBoardPage;
+    generation: number;
+  } | null>(null);
+  if (replacement && replacement.source !== initialPage) setReplacement(null);
+  const page = replacement?.source === initialPage ? replacement.page : initialPage;
   const aboutHeadingId = useId();
   const rulesHeadingId = useId();
   const { board, threads, authors, now } = page;
@@ -58,7 +65,7 @@ export function BoardCommunity({
           <div className="flex flex-wrap items-end justify-between gap-3">
             <CommunityAvatar avatar={avatar} name={name} realmId={community?.realmId ?? board.realmId} />
             <div className="flex max-w-full flex-wrap items-center gap-2 pt-3">
-              {participation}
+              {typeof participation === 'function' ? participation(page) : participation}
               {overflow ?? <BoardCommunityMenu boardId={board.id} />}
             </div>
           </div>
@@ -75,13 +82,17 @@ export function BoardCommunity({
       </header>
       <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <BoardFeed
+          key={replacement?.source === initialPage ? replacement.generation : 0}
+          onOpeningRead={(page) =>
+            setReplacement((previous) => ({ source: initialPage, page, generation: (previous?.generation ?? 0) + 1 }))
+          }
           boardId={board.id}
           sort={sort}
           page={threads}
           openingCards={page.openingCards}
           authors={authors}
           now={now}
-          actions={start}
+          actions={typeof start === 'function' ? start(page) : start}
           {...(cursor === undefined ? {} : { cursor })}
         />
         <aside className="min-w-0" aria-labelledby={aboutHeadingId}>
