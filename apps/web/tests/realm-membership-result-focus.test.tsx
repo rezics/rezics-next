@@ -14,6 +14,7 @@ let reads = 0;
 let read: () => Promise<RealmViewer>;
 let send: () => Promise<MembershipResult>;
 mock.module('../src/community/realm-membership-actions', () => ({
+  readRealmJoinAdvice: async () => ({ state: 'current', allowed: true }),
   readRealmMembership: () => {
     reads++;
     return read();

@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement, useEffect, useRef, useState } from 'react';
+import { act, createElement, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { MembershipResult } from '../src/community/space';
@@ -89,12 +89,22 @@ Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
 mock.module('../src/session/query', () => ({
   ...sessionModule,
   sessionCsrfToken: () => null,
-  useSession: () =>
-    useQueryClient().getQueryData(sessionModule.sessionQuery.queryKey) ?? {
-      state: 'unknown',
-      csrfToken: null,
-      subject: null,
-    },
+  useSession: () => {
+    const client = useQueryClient();
+    return (
+      useSyncExternalStore(
+        (notify) =>
+          client.getQueryCache().subscribe(({ query }) => {
+            if (query.queryKey[0] === 'session') notify();
+          }),
+        () => client.getQueryData(sessionModule.sessionQuery.queryKey),
+      ) ?? {
+        state: 'unknown',
+        csrfToken: null,
+        subject: null,
+      }
+    );
+  },
 }));
 const { realmMembershipQuery } = await import('../src/community/realm-membership-queries');
 const { RealmMembership } = await import('../src/community/realm-membership');
