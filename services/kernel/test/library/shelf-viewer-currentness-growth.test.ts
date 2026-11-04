@@ -10,6 +10,7 @@ test('FULL shelf viewer overlay and final page reread stay bounded as same-owner
     const book = await fixture.create('schema:Book', { 'schema:wordCount': { amount: '+123', unit: '1' } });
     await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'planned' }, 'editor');
     const editor = await fixture.deps('editor');
+    if (editor.actor.kind !== 'account') throw new Error('Editor fixture must authenticate');
     const token = await fixture.credential(editor.actor.scopes);
     const ownerRoute = routeOf(fixture.accounts.editor)!;
     const population: Population = {

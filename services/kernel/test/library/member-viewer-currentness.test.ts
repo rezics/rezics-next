@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { routeOf } from '../../src/route/route.ts';
 import { assertMemberPageCurrent } from '../../src/library/member-viewer-currentness.ts';
 import { createCollectionListFactsFixture } from './support/collection-list-facts-fixture.ts';
@@ -14,14 +15,14 @@ afterAll(async () => {
 }, 180_000);
 
 function interleaveViewerEntries(mutate: () => Promise<unknown>) {
-  const pool = fixture.database.pool;
+  const pool = fixture.pool;
   const descriptor = Object.getOwnPropertyDescriptor(pool, 'connect');
   const connect = pool.connect;
   let interleaved = false;
   Object.defineProperty(pool, 'connect', {
     configurable: true,
     value: async () => {
-      const client = await Reflect.apply(connect, pool, []);
+      const client = (await Reflect.apply(connect, pool, [])) as PoolClient;
       return new Proxy(client, {
         get(target, property) {
           if (property !== 'query') {
@@ -96,7 +97,7 @@ test('Collection route withholds duplicate occurrence facts when one admitted ro
 
   const removed = initialPage.members[1]!;
   const interleave = interleaveViewerEntries(() =>
-    fixture.database.admin.query(
+    fixture.db.admin.query(
       'DELETE FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=$3',
       [routeOf(collection.id), collection.id, removed.id],
     ),

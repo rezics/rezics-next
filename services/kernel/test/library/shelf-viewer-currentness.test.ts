@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { routeOf } from '../../src/route/route.ts';
 import { assertShelfPageCurrent } from '../../src/library/shelf-viewer-currentness.ts';
 import { createCollectionListFactsFixture } from './support/collection-list-facts-fixture.ts';
@@ -14,14 +15,14 @@ afterAll(async () => {
 }, 180_000);
 
 function interleaveViewerEntries(mutate: () => Promise<unknown>) {
-  const pool = fixture.database.pool;
+  const pool = fixture.pool;
   const descriptor = Object.getOwnPropertyDescriptor(pool, 'connect');
   const connect = pool.connect;
   let interleaved = false;
   Object.defineProperty(pool, 'connect', {
     configurable: true,
     value: async () => {
-      const client = await Reflect.apply(connect, pool, []);
+      const client = (await Reflect.apply(connect, pool, [])) as PoolClient;
       return new Proxy(client, {
         get(target, property) {
           if (property !== 'query') {
@@ -81,6 +82,7 @@ test('shelf route withholds a row whose native Entry changes during viewer overl
   const book = await fixture.create('schema:Book');
   await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
   const editor = await fixture.deps('editor');
+  if (editor.actor.kind !== 'account') throw new Error('Editor fixture must authenticate');
   const token = await fixture.credential(editor.actor.scopes);
   const path = '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=10';
   const read = () =>
@@ -94,7 +96,7 @@ test('shelf route withholds a row whose native Entry changes during viewer overl
   ]);
 
   const interleave = interleaveViewerEntries(() =>
-    fixture.database.admin.query(
+    fixture.db.admin.query(
       "UPDATE library.entry SET state='paused', revision=revision+1, updated_at=now() WHERE route=$1 AND account_id=$2 AND subject_id=$3",
       [routeOf(fixture.accounts.editor), fixture.accounts.editor, book],
     ),
