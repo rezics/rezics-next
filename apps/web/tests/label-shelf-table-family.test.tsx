@@ -4,7 +4,7 @@ import { act, createElement } from 'react';
 import type { LabelShelfEntry } from '../src/library/label-shelf-read';
 import * as start from '../.storybook/react-start';
 
-// Authored outcome cases for controller verification; deliberately UNRUN in this source delivery.
+// Focused component outcomes; broader native and rendered acceptance remains with the controller.
 // Keep the real table, menu and native form. Substitute only operation admission and server bindings.
 test('Label-shelf table respects supported selected columns, assignment identity, exact removal operands and honest unavailable facts', async () => {
   const { Window } = await import(
@@ -114,6 +114,11 @@ test('Label-shelf table respects supported selected columns, assignment identity
   let current = true;
   let mountKey = 0;
   let selection: string | undefined;
+  let readEnabled = false;
+  let readAdmitted = true;
+  let pageObservation: object = {};
+  let readingLocale = 'en';
+  let layout: 'grid' | 'list' | 'table' = 'table';
   const render = async (rows = entries) => {
     await act(async () => {
       root.render(
@@ -121,12 +126,13 @@ test('Label-shelf table respects supported selected columns, assignment identity
           key: mountKey,
           entries: rows,
           label,
-          locale: 'en',
-          layout: 'table',
+          locale: readingLocale,
+          layout,
           size: 'm',
           ...(selection ? { columns: selection } : {}),
           csrfToken: 'original-csrf',
           isCurrent: () => current,
+          ...(readEnabled ? { readIsCurrent: () => readAdmitted, readObservation: pageObservation } : {}),
         }),
       );
     });
@@ -254,6 +260,110 @@ test('Label-shelf table respects supported selected columns, assignment identity
     expect(rows()[0]!.textContent).toContain(m.library_other());
     expect(rows()[1]!.textContent).not.toContain(m.library_other());
     expect(host.querySelector('button')).toBeNull();
+
+    // Accessible reading is independent of the writer; native actions and columns above retain their contract.
+    readEnabled = true;
+    admitted = true;
+    label.name = '長いラベル名・'.repeat(30);
+    await render();
+    const reader = () => host.querySelector<HTMLElement>('[data-received-assignment-reader]');
+    const readButtons = () => [...host.querySelectorAll<HTMLButtonElement>('[data-received-assignment-trigger]')];
+    const click = async (element: HTMLElement) => {
+      await act(async () => element.click());
+    };
+    const read = async (index: number) => {
+      await click(readButtons()[index]!);
+    };
+    const originalRows = structuredClone(entries);
+    const requests = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Reading must not request'));
+    try {
+      const opening = readButtons()[1]!;
+      await read(1);
+      expect(reader()).not.toBeNull();
+      expect(reader()!.getAttribute('aria-labelledby')).toBeTruthy();
+      expect(window.document.activeElement?.tagName).toBe('H2');
+      expect(reader()!.querySelectorAll('article')).toHaveLength(1);
+      expect(reader()!.textContent).toContain('Recorded location');
+      expect(reader()!.textContent).toContain(label.name);
+      expect(reader()!.textContent).toContain(m.library_received_reading_state_unavailable());
+      expect(reader()!.textContent).toContain(m.library_received_reading_entry_unavailable());
+      expect(reader()!.textContent).toContain(m.library_received_reading_total_unknown());
+      expect(reader()!.querySelector('[data-received-work-destination]')?.getAttribute('href')).toBe(
+        links[0]!.getAttribute('href'),
+      );
+      expect(reader()!.querySelector('form, input, [role="checkbox"]')).toBeNull();
+      expect(reader()!.innerHTML).not.toContain('original-csrf');
+      expect(reader()!.innerHTML).not.toContain(entries[1]!.removeKey!);
+      await read(0);
+      const articles = () => [...reader()!.querySelectorAll('article')];
+      expect(articles()).toHaveLength(2);
+      expect(articles()[0]!.textContent).toContain('Recorded state');
+      expect(articles()[0]!.textContent).toContain('0%');
+      expect(articles()[1]!.textContent).toContain('Recorded location');
+      expect(reader()!.textContent).toContain(m.library_received_reading_count({ count: 2 }));
+      await read(2); // No implicit replacement or third retained snapshot.
+      expect(articles()).toHaveLength(2);
+      expect(articles()[1]!.textContent).toContain('Recorded location');
+      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-replace]')!);
+      expect(reader()!.textContent).toContain(m.library_received_reading_replacing({ position: 2 }));
+      await click(reader()!.querySelector<HTMLButtonElement>('[data-received-cancel-replacement]')!);
+      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-replace]')!);
+      await read(2);
+      expect(articles()).toHaveLength(2);
+      expect(articles()[1]!.textContent).toContain(m.library_subject_unavailable());
+      expect(articles()[1]!.querySelector('a')).toBeNull();
+      expect(articles()[1]!.textContent).not.toContain(entries[2]!.subjectId);
+      await click(articles()[1]!.querySelector<HTMLButtonElement>('[data-received-remove]')!);
+      expect(articles()).toHaveLength(1);
+      expect(reader()!.textContent).toContain(m.library_received_reading_count({ count: 1 }));
+      await click(reader()!.querySelector<HTMLButtonElement>('[data-received-close]')!);
+      expect(reader()).toBeNull();
+      expect(window.document.activeElement).toBe(opening);
+      expect(entries).toEqual(originalRows);
+      expect(requests).not.toHaveBeenCalled();
+
+      // Display changes preserve the exact observation; a replaced opening control uses the stable shelf fallback.
+      await read(0);
+      for (const next of ['grid', 'list', 'table'] as const) {
+        layout = next;
+        window.innerWidth = next === 'list' ? 360 : 1280;
+        await render();
+        expect(reader()).not.toBeNull();
+        expect(reader()!.querySelector('article')).not.toBeNull();
+      }
+      await act(async () =>
+        reader()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      );
+      expect(reader()).toBeNull();
+      expect(window.document.activeElement).toBe(host.querySelector('[data-received-shelf]'));
+      await read(0);
+      pageObservation = {}; // Same IDs/array cannot keep an unrelated FULL response's reading.
+      await render();
+      expect(reader()).toBeNull();
+      await read(0);
+      await render(entries.map((entry) => ({ ...entry })));
+      expect(reader()).toBeNull();
+      await render();
+      await read(0);
+      readAdmitted = false;
+      await render();
+      expect(reader()).toBeNull();
+      expect(readButtons()).toHaveLength(0);
+      readAdmitted = true;
+      await render();
+      expect(reader()).toBeNull();
+      await read(0);
+      for (const locale of ['ja', 'zh-Hant']) {
+        readingLocale = locale;
+        await render();
+        expect(reader()).toBeNull();
+        await read(0);
+        expect(reader()!.textContent).toContain(label.name);
+        expect(reader()!.querySelector('h3')?.getAttribute('lang')).toBe('ja');
+      }
+    } finally {
+      requests.mockRestore();
+    }
   } finally {
     await act(async () => root.unmount());
     admission.mockRestore();
@@ -263,4 +373,100 @@ test('Label-shelf table respects supported selected columns, assignment identity
       else Reflect.deleteProperty(globalThis, key);
     window.happyDOM.abort();
   }
+});
+
+test('received-assignment observations keep supplied state, exact progress and admitted work context without merging duplicate Subjects', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { contextExampleRelease, shelfContextExamples } = await import('../src/library/shelf-work-context/examples');
+  const { prepareShelfWorkContext } = await import('../src/library/shelf-work-context/context');
+  const { ReceivedAssignmentReader } = await import('../src/library/received-label-assignment-reading/view');
+  const selection = await import('../src/library/received-label-assignment-reading/selection');
+  const current = await import('../src/library/received-label-assignment-reading/current');
+  const sample = shelfContextExamples('en')[0]!;
+  const label = { id: 'label', name: 'Reading' };
+  const rows: LabelShelfEntry[] = [
+    {
+      ...sample,
+      id: 'assignment-b',
+      labelId: label.id,
+      revision: 9,
+      entryIdentity: { subjectId: sample.subjectId, revision: 2 },
+    },
+    {
+      ...sample,
+      id: 'assignment-a',
+      labelId: label.id,
+      revision: 3,
+      state: 'unknown-native-state',
+      stateLabel: 'Supplied released state',
+      activeProgressSession: {
+        mode: 'scalar_amount',
+        unit: 'page',
+        unitLabel: 'pages',
+        amount: '0.000000',
+        total: '100.123456',
+        completedUnitCount: 0,
+        locator: null,
+      },
+    },
+    { id: 'concealed', labelId: label.id, subjectId: 'unavailable', revision: 1, subject: null },
+  ].map((row) => ({ ...row, workContext: prepareShelfWorkContext(row, contextExampleRelease, 'en') }));
+  const source = { observation: {}, entries: rows, label, locale: 'en', isCurrent: () => true };
+  const visit = current.captureReceivedVisit(source);
+  const first = selection.receivedObservation(rows, label.id, rows[0]!)!;
+  const second = selection.receivedObservation(rows, label.id, rows[1]!)!;
+  let reading = selection.chooseReceivedObservation(selection.emptyReceivedReading(), second);
+  expect(reading.selected).toHaveLength(1);
+  reading = selection.chooseReceivedObservation(reading, first);
+  expect(reading.selected.map((item) => item.row.id)).toEqual(['assignment-b', 'assignment-a']);
+  expect(current.receivedReadingIsCurrent(visit, source, reading)).toBe(true);
+  const html = renderToStaticMarkup(
+    createElement(ReceivedAssignmentReader, {
+      id: 'reading',
+      membershipId: 'membership',
+      headingRef: { current: null },
+      label,
+      locale: 'en',
+      reading,
+      isCurrent: () => true,
+      close() {},
+      remove() {},
+      replace() {},
+      cancelReplacement() {},
+    }),
+  );
+  expect(html.match(/data-received-assignment-observation/g)).toHaveLength(2);
+  for (const text of ['Supplied released state', '0.000000', '100.123456', 'Author', 'Alex Lee', '2020'])
+    expect(html).toContain(text);
+  expect(html).toContain('lg:grid-cols-2');
+  expect(html).toContain('/en/subjects/');
+  expect(html).not.toMatch(/name="(?:csrf_token|idempotencyKey)"|<form|role="checkbox"/);
+  for (const changed of [
+    { ...source, observation: {} },
+    { ...source, entries: rows.slice() },
+    { ...source, label: { ...label, id: 'other-label' } },
+    { ...source, locale: 'ja' },
+    { ...source, isCurrent: () => false },
+  ])
+    expect(current.receivedReadingIsCurrent(visit, changed, reading)).toBe(false);
+  for (const changed of [
+    { revision: 10 },
+    { subjectId: 'replacement-subject' },
+    { subject: { ...rows[0]!.subject!, id: 'replacement-work' } },
+    { entryIdentity: { subjectId: sample.subjectId, revision: 3 } },
+    { stateLabel: 'Changed label' },
+    { subject: null },
+  ]) {
+    const original = { ...rows[0]! };
+    Object.assign(rows[0]!, changed);
+    expect(current.receivedReadingIsCurrent(visit, source, reading)).toBe(false);
+    Object.assign(rows[0]!, original);
+  }
+  const replacement = selection.receivedObservation(rows, label.id, rows[2]!)!;
+  expect(selection.chooseReceivedObservation(reading, replacement)).toBe(reading);
+  reading = selection.chooseReceivedObservation(selection.beginReceivedReplacement(reading, first), replacement);
+  expect(reading.selected.map((item) => item.row.id)).toEqual(['assignment-a', 'concealed']);
+  expect(selection.removeReceivedObservation(reading, reading.selected[0]!).selected).toHaveLength(1);
+  visit.active = false;
+  expect(current.receivedReadingIsCurrent(visit, source, reading)).toBe(false);
 });

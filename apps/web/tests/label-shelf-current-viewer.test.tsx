@@ -194,6 +194,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(host.querySelector('a[href*="private-next-"]')).toBeNull();
     expect(host.querySelector('a[href*="/subjects/"]')).toBeNull();
     expect(host.querySelector('form')).toBeNull();
+    expect(host.querySelector('[data-received-assignment-reader]')).toBeNull();
     expect(host.innerHTML).not.toContain('idempotencyKey');
   };
   const visible = (subject: string, token: string | null = csrf(subject)) => {
@@ -288,10 +289,34 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(host.textContent).toContain('A private shelf entry');
     expect(host.textContent).toContain('42%');
     expect(host.querySelector('a[href*="private-next-"]')).not.toBeNull();
+    expect(host.querySelector('[data-received-assignment-trigger]')).toBeNull();
     await act(async () => {
       root = hydrateRoot(host, tree());
     });
     visible(A, null);
+    // Read admission is independent of missing CSRF and of unassign admission.
+    const reading = () => host.querySelector('[data-received-assignment-reader]');
+    const openReading = async () => {
+      await act(async () => host.querySelector<HTMLButtonElement>('[data-received-assignment-trigger]')!.click());
+      expect(reading()).not.toBeNull();
+    };
+    const readsBeforeReading = reads.length;
+    await openReading();
+    expect(reading()!.textContent).toContain('A private shelf entry');
+    expect(reading()!.textContent).toContain('42%');
+    expect(reading()!.querySelector('form, input')).toBeNull();
+    expect(reading()!.innerHTML).not.toContain('credential-a');
+    expect(reads).toHaveLength(readsBeforeReading);
+    const lateClose = host.querySelector<HTMLButtonElement>('[data-received-close]')!;
+    flushSync(() =>
+      client.setQueryData(
+        exposureQuery.queryKey,
+        admitted.filter((group) => group !== 'library_label.unassign'),
+      ),
+    );
+    expect(reading()).not.toBeNull();
+    expect(host.querySelector('[data-received-assignment-trigger]')).not.toBeNull();
+    flushSync(() => client.setQueryData(exposureQuery.queryKey, admitted));
     const undoForm = host.querySelector<HTMLFormElement>('[data-label-undo]')!;
     const blockedSubmit = new window.Event('submit', { bubbles: true, cancelable: true });
     undoForm.dispatchEvent(blockedSubmit);
@@ -308,6 +333,7 @@ test('The actual named-label Library renders private FULL assignments and remove
     });
     expect(serial).toBe(beforeHydration);
     expect(fields()).toEqual(originalForms);
+    expect(reading()).not.toBeNull(); // Display changes preserve the exact page observation.
     observe('signed-in', A, 'z'.repeat(22));
     expect(fields()).toEqual(originalForms); // Rotation cannot rebuild an unresolved command or change its captured CSRF.
 
@@ -321,8 +347,10 @@ test('The actual named-label Library renders private FULL assignments and remove
     credentialSubject = B;
     observe('signed-in', B);
     absent();
+    await act(async () => lateClose.click());
     await settle();
     visible(B);
+    expect(reading()).toBeNull();
     const bForms = fields();
     await act(async () => {
       const pending = held.shift()!;
@@ -371,8 +399,18 @@ test('The actual named-label Library renders private FULL assignments and remove
     observe('signed-in', B);
     await settle();
     visible(B);
+    await openReading();
     const current = currentQuery();
     const matching = current.state.data as CurrentLabelShelfData;
+    if (matching.state !== 'loaded') throw new Error('Missing current FULL page');
+    const replacement = {
+      ...matching,
+      entries: matching.entries.map((entry) => ({ ...entry, revision: entry.revision + 1 })),
+    };
+    flushSync(() => client.setQueryData(current.queryKey, replacement));
+    expect(reading()).toBeNull();
+    flushSync(() => client.setQueryData(current.queryKey, matching));
+    expect(reading()).toBeNull();
     const other = await loadCurrentLabelShelfPage(kernelClient(), request(), sessionEnv as unknown as SessionEnv, {
       ...input,
       labelId: id(899),

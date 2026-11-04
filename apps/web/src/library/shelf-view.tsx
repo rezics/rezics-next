@@ -1,3 +1,4 @@
+import { useReceivedAssignmentReading } from './received-label-assignment-reading/use-reading';
 import { useConsolidationSelection } from './label-consolidation/selection';
 import { ShelfWorkContextView } from './shelf-work-context/view';
 import { Exposure, useOperation } from '../kernel/exposure';
@@ -981,7 +982,41 @@ function LabelAssignmentRemoveForm({
 }
 
 /** The label shelf shares the main shelf's cover, list and table primitives without manufacturing entry state. */
-export function LabelShelfEntries({
+type LabelShelfEntriesProps = {
+  isCurrent?: () => boolean;
+  readIsCurrent?: () => boolean;
+  readObservation?: object;
+  columns?: string;
+  entries: LabelShelfEntry[];
+  label: { id: string; name: string };
+  locale: string;
+  layout: ShelfLayout;
+  size: ShelfSize;
+  csrfToken: string | null;
+};
+
+export function LabelShelfEntries(props: LabelShelfEntriesProps) {
+  const reading = useReceivedAssignmentReading({
+    observation: props.readObservation ?? props.entries,
+    entries: props.entries,
+    label: props.label,
+    locale: props.locale,
+    isCurrent: props.readIsCurrent,
+  });
+  return (
+    <div
+      ref={reading.shelf}
+      tabIndex={-1}
+      className="min-w-0 space-y-4 focus-visible:outline-ring"
+      data-received-shelf=""
+    >
+      {reading.surface}
+      <LabelShelfTiles {...props} readingTrigger={reading.trigger} />
+    </div>
+  );
+}
+
+function LabelShelfTiles({
   entries,
   label,
   locale,
@@ -990,16 +1025,8 @@ export function LabelShelfEntries({
   columns,
   csrfToken,
   isCurrent,
-}: {
-  isCurrent?: () => boolean;
-  columns?: string;
-  entries: LabelShelfEntry[];
-  label: { id: string; name: string };
-  locale: string;
-  layout: ShelfLayout;
-  size: ShelfSize;
-  csrfToken: string | null;
-}) {
+  readingTrigger,
+}: LabelShelfEntriesProps & { readingTrigger: (row: LabelShelfEntry) => ReactNode }) {
   const selection = useConsolidationSelection();
   const removeAdmitted = useOperation('library_label.unassign');
   const display: ShelfDisplay = { layout, size, ...(columns ? { columns } : {}) };
@@ -1015,6 +1042,7 @@ export function LabelShelfEntries({
             return (
               <div key={entry.id} className="min-w-0">
                 <Tombstone shape="card" />
+                {readingTrigger(entry)}
                 {removeAdmitted ? (
                   <div className="flex min-w-0 justify-end">
                     <ItemMenu
@@ -1048,31 +1076,33 @@ export function LabelShelfEntries({
             );
           const progress = labelEntryProgress(entry, locale);
           return (
-            <CoverCard
-              key={entry.id}
-              {...selection?.(entry)}
-              href={href(entry)}
-              title={title(entry)}
-              cover={shelfCover(entry.subject)}
-              secondary={<ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />}
-              {...(progress ? { progress } : {})}
-              {...(entry.state ? { status: { label: entry.stateLabel ?? m.library_other() } } : {})}
-              {...(removeAdmitted
-                ? {
-                    menu: (
-                      <LabelAssignmentRemoveForm
-                        display={display}
-                        {...(isCurrent ? { isCurrent } : {})}
-                        entry={entry}
-                        labelName={label.name}
-                        locale={locale}
-                        csrfToken={csrfToken}
-                      />
-                    ),
-                    menuLabel: m.library_entry_actions({ title: title(entry) }),
-                  }
-                : {})}
-            />
+            <div key={entry.id} className="min-w-0 space-y-2">
+              <CoverCard
+                {...selection?.(entry)}
+                href={href(entry)}
+                title={title(entry)}
+                cover={shelfCover(entry.subject)}
+                secondary={<ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />}
+                {...(progress ? { progress } : {})}
+                {...(entry.state ? { status: { label: entry.stateLabel ?? m.library_other() } } : {})}
+                {...(removeAdmitted
+                  ? {
+                      menu: (
+                        <LabelAssignmentRemoveForm
+                          display={display}
+                          {...(isCurrent ? { isCurrent } : {})}
+                          entry={entry}
+                          labelName={label.name}
+                          locale={locale}
+                          csrfToken={csrfToken}
+                        />
+                      ),
+                      menuLabel: m.library_entry_actions({ title: title(entry) }),
+                    }
+                  : {})}
+              />
+              {readingTrigger(entry)}
+            </div>
           );
         })}
       </CoverGrid>
@@ -1085,6 +1115,7 @@ export function LabelShelfEntries({
             return (
               <li key={entry.id} className="space-y-2 border-b py-3">
                 <Tombstone shape="row" />
+                {readingTrigger(entry)}
                 <LabelAssignmentRemoveForm
                   display={display}
                   {...(isCurrent ? { isCurrent } : {})}
@@ -1106,6 +1137,7 @@ export function LabelShelfEntries({
               meta={
                 <>
                   <span>{entry.subject.typeLabel}</span>
+                  {readingTrigger(entry)}
                   <ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />
                 </>
               }
@@ -1169,9 +1201,13 @@ export function LabelShelfEntries({
             {entryTitle.text}
           </a>
           <ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />
+          {readingTrigger(entry)}
         </div>
       ) : (
-        <Tombstone shape="row" labels={{ unavailable: m.library_subject_unavailable() }} />
+        <div className="min-w-0 space-y-2">
+          <Tombstone shape="row" labels={{ unavailable: m.library_subject_unavailable() }} />
+          {readingTrigger(entry)}
+        </div>
       ),
       type: entry.subject?.typeLabel,
       status: (
