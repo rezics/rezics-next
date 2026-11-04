@@ -31,11 +31,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "A reachable private insights page composes independently identified all-time/year summaries, retained-profile distribution, and current progress and assessment panels with explicit coverage, response-provided actions, and typed viewer states."
-    - "Current units preserve exact native decimal/integer values and separate exact, estimate, lower-bound, unknown-total, absent-value, unsupported-meaning, cursor, percentage, active, and backlog coverage; incompatible profile and assessment revisions never merge."
-    - "Assessment receiving distinguishes new absent, null, and value states while historical nulls remain unavailable for the presence distinction; native correction, retirement, restoration, and receipt replay update aggregates exactly once."
-    - "Finite funded installation and repair account for every participating pool, replay, failure, terminal cleanup, SQL statement, row/block/index seek, lock, dispatch/receipt, hydration, serialization, and retained child-work cost without GET scans."
-    - "Focused native/page tests and stories cover heterogeneous units, assessment revisions, source-generation invalidation, unsupported history, partial repair, failed panels, stale responses, and independent 64/512/4096 populations."
+    - 'A reachable private insights page composes independently identified all-time/year summaries, retained-profile distribution, and current progress and assessment panels with explicit coverage, response-provided actions, and typed viewer states.'
+    - 'Current units preserve exact native decimal/integer values and separate exact, estimate, lower-bound, unknown-total, absent-value, unsupported-meaning, cursor, percentage, active, and backlog coverage; incompatible profile and assessment revisions never merge.'
+    - 'Assessment receiving distinguishes new absent, null, and value states while historical nulls remain unavailable for the presence distinction; native correction, retirement, restoration, and receipt replay update aggregates exactly once.'
+    - 'Finite funded installation and repair account for every participating pool, replay, failure, terminal cleanup, SQL statement, row/block/index seek, lock, dispatch/receipt, hydration, serialization, and retained child-work cost without GET scans.'
+    - 'Focused native/page tests and stories cover heterogeneous units, assessment revisions, source-generation invalidation, unsupported history, partial repair, failed panels, stale responses, and independent 64/512/4096 populations.'
   failing: true
   workerOwned: true
 estimate:
