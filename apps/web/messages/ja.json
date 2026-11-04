@@ -8748,5 +8748,16 @@
   "concept_tagged_works_continuation_failed": "次の結果ページを利用できません。表示済みの作品は保持されています。",
   "concept_tagged_works_retry": "この結果ページを再試行",
   "concept_tagged_works_lagging": "Searchの更新中は作品一覧が不完全な場合があります。",
-  "concept_tagged_works_next": "さらに作品を表示"
+  "concept_tagged_works_next": "さらに作品を表示",
+  "literary_grain_scope": "作品・シリーズ・構成作品・版の識別は、提供された型と記述に基づきます。総数から巻や読書進捗を作成することはありません。",
+  "literary_grain_preparing": "元の一覧を準備中です。空の一覧とは限りません。",
+  "literary_grain_empty": "この完了済みの範囲には開示された関係がありません。",
+  "literary_grain_sparse": "このページに開示された項目はありません。一覧を続けられます。",
+  "literary_grain_window": "現在取得された一覧の範囲のみ表示します。",
+  "literary_grain_withheld": "この閲覧では対象が開示されていません。",
+  "literary_grain_unavailable": "この部分は利用できません。現在の主題を再読み込みしてください。",
+  "literary_grain_unsupported": "現在の定義版はこの部分に対応していません。",
+  "literary_grain_position_unknown": "順序は提供されていません。",
+  "literary_grain_mapping_missing": "対応する原作品は提供されていません。",
+  "literary_grain_terms_more": "主題ページに他の名称や説明があります。"
 }

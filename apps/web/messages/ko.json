@@ -8748,5 +8748,16 @@
   "concept_tagged_works_continuation_failed": "다음 결과 페이지를 사용할 수 없습니다. 이미 표시된 작품은 유지됩니다.",
   "concept_tagged_works_retry": "이 결과 페이지 다시 시도",
   "concept_tagged_works_lagging": "Search가 갱신되는 동안 작품 목록이 불완전할 수 있습니다.",
-  "concept_tagged_works_next": "작품 더 보기"
+  "concept_tagged_works_next": "작품 더 보기",
+  "literary_grain_scope": "작품, 시리즈, 구성 작품과 판본의 식별은 제공된 유형과 서술을 따릅니다. 수량으로 권이나 독서 진행도를 만들지 않습니다.",
+  "literary_grain_preparing": "원본 목록을 준비하고 있습니다. 빈 목록이라는 뜻은 아닙니다.",
+  "literary_grain_empty": "완료된 이 범위에 공개된 관계가 없습니다.",
+  "literary_grain_sparse": "이 페이지에 공개된 항목이 없습니다. 원본 목록을 계속 볼 수 있습니다.",
+  "literary_grain_window": "현재 원본 목록 범위만 표시합니다.",
+  "literary_grain_withheld": "이 열람에서는 대상이 공개되지 않습니다.",
+  "literary_grain_unavailable": "이 부분을 이용할 수 없습니다. 현재 주제를 다시 읽어 주세요.",
+  "literary_grain_unsupported": "현재 정의 버전은 이 부분을 제공하지 않습니다.",
+  "literary_grain_position_unknown": "순서가 제공되지 않았습니다.",
+  "literary_grain_mapping_missing": "대응하는 원작이 제공되지 않았습니다.",
+  "literary_grain_terms_more": "주제 페이지에 다른 이름이나 설명이 있습니다."
 }

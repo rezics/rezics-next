@@ -8748,5 +8748,16 @@
   "concept_tagged_works_continuation_failed": "无法获取下一页结果。已显示的作品仍会保留。",
   "concept_tagged_works_retry": "重试此结果页",
   "concept_tagged_works_lagging": "Search 更新期间，作品列表可能不完整。",
-  "concept_tagged_works_next": "显示更多作品"
+  "concept_tagged_works_next": "显示更多作品",
+  "literary_grain_scope": "作品、系列、成员与版本的身份均依据提供的类型与陈述。数量不代表已提供各卷或阅读进度。",
+  "literary_grain_preparing": "原生列表仍在准备中，这不表示列表为空。",
+  "literary_grain_empty": "此已完成的窗口中没有可披露的关系。",
+  "literary_grain_sparse": "此页没有可披露的项目，仍可继续浏览原生列表。",
+  "literary_grain_window": "仅显示当前的原生窗口。",
+  "literary_grain_withheld": "此阅读情境不披露目标。",
+  "literary_grain_unavailable": "此部分不可用，请重新读取当前主题。",
+  "literary_grain_unsupported": "当前的定义版本不提供此部分。",
+  "literary_grain_position_unknown": "未提供顺序。",
+  "literary_grain_mapping_missing": "未提供对应的原始作品。",
+  "literary_grain_terms_more": "主题页面上还有其他名称或描述。"
 }

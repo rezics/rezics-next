@@ -141,6 +141,7 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
       fragment !== '#connections' &&
       !(subject && connectionReturnWindow(fragment)) &&
       fragment !== '#manga-reader' &&
+      fragment !== '#literary-reader' &&
       !(subject?.[2] === 'sources' && fragment === '#subject-sources-heading')
     )
       return;

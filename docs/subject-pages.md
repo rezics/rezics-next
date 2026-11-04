@@ -78,24 +78,48 @@ bounds bytes, cursors and retained windows. Shared Subject wiring adds no View e
 
 ## Read a literary work
 
-The ordinary `schema:Book` Subject presents the work identity, its admitted multilingual names and work-level facts.
-The existing composed editions list keeps each related `bf:Instance` exact; each edition destination opens in a new
-tab and its current release-fidelity reader owns ISBN, publisher, publication date, language and page count. The
-work's ordinary Details view remains the generic facts path when the release does not provide a useful domain view.
-The existing Literary profile action remains the correction path. Parts and personal copies keep their own identities
-and owners.
+The ordinary Subject page recognizes released `schema:Book`, `schema:BookSeries` and `bf:Instance` identities,
+including delivered descendants. Type names, multilingual terms and property labels come from the current native
+descriptor. A Book's actual directed series membership and supplied position remain attached to that statement;
+an edition's disclosed canonical work stays separate from its publisher, translator and publication facts. Sources,
+unknown values and partial dates retain the shared native value presentation. Missing canonical mapping, a withheld
+target and failure to read current facts are separate outcomes. Existing Terms, Facts and correction handoffs keep
+their current admission; public reading does not require a correction companion.
 
-Decision: Open each exact edition in a new tab so the bounded work view remains the return target; retire retained data when authority, locale, Subject identity or the composed read changes.
+Decision: A released Book with a directed series membership remains that exact Book; neither a numbered title nor a stated count grants a new volume Type, member identity or integer position.
+
+One native member window and one edition window may accompany the current Subject. The explicitly continued node
+wins selection within its family. Rows retain statement identity, direction, source references and qualifiers; a
+missing target summary never becomes a link. Preparing, withheld, unavailable, unsupported, empty terminal and
+sparse continued windows remain distinct. The native page's row limit applies before projection. A sparse page can
+continue; a stale cursor offers a fresh reading instead of claiming exhaustion. Overview enters the existing full
+view, since its preview node need not be the full view's node. Full-view continuation uses the exact current node
+and opaque cursor, replacing the loaded page rather than accumulating a catalogue.
+
+Destinations open in a new tab and carry the existing validated single-hop return address. Returning preserves the
+source window, locale, Realm Context, reader settings and focus. Explicit return links name the original native
+node and cursor. Moving focus cancels automatic restoration. Subject, source incarnation, release, Context, locale,
+reader or credential replacement retires the preceding reading, including A-to-B-to-A. Read retirement never clears
+private drafts or cancels a command. Canonical work links use only the currently admitted native disclosure; no
+parent resolver or per-target read is added.
 
 ### Literary work reader Cost
 
-- **Page:** zero reads beyond the Subject page's existing composition plan. The reader consumes the bounded
-  `SubjectList` preview and does not hydrate edition targets. The existing Editions view retains its native bounded
-  continuation.
-- **Display:** up to 32 work titles, 48 aliases and 16 descriptions from the current Subject read. No work-level
-  ISBN or page count is created from edition data.
-- **Navigation:** opening one exact edition is a deliberate destination read owned by that edition's existing
-  release-fidelity page. Returning to the original tab preserves the current work page and its bounded window.
+The adapter starts zero requests and decodes zero additional network bytes. It shares the already decoded Subject,
+related summaries and native descriptor, and retains at most two currently mounted relation windows. Native
+`profileRelationWindows` exposes each planned `PageRead.limit` and freshness; `SubjectList` in `platformRegistry`
+admits at most 24 rows (12 for paged previews), while other relation nodes retain their own native planned limit.
+The shared plan retains `MAX_PAGE_READS = 16`, `MAX_PAGE_COST = 128`, `MAX_COMPOSITION_NODES = 256` and
+`MAX_COMPOSITION_BYTES = 65,536`. The descriptor uses the existing bounded definition-release vocabulary; extending
+its literary admission adds no engine query. No SQL selection, scan, count or statement-history path is added.
+
+The focused composition case at 64/512/4096 unrelated Subjects and obsolete reads records the supplied window's
+UTF-8 bytes, retained projection bytes, rows and zero incremental requests/decoding. Only reads named by the current
+native composition enter that projection. This is adapter evidence; it does not assert execution or growth results
+for native SQL. The installed page producer has no exported whole-response byte ceiling: these measurements are
+actual fixture bytes, not an invented native byte limit. Native compact selection and seeded journey acceptance
+remain with their owners. Terms retain the existing 32-title/48-alias/16-description preview, with explicit overflow
+advice; no facts are silently cut to meet a budget.
 
 ## Read a music edition
 

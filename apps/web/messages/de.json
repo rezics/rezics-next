@@ -8748,5 +8748,16 @@
   "concept_tagged_works_continuation_failed": "Die nächste Ergebnisseite ist nicht verfügbar. Bereits angezeigte Werke bleiben erhalten.",
   "concept_tagged_works_retry": "Diese Ergebnisseite erneut laden",
   "concept_tagged_works_lagging": "Die Werkliste kann unvollständig sein, solange die Suche aktualisiert wird.",
-  "concept_tagged_works_next": "Weitere Werke anzeigen"
+  "concept_tagged_works_next": "Weitere Werke anzeigen",
+  "literary_grain_scope": "Werk, Reihe, Mitglied und Ausgabe werden anhand der gelieferten Typen und Aussagen identifiziert. Eine Anzahl erzeugt weder Bände noch Lesefortschritt.",
+  "literary_grain_preparing": "Die native Liste wird noch vorbereitet. Das bedeutet nicht, dass sie leer ist.",
+  "literary_grain_empty": "Keine offengelegten Beziehungen in diesem abgeschlossenen Fenster.",
+  "literary_grain_sparse": "Keine offengelegten Zeilen auf dieser Seite. Die native Liste kann fortgesetzt werden.",
+  "literary_grain_window": "Nur das aktuelle native Fenster wird angezeigt.",
+  "literary_grain_withheld": "Das Ziel wird für diese Ansicht nicht offengelegt.",
+  "literary_grain_unavailable": "Dieser Abschnitt ist nicht verfügbar. Laden Sie das aktuelle Thema erneut.",
+  "literary_grain_unsupported": "Die aktuelle Definitionsversion bietet diesen Abschnitt nicht an.",
+  "literary_grain_position_unknown": "Es wurde keine Position geliefert.",
+  "literary_grain_mapping_missing": "Es wurde keine Zuordnung zu einem kanonischen Werk geliefert.",
+  "literary_grain_terms_more": "Weitere Namen oder Beschreibungen stehen auf der Themenseite."
 }

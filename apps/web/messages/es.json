@@ -8748,5 +8748,16 @@
   "concept_tagged_works_continuation_failed": "La página siguiente de resultados no está disponible. Se conservan las obras mostradas.",
   "concept_tagged_works_retry": "Reintentar esta página de resultados",
   "concept_tagged_works_lagging": "La lista de obras puede estar incompleta mientras se actualiza Search.",
-  "concept_tagged_works_next": "Mostrar más obras"
+  "concept_tagged_works_next": "Mostrar más obras",
+  "literary_grain_scope": "Las identidades de obras, series, miembros y ediciones se basan en los tipos y las afirmaciones suministrados. Una cantidad no crea volúmenes ni progreso de lectura.",
+  "literary_grain_preparing": "La lista nativa aún se está preparando. Esto no significa que esté vacía.",
+  "literary_grain_empty": "No hay relaciones divulgadas en esta ventana completada.",
+  "literary_grain_sparse": "No hay filas divulgadas en esta página. La lista nativa puede continuar.",
+  "literary_grain_window": "Solo se muestra la ventana nativa actual.",
+  "literary_grain_withheld": "El destino no se divulga para esta lectura.",
+  "literary_grain_unavailable": "Esta sección no está disponible. Vuelve a cargar el tema actual.",
+  "literary_grain_unsupported": "La versión actual de las definiciones no ofrece esta sección.",
+  "literary_grain_position_unknown": "No se ha suministrado ninguna posición.",
+  "literary_grain_mapping_missing": "No se ha suministrado una correspondencia con una obra canónica.",
+  "literary_grain_terms_more": "Hay otros nombres o descripciones en la página del tema."
 }

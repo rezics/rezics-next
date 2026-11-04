@@ -8840,5 +8840,16 @@
   "concept_tagged_works_continuation_failed": "The next result page is unavailable. Existing works are retained.",
   "concept_tagged_works_retry": "Retry this result page",
   "concept_tagged_works_lagging": "The work list may be incomplete while Search updates.",
-  "concept_tagged_works_next": "Show more works"
+  "concept_tagged_works_next": "Show more works",
+  "literary_grain_scope": "Work, series, member and edition identities come from supplied Types and statements. A stated count supplies no volumes or reading progress.",
+  "literary_grain_preparing": "The native list is still preparing. This does not mean it is empty.",
+  "literary_grain_empty": "No disclosed relationships in this completed window.",
+  "literary_grain_sparse": "No disclosed rows on this page. The native list can continue.",
+  "literary_grain_window": "Only the current native window is shown.",
+  "literary_grain_withheld": "The target is withheld for this reading.",
+  "literary_grain_unavailable": "This section is unavailable. Read the current Subject again.",
+  "literary_grain_unsupported": "The current release does not provide this section.",
+  "literary_grain_position_unknown": "No position was supplied.",
+  "literary_grain_mapping_missing": "No canonical work mapping was supplied.",
+  "literary_grain_terms_more": "Additional names or descriptions are available on the Subject page."
 }
