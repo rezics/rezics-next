@@ -122,8 +122,14 @@ export class ContributionActionsReceiver<T> {
     private originCurrent: () => boolean,
   ) {}
 
-  isCurrent = (): boolean => !this.retired && this.originCurrent();
-  snapshot = (): ContributionActionsState<T> => (this.isCurrent() ? this.current : { state: 'retired' });
+  isCurrent = (): boolean => {
+    if (!this.retired && !this.originCurrent()) this.retire();
+    return !this.retired;
+  };
+  snapshot = (): ContributionActionsState<T> => {
+    this.isCurrent();
+    return this.current;
+  };
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
