@@ -87,6 +87,58 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   expect(editor.snapshot().phase).not.toBe('saved'); // The old receipt cannot confirm this new command.
 });
 
+test('empty current update advice blocks a retained original replay and refreshed advice restores it when the target already matches', async () => {
+  let now = 1_000;
+  let reads = 0;
+  const commands: VisibilityAttempt[] = [];
+  const alreadyApplied = { ...row('public', 8), allowedVisibilityActions: ['private', 'unlisted'] as const };
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async (input) => {
+        commands.push(input);
+        return { ok: false, reason: 'unavailable', failure: { status: 503, ...(commands.length === 1 ? { retryAfter: '60' } : {}) } };
+      },
+      read: async () => ({
+        ok: true,
+        value: ++reads === 1 ? { ...alreadyApplied, allowedVisibilityActions: [] } : alreadyApplied,
+      }),
+    },
+    undefined,
+    undefined,
+    () => now,
+  );
+
+  await editor.edit('public');
+  const original = editor.snapshot().attempt!;
+  const retainedRetry = editor.retry.bind(editor);
+  await editor.edit('unlisted');
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({
+    current: { revision: 8, visibility: 'public', allowedVisibilityActions: [] },
+    desired: 'unlisted',
+    phase: 'uncertain',
+    attempt: original,
+    outcomeUnknown: true,
+  });
+  const commandWait = editor.commandRetryDeadline();
+  now = commandWait;
+  await retainedRetry();
+  expect(commands).toEqual([original]);
+  expect(editor.commandRetryDeadline()).toBe(commandWait);
+
+  await editor.reload();
+  await retainedRetry();
+  expect(commands).toEqual([original, original]);
+  expect(commands[1]).toBe(original);
+  expect(editor.snapshot()).toMatchObject({
+    current: { visibility: 'public', allowedVisibilityActions: ['private', 'unlisted'] },
+    desired: 'unlisted',
+    phase: 'uncertain',
+    attempt: original,
+  });
+});
+
 test('an original command wait survives a shorter current-read refusal and retained retry callback', async () => {
   let now = 1_000;
   let reads = 0;
