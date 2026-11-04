@@ -14,7 +14,7 @@ function RecoveryExample({ scenario = 'inspection' }: { scenario?: Scenario }) {
     const example = gameExample('work', locale);
     if (scenario === 'missing-assertion') {
       delete example.first.links[0]!.assertion;
-      delete example.first.links[0]!.summary;
+      example.first.links[0]!.summary.label = null;
     }
     return example;
   }, [locale, scenario]);

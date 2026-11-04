@@ -346,7 +346,7 @@ test('a missing assertion is unavailable and a missing summary remains withheld,
   try {
     const fixture = gameExample();
     const row = fixture.first.links[0]!;
-    delete row.summary;
+    Reflect.deleteProperty(row, 'summary');
     delete row.assertion;
     await mounted.render({ ...fixture.address, locale: 'en', source: fixture, reader: null, transport: fixture.read });
     expect(mounted.host.querySelector('[data-date-kind="partial"]')?.textContent).toContain('+2024-05');
