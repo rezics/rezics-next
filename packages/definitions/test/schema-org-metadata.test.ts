@@ -32,6 +32,7 @@ const reviewedTypes = {
   'schema:MusicRecording': 'https://schema.org/MusicRecording',
   'schema:MediaObject': 'https://schema.org/MediaObject',
   'rezics:ReleaseGroup': 'https://schema.org/Organization',
+  'schema:Quotation': 'https://schema.org/Quotation',
 } as const;
 
 type NativeIdentity = readonly [iri: string, bases: readonly string[], mappings: readonly string[]];
@@ -98,6 +99,7 @@ const nativeIdentities: Record<string, NativeIdentity> = {
   ],
   'schema:MediaObject': ['http://schema.org/MediaObject', ['schema:CreativeWork', 'schema:Thing'], []],
   'rezics:ReleaseGroup': ['https://rezics.com/vocab/ReleaseGroup', ['schema:Organization', 'schema:Thing'], []],
+  'schema:Quotation': ['http://schema.org/Quotation', ['schema:Thing'], ['wd:Q815341']],
 };
 
 test('every bundled concrete type declares its reviewed schema.org serialization type', () => {

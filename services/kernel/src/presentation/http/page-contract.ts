@@ -6,6 +6,21 @@ const readResult = t.Object(
   { status: t.Integer(), body: t.Any(), headers: t.Optional(t.Record(t.String(), t.String())) },
   closed,
 );
+const pageAction = t.Object(
+  {
+    action: t.String(),
+    operationId: t.String(),
+    state: t.Union([
+      t.Literal('allowed'),
+      t.Literal('denied'),
+      t.Literal('unavailable'),
+      t.Literal('unsupported'),
+      t.Literal('absent'),
+      t.Literal('withheld'),
+    ]),
+  },
+  closed,
+);
 
 /** The common page body shared by public presentation reads and their extensions. */
 export const PageResponseSchema = t.Object(
@@ -74,6 +89,7 @@ export const PageResponseSchema = t.Object(
     reads: t.Record(t.String(), readResult),
     actions: t.Optional(
       t.Union([
+        t.Array(pageAction),
         t.Object(
           {
             status: t.Literal('ready'),

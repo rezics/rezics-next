@@ -1,7 +1,14 @@
-import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
+import {
+  definedViews,
+  resolveView,
+  type PageDocumentRead,
+  type PresentationProfile,
+  type View,
+} from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { deadlineClient } from '../access/authenticate.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import type { Pool } from 'pg';
@@ -13,6 +20,88 @@ import { readItemDetails } from '../semantic/subject.ts';
 import statesRead from '../semantic/subject-summary-states.sql';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { activeProfile } from './profiles.ts';
+
+/** Native correction operation on an admitted quotation; Type descriptors never grant this. */
+export const quotationCorrectionActions = [{ action: 'statement:propose', operationId: 'subject.propose' }] as const;
+
+export type PageViewer = { kind: 'anonymous' } | { kind: 'account' };
+export type PageActionState = 'allowed' | 'denied' | 'unavailable' | 'unsupported' | 'absent' | 'withheld';
+export type PageAction = { action: string; operationId: string; state: PageActionState };
+
+/** Current release admission of schema:Quotation, including descendants. Historical pins omit this type. */
+export function quotationTypeAdmitted(
+  release: { types?: Record<string, { bases?: readonly string[] }> } | undefined,
+  type: string | null | undefined,
+): boolean {
+  if (!type || !release?.types?.['schema:Quotation']) return false;
+  const seen = new Set<string>();
+  const extendsQuotation = (candidate: string): boolean => {
+    if (candidate === 'schema:Quotation') return true;
+    if (seen.has(candidate)) return false;
+    seen.add(candidate);
+    return (release.types?.[candidate]?.bases ?? []).some(extendsQuotation);
+  };
+  return extendsQuotation(type);
+}
+
+const quotationTextProperties = ['schema:text', 'schema:abstract'] as const;
+
+/** Ordinary overview Summary hydrates schema:abstract; admitted quotation text still needs the document composition. */
+export function quotationPageDocuments(
+  base: PageDocumentRead | null,
+  release:
+    | {
+        types?: Record<string, { bases?: readonly string[] }>;
+        properties?: Record<string, { datatype?: string }>;
+      }
+    | undefined,
+  type: string | null | undefined,
+  subject: string | null,
+  available: readonly string[],
+  context?: string,
+): PageDocumentRead | null {
+  if (subject === null || !quotationTypeAdmitted(release, type)) return base;
+  const extra = quotationTextProperties.filter(
+    (id) => available.includes(id) && release?.properties?.[id]?.datatype === 'document',
+  );
+  if (!extra.length) return base;
+  const properties = [...new Set([...(base?.properties ?? []), ...extra])].sort();
+  return {
+    kind: 'documents',
+    id: subject,
+    ...(context ? { context } : {}),
+    properties,
+  };
+}
+
+/** Derive quotation correction actions with native Access under the actual caller. */
+export async function readQuotationPageAuthority(deps: {
+  pool: Pool;
+  access: Access;
+  actor: Actor;
+  deadline: number;
+}): Promise<{ viewer: PageViewer; actions: PageAction[] }> {
+  const viewer: PageViewer = { kind: deps.actor.kind === 'account' ? 'account' : 'anonymous' };
+  const [propose] = quotationCorrectionActions;
+  const unavailable = [{ action: propose.action, operationId: propose.operationId, state: 'unavailable' as const }];
+  try {
+    const check = await accessCheck(
+      deps.access,
+      deps.actor,
+      propose.action,
+      { route: 0, id: GLOBAL_CONTEXT },
+      { pool: deps.pool, deadline: deps.deadline },
+    );
+    const allowed = await withConnection(deps.pool, (client) => check(client));
+    return {
+      viewer,
+      actions: [{ action: propose.action, operationId: propose.operationId, state: allowed ? 'allowed' : 'denied' }],
+    };
+  } catch (error) {
+    if (classifyUnavailability(error)) return { viewer, actions: unavailable };
+    throw error;
+  }
+}
 
 export type PageViewerActions =
   | { status: 'ready'; viewerActions: { action: string; operations: string[] }[] }

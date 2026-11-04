@@ -30,6 +30,7 @@ const labels = {
   'schema:MusicRelease': ['音乐发行', '音樂發行', 'リリース'],
   'schema:MusicRecording': ['录音', '錄音', '録音'],
   'schema:MediaObject': ['媒体对象', '媒體物件', 'メディアオブジェクト'],
+  'schema:Quotation': ['引文', '引文', '引用'],
   'rezics:ReleaseGroup': ['发布组', '發佈組', 'リリースグループ'],
 };
 

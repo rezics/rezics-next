@@ -198,7 +198,37 @@ test('patterns must be safe and releases are bounded', () => {
 
 test('the bundled catalogue admits exact file hashes, byte size and directed file associations', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue.version).toBe('1.0.4');
+  expect(bundledRelease.catalogue.version).toBe('1.0.5');
+  expect(types['schema:Quotation']).toMatchObject({
+    iri: 'http://schema.org/Quotation',
+    bases: ['schema:Thing'],
+    mappings: ['wd:Q815341'],
+    properties: expect.arrayContaining([
+      'schema:text',
+      'schema:inLanguage',
+      'schema:spokenByCharacter',
+      'schema:about',
+      'schema:creator',
+      'schema:actor',
+    ]),
+  });
+  expect(properties['schema:text']).toMatchObject({
+    datatype: 'document',
+    multivalued: false,
+    value: { required: ['language', 'document'] },
+  });
+  expect(properties['schema:spokenByCharacter']).toMatchObject({
+    datatype: 'wikibase-item',
+    qualifiers: ['rezics:spoilerLevel'],
+    targets: ['wd:Q95074'],
+  });
+  expect(properties['schema:creator']?.targets).toEqual(['schema:Organization', 'schema:Person']);
+  expect(properties['schema:actor']?.targets).toEqual(['schema:Person']);
+  for (const locale of ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
+    expect(types['schema:Quotation']?.labels[locale]).toBeTruthy();
+    for (const property of ['schema:text', 'schema:spokenByCharacter', 'schema:about', 'schema:creator', 'schema:actor'])
+      expect(properties[property]?.labels[locale]).toBeTruthy();
+  }
   expect(types['schema:MediaObject']?.properties).toEqual(
     expect.arrayContaining([
       'wdt:P4092',
