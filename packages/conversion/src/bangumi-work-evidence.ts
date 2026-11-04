@@ -1,6 +1,5 @@
 import {
   bangumiTVAnimeWorkEvidenceFields,
-  isBangumiTVAnimeWorkEvidenceField,
   type BangumiTVAnimeWorkEvidenceField,
 } from './bangumi-subject-profile.ts';
 
@@ -96,9 +95,12 @@ function overflowCode(property: BangumiWorkEvidence['property']): string {
 export function createBangumiWorkEvidenceCollector(omit: BangumiWorkEvidenceOmit) {
   const values: BangumiWorkEvidence[] = [];
 
-  function begin(key: string, pointer: string, inlineValue: string, hasInline: boolean) {
-    if (!isBangumiTVAnimeWorkEvidenceField(key)) return;
-    const fieldKey = key as BangumiTVAnimeWorkEvidenceField;
+  function begin(
+    fieldKey: BangumiTVAnimeWorkEvidenceField,
+    pointer: string,
+    inlineValue: string,
+    hasInline: boolean,
+  ): BangumiWorkEvidenceFieldState {
     const property = propertyFor(fieldKey);
     const inlineInvalid = hasInline && inlineValue.length > valueLimit;
     return {
