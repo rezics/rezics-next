@@ -1,3 +1,4 @@
+import type { FutureThreadUploadEpisode } from './thread-upload-episode/episode';
 import { sessionCsrfToken } from '../session/query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { UploadedImage } from '@rezics/ui';
@@ -47,8 +48,15 @@ export type MediaReservationIntent = Readonly<{
   viewer: string;
 }>;
 
-// A 409 names no thread, and the site has no route key to derive one. Keep the id the reservation already returned.
-const futureThreadIds = new Map<string, string>();
+/** One attachment's original commands. A disclosed container gets its own immutable reservation command. */
+export type ReplyImageReservation = {
+  original: MediaReservationIntent;
+  container?: MediaReservationIntent;
+};
+export type ReplyImageUploadOptions = {
+  episode?: FutureThreadUploadEpisode;
+  reservation: ReplyImageReservation;
+};
 
 function isPostImageType(value: string): value is PostImageType {
   return (postImageTypes as readonly string[]).includes(value);
@@ -214,7 +222,7 @@ function reserveBody(target: ReserveTarget, file: File, purpose: ImagePurpose) {
   if (typeof target === 'string') return { containerId: target, ...image };
   if ('containerId' in target) return { containerId: target.containerId, ...image };
   if ('realmId' in target) return { realmId: target.realmId, ...image };
-  return { newThread: target.newThread, ...image };
+  return { newThread: Object.freeze({ ...target.newThread }), ...image };
 }
 
 export function createMediaReservationIntent(
@@ -237,7 +245,10 @@ async function reserve(
   signal: AbortSignal,
   purpose: ImagePurpose,
   intent?: MediaReservationIntent,
+  options?: ReplyImageUploadOptions,
 ): Promise<ReservedMedia> {
+  throwIfAborted(signal);
+  options?.episode?.assertCurrent();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (intent) headers['idempotency-key'] = JSON.stringify(intent.key);
   const response = await siteFetch('/media', {
@@ -246,25 +257,30 @@ async function reserve(
     headers,
     body: JSON.stringify(intent?.body ?? reserveBody(target, file, purpose)),
   });
+  throwIfAborted(signal);
+  options?.episode?.assertCurrent();
   if (response.status === 409 && typeof target !== 'string' && 'newThread' in target) {
-    const key = target.newThread.idempotencyKey;
-    const known = futureThreadIds.get(key);
-    if (known) {
-      await response.body?.cancel().catch(() => {});
-      return reserve({ containerId: known }, file, signal, purpose);
-    }
-    const discovered = containerIdFrom(await response.json().catch(() => undefined));
-    if (!discovered) throw new UploadRefusal('unavailable');
-    futureThreadIds.set(key, discovered);
-    return reserve({ containerId: discovered }, file, signal, purpose);
+    const disclosed = containerIdFrom(await response.json().catch(() => undefined));
+    throwIfAborted(signal);
+    options?.episode?.assertCurrent();
+    const known = options?.episode?.containerId ?? disclosed;
+    if (!known) throw new UploadRefusal('unavailable');
+    options?.episode?.remember(known);
+    // Recovery repeats this exact command even if its response is lost.
+    const reservation = options?.reservation;
+    if (reservation && !reservation.container)
+      reservation.container = createMediaReservationIntent({ containerId: known }, file, purpose, intent!.viewer);
+    return reserve({ containerId: known }, file, signal, purpose, reservation?.container, options);
   }
   if (!response.ok) throw await refusalFrom(response);
   const payload = await response.json();
+  throwIfAborted(signal);
+  options?.episode?.assertCurrent();
   const media = mediaOf(payload);
   if (!media) throw new UploadRefusal('unavailable');
   if (typeof target !== 'string' && 'newThread' in target) {
     const containerId = containerIdFrom(payload);
-    if (containerId) futureThreadIds.set(target.newThread.idempotencyKey, containerId);
+    if (containerId) options?.episode?.remember(containerId);
   }
   return media;
 }
@@ -326,6 +342,7 @@ async function uploadImage(
   purpose: ImagePurpose,
   intent?: MediaReservationIntent,
   onStage?: (stage: UploadStage) => void,
+  options?: ReplyImageUploadOptions,
 ): Promise<UploadedImage> {
   let mediaId: string | undefined;
   try {
@@ -337,11 +354,11 @@ async function uploadImage(
       intent &&
       (intent.file !== file ||
         intent.body.purpose !== purpose ||
-        ('containerId' in intent.body && intent.body.containerId !== intent.viewer))
+        (purpose === 'avatar' && 'containerId' in intent.body && intent.body.containerId !== intent.viewer))
     )
       throw new UploadRefusal('unavailable');
     onStage?.('reservation');
-    const reserved = await reserve(target, file, signal, purpose, intent);
+    const reserved = await reserve(target, file, signal, purpose, intent, options);
     mediaId = reserved.id;
     throwIfAborted(signal);
     onStage?.('transfer');
@@ -357,8 +374,18 @@ async function uploadImage(
   }
 }
 
-export function uploadReplyImage(target: PostReserveTarget, file: File, signal: AbortSignal): Promise<UploadedImage> {
-  return uploadImage(target, file, signal, 'post-image');
+export function uploadReplyImage(
+  target: PostReserveTarget,
+  file: File,
+  signal: AbortSignal,
+  options?: ReplyImageUploadOptions,
+): Promise<UploadedImage> {
+  const command = options?.reservation.container ?? options?.reservation.original;
+  const originalTarget = command?.body;
+  const reservedTarget = originalTarget && 'containerId' in originalTarget
+    ? { containerId: originalTarget.containerId! }
+    : target;
+  return uploadImage(reservedTarget, file, signal, 'post-image', command, undefined, options);
 }
 
 /** Resume only missing bytes on the original reservation, then observe its native processing state. */
