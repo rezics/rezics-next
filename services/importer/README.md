@@ -2027,8 +2027,12 @@ Selected-family `chars` rows already reach `convertCrossMediaEntity`. Revision
 `cross-media-entities@4` publishes admitted height and weight from those COPY
 cells as exact native quantities with source units and citations. Appearance
 selection still owns identity; measurement cells never authorize acceptance.
-Decision: COPY `\N` and exact `0` are unknown measurement sentinels, not
-measured zero.
+The dump COPY header is the public `chars` columns; height unknown is `0` and
+weight unknown is `\N`. Exact `0` is never a measured zero. Those cells enter
+the entity digest, so a mapping that newly admits them refreshes without a
+revision bump.
+Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
+exact `0` is never a measured zero.
 
 The same production callers now attach admitted `releases_titles` rows to each
 selected release payload and convert them through `cross-media-entities@4`.

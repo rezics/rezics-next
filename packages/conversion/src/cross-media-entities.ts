@@ -417,7 +417,7 @@ export function episodeDuration(
   return 'unknown';
 }
 
-/** COPY smallint cells only. `\N`/null and exact `0` are unknown, not a measured zero. */
+/** COPY smallint cells only. Height unknown is `0`; weight unknown is null; exact `0` is never measured. */
 export function vndbCharacterQuantity(
   value: unknown,
   property: 'schema:height' | 'schema:weight',
