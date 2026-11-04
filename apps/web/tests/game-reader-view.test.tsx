@@ -89,7 +89,7 @@ test('ordinary facts and exact release destinations retain source meaning and ke
     expect(mounted.host.textContent).toContain('Trial 0.8 · ja / Windows');
     expect(mounted.host.textContent).toContain(fixture.publicRead.subject.labels.en);
     expect(mounted.host.textContent).toContain(fixture.publicRead.subject.sourceRecords[0]!.name);
-    expect(fixture.calls).toHaveLength(4);
+    expect(fixture.calls).toHaveLength(2);
     const destination = mounted.host.querySelector<HTMLAnchorElement>(`a[href*="${editionId}"]`)!;
     expect(destination.getAttribute('href')).toBe(
       `/en/subjects/${editionId}/harbour-trial-japanese-windows?realm=games`,
