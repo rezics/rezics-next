@@ -178,7 +178,7 @@ export function IndependentMeasuresVisit({
         commands.current = [];
         setVisit((latest) => {
           if (latest.sessionId !== session.id) return latest;
-          return acknowledgeIndependentRetry(latest, original.operands.measureId, result.session);
+          return acknowledgeIndependentRetry(latest, original.operands.measureId!, result.session);
         });
         return;
       }
