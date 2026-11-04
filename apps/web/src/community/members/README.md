@@ -9,8 +9,7 @@ Decision: management discovery uses the existing exact-Realm `realm.update` perm
 `canManage` observation, both owned by `realm:manage`; ban-list admission and Space-only grants do not qualify.
 The management host supplies these observations without a new probe or a private query snapshot.
 
-Decision: keep production unavailable until the installed roster has generated GET declarations and exposes an exact
-membership interval for selection; neither account ID nor `membership: 'member'` can stand in for that interval.
+Decision: keep production unavailable until the installed roster has generated GET declarations and exposes current viewer/authority advice for selection; neither account ID nor `membership: 'member'` can stand in for that interval.
 
 Decision: interval tokens are opaque within their exact Account selection; tokens need not be globally unique across
 different Accounts.
@@ -21,9 +20,7 @@ The installed [native producer](../../../../../services/kernel/src/community/REA
 `GET /v1/realms/:realmId/members` (`realm.members`, public operation exposure, private `realm:manage` admission), with
 optional exact `accountId` inspection. Its installed schema caps pages at 20 rows, names at 4,096 UTF-16 units, cursors
 at 4,096 characters and serialized responses at 600,000 UTF-8 bytes. It publishes add/ban/unban advice and explicitly
-unavailable remove/role variants; it publishes no media grants. Its interval rechecks remain internal: neither rows
-nor selected observations expose an interval identifier. The retained generated Community declarations still have
-only `members.post` and `members.me.get`. A server source or a local factory does not establish an installed generated
+unavailable remove/role variants; it publishes no media grants. Its rows and selected observations now expose the producer-owned opaque `episode` binding; a leave/rejoin changes it. Shared generated declaration installation remains publisher-owned. A server source or a local factory does not establish an installed generated
 consumer. The visit therefore retains its unavailable production adapter. These consumer types remain illustrative
 composition types, not a proposed wire schema. `pageBound` must come from that installed producer when bound;
 fixtures use 20 only to exercise bounded composition.
@@ -98,3 +95,28 @@ deterministic response fixtures. The remaining mounted native/page source accept
 review across all eight locales are integration-owned. Existing Storybook capture ownership remains unchanged.
 Consumer fixtures and an unavailable production source do not establish native 256/1024/4096 growth or a production
 roster binding.
+
+## Native read transport
+
+Decision: preserve the unavailable default until native viewer/authority projection is connected; the minimal
+`native.ts` wire seam reads real mounted data without converting episode tokens into page authority or inventing viewer advice.
+`request.ts` resolves the admitted browser session and checks its subject before calling the native GET; `transport.ts`
+keeps this explicit read private and outside route loaders. The seam is source integration, not installed generated
+typing or completion of the route journey. No membership or ban writer is introduced. Native `member` maps to
+consumer `current` only once connected; `none` establishes absence of a current membership, never `pending` or workflow
+completion. Preparation stays separate from a ready empty roster.
+
+Cost: native read transport
+
+- Touches: one GET per explicit request, with optional exact Account and opaque cursor; no hydration, refill, or scan.
+  Session preparation uses the existing session owner. Producer authentication and nested native work remain charged
+  to the mounted operation, not established by these receiver fixtures.
+- Bound: at most twenty rows and one exact selected Account, 4,096-unit names/cursors and a 600,000-byte response
+  validation ceiling. This validation occurs after native materialization and establishes no upstream physical bound.
+  Closed actions preserve native reasons and admit only the mounted target and operands.
+- Growth check: receiver tests fix one request independently of response states; native 256/1024/4096 work and the
+  mounted route-to-command journey remain in the continuation and controller acceptance.
+
+Additional sources read: `legacy-final:apps/web/features/manage/realm-team-recorded-page.tsx`, its actual members
+route and `admin-api.ts`; `/home/edge/projects/rezics/rezics/apps/web/features/realms/realm-members.tsx`; reference
+`INDEX.md`. No legacy implementation was ported.
