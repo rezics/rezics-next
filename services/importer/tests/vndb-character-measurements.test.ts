@@ -210,7 +210,7 @@ test('operator plans authored COPY character measurements and imports exact supp
           ],
         }),
       ),
-      join(directory, 'changed.sqlite'),
+      join(directory, 'state.sqlite'),
       port(commands),
       undefined,
       vndbSeed,
