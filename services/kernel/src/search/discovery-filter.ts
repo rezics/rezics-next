@@ -15,7 +15,7 @@ import type {
 } from './discovery.ts';
 import { discoveryKindDirectory } from './discovery-registry.ts';
 import { compileText } from './text.ts';
-import { compileMatchEvidence } from './match-evidence.ts';
+import { compileMatchEvidence, type MatchEvidenceQuery } from './match-evidence.ts';
 import { discoveryNativeQuery } from './discovery-query.ts';
 import { compileFilter } from './filter.ts';
 import type {
@@ -215,7 +215,11 @@ export function compileDiscoveryConsumerCapture(
   input: DiscoveryConsumerCaptureInput,
   meaning: PublicFilterProjectionMeaning,
   registry: (DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>) | undefined,
-): Readonly<{ query: Query; dependencyKeys: readonly PublicFilterDependencyKey[] }> {
+): Readonly<{
+  query: Query;
+  dependencyKeys: readonly PublicFilterDependencyKey[];
+  matchEvidence?: MatchEvidenceQuery;
+}> {
   if (!Object.hasOwn(input, 'filterDocument') || !Object.hasOwn(input, 'text'))
     throw new TypeError('Mixed capture requires the exact root');
   const keys: PublicFilterDependencyKey[] = [
