@@ -16,7 +16,10 @@ import {
   declareMembersPreparationParent,
   type MembersPreparationDeclarations,
 } from '../../src/library/members-preparation-budget.ts';
-import { MEMBERS_PREPARATION_RESERVATION_SUBTOTAL, MEMBERS_PREPARATION_STEP_CEILING } from '../../src/library/members-preparation-cost.ts';
+import {
+  MEMBERS_PREPARATION_RESERVATION_SUBTOTAL,
+  MEMBERS_PREPARATION_STEP_CEILING,
+} from '../../src/library/members-preparation-cost.ts';
 import { declareMembersPreparationRequest } from '../../src/library/members-preparation-request.ts';
 
 const cost = (amount: number): WorkDimensions => ({
