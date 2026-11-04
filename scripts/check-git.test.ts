@@ -2,14 +2,19 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import {
   chmodSync,
+  closeSync,
+  constants,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -172,20 +177,25 @@ test('GitHub fetch serializes only fetch and ref verify on the store lock', () =
     remote: { ref: 'refs/checks/lock-scope', commit: 'e'.repeat(40) },
   };
   const script = fetchCheckGitScript(publication, '/tmp/lock-scope', '/tmp/check-git.git');
-  const lock = "flock -x '/tmp/check-git.git.lock'";
-  const first = script.indexOf(lock);
-  const second = script.indexOf(lock, first + 1);
+  const lockFile = "exec 9>>'/tmp/check-git.git.lock'";
+  const pinFile = "exec 8>>'/tmp/check-git.git.preparing/lock-scope'";
+  const gcLock = "flock -x '/tmp/check-git.git.lock'";
   const fetch = script.indexOf('fetch --no-tags --no-write-fetch-head');
+  const pin = script.indexOf('flock -x 8');
+  const release = script.indexOf('flock -u 9');
   const checkout = script.indexOf('checkout-index --all --force');
   const gc = script.indexOf('gc --quiet --prune=7.days.ago');
-  expect(first).toBeGreaterThan(-1);
-  expect(second).toBeGreaterThan(first);
-  expect(script.indexOf(lock, second + 1)).toBe(-1);
-  expect(fetch).toBeGreaterThan(first);
-  expect(fetch).toBeLessThan(checkout);
-  expect(checkout).toBeGreaterThan(first);
-  expect(checkout).toBeLessThan(second);
-  expect(gc).toBeGreaterThan(second);
+  expect(script.indexOf(lockFile)).toBeGreaterThan(-1);
+  expect(script.indexOf(pinFile)).toBeGreaterThan(-1);
+  expect(script.indexOf('flock -x 9')).toBeGreaterThan(-1);
+  expect(fetch).toBeGreaterThan(script.indexOf('flock -x 9'));
+  expect(pin).toBeGreaterThan(fetch);
+  expect(script.indexOf(pinFile)).toBeLessThan(pin);
+  expect(release).toBeGreaterThan(pin);
+  expect(checkout).toBeGreaterThan(release);
+  expect(script.indexOf(gcLock)).toBeGreaterThan(checkout);
+  expect(gc).toBeGreaterThan(script.indexOf(gcLock));
+  expect(script.indexOf(gcLock, script.indexOf(gcLock) + 1)).toBe(-1);
 });
 
 test('concurrent fetches of one store checkout independently after the shared fetch lock', async () => {
@@ -469,3 +479,165 @@ test('an unavailable ownership journal falls back without publishing or releasin
   expect(git(root, '--git-dir', origin, 'rev-parse', 'refs/checks/existing')).toBe(candidate);
   await releaseCheckGit(source, owned);
 });
+
+function storeHas(store: string, oid: string) {
+  return (
+    Bun.spawnSync(['git', '--git-dir', store, 'cat-file', '-e', oid], {
+      env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
+      stdout: 'ignore',
+      stderr: 'ignore',
+      timeout: 10000,
+    }).exitCode === 0
+  );
+}
+function ageStore(store: string) {
+  const objects = join(store, 'objects');
+  for (const name of readdirSync(objects)) {
+    const path = join(objects, name);
+    const info = statSync(path);
+    if (info.isFile()) Bun.spawnSync(['touch', '-d', '8 days ago', path]);
+    if (!info.isDirectory()) continue;
+    for (const child of readdirSync(path)) Bun.spawnSync(['touch', '-d', '8 days ago', join(path, child)]);
+  }
+  const timestamp = join(store, 'gc.timestamp');
+  if (existsSync(timestamp)) Bun.spawnSync(['touch', '-d', '2 days ago', timestamp]);
+}
+function pokeFifo(path: string) {
+  try {
+    const fd = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK);
+    try {
+      writeSync(fd, 'go\n');
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    /* No reader remains. */
+  }
+}
+function mktempBarrier(root: string) {
+  const dir = join(root, 'barrier');
+  const bin = join(dir, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const ready = join(dir, 'ready');
+  const go = join(dir, 'go');
+  expect(Bun.spawnSync(['mkfifo', ready, go]).exitCode).toBe(0);
+  writeFileSync(
+    join(bin, 'mktemp'),
+    `#!/bin/sh
+path=$(/usr/bin/mktemp "$@")
+printf 'ready\\n' > ${JSON.stringify(ready)}
+read dummy < ${JSON.stringify(go)}
+printf '%s\\n' "$path"
+`,
+  );
+  chmodSync(join(bin, 'mktemp'), 0o755);
+  return { ready, go, env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } };
+}
+async function publishCandidate(source: string, artifacts: string, ref: string, staged: string) {
+  writeFileSync(join(source, 'staged.txt'), staged);
+  git(source, 'add', 'staged.txt');
+  const blob = git(source, 'hash-object', 'staged.txt');
+  const indexTree = git(source, 'write-tree');
+  const manifestPath = await stageCheckGit(source, artifacts, { ref });
+  return { blob, indexTree, publication: JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication };
+}
+
+test('a live preparation pin keeps reused objects through another run forced GC', async () => {
+  const root = sandbox();
+  const { source, head, base } = repository(root);
+  const origin = publicOrigin(root, source);
+  const alpha = await publishCandidate(source, join(root, 'pub-a'), 'refs/checks/alpha', 'alpha unique\n');
+  const beta = await publishCandidate(source, join(root, 'pub-b'), 'refs/checks/beta', 'beta unique\n');
+  const store = join(root, 'check-git.git');
+  const checkoutA = join(root, 'runs', 'alpha-run');
+  const checkoutB = join(root, 'runs', 'beta-run');
+  const barrier = mktempBarrier(root);
+  const paused = Bun.spawn(['sh', '-c', fetchCheckGitScript(alpha.publication, checkoutA, store, origin)], {
+    env: barrier.env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  try {
+    expect(readFileSync(barrier.ready, 'utf8')).toContain('ready');
+    expect(storeHas(store, alpha.blob)).toBe(true);
+    ageStore(store);
+    const other = fetchPublication(beta.publication, checkoutB, store, origin);
+    expect(other.exitCode, other.stderr.toString()).toBe(0);
+    expect(git(root, '--git-dir', store, 'rev-parse', 'refs/check-runs/alpha-run')).toBe(alpha.publication.remote.commit);
+    expect(storeHas(store, alpha.blob)).toBe(true);
+    pokeFifo(barrier.go);
+    expect(await paused.exited, await new Response(paused.stderr).text()).toBe(0);
+    expect(git(checkoutA, 'rev-parse', 'HEAD')).toBe(head);
+    expect(git(checkoutA, 'write-tree')).toBe(alpha.indexTree);
+    expect(git(checkoutA, 'rev-parse', 'dev')).toBe(base);
+    expect(readFileSync(join(checkoutA, 'staged.txt'), 'utf8')).toBe('alpha unique\n');
+    expect(git(checkoutB, 'write-tree')).toBe(beta.indexTree);
+  } finally {
+    paused.kill('SIGKILL');
+    pokeFifo(barrier.go);
+    await paused.exited;
+  }
+}, 30000);
+
+test('GC keeps live completed runs, recovers abandoned pins, and allows identifier reuse', async () => {
+  const root = sandbox();
+  const { source } = repository(root);
+  const origin = publicOrigin(root, source);
+  const live = await publishCandidate(source, join(root, 'pub-live'), 'refs/checks/live', 'live unique\n');
+  const removed = await publishCandidate(source, join(root, 'pub-removed'), 'refs/checks/removed', 'removed unique\n');
+  const failed = await publishCandidate(source, join(root, 'pub-failed'), 'refs/checks/failed', 'failed unique\n');
+  const dead = await publishCandidate(source, join(root, 'pub-dead'), 'refs/checks/dead', 'dead unique\n');
+  const reused = await publishCandidate(source, join(root, 'pub-reused'), 'refs/checks/reused', 'reused unique\n');
+  const store = join(root, 'check-git.git');
+  const liveRoot = join(root, 'runs', 'live-run');
+  const removedRoot = join(root, 'runs', 'removed-run');
+  const failedRoot = join(root, 'runs', 'failed-run');
+  const deadRoot = join(root, 'runs', 'dead-run');
+  expect(fetchPublication(live.publication, liveRoot, store, origin).exitCode).toBe(0);
+  expect(fetchPublication(removed.publication, removedRoot, store, origin).exitCode).toBe(0);
+  rmSync(removedRoot, { recursive: true, force: true });
+  const failBin = join(root, 'fail-bin');
+  mkdirSync(failBin);
+  writeFileSync(
+    join(failBin, 'git'),
+    `#!/bin/sh
+for arg; do [ "$arg" = checkout-index ] && exit 1; done
+exec /usr/bin/git "$@"
+`,
+  );
+  chmodSync(join(failBin, 'git'), 0o755);
+  const failedFetch = Bun.spawnSync(['sh', '-c', fetchCheckGitScript(failed.publication, failedRoot, store, origin)], {
+    env: { ...process.env, PATH: `${failBin}:${process.env.PATH}` },
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 30000,
+  });
+  expect(failedFetch.exitCode).not.toBe(0);
+  expect(existsSync(failedRoot)).toBe(false);
+  const barrier = mktempBarrier(root);
+  const killed = Bun.spawn(['sh', '-c', fetchCheckGitScript(dead.publication, deadRoot, store, origin)], {
+    env: barrier.env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  expect(readFileSync(barrier.ready, 'utf8')).toContain('ready');
+  killed.kill('SIGKILL');
+  pokeFifo(barrier.go);
+  await killed.exited;
+  ageStore(store);
+  const sweeper = fetchPublication(reused.publication, join(root, 'runs', 'sweep-run'), store, origin);
+  expect(sweeper.exitCode, sweeper.stderr.toString()).toBe(0);
+  const refs = git(root, '--git-dir', store, 'for-each-ref', '--format=%(refname)', 'refs/check-runs/');
+  expect(refs).toContain('refs/check-runs/live-run');
+  expect(refs).toContain('refs/check-runs/sweep-run');
+  expect(refs).not.toContain('refs/check-runs/removed-run');
+  expect(refs).not.toContain('refs/check-runs/failed-run');
+  expect(refs).not.toContain('refs/check-runs/dead-run');
+  expect(storeHas(store, live.blob)).toBe(true);
+  expect(storeHas(store, failed.blob)).toBe(false);
+  expect(storeHas(store, dead.blob)).toBe(false);
+  const reuse = fetchPublication(reused.publication, deadRoot, store, origin);
+  expect(reuse.exitCode, reuse.stderr.toString()).toBe(0);
+  expect(git(deadRoot, 'write-tree')).toBe(reused.indexTree);
+  expect(readFileSync(join(deadRoot, 'staged.txt'), 'utf8')).toBe('reused unique\n');
+}, 30000);

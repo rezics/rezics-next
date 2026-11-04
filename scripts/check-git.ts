@@ -46,7 +46,7 @@ function shell(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-/** Fetch and ref verify take the store lock; checkout is per-run; daily gc takes a second short lock. */
+/** Fetch, ref verify and the preparing pin take the store lock; checkout is per-run; daily gc takes a second short lock. */
 export function fetchCheckGitScript(
   publication: CheckGitPublication,
   checkout: string,
@@ -65,27 +65,31 @@ export function fetchCheckGitScript(
   const storePath = resolve(store);
   const rootPath = resolve(checkout);
   const lock = `${storePath}.lock`;
-  const fetchBody = `set -eu
-export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
-store=${shell(storePath)}
-if [ ! -d "$store" ]; then git init --bare --quiet --template= --object-format=${objectFormat} "$store"; fi
-git --git-dir="$store" -c gc.auto=0 fetch --no-tags --no-write-fetch-head ${shell(origin)} ${shell(`+${remote.ref}:refs/check-runs/${run}`)}
-test "$(git --git-dir="$store" rev-parse ${shell(`refs/check-runs/${run}`)})" = ${shell(remote.commit)}
-test "$(git --git-dir="$store" rev-parse ${shell(`${remote.commit}^{tree}`)})" = ${shell(indexTree)}
-git --git-dir="$store" cat-file -e ${shell(`${head}^{commit}`)}
-${dev ? `git --git-dir="$store" cat-file -e ${shell(`${dev}^{commit}`)}` : ''}
-`;
+  const preparingDir = `${storePath}.preparing`;
+  const preparing = `${preparingDir}/${run}`;
   const gcBody = `set -eu
 store=${shell(storePath)}
 root=${shell(rootPath)}
+preparing_dir=${shell(preparingDir)}
 if [ ! -f "$store/gc.timestamp" ] || [ "$(date +%s)" -gt "$(($(stat -c %Y "$store/gc.timestamp" 2>/dev/null || echo 0) + 86400))" ]; then
- (
   git --git-dir="$store" for-each-ref --format='%(refname)' refs/check-runs/ | while read -r ref; do
-    if [ ! -d "$(dirname "$root")/\${ref##*/}" ]; then git --git-dir="$store" update-ref -d "$ref"; fi
+    case "$ref" in refs/check-runs/[a-zA-Z0-9-]*) ;; *) continue ;; esac
+    published="$(dirname "$root")/\${ref##*/}"
+    pin="$preparing_dir/\${ref##*/}"
+    if [ -d "$published" ]; then continue; fi
+    if [ -e "$pin" ]; then
+      exec 7>>"$pin"
+      if flock -n 7; then
+        git --git-dir="$store" update-ref -d "$ref"
+        rm -f -- "$pin"
+      fi
+      exec 7>&-
+    else
+      git --git-dir="$store" update-ref -d "$ref"
+    fi
   done
   git --git-dir="$store" gc --quiet --prune=7.days.ago
   touch "$store/gc.timestamp"
- )
 fi
 `;
   return `# REMOTE_CHECK_GITHUB_FETCH
@@ -93,8 +97,22 @@ set -eu
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
 store=${shell(storePath)}
 root=${shell(rootPath)}
+lock=${shell(lock)}
+preparing_dir=${shell(preparingDir)}
+preparing=${shell(preparing)}
 mkdir -p ${shell(dirname(storePath))} "$(dirname "$root")"
-flock -x ${shell(lock)} sh -c ${shell(fetchBody)}
+exec 9>>"$lock"
+flock -x 9
+if [ ! -d "$store" ]; then git init --bare --quiet --template= --object-format=${objectFormat} "$store"; fi
+git --git-dir="$store" -c gc.auto=0 fetch --no-tags --no-write-fetch-head ${shell(origin)} ${shell(`+${remote.ref}:refs/check-runs/${run}`)}
+test "$(git --git-dir="$store" rev-parse ${shell(`refs/check-runs/${run}`)})" = ${shell(remote.commit)}
+test "$(git --git-dir="$store" rev-parse ${shell(`${remote.commit}^{tree}`)})" = ${shell(indexTree)}
+git --git-dir="$store" cat-file -e ${shell(`${head}^{commit}`)}
+${dev ? `git --git-dir="$store" cat-file -e ${shell(`${dev}^{commit}`)}` : ''}
+mkdir -p "$preparing_dir"
+exec 8>>"$preparing"
+flock -x 8
+flock -u 9
 stage=$(mktemp -d "$root.fetch-XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 git init --quiet --template= --object-format=${objectFormat} "$stage"
@@ -114,6 +132,11 @@ mkdir -p "$stage/.git/info"
 printf '%s\\n' '/.alive' '/.bun-install-complete' '/.remote-check-slot-count' '/bun-runtime-transpiler-cache/' '/command-phases.tsv' '/command-started' '/exit-status' >> "$stage/.git/info/exclude"
 mv -T -- "$stage" "$root"
 trap - EXIT
+flock -u 8
+rm -f -- "$preparing"
+exec 8>&-
+flock -u 9
+exec 9>&-
 flock -x ${shell(lock)} sh -c ${shell(gcBody)} || echo 'check-git: store age pruning deferred' >&2
 `;
 }

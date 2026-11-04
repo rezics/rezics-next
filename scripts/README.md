@@ -433,7 +433,14 @@ Admission retries races against other callers. The default probe interval is fiv
    rsync reports duration, bytes sent, file count and mode (`overlay after GitHub fetch`, `checksum copy-dest`, or
    `full tree`). The per-run local staging directory is removed after transfer, including on failure.
    Host fetch serializes only GitHub fetch and ref verify on the shared store lock; `checkout-index` is per-run, and
-   daily store gc takes a second short lock. Overlay rsync then sends only working edits and untracked inputs.
+   daily store gc takes a second short lock. A live preparation holds an exclusive flock on
+   `<store>.preparing/<run>` before that first lock is released; that file is the liveness pin, and
+   `refs/check-runs/<run>` remains the Git GC root. Daily gc deletes a run ref only when its published
+   directory is absent and its preparing lock is free, so a preparing run is distinct from a published or
+   still-live run, an abandoned preparation, and a completed or removed run. Directory absence, staging-name
+   age, and object mtime are not process-stopped evidence.
+   Decision: a per-run flock beside the store is preparation liveness; `refs/check-runs/<run>` stays the GC root.
+   Overlay rsync then sends only working edits and untracked inputs.
    GitHub publication retries the same candidate/ref once after 250 ms within one absolute preparation deadline
    (the configured 900-second default). Each failed push reports its exit/signal status and credential-redacted stderr;
    final failure retains full snapshot upload. Local authentication never enters a manifest or host checkout.
