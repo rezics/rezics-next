@@ -350,6 +350,8 @@ async function quotationText(
   const definition = release.properties[property];
   if (!definition) return { ...exact, status: 'unsupported' };
   if (definition.datatype === 'document') {
+    if (!isRecord(content) || typeof content.document !== 'string' || typeof content.digest !== 'string' || !language)
+      return { ...exact, status: 'unsupported' };
     const body =
       documents !== undefined
         ? pageDocumentBody(documents, subject.subject.id, statement)
@@ -454,9 +456,17 @@ async function quotationRow(
         },
       ],
     };
-  const selected = (subject.subject.statements[textProperty] ?? []).filter(
-    (statement) => statement.rank !== 'deprecated' && statement.property.id === textProperty,
-  );
+  // Apply the existing rank rule within each native language slot, never across languages.
+  const languages = new Map<string, Statement[]>();
+  for (const statement of subject.subject.statements[textProperty] ?? []) {
+    if (statement.property.id !== textProperty) continue;
+    const value = statement.value.type === 'value' ? statement.value.content : undefined;
+    const language = isRecord(value) && typeof value.language === 'string' ? value.language : '';
+    const group = languages.get(language) ?? [];
+    group.push(statement);
+    languages.set(language, group);
+  }
+  const selected = [...languages.values()].flatMap(ranked);
   const contexts = [
     ...contextsFor(subject, release, 'speaker', quotationRequested.speaker, locale),
     ...contextsFor(subject, release, 'credited', quotationRequested.credited, locale),
