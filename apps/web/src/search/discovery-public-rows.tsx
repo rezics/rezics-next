@@ -49,9 +49,7 @@ function PublicCollectionRow({
             subject={{
               id,
               title: summary.title,
-              types: summary.card.presentationKind
-                ? [summary.card.presentationKind]
-                : [],
+              types: summary.card.presentationKind ? [summary.card.presentationKind] : [],
             }}
             cover={summary.card.cover}
             src={coverSrc}
@@ -150,16 +148,14 @@ function ReviewRow({
 }) {
   const searchContext = summary.searchContext;
   const target =
-    searchContext?.state === "available" &&
-    searchContext.target.state === "available"
+    searchContext?.state === 'available' && searchContext.target.state === 'available'
       ? searchContext.target.subject
       : null;
   // An enriched withheld state never falls back to the earlier title-only slot.
   const reviewedSubject = searchContext
     ? target && { id: target.id, title: target.label?.value ?? null }
     : summary.subject;
-  const reviewedTitle =
-    reviewedSubject?.title || m.subject_value_unlabelled({}, options(locale));
+  const reviewedTitle = reviewedSubject?.title || m.subject_value_unlabelled({}, options(locale));
   const context = (
     <div className="min-w-0 space-y-1">
       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -172,31 +168,19 @@ function ReviewRow({
               subjectHrefFor?.({
                 id: reviewedSubject.id,
                 label: reviewedTitle,
-              }) ??
-              subjectHref(
-                { id: reviewedSubject.id, label: reviewedTitle },
-                locale,
-              ).href
+              }) ?? subjectHref({ id: reviewedSubject.id, label: reviewedTitle }, locale).href
             }
           >
             {reviewedTitle}
           </a>
         ) : searchContext ? (
-          <span>
-            {m.discussion_provenance_details_subject_unavailable(
-              {},
-              options(locale),
-            )}
-          </span>
+          <span>{m.discussion_provenance_details_subject_unavailable({}, options(locale))}</span>
         ) : null}
       </span>
       {target ? (
         <>
           <SubjectMeta
-            type={localizedLabel(
-              targetTypes?.[target.type] ?? { en: target.type },
-              locale,
-            )}
+            type={localizedLabel(targetTypes?.[target.type] ?? { en: target.type }, locale)}
             year={undefined}
             locale={locale}
           />
@@ -207,13 +191,8 @@ function ReviewRow({
       ) : null}
     </div>
   );
-  const authorName =
-    summary.author?.displayName ||
-    (summary.author?.handle ? `@${summary.author.handle}` : undefined);
-  const authorHandle =
-    summary.author?.displayName && summary.author.handle
-      ? `@${summary.author.handle}`
-      : undefined;
+  const authorName = summary.author?.displayName || (summary.author?.handle ? `@${summary.author.handle}` : undefined);
+  const authorHandle = summary.author?.displayName && summary.author.handle ? `@${summary.author.handle}` : undefined;
 
   return (
     <ContentItem
@@ -242,44 +221,32 @@ function ReviewRow({
         authorName ? (
           <span>
             {authorName}
-            {authorHandle ? ` ${authorHandle}` : ""}
+            {authorHandle ? ` ${authorHandle}` : ''}
           </span>
         ) : undefined
       }
       preview={
         <div className="min-w-0 space-y-3">
-          {summary.excerpt &&
-          (!searchContext || searchContext.state === "available") ? (
-            searchContext?.state === "available" && searchContext.spoiler ? (
-              <details
-                key={`${id}:${summary.source?.openingRevisionId}:${summary.source?.sourceVersion}:${locale}`}
-              >
+          {summary.excerpt && (!searchContext || searchContext.state === 'available') ? (
+            searchContext?.state === 'available' && searchContext.spoiler ? (
+              <details key={`${id}:${summary.source?.openingRevisionId}:${summary.source?.sourceVersion}:${locale}`}>
                 <summary className="inline-flex min-h-11 cursor-pointer items-center underline underline-offset-4">
                   {m.subject_spoiler_show({}, options(locale))}
                 </summary>
-                <p
-                  lang={searchContext.language ?? undefined}
-                  className="line-clamp-3 break-words"
-                >
+                <p lang={searchContext.language ?? undefined} className="line-clamp-3 break-words">
                   {summary.excerpt}
                 </p>
               </details>
             ) : (
               <p
-                lang={
-                  searchContext?.state === "available"
-                    ? (searchContext.language ?? undefined)
-                    : undefined
-                }
+                lang={searchContext?.state === 'available' ? (searchContext.language ?? undefined) : undefined}
                 className="line-clamp-3 break-words"
               >
                 {summary.excerpt}
               </p>
             )
           ) : null}
-          {searchContext ? (
-            <ReviewContextDetails context={searchContext} locale={locale} />
-          ) : null}
+          {searchContext ? <ReviewContextDetails context={searchContext} locale={locale} /> : null}
         </div>
       }
     />
@@ -346,11 +313,7 @@ function SpaceRow({
         </span>
       }
       metadata={<span className="break-all">{summary.address}</span>}
-      preview={
-        summary.summary ? (
-          <p className="line-clamp-2 break-words">{summary.summary}</p>
-        ) : undefined
-      }
+      preview={summary.summary ? <p className="line-clamp-2 break-words">{summary.summary}</p> : undefined}
     />
   );
 }

@@ -211,9 +211,11 @@ export async function prepareSearchReviewContexts(
           authorIds,
           { languages: context.languages ?? ['en'] },
         );
-        return new Map([...summaries].map(([id, author]) => [id, author
-          ? { displayName: author.displayName, handle: author.handle }
-          : null] as const));
+        return new Map(
+          [...summaries].map(
+            ([id, author]) => [id, author ? { displayName: author.displayName, handle: author.handle } : null] as const,
+          ),
+        );
       };
       const accounts = await readAuthors();
       const confirmed = await native();
@@ -273,9 +275,7 @@ export async function prepareSearchReviewContexts(
       return {
         ...currentPage,
         hits: currentPage.hits.map((hit) =>
-          isReview(hit)
-            ? { ...hit, summary: { kind: 'review' as const, value: values.get(hit.key.id)! } }
-            : hit,
+          isReview(hit) ? { ...hit, summary: { kind: 'review' as const, value: values.get(hit.key.id)! } } : hit,
         ),
       };
     },

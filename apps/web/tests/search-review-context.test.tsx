@@ -148,9 +148,12 @@ test('unavailable current context suppresses an earlier opening excerpt', () => 
   wire.hits = [hit];
   const admitted = parseDiscoveryPage(wire);
   expect(admitted).toBeDefined();
-  const html = renderToStaticMarkup(createElement(DiscoveryResults, {
-    state: { status: 'ready', page: admitted! }, locale: 'en',
-  }));
+  const html = renderToStaticMarkup(
+    createElement(DiscoveryResults, {
+      state: { status: 'ready', page: admitted! },
+      locale: 'en',
+    }),
+  );
   expect(html).not.toContain('A spoiler observation.');
   expect(html).not.toContain('0 units');
 });
