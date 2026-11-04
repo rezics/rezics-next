@@ -5,7 +5,6 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { noEffect, principalCommandIdentity, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -46,7 +45,8 @@ import {
 
 /** Reuses the existing bulk/governance authority. It grants no native ballot or public fence access. */
 export const SOURCE_CLASSIFICATION_WRITE_ACTION = 'source_statistic:write';
-const root = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
+// Literal identity so this module can finish while definitions.ts is still evaluating.
+const root = Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' });
 export type SourceClassificationConfig = {
   pool: Pool;
   access: Access;

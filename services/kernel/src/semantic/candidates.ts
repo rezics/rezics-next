@@ -14,6 +14,7 @@ import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -88,6 +89,25 @@ import updateSubjectRelease from './update-subject-release.sql';
 
 export class SubjectNotFoundError extends Error {}
 export class EditorialConflictError extends Error {}
+
+const PROPOSE = 'subject.propose';
+const DECIDE = 'subject.decide';
+const ADOPT = 'subject.adopt';
+registerCommandHistoryKind(PROPOSE, 3022);
+registerCommandHistoryKind(DECIDE, 3023);
+registerCommandHistoryKind(ADOPT, 3024);
+
+async function declareSubjectHistory(
+  tx: CommandTransaction,
+  kind: typeof PROPOSE | typeof DECIDE | typeof ADOPT,
+  events: readonly { type: string }[],
+) {
+  await declareCommandHistory(tx, kind, {
+    response: { artifactType: 'command-receipt/v1', accounts: [] },
+    events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+  });
+}
+
 const CANDIDATE_NS = '3c62c392-7c55-4fda-bf16-13b4853e7598';
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -181,7 +201,7 @@ export async function proposeStatement(
       deadline: options.deadline,
       receipt: {
         actorAccountId: options.actor.accountId,
-        kind: 'subject.propose',
+        kind: PROPOSE,
         key: options.idempotencyKey,
         digest: options.digest,
       },
@@ -194,7 +214,9 @@ export async function proposeStatement(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeProposal(tx, transactionId, { ...options, statement });
+      const result = await writeProposal(tx, transactionId, { ...options, statement });
+      await declareSubjectHistory(tx, PROPOSE, result.events);
+      return result;
     },
   );
   return {
@@ -435,7 +457,7 @@ export async function decideCandidate(
       deadline: options.deadline,
       receipt: {
         actorAccountId: options.actor.accountId,
-        kind: 'subject.decide',
+        kind: DECIDE,
         key: options.idempotencyKey,
         digest: options.digest,
       },
@@ -594,6 +616,21 @@ export async function decideCandidate(
             });
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
+        const events = [
+          ...linkEvents,
+          {
+            type: SUBJECT_REVISED,
+            subject: options.subject,
+            data: { id: options.subject, revision, kind: options.decision },
+          },
+          {
+            type:
+              options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
+            subject: options.subject,
+            data: { candidate: options.candidate, context: options.context, revision, head },
+          },
+        ];
+        await declareSubjectHistory(tx, DECIDE, events);
         return {
           value: {
             acceptance: {
@@ -604,20 +641,7 @@ export async function decideCandidate(
             },
             revision,
           },
-          events: [
-            ...linkEvents,
-            {
-              type: SUBJECT_REVISED,
-              subject: options.subject,
-              data: { id: options.subject, revision, kind: options.decision },
-            },
-            {
-              type:
-                options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
-              subject: options.subject,
-              data: { candidate: options.candidate, context: options.context, revision, head },
-            },
-          ],
+          events,
         };
       } catch (error) {
         retryEditorialUniqueness(error);
@@ -654,7 +678,7 @@ export async function adoptCandidates(
       deadline: options.deadline,
       receipt: {
         actorAccountId: options.actor.accountId,
-        kind: 'subject.adopt',
+        kind: ADOPT,
         key: options.idempotencyKey,
         digest: options.digest,
       },
@@ -927,6 +951,7 @@ export async function adoptCandidates(
           }
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
+        await declareSubjectHistory(tx, ADOPT, events);
         return {
           value: {
             adoption: {

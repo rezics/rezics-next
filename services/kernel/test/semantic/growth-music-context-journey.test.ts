@@ -1,16 +1,16 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { bundledRelease, bundledSources } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease, bundledSources } from '@rezics/definitions/bundled';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { PUBLICATION_LIMITS, publicationLimits, RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { newId } from '../../src/route/route.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject } from '../../src/semantic/subject.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { itemFacts } from '../../src/semantic/item.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 import { verticalManifests } from '../support/manifests.ts';
 
@@ -18,14 +18,6 @@ const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const NIL = '00000000-0000-0000-0000-000000000000';
 const route = 16000;
-const actor = {
-  kind: 'account' as const,
-  accountId: newId(route),
-  clientId: 'growth',
-  scopes: ['subject:create'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
 const node = (type: string, id: string) => ({ type, props: { id } });
 const document = (...content: ReturnType<typeof node>[]) => ({ root: { props: {} }, content });
 let db: GrowthDatabase;
@@ -46,7 +38,8 @@ async function call(method: string, path: string, body?: unknown) {
 
 beforeAll(async () => {
   db = await openGrowthDatabase(url);
-  const releaseDigest = await bootstrapRelease(db.pool, bundledRelease);
+  configureTestReceiptKeys(db.pool);
+  await bootstrapRelease(db.pool, bundledRelease);
   const profile: PresentationProfile = {
     format: PROFILE_FORMAT,
     generic: document(node('SubjectHeader', 'header')),
@@ -59,19 +52,61 @@ beforeAll(async () => {
   kernel = createKernel({
     pool: db.pool,
     receiptKeys: testReceiptKeys(),
+    requestDeadlineMs: 30_000,
     routeKey: new Uint8Array(32).fill(61),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(62)]]) },
   });
-  const created = await createSubject(db.pool, {
-    actor,
-    target: { route, id: newId(route) },
-    idempotencyKey: randomUUID(),
-    digest: new Uint8Array(32),
-    item: { type: 'schema:MusicEvent', labels: { en: 'Selected concert' } },
-    release: { digest: releaseDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  eventId = created.subject.id;
+  const selected: { id: string; route: number } = { id: '', route: 0 };
+  await seed(
+    db,
+    {
+      name: 'music-context-selected-event',
+      hotPartition: partitionOf(route),
+      hotShare: 1,
+      rows: ({ route: placed }) => {
+        const id = newId(placed);
+        selected.id = id;
+        selected.route = placed;
+        const transaction = randomUUID();
+        const facts = itemFacts(id, { labels: { en: 'Selected concert' } }, 'schema:MusicEvent', bundledRelease);
+        return {
+          'semantic.subject': [
+            {
+              route: placed,
+              subject_id: id,
+              type: 'schema:MusicEvent',
+              recorded_transaction_id: transaction,
+              visibility: 'visible',
+              security_revision: 0,
+              current_facts: facts.length,
+              current_release: bundledDigest,
+              projection_pending: false,
+            },
+          ],
+          'semantic.revision': [
+            {
+              route: placed,
+              subject_id: id,
+              revision: 1,
+              kind: 'create',
+              release: bundledDigest,
+              recorded_transaction_id: transaction,
+            },
+          ],
+          'semantic.fact': facts.map((fact) => ({
+            ...fact,
+            route: placed,
+            subject_id: id,
+            recorded_transaction_id: transaction,
+            release: fact.kind === 'statement' ? bundledDigest : null,
+            relation: false,
+          })),
+        };
+      },
+    },
+    { from: 0, to: 1 },
+  );
+  eventId = selected.id;
   await db.admin.query(
     `INSERT INTO semantic.outbound_link(
        route, subject_id, property, filter_value, order_key, target_subject_id, statement_id, slot_id,
@@ -80,12 +115,12 @@ beforeAll(async () => {
      SELECT $1, $2, 'schema:location', $3, lpad(n::text, 8, '0'), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(),
             true, 'schema:MusicEvent', lpad(n::text, 8, '0'), 'name', 1, 0, 1, 'schema:MusicVenue', NULL, 'value', true, gen_random_uuid()
      FROM generate_series(1, 20) n`,
-    [route, eventId, NIL],
+    [selected.route, eventId, NIL],
   );
   await db.admin.query(
     `INSERT INTO semantic.outbound_link_count(route, subject_id, property, filter_value, value)
      VALUES ($1, $2, 'schema:location', $3, 20)`,
-    [route, eventId, NIL],
+    [selected.route, eventId, NIL],
   );
 }, 60_000);
 
