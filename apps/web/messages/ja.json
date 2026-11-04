@@ -6859,7 +6859,7 @@
   "concept_explore_unknown_role": "未知のソース役割",
   "concept_explore_unsupported": "この値は証拠として保持され、認められた概念ではありません。",
   "concept_explore_unreadable": "この概念を現在読めません。",
-  "concept_explore_retired": "このソース概念は廃止された発行で最後に公開されました。このページには現在読めるソースと承認状態を表示します。",
+  "concept_explore_retired": "このソース概念は旧リリースに属しています。元の定義、リリース、コードを保持しています。",
   "concept_explore_empty": "この階層ページに読み取り可能な項目はありませんでした。",
   "concept_explore_more": "階層を続ける",
   "concept_explore_correct": "この事実を修正",
@@ -8189,7 +8189,7 @@
   "concept_explore_inverse_unsupported": "認められた定義に、この関係の下位逆関係はありません。",
   "concept_explore_hierarchy_preparing": "下位階層を準備中です。このページを再試行してください。",
   "concept_explore_hierarchy_lagging": "この下位ページは現在のソース変更に遅れている可能性があります。",
-  "concept_explore_hierarchy_unavailable": "下位ページを読み取れませんでした。前のページは引き続き利用できます。",
+  "concept_explore_hierarchy_unavailable": "下位概念のページを読み取れませんでした。要求したページを再試行してください。",
   "concept_explore_page_empty": "この階層ページに読み取り可能な項目はありませんでした。続きがある場合があります。",
   "concept_explore_no_narrower": "現在のネイティブ読み取りで下位概念がないことを確認しました。",
   "concept_explore_retry": "このページを再試行",
@@ -8385,5 +8385,10 @@
   "own_media_recovery_return": "元のメディアに戻る",
   "library_priority_unavailable": "優先度順はまだ利用できません。",
   "library_priority_ascending": "優先度1から",
-  "library_priority_descending": "優先度100から"
+  "library_priority_descending": "優先度100から",
+  "concept_explore_original_role": "元のソースロール",
+  "concept_explore_role_evidence": "不明なソースロールです。受け取った値をそのまま保持します。概念の承認や訂正の権限は与えません。",
+  "concept_explore_scheme_withheld": "スキームの参照先は非公開です",
+  "concept_explore_retained_page": "このソース改訂の保持済み階層ページ {page} を表示しています。失敗したリクエストによる置き換えは行われていません。",
+  "concept_explore_hierarchy_navigation": "階層ページ"
 }

@@ -2,7 +2,11 @@ import { expect, mock, test } from 'bun:test';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { conceptTypeAdmitted, readSourceConcept } from '../src/features/catalogue/source-concept-explorer';
+import {
+  conceptTypeAdmitted,
+  readSourceConcept,
+  validConceptCursor,
+} from '../src/features/catalogue/source-concept-explorer';
 import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -120,7 +124,8 @@ test('source concept explorer covers two schemes, duplicate labels, unknown role
   if (!read.ok) throw new Error('expected concept');
   expect(read.schemes.map((scheme) => scheme.label).sort()).toEqual(['Bangumi tags', 'VNDB traits']);
   expect(read.aliases.filter((alias) => alias.text === 'Protagonist').length).toBe(1);
-  expect(read.codes.some((code) => code.unknown && code.value === 'vndb:unknown')).toBe(true);
+  expect(read.requestedRole).toBe('vndb:unknown');
+  expect(read.codes.some((code) => code.property === 'role')).toBe(false);
   expect(read.public.subject.id).toBe(concept);
   expect(read.broader.rows.some((row) => row.direction === 'broader' && row.id === broader)).toBe(true);
   expect(read.codes.some((code) => code.property === 'schema:sameAs')).toBe(false);
@@ -158,4 +163,112 @@ test('source concept explorer covers two schemes, duplicate labels, unknown role
   const unknown = await readSourceConcept(client('ok'), 'Bearer reader', bundledRelease, concept, 'en', {});
   expect(unknown.ok && conceptTypeAdmitted(bundledRelease, 'schema:Book')).toBe(false);
   expect(catalogueEntries.concepts({ id: concept, label: 'Protagonist', locale: 'en' }).href).toContain('/concepts');
+});
+
+test('native inverse stays bounded, distinguishes exact empty and readiness, and keeps advice independent', async () => {
+  const subject = item('retired');
+  subject.subject.statements['source:original'] = [
+    {
+      id: broader,
+      rank: 'normal',
+      property: { id: 'source:original', data_type: 'external-id' },
+      value: { type: 'value', content: '未知/المصدر/00-A' },
+      qualifiers: [],
+      references: [],
+    },
+  ];
+  subject.related[schemeB] = { labels: {} };
+  delete subject.related[broader];
+  Object.assign(subject, {
+    viewerActions: { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] },
+  });
+  let calls = 0;
+  let response: { status: number; data: unknown } = {
+    status: 200,
+    data: {
+      links: [],
+      next: null,
+      count: { value: 0, exact: true },
+      freshness: { caught_up: true },
+    },
+  };
+  const native = {
+    subjects: () => ({
+      get: async () => ({ status: 200, data: subject, headers: { 'rezics-session-token': 'source-receipt' } }),
+      links: {
+        get: async (request: unknown) => {
+          calls++;
+          expect(request).toEqual({
+            query: { property: 'skos:broader', language: 'ja', limit: 20, cursor: 'original' },
+            headers: { authorization: 'Bearer reader', 'rezics-session-token': 'source-receipt' },
+          });
+          return response;
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+  const read = () =>
+    readSourceConcept(
+      native,
+      'Bearer reader',
+      {
+        ...bundledRelease,
+        digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+      concept,
+      'ja',
+      { role: '未知/المصدر/00-A', cursor: 'original', session: 'previous' },
+    );
+  const exact = await read();
+  expect(exact).toMatchObject({
+    ok: true,
+    retired: true,
+    requestedRole: '未知/المصدر/00-A',
+    narrower: { state: 'available', exactEmpty: true },
+    broader: { rows: [], withheld: 1 },
+    viewerActions: { state: 'available' },
+  });
+  if (!exact.ok) throw Error('Expected source');
+  expect(exact.codes).toEqual([
+    {
+      property: 'source:original',
+      label: 'source:original',
+      labelLang: null,
+      value: '未知/المصدر/00-A',
+      unknown: true,
+    },
+  ]);
+  expect(exact.schemes.find((row) => row.id === schemeB)?.readable).toBe(true);
+  response = {
+    status: 200,
+    data: { links: [], next: 'continue', freshness: { caught_up: false }, count: { value: 0, exact: true } },
+  };
+  expect(await read()).toMatchObject({ narrower: { state: 'lagging', exactEmpty: false, next: 'continue' } });
+  response = { status: 200, data: { links: [], next: 'continue', freshness: { caught_up: true } } };
+  expect(await read()).toMatchObject({ narrower: { state: 'available', exactEmpty: false } });
+  for (const [code, state] of [
+    ['semantic_not_ready', 'preparing'],
+    ['dependency_unavailable', 'unavailable'],
+  ]) {
+    response = { status: 503, data: { code } };
+    expect(await read()).toMatchObject({
+      narrower: { state, rows: [], next: null, exactEmpty: false },
+      viewerActions: exact.viewerActions,
+      codes: exact.codes,
+    });
+  }
+  response = { status: 403, data: {} };
+  expect(await read()).toEqual({ ok: false, reason: 'denied' });
+  expect(calls).toBe(6);
+  expect(validConceptCursor('界'.repeat(1365))).toBe(true);
+  expect(validConceptCursor('界'.repeat(1366))).toBe(false);
+  const before = calls;
+  expect(
+    (
+      await readSourceConcept(native, undefined, bundledRelease, concept, 'en', {
+        cursor: '界'.repeat(1366),
+      })
+    ).ok,
+  ).toBe(false);
+  expect(calls).toBe(before);
 });

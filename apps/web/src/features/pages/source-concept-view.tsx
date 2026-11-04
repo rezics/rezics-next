@@ -1,71 +1,47 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
-import { candidateFailure, type CandidateFailure } from '../../subject/candidates';
+import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { subjectHref } from '../../subject/subject-href';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
+import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import {
-  appendChangePage,
-  changePageHistoryLimit,
-  firstChangePage,
-  type ChangePageHistory,
-} from '../catalogue/subject-changes-navigation';
-import type { ConceptHierarchyRow, ConceptRead } from '../catalogue/source-concept-explorer';
+  actionClass,
+  linkClass,
+  HierarchyLinks,
+  ConceptHierarchy,
+  visitAnnouncement,
+} from './source-concept-reading/hierarchy';
+import { originatingClassification } from './source-concept-reading/origin';
+import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
 import { ViewHeading } from './view-heading';
 
-const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-const linkClass =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const continuationLimit = 4096;
+export type { ConceptTransport } from './source-concept-reading/visit';
 
-export type ConceptTransport = {
-  read: (input: { cursor?: string | undefined; session?: string | undefined }) => Promise<ConceptRead>;
+type Props = {
+  id: string;
+  locale: string;
+  role?: string | undefined;
+  returnTo?: string | undefined;
+  pinUnsupported?: boolean;
+  transport: ConceptTransport;
+  initial?: ConceptRead | undefined;
 };
 
-type PageError = { cursor?: string; preparing: boolean };
-type ConceptPage = Extract<ConceptRead, { ok: true }>;
-
-function neighbourHref(row: ConceptHierarchyRow, locale: string, returnTo?: string) {
-  const base = row.conceptPage
-    ? catalogueEntries.concepts({ id: row.id, label: row.label, locale }).href
-    : subjectHref({ id: row.id, label: row.label }, locale).href;
-  return returnTo ? `${base}?${new URLSearchParams({ returnTo })}` : base;
+export function SourceConceptView(props: Props) {
+  const admission = useCatalogueLifetime(JSON.stringify(['concept-explore', props.id, props.locale, props.role]));
+  return <ConceptVisitView key={admission.generation} {...props} admission={admission} />;
 }
 
-function HierarchyLinks({
-  rows,
-  locale,
-  returnTo,
-}: {
-  rows: ConceptHierarchyRow[];
-  locale: string;
-  returnTo?: string;
-}) {
-  return (
-    <ul className="list-disc space-y-1 pl-5">
-      {rows.map((row) => (
-        <li key={`${row.direction}:${row.id}`}>
-          <a className={linkClass} href={neighbourHref(row, locale, returnTo)} lang={row.lang ?? undefined}>
-            {row.label}
-          </a>
-          <span className="ml-2 text-sm text-muted-foreground">{row.id}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function SourceConceptView({
+function ConceptVisitView({
   id,
   locale,
   role,
-  returnTo,
+  returnTo: suppliedReturn,
   pinUnsupported = false,
   transport,
   initial,
+  admission,
 }: {
   id: string;
   locale: string;
@@ -74,36 +50,12 @@ export function SourceConceptView({
   pinUnsupported?: boolean;
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
+  admission: ReturnType<typeof useCatalogueLifetime>;
 }) {
   const o = { locale: locale as never };
-  const failureRef = useRef<HTMLParagraphElement>(null);
-  const statusRef = useRef<HTMLParagraphElement>(null);
-  const requestRef = useRef(0);
-  const busyRef = useRef(false);
-  const [page, setPage] = useState<ConceptPage>();
-  const [withdrawn, setWithdrawn] = useState(false);
-  const [withdrawnError, setWithdrawnError] = useState<CandidateFailure>();
-  const [pageError, setPageError] = useState<PageError>();
-  const [busy, setBusy] = useState(false);
-  const [focusStatus, setFocusStatus] = useState(0);
-  const [history, setHistory] = useState<ChangePageHistory>(firstChangePage);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const query = useQuery({
-    queryKey: ['concept-explore', id, locale, role],
-    queryFn: () => transport.read({}),
-    initialData: initial,
-    retry: false,
-    staleTime: Infinity,
-    gcTime: 0,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
-  const read = withdrawn ? undefined : (page ?? (query.data?.ok ? query.data : undefined));
-  const error: CandidateFailure | undefined = withdrawn
-    ? (withdrawnError ?? candidateFailure(503))
-    : !read && query.data && !query.data.ok
-      ? query.data
-      : undefined;
+  const returnTo = originatingClassification(suppliedReturn);
+  const visit = useConceptVisit({ id, role, transport, initial, admission });
+  const { read, error, busy } = visit;
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const factsHref = catalogueEntries.facts({ id, label: title.text, locale }).href;
   const correctionReturn = returnTo ? `${factsHref}?${new URLSearchParams({ returnTo })}` : factsHref;
@@ -112,139 +64,29 @@ export function SourceConceptView({
     read.viewerActions.actions.some(
       (item) => item.action === 'statement:propose' && item.operations.includes('subject.propose'),
     );
-
-  useEffect(
-    () => () => {
-      requestRef.current++;
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (focusStatus) statusRef.current?.focus();
-  }, [focusStatus, busy]);
-
-  useEffect(() => {
-    if (error) failureRef.current?.focus();
-  }, [!!error]);
-
-  async function visitCursor(cursor?: string, mode: 'next' | 'previous' | 'retry' = 'next', index?: number) {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setPageError(undefined);
-    const requestId = ++requestRef.current;
-    try {
-      const result = await transport.read({ cursor, session: read?.session });
-      if (requestId !== requestRef.current) return;
-      if (!result.ok) {
-        setPage(undefined);
-        setWithdrawn(true);
-        setWithdrawnError(result);
-        setPageError(undefined);
-        setFocusStatus((value) => value + 1);
-        return;
-      }
-      if (result.narrower.state === 'unavailable' || result.narrower.state === 'preparing') {
-        if (read) setPage({ ...result, narrower: read.narrower });
-        else setPage(result);
-        setWithdrawn(false);
-        setWithdrawnError(undefined);
-        setPageError({ ...(cursor ? { cursor } : {}), preparing: result.narrower.state === 'preparing' });
-        setFocusStatus((value) => value + 1);
-        return;
-      }
-      if (result.public.subject.id !== id) {
-        setWithdrawn(true);
-        setPageError(undefined);
-        setFocusStatus((value) => value + 1);
-        return;
-      }
-      setPage(result);
-      setWithdrawn(false);
-      setWithdrawnError(undefined);
-      setPageError(undefined);
-      if (mode === 'previous' && index !== undefined) setHistoryIndex(index);
-      else if (mode === 'next') {
-        const nextHistory =
-          history.addresses[historyIndex + 1] === cursor
-            ? history
-            : appendChangePage({ ...history, addresses: history.addresses.slice(0, historyIndex + 1) }, cursor ?? '');
-        setHistory(nextHistory);
-        setHistoryIndex(nextHistory.addresses.indexOf(cursor));
-      }
-      setFocusStatus((value) => value + 1);
-    } catch {
-      if (requestId === requestRef.current) {
-        if (mode === 'retry') {
-          setPage(undefined);
-          setWithdrawn(true);
-          setWithdrawnError(candidateFailure(503));
-        } else {
-          setPageError({ ...(cursor ? { cursor } : {}), preparing: false });
-        }
-        setFocusStatus((value) => value + 1);
-      }
-    } finally {
-      if (requestId === requestRef.current) {
-        busyRef.current = false;
-        setBusy(false);
-      }
-    }
-  }
-
-  const hierarchy = read?.narrower;
-  const failedCursor = pageError ? pageError.cursor : hierarchy?.cursor;
-  const failedInitial = pageError
-    ? pageError.cursor === undefined
-    : hierarchy?.state === 'unavailable' || hierarchy?.state === 'preparing';
-  const previous = historyIndex > 0 ? history.addresses[historyIndex - 1] : undefined;
-  const hasPrevious = historyIndex > 0;
-  const nextCursor = hierarchy?.next ?? null;
-  const oversizedCursor = !!nextCursor && nextCursor.length > continuationLimit;
-
-  async function retrySubject() {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setPage(undefined);
-    setPageError(undefined);
-    const requestId = ++requestRef.current;
-    try {
-      const result = await query.refetch();
-      if (requestId !== requestRef.current) return;
-      if (result.data?.ok) {
-        setPage(result.data);
-        setWithdrawn(false);
-        setWithdrawnError(undefined);
-      } else {
-        setWithdrawn(true);
-        setWithdrawnError(result.data && !result.data.ok ? result.data : candidateFailure(503));
-      }
-    } finally {
-      if (requestId === requestRef.current) {
-        busyRef.current = false;
-        setBusy(false);
-        setFocusStatus((value) => value + 1);
-      }
-    }
-  }
-
   return (
     <article
       className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
-      aria-busy={query.isPending || busy}
+      aria-busy={visit.loading || busy}
     >
       <ViewHeading label={m.concept_explore_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.concept_explore_intro({}, o)}</p>
       {pinUnsupported && <p role="status">{m.concept_explore_pin_unsupported({}, o)}</p>}
-      {query.isPending && <p role="status">{m.concept_explore_loading({}, o)}</p>}
+      <p ref={visit.statusRef} role="status" tabIndex={-1} aria-live="polite" aria-atomic="true">
+        {visitAnnouncement(visit, locale)}
+      </p>
       {error && (
         <div className="space-y-2">
-          <p ref={failureRef} role="alert" tabIndex={-1}>
+          <p role="alert" tabIndex={-1}>
             {error.reason === 'denied' ? m.concept_explore_denied({}, o) : m.concept_explore_unreadable({}, o)}
           </p>
-          <Button type="button" variant="outline" className={actionClass} onClick={() => void retrySubject()}>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClass}
+            disabled={busy}
+            onClick={() => void visit.retry()}
+          >
             {m.concept_explore_retry({}, o)}
           </Button>
         </div>
@@ -287,6 +129,18 @@ export function SourceConceptView({
             )}
           </section>
 
+          {role !== undefined && (
+            <section className="space-y-2" aria-labelledby="concept-requested-role">
+              <h2 id="concept-requested-role" className="font-sans text-lg font-semibold">
+                {m.concept_explore_original_role({}, o)}
+              </h2>
+              <p>
+                <code dir="auto">{role}</code>
+              </p>
+              <p className="text-sm text-muted-foreground">{m.concept_explore_role_evidence({}, o)}</p>
+            </section>
+          )}
+
           {read.admitted && (
             <>
               <section className="space-y-2">
@@ -315,7 +169,7 @@ export function SourceConceptView({
                             {scheme.label || scheme.id}
                           </a>
                         ) : (
-                          <span>{scheme.id}</span>
+                          <span>{m.concept_explore_scheme_withheld({}, o)}</span>
                         )}
                       </li>
                     ))}
@@ -331,10 +185,8 @@ export function SourceConceptView({
                   <ul className="list-disc space-y-1 pl-5">
                     {read.codes.map((code) => (
                       <li key={`${code.property}:${code.value}`}>
-                        <span lang={code.unknown ? undefined : (code.labelLang ?? undefined)}>
-                          {code.unknown ? m.concept_explore_unknown_role({}, o) : code.label}
-                        </span>{' '}
-                        <code>{code.property}</code>: <code>{code.value}</code>
+                        <span lang={code.labelLang ?? undefined}>{code.label}</span> <code>{code.property}</code>:{' '}
+                        <code>{code.value}</code>
                       </li>
                     ))}
                   </ul>
@@ -363,82 +215,7 @@ export function SourceConceptView({
                 )}
               </section>
 
-              <section className="space-y-2" aria-labelledby="concept-narrower-heading">
-                <h2 id="concept-narrower-heading" className="font-sans text-lg font-semibold">
-                  {m.concept_explore_narrower({}, o)}
-                </h2>
-                {hierarchy?.state === 'unsupported' ? (
-                  <p role="status">{m.concept_explore_inverse_unsupported({}, o)}</p>
-                ) : hierarchy?.state === 'preparing' ? (
-                  <p role="status">{m.concept_explore_hierarchy_preparing({}, o)}</p>
-                ) : hierarchy?.state === 'unavailable' ? (
-                  <p role="alert">{m.concept_explore_hierarchy_unavailable({}, o)}</p>
-                ) : hierarchy?.state === 'lagging' ? (
-                  <p role="status">{m.concept_explore_hierarchy_lagging({}, o)}</p>
-                ) : null}
-                {hierarchy?.rows.length ? (
-                  <HierarchyLinks
-                    rows={hierarchy.rows}
-                    locale={locale}
-                    {...(returnTo === undefined ? {} : { returnTo })}
-                  />
-                ) : hierarchy?.state === 'available' && hierarchy.exactEmpty ? (
-                  <p>{m.concept_explore_no_narrower({}, o)}</p>
-                ) : hierarchy?.state === 'available' ? (
-                  <p>{m.concept_explore_page_empty({}, o)}</p>
-                ) : null}
-                {pageError && (
-                  <p role="alert">
-                    {pageError.preparing
-                      ? m.concept_explore_hierarchy_preparing({}, o)
-                      : m.concept_explore_hierarchy_unavailable({}, o)}
-                  </p>
-                )}
-                {(failedInitial || pageError) && hierarchy?.state !== 'unsupported' && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={actionClass}
-                    disabled={busy}
-                    onClick={() => void visitCursor(pageError ? pageError.cursor : failedCursor, 'retry')}
-                  >
-                    {m.concept_explore_retry({}, o)}
-                  </Button>
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={actionClass}
-                    disabled={!hasPrevious || busy}
-                    onClick={() => void visitCursor(previous, 'previous', historyIndex - 1)}
-                  >
-                    {m.concept_explore_previous({}, o)}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={actionClass}
-                    disabled={!nextCursor || oversizedCursor || busy || !!pageError}
-                    onClick={() => nextCursor && void visitCursor(nextCursor, 'next')}
-                  >
-                    {m.concept_explore_more({}, o)}
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    {m.concept_explore_page_position(
-                      { current: historyIndex + 1, retained: history.addresses.length },
-                      o,
-                    )}
-                  </span>
-                </div>
-                {oversizedCursor && <p role="status">{m.concept_explore_cursor_too_large({}, o)}</p>}
-                {history.truncated && (
-                  <p role="status">{m.concept_explore_history_truncated({ limit: changePageHistoryLimit }, o)}</p>
-                )}
-                <p ref={statusRef} role="status" tabIndex={-1} aria-live="polite">
-                  {busy ? m.concept_explore_loading({}, o) : m.concept_explore_page_ready({}, o)}
-                </p>
-              </section>
+              <ConceptHierarchy visit={visit} locale={locale} returnTo={returnTo} />
 
               <section className="space-y-2" aria-labelledby="concept-actions-heading">
                 <h2 id="concept-actions-heading" className="font-sans text-lg font-semibold">
@@ -465,19 +242,19 @@ export function SourceConceptView({
                   variant="outline"
                   className={actionClass}
                   disabled={busy}
-                  onClick={() => void visitCursor(read.narrower.cursor, 'retry')}
+                  onClick={() => void visit.refresh()}
                 >
                   {m.concept_explore_refresh_actions({}, o)}
                 </Button>
               </section>
             </>
           )}
-          {returnTo && (
-            <a className={linkClass} href={returnTo}>
-              {m.concept_explore_return({}, o)}
-            </a>
-          )}
         </div>
+      )}
+      {returnTo && (
+        <a className={linkClass} href={returnTo}>
+          {m.concept_explore_return({}, o)}
+        </a>
       )}
     </article>
   );

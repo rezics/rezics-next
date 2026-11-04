@@ -2,7 +2,7 @@ import { expectedCandidateReader } from '../../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
 import { isExploreId } from '../../pages/graph-browser';
 import { exploreContext } from '../../pages/graph-browser/actions';
-import { readSourceConcept, type ConceptRead } from './index';
+import { readSourceConcept, validConceptCursor, type ConceptRead } from './index';
 
 export const readSubjectConcept = createServerFn({ method: 'POST', strict: false })
   .validator((value: unknown) => {
@@ -15,11 +15,13 @@ export const readSubjectConcept = createServerFn({ method: 'POST', strict: false
       input.locale.length > 35
     )
       throw new Error('Invalid concept address');
+    if (input.cursor !== undefined && (typeof input.cursor !== 'string' || !validConceptCursor(input.cursor)))
+      throw new Error('Invalid concept continuation');
     return {
       expectedReader: input.expectedReader === null ? null : expectedCandidateReader(input),
       id: input.id,
       locale: input.locale,
-      cursor: typeof input.cursor === 'string' && input.cursor.length <= 8192 ? input.cursor : undefined,
+      cursor: typeof input.cursor === 'string' ? input.cursor : undefined,
       role: typeof input.role === 'string' && input.role.length <= 128 ? input.role : undefined,
       session: typeof input.session === 'string' && input.session.length <= 16384 ? input.session : undefined,
     };

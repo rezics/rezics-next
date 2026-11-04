@@ -4,6 +4,11 @@ import type { Release } from '@rezics/definitions';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 
+export const conceptContinuationLimit = 4096;
+export function validConceptCursor(cursor: string | undefined): boolean {
+  return cursor === undefined || new TextEncoder().encode(cursor).byteLength <= conceptContinuationLimit;
+}
+
 export const conceptRequested = {
   type: 'skos:Concept',
   scheme: 'skos:ConceptScheme',
@@ -38,6 +43,7 @@ export type ConceptRead =
       public: SubjectRead;
       admitted: boolean;
       retired: boolean | null;
+      requestedRole?: string | undefined;
       aliases: { text: string; lang: string | null }[];
       definition: { text: string; lang: string | null } | null;
       schemes: ConceptSchemeRef[];
@@ -122,6 +128,7 @@ export async function readSourceConcept(
   },
 ): Promise<ConceptRead> {
   try {
+    if (!validConceptCursor(input.cursor)) return candidateFailure(400);
     const headers = headersOf(authorization, input.session);
     const query = { language: locale, includeViewerActions: true };
     const current = await client.subjects({ id }).get({ query, headers });
@@ -139,11 +146,16 @@ export async function readSourceConcept(
         aliases: [],
         definition: null,
         schemes: [],
-        codes: input.role
-          ? [{ property: 'role', label: input.role, labelLang: null, value: input.role, unknown: true }]
-          : [],
+        requestedRole: input.role,
+        codes: [],
         broader: { rows: [], withheld: 0 },
-        narrower: { state: 'unsupported', rows: [], next: null, exactEmpty: false },
+        narrower: {
+          state: 'unsupported',
+          rows: [],
+          next: null,
+          exactEmpty: false,
+          ...(input.cursor ? { cursor: input.cursor } : {}),
+        },
         viewerActions,
         spoiler: false,
         ...(session ? { session } : {}),
@@ -175,26 +187,29 @@ export async function readSourceConcept(
       });
     }
 
+    // Codes retain the datatype from the supplied source, including retired/unknown properties.
+    // Active vocabulary labels never reinterpret a retired source release.
     const codes = Object.entries(current.data.subject.statements).flatMap(([property, statements]) => {
       const definition = release.properties[property];
-      if (!definition || definition.datatype !== 'external-id') return [];
+      const label =
+        retired === false && definition?.datatype === 'external-id'
+          ? pickText(definition.labels, locale)
+          : relatedLabel(current.data.related, property, locale);
       return statements.flatMap((statement) => {
+        if (statement.property.data_type !== 'external-id') return [];
         const value = relationValue(statement);
         if (value === undefined) return [];
         return [
           {
             property,
-            label: pickText(definition.labels, locale).text || property,
-            labelLang: pickText(definition.labels, locale).lang,
+            label: label?.text || property,
+            labelLang: label?.lang ?? null,
             value,
-            unknown: false,
+            unknown: !definition || retired !== false,
           },
         ];
       });
     });
-    if (input.role && !codes.some((code) => code.value === input.role)) {
-      codes.push({ property: 'role', label: input.role, labelLang: null, value: input.role, unknown: true });
-    }
 
     const broaderRows: ConceptHierarchyRow[] = [];
     let broaderWithheld = 0;
@@ -243,8 +258,8 @@ export async function readSourceConcept(
           narrower = {
             state: page.data.freshness.caught_up ? 'available' : 'lagging',
             rows: page.data.links.flatMap((row) => {
-              const label = row.summary.label;
-              if (!row.summary.id || !label?.value) return [];
+              const label = row.summary?.label;
+              if (!row.summary.id || row.summary.id !== row.subject || !label?.value) return [];
               return [
                 {
                   id: row.summary.id,
@@ -285,6 +300,7 @@ export async function readSourceConcept(
       public: current.data,
       admitted: true,
       retired,
+      requestedRole: input.role,
       aliases,
       definition: definition.text ? definition : null,
       schemes,
