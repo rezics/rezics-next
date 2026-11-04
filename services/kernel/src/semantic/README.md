@@ -30,28 +30,49 @@ For this producer, `lie: true` is a suppressed source outcome. Imports still own
 The captured official query uses this exact request body:
 
 ```json
-{"filters":["id","=","v17"],"fields":"id,tags{id,rating,spoiler,lie}","results":1}
+{ "filters": ["id", "=", "v17"], "fields": "id,tags{id,rating,spoiler,lie}", "results": 1 }
 ```
 
 Its response contains `v17` / `g3` with `rating: 2.59999990463257`, `spoiler: 2` and `lie: false`; the complete response digest is `sha256:5cd11554c247c1c3085297a765d172216b9733331d5aac273788ba9fe6d5eba5`. With the actual native subject, Context and Concept ids substituted, the callable producer returns this statement shape:
 
 ```json
 {
-  "property":{"id":"schema:genre"},
-  "value":{"type":"value","content":"<concept-uuid>"},
-  "rank":"normal",
-  "qualifiers":[
-    {"property":{"id":"rezics:sourceTagWeight"},"value":{"type":"value","content":{"amount":"+2.59999990463257","unit":"1"}}},
-    {"property":{"id":"rezics:sourceTagWeightMetric"},"value":{"type":"value","content":"vndbTagsRating"}},
-    {"property":{"id":"rezics:spoilerLevel"},"value":{"type":"value","content":{"amount":"+2","unit":"1"}}}
+  "property": { "id": "schema:genre" },
+  "value": { "type": "value", "content": "<concept-uuid>" },
+  "rank": "normal",
+  "qualifiers": [
+    {
+      "property": { "id": "rezics:sourceTagWeight" },
+      "value": { "type": "value", "content": { "amount": "+2.59999990463257", "unit": "1" } }
+    },
+    { "property": { "id": "rezics:sourceTagWeightMetric" }, "value": { "type": "value", "content": "vndbTagsRating" } },
+    {
+      "property": { "id": "rezics:spoilerLevel" },
+      "value": { "type": "value", "content": { "amount": "+2", "unit": "1" } }
+    }
   ],
-  "references":[
-    {"parts":[
-      {"property":{"id":"schema:url"},"value":{"type":"value","content":"https://vndb.org/v17"}},
-      {"property":{"id":"rezics:sourceTagId"},"value":{"type":"value","content":"g3"}},
-      {"property":{"id":"rezics:sourceSnapshot"},"value":{"type":"value","content":"unversioned:sha256:5cd11554c247c1c3085297a765d172216b9733331d5aac273788ba9fe6d5eba5"}}
-    ]},
-    {"parts":[{"property":{"id":"schema:url"},"value":{"type":"value","content":"https://api.vndb.org/kana#post-vn"}}]}
+  "references": [
+    {
+      "parts": [
+        { "property": { "id": "schema:url" }, "value": { "type": "value", "content": "https://vndb.org/v17" } },
+        { "property": { "id": "rezics:sourceTagId" }, "value": { "type": "value", "content": "g3" } },
+        {
+          "property": { "id": "rezics:sourceSnapshot" },
+          "value": {
+            "type": "value",
+            "content": "unversioned:sha256:5cd11554c247c1c3085297a765d172216b9733331d5aac273788ba9fe6d5eba5"
+          }
+        }
+      ]
+    },
+    {
+      "parts": [
+        {
+          "property": { "id": "schema:url" },
+          "value": { "type": "value", "content": "https://api.vndb.org/kana#post-vn" }
+        }
+      ]
+    }
   ]
 }
 ```

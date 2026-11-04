@@ -5,7 +5,10 @@ import { checkStatementInput } from '../src/validate.ts';
 const concept = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
 const sourceUrl = 'https://vndb.org/v17';
 const snapshot = `unversioned:sha256:${'a'.repeat(64)}`;
-const snak = (property: string, content: unknown) => ({ property: { id: property }, value: { type: 'value', content } });
+const snak = (property: string, content: unknown) => ({
+  property: { id: property },
+  value: { type: 'value', content },
+});
 const statement = (amount: string, metric = 'vndbTagsRating') => ({
   property: { id: 'schema:genre' },
   value: { type: 'value', content: concept },
@@ -25,7 +28,9 @@ test('the bundled classification release admits only the typed VNDB aggregate on
   const genre = release.properties['schema:genre']!;
   const keywords = release.properties['schema:keywords']!;
   expect(genre.qualifiers).toEqual(expect.arrayContaining(['rezics:sourceTagWeight', 'rezics:sourceTagWeightMetric']));
-  expect(keywords.qualifiers).toEqual(expect.arrayContaining(['rezics:sourceTagWeight', 'rezics:sourceTagWeightMetric']));
+  expect(keywords.qualifiers).toEqual(
+    expect.arrayContaining(['rezics:sourceTagWeight', 'rezics:sourceTagWeightMetric']),
+  );
   expect(release.properties['rezics:sourceTagWeight']).toMatchObject({
     datatype: 'quantity',
     units: ['1'],

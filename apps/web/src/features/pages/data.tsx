@@ -677,22 +677,25 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
     );
   }
   const keywords = TAG_PROPERTIES.flatMap((property) =>
-    bestRank((Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : []) as Stmt[]).flatMap(
-      (statement) => {
-        if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return [];
-        const id = statement.value.content;
-        const entry = Object.hasOwn(read.related, id) ? read.related[id] : undefined;
-        const label = pageText(entry?.labels, options.locale);
-        if (!entry || !label.text) return [];
-        return [{ statement, text: label.text, node: itemLink(entry.redirect ?? id, entry.labels, options) }];
-      },
-    ),
+    bestRank(
+      (Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : []) as Stmt[],
+    ).flatMap((statement) => {
+      if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return [];
+      const id = statement.value.content;
+      const entry = Object.hasOwn(read.related, id) ? read.related[id] : undefined;
+      const label = pageText(entry?.labels, options.locale);
+      if (!entry || !label.text) return [];
+      return [{ statement, text: label.text, node: itemLink(entry.redirect ?? id, entry.labels, options) }];
+    }),
   );
   const visibleKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) <= reader.spoilerLevel);
   const spoilerKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) > reader.spoilerLevel);
   const spoilerKeywordPreview = options.overview ? spoilerKeywords.slice(0, 6) : spoilerKeywords;
   const spoilerKeywordIdentity = spoilerKeywordPreview
-    .map(({ statement, text }) => [statement.id, text, spoilerLevel(statement), statement.qualifiers, statement.references] as const)
+    .map(
+      ({ statement, text }) =>
+        [statement.id, text, spoilerLevel(statement), statement.qualifiers, statement.references] as const,
+    )
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
   const spoilerKeywordKey = JSON.stringify([
     read.subject.id,

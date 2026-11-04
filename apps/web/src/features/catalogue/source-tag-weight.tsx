@@ -63,7 +63,11 @@ function reading(statement: Stmt): Reading {
         : [],
     );
     const recordUrl = recordUrls.find((url) => RECORD_URL.test(url));
-    return recordUrl && revisions.length === 1 && tagIds.length === 1 && SNAPSHOT_ID.test(revisions[0]!) && TAG_ID.test(tagIds[0]!)
+    return recordUrl &&
+      revisions.length === 1 &&
+      tagIds.length === 1 &&
+      SNAPSHOT_ID.test(revisions[0]!) &&
+      TAG_ID.test(tagIds[0]!)
       ? [recordUrl]
       : [];
   });
@@ -100,7 +104,11 @@ export function SourceTagWeight({ statement, locale }: { statement: Stmt; locale
       </span>
     );
   return (
-    <span data-slot="source-tag-weight" data-state="available" className="inline-flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+    <span
+      data-slot="source-tag-weight"
+      data-state="available"
+      className="inline-flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground"
+    >
       <span title={m.subject_source_tag_weight_explanation({}, options)}>
         {m.subject_source_tag_weight_value({ value: result.amount }, options)}
       </span>
