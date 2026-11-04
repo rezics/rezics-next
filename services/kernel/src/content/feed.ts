@@ -17,6 +17,7 @@ import { readAccountDiscoverySummaries } from '../access/account-discovery-sourc
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
 import { prepareFeedContentContext, type FeedContentContextReference } from './feed-context.ts';
 import { projectFeedReactions } from './feed-reactions.ts';
+import { prepareFeedSubjectReactions } from './feed-subject-reactions.ts';
 import { feedDiscoveryItem } from './feed-discovery.ts';
 import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
 import { openSpaceSubjectPopulation } from './feed-subject-scope.ts';
@@ -747,6 +748,28 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           )
             feedItems.splice(index, 1);
         reactionsAsOf = undefined;
+      }
+      const subjectLanes = new Set(
+        feedItems
+          .filter((item) => item.destination.kind === 'subject')
+          .map((item) => item.source as Lane),
+      );
+      if (subjectLanes.size) {
+        try {
+          const composition = await prepareFeedSubjectReactions(content, actor, feedItems, deadline);
+          feedItems.splice(0, feedItems.length, ...(await composition.finish()));
+        } catch (error) {
+          // A missing Subject component invalidates its whole lane. Preserve its exact
+          // input frontier; Continue also keeps its original fingerprint/resume key.
+          for (const lane of subjectLanes) {
+            sources[lane] = sourceState(error);
+            lanes[lane] = [];
+            next[lane] = position[lane];
+            if (lane === 'continue') next.resume = position.resume;
+          }
+          for (let index = feedItems.length - 1; index >= 0; index--)
+            if (subjectLanes.has(feedItems[index]!.source as Lane)) feedItems.splice(index, 1);
+        }
       }
       // Repeat the original selected Space authority after all native hydration,
       // reaction projection and final follow checks, including sparse examined pages.
