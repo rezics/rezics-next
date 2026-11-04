@@ -64,6 +64,7 @@ import { validateRealmClaimInput, type RealmClaimInput } from './realm-claim';
 import { readSetupContextDirectory, setupContextDirectorySchema } from './setup-context-native';
 import { boardChoiceReadSchema, readNativeBoardChoices } from './setup-board-native';
 import { requestLanguages } from '../kernel/languages';
+import { parseRulesAuthoringResponse } from './realm-rules-authoring/contract';
 
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -488,6 +489,45 @@ export const readRealmAppearanceSettings = createServerFn({ method: 'GET' })
     const request = getRequest();
     await prepareSession(request, env as Partial<SessionEnv>);
     return readRealmAppearance(kernelClient(), viewerCredential(request), data.realmId);
+  });
+
+export const readRealmRulesAuthoring = createServerFn({ method: 'GET' })
+  .validator((input: unknown) =>
+    v.parse(
+      v.strictObject({
+        realmId: v.pipe(v.string(), v.uuid()),
+        cursor: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(4096))),
+      }),
+      input,
+    ),
+  )
+  .handler(async ({ data, signal }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    const authorization = viewerCredential(request);
+    const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+    if (!authorization) return { kind: 'denied' as const };
+    if (!origin) return { kind: 'unavailable' as const };
+    const url = new URL(`/v1/realms/${data.realmId}/rulesAuthoring`, origin);
+    if (data.cursor) url.searchParams.set('cursor', data.cursor);
+    const locale = requestLocale(request);
+    const headers = new Headers({ authorization, accept: 'application/json' });
+    if (locale) headers.set('accept-language', acceptLanguage(locale));
+    try {
+      const response = await fetch(url, {
+        headers,
+        cache: 'no-store',
+        redirect: 'manual',
+        signal: signal ? AbortSignal.any([signal, request.signal]) : request.signal,
+      });
+      if (response.status === 401 || response.status === 403 || response.status === 404)
+        return { kind: 'denied' as const };
+      if (!response.ok) return { kind: 'unavailable' as const };
+      return { kind: 'ready' as const, value: parseRulesAuthoringResponse(await response.json()) };
+    } catch {
+      return { kind: 'unavailable' as const };
+    }
   });
 
 export const changeRealmAppearanceSettings = createServerFn({ method: 'POST' })

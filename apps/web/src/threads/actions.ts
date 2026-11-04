@@ -122,6 +122,17 @@ function validateThreadDraft(input: unknown): StartThreadInput {
   )
     throw new Error('Invalid thread draft');
   const base = { ...draft, boardId: input.boardId, title: input.title };
+  if ('kind' in input && input.kind === 'rules') {
+    if (
+      'subjectIds' in input ||
+      'subjectId' in input ||
+      'voteCitation' in input ||
+      !('licence' in input) ||
+      input.licence !== 'LicenseRef-rezics-terms'
+    )
+      throw new Error('Invalid rules draft');
+    return { ...base, kind: 'rules', licence: input.licence };
+  }
   if ('kind' in input && input.kind !== undefined) {
     if (
       input.kind !== 'review' ||

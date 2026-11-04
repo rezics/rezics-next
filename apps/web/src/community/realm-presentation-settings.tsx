@@ -29,6 +29,7 @@ import {
 import { realmAppearanceReference, type RealmAppearanceReference } from './realm-appearance-reference';
 import type { RealmAppearanceCallerLifetime } from './realm-appearance-caller-lifetime';
 import { RealmAppearanceDeparture } from './realm-appearance-departure';
+import { RealmRulesAuthoringPanel } from './realm-rules-authoring/panel';
 
 function ImagePreview({
   image,
@@ -180,6 +181,7 @@ export function RealmAppearanceSettings({
   );
   const state = useSyncExternalStore(control.subscribe, control.getSnapshot, control.getSnapshot);
   const [selectionState, setSelectionState] = useState<Selection | null>(null);
+  const [rulesAuthoringActive, setRulesAuthoringActive] = useState(false);
   const selectionRef = useRef<Selection | null>(null);
   const [usedReferences, setUsedReferences] = useState<
     Partial<Record<RealmImageSlot, { owner: object; callerId: number; reference: RealmAppearanceReference }>>
@@ -499,8 +501,8 @@ export function RealmAppearanceSettings({
         : retained.rules,
   };
   const selection = visibleSelection;
-  const editable = control.editable() && !selection;
-  const selectable = control.selectable() && !selection && !clear;
+  const editable = control.editable() && !selection && !rulesAuthoringActive;
+  const selectable = control.selectable() && !selection && !clear && !rulesAuthoringActive;
   const label = (slot: RealmImageSlot | 'rules') =>
     slot === 'avatar'
       ? m.realm_appearance_icon()
@@ -650,6 +652,15 @@ export function RealmAppearanceSettings({
               : m.realm_appearance_no_rules()}
           </p>
         )}
+        <RealmRulesAuthoringPanel
+          realmId={realmId}
+          snapshot={snapshot}
+          state={state}
+          adapter={adapter}
+          control={control}
+          lifetime={lifetime}
+          onModeChange={(active) => setRulesAuthoringActive(active)}
+        />
         {snapshot.canManage ? (
           <>
             <p className="text-sm text-muted-foreground">{m.realm_appearance_rules_help()}</p>

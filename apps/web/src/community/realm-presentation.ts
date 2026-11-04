@@ -9,6 +9,7 @@ export type {
 import * as v from 'valibot';
 import { coverSrc } from '../media/cover-src';
 import type { RealmAppearanceCallerLifetime } from './realm-appearance-caller-lifetime';
+import type { RulesAuthoringRead } from './realm-rules-authoring/contract';
 
 const id = v.pipe(v.string(), v.uuid());
 export const realmPresentationSchema = v.strictObject({
@@ -68,6 +69,7 @@ export type RealmAppearanceAdapter = Readonly<{
   read(realmId: string): Promise<RealmAppearanceRead>;
   change(command: RealmAppearanceCommand): Promise<RealmAppearanceResult>;
   select(choice: RealmAppearanceChoice): Promise<RealmAppearanceSelection>;
+  prepareRules?(realmId: string, cursor: string | undefined, signal: AbortSignal): Promise<RulesAuthoringRead>;
   upload(realmId: string, slot: RealmImageSlot, file: File, signal: AbortSignal): Promise<{ id: string }>;
   resume(mediaId: string, file: File, realmId: string, signal: AbortSignal): Promise<{ id: string }>;
 }>;
@@ -537,7 +539,7 @@ export function createRealmAppearance(
     },
     disconnect,
     cancelUpload,
-    reviewConflict() {
+    reviewConflict(options: { resetDraft?: boolean } = {}) {
       if (
         active() &&
         state.phase === 'conflict' &&
@@ -545,7 +547,12 @@ export function createRealmAppearance(
         admitted(state.read) &&
         state.read.snapshot.canManage
       )
-        update({ attempt: null, phase: 'idle', reviewed: false });
+        update({
+          ...(options.resetDraft ? { draft: state.read.snapshot } : {}),
+          attempt: null,
+          phase: 'idle',
+          reviewed: false,
+        });
     },
   };
 

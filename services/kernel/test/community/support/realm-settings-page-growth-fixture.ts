@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, serializeDocument } from '@rezics/document';
 import type { Access } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { capture, openGrowthDatabase, type Population } from '../../support/growth.ts';
@@ -370,7 +370,40 @@ export async function settingsPageGrowthFixture() {
       ...network,
     };
   }
-  return { ...f, select, population, historyCount, snapshot, read };
+  async function readAuthoring(s: Selected) {
+    const network = { jwksRequestBytes: 0, jwksResponseBytes: 0 };
+    const access = f.base.system.createFreshAccess(async (request, response) => {
+      network.jwksRequestBytes += requestBytes(request);
+      network.jwksResponseBytes += responseBytes(response, await response.text());
+    });
+    const kernel = f.base.system.createKernelForPool(f.db.pool, access);
+    const request = new Request(`https://content.test/v1/realms/${s.realmId}/rulesAuthoring`, {
+      headers: { authorization: `Bearer ${f.base.author.bearer}` },
+    });
+    const observed = await capture(
+      authDb,
+      async () => {
+        const response = await kernel.handle(request);
+        const body = await response.text();
+        expect(response.status, body).toBe(200);
+        expect(response.headers.get('cache-control')).toBe('private, no-store');
+        const page = JSON.parse(body);
+        expect(page.realm.realmId).toBe(s.realmId);
+        expect(page.current.reference).toEqual(s.pin);
+        expect(page.destinations.items.length).toBeLessThanOrEqual(20);
+        expect(Buffer.byteLength(serializeDocument(page.current.body))).toBe(65_536);
+        return responseBytes(response, body);
+      },
+      { includeBackends: true },
+    );
+    return {
+      authCapture: observed.capture,
+      applicationRequestBytes: requestBytes(request),
+      applicationResponseBytes: observed.value,
+      ...network,
+    };
+  }
+  return { ...f, select, population, historyCount, snapshot, read, readAuthoring };
 }
 
 function wireBytes(start: string, headers: Headers, body = '') {

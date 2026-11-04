@@ -2951,6 +2951,12 @@ and a board of the specified Realm, plus current parent disclosure and matching 
 and epochs. Text-profile canonical bytes are bounded to 65,536; native document parsing, SPDX and digest validation
 remain authoritative. Missing, concealed or erased sources produce no rules; a dependency error produces unavailable.
 No caller can supply a successful authorization flag, and no authored body is stored in Realm or Semantic JSON.
+`readExactPublishedRulesForAuthoring` uses the same two-round exact observation and limits, adding only currently
+admitted title, author, thread and board headers, the exact revision's bounded media IDs, current-head equality,
+native `post:revise` advice for the exact selected post, and a closed erased/concealed state. The Web editor uses the
+native thread ID as its media target and still checks each media claim through the existing owner. The edit action is
+stable across both observations; a changed decision is unavailable advice. Erasure metadata requires native tombstone
+read authority; the historical body is never returned for erased or concealed sources.
 
 `RealmPresentationOptional<T>` and `RealmPresentationImage` belong to `realm-media.ts`. Unset images are `none`.
 The installed `readRealmPresentationImages` reads at most two exact media keys per distinct Realm after releasing

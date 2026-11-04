@@ -23,6 +23,7 @@ export type VoteCitation = { questionId: string; units: number; revision: number
 export type StartThreadInput = StartThreadBase &
   (
     | { kind: 'review'; subjectId: string; subjectIds?: never; voteCitation?: VoteCitation }
+    | { kind: 'rules'; licence: 'LicenseRef-rezics-terms'; subjectIds?: never; subjectId?: never; voteCitation?: never }
     | ({ kind?: undefined; voteCitation?: undefined } & (
         | { subjectIds: string[]; subjectId?: never }
         | { subjectId?: string; subjectIds?: never }
@@ -63,7 +64,7 @@ export async function startThreadRequest(
   refusal: Refusal,
 ): Promise<{ ok: true; thread: StartedThread } | WriteFailure> {
   if (input.kind === 'review' && 'subjectIds' in input) throw new Error('Invalid review draft');
-  const subjectIds = input.kind === 'review' ? [input.subjectId] : discussionSubjectIds(input);
+  const subjectIds = input.kind === 'review' ? [input.subjectId] : input.kind === 'rules' ? [] : discussionSubjectIds(input);
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   if (!authorization) throw new Error('A signed-in session is required to post.');
@@ -73,7 +74,7 @@ export async function startThreadRequest(
         boardId: input.boardId,
         title: input.title,
         body: input.body,
-        licence: 'LicenseRef-rezics-terms',
+        licence: input.kind === 'rules' ? input.licence : 'LicenseRef-rezics-terms',
         ...(input.kind === 'review'
           ? {
               kind: 'review' as const,

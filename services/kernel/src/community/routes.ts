@@ -105,6 +105,11 @@ import { readCommunityPresentations } from '../content/community-presentation.ts
 import { readRealmHomePresentation } from './realm-home-presentation.ts';
 import { readRealmSettingsPage, RealmSettingsPageSchema } from './settings-page.ts';
 import {
+  readRealmRulesAuthoringPage,
+  RulesAuthoringPageSchema,
+  RulesAuthoringQuerySchema,
+} from './rules-authoring.ts';
+import {
   createRealmHomePublicationReader,
   RealmHomePublicationPageSchema,
   RealmHomePublicationQuerySchema,
@@ -1693,6 +1698,41 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         set.headers.etag = JSON.stringify(page.snapshot.head);
         set.headers['cache-control'] = 'private, no-store';
         return page;
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/rulesAuthoring',
+      {
+        params: realmParams,
+        query: strict(RulesAuthoringQuerySchema),
+        response: {
+          200: strict(RulesAuthoringPageSchema),
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'realm.rules_authoring',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['community.realm', 'content.board', 'content.thread', 'content.post'],
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        try {
+          return await admission.run('normal', job, () =>
+            readRealmRulesAuthoringPage(
+              { ...realmDependencies(), tokens: dependencies.tokens },
+              actor,
+              realmId,
+              { actor, deadline: job.deadline },
+              query,
+            ),
+          );
+        } catch (error) {
+          communityProblem(error);
+        }
       },
     )
     .get(
