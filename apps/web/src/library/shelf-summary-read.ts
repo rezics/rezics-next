@@ -10,7 +10,15 @@ import { libraryShelfType } from './shelf-params';
 
 // Derive the receiving shape from the installed publisher, without a parallel wire declaration.
 export type ShelfSummary = NonNullable<Awaited<ReturnType<KernelClient['libraryShelfSummary']['get']>>['data']>;
-export const shelfSummaryTabs = ['all', 'in_progress', 'planned', 'completed', 'paused', 'dropped', 'collections'] as const;
+export const shelfSummaryTabs = [
+  'all',
+  'in_progress',
+  'planned',
+  'completed',
+  'paused',
+  'dropped',
+  'collections',
+] as const;
 export type ShelfSummaryView =
   | { state: 'loaded'; summary: ShelfSummary }
   | { state: 'signed-out' | 'closed' | 'denied' | 'preparing' | 'unavailable' };
@@ -41,16 +49,25 @@ export function validShelfSummary(value: unknown, type?: string): value is Shelf
     const count: unknown = Reflect.get(tabs, key);
     if (!count || typeof count !== 'object' || !('total' in count) || !('shown' in count)) return false;
     const { total, shown } = count;
-    if (typeof total !== 'number' || typeof shown !== 'number' ||
-        !Number.isSafeInteger(total) || !Number.isSafeInteger(shown) || shown < 0 || total < shown ||
-        ((!type || key === 'collections') && total !== shown)) return false;
+    if (
+      typeof total !== 'number' ||
+      typeof shown !== 'number' ||
+      !Number.isSafeInteger(total) ||
+      !Number.isSafeInteger(shown) ||
+      shown < 0 ||
+      total < shown ||
+      ((!type || key === 'collections') && total !== shown)
+    )
+      return false;
     counts.push({ total, shown });
   }
   const all = counts[0]!;
   // Custom states are included only in all; legacy buckets need not exhaust it.
   const legacy = counts.slice(1, 6);
-  return legacy.reduce((sum, count) => sum + count.total, 0) <= all.total &&
-    legacy.reduce((sum, count) => sum + count.shown, 0) <= all.shown;
+  return (
+    legacy.reduce((sum, count) => sum + count.total, 0) <= all.total &&
+    legacy.reduce((sum, count) => sum + count.shown, 0) <= all.shown
+  );
 }
 
 /** One native GET; the caller owns retirement of this independent admitted observation. */
@@ -67,12 +84,17 @@ export async function loadShelfSummaryCurrent(
     requested: { type: type ?? null, locale: requestLocale(request) ?? 'en', source: request.url },
   };
   let authorization: string | null = null;
-  const agrees = () => !!provenance.sessionSubject && !request.headers.has('authorization') &&
-    sessionSubject(request) === provenance.sessionSubject && viewerCredential(request) === authorization;
+  const agrees = () =>
+    !!provenance.sessionSubject &&
+    !request.headers.has('authorization') &&
+    sessionSubject(request) === provenance.sessionSubject &&
+    viewerCredential(request) === authorization;
   const result = (page: ShelfSummaryView): ShelfSummaryCurrentRead => {
     provenance.authorizationAgrees = authorization !== null && agrees();
-    return { ...provenance, page: page.state === 'loaded' && !provenance.authorizationAgrees
-      ? { state: 'unavailable' } : page };
+    return {
+      ...provenance,
+      page: page.state === 'loaded' && !provenance.authorizationAgrees ? { state: 'unavailable' } : page,
+    };
   };
   try {
     if (await prepareSession(request, sessionEnv)) return result({ state: 'signed-out' });
