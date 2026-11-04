@@ -60,12 +60,24 @@ export const readReviewDestination = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<ReviewDestinationRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
+    request.signal.throwIfAborted();
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     const provenance = await preparedReviewReader(sessionSubject(request), requestCsrfToken(request));
+    request.signal.throwIfAborted();
     if (!authorization || !sameReviewReader(data.expected, provenance)) return { kind: 'mismatch' };
     const page = await loadReviewDestinationPage(
-      kernelClient(data.locale, authorization),
+      kernelClient(data.locale, authorization, (fetcher) => async (input, init) => {
+        request.signal.throwIfAborted();
+        const response = await fetcher(input, {
+          ...init,
+          signal: request.signal,
+          cache: 'no-store',
+          credentials: 'omit',
+        });
+        request.signal.throwIfAborted();
+        return response;
+      }),
       {
         realmId: data.realmId,
         subjectId: data.subjectId,
@@ -75,6 +87,7 @@ export const readReviewDestination = createServerFn({ method: 'GET' })
       authorization,
     );
     const finalProvenance = await preparedReviewReader(sessionSubject(request), requestCsrfToken(request));
+    request.signal.throwIfAborted();
     if (!sameReviewReader(data.expected, finalProvenance)) return { kind: 'mismatch' };
     return { kind: 'ready', page, provenance: provenance! };
   });

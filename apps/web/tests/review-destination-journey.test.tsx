@@ -44,14 +44,24 @@ function gate<T>(): Gate<T> {
   return { promise, resolve };
 }
 
-const calls: { path: string; query: string; authorization: string | null; method: string }[] = [];
+const calls: {
+  path: string;
+  query: string;
+  authorization: string | null;
+  method: string;
+  signal: AbortSignal;
+  cache: RequestCache;
+  credentials: RequestCredentials;
+}[] = [];
 const headers: string[] = [];
 const serverFunctionSignals: (AbortSignal | undefined)[] = [];
 let realmRead: (cursor: string | null) => Promise<Response> = async (cursor) =>
   cursor
     ? Response.json({ items: [laterRealm], next: null })
     : Response.json({ items: [firstRealm], next: 'later-page' });
-let destinationRead: (realmId: string, _boardId: string | null) => Promise<Response> = async (realmId) =>
+let destinationRead: (realmId: string, _boardId: string | null, cursor: string | null) => Promise<Response> = async (
+  realmId,
+) =>
   Response.json({
     state: 'choices',
     viewer: { state: 'current' },
@@ -65,22 +75,28 @@ let destinationRead: (realmId: string, _boardId: string | null) => Promise<Respo
 let serverReader = reader;
 let request = new Request('https://review.test/en/subjects/review');
 
-const client = createKernelClient('https://kernel.review.test', {
-  fetch: async (input, init) => {
-    const req = new Request(input, init);
-    const url = new URL(req.url);
-    calls.push({
-      path: url.pathname,
-      query: url.search,
-      authorization: req.headers.get('authorization'),
-      method: req.method,
-    });
-    if (url.pathname === '/v1/me/realms') return realmRead(url.searchParams.get('cursor'));
-    const match = /^\/v1\/realms\/([^/]+)\/review-destinations$/.exec(url.pathname);
-    if (match) return destinationRead(decodeURIComponent(match[1]!), url.searchParams.get('boardId'));
-    throw new Error(`Unexpected review request ${url.pathname}`);
-  },
-});
+const fetcher: typeof fetch = async (input, init) => {
+  const req = new Request(input, init);
+  const url = new URL(req.url);
+  calls.push({
+    path: url.pathname,
+    query: url.search,
+    authorization: req.headers.get('authorization'),
+    method: req.method,
+    signal: req.signal,
+    cache: req.cache,
+    credentials: req.credentials,
+  });
+  if (url.pathname === '/v1/me/realms') return realmRead(url.searchParams.get('cursor'));
+  const match = /^\/v1\/realms\/([^/]+)\/review-destinations$/.exec(url.pathname);
+  if (match)
+    return destinationRead(
+      decodeURIComponent(match[1]!),
+      url.searchParams.get('boardId'),
+      url.searchParams.get('cursor'),
+    );
+  throw new Error(`Unexpected review request ${url.pathname}`);
+};
 
 const start = await import('@tanstack/react-start');
 mock.module('@tanstack/react-start', () => ({
@@ -98,6 +114,7 @@ mock.module('@tanstack/react-start', () => ({
           const data = validate ? validate(input.data) : input.data;
           request = new Request('https://review.test/en/_server/review', {
             headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+            signal: input.signal,
           });
           return handler({ data });
         };
@@ -131,7 +148,11 @@ mock.module('cloudflare:workers', () => ({
     },
   },
 }));
-mock.module('../src/kernel/client', () => ({ kernelClient: () => client, requestLocale: () => 'en' }));
+mock.module('../src/kernel/client', () => ({
+  kernelClient: (_locale?: string, _authorization?: string, decorate = (fetch: typeof fetch) => fetch) =>
+    createKernelClient('https://kernel.review.test', { fetch: decorate(fetcher) }),
+  requestLocale: () => 'en',
+}));
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -296,6 +317,11 @@ test('the later Realm page and exact Board require deliberate selection before t
       calls.every(({ authorization, method }) => authorization === 'Bearer review-token' && method === 'GET'),
     ).toBe(true);
     expect(headers.every((header) => header === 'cache-control: private, no-store')).toBe(true);
+    expect(
+      calls
+        .filter(({ path }) => path.endsWith('/review-destinations'))
+        .every(({ cache, credentials, signal }) => cache === 'no-store' && credentials === 'omit' && !signal.aborted),
+    ).toBe(true);
   } finally {
     await view.unmount();
   }
@@ -323,6 +349,7 @@ test('a Realm replacement retires a late destination page and its selection', as
       subjectTitle: '替換後的作品',
     });
     expect(serverFunctionSignals.at(-1)?.aborted).toBe(true);
+    expect(calls.at(-1)?.signal.aborted).toBe(true);
     pending.resolve(
       Response.json({
         state: 'choices',
@@ -339,6 +366,46 @@ test('a Realm replacement retires a late destination page and its selection', as
     expect(navigations).toHaveLength(0);
     expect(view.host.querySelector('button[aria-pressed="true"]')).toBeNull();
     expect(view.host.querySelector('ul[aria-label]')).toBeNull();
+  } finally {
+    await view.unmount();
+  }
+});
+
+test('a sparse destination page continues only on More and retries the exact failed cursor', async () => {
+  reset();
+  await setLocale('en', { reload: false });
+  let attempts = 0;
+  destinationRead = async (realmId, _boardId, cursor) => {
+    if (cursor && ++attempts === 1) return Response.json({ error: 'unavailable' }, { status: 503 });
+    return Response.json({
+      state: cursor ? 'exhausted' : 'sparse',
+      viewer: { state: 'current' },
+      context: {
+        subject: { id: subjectId, label: null, source },
+        realm: { id: realmId, title: laterRealm.name, spaceId, headRevisionId },
+      },
+      items: [],
+      next: cursor ? null : 'exact-frontier',
+    });
+  };
+  const view = await surface();
+  const destinations = () => calls.filter(({ path }) => path.endsWith('/review-destinations'));
+  try {
+    await view.click(m.thread_review_write());
+    await until(() => calls.length === 1);
+    await view.click(laterRealm.name);
+    await until(() => view.host.textContent?.includes(m.thread_review_more()) === true);
+    expect(destinations()).toHaveLength(1);
+    expect(navigations).toHaveLength(0);
+    await view.click(m.thread_review_more());
+    await until(() => view.host.textContent?.includes(m.subject_view_retry()) === true);
+    expect(destinations()).toHaveLength(2);
+    await view.click(m.subject_view_retry());
+    await until(() => destinations().length === 3);
+    await settle();
+    expect(destinations()[1]?.query).toBe(destinations()[2]?.query);
+    expect(destinations()[2]?.query).toContain('cursor=exact-frontier');
+    expect(navigations).toHaveLength(0);
   } finally {
     await view.unmount();
   }
