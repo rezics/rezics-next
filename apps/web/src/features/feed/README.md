@@ -149,6 +149,17 @@ Share uses the native browser sheet when installed, then the clipboard when unsu
 does not copy. Only a successful clipboard promise announces success. A blocked clipboard exposes the admitted URL
 for manual copying and a Close action returning focus. Replacement visits retire pending share/copy feedback.
 
+### Home Subject reactions
+
+Home consumes only the mounted feed-local `subjectReactions` field and binds it to the exact semantic key and
+destination ID. Covered zero is an available empty map; missing counts or an unknown signed-in viewer slot retain the
+five disabled Subject controls with an unavailable dash and a retry of the current feed request. Anonymous controls
+keep their localized sign-in return. A deliberate Subject write uses the shared reaction engine, current feed origin,
+native PUT/DELETE and point reconciliation; its aggregate waits for that read and never updates optimistically.
+
+Decision: unavailable Home Subject projections keep all five controls disabled, show dashes only for unknown counts,
+and retry through the owning page request; Home never infers zero from missing coverage.
+
 ### Producer and board handoff
 
 Decision: phone Share and vote-presentation reaction pickers use compact labeled icons; desktop Share retains its text,

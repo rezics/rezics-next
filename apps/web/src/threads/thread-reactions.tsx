@@ -94,8 +94,12 @@ export type ThreadReactionsProps = {
   signInAllowed?: boolean;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
   presentation?: 'chips' | 'vote' | 'vote-plain';
+  /** Override the Subject phone picker collapse; null keeps every admitted kind in the row. */
+  subjectCollapse?: number | null;
   /** Feed callers reconcile one successful explicit write with the existing bounded point reader. */
   settleWithRead?: boolean;
+  /** Keep the aggregate projection unchanged until its authoritative point read settles. */
+  optimistic?: boolean;
   /** A supplied Home baseline requires a current projected watermark before point-read settlement. */
   sourceWatermark?: ReactionSnapshot['reactionsAsOf'];
   locale?: string;
@@ -188,6 +192,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
     props.signInAllowed ?? true,
     props.reactionOrigin?.key ?? null,
     props.sourceWatermark,
+    props.optimistic ?? true,
     hydrated,
   ]);
   const desiredKey = useRef(key);
@@ -225,7 +230,9 @@ function ReactionCaller({
   reactionOrigin,
   isDesired,
   presentation,
+  subjectCollapse,
   settleWithRead,
+  optimistic = true,
   locale,
   preparedTransport,
   sourceWatermark,
@@ -499,10 +506,16 @@ function ReactionCaller({
         key={generation}
         counts={resolved?.snapshot.counts ?? counts}
         disabled={disabled || recovery !== null || recovering}
-        {...(target.kind === 'subject' ? { kinds: subjectReactionKinds, collapse: 2 } : {})}
+        {...(target.kind === 'subject'
+          ? {
+              kinds: subjectReactionKinds,
+              ...(subjectCollapse === null ? {} : { collapse: subjectCollapse ?? 2 }),
+            }
+          : {})}
         labels={reactionLabels(failed)}
         locale={locale ?? getLocale()}
         {...(presentation ? { presentation } : {})}
+        optimistic={optimistic}
         onChange={onChange}
         value={resolved ? resolved.snapshot.value : value}
         {...(signedIn || signInAllowed === false
