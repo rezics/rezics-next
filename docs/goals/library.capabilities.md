@@ -751,9 +751,14 @@ Owners can independently mark canonical episodes 1 and 3 while 2 stays unmarked,
 separate. The mounted `progress_session.episodes` and `progress_session.record_episodes` operations use persisted
 Episode Subjects and admitted direct parent relationships; generic progress retains its existing meaning.
 [Exact shapes, limits and lifecycle](../library-episode-progress.md) include private bounded inspection, catalogue
-withdrawal/visibility changes, correction/clear, current revisions, owner isolation and stable retry identity.
-Focused native scenarios: `services/kernel/test/library/episode-progress.test.ts`. Broader frozen integration
-acceptance remains controller-owned; source presence is not an acceptance result.
+withdrawal/visibility changes, correction/clear, current revisions, owner isolation and stable retry identity. The
+focused native journey composes actual inverse pages with exact ID inspection, covers lost acknowledgements and
+stale revisions, and shows retired session state separately from current profile support. Its generated client
+methods are installed. Concealed/missing Subjects stay redacted with `completed:null`; dependency failure is 503
+`semantic_not_ready`; unsupported profile additions are 422 `unsupported_library_profile`; retired reads and fresh
+writes are 404 `not_found`, while exact admitted receipts replay. The owner document records response examples and
+source-derived costs. The frozen integration, full-Kernel, native 64/512/4096 growth and browser checks remain
+controller-owned and were not run in this attempt.
 
 ## Personal-score shelf order
 

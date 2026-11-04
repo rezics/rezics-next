@@ -10,6 +10,11 @@ Decision: canonical episode completions are a separate per-session fact set, ind
 progress; exact canonical IDs and direct `schema:isPartOf` membership are required for additions, while
 correction and clear survive catalogue removal.
 
+Decision: the existing session `state: "retired"` is the checklist's retired presentation. Episode reads continue to
+conceal retained IDs after retirement, and the profile presentation reports historical meaning and current recording
+support independently from that lifecycle state. `recording.state:"supported"` describes profile compatibility;
+consumers still gate mutations on the native session state.
+
 ## Start, record and inspect
 
 Use the authenticated native `POST /v1/progressSessions` to create an independent session for the real parent
@@ -116,24 +121,55 @@ a stale revision, retain the exact key/body for transport retries, and never inf
 value. Reopening keeps canonical facts; a retired occurrence conceals current rows and refuses fresh mutations,
 including clear, while an authorized exact receipt may replay its original revision.
 
+The installed `@rezics/client` methods are `subjects({id}).get()`,
+`subjects({id}).links.get({query:{property:"schema:isPartOf",context,language,limit:20,cursor}})`,
+`progressSessions({sessionId}).episodes.get({query:{ids}})`, and
+`progressSessions({sessionId}).$recordEpisodes.post(body,{headers:{"idempotency-key":JSON.stringify(key)}})`.
+The inverse links page supplies exact holder IDs; Episode inspection supplies `episodeSubjectId`, `completed`,
+`membership` and `ordinal`. A representative response shape is
+`{"revision":4,"episodes":[{"episodeSubjectId":"<canonical-id>","completed":false,"membership":"member","ordinal":"2"}],"next":null}`.
+Visible Episodes without current direct-parent membership are `detached` and keep their completion boolean. A missing,
+redirected or concealed Subject/parent is the redacted `unavailable` row with `completed:null`; a temporary Semantic
+dependency failure is HTTP 503 `semantic_not_ready`. A missing original profile pin/descriptor has
+`presentation.meaning:"unknown"`; a failed pinned-release read has `meaning:"unavailable"`. Current incompatible
+profile support is `presentation.recording.state:"unsupported"` while original meaning stays known. The existing
+session GET returns `progressSession.state:"retired"`; episode reads and fresh writes then return HTTP 404
+`not_found`, while an admitted exact receipt returns its original revision. These fields remain distinct, so consumers
+gate mutations on session state and never map an unavailable completion to false.
+
 [`episode-progress.test.ts`](../services/kernel/test/library/episode-progress.test.ts) exercises mounted production
-Access and persisted Subjects: episodes 1 and 3 with 2 unmarked, equal-numbered special, separate reread, scalar
-independence, wrong parent/type, owner isolation, CAS, exact retry, clear, cursor invalidation, membership withdrawal,
-concealment, correction after profile removal, reopening and retirement. Its intent checks reject old tokens and
-ambiguous batches.
-Controller-owned integration acceptance remains separate from these focused scenarios.
+Access and persisted Subjects: actual inverse `schema:isPartOf` first/deep/end pages, exact inspection with an off-page
+ID, episodes 1 and 3 with 2 unmarked, duplicate and missing ordinals, separate reread, scalar independence, wrong
+parent/type, owner isolation, CAS, lost acknowledgement replay, clear, retained-fact first/deep/end pages, cursor
+invalidation, membership withdrawal after inspection, Episode and parent concealment, unsupported-profile correction,
+reopening and retirement. Intent checks reject old tokens and ambiguous batches. This attempt derives costs but does not run the
+controller-owned frozen acceptance, 64/512/4096 native growth, full-Kernel or browser checks.
 
 ## Cost
 
-- Operation: one private checklist visit (membership page + ≤20-ID inspect), explicit retained continuation, and one
-  bounded add/remove or exclusive clear plus inspect readback.
-- Touched neighbourhood: installed `episodes` GET and `$recordEpisodes` POST, the work-parts membership page, the
-  mounted visit. No per-episode request loop, catalogue enumeration or whole-session cache of N ≤ 20,000.
-- Formula: one visit is `1` membership page of cap `L=20` plus `1` inspect of `I≤20`. Continuation adds one retained
-  page `R≤20`. A mutation is one command plus fixed revision/readback. Web work and retained bytes are
-  `O(L + 20 + encoded current-page bytes)`, independent of retained completion count N.
-- Installed caps: inspect ≤20 IDs, retained pages ≤20, combined add/remove ≤20 distinct IDs, session retained cap
-  20,000 (`MAX_EPISODE_IDS` / producer session cap). Work-parts membership `limit: 20`. Association byte cap is
-  unavailable; Web does not invent one.
-- Test reference: `apps/web/tests/canonical-episode-checklist.test.tsx` growth cases at 20/200/2,000 retained
-  completions with a fixed membership/inspection set.
+- Fixed caller bounds: a visit is one subject read, one work-parts inverse page (`L≤20`) and one exact inspection
+  (`I≤20`), or three native HTTP calls. A deliberate retained continuation adds one page (`R≤20`); its SQL uses
+  `R+1` lookahead, at most 21 rows. A patch has `B≤20` distinct add/remove IDs; clear has no source IDs. A mutation
+  is one command plus one deliberate readback. No other stream is scanned and no catalogue or all-facts cache is built.
+- Pool/source derivation: all reads use the existing Kernel pool and Access path; no pool or cross-partition transaction
+  is added. For `K≤20` inspected/retained IDs, the first source pass observes the parent and active release around
+  `K` individual `subject:read` checks and canonical `readSubject` calls. Final disclosure repeats those checks for
+  `V≤K` disclosed IDs, so Episode source observations are `K+V≤40`; each nonempty pass also brackets its rows with
+  parent and release rechecks. Additions perform one current profile observation plus at most `B` Episode authority
+  reads. These reads finish before the owner write transaction.
+- Episode SQL derivation: exact inspection returns at most 20 rows; retained paging uses the
+  `(route,session_id,episode_subject_id)` frontier and returns at most 21 rows; reads issue no retained-count scan.
+  A write performs one exact existing-ID probe (≤20 rows), one counter-row read, one set write and one session
+  revision update inside the existing lock/receipt transaction. Add/remove touches at most 20 fact rows. Clear deletes
+  `N≤20,000` retained rows in one statement, so row work is `O(N)` despite its constant caller payload. Physical
+  database blocks and helper-owned SQL are not measured here; the controller's native growth checks own them.
+- Retained work and serialization: membership, inspection and one retained page hold at most `L+I+R≤60` rows and
+  their encoded current-page bytes. The subject-page contract has no association byte cap, so none is claimed. Stable
+  owner/partition snapshots, repeated source authority, session lock, revision CAS, one command dispatch and its
+  receipt are fixed per operation; an exact retry is a receipt replay, never a second completion.
+- Cleanup/background: terminal account cleanup uses the existing shared 100-child session page; Episode rows share
+  those slots, so episode-only cleanup is at most `ceil(N/100)≤200` pages at the session cap. No Episode synchronizer
+  or new background worker is installed; Semantic's existing link projection remains its owner's work.
+- Evidence boundary: these are source-derived bounds, not executed SQL/block or growth results. The existing Web test
+  covers fixed 20/200/2,000-history cost; the controller owns this attempt's frozen integration, native 64/512/4096,
+  full-Kernel and browser acceptance.

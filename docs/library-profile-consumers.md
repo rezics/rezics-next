@@ -590,6 +590,19 @@ Semantic catalogue page, then `POST /v1/progressSessions/{sessionId}:recordEpiso
 or exclusive clear. The generated client retains these methods. Preserve exact retry keys/bodies; refresh after
 409, show redacted/unavailable rows explicitly, and keep generic scalar/manual progress independent.
 
+The current generated seam is `subjects({id}).get()`,
+`subjects({id}).links.get({query:{property:"schema:isPartOf",context,language,limit:20,cursor}})`,
+`progressSessions({sessionId}).episodes.get({query:{ids}})` and
+`progressSessions({sessionId}).$recordEpisodes.post(body,{headers:{"idempotency-key":JSON.stringify(key)}})`. The
+inverse page's `links[].subject` is the exact candidate identity; inspection preserves supplied order and returns
+`episodeSubjectId`, `completed`, `membership` and `ordinal`. Redacted or concealed candidates explicitly use
+`completed:null`; a temporary dependency failure is HTTP 503 `semantic_not_ready`.
+Retirement is read through the existing session GET's `progressSession.state:"retired"`; episode GETs and new writes
+return HTTP 404 `not_found`, while an admitted exact retry can return its original revision. Current profile support
+remains in `presentation.recording.state`, separate from historical `presentation.meaning` and session lifecycle;
+`recording.state:"supported"` does not override a retired session state when deciding whether to dispatch a command.
+These methods are already generated and installed; no new client declaration or producer publication is needed.
+
 Adds require the session's compatible original/current profile mode/unit with `unit: episode`, plus current
 Semantic Episode type and direct parent authority. This does not change any descriptor's generic identity or
 structure algorithm or activate a release. Removal and clear use historical owner fact identity after definition

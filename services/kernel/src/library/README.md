@@ -3190,3 +3190,10 @@ checks both. The focused mounted journey is `test/library/episode-progress.test.
 Canonical episode owner admission follows generic session scope, current-account and terminal fences; catalogue disclosure independently uses native Subject Access, without installing an account ACL.
 
 Decision: canonical facts follow native occurrence lifecycle: reopening preserves them; retirement conceals both owner read modes and refuses fresh mutations, while admitted exact receipts remain replayable.
+
+The installed checklist composition pages the actual inverse `schema:isPartOf` work-parts stream, then inspects its
+exact `links[].subject` IDs through the generated `episodes.get` method. Missing/currently concealed Subjects remain
+redacted with `completed:null`; temporary Semantic failure remains `503 semantic_not_ready`. The existing session
+response presents `state:"retired"` separately from original meaning and current `presentation.recording.state`,
+while retired Episode reads and fresh writes remain 404. No new client declaration, catalogue, or background worker
+is introduced.

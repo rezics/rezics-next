@@ -194,10 +194,10 @@ export function createEpisodeProgressCommands(config: Dependencies) {
                 observation.anchor.component.position.toString() !== expected.component.position)
             )
               throw new ProblemError('conflict');
-            const current = source?.kind === 'supported' ? nativeProgressUnit(source.profile, fact.session) : null;
-            if (!original || !current || !compatibleProgressUnits(original, current))
+            if (!source || source.subjectId !== fact.session.subjectId) throw new LibraryNotFoundError();
+            const current = source.kind === 'supported' ? nativeProgressUnit(source.profile, fact.session) : null;
+            if (source.kind !== 'supported' || !original || !current || !compatibleProgressUnits(original, current))
               throw new ProblemError('unsupported_library_profile');
-            if (source?.subjectId !== fact.session.subjectId) throw new LibraryNotFoundError();
             const episodes = await readEpisodeSources(deps, fact.session.subjectId, intent.add);
             if (episodes.some((episode) => !episode || episode.membership !== 'member'))
               throw new LibraryNotFoundError();
