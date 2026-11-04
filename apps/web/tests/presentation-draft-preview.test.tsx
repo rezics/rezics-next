@@ -356,15 +356,18 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
       controls().getByRole('textbox', { name: m.draft_preview_address({}, { locale }) }).focus();
       await act(async () => client.setQueryData(['session'], { state: 'signed-in', subject: anotherReader, csrfToken: 'other' }));
       const otherTemplates = within(canvas.getByRole('region', { name: m.curation_templates({}, { locale }) }));
-      expect(otherTemplates.queryByText(/schema:Book/u)).toBeNull();
-      expect(otherTemplates.queryByText(/schema:Novel/u)).toBeNull();
+      const templateLabels = (region: typeof otherTemplates) =>
+        Array.from(region.getByRole('combobox', { name: m.curation_template({}, { locale }) }).querySelectorAll('option'))
+          .map((option) => option.textContent);
+      expect(templateLabels(otherTemplates)).not.toContain('Type: schema:Book');
+      expect(templateLabels(otherTemplates)).not.toContain('Type: schema:Novel');
       await act(async () => client.setQueryData(['session'], { state: 'signed-in', subject: reader, csrfToken: 'third' }));
       await settle(6, success(6));
       expect(controls().queryByRole('heading', { name: 'Draft companion sibling' })).toBeNull();
       expect(window.document.activeElement).toBe(controls().getByRole('button', { name: m.draft_preview_capture({}, { locale }) }));
       const retainedTemplates = within(canvas.getByRole('region', { name: m.curation_templates({}, { locale }) }));
-      expect(retainedTemplates.getByText(/schema:Book/u)).toBeTruthy();
-      expect(retainedTemplates.getByText(/schema:Novel/u)).toBeTruthy();
+      expect(templateLabels(retainedTemplates)).toContain('Type: schema:Book');
+      expect(templateLabels(retainedTemplates)).toContain('Type: schema:Novel');
       const templateSelect = retainedTemplates.getByRole('combobox', { name: m.curation_template({}, { locale }) });
       await select(templateSelect, JSON.stringify({ scope: 'type', key: 'schema:Book' }));
       const viewSelect = retainedTemplates.getByRole('combobox', { name: m.curation_view({}, { locale }) });
