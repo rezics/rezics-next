@@ -27,6 +27,7 @@ const labels = {
   'wd:Q7725310': ['系列', '系列', 'シリーズ'],
   'wd:Q689445': ['视觉小说', '視覺小說', 'ビジュアルノベル'],
   'schema:MusicAlbum': ['音乐专辑', '音樂專輯', 'アルバム'],
+  'schema:Quotation': ['引文', '引文', '引用'],
 };
 
 const authoredDescriptions = {

@@ -1,9 +1,10 @@
 import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
+import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
@@ -12,6 +13,74 @@ import { readItemDetails } from '../semantic/subject.ts';
 import statesRead from '../semantic/subject-summary-states.sql';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { activeProfile } from './profiles.ts';
+
+/** Native correction operations on an admitted quotation; Type descriptors never grant these. */
+export const quotationCorrectionActions = [
+  { action: 'statement:propose', operationId: 'subject.propose' },
+  { action: 'context:accept', operationId: 'subject.accept_candidate' },
+  { action: 'context:adopt', operationId: 'subject.adopt' },
+] as const;
+
+export type PageViewer = { kind: 'anonymous' } | { kind: 'account' };
+export type PageActionState = 'allowed' | 'denied' | 'unavailable' | 'unsupported' | 'absent' | 'withheld';
+export type PageAction = { action: string; operationId: string; state: PageActionState };
+
+/** Current release admission of schema:Quotation, including descendants. Historical pins omit this type. */
+export function quotationTypeAdmitted(
+  release: { types?: Record<string, { bases?: readonly string[] }> } | undefined,
+  type: string | null | undefined,
+): boolean {
+  if (!type || !release?.types?.['schema:Quotation']) return false;
+  return type === 'schema:Quotation' || (release.types[type]?.bases ?? []).includes('schema:Quotation');
+}
+
+/** Derive quotation correction actions with native Access under the actual caller. */
+export async function readQuotationPageAuthority(deps: {
+  pool: Pool;
+  access: Access;
+  actor: Actor;
+  deadline: number;
+}): Promise<{ viewer: PageViewer; actions: PageAction[] }> {
+  const viewer: PageViewer = { kind: deps.actor.kind === 'account' ? 'account' : 'anonymous' };
+  const context = { pool: deps.pool, deadline: deps.deadline };
+  const resource = { route: 0, id: GLOBAL_CONTEXT };
+  const prepared = await Promise.all(
+    quotationCorrectionActions.map(async (entry) => {
+      try {
+        return { ...entry, check: await accessCheck(deps.access, deps.actor, entry.action, resource, context) };
+      } catch (error) {
+        if (classifyUnavailability(error)) return { ...entry, state: 'unavailable' as const, check: null };
+        throw error;
+      }
+    }),
+  );
+  const actions = await withReadTransaction(
+    deps.pool,
+    async (client) => {
+      const result: PageAction[] = [];
+      for (const entry of prepared) {
+        if (!entry.check) {
+          result.push({ action: entry.action, operationId: entry.operationId, state: 'unavailable' });
+          continue;
+        }
+        try {
+          result.push({
+            action: entry.action,
+            operationId: entry.operationId,
+            state: (await entry.check(client)) ? 'allowed' : 'denied',
+          });
+        } catch (error) {
+          if (classifyUnavailability(error))
+            result.push({ action: entry.action, operationId: entry.operationId, state: 'unavailable' });
+          else throw error;
+        }
+      }
+      return result;
+    },
+    deps.deadline,
+  );
+  return { viewer, actions };
+}
 
 /** The ordinary native page's template order and offered views, shared with pages.read. */
 export function semanticPageView(

@@ -1840,6 +1840,13 @@ acceptance is `apps/web/tests/subject-graph-browser.test.tsx`.
 
 ## Read an admitted quotation
 
+Native admission: `schema:Quotation` is a released Thing with a document-valued `schema:text`, `schema:inLanguage`, a
+`schema:about` work-context, `schema:spokenByCharacter`, a credited `schema:creator` and an optional `schema:actor`.
+The ordinary subject `POST /v1/pages:read` carries current viewer state and Access-derived correction actions for this
+type. Historical pins without the type keep unsupported reading. Quotation class, text, about, creator and actor live
+in `works.yaml` with `schema:spokenByCharacter`, so labels stay in the eight works presentation files. Work-context is
+`schema:about`, not episode `schema:isPartOf`. Credited creator and performing voice use association, not credit.
+
 The `/quotations` companion follows only relation targets whose released type extends `schema:Quotation`. A quote's
 text comes from the first released `schema:text` or `schema:abstract` property on that type and one unambiguous
 best-ranked statement. The reader keeps that statement ID, its exact language, permitted qualifiers and reference

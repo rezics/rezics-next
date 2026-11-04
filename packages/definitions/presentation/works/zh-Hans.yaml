@@ -1,4 +1,23 @@
 types:
   schema:MusicAlbum: 音乐专辑
+  schema:Quotation: 引文
 typeDescriptions:
   schema:MusicAlbum: '汇集曲目的音乐专辑作品，独立于某一实体副本或发行版本。'
+  schema:Quotation: '作品中的引文，说话者、具名创作者与出处分开保存。'
+properties:
+  schema:text: 正文
+  schema:spokenByCharacter: 说话者
+  schema:about: 作品
+  schema:creator: 具名创作者
+  schema:actor: 配音
+propertyDescriptions:
+  schema:text: '引文的准确正文文档。使用文档值，而不是关系标签或其他文本栏。'
+  schema:spokenByCharacter: '说出这段引文的虚构角色。不是具名创作者，也不是配音。'
+  schema:about: '这段引文所指向的作品。需要准确的作品或部分身份；子串匹配不会建立关系。'
+  schema:creator: '这段引文具名的人物或组织，与虚构说话者分开。'
+  schema:actor: '可选的配音。说话者不会在没有合格来源断言时被当成配音。'
+inverseProperties:
+  schema:spokenByCharacter: 说出的引文
+  schema:about: 引文
+  schema:creator: 具名的引文
+  schema:actor: 配音的引文

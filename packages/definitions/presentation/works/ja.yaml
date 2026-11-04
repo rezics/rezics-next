@@ -1,4 +1,23 @@
 types:
   schema:MusicAlbum: アルバム
+  schema:Quotation: 引用
 typeDescriptions:
   schema:MusicAlbum: '楽曲をまとめた音楽アルバムの作品。特定の所蔵物や頒布版とは独立した対象です。'
+  schema:Quotation: '作品からの引用。話者、クレジットされた作者、出典を分けて保持します。'
+properties:
+  schema:text: 本文
+  schema:spokenByCharacter: 話者
+  schema:about: 作品
+  schema:creator: クレジットされた作者
+  schema:actor: 声
+propertyDescriptions:
+  schema:text: '引用の本文ドキュメントです。関係のラベルや別のテキスト欄ではなく、ドキュメント値を渡します。'
+  schema:spokenByCharacter: 'この引用を話す架空のキャラクターです。クレジットされた作者や声優ではありません。'
+  schema:about: 'この引用が示す作品です。作品または部分の正確な同一性を要し、部分文字列の一致では関係になりません。'
+  schema:creator: 'この引用にクレジットされた人物または組織です。架空の話者とは別に保持します。'
+  schema:actor: '任意の演じる声です。話者から、出典に基づく主張なしに声優を推論しません。'
+inverseProperties:
+  schema:spokenByCharacter: 発話した引用
+  schema:about: 引用
+  schema:creator: クレジットされた引用
+  schema:actor: 声を当てた引用

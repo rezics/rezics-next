@@ -28,5 +28,6 @@ test('bundled works and specialized types use the published portrait frame', () 
   expect(core.classes.Character.annotations.cover_ratio).toBe('5:7');
   expect(bundledRelease.types['schema:MusicAlbum']?.coverRatio).toBe('5:7');
   expect(bundledRelease.types['schema:Recipe']?.coverRatio).toBe('5:7');
+  expect(bundledRelease.types['schema:Quotation']?.coverRatio).toBe('5:7');
   expect(bundledRelease.types['schema:Organization']?.coverRatio).toBe('5:7');
 });

@@ -7,6 +7,26 @@ const readResult = t.Object(
   closed,
 );
 
+const pageViewer = t.Union([
+  t.Object({ kind: t.Literal('anonymous') }, closed),
+  t.Object({ kind: t.Literal('account') }, closed),
+]);
+const pageAction = t.Object(
+  {
+    action: t.String(),
+    operationId: t.String(),
+    state: t.Union([
+      t.Literal('allowed'),
+      t.Literal('denied'),
+      t.Literal('unavailable'),
+      t.Literal('unsupported'),
+      t.Literal('absent'),
+      t.Literal('withheld'),
+    ]),
+  },
+  closed,
+);
+
 /** The common page body shared by public presentation reads and their extensions. */
 export const PageResponseSchema = t.Object(
   {
@@ -36,6 +56,8 @@ export const PageResponseSchema = t.Object(
     document: t.Any(),
     views: t.Optional(t.Array(t.String())),
     reads: t.Record(t.String(), readResult),
+    viewer: t.Optional(pageViewer),
+    actions: t.Optional(t.Array(pageAction)),
   },
   closed,
 );
