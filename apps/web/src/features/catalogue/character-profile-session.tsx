@@ -7,7 +7,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { CharacterProfile } from './character-profile-view';
 import { characterFacts, type CharacterAddress } from './character-profile';
 import { loadCharacterProfile, createCatalogueCharacter } from './character-profile-actions';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { readCurrentTypeDescriptor } from './type-directory';
 import { relationTargetSearch } from './relation-editor-search';
 import { submitFactCorrection } from './subject-facts-actions';
@@ -36,6 +36,7 @@ function CharacterProfileSessionLive({
         create: (data) => createCatalogueCharacter({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
         workType: (data) => readCurrentTypeDescriptor({ data }),
+        eligibility: () => readCatalogueCreateEligibility(),
       }}
       facts={(id) => ({
         read: async () => {

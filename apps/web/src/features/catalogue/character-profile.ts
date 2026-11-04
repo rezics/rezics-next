@@ -2,6 +2,7 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { checkSubjectInput, type Violation } from '@rezics/definitions/validate';
 import { initialTerms, type TermDraft, type CreateResult, type CreatedReader } from './create-subject';
+import type { CreateAuthority } from './identity-intake';
 import { createSubjectRecord } from './create-subject-request';
 import type { SessionEnv } from '../../session/client';
 import { creationStatement, type StatementInput, type EditorRead } from './statement-editor';
@@ -51,6 +52,8 @@ export type CharacterTransport = {
   create: (command: CharacterCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
   workType?: (typeId: string) => Promise<CurrentTypeRead>;
+  /** Current parent subject.create observation. Independent of work, classification return, and the future UUID. */
+  eligibility?: () => Promise<CreateAuthority>;
 };
 
 /** Presentation groups intersect the effective native profile; they never add vocabulary. */
