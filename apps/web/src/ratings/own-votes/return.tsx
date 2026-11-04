@@ -84,7 +84,6 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
   const [receipt, setReceipt] = useState<OwnVotesReturnReceipt | null>(null);
   const receiptRef = useRef(receipt);
   const focusVersion = useRef(0);
-  receiptRef.current = receipt;
 
   const publish = useCallback((next: OwnVotesReturnReceipt | null) => {
     receiptRef.current = next;
