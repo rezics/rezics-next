@@ -103,7 +103,7 @@ export function ScreenProfileReader({
       {publicRead && !visit.unpublished.episodes ? (
         <ScreenEpisodeList
           locale={locale}
-          read={episodeRead}
+          {...(episodeRead ? { read: episodeRead } : {})}
           loading={episodeLoading}
           retry={onEpisodeRetry}
           origin={episodeOrigin ?? { pathname: '', searchStr: '' }}

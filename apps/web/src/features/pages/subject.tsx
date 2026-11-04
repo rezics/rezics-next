@@ -793,7 +793,7 @@ export function SubjectPage({
                 public={composedSubjectRead(read)}
                 bounds={boundedProfileRelations(page)}
                 link={ContextLink}
-                context={page.context?.id}
+                {...(page.context?.id ? { context: page.context.id } : {})}
                 viewerKey={page.requestedReader ?? null}
               />
             ) : null}
