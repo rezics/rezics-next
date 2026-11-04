@@ -1,3 +1,4 @@
+import type { CollectionComparisonDefinitions } from './collection-comparison/model';
 import {
   collectionPresentationOf,
   type CollectionPresentationData,
@@ -241,6 +242,7 @@ export type EditableCollectionPage = Omit<CollectionPageData, 'memberCount'> &
     coverMediaId?: string | null;
     presentationTypes?: CollectionTypeOption[] | null;
     listPresentations?: CollectionListPresentations;
+    comparisonDefinitions?: CollectionComparisonDefinitions;
     viewerActions?: CollectionViewerActions;
     memberState?: 'ready' | 'preparing' | 'unavailable' | 'failed';
     retryAfterMs?: number;

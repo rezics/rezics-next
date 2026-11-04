@@ -1,5 +1,8 @@
-import { MetaLine } from '@rezics/ui/meta-line';
-import { listKeyFacts } from '../media/type-presentation';
+import {
+  collectionComparisonFacts,
+  collectionComparisonHref,
+  type CollectionComparisonDefinitions,
+} from './collection-comparison/model';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import type { CollectionListPresentations } from './collection-presentation';
@@ -26,26 +29,66 @@ export function CollectionMemberNoteSaved({ memberId }: { memberId: string }) {
 export function CollectionMemberDetails({
   member,
   listPresentations,
+  comparisonDefinitions,
+  currentHref,
+  onReferenceNavigate,
 }: {
-  member: Pick<CollectionMember, 'subject' | 'facts'>;
+  member: Pick<CollectionMember, 'subject' | 'facts'> & { id?: string };
   listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
+  currentHref?: string | undefined;
+  onReferenceNavigate?: (() => void) | undefined;
 }) {
   if (!member.subject) return null;
-  const facts = listKeyFacts(member.facts, listPresentations?.[member.subject.type]?.keyFacts, [], getLocale());
+  const locale = getLocale();
+  const facts = collectionComparisonFacts(member, listPresentations, comparisonDefinitions, locale);
+  const state =
+    member.facts === undefined
+      ? 'unknown'
+      : facts.length
+        ? 'supplied'
+        : Object.values(member.facts).some((values) => values.length)
+          ? 'unavailable'
+          : 'empty';
   return (
     <>
       {member.subject.typeLabel ? <p className="text-sm text-muted-foreground">{member.subject.typeLabel}</p> : null}
-      {facts.length ? (
-        <p data-slot="member-list-row-facts" className="text-sm text-muted-foreground">
-          <MetaLine
-            items={facts.map((fact, index) => (
-              <span key={index} lang={fact.lang}>
-                {fact.text}
-              </span>
+      <div data-slot="member-list-row-facts" data-context-state={state} className="text-sm text-muted-foreground">
+        {facts.length ? (
+          <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 [overflow-wrap:anywhere]">
+            {facts.map((fact, index) => (
+              <div key={`${fact.property}:${index}`} data-property={fact.property} className="min-w-0 max-w-full">
+                <dt lang={fact.label.lang} className="text-xs">
+                  {fact.label.text || m.search_constraint_identity_property_unavailable()}
+                </dt>
+                <dd lang={fact.lang}>
+                  {fact.targetId && currentHref ? (
+                    <a
+                      href={collectionComparisonHref(fact.targetId, fact.text, locale, currentHref, member.id)}
+                      data-comparison-reference={fact.targetId}
+                      className="relative z-10 inline-flex min-h-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      onClick={onReferenceNavigate}
+                    >
+                      {fact.text}
+                    </a>
+                  ) : (
+                    fact.text
+                  )}
+                </dd>
+              </div>
             ))}
-          />
-        </p>
-      ) : null}
+          </dl>
+        ) : (
+          <p>
+            {state === 'unknown'
+              ? m.catalogue_context_unknown()
+              : state === 'unavailable'
+                ? m.catalogue_context_unavailable()
+                : m.catalogue_context_absent()}
+          </p>
+        )}
+        {facts.length && comparisonDefinitions === undefined ? <p>{m.catalogue_context_unavailable()}</p> : null}
+      </div>
     </>
   );
 }

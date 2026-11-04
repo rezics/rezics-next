@@ -1,3 +1,4 @@
+import { collectionComparisonDefinitions } from './collection-comparison/model';
 import { readCollectionTypeOptions } from './collection-presentation';
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
@@ -86,6 +87,7 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       configuredFilters === undefined
         ? import.meta.env.DEV
         : configuredFilters === true || configuredFilters === 'true';
+    const release = await readRelease().catch(() => null);
     let filter: ReturnType<typeof readCollectionFilterParams> | undefined;
     let filterStatus: 'failed' | undefined = !filtersOn && data.filterActive ? 'failed' : undefined;
     let filterProperties: CollectionFilterProperty[] = [];
@@ -94,7 +96,7 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
     const type = typeof requested.type === 'string' ? requested.type : 'schema:Book';
     if (filtersOn) {
       try {
-        const release = await readRelease();
+        if (!release) throw new Error('Definitions unavailable');
         filterReleaseKey = release.digest;
         const locale = requestLocale() ?? 'en';
         filterProperties = refinementProperties(release, type)
@@ -136,7 +138,6 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       data.credentialMode,
     );
     await nameSubjectTypes(page.members.map((member) => member.subject));
-    const release = await readRelease().catch(() => null);
     const typeRatios = release
       ? Object.fromEntries(
           Object.entries(release.types).flatMap(([id, type]) => (type.coverRatio ? [[id, type.coverRatio]] : [])),
@@ -154,6 +155,15 @@ export const readCollectionPage = createServerFn({ method: 'GET' })
       filterActive: data.filterActive,
       typeRatios,
       listPresentations,
+      ...(release
+        ? {
+            comparisonDefinitions: collectionComparisonDefinitions(
+              [...page.members, ...(!('preparing' in page) ? (page.filteredMembers ?? []) : [])],
+              listPresentations,
+              release.properties,
+            ),
+          }
+        : {}),
       ...(!('preparing' in page)
         ? {
             ...(page.visibility !== null
