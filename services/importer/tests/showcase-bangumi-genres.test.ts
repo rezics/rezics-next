@@ -88,7 +88,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
       };
     },
     async setSourceRecordMetadata({ command }: { command: { metadata: unknown } }) {
-      return { record: command.metadata, revision: 1 } as never;
+      return { record: command.metadata, metadata_revision: 1, effect: 'filled' } as never;
     },
     async fence() {
       return { fenced: false, securityRevision: null };
