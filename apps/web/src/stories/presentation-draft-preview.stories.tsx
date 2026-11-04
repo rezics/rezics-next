@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { expect, userEvent, within } from 'storybook/test';
 import {
@@ -69,8 +69,9 @@ function answer(input: DraftPreviewInput, state: State): DraftPreviewResult {
     },
   };
 }
-function Connected({ state = 'success' }: { state?: State }) {
+function Connected({ state = 'success', admissionReplacement = false }: { state?: State; admissionReplacement?: boolean }) {
   const locale = getLocale();
+  const [signedOut, setSignedOut] = useState(false);
   const client = useMemo(() => {
     const client = new QueryClient();
     client.setQueryData(['session'], { state: 'signed-in', subject: reader, csrfToken: 'story-curator' });
@@ -98,6 +99,24 @@ function Connected({ state = 'success' }: { state?: State }) {
       <QueryClientProvider client={client}>
         <PresentationPreviewContext.Provider value={{ read: async () => ({ ok: false, reason: 'unavailable' }) }}>
           <div className="mx-auto max-w-6xl p-4 sm:p-8">
+            {admissionReplacement && (
+              <button
+                type="button"
+                className="mb-4 min-h-11 rounded-md border border-border px-3"
+                onClick={() => {
+                  const next = !signedOut;
+                  client.setQueryData(
+                    ['session'],
+                    next
+                      ? { state: 'signed-out', csrfToken: null }
+                      : { state: 'signed-in', subject: reader, csrfToken: 'story-curator' },
+                  );
+                  setSignedOut(next);
+                }}
+              >
+                {signedOut ? 'Return to curator' : 'Retire curator admission'}
+              </button>
+            )}
             <CurationView initial={initial} transport={transport} />
           </div>
         </PresentationPreviewContext.Provider>
@@ -150,6 +169,19 @@ export const PendingEdits: Story = {
     await expect(controls.getByText(m.draft_preview_changed())).toBeVisible();
     await userEvent.click(controls.getByRole('button', { name: m.draft_preview_interrupt() }));
     await expect(controls.getByText(m.draft_preview_interrupted())).toBeVisible();
+  },
+};
+export const AdmissionReplacementPreservesDraft: Story = {
+  render: () => <Connected state="pending" admissionReplacement />,
+  play: async ({ canvasElement }) => {
+    const controls = await capture(canvasElement);
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: m.curation_key() }), 'schema:Book');
+    await userEvent.click(canvas.getByRole('button', { name: m.curation_add() }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Retire curator admission' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Return to curator' }));
+    await expect(canvas.getByRole('region', { name: m.curation_templates() })).toHaveTextContent('schema:Book');
+    await expect(controls.queryByText(m.draft_preview_success())).not.toBeInTheDocument();
   },
 };
 export const Denied: Story = {

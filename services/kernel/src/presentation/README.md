@@ -340,11 +340,16 @@ not generic fallbacks. All response bodies are private/no-store. Successful bodi
 advice: 'allowed' }`; the ordinary `profile` digest names the captured candidate, never an activation acknowledgement.
 Advice describes this operation only and does not replace independent publish/activate advice or command admission.
 
+Admission handoff keeps the unpublished draft in mounted editor memory keyed by reader; retirement restores focus to
+the preview capture control only when preview-owned focus is removed and leaves editor-owned focus untouched.
+
 Cost: capture uses the publication canonicalization, registry, one MiB UTF-8 cap and template/structural bounds.
 Admission adds fixed Global Context publish/caller-read/public-read decisions and one current release lookup;
 these use existing point/indexed authority reads, independent of unrelated profile and subject populations.
 There is no preview-profile storage or cache lookup. After selection all indexed seeks, raw examined rows, nested
 producer work, per-leaf bytes and final disclosure remain the aggregate Cost above: at most 16 reads and 128 summed
 slots, with each producer's independent examined-input and byte bounds. Output LIMIT is not the upstream bound.
-Focused HTTP coverage is `test/presentation/draft-preview.test.ts`; mounted receiver and 256/1024/4096 growth
-acceptance remain deferred to the editor continuation and integration acceptance.
+Focused HTTP coverage is `test/presentation/draft-preview.test.ts`; native public admission and wire bounds at
+256/1024/4096 are in `test/presentation/draft-preview-growth.test.ts`. Mounted retention and retirement coverage is
+in `apps/web/tests/presentation-draft-preview.test.tsx`, with the connected `AdmissionReplacementPreservesDraft`
+example in `apps/web/src/stories/presentation-draft-preview.stories.tsx`.

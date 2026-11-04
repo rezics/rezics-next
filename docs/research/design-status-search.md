@@ -101,13 +101,16 @@ Algolia, Discourse, OpenSearch and HTTP/accessibility/JSON-LD sources, with prov
   revision; subsequent edits stay local and mark that revision out of date. The existing isolated anonymous
   renderer retains native leaf failures and their supported siblings. Reader/admission, credential, target,
   locale and transport replacement retire pending work and output permanently, including a returning
-  reader. Publication advice and recovery keep their own lifetimes.
+  reader. The same reader's unpublished editor draft survives admission replacement in mounted reader-keyed
+  memory; preview-owned focus returns to the capture control while editor-owned focus remains undisturbed.
+  Publication advice and recovery keep their own lifetimes.
   Decision: retry re-executes the captured revision; the capture action explicitly adopts later draft edits.
   The additive mounted schemas and local typed BFF seam are inputs to Content’s complete-input publisher;
   generated client declarations and OpenAPI remain publisher-owned. Additional personal host regions
   and supplementary rating/community reads are not synthesized by this inspection.
   Connected examples are `patterns-curation-presentation-resolution--current-resolution`,
-  `--route-resolution`, `--denied`, `--unavailable` and `--draft-distinction`, using shared viewport,
+  `--route-resolution`, `--denied`, `--unavailable`, `--draft-distinction` and
+  `--admission-replacement-preserves-draft`, using shared viewport,
   locale and theme globals. They use a recorded public Subject body inside clearly identified
   contract-shaped aggregate fixtures; native execution and Web visual review remain separate.
 
