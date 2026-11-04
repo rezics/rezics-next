@@ -454,14 +454,19 @@ test('fresh Character create rechecks eligibility; viewer replacement drops a la
   try {
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
     await page.act(async () =>
-      page.user.type(page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }), 'Eligible traveler'),
+      page.user.type(
+        page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }),
+        'Eligible traveler',
+      ),
     );
     await page.submit();
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.character_create_review_title()));
     observation = { state: 'refused', reason: 'permission' };
     await page.submit();
     await page.waitFor(() =>
-      expect(page.canvas().getByRole('alert').textContent).toContain(page.m.identity_intake_authority_refused_permission()),
+      expect(page.canvas().getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
     );
     expect(page.commands).toHaveLength(0);
 
@@ -471,7 +476,9 @@ test('fresh Character create rechecks eligibility; viewer replacement drops a la
     );
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
     await page.submit();
-    await page.waitFor(() => expect(page.canvas().getByRole('button', { name: page.m.correction_retry() })).toBeDefined());
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('button', { name: page.m.correction_retry() })).toBeDefined(),
+    );
     expect(page.commands).toHaveLength(1);
     observation = { state: 'refused', reason: 'permission' };
     await page.submit();
@@ -508,11 +515,15 @@ test('viewer replacement drops a late allowed Character observation', async () =
     expect(page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() })).toBeDefined();
     await page.render({ subject: 'bob' });
     await page.waitFor(() =>
-      expect(page.canvas().getByRole('alert').textContent).toContain(page.m.identity_intake_authority_refused_permission()),
+      expect(page.canvas().getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
     );
     pending?.(allowedCreateAuthority);
     await page.act(async () => undefined);
-    expect(page.canvas().getByRole('alert').textContent).toContain(page.m.identity_intake_authority_refused_permission());
+    expect(page.canvas().getByRole('alert').textContent).toContain(
+      page.m.identity_intake_authority_refused_permission(),
+    );
     expect(
       (page.canvas().getByRole('button', { name: page.m.character_create_review() }) as HTMLButtonElement).disabled,
     ).toBe(true);

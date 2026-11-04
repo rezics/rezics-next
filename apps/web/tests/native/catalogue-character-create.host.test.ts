@@ -58,7 +58,9 @@ test('guest, unsigned grant, unavailable observation, and a stale work stay dist
   await bobPage.getByText(/does not allow creating a catalogue identity/i).waitFor({ state: 'visible' });
   const bobLabel = `Unsigned character ${crypto.randomUUID()}`;
   await bobForm.getByRole('textbox', { name: 'Name', exact: true }).fill(bobLabel);
-  expect(await bobForm.getByRole('button', { name: 'Review fictional character', exact: true }).isDisabled()).toBe(true);
+  expect(await bobForm.getByRole('button', { name: 'Review fictional character', exact: true }).isDisabled()).toBe(
+    true,
+  );
   await stack.syncKernelRequests();
   expect(posts(bobLabel)).toHaveLength(0);
   await bobPage.close();
