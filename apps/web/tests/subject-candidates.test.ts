@@ -54,25 +54,17 @@ test('candidate action hydration keeps exact resources and separates denial from
   expect(nativeOperationAvailability(deniedActions, 'context:adopt', 'subject.adopt')).toBe('denied');
 
   const unavailableFixture = candidateFixture('actions-unavailable');
-  const unavailable = await readCandidateAuthority(
-    unavailableFixture.client,
-    'Bearer reviewer',
-    candidateContext,
-    [unavailableFixture.id],
-  );
+  const unavailable = await readCandidateAuthority(unavailableFixture.client, 'Bearer reviewer', candidateContext, [
+    unavailableFixture.id,
+  ]);
   const unavailableActions = candidateViewerActionsFor(unavailable, unavailableFixture.id).context;
   expect(unavailableActions).toEqual({ state: 'unavailable', reason: 'unavailable' });
-  expect(nativeOperationAvailability(unavailableActions, 'context:adopt', 'subject.adopt')).toBe(
-    'unavailable',
-  );
+  expect(nativeOperationAvailability(unavailableActions, 'context:adopt', 'subject.adopt')).toBe('unavailable');
 
   const concealedFixture = candidateFixture('concealed');
-  const concealed = await readCandidateAuthority(
-    concealedFixture.client,
-    'Bearer reviewer',
-    candidateContext,
-    [concealedFixture.id],
-  );
+  const concealed = await readCandidateAuthority(concealedFixture.client, 'Bearer reviewer', candidateContext, [
+    concealedFixture.id,
+  ]);
   expect(concealed.disclosure).toBe('unreadable');
   expect(candidateViewerActionsFor(concealed, concealedFixture.id).subject).toEqual({
     state: 'unavailable',
@@ -240,11 +232,7 @@ test('an opposite native adoption acknowledgment remains unavailable instead of 
   const initial = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, candidateProperty);
   if (!initial.ok || !initial.page) throw new Error('Expected exact imported candidate');
   const candidate = initial.page.candidates[0]!;
-  const accepted = await selectCandidate(
-    fixture.client,
-    'Bearer reviewer',
-    command(fixture, 'accept', candidate.head),
-  );
+  const accepted = await selectCandidate(fixture.client, 'Bearer reviewer', command(fixture, 'accept', candidate.head));
   expect(accepted).toMatchObject({ ok: true, kind: 'accepted' });
   const current = await readCandidates(fixture.client, 'Bearer reviewer', fixture.id, candidateProperty);
   if (!current.ok || !current.page) throw new Error('Expected accepted candidate');

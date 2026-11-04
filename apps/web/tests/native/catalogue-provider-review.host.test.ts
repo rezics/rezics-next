@@ -275,8 +275,8 @@ nativeTest(
     expect(listing.adoption).toBeNull();
     expect(listing.candidates.find((candidate) => candidate.id === book.candidate)?.decision).toBe('accepted');
     expect(
-      listing.candidates.find((candidate) => candidate.id === book.candidate)?.statement.references[0]?.parts[0]
-        ?.value.content,
+      listing.candidates.find((candidate) => candidate.id === book.candidate)?.statement.references[0]?.parts[0]?.value
+        .content,
     ).toBe(`https://openlibrary.org/works/${book.externalId}`);
 
     const publicRead = await current.stack.kernel(`/v1/subjects/${book.id}`, {}, 'anonymous');

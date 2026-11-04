@@ -257,9 +257,7 @@ nativeTest(
     await review.getByText(m.candidate_selection_confirmed(), { exact: true }).waitFor();
     await review.getByRole('link', { name: m.candidate_view_public(), exact: true }).waitFor();
     const currentSelection = review.locator('[data-candidate-panel="current"]');
-    await currentSelection
-      .getByText(m.candidate_statement_identity({ id: book.candidate }), { exact: true })
-      .waitFor();
+    await currentSelection.getByText(m.candidate_statement_identity({ id: book.candidate }), { exact: true }).waitFor();
     await currentSelection.locator(`a[href="${sourceReference}"]`).waitFor({ state: 'visible' });
 
     await concurrentReview.getByRole('button', { name: m.candidate_adopt(), exact: true }).last().click();

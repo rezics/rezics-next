@@ -40,9 +40,7 @@ export function fixtureCandidateViewerActions(scenario: CandidateScenario = 'rea
     };
   return {
     subject:
-      scenario === 'concealed'
-        ? { state: 'unavailable', reason: 'not-found' }
-        : { state: 'available', actions: [] },
+      scenario === 'concealed' ? { state: 'unavailable', reason: 'not-found' } : { state: 'available', actions: [] },
     context: {
       state: 'available',
       actions:
@@ -181,8 +179,8 @@ export function candidateFixture(
       const actionComponents = fixtureCandidateViewerActions(scenario);
       return json({
         resources: resources.map((resource) => {
-            if (scenario === 'concealed' && resource.type === 'semantic.subject')
-              return { ...resource, error: 'not_found' };
+          if (scenario === 'concealed' && resource.type === 'semantic.subject')
+            return { ...resource, error: 'not_found' };
           const component = resource.type === 'semantic.context' ? actionComponents.context : actionComponents.subject;
           return { ...resource, viewerActions: component.state === 'available' ? component.actions : [] };
         }),
@@ -281,8 +279,7 @@ export function candidateFixture(
         revision: 4,
       };
       if (key) receipts.set(key, result);
-      if (scenario === 'malformed-ack')
-        return json({ ...result, adoption: { ...result.adoption, mode: 'suppress' } });
+      if (scenario === 'malformed-ack') return json({ ...result, adoption: { ...result.adoption, mode: 'suppress' } });
       return json(result);
     }
     return json({ code: 'not_found' }, 404);

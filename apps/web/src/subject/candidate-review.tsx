@@ -755,7 +755,9 @@ function CandidateReviewLive({
                           data-candidate-panel="current"
                         >
                           <ContentItemHeading level={4} className="text-sm font-semibold">
-                          {isContextReview ? m.context_selected_values({}, options) : m.candidate_current({}, options)}
+                            {isContextReview
+                              ? m.context_selected_values({}, options)
+                              : m.candidate_current({}, options)}
                           </ContentItemHeading>
                           {!publicRead ? (
                             <p>{m.candidate_public_unconfirmed({}, options)}</p>
@@ -772,7 +774,9 @@ function CandidateReviewLive({
                               </div>
                             ))
                           ) : (
-                            <p>{isContextReview ? m.context_no_values({}, options) : m.candidate_no_current({}, options)}</p>
+                            <p>
+                              {isContextReview ? m.context_no_values({}, options) : m.candidate_no_current({}, options)}
+                            </p>
                           )}
                         </ContentItemFrame>
                         <ContentItemFrame
@@ -861,7 +865,9 @@ function CandidateReviewLive({
                   )}
                   {draft && (
                     <section
-                      aria-label={isContextReview ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)}
+                      aria-label={
+                        isContextReview ? m.context_draft({}, options) : m.candidate_selection_draft({}, options)
+                      }
                       className="min-w-0"
                     >
                       <ContentItemFrame
