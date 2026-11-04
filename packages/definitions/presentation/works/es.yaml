@@ -1,4 +1,28 @@
 types:
   schema:MusicAlbum: álbum
+  schema:Place: lugar
+  schema:MusicVenue: sala de conciertos
+  schema:AdministrativeArea: área administrativa
+  schema:Event: acontecimiento
+  schema:MusicEvent: acontecimiento musical
+  wd:Q34379: instrumento musical
+properties:
+  schema:containedInPlace: contenido en
+  schema:location: ubicación
+  wdt:P1303: instrumento
+inverseProperties:
+  schema:containedInPlace: Contiene
+  schema:location: Acontecimientos aquí
+  wdt:P1303: Usado en
 typeDescriptions:
   schema:MusicAlbum: 'Un álbum musical como obra que agrupa pistas, independiente de un ejemplar o edición distribuida concreta.'
+  schema:Place: 'Un lugar físico, como un edificio o una localidad; no es un acontecimiento, una grabación ni un organizador.'
+  schema:MusicVenue: 'Un lugar cuya identidad es una sala de conciertos, distinto de un lugar genérico y de cualquier acontecimiento que se celebre allí.'
+  schema:AdministrativeArea: 'Una ciudad, región o país; contiene lugares y no es en sí un acontecimiento ni una grabación.'
+  schema:Event: 'Una ocurrencia con sus propias horas de inicio y fin, en un lugar; no es ese lugar, una grabación ni un organizador.'
+  schema:MusicEvent: 'Un concierto, recital o festival, distinto de su recinto, de una grabación y de un álbum.'
+  wd:Q34379: 'Un instrumento musical como identidad propia; el uso acreditado pertenece al acontecimiento, no a una cadena de nombre.'
+propertyDescriptions:
+  schema:containedInPlace: 'El lugar o área administrativa que contiene este lugar; no recorrer ancestros ni inventar coordenadas.'
+  schema:location: 'El lugar donde ocurre este acontecimiento. El destino es un lugar o recinto, no otro acontecimiento, grabación u organizador.'
+  wdt:P1303: 'El instrumento musical usado en este acontecimiento, con la identidad de instrumento; no inferirlo del nombre de un intérprete.'

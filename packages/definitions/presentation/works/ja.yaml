@@ -1,4 +1,28 @@
 types:
   schema:MusicAlbum: アルバム
+  schema:Place: 場所
+  schema:MusicVenue: 音楽会場
+  schema:AdministrativeArea: 行政区域
+  schema:Event: イベント
+  schema:MusicEvent: 音楽イベント
+  wd:Q34379: 楽器
+properties:
+  schema:containedInPlace: 所属
+  schema:location: 開催地
+  wdt:P1303: 楽器
+inverseProperties:
+  schema:containedInPlace: 含む場所
+  schema:location: ここでのイベント
+  wdt:P1303: 使用された場
 typeDescriptions:
   schema:MusicAlbum: '楽曲をまとめた音楽アルバムの作品。特定の所蔵物や頒布版とは独立した対象です。'
+  schema:Place: '建物や地域などの物理的な場所です。イベント、録音、主催者ではありません。'
+  schema:MusicVenue: '音楽会場としての場所です。一般の場所や、そこで行われるイベントとは別です。'
+  schema:AdministrativeArea: '市・地域・国などの行政区域です。場所を含み、それ自体はイベントでも録音でもありません。'
+  schema:Event: '開始と終了の時刻を持つ出来事です。開催地、録音、主催者とは別です。'
+  schema:MusicEvent: '演奏会やフェスティバルなどの音楽の出来事です。会場、録音、アルバムとは別です。'
+  wd:Q34379: '楽器そのものの対象です。使用のクレジットはイベントに置き、名前の文字列から推測しません。'
+propertyDescriptions:
+  schema:containedInPlace: 'この場所を含む場所または行政区域です。祖先をたどったり座標を作ったりしません。'
+  schema:location: 'このイベントが行われる場所です。対象は場所や会場であり、別のイベント、録音、主催者ではありません。'
+  wdt:P1303: 'このイベントで使われた楽器で、楽器の対象を指します。演奏者名から推測しません。'

@@ -1,4 +1,28 @@
 types:
   schema:MusicAlbum: 앨범
+  schema:Place: 장소
+  schema:MusicVenue: 공연장
+  schema:AdministrativeArea: 행정구역
+  schema:Event: 행사
+  schema:MusicEvent: 음악 행사
+  wd:Q34379: 악기
+properties:
+  schema:containedInPlace: 소속
+  schema:location: 장소
+  wdt:P1303: 악기
+inverseProperties:
+  schema:containedInPlace: 포함하는 장소
+  schema:location: 여기의 행사
+  wdt:P1303: 사용된 곳
 typeDescriptions:
   schema:MusicAlbum: '여러 곡을 묶은 음악 앨범 작품입니다. 특정 소장본이나 유통 판본과는 독립적입니다.'
+  schema:Place: '건물이나 지역 같은 실제 장소입니다. 행사, 녹음, 주최자가 아닙니다.'
+  schema:MusicVenue: '공연장으로 인정된 장소입니다. 일반 장소나 그곳에서 열리는 행사와는 다릅니다.'
+  schema:AdministrativeArea: '시·지역·국가 같은 행정구역입니다. 장소를 포함하며 그 자체는 행사나 녹음이 아닙니다.'
+  schema:Event: '시작과 종료 시각을 가진 발생입니다. 그 장소, 녹음, 주최자와는 별개입니다.'
+  schema:MusicEvent: '공연이나 페스티벌 같은 음악 행사입니다. 공연장, 녹음, 앨범과는 별개입니다.'
+  wd:Q34379: '악기 자체의 대상입니다. 사용 크레딧은 행사에 두고 이름 문자열에서 추론하지 않습니다.'
+propertyDescriptions:
+  schema:containedInPlace: '이 장소를 포함하는 장소나 행정구역입니다. 조상을 따라가거나 좌표를 만들지 않습니다.'
+  schema:location: '이 행사가 열리는 장소입니다. 대상은 장소나 공연장이지, 다른 행사·녹음·주최자가 아닙니다.'
+  wdt:P1303: '이 행사에서 사용된 악기로, 악기 대상을 가리킵니다. 연주자 이름에서 추론하지 않습니다.'

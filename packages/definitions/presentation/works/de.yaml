@@ -1,4 +1,28 @@
 types:
   schema:MusicAlbum: Album
+  schema:Place: Ort
+  schema:MusicVenue: Musikspielstätte
+  schema:AdministrativeArea: Verwaltungsgebiet
+  schema:Event: Ereignis
+  schema:MusicEvent: Musikereignis
+  wd:Q34379: Musikinstrument
+properties:
+  schema:containedInPlace: enthalten in
+  schema:location: Ort
+  wdt:P1303: Instrument
+inverseProperties:
+  schema:containedInPlace: Enthält
+  schema:location: Ereignisse hier
+  wdt:P1303: Verwendet bei
 typeDescriptions:
   schema:MusicAlbum: 'Ein Musikalbum als Werk mit zusammengehörigen Titeln, unabhängig von einem bestimmten Exemplar oder einer vertriebenen Ausgabe.'
+  schema:Place: 'Ein physischer Ort wie ein Gebäude oder eine Ortschaft; kein Ereignis, keine Aufnahme und kein Veranstalter.'
+  schema:MusicVenue: 'Ein Ort, dessen Identität eine Musikspielstätte ist, getrennt von einem allgemeinen Ort und von dort stattfindenden Ereignissen.'
+  schema:AdministrativeArea: 'Eine Stadt, Region oder ein Land; sie enthält Orte und ist selbst kein Ereignis und keine Aufnahme.'
+  schema:Event: 'Ein Vorgang mit eigenen Anfangs- und Endzeiten an einem Ort; nicht dieser Ort, keine Aufnahme und kein Veranstalter.'
+  schema:MusicEvent: 'Ein Konzert, Recital oder Festival, getrennt von seiner Spielstätte, einer Aufnahme und einem Album.'
+  wd:Q34379: 'Ein Musikinstrument als eigene Identität; die zugeschriebene Verwendung gehört zum Ereignis, nicht zu einem Namensstring.'
+propertyDescriptions:
+  schema:containedInPlace: 'Der übergeordnete Ort oder das Verwaltungsgebiet dieses Orts; keine Ahnenschaft und keine Koordinaten erfinden.'
+  schema:location: 'Der Ort, an dem dieses Ereignis stattfindet. Ziel ist ein Ort oder eine Spielstätte, nicht ein anderes Ereignis, eine Aufnahme oder ein Veranstalter.'
+  wdt:P1303: 'Das bei diesem Ereignis verwendete Musikinstrument als Instrumentidentität; nicht aus einem Interpretinnennamen ableiten.'

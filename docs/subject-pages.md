@@ -164,12 +164,17 @@ bounded Relations view.
 
 ## Read a music place, area, event or instrument
 
-The ordinary Subject overview recognizes released `schema:Place`, `schema:AdministrativeArea`, `schema:Event` and
-`schema:MusicInstrument` identities (including their admitted descendants). It names the exact released Type and reads
-the finite forward and inverse relationship streams admitted for that Type. Related event, area, participant and
-instrument destinations retain their native direction, qualifiers, references, partial dates and exact readable
-identity. Hidden summaries do not link; coordinate strings do not become locations. Unsupported Types have a named
-unsupported state while generic Subject facts and correction access remain available.
+The ordinary Subject overview recognizes released `schema:Place`, `schema:MusicVenue`, `schema:AdministrativeArea`,
+`schema:Event`, `schema:MusicEvent` and `wd:Q34379` identities (including their admitted descendants). It names the
+exact released Type and reads the finite forward and inverse relationship streams admitted for that Type. Related
+event, area, participant and instrument destinations retain their native direction, qualifiers, references, partial
+dates and exact readable identity. Hidden summaries do not link; coordinate strings do not become locations.
+Unsupported Types, including a historical pin that still names `schema:MusicInstrument`, have a named unsupported
+state while generic Subject facts and correction access remain available.
+
+Decision: Event timing belongs on the event, location on the place, and instrument use on the exact event credit
+targeting `wd:Q34379`; Place, MusicVenue, AdministrativeArea, Event and MusicEvent are Thing grains in `works.yaml`,
+not CreativeWork, and no `schema:MusicInstrument`, coordinates or geographic engine are published.
 
 Decision: related Subjects open in a same-locale new tab; closing it returns keyboard focus to the source relation link.
 
@@ -1824,8 +1829,8 @@ Selecting a node issues at most two explicit native reads (the selected subject,
 companion page). Correction uses the existing facts, relation and authored-document editors and returns to the same
 bounded exploration address.
 
-Decision: unreleased `schema:Quotation` and place/event/area/instrument types stay named unavailable until Semantic
-admits them; unknown source roles stay retained evidence.
+Decision: unreleased `schema:Quotation` stays named unavailable until Semantic admits it; place, venue, area, event
+and `wd:Q34379` instrument types are admitted in the bundled catalogue. Unknown source roles stay retained evidence.
 
 ### Cost
 

@@ -1,4 +1,28 @@
 types:
   schema:MusicAlbum: album
+  schema:Place: lieu
+  schema:MusicVenue: salle de concert
+  schema:AdministrativeArea: circonscription
+  schema:Event: événement
+  schema:MusicEvent: événement musical
+  wd:Q34379: instrument de musique
+properties:
+  schema:containedInPlace: contenu dans
+  schema:location: lieu
+  wdt:P1303: instrument
+inverseProperties:
+  schema:containedInPlace: Contient
+  schema:location: Événements ici
+  wdt:P1303: Utilisé à
 typeDescriptions:
   schema:MusicAlbum: 'Un album musical en tant qu’œuvre regroupant des pistes, indépendant d’un exemplaire ou d’une édition distribuée donnée.'
+  schema:Place: 'Un lieu physique, tel un bâtiment ou une localité ; ce n’est ni un événement, ni un enregistrement, ni un organisateur.'
+  schema:MusicVenue: 'Un lieu dont l’identité est une salle de concert, distinct d’un lieu générique et de tout événement qui s’y tient.'
+  schema:AdministrativeArea: 'Une ville, une région ou un pays ; elle contient des lieux et n’est elle-même ni un événement ni un enregistrement.'
+  schema:Event: 'Une occurrence avec ses propres heures de début et de fin, tenue dans un lieu ; ce n’est pas ce lieu, un enregistrement ou un organisateur.'
+  schema:MusicEvent: 'Un concert, un récital ou un festival, distinct de sa salle, d’un enregistrement et d’un album.'
+  wd:Q34379: 'Un instrument de musique comme identité propre ; l’usage crédité appartient à l’événement, non à une chaîne de nom.'
+propertyDescriptions:
+  schema:containedInPlace: 'Le lieu ou la circonscription qui contient ce lieu ; ne pas parcourir l’ascendance ni inventer de coordonnées.'
+  schema:location: 'Le lieu où se tient cet événement. La cible est un lieu ou une salle, non un autre événement, un enregistrement ou un organisateur.'
+  wdt:P1303: 'L’instrument de musique utilisé à cet événement, en visant l’identité d’instrument ; ne pas l’inférer du nom d’un interprète.'

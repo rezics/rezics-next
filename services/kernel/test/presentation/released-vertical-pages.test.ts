@@ -32,6 +32,15 @@ const launch = {
   series: ['wd:Q7725310', 'schema:BookSeries'],
   character: ['wd:Q95074'],
   agents: ['schema:Person', 'schema:Organization', 'schema:SoftwareApplication'],
+  works: [
+    'schema:MusicAlbum',
+    'schema:Place',
+    'schema:MusicVenue',
+    'schema:AdministrativeArea',
+    'schema:Event',
+    'schema:MusicEvent',
+    'wd:Q34379',
+  ],
 };
 const sources = bundledSources();
 const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
@@ -62,7 +71,19 @@ function selection(type: string): Scope {
   if (['schema:Person', 'schema:Organization', 'wd:Q95074'].includes(type)) return { scope: 'type', key: type };
   if (['schema:TVSeries', 'schema:ComicSeries', 'schema:BookSeries', 'wd:Q7725310'].includes(type))
     return { scope: 'base', key: 'schema:CreativeWorkSeries' };
-  if (['schema:Recipe', 'wd:Q20631656', 'schema:SoftwareApplication'].includes(type))
+  if (
+    [
+      'schema:Recipe',
+      'wd:Q20631656',
+      'schema:SoftwareApplication',
+      'schema:Place',
+      'schema:MusicVenue',
+      'schema:AdministrativeArea',
+      'schema:Event',
+      'schema:MusicEvent',
+      'wd:Q34379',
+    ].includes(type)
+  )
     return { scope: 'generic', key: null };
   return { scope: 'base', key: 'schema:CreativeWork' };
 }

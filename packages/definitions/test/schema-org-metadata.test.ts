@@ -28,6 +28,12 @@ const reviewedTypes = {
   'skos:ConceptScheme': 'https://schema.org/DefinedTermSet',
   'schema:Recipe': 'https://schema.org/Recipe',
   'schema:MusicAlbum': 'https://schema.org/MusicAlbum',
+  'schema:Place': 'https://schema.org/Place',
+  'schema:MusicVenue': 'https://schema.org/MusicVenue',
+  'schema:AdministrativeArea': 'https://schema.org/AdministrativeArea',
+  'schema:Event': 'https://schema.org/Event',
+  'schema:MusicEvent': 'https://schema.org/MusicEvent',
+  'wd:Q34379': 'https://schema.org/Thing',
 } as const;
 
 type NativeIdentity = readonly [iri: string, bases: readonly string[], mappings: readonly string[]];
@@ -86,6 +92,16 @@ const nativeIdentities: Record<string, NativeIdentity> = {
     [],
   ],
   'schema:MusicAlbum': ['http://schema.org/MusicAlbum', ['schema:CreativeWork', 'schema:Thing'], ['wd:Q482994']],
+  'schema:Place': ['http://schema.org/Place', ['schema:Thing'], ['wd:Q2221906']],
+  'schema:MusicVenue': ['http://schema.org/MusicVenue', ['schema:Place', 'schema:Thing'], ['wd:Q18674739']],
+  'schema:AdministrativeArea': [
+    'http://schema.org/AdministrativeArea',
+    ['schema:Place', 'schema:Thing'],
+    ['wd:Q56061'],
+  ],
+  'schema:Event': ['http://schema.org/Event', ['schema:Thing'], ['wd:Q1656682']],
+  'schema:MusicEvent': ['http://schema.org/MusicEvent', ['schema:Event', 'schema:Thing'], []],
+  'wd:Q34379': ['http://www.wikidata.org/entity/Q34379', ['schema:Thing'], []],
 };
 
 test('every bundled concrete type declares its reviewed schema.org serialization type', () => {

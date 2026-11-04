@@ -9,6 +9,7 @@ export const musicContextRequested = {
   place: ['schema:Place', 'schema:MusicVenue'] as const,
   event: ['schema:Event', 'schema:MusicEvent'] as const,
   area: ['schema:AdministrativeArea'] as const,
+  // Published identity is wd:Q34379; schema:MusicInstrument stays a historical requested pin only.
   instrument: ['schema:MusicInstrument', 'wd:Q34379'] as const,
 } as const;
 

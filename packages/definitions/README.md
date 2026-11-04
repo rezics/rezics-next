@@ -393,6 +393,12 @@ identify classification resources rather than works.
 | `wd:Q7725310`              | 系列     | 系列     | シリーズ           |
 | `wd:Q689445`               | 视觉小说 | 視覺小說 | ビジュアルノベル   |
 | `schema:MusicAlbum`        | 音乐专辑 | 音樂專輯 | アルバム           |
+| `schema:Place`             | 地点     | 地點     | 場所               |
+| `schema:MusicVenue`        | 音乐场地 | 音樂場地 | 音楽会場           |
+| `schema:AdministrativeArea`| 行政区   | 行政區   | 行政区域           |
+| `schema:Event`             | 活动     | 活動     | イベント           |
+| `schema:MusicEvent`        | 音乐活动 | 音樂活動 | 音楽イベント       |
+| `wd:Q34379`                | 乐器     | 樂器     | 楽器               |
 
 Each changed label below was written by hand. References establish the usage of
 the word in its language; choosing it for a catalogue type is an editorial decision
@@ -499,7 +505,7 @@ Run `bun run --cwd packages/definitions check` from the repository root.
 ### Schema.org subject types
 
 For each concrete catalogue profile, select the narrowest Schema.org class
-that is true of its entire admitted scope. The following 24 mappings are the
+that is true of its entire admitted scope. The following 31 mappings are the
 reviewed choices for subject JSON-LD; the source research and supporting
 rationales are in [the Schema.org mapping report](../../docs/research/catalogue-schema-org-mapping.md).
 The corresponding `annotations.schema_org_type` values are a separate profile
@@ -534,6 +540,12 @@ mappings or property semantics.
 | `wd:Q2095` / Food                                  | `https://schema.org/Thing`               |
 | `schema:Recipe` / Recipe                           | `https://schema.org/Recipe`              |
 | `schema:MusicAlbum` / MusicAlbum                   | `https://schema.org/MusicAlbum`          |
+| `schema:Place` / Place                             | `https://schema.org/Place`               |
+| `schema:MusicVenue` / MusicVenue                   | `https://schema.org/MusicVenue`          |
+| `schema:AdministrativeArea` / AdministrativeArea   | `https://schema.org/AdministrativeArea`  |
+| `schema:Event` / Event                             | `https://schema.org/Event`               |
+| `schema:MusicEvent` / MusicEvent                   | `https://schema.org/MusicEvent`          |
+| `wd:Q34379` / MusicalInstrument                    | `https://schema.org/Thing`               |
 
 Book work and its book-specific edition both use `Book` while keeping distinct
 native identities. Broad fictional characters and Food use `Thing`; broad game
