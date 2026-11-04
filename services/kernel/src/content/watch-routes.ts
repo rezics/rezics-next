@@ -5,6 +5,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import type { editionRoutes } from './edition-routes.ts';
 import { readBoardWatchState, setBoardWatch } from './board-watch.ts';
+import { readBoardWatchPage } from './board-watch-page.ts';
 import { listWatches, removeWatch } from './watch-management.ts';
 import { ContentNotFoundError } from './reads.ts';
 import { WatchManagementKindSchema, WatchManagementPageSchema, strictContentSchema } from './schemas.ts';
@@ -13,6 +14,14 @@ import type { WatchDependencies } from './watch-authority.ts';
 const closed = { additionalProperties: false };
 const revision = t.Integer({ minimum: 0, maximum: 2147483646 });
 const state = t.Object({ watching: t.Boolean(), revision }, closed);
+const advice = t.Union([t.Literal('available'), t.Literal('denied'), t.Literal('not-applicable')]);
+const page = t.Object({
+  boardId: t.String(),
+  accountId: t.String(),
+  viewer: t.Object({ state: t.Literal('current'), watching: t.Boolean(), revision }, closed),
+  actions: t.Object({ watch: advice, unwatch: advice }, closed),
+  source: t.Object({ epoch: t.Integer(), position: t.String() }, closed),
+}, closed);
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const failures = {
@@ -43,6 +52,29 @@ const writeDetail = {
 /** Native Content methods consumed by board controls and Settings. No alternate board list exists. */
 export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDependencies) {
   return app
+    .get(
+      '/v1/boards/:id/watch/page',
+      {
+        params: t.Object({ id: t.String() }, closed),
+        response: { 200: withHeaders(page, sessionHeader), ...failures },
+        detail: { ...readDetail, operationId: 'board.watch_page' },
+      },
+      async ({ params: { id }, actor, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        try {
+          const result = await admission.run('normal', job, () => readBoardWatchPage(deps, actor, id, job.deadline));
+          session.record({
+            partition: result.anchor.partition.partitionNo,
+            epoch: result.anchor.epoch,
+            position: result.anchor.position,
+          });
+          return result.value;
+        } catch (error) {
+          if (error instanceof ContentNotFoundError) throw new ProblemError('not_found');
+          throw error;
+        }
+      },
+    )
     .get(
       '/v1/boards/:id/watch',
       {
