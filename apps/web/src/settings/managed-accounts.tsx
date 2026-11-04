@@ -64,7 +64,7 @@ function Failure({
   busy,
   scope,
   headingId,
-  retryAt,
+  waiting,
 }: {
   failure: ManagedAccountsFailure;
   retry: () => void;
@@ -72,16 +72,11 @@ function Failure({
   busy: boolean;
   scope: 'inventory' | ManagedFeed;
   headingId: string;
-  retryAt?: number | undefined;
+  waiting: boolean;
 }) {
   const id = useId();
   const descriptionId = `${id}-description`;
   const waitId = `${id}-wait`;
-  const retryMetadata = useMemo(
-    () => ({ status: failure.status, ...(failure.retryAfter ? { retryAfter: failure.retryAfter } : {}) }),
-    [failure],
-  );
-  const waiting = usePreferenceRetry(retryMetadata, retryAt);
   return (
     <Alert
       variant="destructive"
@@ -92,10 +87,22 @@ function Failure({
       data-retry-after={failure.retryAfter}
     >
       <AlertTitle className="min-w-0">
-        {failure.kind === 'denied' ? m.managed_denied_title() : m.managed_unavailable_title()}
+        {scope === 'organizations'
+          ? m.managed_organizations_title()
+          : scope === 'responsibilities'
+            ? m.managed_operated_title()
+            : failure.kind === 'denied'
+              ? m.managed_denied_title()
+              : m.managed_unavailable_title()}
       </AlertTitle>
       <AlertDescription className="min-w-0 space-y-3">
-        <p id={descriptionId}>{failure.kind === 'denied' ? m.managed_denied_text() : m.managed_unavailable_text()}</p>
+        <p id={descriptionId}>
+          {failure.kind === 'denied'
+            ? m.managed_denied_text()
+            : scope === 'inventory'
+              ? m.managed_unavailable_text()
+              : m.settings_managed_page_failed()}
+        </p>
         {waiting ? (
           <p id={waitId} role="status" aria-labelledby={headingId}>
             {scope === 'inventory'
@@ -141,14 +148,17 @@ function FeedActions({
   retry,
   firstPage,
   headingId,
+  waiting,
 }: {
-  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable' | 'retryAt'>;
+  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable'>;
   scope: ManagedFeed;
   preparing?: boolean;
   retry: () => void;
   firstPage: () => void;
   headingId: string;
+  waiting: boolean;
 }) {
+  const waitId = `${headingId}-wait`;
   return (
     <>
       {feed.failure ? (
@@ -159,11 +169,18 @@ function FeedActions({
           busy={feed.busy}
           scope={scope}
           headingId={headingId}
-          retryAt={feed.retryAt}
+          waiting={waiting}
         />
       ) : null}
       {!feed.failure && (feed.next !== null || preparing) ? (
         <div role="group" aria-labelledby={headingId}>
+          {waiting ? (
+            <p id={waitId} role="status" aria-labelledby={headingId}>
+              {scope === 'organizations'
+                ? m.settings_managed_organizations_retry_wait()
+                : m.settings_managed_responsibilities_retry_wait()}
+            </p>
+          ) : null}
           <div
             role={feed.busy && !preparing ? 'status' : undefined}
             aria-labelledby={feed.busy && !preparing ? headingId : undefined}
@@ -172,8 +189,8 @@ function FeedActions({
               type="button"
               variant="outline"
               className={recoveryButtonClassName}
-              aria-describedby={headingId}
-              disabled={feed.busy}
+              aria-describedby={`${headingId}${waiting ? ` ${waitId}` : ''}`}
+              disabled={feed.busy || waiting}
               onClick={retry}
             >
               {feed.busy
@@ -208,6 +225,9 @@ export function ManagedAccountsView({
   const organizationsHeadingId = `${id}-organizations`;
   const responsibilitiesHeadingId = `${id}-responsibilities`;
   const { account, organizations, responsibilities } = snapshot;
+  // One presentation timer only re-enables deliberate directory controls; it never dispatches a read.
+  const waiting = usePreferenceRetry(undefined, snapshot.retryAt ?? 0);
+  const inventoryWaitId = `${id}-inventory-wait`;
   const previous = useRef(snapshot);
   useLayoutEffect(() => {
     const before = previous.current;
@@ -249,7 +269,7 @@ export function ManagedAccountsView({
               busy={snapshot.loading}
               scope="inventory"
               headingId={viewerHeadingId}
-              retryAt={snapshot.retryAt}
+              waiting={waiting}
             />
           ) : null}
           {account ? (
@@ -258,7 +278,24 @@ export function ManagedAccountsView({
             </ul>
           ) : null}
           {account ? (
-            <p className="mt-3 text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
+            <div className="mt-3 space-y-3">
+              <p className="text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
+              {waiting ? (
+                <p id={inventoryWaitId} role="status" aria-labelledby={viewerHeadingId}>
+                  {m.settings_managed_inventory_retry_wait()}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className={recoveryButtonClassName}
+                aria-describedby={`${viewerHeadingId}${waiting ? ` ${inventoryWaitId}` : ''}`}
+                disabled={snapshot.loading || waiting}
+                onClick={retry}
+              >
+                {m.managed_refresh()}
+              </Button>
+            </div>
           ) : null}
         </CardContent>
       </Card>
@@ -305,6 +342,7 @@ export function ManagedAccountsView({
                 retry={() => more('organizations')}
                 firstPage={() => firstPage('organizations')}
                 headingId={organizationsHeadingId}
+                waiting={waiting}
               />
             </CardContent>
           </Card>
@@ -362,6 +400,7 @@ export function ManagedAccountsView({
                 retry={() => more('responsibilities')}
                 firstPage={() => firstPage('responsibilities')}
                 headingId={responsibilitiesHeadingId}
+                waiting={waiting}
               />
             </CardContent>
           </Card>
