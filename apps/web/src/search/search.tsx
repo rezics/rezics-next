@@ -1356,7 +1356,7 @@ function renderResults(
                 state={data.queryState}
                 locale={locale}
                 labels={{
-                  typeLabels: data.typeLabels,
+                  typeLabels: data.typeLabels ?? {},
                   typeChoices: data.typeChoices,
                   selectedFacetLabels: data.selectedFacetLabels,
                   groups: data.groups,
