@@ -14,6 +14,7 @@ import {
 } from '../scripts/dev-stack.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
+import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
 
 test('development setup gives finite dataset write capacity and preserves explicit deployment budgets', () => {
   const generated = developmentEnv('', 'postgres://127.0.0.1/rezics');
@@ -147,4 +148,22 @@ test('repeated setup leaves identical private configuration untouched for live d
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('parallel local startup has a configured connection allowance while the ordinary default stays strict', () => {
+  const generated = developmentEnv('', 'postgres://127.0.0.1/rezics');
+  const env = Object.fromEntries(
+    generated
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const at = line.indexOf('=');
+        return [line.slice(0, at), line.slice(at + 1)];
+      }),
+  );
+  expect(readPoolAcquireTimeoutMillis(env)).toBe(10000);
+  expect(readPoolAcquireTimeoutMillis({})).toBe(200);
+  expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
+    'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
+  );
 });

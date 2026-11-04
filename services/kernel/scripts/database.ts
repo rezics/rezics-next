@@ -77,6 +77,7 @@ export function developmentEnv(existing: string, url: string): string {
   const defaults: Record<string, string> = {
     KERNEL_RECEIPT_KEYS: `1:${randomBytes(32).toString('base64url')}`,
     KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
+    KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '10000',
     KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify({
       'new-account': { write: { maximum: 100000, seconds: 60 } },
       member: { write: { maximum: 100000, seconds: 60 } },
