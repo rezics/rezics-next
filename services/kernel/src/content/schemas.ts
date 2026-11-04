@@ -1109,6 +1109,7 @@ export const SubjectThreadsQuerySchema = t.Object(
   {
     place: ContentIdSchema,
     kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+    board: t.Optional(ContentIdSchema),
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
     limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1 })),
   },
@@ -1281,6 +1282,131 @@ const SubjectThreadEntrySchema = t.Unsafe<SubjectThreadCardEntry>(
 );
 export const SubjectThreadsResponseSchema = t.Object(
   {
+    entry: t.Union([
+      t.Object(
+        {
+          state: t.Literal('not_selected'),
+          request: t.Object(
+            {
+              subjectId: ContentIdSchema,
+              placeId: ContentIdSchema,
+              kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+              selectedBoardId: t.Optional(ContentIdSchema),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+      ...(['concealed', 'unavailable'] as const).map((state) =>
+        t.Object(
+          {
+            state: t.Literal(state),
+            request: t.Object(
+              {
+                subjectId: ContentIdSchema,
+                placeId: ContentIdSchema,
+                kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+                selectedBoardId: ContentIdSchema,
+              },
+              closed,
+            ),
+          },
+          closed,
+        ),
+      ),
+      t.Object(
+        {
+          state: t.Literal('current'),
+          request: t.Object(
+            {
+              subjectId: ContentIdSchema,
+              placeId: ContentIdSchema,
+              kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+              selectedBoardId: ContentIdSchema,
+            },
+            closed,
+          ),
+          board: BoardViewSchema,
+          actions: t.Object({ createThread: boardAdvice }, closed),
+          observations: t.Object(
+            {
+              subject: t.Object(
+                {
+                  partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                  epoch: t.Integer({ minimum: 1 }),
+                  position: t.String({ pattern: '^[0-9]+$' }),
+                },
+                closed,
+              ),
+              place: t.Union([
+                t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
+                t.Object(
+                  {
+                    kind: t.Literal('realm'),
+                    id: ContentIdSchema,
+                    title: t.String(),
+                    spaceId: ContentIdSchema,
+                    headRevisionId: ContentIdSchema,
+                  },
+                  closed,
+                ),
+              ]),
+              board: t.Object(
+                {
+                  initial: t.Object(
+                    {
+                      partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                      epoch: t.Integer({ minimum: 1 }),
+                      position: t.String({ pattern: '^[0-9]+$' }),
+                    },
+                    closed,
+                  ),
+                  final: t.Object(
+                    {
+                      partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                      epoch: t.Integer({ minimum: 1 }),
+                      position: t.String({ pattern: '^[0-9]+$' }),
+                    },
+                    closed,
+                  ),
+                },
+                closed,
+              ),
+              access: t.Object(
+                {
+                  initial: t.Array(
+                    t.Object(
+                      {
+                        partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                        epoch: t.Integer({ minimum: 1 }),
+                        position: t.String({ pattern: '^[0-9]+$' }),
+                      },
+                      closed,
+                    ),
+                    { maxItems: 1 },
+                  ),
+                  final: t.Array(
+                    t.Object(
+                      {
+                        partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                        epoch: t.Integer({ minimum: 1 }),
+                        position: t.String({ pattern: '^[0-9]+$' }),
+                      },
+                      closed,
+                    ),
+                    { maxItems: 1 },
+                  ),
+                },
+                closed,
+              ),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+    ]),
     threads: t.Array(SubjectThreadEntrySchema, { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
     reactionsAsOf: reactionFreshness,
