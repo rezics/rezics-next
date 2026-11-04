@@ -1059,7 +1059,8 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   }
   if (kind === 'vndb-staff') {
     const names = projectStaffNames(raw, expected);
-    projectEntityLinks(kind, raw, expected, names.normalized);
+    if (own(raw, 'staff_extlinks', '/staff_extlinks') !== undefined || own(raw, 'extlinks', '/extlinks') !== undefined)
+      projectEntityLinks(kind, raw, expected, names.normalized);
     if (Buffer.byteLength(JSON.stringify(names.normalized), 'utf8') > vndbStaffNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     return {
