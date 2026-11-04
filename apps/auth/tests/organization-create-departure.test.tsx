@@ -131,8 +131,8 @@ test('pagehide clears private review before caching and a late approval cannot e
     leave();
     expect(page.host.querySelector('input')).toBeNull();
     expect(page.host.textContent).not.toContain('team-alpha');
-    expect(button(page.host, 'Create organization')).toBeNull();
-    expect(button(page.host, 'Retry this creation')).toBeNull();
+    expect(button(page.host, 'Create organization')).toBeUndefined();
+    expect(button(page.host, 'Retry this creation')).toBeUndefined();
   });
   expect(readPendingAccountOperationStepUp()).toEqual(original);
 

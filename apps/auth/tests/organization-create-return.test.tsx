@@ -82,7 +82,7 @@ for (const storageChange of ['replaced', 'missing', 'malformed'] as const)
   expect(page.host.textContent).toContain('cannot be resumed safely');
   expect(page.host.textContent).not.toContain('team-alpha');
   expect(page.host.textContent).not.toContain('other-team');
-  expect(button(page.host, 'Retry this creation')).toBeNull();
+  expect(button(page.host, 'Retry this creation')).toBeUndefined();
   expect(button(page.host, 'Check current advice')).not.toBeNull();
   if (storageChange === 'replaced')
     expect(readPendingAccountOperationStepUp()).toMatchObject({

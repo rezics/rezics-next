@@ -200,7 +200,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     authority.current = null;
     submitting.current = false;
     setPending(false);
-    setLoadState('loading');
+    setLoadState(initial?.kind === 'signed-out' && reload === 0 ? 'signed-out' : 'loading');
     setAccountId('');
     setNeedsProfile(false);
     setHandle('');
@@ -480,36 +480,6 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       isCurrent,
       onExecutionDispatch: () => {
         if (!isCurrent()) return false;
-        if (
-          !storePendingAccountOperationStepUp({
-            kind: 'organization',
-            accountId,
-            operationKey,
-            operation,
-            submitted: true,
-          })
-        ) {
-          lifetime.current = null;
-          authority.current = null;
-          submitting.current = false;
-          flushSync(() => {
-            setLoadState('failure');
-            setAccountId('');
-            setNeedsProfile(false);
-            setHandle('');
-            setHandleError('');
-            setPending(false);
-            setMessage('');
-            setShowRetry(false);
-            setCreatedHandle('');
-            setCreatedAccountId('');
-            setRecoveryUnavailable(true);
-            setLoadMessage(m.auth_account_operation_failure());
-            recordReturn({ type: 'unresumable' });
-          });
-          return false;
-        }
-        continuation = JSON.stringify(pendingAccountOperationStepUpState());
         executionDispatched = true;
         recordReturn({ type: 'execution' });
         return isCurrent();

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createElement } from 'react';
 import { creationFixture, button, dom, flush, leave, open, session } from './creation-page-fixture';
 import { NewOrganizationPage } from '../src/routes/organizations.new';
 import { storePendingAccountOperationStepUp } from '../src/account-operation-step-up';
@@ -17,7 +18,7 @@ test('return and read Retry make bounded session reads but no approval or execut
   })).toBe(true);
   storePendingOrganizationHandle('private-team');
   const page = await open(
-    <NewOrganizationPage initial={{ kind: 'failure', message: 'Unavailable' }} />,
+    createElement(NewOrganizationPage, { initial: { kind: 'failure', message: 'Unavailable' } }),
     body,
   );
   expect(page.host.textContent).toContain('creation result is still unknown');
