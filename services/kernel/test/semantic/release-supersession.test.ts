@@ -31,6 +31,20 @@ function subject(response: HttpResponse): Subject {
 const relationProperty = 'rezics:releaseSupersedes';
 const relation = (target: string): StatementInput => discoveryStatement(relationProperty, target);
 
+function mappedStatement(admission: NonNullable<ReturnType<typeof bindVndbReleaseSupersession>>): StatementInput {
+  return {
+    property: { id: admission.statement.property.id },
+    value: { type: 'value', content: admission.statement.value.content },
+    qualifiers: [],
+    references: admission.statement.references.map((reference) => ({
+      parts: reference.parts.map((part) => ({
+        property: { id: part.property.id },
+        value: { type: 'value', content: part.value.content },
+      })),
+    })),
+  };
+}
+
 async function context(name: string) {
   const result = body(
     await fixture.request('editor', 'POST', '/v1/contexts', { labels: { en: name } }, discoveryKey()),
@@ -91,11 +105,16 @@ test('native release supersession keeps direction, chronology, Context, source e
   const current = await fixture.createSubject('wd:Q20631656', 'Superseding release');
   const work = await fixture.createSubject('wd:Q689445', 'Represented visual novel work');
   const sourceUrl = 'https://vndb.org/r1001';
-  const original = {
-    ...relation(prior.id),
-    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: sourceUrl } }] }],
-  };
-  await fixture.adopt(current, original);
+  const candidate = bindVndbReleaseSupersession({
+    row: { id: '1001', rid: '1000' },
+    current: { id: current.id, type: 'wd:Q20631656', sourceCode: '1001' },
+    superseded: { id: prior.id, type: 'wd:Q20631656', sourceCode: '1000' },
+    context: GLOBAL_CONTEXT,
+    release: bundledDigest,
+    sourceRecordUrl: sourceUrl,
+  });
+  if (!candidate) throw new Error('Expected a typed VNDB release supersession admission');
+  await fixture.adopt(current, mappedStatement(candidate));
   await fixture.adopt(current, discoveryStatement('wdt:P155', prior.id));
   await fixture.adopt(prior, {
     ...discoveryStatement('schema:datePublished', { time: '+2026-00-00T00:00:00Z', precision: 9 }),
@@ -106,14 +125,6 @@ test('native release supersession keeps direction, chronology, Context, source e
   const selectedB = await context('Release replacement selection B');
   await adoptInContext(current, relation(alternate.id), selectedA);
   await adoptInContext(current, relation(prior.id), selectedB);
-  const candidate = bindVndbReleaseSupersession({
-    row: { id: '1001', rid: '1000' },
-    current: { id: current.id, type: 'wd:Q20631656', sourceCode: '1001' },
-    superseded: { id: prior.id, type: 'wd:Q20631656', sourceCode: '1000' },
-    context: GLOBAL_CONTEXT,
-    release: bundledDigest,
-    sourceRecordUrl: sourceUrl,
-  });
   expect(candidate).toMatchObject({
     subject: current.id,
     property: relationProperty,

@@ -277,8 +277,24 @@ export async function planVndbReleaseFidelity(
   }
   for await (const row of input.rows('vndb', 'releases_supersedes')) {
     const id = String(row.id ?? '');
-    if (!releaseIds.has(id) && !releaseIds.has(String(row.rid ?? ''))) continue;
-    gap('releases_supersedes', row, 'Release-to-release supersession is not representable on the shared follows term');
+    const rid = String(row.rid ?? '');
+    if (!releaseIds.has(id) && !releaseIds.has(rid)) continue;
+    if (!RELEASE_ID.test(id) || !RELEASE_ID.test(rid) || id === rid) {
+      gap('releases_supersedes', row, 'Invalid VNDB release supersession identity');
+      continue;
+    }
+    plan.edges.push({
+      source: 'vndb',
+      alias: crossMediaAliases.vndb,
+      table: 'releases_supersedes',
+      holder: id,
+      target: rid,
+      property: 'rezics:releaseSupersedes',
+      url: vndbRecordUrl(id),
+      membership: 'referenced',
+      record: { id, rid },
+      fields: ['releases_supersedes.id', 'releases_supersedes.rid'],
+    });
   }
   for (const id of vnIds) {
     const row = vns.get(id),
