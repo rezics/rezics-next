@@ -864,3 +864,38 @@ omissions, with no source prose copied into diagnostics. Parsing scans at most 6
 field occurrences, retains at most 24 distinct name values, and emits at most 16
 omission diagnostics. Each field occurrence is staged until its complete scalar
 or bullet-list form is known; malformed or mixed occurrences contribute no names.
+omission diagnostics.
+
+### Bangumi character physical profile
+
+`cross-media-entities@8` parses only `血型`, `身高` and `体重` from the
+[pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
+weights keep explicit kilograms/grams as released exact quantities. The
+original scalar and indexed field path enter normalized source evidence, so an
+unchanged record is stable and a changed or removed field refreshes its source
+digest. Missing units, estimates, ranges, fictional units, mixed prose and
+duplicate fields are field-specific omissions. Blank and explicit unknown
+values remain unknown; a unit-bearing zero remains literal. Birthday and BWH
+remain omitted. Blood type is retained as bounded source evidence but is not
+proposed until a released source-to-current-native Concept binding exists.
+
+The parser caps an infobox at 65,536 UTF-8 bytes, depth 2, 64 fields, 128
+retained scalar code units, 64 quantity characters, 2 quantity facts and 16
+sanitized diagnostics. Overlong values are withheld with byte length and digest;
+they are never truncated into plausible quantities. Quantity admission is
+checked against the compiled Character property, its fixed amount schema and
+its released units before fact emission. Existing identity, names and summary
+rights follow their current paths.
+
+- Touches: selected Bangumi Character profile evidence and at most one height
+  and one weight statement, each cited to its exact character record.
+- Bound: one selected source record, one line-oriented Crt pass within the
+  parser caps above, and the converter's existing bounded command ceiling. The
+  parser does not interpret arbitrary wiki markup or resolve labels as Concepts.
+- Growth check: `tests/bangumi-character-measurements.test.ts` covers exact
+  units, unavailable values, independent removal and source bounds. The native
+  default-seed/publication scenario is
+  `services/kernel/test/imports/bangumi-character-measurements.test.ts` and is
+  deferred to integration.
+
+Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.

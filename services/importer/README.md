@@ -2338,11 +2338,28 @@ The result carries provider and native type bindings, source keys, source and co
 - Bound: work is limited to selected records, the four finite reviewed Bangumi vocabulary identities, exact local candidate IDs and required current subject/property reads. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-publication.test.ts` retains compact plan and journal coverage. `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution and same-state binding recovery. `services/kernel/test/imports/showcase-bangumi-genres.test.ts` covers native adoption, anonymous public read and source-tag removal; its execution remains controller-owned and is not recorded as a local pass.
 
+### Bangumi character physical profile
+
+The default `planCrossMediaSeed` path already selects a character by the
+selected work's `subject-characters` relation and passes that exact `character`
+row to the ordinary `bangumi_cross_media` registration. The conversion adds
+bounded Crt physical evidence on that existing path; the common finite
+publication manifest remains responsible for exact candidate acceptance,
+independent property adoption and the current public read. An acknowledgement
+alone does not make a quantity public. Source attribution and metadata rights
+remain independent of summary permission.
+
+Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
+
+- Touches: at most one height and one weight quantity per selected `character:<id>`, the exact scalar and `/infobox/fields/<n>` evidence, and bounded sanitized diagnostics. Existing names, kind, appearance and summary behavior stay on their current paths.
+- Bound: 65,536 UTF-8 infobox bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 emitted quantity facts and 16 diagnostics. Explicit centimetres/metres and kilograms/grams retain their source units; missing units are never guessed. The existing source journal, publication manifest and command ceiling still apply.
+- Growth check: `packages/conversion/tests/bangumi-character-measurements.test.ts` covers exact unit meaning, unknown and unsupported values, independent removal and the parser bounds. `services/kernel/test/imports/bangumi-character-measurements.test.ts` covers default selected identity, exact citation, proposal versus public adoption, reopen and changed-source suppression under a current facts fence. Kernel execution remains controller-owned and is deferred to integration.
+
 ### Bangumi TVAnime subject names
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
+`cross-media-entities@8` revision while the ordinary caller uses `bangumi@6`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
