@@ -24,7 +24,10 @@ const management = (open: boolean) => ({
 
 test('viewer-filtered OpenAPI remains partial group discovery and malformed discovery cannot hide native management', async () => {
   expect(parseDiscovery(document)).toEqual({ status: 'available', groups: ['collections'] });
-  for (const discovery of [Response.json({ paths: { '/broken': { get: {} } } }), new Response('offline', { status: 503 })]) {
+  for (const discovery of [
+    Response.json({ paths: { '/broken': { get: {} } } }),
+    new Response('offline', { status: 503 }),
+  ]) {
     const calls: string[] = [];
     const client = createKernelClient('https://kernel.example.test', {
       fetch: (async (input, init) => {

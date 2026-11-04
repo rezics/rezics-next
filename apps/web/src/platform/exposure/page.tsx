@@ -44,20 +44,20 @@ function ExposureView({
   onConfirm,
   onCancel,
 }: ViewProps) {
-  const offered = page.status === 'ready' ? (['open', 'close'] as const).filter((action) => page.current.actions[action]) : [];
+  const offered =
+    page.status === 'ready' ? (['open', 'close'] as const).filter((action) => page.current.actions[action]) : [];
   const discovered = page.discovery.status === 'available' ? page.discovery.groups : [];
-  const rows = page.status === 'ready'
-    ? page.current.exposureGroups
-    : discovered.slice(0, 20).map((group) => ({ group, open: undefined, at: undefined }));
+  const rows =
+    page.status === 'ready'
+      ? page.current.exposureGroups
+      : discovered.slice(0, 20).map((group) => ({ group, open: undefined, at: undefined }));
   return (
     <article className="mx-auto w-full max-w-3xl space-y-6 pb-8">
       <header className="space-y-3">
         <PageHeading>{m.exposure_title()}</PageHeading>
         <p className="text-muted-foreground">{m.exposure_intro()}</p>
       </header>
-      {page.status !== 'ready' && (
-        <p role="status">{m.exposure_current_unavailable()}</p>
-      )}
+      {page.status !== 'ready' && <p role="status">{m.exposure_current_unavailable()}</p>}
       <Button variant="outline" disabled={busy} onClick={onReload}>
         {m.exposure_reload()}
       </Button>
@@ -224,7 +224,8 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: Stand
   const intent = operation.intent;
   const outcome = operation.outcome;
   const busy = operation.busy || reading;
-  const offered = page.status === 'ready' ? (['open', 'close'] as const).filter((action) => page.current.actions[action]) : [];
+  const offered =
+    page.status === 'ready' ? (['open', 'close'] as const).filter((action) => page.current.actions[action]) : [];
   const canReview = page.status === 'ready' && Object.values(page.current.actions).some(Boolean);
   const canSend =
     intent && page.status === 'ready' && hasGroup(page, intent.group) && offered.includes(intent.action) ? true : false;
