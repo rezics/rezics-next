@@ -15,6 +15,8 @@ through the existing authenticated server transport, with abort signals and priv
 Decision: Keep browser and server writing as independent sources after every command acknowledgement. Require a
 named body choice before opening the editor, retain the browser copy, and report a later current read separately.
 
+Decision: Open each supplied Subject reference in a labelled new tab at its localized canonical unlabelled address, keeping the exact Subject ID visible so the private selection and both writing sources stay in their original tab.
+
 Decision: Keep the selected revision in the private erase retry intent and use the existing typed DELETE command,
 whose native contract accepts an idempotency key but no revision precondition.
 

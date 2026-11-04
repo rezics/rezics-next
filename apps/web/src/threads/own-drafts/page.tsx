@@ -2,7 +2,10 @@ import { documentText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
+import { localizeHref } from '../../paraglide/runtime.js';
+import { subjectHref } from '../../subject/subject-href';
 import type { SavedWriting } from '../local-writing-draft';
+import { threadHref } from '../thread-href';
 import { OwnDraftEditor } from './editor';
 import {
   admittedOwnDraftAction,
@@ -619,7 +622,10 @@ function BoundOwnDraftsPage({
           <>
             <p className="text-sm text-muted-foreground">
               {kindLabel(selection.entry, locale)} · {documentKindLabel(selection.entry, locale)} ·{' '}
-              <a className="underline" href={`/boards/${selection.entry.board.id}`}>
+              <a
+                className="underline"
+                href={localizeHref(`/boards/${encodeURIComponent(selection.entry.board.id)}`, { locale })}
+              >
                 {selection.entry.board.title ?? m.own_drafts_board_unavailable({}, { locale })}
               </a>
             </p>
@@ -690,8 +696,13 @@ function BoundOwnDraftsPage({
                       <ul className="flex flex-wrap gap-2">
                         {selection.entry.subjectIds.map((id) => (
                           <li key={id}>
-                            <a className="underline" href={`/subjects/${id}`}>
-                              {id}
+                            <a
+                              className="underline"
+                              href={subjectHref({ id, label: '' }, locale).href}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {m.own_drafts_inspect_subject({}, { locale })}: <code>{id}</code>
                             </a>
                           </li>
                         ))}
@@ -895,13 +906,19 @@ function BoundOwnDraftsPage({
               {page.index.rows.map((entry) => (
                 <li key={entry.id} className="min-w-0 rounded-lg border border-border p-4 [overflow-wrap:anywhere]">
                   <h2 className="text-lg font-medium">
-                    <a className="underline" href={`/threads/${entry.threadId}`}>
+                    <a
+                      className="underline"
+                      href={localizeHref(threadHref({ id: entry.threadId, title: entry.title }), { locale })}
+                    >
                       {entry.title ?? m.own_drafts_no_title({}, { locale })}
                     </a>
                   </h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {kindLabel(entry, locale)} · {documentKindLabel(entry, locale)} ·{' '}
-                    <a className="underline" href={`/boards/${entry.board.id}`}>
+                    <a
+                      className="underline"
+                      href={localizeHref(`/boards/${encodeURIComponent(entry.board.id)}`, { locale })}
+                    >
                       {entry.board.title ?? m.own_drafts_board_unavailable({}, { locale })}
                     </a>
                   </p>

@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, type ComponentType } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
+import { subjectHref } from '../subject/subject-href';
 import type { CurrentPost } from '../threads/actions';
 import { OwnDraftsPage } from '../threads/own-drafts/page';
 import type {
@@ -213,6 +214,27 @@ const selectDraft: NonNullable<Story['play']> = async ({ canvasElement, args }) 
 };
 
 export const Selected: Story = { play: selectDraft };
+const inspectSubjectByKeyboard: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
+  const view = within(canvasElement);
+  const inspect = await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) });
+  inspect[0]!.focus();
+  await userEvent.keyboard('{Enter}');
+  const link = await view.findByRole('link', {
+    name: `${m.own_drafts_inspect_subject({}, { locale: args.locale })}: ${subjectId}`,
+  });
+  await expect(link).toHaveAttribute('href', subjectHref({ id: subjectId, label: '' }, args.locale).href);
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noreferrer');
+  link.focus();
+  await userEvent.keyboard('{Enter}');
+  await expect(view.getByRole('article')).toHaveTextContent('The exact selected draft body');
+  await expect(view.getByRole('heading', { level: 1 })).toBeVisible();
+};
+
+export const SelectedJapaneseSubjectKeyboard: Story = {
+  args: { locale: 'ja' },
+  play: inspectSubjectByKeyboard,
+};
 const desktop = [
   (Story: ComponentType) => (
     <div className="w-[1280px] bg-background text-foreground">

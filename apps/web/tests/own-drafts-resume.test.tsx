@@ -2,6 +2,10 @@ import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { fromPlainText } from '@rezics/document';
+import { m } from '../src/paraglide/messages.js';
+import { localizeHref } from '../src/paraglide/runtime.js';
+import { subjectHref } from '../src/subject/subject-href';
+import { threadHref } from '../src/threads/thread-href';
 import {
   readSelectedOwnDraft,
   type OwnDraftReader,
@@ -172,7 +176,9 @@ test('mounted inventory bounds selected reads and retires bodies, advice and lat
 });
 
 test('browser writing stays separate until the person names it as the editor source', async () => {
-  const entry = row();
+  const locale: typeof identity.locale = 'ja';
+  const unknownSubjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000006';
+  const entry = row({ subjectIds: [unknownSubjectId] });
   const native = selected(entry, 'Server-saved body');
   const browser = {
     slot: 0,
@@ -190,17 +196,31 @@ test('browser writing stays separate until the person names it as the editor sou
     },
   };
   const reader: OwnDraftReader = {
-    list: async () => ({ state: 'ready', viewer: { accountId, authnEpoch: 2 }, drafts: [entry], next: null }),
-    resume: async () => native,
+    list: async () => {
+      listReads++;
+      return { state: 'ready', viewer: { accountId, authnEpoch: 2 }, drafts: [entry], next: null };
+    },
+    resume: async () => {
+      selectedReads++;
+      return native;
+    },
   };
+  let listReads = 0;
+  let selectedReads = 0;
+  let localReads = 0;
   const writes: unknown[] = [];
   const fixture = await mountOwnDrafts();
   try {
     await fixture.render({
-      identity,
+      identity: { ...identity, locale },
       active: true,
       reader,
-      localWritingReader: { load: async () => browser },
+      localWritingReader: {
+        load: async () => {
+          localReads++;
+          return browser;
+        },
+      },
       commands: {
         async write(input) {
           writes.push(input);
@@ -214,13 +234,39 @@ test('browser writing stays separate until the person names it as the editor sou
         },
       },
     });
-    await fixture.click('Inspect draft privately');
+    const expectedThreadHref = localizeHref(
+      threadHref({ id: entry.threadId, title: entry.title }),
+      { locale },
+    );
+    const expectedBoardHref = localizeHref(`/boards/${encodeURIComponent(entry.board.id)}`, { locale });
+    const inventoryLinks = [...fixture.host.querySelectorAll('a')];
+    expect(inventoryLinks.find((link) => link.textContent === entry.title)?.getAttribute('href')).toBe(expectedThreadHref);
+    expect(inventoryLinks.find((link) => link.textContent === entry.board.title)?.getAttribute('href')).toBe(
+      expectedBoardHref,
+    );
+    await fixture.click(m.own_drafts_inspect({}, { locale }));
     expect(fixture.host.textContent).toContain('Server-saved body');
     expect(fixture.host.textContent).toContain('Independent browser body');
-    expect(fixture.host.textContent).toContain('Choose which writing to open');
+    expect(fixture.host.textContent).toContain(m.own_drafts_choose_body({}, { locale }));
     expect(writes).toHaveLength(0);
-    await fixture.click('Use browser-saved body in editor');
-    expect(fixture.host.textContent).toContain('Saved in this browser');
+    expect(listReads).toBe(1);
+    expect(selectedReads).toBe(1);
+    expect(localReads).toBe(1);
+    const expectedSubjectHref = subjectHref({ id: unknownSubjectId, label: '' }, locale).href;
+    const subjectLink = [...fixture.host.querySelectorAll('a')].find(
+      (link) => link.getAttribute('href') === expectedSubjectHref,
+    );
+    if (!subjectLink) throw new Error('Missing localized Subject reference');
+    expect(subjectLink.textContent).toContain(m.own_drafts_inspect_subject({}, { locale }));
+    expect(subjectLink.textContent).toContain(unknownSubjectId);
+    expect(subjectLink.target).toBe('_blank');
+    expect(subjectLink.rel).toBe('noreferrer');
+    subjectLink.click();
+    expect(fixture.host.textContent).toContain('Server-saved body');
+    expect(fixture.host.textContent).toContain('Independent browser body');
+    expect([listReads, selectedReads, localReads, writes.length]).toEqual([1, 1, 1, 0]);
+    await fixture.click(m.own_drafts_use_browser({}, { locale }));
+    expect(fixture.host.textContent).toContain(m.own_drafts_browser_source({}, { locale }));
     expect(fixture.host.textContent).toContain('Independent browser body');
     expect(fixture.host.textContent).not.toContain('Server-saved body');
     expect(writes).toHaveLength(0);
