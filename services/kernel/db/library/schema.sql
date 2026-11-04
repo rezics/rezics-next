@@ -1837,6 +1837,7 @@ CREATE TABLE library.bangumi_upload (
     account_id uuid NOT NULL,
     upload_id uuid NOT NULL,
     cancelled boolean DEFAULT false NOT NULL,
+    expires_at timestamp with time zone DEFAULT (clock_timestamp() + '7 days'::interval) NOT NULL,
     CONSTRAINT bangumi_upload_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -6622,6 +6623,13 @@ ALTER TABLE ONLY library.vndb_label_adoption_item
 
 ALTER TABLE ONLY library.vndb_label_adoption
     ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: bangumi_upload_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bangumi_upload_expiry ON library.bangumi_upload USING btree (expires_at, route, account_id, upload_id);
 
 
 --
