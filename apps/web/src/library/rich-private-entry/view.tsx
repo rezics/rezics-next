@@ -73,9 +73,9 @@ function validDraft(draft: AnnotationDraft) {
 }
 
 type PrivateEntryTransport = {
-  read: (input: Parameters<typeof readPrivateEntryForSubject>[0]) => Promise<PrivateEntryReadResult>;
-  annotations: (input: Parameters<typeof savePrivateAnnotations>[0]) => Promise<PrivateEntryCommandResult>;
-  privacy: (input: Parameters<typeof savePrivateSourcePrivacy>[0]) => Promise<SourcePrivacyCommandResult>;
+  read: (input: { data: { subjectId: string } }) => Promise<PrivateEntryReadResult>;
+  annotations: (input: { data: AnnotationCommand }) => Promise<PrivateEntryCommandResult>;
+  privacy: (input: { data: PrivacyCommand }) => Promise<SourcePrivacyCommandResult>;
 };
 const nativeTransport: PrivateEntryTransport = {
   read: readPrivateEntryForSubject,
@@ -96,6 +96,8 @@ type PrivateEntryProps = {
 };
 
 export function RichPrivateEntry(props: PrivateEntryProps) {
+  const client = useQueryClient();
+  const receiver = useMemo(() => crypto.randomUUID(), [client]);
   return (
     <PrivateEntryReview
       key={JSON.stringify([props.subject.id, props.session.subject, props.origin.lifetime, props.returnTo])}

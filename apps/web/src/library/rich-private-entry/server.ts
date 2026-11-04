@@ -195,8 +195,10 @@ export const savePrivateAnnotations = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<PrivateEntryCommandResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const identity = await currentIdentity();
-    if (!identity) return { kind: 'signed-out' };
+    const session = await readSubjectSlotSession(getRequest(), env as Partial<SessionEnv>);
+    if (session.state === 'unavailable') return { kind: 'uncertain' };
+    if (session.state !== 'signed-in' || !session.csrfToken) return { kind: 'signed-out' };
+    const identity = { viewer: session.subject, csrfToken: session.csrfToken, authorization: session.authorization };
     const authorization = await originalAnnotationCredential(getRequest(), env as Partial<SessionEnv>, identity, data);
     if (!authorization) return { kind: 'retired' };
     try {
