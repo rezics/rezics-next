@@ -7,7 +7,19 @@ const readResult = t.Object(
   closed,
 );
 
-const pageViewer = t.Union([
+const catalogueViewer = t.Object(
+  {
+    state: t.Union([t.Literal('anonymous'), t.Literal('account')]),
+    account: t.Optional(t.String()),
+    context: t.String(),
+    actions: t.Object(
+      { statementPropose: t.Union([t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable')]) },
+      closed,
+    ),
+  },
+  closed,
+);
+const quotationViewer = t.Union([
   t.Object({ kind: t.Literal('anonymous') }, closed),
   t.Object({ kind: t.Literal('account') }, closed),
 ]);
@@ -68,22 +80,8 @@ export const PageResponseSchema = t.Object(
         closed,
       ),
     ),
-    viewer: t.Optional(
-      t.Object(
-        {
-          state: t.Union([t.Literal('anonymous'), t.Literal('account')]),
-          account: t.Optional(t.String()),
-          context: t.String(),
-          actions: t.Object(
-            { statementPropose: t.Union([t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable')]) },
-            closed,
-          ),
-        },
-        closed,
-      ),
-    ),
+    viewer: t.Optional(t.Union([catalogueViewer, quotationViewer])),
     reads: t.Record(t.String(), readResult),
-    viewer: t.Optional(pageViewer),
     actions: t.Optional(t.Array(pageAction)),
   },
   closed,

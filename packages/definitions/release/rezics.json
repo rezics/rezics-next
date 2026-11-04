@@ -241,7 +241,10 @@
         "zh-Hant": "媒體物件"
       },
       "mappings": [],
-      "bases": ["schema:CreativeWork", "schema:Thing"],
+      "bases": [
+        "schema:CreativeWork",
+        "schema:Thing"
+      ],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1108,8 +1111,18 @@
         "zh-Hant": "發佈組"
       },
       "mappings": [],
-      "bases": ["schema:Organization", "schema:Thing"],
-      "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
+      "bases": [
+        "schema:Organization",
+        "schema:Thing"
+      ],
+      "properties": [
+        "rezics:penNameOf",
+        "schema:image",
+        "schema:name",
+        "schema:sameAs",
+        "schema:url",
+        "wdt:P3180"
+      ],
       "facets": [],
       "coverRatio": "5:7",
       "listPresentation": {
@@ -2242,7 +2255,9 @@
           "zh-Hant": "包含此檔案的發行版"
         }
       },
-      "targets": ["schema:MediaObject"],
+      "targets": [
+        "schema:MediaObject"
+      ],
       "descriptions": {
         "de": "Eine Katalogdatei, die dieser identifizierten Anime-Veröffentlichung zugeordnet ist; die Verknüpfung macht die Datei nicht zur Veröffentlichung.",
         "en": "A catalogue file associated with this identified anime publication release; the link does not make the file the release.",
@@ -2415,7 +2430,9 @@
           "zh-Hant": "編碼此單集的檔案"
         }
       },
-      "targets": ["schema:Episode"],
+      "targets": [
+        "schema:Episode"
+      ],
       "descriptions": {
         "de": "Die Episode, die diese genaue Katalogdatei enthält; die Beziehung belegt weder Besitz noch einen Gesehen-Status.",
         "en": "The episode encoded by this exact catalogue file; the relation does not establish possession or watched state.",
@@ -4370,7 +4387,9 @@
       "mappings": [],
       "datatype": "string",
       "multivalued": true,
-      "qualifiers": ["rezics:hashAlgorithm"],
+      "qualifiers": [
+        "rezics:hashAlgorithm"
+      ],
       "value": {
         "type": "string",
         "minLength": 1,
@@ -5041,7 +5060,10 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": ["amount", "unit"],
+        "required": [
+          "amount",
+          "unit"
+        ],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -5057,11 +5079,15 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
           },
           "unit": {
-            "enum": ["http://www.wikidata.org/entity/Q8799"]
+            "enum": [
+              "http://www.wikidata.org/entity/Q8799"
+            ]
           }
         }
       },
-      "units": ["http://www.wikidata.org/entity/Q8799"],
+      "units": [
+        "http://www.wikidata.org/entity/Q8799"
+      ],
       "descriptions": {
         "de": "Dateigröße als exakte Dezimalmenge in Byte, entsprechend der Quelle.",
         "en": "File size as a decimal quantity in bytes, preserving the source amount exactly.",
@@ -5936,7 +5962,9 @@
           "zh-Hant": "此發佈組的檔案"
         }
       },
-      "targets": ["rezics:ReleaseGroup"],
+      "targets": [
+        "rezics:ReleaseGroup"
+      ],
       "descriptions": {
         "de": "Die unabhängig lesbare AniDB-Quellgruppe dieser Datei, getrennt von Veröffentlichung und persönlicher Kopie.",
         "en": "The independently readable AniDB source group associated with this file, separate from a publication release and personal copy.",
