@@ -43,7 +43,12 @@ export function AccountDeletionRecovery({
         </p>
       ) : null}
       {refreshing ? <p role="status">{m.auth_account_delete_recovery_refreshing()}</p> : null}
-      <Button type="button" variant="outline" disabled={refreshing || attempt.phase === 'approval' || attempt.phase === 'execution'} onClick={onRefresh}>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={refreshing || attempt.phase === 'approval' || attempt.phase === 'execution'}
+        onClick={onRefresh}
+      >
         {m.auth_account_delete_recovery_refresh()}
       </Button>
     </section>

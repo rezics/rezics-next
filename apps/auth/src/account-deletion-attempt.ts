@@ -114,9 +114,9 @@ export function accountDeletionAttemptMatches(
 ): attempt is AccountDeletionAttempt {
   return Boolean(
     attempt &&
-      attempt.operation.kind === 'delete' &&
-      attempt.operation.accountId === accountId &&
-      attempt.operationKey === operationKey,
+    attempt.operation.kind === 'delete' &&
+    attempt.operation.accountId === accountId &&
+    attempt.operationKey === operationKey,
   );
 }
 

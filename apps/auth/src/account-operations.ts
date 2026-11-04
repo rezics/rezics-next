@@ -62,12 +62,7 @@ export async function loadAccountSession(signal?: AbortSignal): Promise<AccountS
 
 async function post<Body>(path: string, body: unknown, isCurrent?: () => boolean): Promise<AuthPostResult<Body>> {
   const first = await authPost<Body>(path, body);
-  if (
-    !first.ok &&
-    first.status === 503 &&
-    first.code === 'unavailable' &&
-    (!isCurrent || isCurrent())
-  )
+  if (!first.ok && first.status === 503 && first.code === 'unavailable' && (!isCurrent || isCurrent()))
     return authPost<Body>(path, body);
   return first;
 }
@@ -113,8 +108,7 @@ export async function runAccountOperation(
     operation,
     reference: approved.body.reference,
   };
-  if (browser?.onExecutionDispatch && !browser.onExecutionDispatch())
-    return { ok: false, reason: 'failure' };
+  if (browser?.onExecutionDispatch && !browser.onExecutionDispatch()) return { ok: false, reason: 'failure' };
   if (browser && !browser.isCurrent()) return { ok: false, reason: 'failure' };
   // Keep the same reference/body/key for the existing unavailable retry. A timeout
   // ends waiting with an unknown outcome; recovery must remain explicit.

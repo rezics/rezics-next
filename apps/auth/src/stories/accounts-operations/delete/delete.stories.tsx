@@ -20,12 +20,16 @@ const initial: AccountDeletionPage = {
   action: 'available',
   policy: 'personal-deletion',
 };
-type DeletionMode = 'success' | 'refused' | 'unknown' | 'unavailable' | 'approval-pending' | 'execution-pending' | 'unknown-then-refused';
+type DeletionMode =
+  | 'success'
+  | 'refused'
+  | 'unknown'
+  | 'unavailable'
+  | 'approval-pending'
+  | 'execution-pending'
+  | 'unknown-then-refused';
 const page = (mode: DeletionMode = 'success', returning = false, submitted = false) => (
-  <AuthStory
-    mode={mode}
-    {...(returning ? { returning: 'delete' as const, returningSubmitted: submitted } : {})}
-  >
+  <AuthStory mode={mode} {...(returning ? { returning: 'delete' as const, returningSubmitted: submitted } : {})}>
     <DeleteAccountContent
       privacyContact="mailto:privacy@example.test"
       initial={initial}
@@ -102,9 +106,10 @@ export const UnknownThenRefused = {
       return control && !control.disabled ? control : null;
     });
     retry.click();
-    await waitFor(() =>
-      canvasElement.textContent?.includes(m.auth_account_delete_denied()) &&
-      canvasElement.querySelector('[data-account-deletion-recovery="unknown"]'),
+    await waitFor(
+      () =>
+        canvasElement.textContent?.includes(m.auth_account_delete_denied()) &&
+        canvasElement.querySelector('[data-account-deletion-recovery="unknown"]'),
     );
   },
 };

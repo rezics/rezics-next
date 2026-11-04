@@ -178,7 +178,7 @@ export function DeleteAccountContent({
   };
   const recoveryVisible = Boolean(
     attempt &&
-      (attempt.uncertain || attempt.phase === 'approval' || attempt.phase === 'execution' || requiresAdviceRefresh),
+    (attempt.uncertain || attempt.phase === 'approval' || attempt.phase === 'execution' || requiresAdviceRefresh),
   );
   const recoveryPanel = () => (
     <AccountDeletionRecovery
@@ -417,7 +417,8 @@ export function DeleteAccountContent({
       return;
     }
     let continuation = JSON.stringify(pendingState);
-    const submittedHint = retainedAttempt?.submitted ?? Boolean(pendingOperation && pendingOperation.submitted !== false);
+    const submittedHint =
+      retainedAttempt?.submitted ?? Boolean(pendingOperation && pendingOperation.submitted !== false);
     const baseAttempt = retainedAttempt ?? createAccountDeletionAttempt(accountId, operationKey, submittedHint);
     const started = beginAccountDeletionAttempt(baseAttempt, generation);
     const runId = started.runId;
@@ -446,14 +447,9 @@ export function DeleteAccountContent({
     const onExecutionDispatch = () => {
       if (!isCurrent()) return false;
       const state = pendingAccountOperationStepUpState();
-      if (
-        state.kind !== 'pending' ||
-        !pendingAccountOperationMatches(state.value, accountId, operationKey, operation)
-      )
+      if (state.kind !== 'pending' || !pendingAccountOperationMatches(state.value, accountId, operationKey, operation))
         return false;
-      if (
-        !storePendingAccountOperationStepUp({ kind: 'delete', accountId, operationKey, operation, submitted: true })
-      )
+      if (!storePendingAccountOperationStepUp({ kind: 'delete', accountId, operationKey, operation, submitted: true }))
         return false;
       const updated = pendingAccountOperationStepUpState();
       if (
