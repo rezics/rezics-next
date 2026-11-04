@@ -188,7 +188,7 @@ test('an original command wait survives a shorter current-read refusal and retai
   expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', attempt: original, outcomeUnknown: true });
 });
 
-test('a failed inventory cursor keeps its retry wait while a deliberate cursor-free restart remains independent', async () => {
+test('a failed inventory cursor gates exact retry and cursor-free restart until the endpoint wait expires', async () => {
   let now = 1_000;
   const reads: (string | null)[] = [];
   const pager = new CollectionPrivacyPager(
@@ -204,12 +204,21 @@ test('a failed inventory cursor keeps its retry wait while a deliberate cursor-f
   await pager.load();
   await pager.load();
   const retry = pager.load.bind(pager);
+  const restart = pager.restart.bind(pager);
   await retry();
   expect(reads).toEqual([null, 'exact-next-page']);
   expect(pager.retryDeadline()).toBe(31_000);
+  expect(pager.restartDeadline()).toBe(31_000);
   expect(pager.snapshot()).toMatchObject({ next: 'exact-next-page', failure: 'unavailable' });
-  await pager.restart();
-  expect(reads).toEqual([null, 'exact-next-page', null]);
+  await retry();
+  await restart();
+  expect(reads).toEqual([null, 'exact-next-page']);
+
+  now = 31_000;
+  expect(reads).toEqual([null, 'exact-next-page']);
+  await retry();
+  await restart();
+  expect(reads).toEqual([null, 'exact-next-page', 'exact-next-page', null]);
   expect(pager.snapshot()).toMatchObject({ collections: [receipt], next: null, failure: null, loaded: true });
 });
 
