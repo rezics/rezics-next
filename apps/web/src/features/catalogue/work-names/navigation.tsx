@@ -54,7 +54,7 @@ export function NamesHandoff({ binding, returnHref, locale, current, children }:
   });
   const [restored, setRestored] = useState<NamesWindow>();
   useEffect(() => {
-    const saved = namesReturn((router?.history.location.state ?? window.history.state)?.namesReturn, locale);
+    const saved = namesReturn(Reflect.get(router?.history.location.state ?? window.history.state ?? {}, 'namesReturn'), locale);
     if (saved && binding && saved.binding === binding && saved.href === selectedReturn(returnHref, new URLSearchParams(router?.history.location.search ?? window.location.search).get('realm'), locale) && current()) setRestored(saved.window);
     // Restoration belongs to this reading, not subsequent mutations of browser state.
   }, [binding, returnHref, locale]);
@@ -95,7 +95,7 @@ export function NamesTermsReturn({ id, locale, via }: { id: string; locale: stri
   const safe = href?.startsWith(`/${locale}/subjects/${id}/`) && href.endsWith('#supplied-names') ? href : undefined;
   const [saved, setSaved] = useState<NamesReturn>();
   useEffect(() => {
-    const value = namesReturn((router?.history.location.state ?? window.history.state)?.namesReturn, locale);
+    const value = namesReturn(Reflect.get(router?.history.location.state ?? window.history.state ?? {}, 'namesReturn'), locale);
     setSaved(value?.href === safe ? value : undefined);
   }, [safe, locale]);
   if (!safe) return null;
