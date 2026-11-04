@@ -5,6 +5,8 @@ import {
   bangumiGameEnvironmentSourceHost,
   type BangumiGameEnvironmentProperty,
 } from '../../../packages/conversion/src/bangumi-game-environment.ts';
+
+export { bangumiGameEnvironmentReferenceKey };
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
 import type { ReviewedSubjectRead } from './import-client.ts';
 

@@ -6,18 +6,17 @@ import { join, resolve } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision } from '@rezics/conversion/bangumi';
 import {
-  bangumiGameEnvironmentReferenceKey,
-} from '../../../../packages/conversion/src/bangumi-game-environment.ts';
-import {
   CrossMediaDumpFiles,
-  crossMediaAliases,
   planCrossMediaSeed,
   seedCrossMedia,
   type CrossMediaPort,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
-import { createShowcaseBangumiGameEnvironmentLookup } from '../src/showcase-bangumi-game-environment.ts';
+import {
+  bangumiGameEnvironmentReferenceKey,
+  createShowcaseBangumiGameEnvironmentLookup,
+} from '../src/showcase-bangumi-game-environment.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { Importer } from '../src/importer.ts';
 
@@ -74,6 +73,12 @@ function environmentCommands(commands: readonly BatchCommand[]) {
       command.source.external_id === String(targetId) &&
       ['schema:gamePlatform', 'wdt:P408'].includes(command.statement.property.id),
   );
+}
+
+function proposedValue(command: BatchCommand) {
+  return command.op === 'propose' && command.statement.value.type === 'value'
+    ? command.statement.value.content
+    : undefined;
 }
 
 test('selected authored Game proposes reviewed platform and engine Concepts and withholds only concealed or wrong-source items', async () => {
@@ -172,7 +177,7 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
     const proposed = environmentCommands(sent);
     expect(
       proposed.map((command) =>
-        command.op === 'propose' ? [command.statement.property.id, command.statement.value.content] : [],
+        command.op === 'propose' ? [command.statement.property.id, proposedValue(command)] : [],
       ),
     ).toEqual([
       ['schema:gamePlatform', pc],
@@ -218,9 +223,7 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
     expect(withheld.runs.bangumi?.status).toBe('committed');
     expect(identities.get(String(targetId))).toBe(firstId);
     const remaining = environmentCommands(sent.slice(before));
-    expect(remaining.map((command) => (command.op === 'propose' ? command.statement.value.content : ''))).toEqual([
-      unity,
-    ]);
+    expect(remaining.map((command) => proposedValue(command))).toEqual([unity]);
     const lookup = createShowcaseBangumiGameEnvironmentLookup({
       sourceAlias: 'bangumi',
       bindings,
