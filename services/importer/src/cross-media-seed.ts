@@ -604,6 +604,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const characters = new Set<number>();
   const persons = new Set<number>();
   const familyWorks = new Set(familyIds.keys());
+  const importedWorks = new Set([...plan.records.bangumi, ...plan.entities.bangumi].map((record) => record.key));
   const selectedAnimeWorks = new Set(
     [...plan.records.bangumi, ...plan.entities.bangumi]
       .filter((record) => record.payload && typeof record.payload === 'object' && record.payload.type === 2)

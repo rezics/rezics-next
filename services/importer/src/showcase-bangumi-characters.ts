@@ -5,7 +5,8 @@ import { mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
 import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
 import { currentBangumiCharacterVocabularyBindings } from './bangumi-character-fidelity.ts';
 import type { CrossMediaPlan, CrossMediaPort } from './cross-media-seed.ts';
-import { showcaseDigest, type ShowcaseJournal } from './showcase-publication.ts';
+import { showcaseDigest } from './showcase-manifest.ts';
+import type { ShowcaseJournal } from './showcase-publication.ts';
 import type { ShowcaseVocabularyRequirement } from './showcase-manifest.ts';
 
 const adapterRevision = 'bangumi-character-vocabulary@1';
@@ -180,7 +181,7 @@ function vocabularyCommands(input: {
   const labels = isScheme ? { en: definition.label } : { en: (entry as MappingEvidence).label };
   const create: BatchCommand = {
     op: 'create',
-    key: `bangumi-character-vocabulary:${commandKey([source, 'create', nativeType, labels])}`,
+    key: `bangumi-character-vocabulary:${commandKey([JSON.stringify(source), 'create', nativeType, JSON.stringify(labels)])}`,
     source,
     subject: { type: nativeType, labels },
   };
@@ -200,7 +201,7 @@ function vocabularyCommands(input: {
   }
   return statements.map((statement) => ({
       op: 'propose' as const,
-      key: `bangumi-character-vocabulary:${commandKey([source, subjectId, 'propose', statement])}`,
+      key: `bangumi-character-vocabulary:${commandKey([JSON.stringify(source), subjectId, 'propose', JSON.stringify(statement)])}`,
       source,
       subject: subjectId,
       statement,
@@ -310,12 +311,13 @@ export async function prepareShowcaseBangumiCharacterVocabulary(input: {
   const conceptCreates = ackedCreates(input.journal);
   const conceptProposals = conceptEntries.flatMap((entry) => {
     const subjectId = conceptCreates.get(entry.uri);
-    return subjectId
+    const schemeId = currentSchemes.get(entry.taxonomy);
+    return subjectId && schemeId
       ? vocabularyCommands({
           entry,
           nativeType: 'skos:Concept',
           subjectId,
-          schemeId: currentSchemes.get(entry.taxonomy),
+          schemeId,
         })
       : [];
   });
