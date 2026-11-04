@@ -292,12 +292,12 @@ export const readManagedAccountActions = createServerFn({ method: 'GET' })
     }
   });
 
-type ActionsSnapshot = { result: ManagedAccountActionsResult | null; pending: boolean };
+type ActionsSnapshot = { result: ManagedAccountActionsResult | null; pending: boolean; retryAt: number };
 
 /** Immutable viewer/target lifetime. Effect reattachment observes the current promise; only retry replaces failures. */
 export class ManagedAccountActionsRead {
   private current?: Promise<ManagedAccountActionsResult>;
-  private value: ActionsSnapshot = { result: null, pending: false };
+  private value: ActionsSnapshot = { result: null, pending: false, retryAt: 0 };
   private retryAt = 0;
   private disposed = false;
   private readonly lifetime = new AbortController();
@@ -316,7 +316,7 @@ export class ManagedAccountActionsRead {
     this.disposed = true;
     this.lifetime.abort();
     this.retryAt = 0;
-    this.publish({ result: null, pending: false });
+    this.publish({ result: null, pending: false, retryAt: 0 });
   };
   isCurrent = () => this.live();
   private live() {
@@ -360,7 +360,7 @@ export class ManagedAccountActionsRead {
       .then((result) => {
         if (!this.live()) return failure(null);
         this.retryAt = result.state === 'unavailable' ? preferenceRetryDeadline(result.retryAfter) : 0;
-        this.publish({ result, pending: false });
+        this.publish({ result, pending: false, retryAt: this.retryAt });
         return result;
       });
     this.publish({ ...this.value, pending: true });

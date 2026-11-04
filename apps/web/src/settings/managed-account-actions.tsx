@@ -57,15 +57,8 @@ function TargetActions({
     [target.accountId, viewerId, io, owner],
   );
   useManagedReaderLifetime(read.dispose, owner);
-  const { result, pending } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);
-  const retryFailure = useMemo(
-    () =>
-      result?.state === 'unavailable'
-        ? { status: result.status, ...(result.retryAfter ? { retryAfter: result.retryAfter } : {}) }
-        : undefined,
-    [result],
-  );
-  const waiting = usePreferenceRetry(retryFailure);
+  const { result, pending, retryAt } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);
+  const waiting = usePreferenceRetry(undefined, retryAt);
   const navigation =
     (!owner || owner.isCurrent()) &&
     authNavigation?.viewerId === viewerId &&
