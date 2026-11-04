@@ -15,7 +15,7 @@ import { useOrganizationEpisode, type OrganizationEpisode } from './reading/epis
 import { OrganizationValue, organizationControl as control } from './reading/value';
 
 type Selection = {
-  episode: OrganizationEpisode;
+  episode: number;
   id: string;
   property: string;
   opener: HTMLButtonElement;
@@ -122,7 +122,7 @@ export function OrganizationReader({
   );
   const [selected, setSelected] = useState<Selection>();
   const [changed, setChanged] = useState(false);
-  if (selected && (selected.episode !== episode || !available)) {
+  if (selected && (selected.episode !== episode.key || !available)) {
     setSelected(undefined);
     setChanged(true);
   }
@@ -307,7 +307,7 @@ function OrganizationFacts({
   const open = (fact: OrganizationFact, event: MouseEvent<HTMLButtonElement>) => {
     if (episode.current())
       select({
-        episode,
+        episode: episode.key,
         id: fact.id,
         property: fact.property.id,
         opener: event.currentTarget,
@@ -372,7 +372,7 @@ function OrganizationFacts({
           <ul className="space-y-3">
             {field.facts.map((fact) => {
               const inspecting =
-                selected?.episode === episode && selected.id === fact.id && selected.property === field.id;
+                selected?.episode === episode.key && selected.id === fact.id && selected.property === field.id;
               const content = (
                 <div className="min-w-0 space-y-2">
                   <OrganizationValue part={fact} {...presentation} />

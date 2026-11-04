@@ -144,7 +144,7 @@ test('history inspection follows the exact disclosed identity, returns focus, an
     opener.focus();
     await settle(() => opener.click());
     expect(host.textContent).toContain('1999');
-    expect(host.textContent).toContain('March 2001');
+    expect(host.textContent).toContain('+2001-03 · month · Gregorian calendar');
     expect(host.textContent).not.toContain('January 1');
     expect(host.textContent).toContain(m.candidate_rank_preferred());
     expect(host.querySelector('a[href="https://example.org/history"]')).not.toBeNull();
@@ -266,6 +266,31 @@ test('authorized historical documents follow exact statement, identity, digest, 
   documents[statement.id]!.subjectId = read.public.subject.id;
   const render = (authorized: unknown = documents) =>
     renderToStaticMarkup(<OrganizationReader read={read} locale="en" documents={authorized} />);
+  const { SubjectPage } = await import('../src/features/pages/subject');
+  const { subjectPageMessages } = await import('../src/features/pages/route-support');
+  const { planReads, platformRegistry } = await import('@rezics/composition');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const client = new QueryClient();
+  const document = { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'header' } }] };
+  const plan = planReads(platformRegistry, document, { subject: read.public.subject.id });
+  const page = {
+    subject: read.public.subject.id,
+    profile: 'fixture',
+    template: { scope: 'generic' as const, key: null },
+    document,
+    catalogue: { state: 'released' as const, type: 'schema:Organization', definitions: read.release },
+    reads: Object.fromEntries(
+      Object.keys(plan.reads).map((key) => [key, { status: 200, body: { ...read.public, documents } }]),
+    ),
+  };
+  expect(
+    renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <SubjectPage page={page} locale="en" messages={subjectPageMessages('en')} renderJsonLd={false} />
+      </QueryClientProvider>,
+    ),
+  ).toContain('Mira directs independent films.');
+  client.clear();
   expect(render()).toContain('Mira directs independent films.');
   expect(render()).toContain('lang="en"');
   for (const [key, value] of Object.entries({
@@ -303,5 +328,5 @@ test('authorized historical documents follow exact statement, identity, digest, 
         preferences={{ spoilerLevel: 2, suitability: 'blur' }}
       />,
     ),
-  ).toContain('Mira directs independent films.');
+  ).not.toContain('Mira directs independent films.');
 });

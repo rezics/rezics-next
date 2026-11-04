@@ -123,7 +123,7 @@ test('composition documents stay together; exact inspection closes to its opener
     await click(m.organization_reader_inspect());
     const inspection = host.querySelector('[role="region"]')!;
     expect(window.document.activeElement).toBe(inspection);
-    const correction = inspection.querySelector('a')!;
+    const correction = inspection.querySelector<HTMLAnchorElement>('a[href*="statement="]')!;
     expect(new URL(correction.href).searchParams.get('statement')).toBe(fact.id);
     expect(new URL(correction.href).searchParams.get('via')).toBe(returnTo);
     expect(host.textContent).toContain(m.organization_reader_navigation());
@@ -200,7 +200,7 @@ test('failed current dependency retries once, distinguishes pending, and rejects
 });
 
 test('explicit spoiler reveals and concealed identities never survive equal success, A/B/A or viewer replacement', async () => {
-  await mounted(async ({ host, client, render, click }) => {
+  await mounted(async ({ host, window, client, render, click }) => {
     const { read, documents, fact } = reading();
     fact.qualifiers = [
       {
@@ -208,25 +208,43 @@ test('explicit spoiler reveals and concealed identities never survive equal succ
         value: { type: 'value', content: { amount: '+2', unit: '1' } },
       },
     ];
+    // A spoiler-qualified document is not selected by the public document policy. Exercise a released text fact's reveal separately.
+    read.release.properties['schema:abstract']!.datatype = 'string';
+    fact.property.data_type = 'string';
+    fact.value = { type: 'value', content: 'Private historical assertion' };
     const a = {},
       b = {};
-    const show = (source: object, locale = 'en') =>
-      render(<OrganizationReader read={read} documents={documents} source={source} locale={locale} />);
+    const show = (source: object, locale = 'en', viewer: string | null = null) =>
+      render(<OrganizationReader read={read} documents={documents} source={source} locale={locale} reader={viewer} />);
     await show(a);
-    expect(host.textContent).not.toContain('Mira directs independent films.');
+    expect(host.textContent).not.toContain('Private historical assertion');
     await click(m.subject_spoiler_show());
-    expect(host.textContent).toContain('Mira directs independent films.');
+    expect(host.textContent).toContain('Private historical assertion');
     await click(m.subject_spoiler_hide());
-    expect(host.textContent).not.toContain('Mira directs independent films.');
+    expect(host.textContent).not.toContain('Private historical assertion');
     await click(m.subject_spoiler_show());
     await show(b);
     await show(a);
-    expect(host.textContent).not.toContain('Mira directs independent films.');
+    expect(host.textContent).not.toContain('Private historical assertion');
     await click(m.subject_spoiler_show());
     await act(async () => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
-    expect(host.textContent).not.toContain('Mira directs independent films.');
+    expect(host.textContent).not.toContain('Private historical assertion');
     await act(async () => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
-    expect(host.textContent).not.toContain('Mira directs independent films.');
     expect(host.querySelectorAll('button')).toHaveLength(0);
+    const viewer = '00000000-0000-4000-8000-00000000d409';
+    await act(async () =>
+      client.setQueryData(['session'], { state: 'signed-in', subject: viewer, csrfToken: 'first' }),
+    );
+    await show({}, 'en', viewer);
+    await click(m.subject_spoiler_show());
+    expect(host.textContent).toContain('Private historical assertion');
+    await act(async () =>
+      client.setQueryData(['session'], { state: 'signed-in', subject: viewer, csrfToken: 'replacement' }),
+    );
+    expect(host.textContent).not.toContain('Private historical assertion');
+    await show({}, 'en', viewer);
+    await click(m.subject_spoiler_show());
+    await act(async () => window.dispatchEvent(new (window as unknown as { Event: typeof Event }).Event('pagehide')));
+    expect(host.textContent).not.toContain('Private historical assertion');
   });
 });
