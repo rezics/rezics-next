@@ -39,6 +39,7 @@ import {
   homeFeedReaction,
   homeFeedReactionStatus,
   homeFeedSubjectReactionProjection,
+  homeFeedSubjectReactionState,
   type HomeFeedReactionStatus,
 } from './home-feed-reaction';
 import { admittedFeedWorkId } from './home-work-library/contract';
@@ -98,15 +99,9 @@ function subjectReactionFallback(
   current: () => boolean,
 ) {
   const options = { locale: locale as Locale };
-  const source = projection && typeof projection === 'object' ? (projection as Record<string, unknown>) : undefined;
-  const counts =
-    source?.counts && typeof source.counts === 'object' ? (source.counts as Record<string, unknown>) : undefined;
-  const knownValues =
-    counts?.state === 'available' && counts.values && typeof counts.values === 'object'
-      ? (counts.values as Record<string, unknown>)
-      : undefined;
-  const viewer =
-    source?.viewer && typeof source.viewer === 'object' ? (source.viewer as Record<string, unknown>) : undefined;
+  const source = homeFeedSubjectReactionState(projection);
+  const knownValues = source.values;
+  const viewer = source.viewer;
   const viewerKnown = current() && viewer?.state === 'available';
   const selected = viewerKnown ? viewer.kind : undefined;
   const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href ?? `/${locale}/`)}`;
