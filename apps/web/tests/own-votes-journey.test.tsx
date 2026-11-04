@@ -16,6 +16,7 @@ const target = 'b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2';
 const question = 'd4d4d4d4-d4d4-44d4-84d4-d4d4d4d4d4d4';
 const secondTarget = 'c3c3c3c3-c3c3-43c3-83c3-c3c3c3c3c3c3';
 const receiptTrace: string[] = [];
+let nextScreenInstance = 0;
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -118,11 +119,12 @@ type RefreshPlan = (input: {
 }) => Promise<unknown>;
 const Context = createContext<Harness | null>(null);
 function RatingsScreen() {
+  const instance = useRef(++nextScreenInstance);
   const value = useContext(Context)!;
   const heading = useRef<HTMLHeadingElement>(null);
   const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const receipt = useOwnVotesReturnReceipt(historyKey, value.cursor, 'en');
-  receiptTrace.push(`${historyKey}:${receipt?.phase ?? 'none'}`);
+  receiptTrace.push(`${instance.current}:${historyKey}:${receipt?.phase ?? 'none'}`);
   const [outcome, setOutcome] = useState<OwnVotesReturnOutcome | null>(null);
   const owner = (): OwnVotesReturnOwner => ({
     visitKey: 'journey',
