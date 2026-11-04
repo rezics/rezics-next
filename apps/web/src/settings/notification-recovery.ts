@@ -439,6 +439,7 @@ export class NotificationEditor {
     // A replay receipt completes the command, but only an uncached native GET establishes current values.
     const confirmation = Object.freeze({ attempt, receipt });
     this.minimumVersion(receipt.version);
+    if (this.live()) this.io.confirmed?.(receipt.version);
     this.update({
       confirmedReceipt: confirmation,
       pending: null,
@@ -451,7 +452,10 @@ export class NotificationEditor {
     const current = await this.readCurrent();
     if (!this.live()) return;
     if (!current || current.version < this.minimumVersion()) {
-      this.update({ phase: 'failed', ...(!current ? {} : { currentAdvice: null, readReason: 'unavailable', readFailure: undefined }) });
+      this.update({
+        phase: 'failed',
+        ...(!current ? {} : { currentAdvice: null, readReason: 'unavailable', readFailure: undefined }),
+      });
       return;
     }
     if (
