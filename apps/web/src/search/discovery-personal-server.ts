@@ -47,6 +47,7 @@ export async function readBoundDiscoveryPage(
         page: {
           ...state.page,
           collectionFollows: { state: 'unavailable', reason: 'native' },
+          accountFollows: { state: 'unavailable', reason: 'native' },
           ...(state.page.spaceEntries
             ? {
                 spaceEntries: {

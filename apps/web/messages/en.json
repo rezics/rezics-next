@@ -8580,5 +8580,10 @@
   "realm_question_management_retired": "Retired",
   "realm_question_management_units": "Stored rating units",
   "realm_question_management_zero": "Zero is a valid score. No score means no response.",
-  "realm_question_management_display_step": "Display step {step}"
+  "realm_question_management_display_step": "Display step {step}",
+  "discovery_account_automated": "Automated account",
+  "discovery_account_bio_absent": "No public biography",
+  "discovery_account_bio_withheld": "Biography withheld",
+  "discovery_account_bio_unavailable": "Biography unavailable",
+  "discovery_account_bio_truncated": "Biography shortened"
 }

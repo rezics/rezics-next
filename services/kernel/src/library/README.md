@@ -2071,7 +2071,7 @@ unavailable. Labels are <=160 code units, Types <=32 with <=256 code units each.
 bytes per native batch, before the existing aggregate transport ceiling. No Library connection spans a foreign read.
 
 `follow-discovery.ts` is the reusable private read seam for Search and Space entry. Input is <=100 unique admitted
-`{ targetId, targetType: collection|space, source }` tuples, not index hints. It derives the home only from the explicit
+`{ targetId, targetType: subject|collection|space, source }` tuples, not index hints. It derives the home only from the explicit
 Account actor and returns signed-out, unavailable or current account/partition/rows with exact follow/unfollow advice.
 Two fresh home snapshots recheck active actor kind, fencing, authn epoch, partition incarnation and current own-account
 Access for both write directions; reading one's own follow state uses the existing authenticated-account contract, without a read scope. One statement per round seeks <=100 complete `(route, account_id, target_id)` keys;

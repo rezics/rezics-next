@@ -1,3 +1,4 @@
+import { accountContext } from './account-context/schema';
 import { resultFreshness } from './search-context/observation';
 import { spaceEntryPage, spaceEntryPresentation } from './space-entry/contract';
 import * as v from 'valibot';
@@ -57,7 +58,8 @@ const subjectSummary: v.GenericSchema<NonNullable<NativeHit['summary']>> = v.obj
     }),
   ),
 });
-const accountSummary = v.object({
+const accountSummary = v.strictObject({
+  context: v.exactOptional(accountContext),
   id: v.string(),
   accountKind: v.picklist(['actor', 'organization']),
   handle: v.nullable(v.string()),
@@ -361,6 +363,7 @@ const page = v.object({
   freshness,
   viewerFacts: v.exactOptional(viewerFacts),
   collectionFollows: v.exactOptional(collectionFollows),
+  accountFollows: v.exactOptional(collectionFollows),
   emptyRecovery: v.exactOptional(emptyRecovery),
 });
 
@@ -447,6 +450,11 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
         break;
       case 'account':
         if (hit.key.owner !== 'accounts' || hit.key.kind !== 'account' || matchEvidence.state !== 'unsupported') return;
+        if (hit.summary.value.context) {
+          const context = hit.summary.value.context;
+          if (new TextEncoder().encode(JSON.stringify(context)).byteLength > 8192 ||
+              (context.biography.state === 'available' && new TextEncoder().encode(context.biography.text).byteLength > 1024)) return;
+        }
         break;
       case 'collection':
         if (
@@ -505,6 +513,15 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
       })
     )
       return;
+  }
+  if (result.accountFollows?.state === 'current') {
+    const follows = result.accountFollows;
+    const targets = result.hits.flatMap((hit) => hit.summary.kind === 'account' &&
+      hit.summary.value.context?.followTarget.state === 'available' ? [hit.summary.value.context.followTarget] : []);
+    const home = Number.parseInt(follows.accountId.slice(24, 28), 16);
+    if (home >>> 4 !== follows.partition || follows.rows.length !== targets.length ||
+        new Set(targets.map((target) => target.id)).size !== targets.length ||
+        follows.rows.some((row, index) => row.targetType !== 'subject' || row.targetId !== targets[index]!.id || row.source !== targets[index]!.source)) return;
   }
   const spaces = result.hits.filter((hit) => hit.summary.kind === 'space');
   for (const hit of spaces) {

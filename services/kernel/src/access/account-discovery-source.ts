@@ -15,6 +15,8 @@ import {
 } from './account-discovery-reduction.ts';
 import type { AccountDiscoverySource, AccountDiscoverySummary } from '../search/discovery.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from '../semantic/summaries.ts';
+import { accountBiography, ACCOUNT_CONTEXT_LIMITS, type AccountContext } from '../search/account-context.ts';
+import { readAccountContextBindings } from '../search/account-context-native.ts';
 
 type AccountRow = {
   route: number;
@@ -27,6 +29,7 @@ type AccountRow = {
   avatar: string | null;
   agent: string | null;
   agentReceipt: string | null;
+  biography?: string | null;
 };
 type ClaimRow = { route: number; handle: string; id: string; revision: string };
 const columns = `route, account_id::text AS id, kind AS "accountKind", handle,
@@ -63,7 +66,7 @@ async function requireHomes(client: Pick<PoolClient, 'query'>, routes: readonly 
       throw new CommandUnavailableError(owner.writeState === 'moved' ? 'moved' : 'fenced', home, owner.movedTo);
   }
 }
-async function accounts(client: Pick<PoolClient, 'query'>, requested: ReturnType<typeof keys>) {
+async function accounts(client: Pick<PoolClient, 'query'>, requested: ReturnType<typeof keys>, context = false) {
   if (!requested.length) return [];
   await requireHomes(
     client,
@@ -71,7 +74,7 @@ async function accounts(client: Pick<PoolClient, 'query'>, requested: ReturnType
   );
   return (
     await client.query<AccountRow>(
-      `SELECT ${columns} FROM access.account
+      `SELECT ${columns}${context ? ', left(biography, 1025) AS biography' : ''} FROM access.account
      WHERE (route, account_id) IN (SELECT * FROM unnest($1::integer[], $2::uuid[]))
        AND state = 'active' AND NOT authn_fenced`,
       [requested.map(({ route }) => route), requested.map(({ id }) => id)],
@@ -354,7 +357,7 @@ async function optionalSummaries<T>(deadline: number, read: () => Promise<Map<st
 export async function readAccountDiscoverySummaries(
   deps: SummaryReaderDependencies,
   ids: readonly string[],
-  options: { languages?: readonly string[] } = {},
+  options: { languages?: readonly string[]; context?: boolean } = {},
 ) {
   const requested = keys(ids);
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
@@ -364,7 +367,7 @@ export async function readAccountDiscoverySummaries(
   if (!requested.length) return result;
   const initial = await withReadTransaction(deps.pool, async (client) => {
     requireAccessDeadline(deps.deadline);
-    const rows = await accounts(client, requested);
+    const rows = await accounts(client, requested, options.context);
     const found = await claims(client, rows);
     return rows.map((row) => ({
       row,
@@ -374,7 +377,13 @@ export async function readAccountDiscoverySummaries(
   });
   // No Account transaction/custody remains open during foreign owner reads.
   const mediaIds = [...new Set(initial.flatMap(({ row }) => (row.avatar ? [row.avatar] : [])))];
-  const subjectIds = [...new Set(initial.flatMap(({ row }) => (row.agent ? [row.agent] : [])))];
+  const contextBindings = options.context
+    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, initial.map(({ row, handle }) => ({ ...row, handle }))))
+    : new Map<string, { id: string; source: string }>();
+  const subjectIds = [...new Set(initial.flatMap(({ row }) => {
+    const target = contextBindings.get(row.id);
+    return [...(row.agent ? [row.agent] : []), ...(target ? [target.id] : [])];
+  }))];
   const avatars = mediaIds.length
     ? await optionalSummaries(deps.deadline, () =>
         withReadTransaction(deps.pool, (client) => readAvatarSummaries(client, mediaIds)),
@@ -382,13 +391,17 @@ export async function readAccountDiscoverySummaries(
     : new Map<string, AvatarSummary | null>();
   requireAccessDeadline(deps.deadline);
   const subjects = subjectIds.length
-    ? await optionalSummaries(deps.deadline, () => readSubjectSummaries(deps, subjectIds, options))
+    ? await optionalSummaries(deps.deadline, () => readSubjectSummaries(
+        { ...deps, actor: { kind: 'anonymous' } }, subjectIds, options))
     : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deps.deadline);
+  const finalBindings = options.context
+    ? await optionalSummaries(deps.deadline, () => readAccountContextBindings(deps, initial.map(({ row, handle }) => ({ ...row, handle }))))
+    : contextBindings;
   // Whole candidates, not just their handle, are withheld on a fence, rename or
   // profile revision during hydration. A bad claim alone leaves a handleless hit.
   await withReadTransaction(deps.pool, async (client) => {
-    const current = new Map((await accounts(client, requested)).map((row) => [row.id, row]));
+    const current = new Map((await accounts(client, requested, options.context)).map((row) => [row.id, row]));
     const found = await claims(client, [...current.values()]);
     for (const before of initial) {
       const row = current.get(before.row.id);
@@ -399,16 +412,29 @@ export async function readAccountDiscoverySummaries(
         (row.handle === null ? null : (found.get(row.handle)?.revision ?? null)) !== before.claimRevision
       )
         continue;
-      const subject = row.agent ? subjects.get(row.agent) : null;
-      result.set(
-        row.id,
-        summary(
+      const subject = row.agent && (!options.context ||
+        (contextBindings.get(row.id)?.id === row.agent && isDeepStrictEqual(contextBindings.get(row.id), finalBindings.get(row.id))))
+        ? subjects.get(row.agent) : null;
+      const value = summary(
           row,
           before.handle,
           row.avatar ? (avatars.get(row.avatar) ?? null) : null,
           subject?.label ? { id: subject.id, label: subject.label.value, type: subject.type } : null,
-        ),
-      );
+        );
+      if (options.context) {
+        const binding = contextBindings.get(row.id);
+        const target = binding && isDeepStrictEqual(binding, finalBindings.get(row.id)) ? subjects.get(binding.id) : null;
+        const context: AccountContext = {
+          biography: before.handle === null ? { state: 'withheld' } : accountBiography(row.biography),
+          followTarget: target?.label && target.label.value.length <= 160 && target.type.length <= 256 && binding
+            ? { state: 'available', id: target.id, label: target.label.value, type: target.type, source: binding.source }
+            : { state: 'unavailable' },
+        };
+        // Optional oversized native labels cannot disqualify the Account itself.
+        value.context = Buffer.byteLength(JSON.stringify(context)) <= ACCOUNT_CONTEXT_LIMITS.contextBytes
+          ? context : { biography: context.biography, followTarget: { state: 'unavailable' } };
+      }
+      result.set(row.id, value);
     }
     requireAccessDeadline(deps.deadline);
   });

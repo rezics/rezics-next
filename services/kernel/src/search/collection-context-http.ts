@@ -72,7 +72,7 @@ export const FollowDiscoverySchema = t.Union([
         t.Object(
           {
             targetId: id,
-            targetType: t.Union([t.Literal('collection'), t.Literal('space')]),
+            targetType: t.Union([t.Literal('subject'), t.Literal('collection'), t.Literal('space')]),
             source: t.String({ maxLength: 1024 }),
             following: t.Boolean(),
             actions: t.Object({ follow: t.Boolean(), unfollow: t.Boolean() }, closed),

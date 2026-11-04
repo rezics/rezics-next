@@ -8468,5 +8468,10 @@
   "realm_question_management_retired": "已退役",
   "realm_question_management_units": "儲存的評分單位",
   "realm_question_management_zero": "零是有效分數；沒有分數代表沒有回覆。",
-  "realm_question_management_display_step": "顯示刻度 {step}"
+  "realm_question_management_display_step": "顯示刻度 {step}",
+  "discovery_account_automated": "自動化帳號",
+  "discovery_account_bio_absent": "暫無公開簡介",
+  "discovery_account_bio_withheld": "簡介已隱藏",
+  "discovery_account_bio_unavailable": "簡介暫時無法取得",
+  "discovery_account_bio_truncated": "簡介已截短"
 }

@@ -8468,5 +8468,10 @@
   "realm_question_management_retired": "Stillgelegt",
   "realm_question_management_units": "Gespeicherte Bewertungseinheiten",
   "realm_question_management_zero": "Null ist eine gültige Bewertung. Ohne Bewertung liegt keine Antwort vor.",
-  "realm_question_management_display_step": "Anzeigeschritt {step}"
+  "realm_question_management_display_step": "Anzeigeschritt {step}",
+  "discovery_account_automated": "Automatisiertes Konto",
+  "discovery_account_bio_absent": "Keine öffentliche Biografie",
+  "discovery_account_bio_withheld": "Biografie nicht freigegeben",
+  "discovery_account_bio_unavailable": "Biografie nicht verfügbar",
+  "discovery_account_bio_truncated": "Biografie gekürzt"
 }

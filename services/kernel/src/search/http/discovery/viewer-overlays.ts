@@ -59,6 +59,18 @@ export function admitCollectionFollows(page: DiscoveryHttpPage) {
   }
 }
 
+export function admitAccountFollows(page: DiscoveryHttpPage) {
+  const follows = page.accountFollows;
+  if (follows?.state !== 'current') return;
+  const targets = page.hits.flatMap((hit) => hit.summary.kind === 'account' &&
+    hit.summary.value.context?.followTarget.state === 'available' ? [hit.summary.value.context.followTarget] : []);
+  const home = routeOf(follows.accountId);
+  if (home === null || home >>> 4 !== follows.partition || follows.rows.length !== targets.length ||
+      new Set(targets.map((target) => target.id)).size !== targets.length ||
+      follows.rows.some((row, index) => row.targetType !== 'subject' || row.targetId !== targets[index]!.id ||
+        row.source !== targets[index]!.source)) unavailable();
+}
+
 export function admitSubjectViewerFacts(page: DiscoveryHttpPage) {
   if (page.viewerFacts && page.viewerFacts !== null && page.viewerFacts.state === 'current') {
     const subjects = page.hits.filter((hit) => hit.summary.kind === 'subject');
@@ -107,6 +119,7 @@ export function snapshotViewerOverlays(page: DiscoveryPage) {
             })),
           };
   return {
+    ...(page.accountFollows === undefined ? {} : { accountFollows: structuredClone(page.accountFollows) }),
     ...(viewerFacts === undefined ? {} : { viewerFacts }),
     ...(collectionFollows === undefined ? {} : { collectionFollows }),
   };

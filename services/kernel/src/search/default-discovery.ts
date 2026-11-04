@@ -1,3 +1,4 @@
+import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { prepareSearchReviewContexts } from './review-context.ts';
 import { boundWorkContexts } from './work-context.ts';
 import { readFollowDiscovery } from '../library/follow-discovery.ts';
@@ -847,9 +848,31 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
               },
             ];
           });
-          const collectionFollows = await readFollowDiscovery(config, context.actor, targets, context.deadline);
+          const accountTargets = enriched.page.hits.flatMap((hit) => {
+            const target = hit.summary.kind === 'account' ? hit.summary.value.context?.followTarget : undefined;
+            return target?.state === 'available'
+              ? [{ targetId: target.id, targetType: 'subject' as const, source: target.source }] : [];
+          });
+          const allTargets = [...targets, ...accountTargets];
+          const follows = new Set(allTargets.map((target) => target.targetId)).size === allTargets.length
+            ? await readFollowDiscovery(config, context.actor, allTargets, context.deadline)
+            : { state: 'unavailable' as const, reason: 'native' as const };
+          const collectionFollows = follows.state === 'current'
+            ? { ...follows, rows: follows.rows.filter((row) => row.targetType === 'collection') } : follows;
+          const accountFollows = follows.state === 'current'
+            ? { ...follows, rows: follows.rows.filter((row) => row.targetType === 'subject') } : follows;
+          // Recheck public Account context after private preparation without changing eligibility/counts.
+          const accountHits = enriched.page.hits.filter((hit) => hit.summary.kind === 'account');
+          if (accountHits.length) {
+            const currentAccounts = await readAccountDiscoverySummaries(
+              { ...config, actor: { kind: 'anonymous' }, deadline: context.deadline },
+              accountHits.map((hit) => hit.key.id), { languages, context: true },
+            );
+            if (accountHits.some((hit) => !isDeepStrictEqual(hit.summary.value, currentAccounts.get(hit.key.id))))
+              throw new ProblemError('search_restart_required');
+          }
           if (!(await spaces.finish())) throw new ProblemError('search_restart_required');
-          const reviewedPage = await reviews.finish({ ...spaces.page, collectionFollows });
+          const reviewedPage = await reviews.finish({ ...spaces.page, collectionFollows, accountFollows });
           const viewerCurrent =
             !enriched.viewer ||
             (await viewerFactsCurrent(

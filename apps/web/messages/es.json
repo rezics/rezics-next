@@ -8468,5 +8468,10 @@
   "realm_question_management_retired": "Retirada",
   "realm_question_management_units": "Unidades de valoración almacenadas",
   "realm_question_management_zero": "Cero es una puntuación válida. Si no hay puntuación, no hay respuesta.",
-  "realm_question_management_display_step": "Incremento mostrado {step}"
+  "realm_question_management_display_step": "Incremento mostrado {step}",
+  "discovery_account_automated": "Cuenta automatizada",
+  "discovery_account_bio_absent": "Sin biografía pública",
+  "discovery_account_bio_withheld": "Biografía oculta",
+  "discovery_account_bio_unavailable": "Biografía no disponible",
+  "discovery_account_bio_truncated": "Biografía abreviada"
 }

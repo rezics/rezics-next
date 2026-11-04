@@ -8468,5 +8468,10 @@
   "realm_question_management_retired": "Retirée",
   "realm_question_management_units": "Unités de notation enregistrées",
   "realm_question_management_zero": "Zéro est une note valide. Aucune note signifie aucune réponse.",
-  "realm_question_management_display_step": "Pas d’affichage {step}"
+  "realm_question_management_display_step": "Pas d’affichage {step}",
+  "discovery_account_automated": "Compte automatisé",
+  "discovery_account_bio_absent": "Aucune biographie publique",
+  "discovery_account_bio_withheld": "Biographie masquée",
+  "discovery_account_bio_unavailable": "Biographie indisponible",
+  "discovery_account_bio_truncated": "Biographie abrégée"
 }

@@ -1,3 +1,4 @@
+import { AccountBiography } from './account-context/biography';
 import { Fragment, type ReactNode } from 'react';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
@@ -130,6 +131,7 @@ function AccountRow({
         <div className="min-w-0 space-y-1">
           <p className="text-sm text-muted-foreground">{kind}</p>
           {account.handle && <p className="break-words text-sm text-muted-foreground">@{account.handle}</p>}
+          <AccountBiography account={account} locale={locale} />
           {verified && (
             <a
               className="text-primary underline underline-offset-4"
@@ -240,6 +242,7 @@ export function DiscoveryResults({
                 <AccountRow account={hit.summary.value} kind={kind} locale={locale} subjectHrefFor={subjectHrefFor} />
                 <li className="ml-6 list-none">
                   <MatchEvidenceView evidence={hit.matchEvidence} locale={locale} />
+                  {renderPersonal?.(hit, hit.summary.value.displayName ?? hit.summary.value.handle ?? kind)}
                 </li>
               </Fragment>
             );

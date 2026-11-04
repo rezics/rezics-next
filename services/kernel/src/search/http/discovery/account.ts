@@ -5,8 +5,11 @@ import { Compile } from 'typebox/compile';
 import { CoverSummarySchema } from '../../../semantic/http/summaries.ts';
 import { MatchEvidenceSchema } from '../../http/match-evidence-schema.ts';
 import { closed, id, nullableText, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
+import { AccountContextSchema } from '../../account-context-http.ts';
+import { ACCOUNT_CONTEXT_LIMITS } from '../../account-context.ts';
 const accountSummary = t.Object(
   {
+    context: t.Optional(AccountContextSchema),
     id,
     accountKind: t.Union([t.Literal('actor'), t.Literal('organization')]),
     handle: nullableText,
@@ -39,6 +42,9 @@ export function admitAccountHit(value: unknown): asserts value is AccountHit {
   const { key, summary, matchEvidence } = hit;
   if (key.owner !== 'accounts' || key.kind !== 'account') unavailable();
   if (matchEvidence.state !== 'unsupported') unavailable();
+  const context = summary.value.context;
+  if (context && (Buffer.byteLength(JSON.stringify(context)) > ACCOUNT_CONTEXT_LIMITS.contextBytes ||
+      (context.biography.state === 'available' && Buffer.byteLength(context.biography.text) > ACCOUNT_CONTEXT_LIMITS.biographyBytes))) unavailable();
 }
 
 /** Detach all nested native values; later owner mutation cannot change the admitted response. */

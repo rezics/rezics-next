@@ -8468,5 +8468,10 @@
   "realm_question_management_retired": "已退役",
   "realm_question_management_units": "储存的评分单位",
   "realm_question_management_zero": "零是有效分数；没有分数表示没有回应。",
-  "realm_question_management_display_step": "显示刻度 {step}"
+  "realm_question_management_display_step": "显示刻度 {step}",
+  "discovery_account_automated": "自动化账号",
+  "discovery_account_bio_absent": "暂无公开简介",
+  "discovery_account_bio_withheld": "简介已隐藏",
+  "discovery_account_bio_unavailable": "简介暂不可用",
+  "discovery_account_bio_truncated": "简介已截短"
 }

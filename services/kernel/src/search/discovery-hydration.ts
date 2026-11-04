@@ -41,7 +41,7 @@ export function createNativeDiscoveryRegistry(options: {
       ...options.accounts,
       source: accountDiscoverySource(pool),
       async hydrate(ids, context) {
-        const summaries = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids, { languages });
+        const summaries = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids, { languages, context: true });
         return new Map([...summaries].flatMap(([id, summary]) => (summary ? [[id, summary]] : [])));
       },
     },

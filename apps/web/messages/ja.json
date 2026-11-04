@@ -8468,5 +8468,10 @@
   "realm_question_management_retired": "終了",
   "realm_question_management_units": "保存された評価単位",
   "realm_question_management_zero": "0 は有効なスコアです。スコアがない場合は回答がありません。",
-  "realm_question_management_display_step": "表示刻み {step}"
+  "realm_question_management_display_step": "表示刻み {step}",
+  "discovery_account_automated": "自動アカウント",
+  "discovery_account_bio_absent": "公開プロフィール文はありません",
+  "discovery_account_bio_withheld": "プロフィール文は非公開です",
+  "discovery_account_bio_unavailable": "プロフィール文を取得できません",
+  "discovery_account_bio_truncated": "プロフィール文を省略しています"
 }
