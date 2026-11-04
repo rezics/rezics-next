@@ -463,6 +463,80 @@ export const ThreadResponseSchema = t.Object(
 );
 export const PostResponseSchema = t.Object({ post: PostEntrySchema }, closed);
 export const BoardResponseSchema = t.Object({ board: BoardViewSchema }, closed);
+const ReviewDestinationSourceSchema = t.Object(
+  {
+    partition: t.Integer({ minimum: 0, maximum: 4095 }),
+    epoch: t.Integer({ minimum: 1 }),
+    position: t.String({ pattern: '^[0-9]+$' }),
+  },
+  closed,
+);
+export const ReviewDestinationPageSchema = t.Object(
+  {
+    state: t.Union([
+      t.Literal('choices'),
+      t.Literal('sparse'),
+      t.Literal('no-destinations'),
+      t.Literal('exhausted'),
+      t.Literal('denied'),
+      t.Literal('expired'),
+    ]),
+    viewer: t.Object({ state: t.Union([t.Literal('current'), t.Literal('denied')]) }, closed),
+    context: t.Union([
+      t.Object(
+        {
+          subject: t.Object(
+            {
+              id: ContentIdSchema,
+              label: t.Union([
+                t.Object({ value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed),
+                t.Null(),
+              ]),
+              source: ReviewDestinationSourceSchema,
+            },
+            closed,
+          ),
+          realm: t.Object(
+            {
+              id: ContentIdSchema,
+              title: t.String({ maxLength: 4096 }),
+              spaceId: ContentIdSchema,
+              headRevisionId: ContentIdSchema,
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+      t.Null(),
+    ]),
+    items: t.Array(
+      t.Object(
+        {
+          id: ContentIdSchema,
+          title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+          purpose: t.Literal('reviews'),
+          actions: t.Object({ createReview: t.Literal('allowed') }, closed),
+          native: t.Object(
+            {
+              kind: t.Literal('review'),
+              boardId: ContentIdSchema,
+              subjectIds: t.Tuple([ContentIdSchema]),
+              subjectSource: ReviewDestinationSourceSchema,
+              realmHeadRevisionId: ContentIdSchema,
+              boardSecurityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+      { maxItems: 20 },
+    ),
+    next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+  },
+  closed,
+);
 export const GlobalBoardDirectoryQuerySchema = t.Object(
   {
     purpose: t.Optional(t.Union([t.Literal('discussion'), t.Literal('reviews')])),

@@ -15,6 +15,7 @@ import { BoardPinLimitError, setBoardThreadPin } from './board-pin.ts';
 import { readSelectedBoardPinAdvice } from './board-pin-advice.ts';
 import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
 import { listSubjectThreads } from './subject-threads.ts';
+import { inspectReviewDestination, readReviewDestinationPage } from './review-destinations.ts';
 import { InvalidSitemapCursorError, listSitemapBoards, listSitemapThreads } from './sitemap.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -125,6 +126,7 @@ import {
   ThreadResponseSchema,
   SubjectThreadsQuerySchema,
   SubjectThreadsResponseSchema,
+  ReviewDestinationPageSchema,
   AuthorThreadsQuerySchema,
   AuthorThreadsResponseSchema,
   AuthorPostsQuerySchema,
@@ -230,6 +232,14 @@ const realmBoardsQuery = t.Object(
 );
 const realmBoardsResponse = t.Object(
   { items: t.Array(BoardViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  { additionalProperties: false },
+);
+const reviewDestinationQuery = t.Object(
+  {
+    subjectId: t.String({ minLength: 1, maxLength: 64 }),
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    boardId: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
+  },
   { additionalProperties: false },
 );
 const boardCreateInput = t.Object(
@@ -673,6 +683,45 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const page = await listRealmBoards(dependencies, realmId, { actor, deadline: job.deadline }, query);
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             return { items: [...page.items], next: page.next };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/realms/:realmId/review-destinations',
+      {
+        params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
+        query: reviewDestinationQuery,
+        response: { 200: withHeaders(ReviewDestinationPageSchema, sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'review-destination.list',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { realmId }, query, actor, admission, job, session }) => {
+        existingId(realmId);
+        existingId(query.subjectId);
+        if (query.boardId !== undefined && query.cursor !== undefined) throw new ProblemError('invalid_request');
+        if (query.boardId !== undefined) existingId(query.boardId);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const context = { actor, deadline: job.deadline };
+            const result =
+              query.boardId === undefined
+                ? await readReviewDestinationPage(dependencies, actor, realmId, query.subjectId, context, query.cursor)
+                : await inspectReviewDestination(
+                    dependencies,
+                    actor,
+                    realmId,
+                    query.subjectId,
+                    query.boardId,
+                    context,
+                  );
+            for (const anchor of result.anchors) session.record(sessionComponent(anchor));
+            if (result.page.context) session.record(result.page.context.subject.source);
+            return result.page;
           }),
         );
       },

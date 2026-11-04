@@ -112,6 +112,8 @@ export type MyRealmsPage = {
   signedIn: boolean;
   realms: RealmLink[];
   next: string | null;
+  /** Review destination navigation keeps an expired frontier until the reader explicitly restarts. */
+  cursorExpired?: boolean;
   /** Same-prepared-read provenance. It contains no credential or raw CSRF value. */
   readerOrigin?: MyRealmsReaderOrigin;
   /** A serializable binding added by the query caller before React Query publishes the result. */
@@ -625,7 +627,7 @@ export async function loadMyRealms(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { cursor?: string },
+  input: { cursor?: string; preserveCursorFailure?: boolean },
 ): Promise<MyRealmsPage> {
   const { signedIn, auth } = await session(request, sessionEnv, 'session');
   const authorization = 'headers' in auth ? auth.headers.authorization : null;
@@ -639,7 +641,11 @@ export async function loadMyRealms(
   if (!signedIn) return { signedIn: false, realms: [], next: null, readerOrigin };
   const read = async (cursor?: string) => client.me.realms.get({ query: cursor ? { cursor } : {}, ...auth });
   let result = await read(input.cursor);
-  if (input.cursor && statusOf(result) === 409) result = await read();
+  if (input.cursor && statusOf(result) === 409) {
+    if (input.preserveCursorFailure)
+      return { signedIn: true, realms: [], next: null, cursorExpired: true, readerOrigin };
+    result = await read();
+  }
   const page = readCommunity(result);
   return {
     signedIn: true,
