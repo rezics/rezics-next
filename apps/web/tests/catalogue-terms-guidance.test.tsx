@@ -322,7 +322,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
       expect(control('terms-aliases').value).toBe('Added alias');
       await click(removeLanguage);
       await clickElement(dialogButton(removeLanguage));
-      expect(control('terms-language').value).toBe('en');
+      expect(control('terms-language').value).toBe(locale);
       expect(window.document.activeElement).toBe(control('terms-language'));
       expect(control('terms-aliases')).toBeNull();
       expect(commands).toHaveLength(0);
