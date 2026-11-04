@@ -9805,5 +9805,15 @@
   "creator_inspect_jump_terms": "Bénéfice enregistré",
   "creator_inspect_jump_references": "Références de version",
   "creator_inspect_jump_management": "Retour à la gestion",
-  "creator_inspect_jump_reading": "Destinations de lecture"
+  "creator_inspect_jump_reading": "Destinations de lecture",
+  "creator_edition_origin_heading": "Inventaire du créateur",
+  "creator_edition_origin_available": "Vous avez ouvert cette page depuis votre inventaire de créateur. Cet onglet conserve la position d’origine.",
+  "creator_edition_origin_checking": "Vérification de la page d’inventaire d’origine…",
+  "creator_edition_origin_present": "Cette édition exacte figure sur la page d’inventaire de nouveau admise.",
+  "creator_edition_origin_missing": "Cette édition exacte ne figure pas sur la page d’inventaire de nouveau admise. Elle a peut-être changé ou été déplacée ; relancez l’inventaire.",
+  "creator_edition_origin_lost": "Le retour à l’inventaire d’origine n’est pas disponible dans cet onglet. Relancez l’inventaire et choisissez une édition.",
+  "creator_edition_origin_return": "Retourner à l’inventaire",
+  "creator_edition_origin_restart": "Relancer l’inventaire",
+  "creator_edition_origin_edition": "ID de l’édition",
+  "creator_edition_origin_source_revision": "Révision source"
 }

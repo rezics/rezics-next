@@ -37,7 +37,7 @@ export function EditionCreateRoute({
   api?: EditionCreateApi;
   controller?: EditionPublicationController;
 }) {
-  const { editionId, postId, revisionId } = useSearch({ from: '/editions/new' });
+  const { editionId, postId, revisionId, editionOrigin } = useSearch({ from: '/editions/new' });
   const resumed = useLoaderData({ from: '/editions/new' });
   return (
     <AuthoringDepartureProvider
@@ -47,12 +47,13 @@ export function EditionCreateRoute({
         unsaved: m.edition_publication_leave_unsaved(),
         pending: m.edition_publication_leave_pending(),
       }}
-      sessionBound="subject"
+      sessionBound
     >
       <EditionPublicationPanel
-        key={editionId ?? `${postId}:${revisionId}`}
+        key={JSON.stringify([editionId ?? `${postId}:${revisionId}`, editionOrigin])}
         initialEditionId={editionId}
         initialResume={resumed}
+        initialOriginToken={editionOrigin}
         api={api}
         controller={controller}
         initialSource={postId && revisionId ? { postId, revisionId } : undefined}

@@ -138,15 +138,17 @@ export function editionCreateSearch(search: Record<string, unknown>) {
       editionId === undefined && typeof search.revisionId === 'string' && editionContentId.test(search.revisionId)
         ? search.revisionId
         : undefined,
+    editionOrigin:
+      typeof search.editionOrigin === 'string' && search.editionOrigin.length <= 64 ? search.editionOrigin : undefined,
   };
 }
 
 /** Route departure follows only the source or edition identity; unrelated search metadata is browsing state. */
 export function editionCreateNavigationContext(location: { pathname: string; search: Record<string, unknown> }) {
   if (!location.pathname.endsWith('/editions/new')) return location.pathname;
-  const { editionId, postId, revisionId } = editionCreateSearch(location.search);
+  const { editionId, postId, revisionId, editionOrigin } = editionCreateSearch(location.search);
   const identity = editionId !== undefined ? `edition:${editionId}` : `source:${postId ?? ''}:${revisionId ?? ''}`;
-  return `${location.pathname}\u0000${identity}`;
+  return `${location.pathname}\u0000${identity}\u0000origin:${editionOrigin ?? ''}`;
 }
 
 export function editionCreateHref(source: EditionSourceIdentity, locale: string): string {

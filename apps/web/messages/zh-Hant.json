@@ -9815,5 +9815,15 @@
   "creator_inspect_jump_terms": "已記錄權益",
   "creator_inspect_jump_references": "版本參照",
   "creator_inspect_jump_management": "返回管理",
-  "creator_inspect_jump_reading": "閱讀入口"
+  "creator_inspect_jump_reading": "閱讀入口",
+  "creator_edition_origin_heading": "創作者作品清單",
+  "creator_edition_origin_available": "你從創作者作品清單開啟了此頁。本分頁會保留原本的清單位置。",
+  "creator_edition_origin_checking": "正在重新檢查原本的作品清單頁面……",
+  "creator_edition_origin_present": "這個確切版本仍在已重新載入的作品清單頁面中。",
+  "creator_edition_origin_missing": "這個確切版本不在已重新載入的作品清單頁面中。它可能已變更或移動；請重新開始作品清單。",
+  "creator_edition_origin_lost": "此分頁已無法使用原本的清單返回資訊。請重新開始作品清單並重新選擇版本。",
+  "creator_edition_origin_return": "返回作品清單",
+  "creator_edition_origin_restart": "重新開始作品清單",
+  "creator_edition_origin_edition": "版本 ID",
+  "creator_edition_origin_source_revision": "來源修訂版本"
 }

@@ -9908,5 +9908,15 @@
   "creator_inspect_jump_terms": "Captured benefit",
   "creator_inspect_jump_references": "Version references",
   "creator_inspect_jump_management": "Management return",
-  "creator_inspect_jump_reading": "Reading destinations"
+  "creator_inspect_jump_reading": "Reading destinations",
+  "creator_edition_origin_heading": "Creator inventory",
+  "creator_edition_origin_available": "You opened this page from your creator inventory. Your original inventory position is saved for this tab.",
+  "creator_edition_origin_checking": "Rechecking the original inventory page…",
+  "creator_edition_origin_present": "This exact Edition is on the admitted inventory page.",
+  "creator_edition_origin_missing": "This exact Edition is not on the admitted inventory page. It may have changed or moved; restart the inventory to continue.",
+  "creator_edition_origin_lost": "The original inventory return is unavailable in this tab. Restart the inventory to choose an Edition again.",
+  "creator_edition_origin_return": "Return to inventory",
+  "creator_edition_origin_restart": "Restart inventory",
+  "creator_edition_origin_edition": "Edition ID",
+  "creator_edition_origin_source_revision": "Source revision"
 }

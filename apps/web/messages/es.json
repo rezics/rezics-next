@@ -9805,5 +9805,15 @@
   "creator_inspect_jump_terms": "Beneficio registrado",
   "creator_inspect_jump_references": "Referencias de versión",
   "creator_inspect_jump_management": "Volver a la gestión",
-  "creator_inspect_jump_reading": "Destinos de lectura"
+  "creator_inspect_jump_reading": "Destinos de lectura",
+  "creator_edition_origin_heading": "Inventario de creador",
+  "creator_edition_origin_available": "Abriste esta página desde tu inventario de creador. Esta pestaña conserva la posición original.",
+  "creator_edition_origin_checking": "Comprobando de nuevo la página original del inventario…",
+  "creator_edition_origin_present": "Esta edición exacta aparece en la página de inventario admitida de nuevo.",
+  "creator_edition_origin_missing": "Esta edición exacta no aparece en la página de inventario admitida de nuevo. Puede haber cambiado o movido; reinicia el inventario.",
+  "creator_edition_origin_lost": "Esta pestaña no puede recuperar el acceso al inventario original. Reinicia el inventario y elige una edición de nuevo.",
+  "creator_edition_origin_return": "Volver al inventario",
+  "creator_edition_origin_restart": "Reiniciar inventario",
+  "creator_edition_origin_edition": "ID de edición",
+  "creator_edition_origin_source_revision": "Revisión de origen"
 }

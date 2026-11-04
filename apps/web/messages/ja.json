@@ -9815,5 +9815,15 @@
   "creator_inspect_jump_terms": "記録された特典",
   "creator_inspect_jump_references": "版の参照情報",
   "creator_inspect_jump_management": "管理操作に戻る",
-  "creator_inspect_jump_reading": "閲覧先"
+  "creator_inspect_jump_reading": "閲覧先",
+  "creator_edition_origin_heading": "クリエイターの作品一覧",
+  "creator_edition_origin_available": "クリエイターの作品一覧から開きました。このタブでは元の一覧位置を保持しています。",
+  "creator_edition_origin_checking": "元の一覧ページを再確認しています…",
+  "creator_edition_origin_present": "この Edition は、再確認した一覧ページにあります。",
+  "creator_edition_origin_missing": "この Edition は、再確認した一覧ページにありません。変更または移動された可能性があります。一覧を最初から開いてください。",
+  "creator_edition_origin_lost": "このタブでは元の一覧に戻る情報を利用できません。一覧を最初から開き、Edition を選び直してください。",
+  "creator_edition_origin_return": "作品一覧に戻る",
+  "creator_edition_origin_restart": "一覧を最初から開く",
+  "creator_edition_origin_edition": "Edition ID",
+  "creator_edition_origin_source_revision": "ソースのリビジョン"
 }
