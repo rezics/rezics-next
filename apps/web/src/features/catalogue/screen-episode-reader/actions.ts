@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { kernelClient } from '../../../kernel/client';
 import { screenSeriesId } from '../screen-episode-membership';
-import { isScreenType } from '../screen-profile';
+import { isScreenType, readScreenProfile } from '../screen-profile';
 import { readScreenProfileForReader } from './read';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -39,4 +39,18 @@ export const loadScreenProfileForReader = createServerFn({ method: 'GET', strict
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     return readScreenProfileForReader(kernelClient(), data);
+  });
+
+/** Load shared screen facts without opening an episode page for an invalid window address. */
+export const loadScreenProfileFactsForReader = createServerFn({ method: 'GET', strict: false })
+  .validator((input: unknown) => {
+    if (!isRecord(input)) throw new Error('Invalid Screen reader address');
+    const id = screenSeriesId(input.id);
+    const context = input.context === undefined ? undefined : screenSeriesId(input.context);
+    if (!id || (input.context !== undefined && !context)) throw new Error('Invalid Screen reader address');
+    return { id, ...(context ? { context } : {}) };
+  })
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return readScreenProfile(kernelClient(), data);
   });
