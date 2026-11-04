@@ -90,7 +90,12 @@ const request = () =>
 let currentRequest = request();
 const responseHeaders = new Headers();
 mock.module('cloudflare:workers', () => ({ env }));
-mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createIsomorphicFn: () => ({
+    server: (handler: (...args: never[]) => unknown) => ({ client: () => handler }),
+  }),
+}));
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
   getRequest: () => currentRequest,
@@ -101,6 +106,12 @@ const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 mock.module('@rezics/ui/shadcn/dialog', () => ({
   Dialog: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
   DialogContent: Part,
+  DialogDescription: Part,
+  DialogFooter: Part,
+  DialogClose: Part,
+  DialogTrigger: Part,
+  DialogOverlay: Part,
+  DialogPortal: Part,
   DialogHeader: Part,
   DialogTitle: Part,
 }));
