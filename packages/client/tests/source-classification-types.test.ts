@@ -36,12 +36,15 @@ const closure: [
   Assert<Equal<SourceClassificationPutResult, Result<Put>>>,
   Assert<Equal<SourceClassificationClearInput, Body<Clear>>>,
   Assert<Equal<SourceClassificationClearResult, Result<Clear>>>,
-  Assert<Equal<RootRead, Read>>,
-  Assert<Equal<RootPut, Put>>,
-  Assert<Equal<RootClear, Clear>>,
+  Assert<Equal<Body<RootRead>, SourceClassificationBatchInput>>,
+  Assert<Equal<Result<RootRead>, SourceClassificationBatch>>,
+  Assert<Equal<Body<RootPut>, SourceClassificationPutInput>>,
+  Assert<Equal<Result<RootPut>, SourceClassificationPutResult>>,
+  Assert<Equal<Body<RootClear>, SourceClassificationClearInput>>,
+  Assert<Equal<Result<RootClear>, SourceClassificationClearResult>>,
   Assert<Equal<State<SourceClassificationPutResult>, 'published' | 'cleared'>>,
   Assert<Equal<State<SourceClassificationClearResult>, 'published' | 'cleared'>>,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 test('official classification DTO aliases follow installed mounted declarations', () => {
   expect(closure).toEqual(Array(closure.length).fill(true));
