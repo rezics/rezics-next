@@ -1697,8 +1697,7 @@ export function createSearchService({
             principal,
             text: normalized.text,
             filter: catalogue,
-            originalFilter:
-              normalized.filter === undefined ? undefined : catalogueFilter(normalized.filter),
+            originalFilter: normalized.filter === undefined ? undefined : catalogueFilter(normalized.filter),
             release: current,
             languages,
             now,
