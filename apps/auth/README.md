@@ -405,7 +405,7 @@ another request. An already dispatched change continues independently; its store
 original key remain available for explicit confirmation and native reconciliation. Failed identity confirmation
 keeps the current review usable.
 
-Decision: membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss bypasses the choice. Browser reload/close warns only while this work exists; reauthentication remains in-page and secrets remain ephemeral.
+Decision: membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
 
 ## Operator transfer
 

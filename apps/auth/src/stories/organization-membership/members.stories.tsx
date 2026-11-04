@@ -1,5 +1,7 @@
 import { AuthShell } from '../../frame';
+import { MembershipRecoveryView } from '../../membership-recovery-view';
 import type { MembershipPage } from '../../organization-membership';
+import { m } from '../../paraglide/messages.js';
 import { OrganizationMembershipRoster } from '../../routes/organizations.members';
 import { authLocale, reviewParameters } from '../accounts-operations/story';
 
@@ -64,3 +66,21 @@ function StoryPage({ page }: { page: typeof ownerPage | typeof memberPage }) {
 // Presentation fixtures only; native membership advice comes from the running source.
 export const OwnerRoster = { render: () => <StoryPage page={ownerPage} /> };
 export const MemberWithoutLeave = { render: () => <StoryPage page={memberPage} /> };
+export const UnresolvedAfterAuthorityLoss = {
+  render: () => (
+    <AuthShell>
+      <main className="mx-auto w-full max-w-2xl space-y-5 p-6">
+        <h1 className="text-2xl font-semibold">Organization members</h1>
+        <MembershipRecoveryView
+          status={m.auth_members_recovery_review()}
+          outcome={m.auth_members_unknown()}
+          pending={false}
+          canRetry
+          canSignIn
+          retry={() => {}}
+          signIn={() => {}}
+        />
+      </main>
+    </AuthShell>
+  ),
+};

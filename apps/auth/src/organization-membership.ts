@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import * as contract from '@rezics/auth-contract';
 import { authPost } from './api';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
+import { membershipReservationMatches, sameMembershipCommand } from './membership-recovery';
 
 export type MembershipOperation = Readonly<{
   kind: 'membership';
@@ -360,6 +361,18 @@ export function saveMembershipCommand(command: MembershipCommand): boolean {
 export function clearMembershipCommand() {
   window.sessionStorage.removeItem(storageKey);
 }
+export function clearMembershipCommandIfMatches(command: MembershipCommand): boolean {
+  const saved = readMembershipCommand();
+  if (saved === 'invalid') return false;
+  if (saved === null) return true;
+  if (!sameMembershipCommand(saved, command)) return false;
+  try {
+    window.sessionStorage.removeItem(storageKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
 export function newMembershipCommand(accountId: string, operation: MembershipOperation): MembershipCommand {
   return {
     accountId,
@@ -389,6 +402,12 @@ export async function submitMembership(
   if (!isActive()) return 'unavailable';
   if (!membershipSessionMatches(session, command.accountId)) return 'denied';
   if (command.unresolved && !command.reference) return 'unknown';
+  if (command.unresolved) {
+    const current = await loadSelectedMembership(command.operation.organizationId, command.operation.memberAccountId);
+    if (!isActive()) return 'unavailable';
+    if (current.kind !== 'ready') return current.kind === 'denied' || current.kind === 'signed-out' ? 'denied' : 'unavailable';
+    if (!membershipReservationMatches(command, current)) return 'conflict';
+  }
   if (!command.reference) {
     const current = await loadSelectedMembership(command.operation.organizationId, command.operation.memberAccountId);
     if (!isActive()) return 'unavailable';

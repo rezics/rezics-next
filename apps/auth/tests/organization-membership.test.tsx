@@ -106,6 +106,24 @@ async function leave(change: boolean) {
 async function confirm() {
   await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
 }
+function saveUnknown() {
+  const command = membership.newMembershipCommand(accountId, {
+    kind: 'membership',
+    organizationId,
+    memberAccountId,
+    role: 'owner',
+    reservationId,
+  });
+  command.reference = 'native-approval';
+  command.unresolved = true;
+  expect(membership.saveMembershipCommand(command)).toBe(true);
+  return command;
+}
+function beforeUnload() {
+  const event = new dom.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event as unknown as Event);
+  return event.defaultPrevented;
+}
 function input(id: string, value: string) {
   const field = host.querySelector<HTMLInputElement>(`#${id}`)!;
   Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(field, value);
@@ -284,4 +302,172 @@ test('determinate refusals preserve review; reauthentication requires confirmati
   });
   await click(m.auth_members_close());
   expect(membership.readMembershipCommand()).toBeNull();
+});
+
+test('a lost acknowledgement stays generic after page return and native refusal', async () => {
+  await mount();
+  await click(m.auth_members_change_role());
+  const original = membership.readMembershipCommand() as membership.MembershipCommand;
+  const normal = reply;
+  reply = (path) => (path.endsWith('/execute') ? Response.json({}, { status: 503 }) : normal(path));
+  await confirm();
+  await click(m.auth_members_submit());
+  const saved = membership.readMembershipCommand() as membership.MembershipCommand;
+  expect(saved.operationKey).toBe(original.operationKey);
+  expect(saved.unresolved).toBe(true);
+  const writes = calls.filter(({ path }) => /\/(approve|execute)$/.test(path)).length;
+
+  await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+  const pageshow = new dom.Event('pageshow');
+  Object.defineProperty(pageshow, 'persisted', { value: true });
+  const pagesBeforeReturn = list.mock.calls.length;
+  await flush(() => window.dispatchEvent(pageshow));
+  expect(list.mock.calls).toHaveLength(pagesBeforeReturn);
+  list.mockResolvedValueOnce({ kind: 'denied' });
+  await click(m.auth_members_recovery_retry());
+
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(organizationId);
+  expect(host.textContent).not.toContain(memberAccountId);
+  expect(host.textContent).not.toContain(reservationId);
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(calls.filter(({ path }) => /\/(approve|execute)$/.test(path))).toHaveLength(writes);
+  expect(beforeUnload()).toBe(true);
+  expect(document.activeElement).toBe(host.querySelector('#membership-recovery-heading'));
+});
+
+test('a replacement session cannot inspect or inherit the original pending review', async () => {
+  const saved = saveUnknown();
+  await mount();
+  const profile = membership.membershipProfile()!;
+  reply = (path) =>
+    path === '/session'
+      ? Response.json({ account_id: other, client_id: profile.client_id, scope: profile.scope })
+      : Response.json({ accountId: memberAccountId });
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(organizationId);
+  expect(host.textContent).not.toContain(memberAccountId);
+  expect(host.textContent).not.toContain(accountId);
+  expect(list).not.toHaveBeenCalled();
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(calls.some(({ path }) => /\/(approve|execute)$/.test(path))).toBe(false);
+  expect(beforeUnload()).toBe(true);
+});
+
+test('same-initiator reauthentication only restores a read-only review', async () => {
+  const saved = saveUnknown();
+  await mount();
+  await click(m.auth_members_recovery_sign_in());
+  await flush(() => {
+    input('membership-email', 'owner@example.test');
+    input('membership-password', 'secret-password');
+  });
+  await click(m.auth_members_reauthenticate());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
+  expect(list).not.toHaveBeenCalled();
+  expect(calls.some(({ path }) => /\/(approve|execute)$/.test(path))).toBe(false);
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain(organizationId);
+  expect(host.querySelector('#membership-confirmation')).not.toBeNull();
+  expect(calls.some(({ path }) => /\/(approve|execute)$/.test(path))).toBe(false);
+});
+
+test('a read-only recovery review restores private review only for the exact initiator and reservation', async () => {
+  const saved = saveUnknown();
+  await mount();
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(organizationId);
+  expect(host.textContent).not.toContain(memberAccountId);
+  expect(host.textContent).not.toContain(accountId);
+  expect(host.textContent).not.toContain(reservationId);
+  expect(list).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(host.querySelector('#membership-recovery-heading'));
+
+  const before = calls.length;
+  await flush(() => {
+    button(m.auth_members_recovery_retry()).click();
+    button(m.auth_members_recovery_retry()).click();
+  });
+  expect(list.mock.calls).toHaveLength(1);
+  expect(calls.slice(before).some(({ path }) => /\/(approve|execute)$/.test(path))).toBe(false);
+  expect(calls.slice(before).some(({ path }) => path.endsWith('/member'))).toBe(true);
+  expect(host.textContent).toContain(organizationId);
+  expect(host.textContent).toContain(memberAccountId);
+  expect(host.textContent).toContain(accountId);
+  expect(host.textContent).toContain(reservationId);
+  expect(document.activeElement).toBe(host.querySelector('#membership-confirmation'));
+  expect(membership.readMembershipCommand()).toEqual(saved);
+
+  await confirm();
+  const retry = button(m.auth_members_retry_exact());
+  await flush(() => {
+    retry.click();
+    retry.click();
+  });
+  const executions = calls.filter(({ path }) => path.endsWith('/execute'));
+  expect(executions).toHaveLength(1);
+  expect(calls.filter(({ path }) => path.endsWith('/approve'))).toHaveLength(0);
+  expect(executions[0]!.body).toEqual({
+    accountId,
+    operationKey: saved.operationKey,
+    operation: saved.operation,
+    reference: saved.reference,
+  });
+});
+
+test('a replacement descriptor or inaccessible storage fails closed without deleting or sending it', async () => {
+  const saved = saveUnknown();
+  await mount();
+  const replacement = membership.newMembershipCommand(accountId, {
+    ...saved.operation,
+    memberAccountId: other,
+  });
+  replacement.reference = 'replacement-approval';
+  replacement.unresolved = true;
+  expect(membership.saveMembershipCommand(replacement)).toBe(true);
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(memberAccountId);
+  expect(host.textContent).not.toContain(other);
+  expect(membership.readMembershipCommand()).toEqual(replacement);
+  expect(list).not.toHaveBeenCalled();
+  expect(calls.some(({ path }) => /\/(approve|execute)$/.test(path))).toBe(false);
+
+  await flush(() => root!.unmount());
+  host.remove();
+  root = undefined;
+  window.sessionStorage.clear();
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+  Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => { throw new Error('storage denied'); } });
+  try {
+    await mount();
+    expect(host.textContent).toContain(m.auth_members_recovery_unavailable());
+    expect(button(m.auth_members_recovery_retry()).disabled).toBe(true);
+    expect(host.querySelector('#membership-confirmation')).toBeNull();
+  } finally {
+    if (descriptor) Object.defineProperty(window, 'sessionStorage', descriptor);
+    else Reflect.deleteProperty(window, 'sessionStorage');
+  }
+});
+
+test('recovery labels are available in all eight Auth locales', async () => {
+  for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
+    if (root) {
+      await flush(() => root!.unmount());
+      host.remove();
+      root = undefined;
+    }
+    window.sessionStorage.clear();
+    saveUnknown();
+    overwriteGetLocale(() => locale);
+    await mount();
+    expect(host.querySelector('#membership-recovery-heading')?.textContent).toBe(m.auth_members_recovery_heading());
+    expect(button(m.auth_members_recovery_retry()).textContent).toBe(m.auth_members_recovery_retry());
+    expect(button(m.auth_members_recovery_sign_in()).textContent).toBe(m.auth_members_recovery_sign_in());
+  }
+  overwriteGetLocale(() => 'en');
 });

@@ -7,9 +7,16 @@ import { AuthButton as Button } from '../button';
 import { AuthPage } from '../frame';
 import { PasswordInput } from '../password-input';
 import { loadAccountSession } from '../account-operations';
+import { MembershipRecoveryView } from '../membership-recovery-view';
+import {
+  isUnresolvedMembership,
+  membershipPageAllowsCommand,
+  membershipReservationMatches,
+  sameMembershipCommand,
+} from '../membership-recovery';
 import { m } from '../paraglide/messages.js';
 import {
-  clearMembershipCommand,
+  clearMembershipCommandIfMatches,
   loadMembershipPage,
   loadSelectedMembership,
   membershipReadback,
@@ -60,6 +67,24 @@ function statusMessage(kind: string) {
       return m.auth_members_step_up();
     default:
       return m.auth_members_unavailable();
+  }
+}
+function recoveryStatusMessage(kind: string) {
+  switch (kind) {
+    case 'signed-out':
+      return m.auth_account_operation_sign_in_required();
+    case 'denied':
+      return m.auth_members_denied();
+    case 'missing':
+      return m.auth_members_missing();
+    case 'preparing':
+      return m.auth_members_preparing();
+    case 'conflict':
+      return m.auth_members_conflict();
+    case 'unavailable':
+      return m.auth_members_recovery_unavailable();
+    default:
+      return m.auth_members_recovery_review();
   }
 }
 export function OrganizationMembersPage({ organizationId }: { organizationId: string }) {
@@ -215,15 +240,18 @@ function MembershipNavigation({ choose }: { choose: () => Promise<boolean> }) {
   useBlocker({ shouldBlockFn: async () => !(await choose()), enableBeforeUnload: false });
   return null;
 }
-function DepartureChoice({ answer }: { answer: (leave: boolean) => void }) {
+function DepartureChoice({ answer, focusFallback }: { answer: (leave: boolean) => void; focusFallback: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const stay = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     dialog.current?.showModal();
     stay.current?.focus();
-    return () => previous?.focus();
-  }, []);
+    return () => {
+      if (previous?.isConnected) previous.focus();
+      else focusFallback();
+    };
+  }, [focusFallback]);
   return (
     <dialog
       ref={dialog}
@@ -263,6 +291,9 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   const [selecting, setSelecting] = useState(false);
   const [departing, setDeparting] = useState(false);
   const [revoked, setRevoked] = useState(false);
+  const [reviewCurrent, setReviewCurrent] = useState(false);
+  const [recoveryBlocked, setRecoveryBlocked] = useState(false);
+  const [recoveryStatus, setRecoveryStatus] = useState('review');
   const lifetime = useRef(0);
   const pendingDeparture = useRef<{ promise: Promise<boolean>; resolve: (leave: boolean) => void } | null>(null);
   const work = useRef(false);
@@ -270,6 +301,8 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   const activity = useRef<() => boolean>(() => false);
   const feedback = useRef<HTMLDivElement>(null);
   const confirmation = useRef<HTMLHeadingElement>(null);
+  const recoveryHeading = useRef<HTMLHeadingElement>(null);
+  const emailInput = useRef<HTMLInputElement>(null);
 
   // Invalidate before another page can handle input. Each continuation captures
   // this particular lifetime, including across Strict Mode effect replay.
@@ -288,48 +321,65 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     if (notice) feedback.current?.focus();
   }, [notice]);
   useLayoutEffect(() => {
-    if (command) confirmation.current?.focus();
-  }, [command?.operationKey]);
+    if (command && reviewCurrent && !revoked) confirmation.current?.focus();
+  }, [command?.operationKey, reviewCurrent, revoked]);
+  const unresolved = isUnresolvedMembership(command, observed);
+  const recoveryVisible = recoveryBlocked || (unresolved && (!reviewCurrent || revoked));
+  useLayoutEffect(() => {
+    if (recoveryVisible && !departing) recoveryHeading.current?.focus();
+  }, [recoveryVisible, departing, recoveryStatus]);
+  useLayoutEffect(() => {
+    if (reauth && recoveryVisible) emailInput.current?.focus();
+  }, [reauth, recoveryVisible]);
+  const focusRecovery = useCallback(() => recoveryHeading.current?.focus(), []);
 
-  work.current = !revoked && !observed && (!!command || selecting);
+  work.current = unresolved || (!revoked && !observed && (!!command || selecting));
   function renewActivity() {
     const version = ++lifetime.current;
     activity.current = () => version === lifetime.current;
     lock.current = false;
   }
-  function discard() {
+  function retirePrivateAuthority(kind = 'review') {
+    const wasUnresolved = isUnresolvedMembership(command, observed);
+    let blocked = recoveryBlocked;
     renewActivity();
-    // Dispatch persists unresolved=true before execute. Only unsent work is discarded.
-    const saved = readMembershipCommand();
-    if (
-      command &&
-      saved &&
-      saved !== 'invalid' &&
-      saved.operationKey === command.operationKey &&
-      (!saved.unresolved || observed)
-    )
-      clearMembershipCommand();
+    if (command) {
+      const saved = readMembershipCommand();
+      if (wasUnresolved) blocked = !sameMembershipCommand(saved, command);
+      else blocked = !clearMembershipCommandIfMatches(command);
+    }
+    setRecoveryBlocked(blocked);
+    setRecoveryStatus(blocked ? 'unavailable' : wasUnresolved ? kind : 'review');
     setConfirmed(false);
-    setCommand(null);
     setEmail('');
     setPassword('');
     setReauth(false);
-    setNotice('');
-    setObserved(false);
+    setNotice(wasUnresolved ? 'unknown' : '');
     setBusy(false);
     setSelecting(false);
-    work.current = false;
+    setReviewCurrent(false);
+    setRevoked(true);
+    setPage(null);
+    if (!wasUnresolved) {
+      setCommand(null);
+      setObserved(false);
+    }
+    work.current = wasUnresolved;
   }
   function installPage(result: MembershipPage) {
-    if (result.kind === 'denied' || result.kind === 'signed-out' || result.kind === 'missing') {
-      discard();
-      setRevoked(true);
-      pendingDeparture.current?.resolve(true);
-      pendingDeparture.current = null;
-      setDeparting(false);
+    if (result.kind !== 'ready') {
+      const wasUnresolved = isUnresolvedMembership(command, observed);
+      retirePrivateAuthority(result.kind);
+      setPage(result);
+      if (!wasUnresolved) {
+        pendingDeparture.current?.resolve(true);
+        pendingDeparture.current = null;
+        setDeparting(false);
+      }
+      return;
     }
-    if (result.kind === 'ready') setRevoked(false);
     setPage(result);
+    if (!recoveryBlocked) setRevoked(false);
   }
   const choose = useCallback((): Promise<boolean> => {
     if (!work.current) return Promise.resolve(true);
@@ -343,7 +393,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     return promise;
   }, []);
   function answer(leave: boolean) {
-    if (leave) discard();
+    if (leave) retirePrivateAuthority();
     pendingDeparture.current?.resolve(leave);
     pendingDeparture.current = null;
     setDeparting(false);
@@ -355,7 +405,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         event.returnValue = '';
       }
     };
-    const hide = () => discard();
+    const hide = () => retirePrivateAuthority();
     const show = (event: PageTransitionEvent) => {
       if (event.persisted) void reload();
     };
@@ -375,6 +425,23 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       await reload(cursor);
     }
   }
+  function retainUnknown(command: MembershipCommand, kind: string, result?: MembershipPage) {
+    const exact = sameMembershipCommand(readMembershipCommand(), command);
+    setCommand(command);
+    setObserved(false);
+    setConfirmed(false);
+    setEmail('');
+    setPassword('');
+    setReauth(false);
+    setNeedsProfile(true);
+    setReviewCurrent(false);
+    setRecoveryBlocked(!exact);
+    setRecoveryStatus(exact ? kind : 'unavailable');
+    setNotice('unknown');
+    setRevoked(true);
+    setPage(result ?? null);
+    work.current = true;
+  }
   async function reload(cursor?: string) {
     const isActive = activity.current;
     if (!isActive() || lock.current) return;
@@ -383,34 +450,67 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     setPage(null);
     try {
       if (!membershipId(organizationId)) {
-        setPage({ kind: 'missing' });
+        installPage({ kind: 'missing' });
         return;
-      }
-      let initiatingAccount = accountId;
-      if (!initiatingAccount) {
-        const session = await loadAccountSession();
-        if (!isActive()) return;
-        if (session.kind !== 'ready') {
-          installPage({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
-          return;
-        }
-        initiatingAccount = session.accountId;
-        setNeedsProfile(!membershipSessionMatches(session, initiatingAccount));
       }
       const saved = readMembershipCommand();
       if (
         saved === 'invalid' ||
-        (saved && (saved.accountId !== initiatingAccount || saved.operation.organizationId !== organizationId))
+        (saved && saved.operation.organizationId !== organizationId) ||
+        (command && !sameMembershipCommand(saved, command))
       ) {
-        discard();
+        setRecoveryBlocked(true);
+        setRecoveryStatus('unavailable');
         setRevoked(true);
+        setReviewCurrent(false);
+        if (isUnresolvedMembership(command, observed)) setNotice('unknown');
         setPage({ kind: 'unavailable' });
         return;
       }
+      if (saved?.unresolved) {
+        retainUnknown(saved, 'review');
+      }
+      const session = await loadAccountSession();
+      if (!isActive()) return;
+      const latest = readMembershipCommand();
+      const unchanged = saved === null ? latest === null : sameMembershipCommand(latest, saved);
+      if (latest === 'invalid' || !unchanged) {
+        setRecoveryBlocked(true);
+        setRecoveryStatus('unavailable');
+        setRevoked(true);
+        setReviewCurrent(false);
+        if (isUnresolvedMembership(command, observed) || saved?.unresolved) setNotice('unknown');
+        setPage({ kind: 'unavailable' });
+        return;
+      }
+      if (session.kind !== 'ready') {
+        if (saved?.unresolved) {
+          retainUnknown(saved, session.kind, { kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
+          return;
+        }
+        installPage({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
+        return;
+      }
+      const initiatingAccount = saved?.accountId ?? (accountId || session.accountId);
+      if (session.accountId !== initiatingAccount) {
+        if (saved?.unresolved) {
+          retainUnknown(saved, 'denied', { kind: 'unavailable' });
+          return;
+        }
+        installPage({ kind: 'denied' });
+        return;
+      }
       setAccountId(initiatingAccount);
+      const matchingProfile = membershipSessionMatches(session, initiatingAccount);
+      setNeedsProfile(!matchingProfile);
+      if (saved?.unresolved) {
+        retainUnknown(saved, matchingProfile ? 'review' : 'signed-out');
+        return;
+      }
       if (saved) {
         setCommand(saved);
-        setNotice(saved.unresolved ? 'unknown' : 'step-up');
+        setReviewCurrent(true);
+        setNotice('step-up');
       }
       const result = await loadMembershipPage(organizationId, initiatingAccount, cursor);
       if (isActive()) installPage(result);
@@ -420,6 +520,82 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setBusy(false);
       }
     }
+  }
+  async function reviewRecovery() {
+    const isActive = activity.current;
+    const expected = command;
+    if (!isActive() || lock.current || !expected || !isUnresolvedMembership(expected, observed)) return;
+    lock.current = true;
+    setBusy(true);
+    setRevoked(true);
+    setReviewCurrent(false);
+    setConfirmed(false);
+    setReauth(false);
+    setEmail('');
+    setPassword('');
+    setNotice('unknown');
+    setRecoveryStatus('review');
+    setPage(null);
+    try {
+      if (!sameMembershipCommand(readMembershipCommand(), expected)) {
+        setRecoveryBlocked(true);
+        setRecoveryStatus('unavailable');
+        return;
+      }
+      setRecoveryBlocked(false);
+      const session = await loadAccountSession();
+      if (!isActive()) return;
+      if (!membershipSessionMatches(session, expected.accountId)) {
+        const kind = session.kind === 'signed-out' ? 'signed-out' : session.kind === 'ready' ? 'denied' : 'unavailable';
+        installPage({ kind });
+        return;
+      }
+      const currentPage = await loadMembershipPage(organizationId, expected.accountId);
+      if (!isActive()) return;
+      if (currentPage.kind !== 'ready') {
+        installPage(currentPage);
+        return;
+      }
+      if (!membershipPageAllowsCommand(currentPage, expected)) {
+        retirePrivateAuthority('denied');
+        setPage({ kind: 'denied' });
+        return;
+      }
+      const currentMember = await loadSelectedMembership(organizationId, expected.operation.memberAccountId);
+      if (!isActive()) return;
+      if (currentMember.kind !== 'ready') {
+        installPage(currentMember);
+        return;
+      }
+      if (!membershipReservationMatches(expected, currentMember)) {
+        retirePrivateAuthority('conflict');
+        setPage({ kind: 'conflict' });
+        return;
+      }
+      if (!sameMembershipCommand(readMembershipCommand(), expected)) {
+        setRecoveryBlocked(true);
+        setRecoveryStatus('unavailable');
+        return;
+      }
+      setPage(currentPage);
+      setRevoked(false);
+      setRecoveryBlocked(false);
+      setRecoveryStatus('review');
+      setReviewCurrent(true);
+      setAccountId(expected.accountId);
+      setNeedsProfile(false);
+      setConfirmed(false);
+    } finally {
+      if (isActive()) {
+        lock.current = false;
+        setBusy(false);
+      }
+    }
+  }
+  function beginRecoverySignIn() {
+    if (!command || !unresolved || recoveryBlocked || !membershipProfile()) return;
+    setReauth(true);
+    setRecoveryStatus('signed-out');
   }
   async function select(memberAccountId: string, desired: 'owner' | 'member' | null) {
     const isActive = activity.current;
@@ -479,6 +655,8 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       setConfirmed(false);
       setNotice('');
       setObserved(false);
+      setReviewCurrent(true);
+      setRecoveryBlocked(false);
     } finally {
       if (isActive()) {
         lock.current = false;
@@ -491,6 +669,17 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     event.preventDefault();
     const isActive = activity.current;
     if (!isActive() || lock.current || !command || !confirmed) return;
+    if (
+      command.unresolved &&
+      (!reviewCurrent || revoked || !sameMembershipCommand(readMembershipCommand(), command))
+    ) {
+      setRecoveryBlocked(true);
+      setRecoveryStatus('unavailable');
+      setRevoked(true);
+      setReviewCurrent(false);
+      setNotice('unknown');
+      return;
+    }
     lock.current = true;
     setBusy(true);
     setNotice('');
@@ -516,13 +705,27 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       if (result === 'step-up') setReauth(true);
       const current = await loadSelectedMembership(organizationId, command.operation.memberAccountId);
       if (!isActive()) return;
-      if (current.kind === 'denied' || current.kind === 'signed-out') {
+      if (current.kind !== 'ready') {
         installPage(current);
         return;
       }
-      setObserved(result === 'acknowledged' && membershipReadback(command, current));
+      const observedResult = result === 'acknowledged' && membershipReadback(command, current);
+      setObserved(observedResult);
+      if (!observedResult && command.unresolved && !membershipReservationMatches(command, current)) {
+        retirePrivateAuthority('conflict');
+        setPage({ kind: 'conflict' });
+        return;
+      }
       const resultPage = await loadMembershipPage(organizationId, accountId);
-      if (isActive()) installPage(resultPage);
+      if (isActive()) {
+        if (!observedResult && command.unresolved && !membershipPageAllowsCommand(resultPage, command)) {
+          retirePrivateAuthority('denied');
+          setPage({ kind: resultPage.kind === 'ready' ? 'denied' : resultPage.kind });
+        } else {
+          setReviewCurrent(!observedResult && command.unresolved);
+          installPage(resultPage);
+        }
+      }
     } finally {
       if (isActive()) {
         lock.current = false;
@@ -542,16 +745,29 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         : reauthenticateMembershipSession(accountId, email, password, isActive));
       if (!isActive()) return;
       if (!authenticated) {
-        setNotice('unavailable');
+        if (command && isUnresolvedMembership(command, observed)) {
+          setRecoveryStatus('unavailable');
+          setNotice('unknown');
+          setRevoked(true);
+          setReviewCurrent(false);
+        } else setNotice('unavailable');
         return;
       }
       setReauth(false);
       setNeedsProfile(false);
       setConfirmed(false);
-      setNotice('step-up');
-      setPage(null);
-      const result = await loadMembershipPage(organizationId, accountId);
-      if (isActive()) installPage(result);
+      if (command && isUnresolvedMembership(command, observed)) {
+        setNotice('unknown');
+        setRecoveryStatus('review');
+        setRevoked(true);
+        setReviewCurrent(false);
+        setPage(null);
+      } else {
+        setNotice('step-up');
+        setPage(null);
+        const result = await loadMembershipPage(organizationId, accountId);
+        if (isActive()) installPage(result);
+      }
     } finally {
       if (isActive()) {
         setPassword('');
@@ -562,10 +778,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   }
   function dismiss() {
     if (busy || !command || (command.unresolved && !observed)) return;
-    try {
-      clearMembershipCommand();
-    } catch {
-      setNotice('unavailable');
+    if (!clearMembershipCommandIfMatches(command)) {
+      setRecoveryBlocked(true);
+      setRecoveryStatus('unavailable');
+      setRevoked(true);
+      setReviewCurrent(false);
       return;
     }
     setCommand(null);
@@ -573,6 +790,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     setReauth(false);
     setConfirmed(false);
     setObserved(false);
+    setReviewCurrent(false);
   }
   const effect =
     command?.operation.role === null
@@ -588,18 +806,29 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         </Link>
       ) : null}
       {router ? <MembershipNavigation choose={choose} /> : null}
-      {departing ? <DepartureChoice answer={answer} /> : null}
+      {departing ? <DepartureChoice answer={answer} focusFallback={focusRecovery} /> : null}
       <p>{m.auth_members_intro()}</p>
-      <p className="break-all">{organizationId}</p>
+      {!recoveryVisible && page?.kind === 'ready' ? <p className="break-all">{organizationId}</p> : null}
       <div aria-busy={busy || page === null} className="space-y-5">
-        {notice ? (
+        {notice && !recoveryVisible ? (
           <div ref={feedback} tabIndex={-1} role="status">
             <Alert>
               <AlertDescription>{statusMessage(notice)}</AlertDescription>
             </Alert>
           </div>
         ) : null}
-        {page?.kind !== 'ready' ? (
+        {recoveryVisible ? (
+          <MembershipRecoveryView
+            status={recoveryStatusMessage(recoveryStatus)}
+            outcome={unresolved ? m.auth_members_unknown() : m.auth_members_recovery_unavailable()}
+            pending={busy}
+            canRetry={!!command && unresolved && !recoveryBlocked}
+            canSignIn={!reauth && !!command && unresolved && !recoveryBlocked && !!membershipProfile()}
+            retry={() => void reviewRecovery()}
+            signIn={beginRecoverySignIn}
+            headingRef={recoveryHeading}
+          />
+        ) : page?.kind !== 'ready' ? (
           <div className="space-y-3" role="status">
             <p>{statusMessage(page?.kind ?? 'loading')}</p>
             {page && page.kind !== 'signed-out' && page.kind !== 'denied' && page.kind !== 'missing' ? (
@@ -623,6 +852,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             <Field>
               <FieldLabel htmlFor="membership-email">{m.auth_login_email()}</FieldLabel>
               <Input
+                ref={emailInput}
                 id="membership-email"
                 type="email"
                 autoComplete="username"
@@ -646,9 +876,14 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             <Button type="submit" disabled={busy} aria-busy={busy}>
               {m.auth_members_reauthenticate()}
             </Button>
+            {recoveryVisible ? (
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setReauth(false)}>
+                {m.auth_inventory_cancel()}
+              </Button>
+            ) : null}
           </form>
         ) : null}
-        {command && !revoked ? (
+        {command && !revoked && !recoveryVisible ? (
           <section className="space-y-4" aria-labelledby="membership-confirmation">
             <h2 id="membership-confirmation" ref={confirmation} tabIndex={-1}>
               {m.auth_members_confirm_heading()}
@@ -692,11 +927,6 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
               {observed ? m.auth_members_close() : m.auth_inventory_cancel()}
             </Button>
           </section>
-        ) : null}
-        {page && page.kind !== 'ready' ? (
-          <Button type="button" variant="outline" disabled={busy} onClick={() => void browse()}>
-            {m.auth_inventory_reload()}
-          </Button>
         ) : null}
       </div>
     </AuthPage>

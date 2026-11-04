@@ -176,8 +176,53 @@ test('deliberate Leave retires late execute callbacks and restores only the unre
   expect(list.mock.calls).toHaveLength(reads);
   expect(membership.readMembershipCommand()).toEqual(saved);
   await navigate('/organizations/members');
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(org);
+  expect(host.textContent).not.toContain(account);
+  expect(host.textContent).not.toContain(member);
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  await click(m.auth_members_recovery_retry());
   expect(host.textContent).toContain(org);
   expect(host.textContent).toContain(account);
+  expect(host.textContent).toContain(member);
   expect(host.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(false);
+  expect(membership.readMembershipCommand()).toEqual(saved);
+});
+
+test('authority loss leaves an open unknown-outcome departure choice honest and protected', async () => {
+  await mount();
+  execute = async () => Response.json({}, { status: 503 });
+  await click(m.auth_members_change_role());
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  const saved = membership.readMembershipCommand() as membership.MembershipCommand;
+  expect(saved.unresolved).toBe(true);
+  await click(m.auth_inventory_reload());
+  expect(host.textContent).toContain(m.auth_members_departure());
+
+  await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+  const restored = new dom.Event('pageshow');
+  Object.defineProperty(restored, 'persisted', { value: true });
+  await flush(() => window.dispatchEvent(restored));
+  list.mockResolvedValueOnce({ kind: 'denied' });
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain(m.auth_members_departure());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(org);
+  expect(host.textContent).not.toContain(member);
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(unload()).toBe(true);
+
+  await click(m.auth_members_stay());
+  expect(document.activeElement).toBe(host.querySelector('#membership-recovery-heading'));
+  await navigate('/away');
+  await click(m.auth_members_leave());
+  expect(host.textContent).toBe('Away');
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  await navigate('/organizations/members');
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(org);
+  expect(host.textContent).not.toContain(account);
   expect(membership.readMembershipCommand()).toEqual(saved);
 });
