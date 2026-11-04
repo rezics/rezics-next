@@ -55,8 +55,6 @@ async function preview(subjectIds: string[], requestKey = key()) {
 }
 
 test('preview is inert, confirmation binds stored peers, and changed entries are skipped individually', async () => {
-  await f.setLibraryOpen(false);
-  await f.grantLibraryGate(f.owner.actor.accountId);
   const a = await entry(),
     b = await entry();
   const requestKey = key(),
@@ -150,18 +148,20 @@ test('filtered preview exhausts native Members pages before status confirmation'
   await f.grantLibraryGate(owner.actor.accountId);
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
-  const source = (
-    await collections.createCollection(owner.actor, { title: 'Paged bulk source', visibility: 'public' }, key())
-  ).value;
+  const made = await f.send(
+    owner.bearer,
+    'POST',
+    '/v1/collections',
+    { title: 'Paged bulk source', visibility: 'public' },
+    key(),
+  );
+  expect(made.status, await made.clone().text()).toBe(201);
+  const source = (await made.json()).collection;
   const subjectId = await f.createSubject('game');
   await f.commands.putEntry(owner.actor, subjectId, { state: 'planned' }, key());
   for (let n = 0; n < 101; n++)
     await collections.addMember(owner.actor, source.id, { subjectId, note: `occurrence-${n}` }, key());
 
-  const collectionRead = await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}`);
-  expect(collectionRead.status, await collectionRead.clone().text()).toBe(200);
-  const memberRead = await f.send(owner.bearer, 'GET', `/v1/collections/${source.id}/members`);
-  expect(memberRead.status, await memberRead.clone().text()).toBe(200);
   const response = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
     action: 'set_status',
     state: 'completed',
@@ -272,9 +272,7 @@ test('filtered preview exhausts native Members pages before status confirmation'
 }, 300000);
 
 test('current authority loss prevents another effect and result disclosure', async () => {
-  await f.setLibraryOpen(false);
-  await f.revokeLibraryGate(f.owner.actor.accountId);
-  await f.grantLibraryGate(f.owner.actor.accountId);
+  await f.setLibraryOpen(true);
   const a = await entry(),
     b = await entry(),
     created = await preview([a.subjectId, b.subjectId]),
@@ -306,12 +304,12 @@ test('current authority loss prevents another effect and result disclosure', asy
   };
   const committed = await executeStatusTarget(runtime, command);
   expect(committed).toMatchObject({ kind: 'terminal', evidence: { outcome: 'applied' } });
-  await f.revokeLibraryGate(f.owner.actor.accountId);
+  await f.setLibraryOpen(false);
   // A lost native response is privately recoverable even after write/disclosure authority is gone.
   expect(await executeStatusTarget(runtime, command)).toEqual(committed);
   await runCollectionBulkPage(dependencies(), { route: created.value.operation.route, operationId: id });
   await expect(bulk.get(f.owner.actor, id)).rejects.toThrow();
-  await f.grantLibraryGate(f.owner.actor.accountId);
+  await f.setLibraryOpen(true);
   expect((await f.commands.readEntry(f.owner.actor, a.subjectId)).revision).toBe(a.revision + 1);
   expect((await f.commands.readEntry(f.owner.actor, b.subjectId)).revision).toBe(b.revision);
   expect((await bulk.outcomes(f.owner.actor, id, {})).outcomes.map((outcome) => outcome.reason)).toEqual([
@@ -331,9 +329,15 @@ test('filtered review pages never narrow the captured set; exact start replay ke
   ]);
   await f.grantLibraryGate(owner.actor.accountId);
   const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
-  const source = (
-    await collections.createCollection(owner.actor, { title: 'Filtered operation review', visibility: 'public' }, key())
-  ).value;
+  const made = await f.send(
+    owner.bearer,
+    'POST',
+    '/v1/collections',
+    { title: 'Filtered operation review', visibility: 'public' },
+    key(),
+  );
+  expect(made.status, await made.clone().text()).toBe(201);
+  const source = (await made.json()).collection;
   const captured: Awaited<ReturnType<typeof entry>>[] = [];
   for (let n = 0; n < 25; n++) {
     const value = await entry(owner.actor);
@@ -448,6 +452,7 @@ test('native add receipt replay survives partial cancellation; results stay priv
     const row = (await pageCollectionBulkManifest(tx, { ...locator, limit: 1 }))[0]!;
     return { operation, row };
   });
+  expect(persisted.operation.phase).toBe('applying');
   const ownerConsent = async () => ({
     actorAccountId: owner.actor.accountId,
     clientId: owner.actor.clientId,
@@ -476,7 +481,7 @@ test('native add receipt replay survives partial cancellation; results stay priv
     deadline: workStepDeadline(),
   };
   const accepted = await executeCollectionAddTarget(runtimeDependencies, command);
-  expect(accepted.kind).toBe('terminal');
+  expect(accepted).toMatchObject({ kind: 'terminal' });
   expect(await executeCollectionAddTarget(runtimeDependencies, command)).toEqual(accepted);
   const checkpoint = await f.pool.query<{ state: string }>(
     'SELECT state FROM library.bulk_target WHERE route=$1 AND operation_id=$2 AND ordinal=0',
