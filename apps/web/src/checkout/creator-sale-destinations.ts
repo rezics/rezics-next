@@ -13,3 +13,26 @@ export function creatorSaleDestinations(sale: Pick<CreatorSale, 'offerId' | 'tar
     work: UUID.test(sale.targetSubjectId) ? subjectHref({ id: sale.targetSubjectId, label: '' }, locale).href : null,
   };
 }
+
+/** Statement navigation retains its ordinary list meaning; there is no supplied sale-to-line relation. */
+export function creatorSaleStatementDestination(locale: string): string {
+  return localizeHref('/creator/statements', { locale: locale as never });
+}
+
+/** Capture only an exact supported same-origin destination, with no arbitrary return URL. */
+export function supportedCreatorSaleDeparture(
+  sale: Pick<CreatorSale, 'offerId' | 'targetSubjectId'>,
+  locale: string,
+  href: string,
+  origin: string,
+): string | null {
+  try {
+    const target = new URL(href, origin);
+    if (target.origin !== origin || target.username || target.password || target.search || target.hash) return null;
+    const destinations = creatorSaleDestinations(sale, locale);
+    const supported = [destinations.offer, destinations.work, creatorSaleStatementDestination(locale)];
+    return supported.includes(target.pathname) ? target.pathname : null;
+  } catch {
+    return null;
+  }
+}

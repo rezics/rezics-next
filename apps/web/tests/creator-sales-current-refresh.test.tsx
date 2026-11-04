@@ -151,3 +151,91 @@ test('a foreign refresh replaces a seeded sale with unavailable and healthy rota
     host.remove();
   }
 });
+
+test('supported departure restores only the exact sale on the original admitted page and retires clipboard work', async () => {
+  const { CreatorSalesPage } = await import('../src/checkout/creator-sales-page');
+  const { supportedCreatorSaleDeparture } = await import('../src/checkout/creator-sale-destinations');
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  let finishCopy: (() => void) | undefined;
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: () =>
+        new Promise<void>((resolve) => {
+          finishCopy = resolve;
+        }),
+    },
+  });
+  let source = {};
+  let current = true;
+  const sale = { ...creatorSaleFixture, orderId: '019a2100-0000-7000-8000-000000000088' };
+  let data = { kind: 'ready', sales: [creatorSaleFixture, sale], next: 'older+/=', projectionState: 'ready' } as const;
+  const render = () =>
+    act(async () =>
+      root.render(<CreatorSalesPage page={data} source={source} locale="en" isCurrent={() => current} />),
+    );
+  const click = async (label: string, index = 0) => {
+    const buttons = [...host.querySelectorAll('button')].filter((button) => button.textContent === label);
+    await act(async () => buttons[index]!.click());
+  };
+  const event = (name: string) =>
+    act(async () => {
+      window.dispatchEvent(new window.Event(name));
+    });
+  // Prevent document navigation after React has prepared the supported departure.
+  const stay = (event: Event) => event.preventDefault();
+  host.addEventListener('click', stay);
+  const depart = async (path: string) => {
+    const link = [...host.querySelectorAll<HTMLAnchorElement>('#creator-sale-inspection a')].find(
+      (anchor) => anchor.getAttribute('href') === path,
+    )!;
+    await act(async () =>
+      link.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
+    );
+    await event('pagehide');
+  };
+  try {
+    await render();
+    await click('Inspect sale', 1);
+    await click('Copy sale reference');
+    await depart(`/en/offers/${sale.offerId}`);
+    expect(host.querySelector('#creator-sale-inspection')).toBeNull();
+    await act(async () => finishCopy?.());
+    await event('pageshow');
+    const inspection = host.querySelector('#creator-sale-inspection')!;
+    expect(inspection.textContent).toContain(sale.orderId);
+    expect(inspection.textContent).not.toContain(creatorSaleFixture.orderId);
+    expect(inspection.textContent).toContain('Returned to the same observed sale');
+    expect(inspection.textContent).not.toContain('Sale reference copied.');
+    await depart('/en/creator/statements');
+    await event('pageshow');
+    expect(host.querySelector('#creator-sale-inspection')?.textContent).toContain(sale.orderId);
+    await depart(`/en/offers/${sale.offerId}`);
+    source = {};
+    data = { ...data, sales: [sale, creatorSaleFixture] };
+    await render();
+    await event('pageshow');
+    expect(host.querySelector('#creator-sale-inspection')).toBeNull();
+    await click('Inspect sale');
+    await depart(`/en/offers/${sale.offerId}`);
+    current = false;
+    await event('pageshow');
+    expect(host.querySelector('#creator-sale-inspection')).toBeNull();
+    for (const href of [
+      'https://foreign.test/en/creator/statements',
+      '/en/orders/private',
+      '/en/creator/statements?line=made-up',
+      '/de/creator/statements',
+    ])
+      expect(supportedCreatorSaleDeparture(sale, 'en', href, 'https://site.test')).toBeNull();
+  } finally {
+    host.removeEventListener('click', stay);
+    await act(async () => root.unmount());
+    if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard);
+    else Reflect.deleteProperty(navigator, 'clipboard');
+    host.remove();
+  }
+});

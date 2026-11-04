@@ -1,11 +1,10 @@
-import { ListRow } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { CreatorSalesData } from './creator-sales';
-import { formatMinorAmount } from './money';
-import { CreatorSaleInspection, creatorSaleSettlementLabel } from './creator-sale-inspection';
+import { CreatorSaleInspection } from './creator-sale-inspection';
 import { useCreatorSaleReading } from './creator-sale-reading';
+import { CreatorSalesReview } from './creator-sales-review';
 
 export function creatorSalesHref(locale: string, cursor?: string): string {
   return `/${locale}/creator/sales${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
@@ -102,62 +101,18 @@ export function CreatorSalesPage({
               </div>
             )
           ) : (
-            <ul className="space-y-4 rounded-xl border bg-card p-4 text-card-foreground sm:p-5">
-              {page.sales.map((sale) => (
-                <ListRow key={sale.orderId} data-settlement={sale.settlement} className="min-w-0 space-y-3 p-3">
-                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                    <h2
-                      id={`sale-title-${sale.orderId}`}
-                      className="line-clamp-3 min-w-0 break-words font-medium [overflow-wrap:anywhere]"
-                    >
-                      {sale.title}
-                    </h2>
-                    <p className="shrink-0 font-serif text-lg tabular-nums">
-                      {formatMinorAmount(locale, sale.currency, sale.unitAmountMinor, sale.moneyUnit) ??
-                        m.statements_amount_unavailable()}{' '}
-                      <span className="text-sm">{sale.currency.toUpperCase()}</span>
-                    </p>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {sale.taxBehavior === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
-                  </p>
-                  <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-                    <dt className="text-muted-foreground">{m.orders_status_label()}</dt>
-                    <dd>{creatorSaleSettlementLabel(sale.settlement)}</dd>
-                    <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
-                    <dd>
-                      <time dateTime={sale.createdAt}>
-                        {new Intl.DateTimeFormat(locale, {
-                          dateStyle: 'medium',
-                          timeStyle: 'medium',
-                          timeZone: 'UTC',
-                        }).format(new Date(sale.createdAt))}
-                      </time>
-                    </dd>
-                    <dt className="text-muted-foreground">{m.creator_sales_reference()}</dt>
-                    <dd className="min-w-0 truncate font-mono">{sale.orderId}</dd>
-                  </dl>
-                  <Button
-                    variant="outline"
-                    className="min-h-11 whitespace-normal"
-                    aria-describedby={`sale-title-${sale.orderId}`}
-                    aria-expanded={reading.selectedId === sale.orderId}
-                    aria-controls={reading.selectedId === sale.orderId ? 'creator-sale-inspection' : undefined}
-                    onClick={(event) => reading.select(sale.orderId, event.currentTarget)}
-                  >
-                    {m.creator_sale_inspect()}
-                  </Button>
-                </ListRow>
-              ))}
-            </ul>
+            <CreatorSalesReview key={reading.sourceVersion} sales={page.sales} locale={locale} reading={reading} />
           )}
           {reading.sale && (
             <CreatorSaleInspection
-              key={reading.selectedId}
+              key={reading.selectionVersion}
               sale={reading.sale}
               locale={locale}
               close={reading.close}
               isCurrent={reading.isCurrent}
+              prepareDeparture={reading.prepareDeparture}
+              returned={reading.returned}
+              cursor={cursor}
             />
           )}
           <nav aria-label={m.creator_sales_pagination()} className="flex flex-wrap gap-3">
