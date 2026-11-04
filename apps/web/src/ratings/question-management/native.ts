@@ -20,7 +20,7 @@ export type QuestionManagementSourceResult =
   | { state: 'ready'; page: QuestionManagementPageData }
   | { state: 'denied' | 'concealed' | 'stale-cursor' | 'unavailable' };
 
-async function boundedBody(response: Response): Promise<Uint8Array> {
+async function boundedBody(response: Response): Promise<ArrayBuffer> {
   const declared = Number(response.headers.get('content-length') ?? 0);
   if (declared > MAX_RESPONSE_BYTES) {
     await response.body?.cancel();
