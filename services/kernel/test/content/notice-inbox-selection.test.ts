@@ -65,6 +65,8 @@ test('candidate scan limits are static page-size bounds', () => {
 
 test('All and Unread bind selection into the cursor, admit displayed through, and seek unread without walking read pages', async () => {
   const ids = await seed(5);
+  const newest = ids[4]!;
+  const unreadOlder = ids[3]!;
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
   await markNoticesSeen(fixture.db.pool, fixture.accountId, ids[2]!);
 
@@ -75,24 +77,24 @@ test('All and Unread bind selection into the cursor, admit displayed through, an
   expect(all.actions.markSeen).toEqual({
     method: 'POST',
     path: `${base}:markSeen`,
-    through: ids[4],
+    through: newest,
   });
 
   const unread = await list({ limit: 10, selection: 'unread' });
   expect(unread.selection).toBe('unread');
   expect(unread.items.map((item) => [item.id, item.unread])).toEqual([
-    [ids[4], true],
-    [ids[3], true],
+    [newest, true],
+    [unreadOlder, true],
   ]);
   expect(unread.next).toBeNull();
-  expect(unread.actions.markSeen?.through).toBe(ids[4]);
+  expect(unread.actions.markSeen?.through).toBe(newest);
 
   const continuing = await list({ limit: 1, selection: 'unread' });
-  expect(continuing.items.map((item) => item.id)).toEqual([ids[4]]);
+  expect(continuing.items.map((item) => item.id)).toEqual([newest]);
   expect(continuing.next).toEqual(expect.any(String));
   expect(continuing.actions.markSeen).toBeNull();
   const sameRange = await list({ limit: 1, selection: 'unread', cursor: continuing.next! });
-  expect(sameRange.items.map((item) => item.id)).toEqual([ids[3]]);
+  expect(sameRange.items.map((item) => item.id)).toEqual([unreadOlder]);
   expect(sameRange.selection).toBe('unread');
 
   const allFirst = await list({ limit: 1, selection: 'all' });
