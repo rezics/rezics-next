@@ -1927,6 +1927,13 @@ export class Importer {
         };
         conversionContext = context;
         conversion = this.convert(registration, staged, context);
+        if (owner.external_id === 'v1')
+          console.error('showcase-credit v1 conversion:', {
+            proposals: conversion.proposals.map((command) => command.op === 'propose' ? command.statement.property.id : command.op),
+            candidates: candidates.length,
+            omissions,
+            vocabularyRows: vocabulary?.rows.length ?? 0,
+          });
         this.retainDiagnostics(run, staged, conversion, 'application');
         const intents =
           'mediaImportIntents' in conversion ? (conversion.mediaImportIntents as MediaImportRequest[]) : [];
