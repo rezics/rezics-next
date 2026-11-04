@@ -498,22 +498,24 @@ const statementVisibilityResponse = t.Object(
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
 const privateCacheControl = { 'cache-control': t.Literal('private, no-store') };
-const statementConsentActionsResponse = t.Union([
-  t.Object(
-    {
-      state: t.Literal('available'),
-      disclosed: t.Boolean(),
-      operations: t.Array(t.Union([t.Literal('statement.disclose'), t.Literal('statement.retract')]), {
+const statementConsentActionsResponse = t.Object(
+  {
+    state: t.Union([
+      t.Literal('available'),
+      t.Literal('refused'),
+      t.Literal('terminal'),
+      t.Literal('unavailable'),
+    ]),
+    disclosed: t.Optional(t.Boolean()),
+    operations: t.Optional(
+      t.Array(t.Union([t.Literal('statement.disclose'), t.Literal('statement.retract')]), {
         minItems: 1,
         uniqueItems: true,
       }),
-    },
-    { additionalProperties: false },
-  ),
-  t.Object({ state: t.Literal('refused') }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('terminal') }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
-]);
+    ),
+  },
+  { additionalProperties: false },
+);
 const reactionKind = t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
 const reactionCountResponse = t.Object(
   {
