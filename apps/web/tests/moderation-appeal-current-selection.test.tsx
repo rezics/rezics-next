@@ -1,7 +1,6 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
-import { createRoot } from 'react-dom/client';
 import type { WorkbenchRead } from '../src/moderation/workbench-queue/read';
 import type { ResolutionCommand } from '../src/moderation/appeal-resolution';
 
@@ -37,6 +36,7 @@ const globals = {
 const saved = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
 const { prepareWorkbenchRead } = await import('../src/moderation/workbench-queue/read');
@@ -176,7 +176,9 @@ test('pointer retry and moved focus do not steal focus; session replacement fenc
     document.body.append(elsewhere);
     if (mode === 'moved') elsewhere.focus();
     if (mode === 'session' || mode === 'account') {
-      cache.setQueryData(['session'], { ...session, ...(mode === 'account' ? { subject: 'foreign' } : { csrfToken: 'replacement' }) });
+      await act(async () => {
+        cache.setQueryData(['session'], { ...session, ...(mode === 'account' ? { subject: 'foreign' } : { csrfToken: 'replacement' }) });
+      });
       await flush();
     }
     if (mode === 'source') await replaceSource();
@@ -211,6 +213,7 @@ test('an uncertain selected resolution fences refresh and retries its original c
   await act(async () => {
     await user.type(textarea, '  Review this.  ');
   });
+  expect(button(m.moderation_appeal_uphold_action()).disabled).toBe(false);
   await click(button(m.moderation_appeal_uphold_action()));
   expect(sent).toHaveLength(1);
   expect(button(m.moderation_queue_refresh()).disabled).toBe(true);
