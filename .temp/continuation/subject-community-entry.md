@@ -52,7 +52,8 @@ Request additive call-site work from the existing catalogue and Realm/thread own
 derives sign-in return from its own path and discards the original Subject region destination. The Board composer
 preset carries Subject identity and label but not exact Global/Realm place and the intended Subject-region return.
 Extend those existing owner paths so exact Subject/place/preset and return intent survive admission, sign-in,
-composition and return to the same region and frontier. Do not add parameters that the route ignores.
+composition and return to the same region and frontier. The return target is the complete originating Subject
+region URL, including its cursor and Realm/node context. Do not add parameters that the route ignores.
 
 After the connected entry works, add only the named focused acceptance and the journey stories for unavailable
 entry, exact admission/sign-in, sparse continuation and replaced-card focus. Exercise en, zh-Hant and ja with long
