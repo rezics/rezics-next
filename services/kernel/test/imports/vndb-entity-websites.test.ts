@@ -55,13 +55,13 @@ async function authoredDump(directory: string, staffSecond = 'https://example.or
     entry_meta: ['id\trevision', 'v1\t1\nv2\t1\nv3\t1'],
     vn_staff: ['id\taid\trole', 'v1\t10\tscenario'],
     staff_alias: ['id\taid\tname', 's4\t10\tAuthored staff'],
-    staff: ['id\tmain\tprod', 's4\t10\t\\N'],
+    staff: ['id\tmain\tprod', 's4\t10\tp2'],
     releases: ['id\ttitle', 'r1\tAuthored release'],
     releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete'],
     releases_producers: ['id\tpid\tdeveloper\tpublisher', 'r1\tp1\tt\tf'],
-    producers: ['id\ttype\tname', 'p1\tco\tAuthored producer\np9\tco\tUnselected producer'],
+    producers: ['id\ttype\tname', 'p1\tco\tAuthored producer\np2\tin\tIndividual producer\np9\tco\tUnselected producer'],
     staff_extlinks: ['id\tlink', 's4\t1\ns4\t2'],
-    producers_extlinks: ['id\tlink', 'p1\t1\np9\t5'],
+    producers_extlinks: ['id\tlink', 'p1\t1\np2\t7\np9\t5'],
     releases_extlinks: ['id\tlink', 'r1\t4'],
     vn_extlinks: ['id\tlink', ''],
     vn_relations: ['id\tvid\trelation', ''],
@@ -74,7 +74,7 @@ async function authoredDump(directory: string, staffSecond = 'https://example.or
     anime: ['id\ttitle', ''],
     extlinks: [
       'id\tsite\tvalue',
-      `1\twebsite\thttps://example.org/shared\n2\twebsite\t${staffSecond}\n4\twebsite\thttps://example.org/release\n5\twebsite\thttps://example.org/unselected\n6\twikidata\tQ1`,
+      `1\twebsite\thttps://example.org/shared\n2\twebsite\t${staffSecond}\n4\twebsite\thttps://example.org/release\n5\twebsite\thttps://example.org/unselected\n6\twikidata\tQ1\n7\twebsite\thttps://example.org/individual`,
     ],
   };
   for (const [name, [header, body]] of Object.entries(files)) {
@@ -125,6 +125,7 @@ test('production operator imports authored VNDB staff, producer and release webs
     };
     const staffId = subject('s4');
     const producerId = subject('p1');
+    const individualProducerId = subject('p2');
     const releaseId = subject('r1');
     expect(first.readings.some((entry) => entry.externalId === 'p9')).toBe(false);
     async function adoptUrl(subjectId: string, url: string) {
@@ -159,6 +160,7 @@ test('production operator imports authored VNDB staff, producer and release webs
     }
     await adoptUrl(staffId, 'https://example.org/shared');
     await adoptUrl(producerId, 'https://example.org/shared');
+    await adoptUrl(individualProducerId, 'https://example.org/individual');
     await adoptUrl(releaseId, 'https://example.org/release');
     const staffPage = await editor.http(
       `/v1/subjects/${staffId}/candidates?${new URLSearchParams({ property: 'schema:url', context: globalContext, limit: '100' })}`,
@@ -195,6 +197,16 @@ test('production operator imports authored VNDB staff, producer and release webs
     expect((await current(producerId)).statements['schema:url']?.map((item) => item.value.content)).toEqual([
       'https://example.org/shared',
     ]);
+    const individualProducerView = await current(individualProducerId);
+    expect(individualProducerView.type).toBe('schema:Person');
+    expect(individualProducerView.statements['schema:url']?.map((item) => item.value.content)).toEqual([
+      'https://example.org/individual',
+    ]);
+    expect(
+      individualProducerView.statements['schema:url']?.[0]?.references
+        ?.flatMap((reference) => reference.parts)
+        .some((part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/p2'),
+    ).toBe(true);
     expect((await current(releaseId)).type).toBe('wd:Q20631656');
     expect((await current(releaseId)).statements['schema:url']?.map((item) => item.value.content)).toEqual([
       'https://example.org/release',

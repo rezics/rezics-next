@@ -21,7 +21,7 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@3';
+export const converter_revision = 'cross-media-entities@4';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxNames: vndbLimits.maxTitleCandidates,
@@ -553,6 +553,41 @@ function projectReleaseTitles(
   return { titles, names: [...uniqueNames.values()], alternateNames, labels, aliases, diagnostics };
 }
 
+function projectEntityLinks(kind: EntityKind, raw: object, owner: string, normalized: Normalized): void {
+  const joinTable = entityLinkTable(kind);
+  if (!joinTable) return;
+  const joins = grouped(own(raw, joinTable, `/${joinTable}`), `/${joinTable}`, vndbLimits.maxLinks, true).map(
+    (value, i) => {
+      const p = `/${joinTable}/${i}`;
+      const entry = object(value, p);
+      const id = text(own(entry, 'id', `${p}/id`), `${p}/id`, 32);
+      if (id !== owner) fail(`${p}/id`, 'External link child ID does not match entity id');
+      return { id, link: positiveInteger(own(entry, 'link', `${p}/link`), `${p}/link`) };
+    },
+  );
+  const external = grouped(own(raw, 'extlinks', '/extlinks'), '/extlinks', vndbLimits.maxLinks, true).map(
+    (value, i) => {
+      const p = `/extlinks/${i}`;
+      const entry = object(value, p);
+      const key = positiveInteger(own(entry, 'id', `${p}/id`), `${p}/id`);
+      const site = text(own(entry, 'site', `${p}/site`), `${p}/site`, 32);
+      const valueText = text(own(entry, 'value', `${p}/value`), `${p}/value`, 4096);
+      return { id: key, site, value: site === 'website' ? website(valueText, `${p}/value`) : valueText };
+    },
+  );
+  const byId = new Set(external.map((entry) => entry.id));
+  const used = new Set(joins.map((entry) => entry.link));
+  if (
+    byId.size !== external.length ||
+    used.size !== joins.length ||
+    used.size !== byId.size ||
+    joins.some((link) => !byId.has(link.link))
+  )
+    fail(`/${joinTable}`, 'External link group has mismatched or duplicate IDs');
+  normalized[joinTable] = joins;
+  normalized.extlinks = external;
+}
+
 function project(kind: EntityKind, input: ConversionInput): Projected {
   const raw = object(input.record, '');
   const idField = kind.startsWith('vndb')
@@ -580,6 +615,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const normalized: Normalized = { id: nativeId, releases_titles: projectedTitles.titles };
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    projectEntityLinks(kind, raw, expected, normalized);
     if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbReleaseNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     const aliases = Object.keys(projectedTitles.aliases).length ? projectedTitles.aliases : undefined;
@@ -657,40 +693,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const description = own(raw, 'description', '/description');
     if (description !== undefined) normalized.description = description;
   }
-  const joinTable = entityLinkTable(kind);
-  if (joinTable) {
-    const owner = expected;
-    const joins = grouped(own(raw, joinTable, `/${joinTable}`), `/${joinTable}`, vndbLimits.maxLinks, true).map(
-      (value, i) => {
-        const p = `/${joinTable}/${i}`;
-        const entry = object(value, p);
-        const id = text(own(entry, 'id', `${p}/id`), `${p}/id`, 32);
-        if (id !== owner) fail(`${p}/id`, 'External link child ID does not match entity id');
-        return { id, link: positiveInteger(own(entry, 'link', `${p}/link`), `${p}/link`) };
-      },
-    );
-    const external = grouped(own(raw, 'extlinks', '/extlinks'), '/extlinks', vndbLimits.maxLinks, true).map(
-      (value, i) => {
-        const p = `/extlinks/${i}`;
-        const entry = object(value, p);
-        const key = positiveInteger(own(entry, 'id', `${p}/id`), `${p}/id`);
-        const site = text(own(entry, 'site', `${p}/site`), `${p}/site`, 32);
-        const valueText = text(own(entry, 'value', `${p}/value`), `${p}/value`, 4096);
-        return { id: key, site, value: site === 'website' ? website(valueText, `${p}/value`) : valueText };
-      },
-    );
-    const byId = new Set(external.map((entry) => entry.id));
-    const used = new Set(joins.map((entry) => entry.link));
-    if (
-      byId.size !== external.length ||
-      used.size !== joins.length ||
-      used.size !== byId.size ||
-      joins.some((link) => !byId.has(link.link))
-    )
-      fail(`/${joinTable}`, 'External link group has mismatched or duplicate IDs');
-    normalized[joinTable] = joins;
-    normalized.extlinks = external;
-  }
+  projectEntityLinks(kind, raw, expected, normalized);
   if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > 65_536) fail('', 'invalid_record_byte_limit');
   return { normalized, type, labels, identifier: expected };
 }

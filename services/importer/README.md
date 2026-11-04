@@ -1615,7 +1615,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB contributor, producer and release websites
 
 - Touches: selected-family staff, producer and release owners, their `staff_extlinks` / `producers_extlinks` / `releases_extlinks` joins, the shared `extlinks` dictionary, the existing family seed/importer caller, and ordinary public batch/fence/candidate commands. No new profile, provider or link-fetching service. One dictionary row may serve several selected owners; unselected owners never become another entity's fact. Bangumi identity stays the independent VN cited-provider bridge.
-- Bound: at most 32 admitted links per owner, 1500-character public HTTPS websites, 64 KiB projection and the existing per-record converter, candidate (≤300) and journal budgets. Overflow, missing dictionary rows and duplicate joins fail with an honest source diagnostic. Mapping revision `cross-media-entities@3` includes owner association and admitted URLs in the digest so newly supported links cannot stay hidden behind unchanged source bytes.
+- Bound: at most 32 admitted links per owner, 1500-character public HTTPS websites, 64 KiB projection and the existing per-record converter, candidate (≤300) and journal budgets. Overflow, missing dictionary rows and duplicate joins fail with an honest source diagnostic. Mapping revision `cross-media-entities@4` includes each owner association and admitted URL in the digest so newly supported links cannot stay hidden behind unchanged source bytes. Decision: selected entity websites use the shared owner converter; only selected VN work links can supply the existing Bangumi identity bridge.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 - Authored conversion and seed tests are local evidence. The kernel native file `services/kernel/test/imports/vndb-entity-websites.test.ts` is registered and not executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: `extlinks.value` for `site=website` maps to inherited `schema:url`; the table-level `schema:sameAs` heading supplies no identity authority.
 
@@ -2010,7 +2010,7 @@ facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to T
 and 00/99 omitted components to year or month precision.
 
 The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@3`.
+selected release payload and convert them through `cross-media-entities@4`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
