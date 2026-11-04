@@ -20,7 +20,6 @@ export type SubjectOffersViewer = {
   readScope?: string;
   readEpoch?: number;
   current?: () => boolean;
-  origin?: object;
 };
 
 /** Cache events retire a read even when React batches an account change away and back. */
@@ -105,6 +104,7 @@ export function SubjectOffersView({
   onRetry?: () => void;
   pageVersion?: number;
   current?: () => boolean;
+  origin?: object;
 }) {
   const language = locales.find((candidate) => candidate === locale);
   if (!language) return null;
