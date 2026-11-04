@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { contextFixture } from '../src/kernel/fake/context-curation';
 import { contextOutcome, readContextCuration } from '../src/features/catalogue/context-curation';
-import { candidateContext, selectCandidate, type CandidateCommand } from '../src/subject/candidates';
+import {
+  candidateContext,
+  nativeOperationAvailability,
+  selectCandidate,
+  type CandidateCommand,
+} from '../src/subject/candidates';
 
 function command(
   fixture: ReturnType<typeof contextFixture>,
@@ -30,6 +35,13 @@ describe('Context curation through the generated native request seam', () => {
     if (!before.ok || !before.contextReview) throw new Error('Context comparison missing');
     expect(before.contextReview.context.labels.en).toBe('Readers’ edition');
     expect(contextOutcome(before.contextReview, fixture.property, before.page?.adoption?.mode)).toBe('inherited');
+    expect(nativeOperationAvailability(before.actions?.context, 'context:accept', 'subject.accept_candidate')).toBe(
+      'allowed',
+    );
+    expect(nativeOperationAvailability(before.actions?.context, 'context:adopt', 'subject.adopt')).toBe('allowed');
+    expect(before.actions?.subject.state).toBe('available');
+    const concealed = await contextFixture('concealed').transport.read('schema:inLanguage');
+    expect(concealed.ok && concealed.page?.candidates).toEqual([]);
     expect(before.public.subject.context).toBe(candidateContext);
     expect(before.contextReview.reading.subject.context).toBe(fixture.context.id);
     const saved = await fixture.transport.confirm(command(fixture));

@@ -134,9 +134,12 @@ function CandidateReviewLive({
   const selectionAvailability = current?.actions
     ? nativeOperationAvailability(current.actions.context, 'context:adopt', 'subject.adopt')
     : undefined;
-  const actionReadUnavailable = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
-    (availability) => availability === 'unavailable',
-  );
+  const subjectActionUnavailable =
+    !!context && !!current && (!current.actions || current.actions.subject.state !== 'available');
+  const actionReadUnavailable =
+    [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
+      (availability) => availability === 'unavailable',
+    ) || subjectActionUnavailable;
   const actionDenied = [acceptanceAvailability, rejectionAvailability, selectionAvailability].some(
     (availability) => availability === 'denied',
   );
@@ -311,6 +314,7 @@ function CandidateReviewLive({
       running.current ||
       requiresReload ||
       (confirmation === 'adopt' ? !valid : !candidate) ||
+      (!!context && (subjectActionUnavailable || selectedAvailability !== 'allowed')) ||
       (selectedAvailability !== undefined && selectedAvailability !== 'allowed')
     )
       return;
@@ -483,8 +487,20 @@ function CandidateReviewLive({
           </Link>
         )}
         {returnUnavailable && <p role="status">{m.candidate_unavailable({}, options)}</p>}
-        {current?.actions && actionReadUnavailable && (
-          <p role="status">{m.candidate_actions_unavailable({}, options)}</p>
+        {actionReadUnavailable && (current?.actions || (context && current)) && (
+          <>
+            <p role="status">{m.candidate_actions_unavailable({}, options)}</p>
+            {context && (
+              <Button
+                variant="outline"
+                className="min-h-11"
+                disabled={busy || !!request.current}
+                onClick={() => void load()}
+              >
+                {m.candidate_reload({}, options)}
+              </Button>
+            )}
+          </>
         )}
         {current?.actions && !actionReadUnavailable && actionDenied && (
           <p role="status">{m.candidate_denied({}, options)}</p>
@@ -716,6 +732,7 @@ function CandidateReviewLive({
                               disabled={
                                 locked ||
                                 requiresReload ||
+                                (!!context && (subjectActionUnavailable || acceptanceAvailability !== 'allowed')) ||
                                 acceptanceAvailability === 'denied' ||
                                 acceptanceAvailability === 'unavailable'
                               }
@@ -731,6 +748,7 @@ function CandidateReviewLive({
                               disabled={
                                 locked ||
                                 requiresReload ||
+                                (!!context && (subjectActionUnavailable || rejectionAvailability !== 'allowed')) ||
                                 rejectionAvailability === 'denied' ||
                                 rejectionAvailability === 'unavailable'
                               }
@@ -880,6 +898,7 @@ function CandidateReviewLive({
                             locked ||
                             requiresReload ||
                             !valid ||
+                            (!!context && (subjectActionUnavailable || selectionAvailability !== 'allowed')) ||
                             selectionAvailability === 'denied' ||
                             selectionAvailability === 'unavailable'
                           }

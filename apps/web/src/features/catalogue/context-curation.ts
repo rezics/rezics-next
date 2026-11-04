@@ -5,6 +5,7 @@ import {
   candidateContext,
   candidateFailure,
   candidateHasPayload,
+  readCandidateAuthority,
   selectCandidate,
   type CandidateCommand,
   type CandidateRead,
@@ -13,6 +14,8 @@ import {
   type ContextComparison,
 } from '../../subject/candidates';
 import { relationFields, relationSlotMatches, validRelationSlot } from '../../subject/relation-candidates';
+
+const unavailableViewerActions = { state: 'unavailable', reason: 'unavailable' } as const;
 
 export type ContextAddress = {
   id: string;
@@ -34,7 +37,7 @@ export async function readContextCuration(
   try {
     const { id, context, property, slot, cursor, session } = address;
     const headers = { authorization, ...(session ? { 'rezics-session-token': session } : {}) };
-    const [scope, reading, current, competition, definitions] = await Promise.all([
+    const [scope, reading, current, competition, definitions, authority] = await Promise.all([
       client.contexts({ id: context }).get({ headers }),
       client.subjects({ id }).get({ query: { context }, headers }),
       client.subjects({ id }).get(session ? { headers: { 'rezics-session-token': session } } : undefined),
@@ -45,6 +48,7 @@ export async function readContextCuration(
           })
         : undefined,
       release,
+      readCandidateAuthority(client, authorization, context, [id]),
     ]);
     if (!scope.data || scope.status !== 200) return candidateFailure(scope.status);
     if (!reading.data || reading.status !== 200) return candidateFailure(reading.status);
@@ -100,6 +104,10 @@ export async function readContextCuration(
       names: Object.fromEntries(
         Object.entries(definitions.properties).map(([id, definition]) => [id, definition.labels]),
       ),
+      actions: {
+        subject: authority.viewerActions?.subjects[id] ?? unavailableViewerActions,
+        context: authority.viewerActions?.context ?? unavailableViewerActions,
+      },
       contextReview: {
         context: scope.data.context,
         reading: reading.data,

@@ -59,10 +59,15 @@ async function openReview(page: Page, subject: CatalogueContextSubject, search: 
 }
 
 async function confirmNamed(page: Page, name: string): Promise<void> {
+  const region = await openConfirmation(page, name);
+  await region.getByRole('button', { name, exact: true }).click();
+}
+
+async function openConfirmation(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).first().click();
   const region = page.locator('section').filter({ has: page.getByRole('heading', { name: `Confirm: ${name}` }) });
   await region.waitFor({ state: 'visible' });
-  await region.getByRole('button', { name, exact: true }).click();
+  return region;
 }
 
 async function applyMode(page: Page, mode: 'replace' | 'inherit' | 'suppress'): Promise<void> {
@@ -96,6 +101,13 @@ test('community Context review compares Global independently and replace inherit
   await page.getByText('Current public Global values', { exact: true }).waitFor();
   await page.getByText('Community Context', { exact: true }).waitFor();
   await page.locator('[data-context-comparison]').getByText('ja', { exact: true }).first().waitFor();
+  const actionRead = (await liveRequests(before)).find(
+    (request) => request.method === 'POST' && request.url.endsWith('/v1/viewerActions'),
+  );
+  expect(JSON.parse(actionRead!.body!).resources).toEqual([
+    { type: 'semantic.context', id: journey.contextId },
+    { type: 'semantic.subject', id: journey.id },
+  ]);
 
   await page.getByRole('button', { name: 'Review suggestion', exact: true }).click();
   await confirmNamed(page, 'Accept suggestion');
@@ -169,20 +181,27 @@ test('stale comparison keeps draft and mode; uncertain confirmation preserves th
   const page = await alice.context.newPage();
   await openReview(page, seams, `context=${seams.contextId}&property=schema:inLanguage`);
   await page.getByLabel('Selection mode').selectOption('suppress');
-  await stack.injectKernelFailureOnce({
-    method: 'POST',
-    path: adoptPath,
-    status: 409,
-    body: JSON.stringify({
-      type: 'https://rezics.com/problems/conflict',
-      title: 'Conflict',
-      status: 409,
-      code: 'stale_editorial_head',
-      request_id: crypto.randomUUID(),
-      retryable: false,
-      effect_status: 'not_applied',
-    }),
-  });
+  const competition = await kernelJson<{ adoption: { head: number } | null }>(
+    `/v1/subjects/${seams.id}/candidates?context=${seams.contextId}&property=schema:inLanguage&limit=20`,
+    'alice',
+  );
+  const staleStart = stack.kernelRequests().length;
+  const concurrent = await stack.kernel(
+    adoptPath,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({
+        context: seams.contextId,
+        property: 'schema:inLanguage',
+        mode: 'inherit',
+        selection: [],
+        expected_head: competition.adoption?.head ?? null,
+      }),
+    },
+    'alice',
+  );
+  expect(concurrent.status).toBe(200);
   await confirmNamed(page, 'Apply to this Context');
   await page
     .getByText(
@@ -192,6 +211,11 @@ test('stale comparison keeps draft and mode; uncertain confirmation preserves th
       },
     )
     .waitFor();
+  const stale = (await liveRequests(staleStart)).find(
+    (request) => request.method === 'POST' && request.url === adoptPath,
+  );
+  expect(stale?.failure?.status).toBe(409);
+  expect(JSON.parse(stale!.body!).expected_head).toBe(competition.adoption?.head ?? null);
   expect(await page.getByLabel('Selection mode').inputValue()).toBe('suppress');
   await page.getByRole('button', { name: 'Reload current values', exact: true }).click();
   await page.locator('[data-candidate-draft]').waitFor({ state: 'visible' });
@@ -229,17 +253,70 @@ test('stale comparison keeps draft and mode; uncertain confirmation preserves th
   expect(retries.length).toBeGreaterThanOrEqual(2);
   expect(retries[0]!.idempotencyKey).toBe(retries[1]!.idempotencyKey);
   expect(retries[0]!.idempotencyKey).toBeTruthy();
+  expect(retries[0]!.body).toBe(retries[1]!.body);
 
+  await fixture!.grantContext(fixture!.bobAccountId, seams.contextId, ['context:accept', 'context:adopt']);
   const bob = await auth.signIn('bob');
   const bobPage = await bob.context.newPage();
+  const actionStart = stack.kernelRequests().length;
+  await stack.injectKernelFailureOnce({
+    method: 'POST',
+    path: '/v1/viewerActions',
+    status: 503,
+    body: JSON.stringify({
+      type: 'https://rezics.com/problems/overloaded',
+      title: 'Overloaded',
+      status: 503,
+      code: 'overloaded',
+      request_id: crypto.randomUUID(),
+      retryable: true,
+      effect_status: 'not_applied',
+    }),
+  });
   await openReview(bobPage, seams, `context=${seams.contextId}&property=schema:inLanguage`);
-  const deniedStart = stack.kernelRequests().length;
-  await confirmNamed(bobPage, 'Apply to this Context');
+  await bobPage
+    .getByText('Current review and selection permissions could not be confirmed. Affected actions are disabled.', {
+      exact: true,
+    })
+    .waitFor();
+  await bobPage.getByRole('button', { name: 'Reload current values', exact: true }).click();
+  await bobPage.locator('[data-context-comparison]').waitFor({ state: 'visible', timeout: 60_000 });
+  const actionRequests = (await liveRequests(actionStart)).filter(
+    (request) => request.method === 'POST' && request.url.endsWith('/v1/viewerActions'),
+  );
+  expect(actionRequests.some((request) => request.failure?.status === 503)).toBe(true);
+  expect(JSON.parse(actionRequests.at(-1)!.body!).resources).toEqual([
+    { type: 'semantic.context', id: seams.contextId },
+    { type: 'semantic.subject', id: seams.id },
+  ]);
+
+  await bobPage.getByRole('button', { name: 'Review suggestion', exact: true }).click();
+  const acceptConfirmation = await openConfirmation(bobPage, 'Accept suggestion');
+  await fixture!.revokeContext(fixture!.bobAccountId, seams.contextId, ['context:accept']);
+  await acceptConfirmation.getByRole('button', { name: 'Accept suggestion', exact: true }).click();
   await bobPage.getByText('You do not have permission for this operation.', { exact: true }).waitFor();
-  const denied = (await liveRequests(deniedStart)).filter(
+  const deniedAcceptance = (await liveRequests(actionStart)).filter(
+    (request) => request.method === 'POST' && request.url.endsWith(':accept'),
+  );
+  expect(deniedAcceptance.some((request) => request.failure?.status === 403)).toBe(true);
+  await bobPage.getByRole('button', { name: 'Reload current values', exact: true }).click();
+  await bobPage.locator('[data-context-comparison]').waitFor({ state: 'visible', timeout: 60_000 });
+  await bobPage.getByRole('button', { name: 'Review suggestion', exact: true }).click();
+  expect(await bobPage.getByRole('button', { name: 'Accept suggestion', exact: true }).isDisabled()).toBe(true);
+  expect(await bobPage.getByRole('button', { name: 'Apply to this Context', exact: true }).isDisabled()).toBe(false);
+
+  await bobPage.getByLabel('Selection mode').selectOption('suppress');
+  const adoptionConfirmation = await openConfirmation(bobPage, 'Apply to this Context');
+  await fixture!.revokeContext(fixture!.bobAccountId, seams.contextId, ['context:adopt']);
+  await adoptionConfirmation.getByRole('button', { name: 'Apply to this Context', exact: true }).click();
+  await bobPage.getByText('You do not have permission for this operation.', { exact: true }).waitFor();
+  const deniedAdoption = (await liveRequests(actionStart)).filter(
     (request) => request.method === 'POST' && request.url === adoptPath,
   );
-  expect(denied.some((request) => request.failure?.status === 403)).toBe(true);
+  expect(deniedAdoption.some((request) => request.failure?.status === 403)).toBe(true);
+  await bobPage.getByRole('button', { name: 'Reload current values', exact: true }).click();
+  await bobPage.locator('[data-context-comparison]').waitFor({ state: 'visible', timeout: 60_000 });
+  expect(await bobPage.getByRole('button', { name: 'Apply to this Context', exact: true }).isDisabled()).toBe(true);
   const global = await kernelJson<SubjectRead>(`/v1/subjects/${seams.id}`);
   expect(values(global, 'schema:inLanguage')).toEqual(['ja']);
   await page.close();
