@@ -205,7 +205,7 @@ test('Home renders five admitted Subject kinds, clears deliberately, and waits f
   expect(nativeFetch).not.toHaveBeenCalled();
 });
 
-test('anonymous Home Subject reactions return to the card, and unknown coverage stays disabled with page retry', async () => {
+test('anonymous Home Subject reactions return to the card', async () => {
   client.setQueryData(['session'], { state: 'signed-out', subject: null, csrfToken: null });
   await paint(
     item({
@@ -222,17 +222,15 @@ test('anonymous Home Subject reactions return to the card, and unknown coverage 
       (link) => link.getAttribute('href') === expected,
     ),
   ).toBe(true);
+});
 
+test('unknown Home Subject coverage disables reactions and retries through the page', async () => {
   let retries = 0;
   const unavailable = item({
     target: { targetKind: 'subject', targetId: subjectId },
     counts: { state: 'unavailable' },
     viewer: { state: 'unavailable' },
     action: 'unavailable',
-  });
-  await act(async () => {
-    client.setQueryData(['session'], { state: 'signed-in', subject: 'reader-one', csrfToken: 'csrf-one' });
-    await tick();
   });
   await paint(unavailable, true, () => retries++);
   expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')).toHaveLength(5);
