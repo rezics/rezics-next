@@ -4,6 +4,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { DEFAULT_NOTIFICATIONS, NOTIFICATION_KINDS, type Notifications } from '../../src/access/notification-kinds.ts';
 import { projectPreferencePage } from '../../src/access/preferences.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { nativeFixture, scopes } from './native-account-bindings-fixture.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
@@ -18,6 +19,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(31),
     tokens: fixture.referenceKeys,
+    receiptKeys: testReceiptKeys(),
     access: () => fixture.access,
     writeRate: createWriteRateLimiter({ secret: 'preference-page-write-rate-secret-32bytes' }),
   });
