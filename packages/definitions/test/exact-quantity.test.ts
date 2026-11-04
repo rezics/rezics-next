@@ -344,13 +344,14 @@ test('the current release uses a new digest and keeps the historical release pin
     '1.0.2': 'sha256:085ce689e886123ba2fb4e58353abeab23c29b4d0c80d4196f913678e51f855b',
     '1.0.3': 'sha256:9555d47808257a23a56a3d843ebb4b2b9d3843af3beebb446e379652bf4be002',
     '1.0.4': 'sha256:1ded81205f3588d10a0cb5dab75bfaec1fcb22cac3e2e54809cf0086f54806f7',
+    '1.0.5': 'sha256:2c483d7a7ffc0438fab47b16ef679036a1100538ddfd3361792d5896b5720619',
   };
   expect(validateRelease(bundledRelease)).toEqual([]);
-  expect(bundledRelease.catalogue.version).toBe('1.0.4');
+  expect(bundledRelease.catalogue.version).toBe('1.0.5');
   expect(releasePins[bundledRelease.catalogue.version as keyof typeof releasePins]).toBe(releaseDigest(bundledRelease));
   expect(releasePins['1.0.0']).not.toBe(releaseDigest(bundledRelease));
   expect(releasePins['1.0.1']).not.toBe(releaseDigest(bundledRelease));
   expect(releasePins['1.0.2']).not.toBe(releaseDigest(bundledRelease));
   expect(releasePins['1.0.3']).not.toBe(releaseDigest(bundledRelease));
-  expect(bundledDigest).toBe(releasePins['1.0.4']);
+  expect(bundledDigest).not.toBe(releasePins['1.0.4']);
 });
