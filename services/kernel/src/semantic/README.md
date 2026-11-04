@@ -2191,3 +2191,48 @@ current or historical roots' directory entries.
   two and three Releases, noninitial exact descriptors, locale fallback, literal
   ties, large IDs, interrupted preparation, stale/tampered cursors, immutable
   Release1 reads, and the actual bounded edge range plans at both catalogue sizes.
+
+## Qualified list work context
+
+`readListPresentationFacts(..., {workContext: true})` extends the existing reader for Search only. Its default remains
+the existing generic facts contract used by Commerce. It reads the current terminal Type's admitted credit properties,
+forward order/derivation/world/membership/association properties and time properties. The Type owns each category;
+no credit graph or inverse traversal runs. Exact candidate, originating immutable release, revision, rank, main value
+and that candidate's qualifiers stay together. Only current original AND terminal disclosure supplies related IDs,
+Types and labels. Account, consent, retraction and exact Source-tuple fences apply before projection, and the same
+finite observations (including selection bases and all locators) repeat before return. Default Search repeats that
+native reader again before its retained execution's final publication observation.
+
+Decision: preserve explicit unknown/no-value and unsupported values; withhold an entire category if a selected
+statement or any examined item/qualifier/lookahead is concealed, so no concealed identity or cardinality is emitted.
+Empty, unsupported and unavailable are distinct from withheld.
+Work-only pending or unavailable identity mappings make their category unavailable; they do not change the
+independent generic-fact availability contract. Concealed targets still withhold their category.
+The wire is documented in
+[Search](../search/README.md#qualified-work-context-in-discovery-v1). A fourth disclosed candidate establishes bounded
+overflow without a guessed destination. MusicAlbum stays a work. The current release has no MusicRelease or
+MusicRecording; the optional Type-identity seam recognizes those exact Types only if Semantic later releases them.
+No definitions, detail reader, relation writer or index are added here.
+
+### Qualified list work context Cost
+
+For k <= 100 raw original keys, immutable Type admission bounds each subject to 64 properties. The existing ordered
+Global outbound range seeks `(route, subject_id, property, context_id, filter_value)` and reads LIMIT 4 per relation
+property, at most 256 locators per hit. Its checkpoint must cover that source's write position, and each locator must
+match current source revision/security. These rows are locators, never qualifier authority. Across the whole hit,
+only four creator and four association candidate locators open selected slots; generic facts independently retain
+three locators for each of four configured properties (at most 12). All time/descriptive slots add at most 64 more
+slot reads: a conservative ceiling is 84 slot resolutions per hit per observation. Each resolver retains the existing
+33 compact log / 32 selection bound (2,772 compact log rows or 2,688 selected rows per hit). Exact provenance reads
+are grouped by native home and chunked at 256 candidate/revision keys. No history or degree-dependent scan occurs.
+
+Only four statements per category reach related preparation: at most 12 mains plus 48 qualifier item keys, plus
+12 generic item keys = 72 raw related keys per hit / 7,200 per page. Each key independently resolves original and
+terminal (at most 14,400 related headers) through full-key batches of 100 grouped by native home. Labels use the
+existing finite native label reader. Account and Source-fence points are deduplicated from these finite source and
+related observations; source fences retain their native 100-tuple chunks. Every checkout closes before foreign
+preparation or another home. Each list read repeats originals, terminal selection/provenance, related identity/labels,
+accounts, fences and release activation; Search invokes that entire reader twice, so its maximum observation fanout
+is four times these source/related bounds. Serialized delivery is separately bounded to three entries per category,
+four qualifier facts per statement, one 256-byte localized label, 16 KiB per hit and 256 KiB per page. There is no
+per-I/O pricing protocol or second writer. Native and mounted-route growth/acceptance remain deferred to integration.

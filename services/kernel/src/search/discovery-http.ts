@@ -1,3 +1,10 @@
+import {
+  WorkContextSchema,
+  validWorkContext,
+  workContextBytes,
+  workContextKind,
+  WORK_CONTEXT_LIMITS,
+} from './work-context.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
@@ -225,6 +232,7 @@ export const DiscoveryPageSchema = t.Object(
             figure: t.Optional(PublicFigureSchema),
             listPresentation: t.Optional(listPresentation),
             contexts: t.Optional(characterPersonContexts),
+            workContext: t.Optional(WorkContextSchema),
           },
           closed,
         ),
@@ -286,6 +294,16 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
   if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
   if (summary.kind === 'subject') {
     if (key.owner !== 'semantic' || key.kind !== summary.value.type) unavailable();
+    const context = (value as Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>).workContext;
+    if (
+      context &&
+      (!validWorkContext(context, summary.value.id) ||
+        (context.state === 'current' &&
+          (context.type.id !== summary.value.type ||
+            !summary.value.creativeWork ||
+            context.kind !== workContextKind([summary.value.type, ...summary.value.types]))))
+    )
+      unavailable();
     const figure = (value as { figure?: { questionId: string; populationId: string } }).figure;
     if (figure && (figure.questionId !== STANDARD_QUESTION_ID || figure.populationId !== GLOBAL_CONTEXT.id))
       unavailable();
@@ -319,8 +337,11 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
   if (!pageCheck.Check(value)) unavailable();
   const page = value as DiscoveryHttpPage;
   const identities = new Set<string>();
+  let contextBytes = 0;
   for (const hit of page.hits) {
     admitDiscoveryHit(hit);
+    if ('workContext' in hit && hit.workContext) contextBytes += workContextBytes(hit.workContext);
+    if (contextBytes > WORK_CONTEXT_LIMITS.pageBytes) unavailable();
     const identity = JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
     if (identities.has(identity)) unavailable();
     identities.add(identity);
@@ -399,6 +420,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         return {
           key: { owner: 'semantic', kind: subject.key.kind, route: subject.key.route, id: subject.key.id },
           summary: { kind: 'subject' as const, value: { ...subject.summary.value } },
+          ...(subject.workContext === undefined ? {} : { workContext: structuredClone(subject.workContext) }),
           ...(subject.labels === undefined ? {} : { labels: { ...subject.labels } }),
           ...(subject.aliases === undefined
             ? {}

@@ -149,16 +149,20 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     type: string,
     values: Record<string, unknown> = {},
     labels: Record<string, string> = { en: 'Native list subject' },
+    statements: Record<string, unknown[]> = {},
   ) {
     const result = await checked('POST', '/v1/subjects', {
       type,
       labels,
-      statements: Object.fromEntries(
-        Object.entries(values).map(([property, content]) => [
-          property,
-          (Array.isArray(content) ? content : [content]).map((value) => citedValue(property, value)),
-        ]),
-      ),
+      statements: {
+        ...Object.fromEntries(
+          Object.entries(values).map(([property, content]) => [
+            property,
+            (Array.isArray(content) ? content : [content]).map((value) => citedValue(property, value)),
+          ]),
+        ),
+        ...statements,
+      },
     });
     const id = result.subject.id as string;
     homes.add(partitionOf(routeOf(id)!));
