@@ -28,15 +28,17 @@ export async function readBoardWatchPage(deps: WatchDependencies, actor: Actor, 
   async function observe() {
     await requireWatchOwner(deps, actor, deadline);
     const update = await accessCheck(deps.access, actor, 'account:update', owner, { pool: deps.pool, deadline });
-    return within(deadline, () => withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      const result = await client.query<BoardWatchState>(
-        'SELECT watching, revision FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2 AND board_id=$3',
-        [owner.route, owner.id, boardId],
-      );
-      const allowed = await update(client);
-      return { state: result.rows[0] ?? { watching: false, revision: 0 }, allowed };
-    }));
+    return within(deadline, () =>
+      withConnection(deps.pool, async (connection) => {
+        const client = deadlineClient(connection, deadline);
+        const result = await client.query<BoardWatchState>(
+          'SELECT watching, revision FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2 AND board_id=$3',
+          [owner.route, owner.id, boardId],
+        );
+        const allowed = await update(client);
+        return { state: result.rows[0] ?? { watching: false, revision: 0 }, allowed };
+      }),
+    );
   }
 
   const initial = await observe();

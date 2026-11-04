@@ -15,13 +15,16 @@ const closed = { additionalProperties: false };
 const revision = t.Integer({ minimum: 0, maximum: 2147483646 });
 const state = t.Object({ watching: t.Boolean(), revision }, closed);
 const advice = t.Union([t.Literal('available'), t.Literal('denied'), t.Literal('not-applicable')]);
-const page = t.Object({
-  boardId: t.String(),
-  accountId: t.String(),
-  viewer: t.Object({ state: t.Literal('current'), watching: t.Boolean(), revision }, closed),
-  actions: t.Object({ watch: advice, unwatch: advice }, closed),
-  source: t.Object({ epoch: t.Integer(), position: t.String() }, closed),
-}, closed);
+const page = t.Object(
+  {
+    boardId: t.String(),
+    accountId: t.String(),
+    viewer: t.Object({ state: t.Literal('current'), watching: t.Boolean(), revision }, closed),
+    actions: t.Object({ watch: advice, unwatch: advice }, closed),
+    source: t.Object({ epoch: t.Integer(), position: t.String() }, closed),
+  },
+  closed,
+);
 const sessionHeader = { [SESSION_HEADER]: t.String() };
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const failures = {
