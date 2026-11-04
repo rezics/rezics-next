@@ -14,45 +14,58 @@ async function owner(data: Owner) {
   const request = getRequest();
   const identity = await readSubjectSlotSession(request, env as Partial<SessionEnv>);
   if (
-    identity.state !== 'signed-in' || identity.subject !== data.viewer ||
-    !identity.csrfToken || identity.csrfToken !== data.csrfToken ||
+    identity.state !== 'signed-in' ||
+    identity.subject !== data.viewer ||
+    !identity.csrfToken ||
+    identity.csrfToken !== data.csrfToken ||
     !/^[0-9a-f-]{36}$/i.test(data.sourceLabelId)
-  ) throw new Error('Consolidation owner is no longer current');
+  )
+    throw new Error('Consolidation owner is no longer current');
   return consolidationClient(kernelClient(), data.sourceLabelId, { authorization: identity.authorization });
 }
-const review = createServerFn({ method: 'POST' }).validator((data: Call<'review'>) => data)
+const review = createServerFn({ method: 'POST' })
+  .validator((data: Call<'review'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).review(...data.args);
     return { data: value, error: consolidationError(error) };
   });
-const confirm = createServerFn({ method: 'POST' }).validator((data: Call<'confirm'>) => data)
+const confirm = createServerFn({ method: 'POST' })
+  .validator((data: Call<'confirm'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).confirm(...data.args);
     return { data: value, error: consolidationError(error) };
   });
-const apply = createServerFn({ method: 'POST' }).validator((data: Call<'apply'>) => data)
+const apply = createServerFn({ method: 'POST' })
+  .validator((data: Call<'apply'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).apply(...data.args);
     return { data: value, error: consolidationError(error) };
   });
-const retry = createServerFn({ method: 'POST' }).validator((data: Call<'retry'>) => data)
+const retry = createServerFn({ method: 'POST' })
+  .validator((data: Call<'retry'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).retry(...data.args);
     return { data: value, error: consolidationError(error) };
   });
-const cancel = createServerFn({ method: 'POST' }).validator((data: Call<'cancel'>) => data)
+const cancel = createServerFn({ method: 'POST' })
+  .validator((data: Call<'cancel'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).cancel(...data.args);
     return { data: value, error: consolidationError(error) };
   });
-const result = createServerFn({ method: 'POST' }).validator((data: Call<'result'>) => data)
+const result = createServerFn({ method: 'POST' })
+  .validator((data: Call<'result'>) => data)
   .handler(async ({ data }) => {
     const { data: value, error } = await (await owner(data)).result(...data.args);
     return { data: value, error: consolidationError(error) };
   });
 
 /** Native DTOs and errors pass through unchanged; no client publisher or assignment writer. */
-export function consolidationTransport(viewer: string, sourceLabelId: string, headers: Record<string, string>): ConsolidationTransport {
+export function consolidationTransport(
+  viewer: string,
+  sourceLabelId: string,
+  headers: Record<string, string>,
+): ConsolidationTransport {
   const captured = { viewer, sourceLabelId, csrfToken: headers['x-csrf-token'] ?? '' };
   return {
     review: (...args) => review({ data: { ...captured, args } }),

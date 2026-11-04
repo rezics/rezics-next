@@ -1,5 +1,12 @@
 import type { KernelClient } from '@rezics/client';
-import { consolidationClient, consolidationError, type Confirmation, type ConfirmationInput, type ConsolidationResult, type ConsolidationTransport } from './client';
+import {
+  consolidationClient,
+  consolidationError,
+  type Confirmation,
+  type ConfirmationInput,
+  type ConsolidationResult,
+  type ConsolidationTransport,
+} from './client';
 import { ConsolidationReview } from './review';
 
 type Operation = 'review' | 'confirm' | 'apply' | 'retry' | 'cancel' | 'result';
@@ -150,9 +157,9 @@ export class ConsolidationVisit {
       const response = await this.transport(captured.headers).result(this.confirmationValue.confirmationId);
       if (this.retired || !captured.isCurrent()) return this.discard();
       if (response.error || !response.data) {
-          this.rejectionValue = consolidationError(response.error);
-          return 'rejected';
-        }
+        this.rejectionValue = consolidationError(response.error);
+        return 'rejected';
+      }
       this.acceptResult(response.data);
       return 'accepted';
     } catch {
