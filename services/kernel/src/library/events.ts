@@ -25,6 +25,10 @@ export const LIBRARY_EVENTS = {
     { additionalProperties: false },
   ),
   'com.rezics.library.type-preparation.changed.v1': Type.Object({ preparationId: id }, { additionalProperties: false }),
+  'com.rezics.library.yearly-goal.changed.v1': Type.Object(
+    { year: Type.Integer({ minimum: 1, maximum: 9999 }), revision: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.account-graph.purged.v1': Type.Object(
     {
       accountId: id,
