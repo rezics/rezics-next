@@ -335,6 +335,27 @@ language is not a whole-release `schema:inLanguage` fact. Scalar `{id,title}`
 payloads remain the untagged legacy envelope for sealed journals. Date, status
 and completeness stay on the release-fidelity vocabulary path.
 
+### VNDB character names and aliases
+
+`cross-media-entities@4` projects selected `chars_names` and `chars_alias`
+rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
+`schema:name`; its explicit romanized `latin` cell becomes an unqualified
+`schema:alternateName` using the source language with a `Latn` script subtag.
+VNDB aliases have no language, so `name` uses `und` and its explicit Romanized
+cell uses `und-Latn`. The original `chars_alias.spoil` value qualifies both
+forms through `rezics:spoilerLevel`; unsupported levels withhold the entire
+alias with a source diagnostic. Qualified alias text never enters bootstrap
+labels or aliases.
+
+Decision: language-less aliases use `und`, explicit Latin cells use the
+admitted Latn form, and empty nullable `latin` cells stay in the normalized
+digest without producing an alternate-name fact. Null and empty cells remain
+distinct. Labels and bootstrap aliases choose eligible unqualified values in
+stable language-then-text order, without claiming a source preference. Per
+character limits are 64 localized rows, 64 aliases, 4,096 bytes and 1,500
+codepoints per text, 64 KiB normalized input and 257 proposals. Overflow is
+rejected rather than truncated.
+
 ### VNDB native alternate-name contract
 
 The scalar `vn.alias` field contains newline-separated alternate names. Use

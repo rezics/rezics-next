@@ -28,11 +28,15 @@ const BANGUMI_TABLES = [
   'episode.jsonlines',
 ];
 export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
+  chars_alias: ['id', 'spoil', 'name', 'latin'],
+  chars_names: ['id', 'lang', 'name', 'latin'],
   producers_relations: ['id', 'pid', 'relation'],
 };
 export const VNDB_DUMP_TABLES = [
   'anime',
   'chars',
+  'chars_alias',
+  'chars_names',
   'chars_vns',
   'entry_meta',
   'extlinks',

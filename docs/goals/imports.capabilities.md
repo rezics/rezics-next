@@ -1050,3 +1050,27 @@ The authored focused scenarios are:
 
 The Kernel scenario is authored but its native execution is deferred to the
 controller after integration. This entry records no native pass receipt.
+
+## VNDB character names and qualified aliases
+
+Decision: language-less aliases use `und`; explicit Romanized cells use the
+admitted Latn form; empty nullable Latin cells remain in the normalized digest
+without a native alternate-name statement.
+
+The production cross-media planner now streams the acquired `chars_names` and
+`chars_alias` COPY tables and joins only exact selected character IDs from
+`chars_vns`. `cross-media-entities@4` preserves localized `schema:name` facts,
+unqualified Romanized alternate names and alias alternate names with their
+exact `rezics:spoilerLevel` qualifier. Invalid qualification withholds the
+whole alias. Qualified text does not enter bootstrap labels or aliases, and
+same spelling on another source ID stays on that owner's Character. Cache
+completeness requires both tables and their exact headers; the existing
+acquisition path refreshes an older extraction while preserving its resolved
+archive manifest.
+
+The authored focused scenarios cover row-order invariance, digest and command
+identity changes, COPY owner/header checks, bootstrap leakage and independent
+native acceptance/current reads for two same-spelling owners. The Kernel
+scenario is authored but its execution is deferred to the controller after
+integration; this entry records no native pass receipt. Existing shared
+unknown-send recovery remains the recovery evidence for sealed commands.

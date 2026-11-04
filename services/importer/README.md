@@ -1594,6 +1594,13 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: at most 64 title rows and 64 KiB per release, 64 names and 64 Romanized alternate names, within the existing per-record candidate and journal budgets. Nonselected owners, missing selected titles, overflow and duplicate associations are review gaps or converter refusals. Machine-translation flags are not a ranking rule.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB character names and qualified aliases
+
+- Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@4` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import authored VNDB public tag associations
 
 - Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.
