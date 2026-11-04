@@ -736,3 +736,92 @@ test('Copies and Labels keep authorized tokenless reads, exact addresses and ord
     spies.forEach((spy) => spy.mockRestore());
   }
 });
+
+// One real client hosts catalogue work, History reading and Ratings without feature-owned session observers.
+test('catalogue, History and My ratings share retirement while read admission survives missing CSRF', async () => {
+  const { candidateSession, useCandidateWork } = await import('../src/subject/candidate-lifetime');
+  const { catalogueEditor, useEditorLifetime } = await import('../src/features/catalogue/editor-lifetime');
+  const { MyLogsCurrentViewer } = await import('../src/library/my-logs-page');
+  const { useOwnVotesCurrentOrigin } = await import('../src/ratings/own-votes/current-origin');
+  const { useHistoryCurrentOrigin } = await import('../src/library/history-current-origin');
+  const { OWN_VOTES_SOURCE } = await import('../src/ratings/own-votes/inventory');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const cacheSubscription = spyOn(client.getQueryCache(), 'subscribe');
+  session(client, 'A', null);
+  const release = viewerExposureLifetime(client).subscribe(() => {});
+  settle(client, 'A');
+  const work: Array<() => boolean> = [];
+  const commands: Array<() => Promise<string>> = [];
+  const reads: Array<() => boolean> = [];
+  const ratings: Array<() => boolean> = [];
+  const pending = deferred<string>();
+  const Editor = catalogueEditor(function Editor({ transport }: { transport: () => Promise<string> }) {
+    const lifetime = useEditorLifetime();
+    work.push(lifetime.active);
+    commands.push(transport);
+    return null;
+  });
+  const Catalogue = candidateSession(function Catalogue() {
+    const lifetime = useCandidateWork('subject-A');
+    work.push(lifetime.live);
+    return <Editor transport={() => pending.promise} />;
+  });
+  const operations = ['copy.list'] as const;
+  function HistoryLease() {
+    const origin = useHistoryCurrentOrigin('copy-address', operations, 'A');
+    reads.push(origin.readLease(0).current);
+    expect(origin.credential(0)).toBeNull();
+    return null;
+  }
+  function Ratings() {
+    const origin = useOwnVotesCurrentOrigin({
+      state: 'ready', subject: 'A', cursor: null, locale: 'en', source: OWN_VOTES_SOURCE,
+      page: { viewer: { accountId: 'A' }, votes: [], next: null },
+    }, null);
+    ratings.push(origin.isCurrent);
+    return null;
+  }
+  const ratingsRouter = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory({ initialEntries: ['/library/ratings'] }) });
+  const page = mounted(client, '/library/logs');
+  try {
+    await page.show(<>
+      <Catalogue />
+      <HistoryLease />
+      <MyLogsCurrentViewer initial={{ sessionSubject: 'A', cursor: null, locale: 'en', page: { state: 'loaded', logs: [], next: null, restarted: false } }} />
+      <RouterContextProvider router={ratingsRouter}><Ratings /></RouterContextProvider>
+    </>);
+    expect(cacheSubscription.mock.calls.length).toBe(1);
+    expect(reads.at(-1)!()).toBe(true);
+    expect(ratings.at(-1)!()).toBe(true);
+    const oldWork = work.at(-1)!;
+    const oldRead = reads.at(-1)!;
+    const oldRating = ratings.at(-1)!;
+    const completion = commands.at(-1)!();
+    await act(async () => {
+      session(client, 'B');
+      session(client, 'A');
+    });
+    pending.resolve('late');
+    await expect(completion).rejects.toThrow('Retired catalogue editor');
+    expect(oldWork()).toBe(false);
+    expect(oldRead()).toBe(false);
+    expect(oldRating()).toBe(false);
+    await act(async () => { settle(client, 'A'); });
+    const same = client.getQueryData(['session']);
+    const time = client.getQueryState(['session'])!.dataUpdatedAt;
+    const enrolled = viewerExposureLifetime(client).getSnapshot();
+    await act(async () => { client.setQueryData(['session'], same, { updatedAt: time }); });
+    expect(viewerExposureLifetime(client).getSnapshot()).not.toBe(enrolled);
+    const beforeRemoval = viewerExposureLifetime(client).getSnapshot();
+    await act(async () => {
+      client.removeQueries({ queryKey: ['session'], exact: true });
+      session(client, 'A');
+    });
+    expect(viewerExposureLifetime(client).getSnapshot()).not.toBe(beforeRemoval);
+    expect(oldWork()).toBe(false);
+  } finally {
+    await page.close();
+    release();
+    cacheSubscription.mockRestore();
+  }
+});

@@ -7,6 +7,7 @@ import {
   type CandidateSessionLease,
 } from '../../subject/candidate-lifetime';
 import { sessionQuery, useSession } from '../../session/query';
+import { browserObservation } from '../../session/observation';
 import { normalizeSessionObservation } from '../../session/browser-state';
 import { loadSubjectChange, loadSubjectChanges } from './subject-changes-actions';
 import { SubjectChanges, SubjectChangesPage } from './subject-changes-page';
@@ -18,9 +19,7 @@ function useHistorySessionRead() {
   const client = useQueryClient();
   const subscribe = useCallback(
     (changed: () => void) =>
-      client.getQueryCache().subscribe(({ query }) => {
-        if (query.queryKey.length === 1 && query.queryKey[0] === sessionQuery.queryKey[0]) changed();
-      }),
+      browserObservation(client).subscribeCache(changed),
     [client],
   );
   const snapshot = useCallback(() => client.getQueryState(sessionQuery.queryKey), [client]);

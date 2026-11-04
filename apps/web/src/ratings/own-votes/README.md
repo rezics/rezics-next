@@ -28,7 +28,8 @@ answer without confirming the original command, even if the value matches; the o
 explicit same-intent replay while currently admitted. A clear is confirmed by readback 404. No public aggregate can restore a
 cleared row.
 
-The current viewer, `personal_library` exposure, locale, route address/cursor and native source bind the private
+Ratings owns the explicit operation/context descriptor, including the currently required `personal_library` exposure.
+Web reader infrastructure composes the current viewer, that exposure, locale, route address/cursor and native source for the private
 query. It is no-store, has zero query retention, and stays out of URL/history payloads and persistent storage.
 Account, credential/CSRF, locale, exposure, address and admitted-reader replacement retire selection, draft and
 callbacks. Replaced action advice also retires the form, confirmation and delayed command/readback callbacks; a

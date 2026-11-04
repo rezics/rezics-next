@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { browserObservation } from './observation';
 
 export const sessionQueryKey = ['session'] as const;
 
@@ -58,10 +59,6 @@ export function normalizeSessionObservation(value: unknown): BrowserSession {
   return unavailableSession;
 }
 
-function isSessionQuery(queryKey: readonly unknown[]): boolean {
-  return queryKey.length === sessionQueryKey.length && queryKey[0] === sessionQueryKey[0];
-}
-
 function entryFor(client: QueryClient): ClientEntry {
   let entry = entries.find((candidate) => candidate.client === client);
   if (!entry) {
@@ -105,8 +102,7 @@ export function subscribeBrowserSession(
     entry.authoritativeReferences += 1;
     if (entry.authoritativeReferences === 1) {
       owners.push(entry);
-      entry.unsubscribeCache = client.getQueryCache().subscribe((event) => {
-        if (!isSessionQuery(event.query.queryKey)) return;
+      entry.unsubscribeCache = browserObservation(client).subscribeCache(() => {
         for (const subscriber of [...entry.listeners]) subscriber();
       });
     }
