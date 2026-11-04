@@ -257,6 +257,23 @@ function timeLabel(value: string): string {
   return new Intl.DateTimeFormat(getLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
+function reasonLabel(reason: string): string {
+  switch (reason) {
+    case 'off_topic':
+      return m.report_off_topic();
+    case 'inappropriate':
+      return m.report_inappropriate();
+    case 'spam':
+      return m.report_spam();
+    case 'illegal':
+      return m.report_illegal();
+    case 'other':
+      return m.report_other();
+    default:
+      return reason;
+  }
+}
+
 function outcomeLabel(entry: ReporterHistoryEntry): string {
   if (entry.outcome === null) return m.reporter_status_pending();
   return entry.outcome === 'actioned' ? m.moderation_actioned() : m.moderation_dismissed();
@@ -343,15 +360,7 @@ function HistoryEntry({
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <div>
             <dt className="font-medium text-muted-foreground">{m.moderation_reason_label()}</dt>
-            <dd className="break-words">
-              {{
-                off_topic: m.report_off_topic,
-                inappropriate: m.report_inappropriate,
-                spam: m.report_spam,
-                illegal: m.report_illegal,
-                other: m.report_other,
-              }[entry.reason]?.() ?? entry.reason}
-            </dd>
+            <dd className="break-words">{reasonLabel(entry.reason)}</dd>
           </div>
           <div>
             <dt className="font-medium text-muted-foreground">{m.reporter_history_outcome()}</dt>
