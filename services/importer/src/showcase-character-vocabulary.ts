@@ -136,9 +136,10 @@ export async function planShowcaseCharacterVocabulary(
       (vndbAppearanceRoleCodes as readonly string[]).includes(row.role) &&
       (row.rid === null || row.rid === undefined) &&
       /^(?:0|1|2)$/.test(String(row.spoil))
-    )
+    ) {
       const path = `/chars_vns/${String(row.id)}/${String(row.vid)}`;
       if (!observedRoles.has(row.role) || path < observedRoles.get(row.role)!) observedRoles.set(row.role, path);
+    }
   }
   const traits = new Map<string, { label: string }>();
   const ambiguousTraits = new Set<string>();
