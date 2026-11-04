@@ -33,19 +33,22 @@ import {
   type ImportDateSessionIdentity,
 } from './import-consumption.ts';
 import {
-  applyEntryImportMetadataCommands,
   ENTRY_IMPORT_METADATA_LIMITS,
   assertEntryImportMetadataHistorySize,
   entryImportMetadataDigest,
   entryPersonalMetadataDigest,
-  metadataObservation,
-  parseEntryImportMetadataSelections,
-  type EntryImportMetadataOutcome,
   type EntryImportMetadataProposal,
   type EntryImportMetadataProposals,
   type EntryImportMetadataReview,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
+import {
+  appendListImportMetadataReview,
+  assertListImportMetadataReviewAvailable,
+  createListImportMetadataCoordinator,
+  mergeListImportMetadataConfirmation,
+  selectListImportMetadataConfirmation,
+} from './list-import-metadata-coordinator.ts';
 
 type Config = Parameters<typeof createEntryCommands>[0] & { routeKey: Uint8Array };
 const VNDB_DECISIONS_BYTES = 8_388_608;
@@ -1127,57 +1130,7 @@ export function createVndbImport(config: Config) {
       stopped: signal?.aborted ? 'cancelled' : Date.now() >= deadline ? 'deadline' : null,
     };
   }
-  async function metadataView(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    token: string,
-    reconcile = false,
-  ): Promise<EntryImportMetadataView> {
-    const upload = await load(actor, id, reconcile),
-      row = upload.rows[ordinal],
-      decision = upload.decisions[ordinal];
-    if (!row || !decision) throw new ProblemError('not_found');
-    const record = decision.metadata?.find((item) => item.token === token);
-    if (!record) throw new ProblemError('conflict');
-    const account = owner(actor),
-      personal = await personalEntries.readPersonalEntry(actor, record.subjectId);
-    const profile = await metadataProfile(actor, decision),
-      matching = await match(actor, row);
-    const status =
-      upload.state === 'active' &&
-      upload.expires_at.getTime() > Date.now() &&
-      decision.reviewId === record.sourceReviewToken &&
-      account.clientId === record.clientId &&
-      (account.requestedBy ?? null) === record.requestedBy &&
-      entryImportMetadataDigest(row) === record.sourceDigest &&
-      entryPersonalMetadataDigest(personal) === record.personalDigest &&
-      personal.annotationRevision === record.annotationRevision &&
-      entryImportMetadataDigest(matching) === decision.matchDigest &&
-      profile?.digest === record.profileDigest &&
-      profile.incarnationId === record.incarnationId
-        ? 'current'
-        : 'stale';
-    const view: EntryImportMetadataView = {
-      status,
-      reviewToken: token,
-      sourceReviewToken: record.sourceReviewToken,
-      subjectId: record.subjectId,
-      personal,
-      proposals: vndbMetadataProposals(row),
-      outcome: record.confirmation?.outcome ?? null,
-    };
-    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
-      throw new ProblemError('invalid_request');
-    if (!reconcile) {
-      await authorized(actor);
-      await retainedSource(actor, id);
-    }
-    return view;
-  }
-  // Reuse the installed native admission protocol. Business failures from source
-  // preparation are deferred by the command runner until after original receipt
-  // lookup; fresh effects then hold the parent lock against cancellation/deletion.
+  // Fresh effects still use VNDB's parent/source fence inside the native write transaction.
   function metadataAdmission(
     actor: Actor,
     id: string,
@@ -1199,8 +1152,6 @@ export function createVndbImport(config: Config) {
       selectionDigest: reviewed.confirmation!.selectionDigest,
     };
     return {
-      // Existing in-flight confirmations keep the exact pre-admission native
-      // receipt digest. The fresh-effect fence still applies to those commands.
       input: reviewed.confirmation?.nativeAdmission === 'vndb-source-v1' ? input : undefined,
       async prepare(at) {
         const retained = await retainedRow(actor, id, ordinal),
@@ -1248,102 +1199,211 @@ export function createVndbImport(config: Config) {
       },
     };
   }
-  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
-    const upload = await load(actor, id),
-      row = upload.rows[ordinal],
-      decision = upload.decisions[ordinal];
-    if (
-      !row ||
-      !decision ||
-      row.kind !== 'vn' ||
-      decision.reviewId !== sourceReviewToken ||
-      !decision.targetId ||
-      !decision.guard
-    )
-      throw new ProblemError('conflict');
-    if (decision.metadata?.some((item) => item.confirmation && !item.confirmation.outcome))
-      throw new ProblemError('conflict');
-    const matching = await match(actor, row),
-      profile = await metadataProfile(actor, decision);
-    if (!profile || entryImportMetadataDigest(matching) !== decision.matchDigest) throw new ProblemError('conflict');
-    const account = owner(actor),
-      personal = await personalEntries.readPersonalEntry(actor, decision.targetId);
-    const requestDigest = entryImportMetadataDigest({ key });
-    const next: EntryImportMetadataReview = {
-      token: randomUUID(),
-      requestDigest,
-      sourceReviewToken,
-      subjectId: decision.targetId,
-      clientId: account.clientId,
-      requestedBy: account.requestedBy ?? null,
-      annotationRevision: personal.annotationRevision,
-      personalDigest: entryPersonalMetadataDigest(personal),
-      sourceDigest: entryImportMetadataDigest(row),
-      profileDigest: profile.digest,
-      incarnationId: profile.incarnationId,
-    };
-    return mutation(actor, 'metadata-review', key, { id, ordinal, sourceReviewToken }, async (tx, a) => {
-      const locked = await tx.query<Upload>(
-        `SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3
-          AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
-        [requireRoute(a.accountId), a.accountId, id],
+
+  const metadataCoordinator = createListImportMetadataCoordinator({
+    provider: 'vndb',
+    nativeAdmission: 'vndb-source-v1',
+    native: personalEntries,
+    async prepareReview({ actor, id, ordinal, sourceReviewToken }) {
+      const upload = await load(actor, id),
+        row = upload.rows[ordinal],
+        decision = upload.decisions[ordinal];
+      if (
+        !row ||
+        !decision ||
+        row.kind !== 'vn' ||
+        decision.reviewId !== sourceReviewToken ||
+        !decision.targetId ||
+        !decision.guard
+      )
+        throw new ProblemError('conflict');
+      const history = decision.metadata ?? [];
+      assertListImportMetadataReviewAvailable(history);
+      const matching = await match(actor, row),
+        profile = await metadataProfile(actor, decision);
+      if (!profile || entryImportMetadataDigest(matching) !== decision.matchDigest) throw new ProblemError('conflict');
+      const account = owner(actor),
+        personal = await personalEntries.readPersonalEntry(actor, decision.targetId);
+      return {
+        history,
+        identity: {
+          sourceReviewToken,
+          subjectId: decision.targetId,
+          clientId: account.clientId,
+          requestedBy: account.requestedBy ?? null,
+          annotationRevision: personal.annotationRevision,
+          personalDigest: entryPersonalMetadataDigest(personal),
+          sourceDigest: entryImportMetadataDigest(row),
+          profileDigest: profile.digest,
+          incarnationId: profile.incarnationId,
+        },
+      };
+    },
+    async persistReview({ actor, id, ordinal, sourceReviewToken, key }, next) {
+      return mutation(actor, 'metadata-review', key, { id, ordinal, sourceReviewToken }, async (tx, a) => {
+        const locked = await tx.query<Upload>(
+          `SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3
+            AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
+          [requireRoute(a.accountId), a.accountId, id],
+        );
+        const found = locked.rows[0],
+          current = found?.decisions[ordinal];
+        if (!found || !current || current.reviewId !== sourceReviewToken) throw new ProblemError('conflict');
+        const appended = appendListImportMetadataReview(current.metadata ?? [], next);
+        if (!appended.added) return { ordinal, reviewToken: appended.reviewToken };
+        current.metadata = appended.history;
+        await save(tx, a, id, ordinal, current);
+        return { ordinal, reviewToken: appended.reviewToken };
+      });
+    },
+    async loadReview({ actor, id, ordinal }, reviewToken, reconcile) {
+      const upload = await load(actor, id, reconcile),
+        decision = upload.decisions[ordinal];
+      return decision?.metadata?.find((item) => item.token === reviewToken) ?? null;
+    },
+    async readView({ actor, id, ordinal, reconcile }, reviewToken) {
+      const upload = await load(actor, id, reconcile),
+        row = upload.rows[ordinal],
+        decision = upload.decisions[ordinal];
+      if (!row || !decision) throw new ProblemError('not_found');
+      const review = decision.metadata?.find((item) => item.token === reviewToken);
+      if (!review) throw new ProblemError('conflict');
+      const account = owner(actor),
+        personal = await personalEntries.readPersonalEntry(actor, review.subjectId),
+        profile = await metadataProfile(actor, decision),
+        matching = await match(actor, row);
+      if (!reconcile) {
+        await authorized(actor);
+        await retainedSource(actor, id);
+      }
+      return {
+        review,
+        observation: {
+          sourceReviewToken: decision.reviewId,
+          subjectId: decision.targetId,
+          clientId: account.clientId,
+          requestedBy: account.requestedBy ?? null,
+          sourceDigest: entryImportMetadataDigest(row),
+          profileDigest: profile?.digest ?? null,
+          incarnationId: profile?.incarnationId ?? null,
+          personal,
+          proposals: vndbMetadataProposals(row),
+          recordId: row.identifier!.value,
+          providerCurrent:
+            upload.state === 'active' &&
+            upload.expires_at.getTime() > Date.now() &&
+            decision.reviewId === review.sourceReviewToken &&
+            decision.targetId === review.subjectId &&
+            entryImportMetadataDigest(matching) === decision.matchDigest,
+        },
+      };
+    },
+    async confirm({ actor, id, ordinal }, reviewToken, proposed) {
+      await mutation(
+        actor,
+        'metadata-confirm',
+        `${id}:${ordinal}:${reviewToken}`,
+        { id, ordinal, reviewToken, fields: proposed.fields },
+        async (tx, a) => {
+          const locked = await tx.query<Upload>(
+            'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
+            [requireRoute(a.accountId), a.accountId, id],
+          );
+          const found = locked.rows[0],
+            decision = found?.decisions[ordinal],
+            record = decision?.metadata?.find((item) => item.token === reviewToken);
+          if (!found || !record) throw new ProblemError('conflict');
+          const confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed);
+          if (!record.confirmation && (found.state !== 'active' || found.expires_at.getTime() <= Date.now()))
+            throw new ProblemError('conflict');
+          record.confirmation = confirmation;
+          assertEntryImportMetadataHistorySize(decision!.metadata ?? []);
+          await save(tx, a, id, ordinal, decision!);
+          return { ordinal, reviewToken };
+        },
       );
-      const found = locked.rows[0],
-        current = found?.decisions[ordinal];
-      if (!found || !current || current.reviewId !== sourceReviewToken) throw new ProblemError('conflict');
-      const history = [...(current.metadata ?? [])],
-        existing = history.find((item) => item.requestDigest === requestDigest);
-      if (existing) return { ordinal, reviewToken: existing.token };
-      if (history.some((item) => item.confirmation && !item.confirmation.outcome)) throw new ProblemError('conflict');
-      if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw new ProblemError('conflict');
-      history.push(next);
-      assertEntryImportMetadataHistorySize(history);
-      current.metadata = history;
-      await save(tx, a, id, ordinal, current);
-      return { ordinal, reviewToken: next.token };
-    });
-  }
-  async function persistMetadataConfirmation(
+    },
+    async persist({ actor, id, ordinal }, reviewToken, confirmation) {
+      const stateDigest = entryImportMetadataDigest(confirmation);
+      await mutation(
+        actor,
+        'metadata-progress',
+        `${id}:${ordinal}:${reviewToken}:progress:${stateDigest}`,
+        { id, ordinal, reviewToken, stateDigest },
+        async (tx, a) => {
+          const locked = await tx.query<Upload>(
+            'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
+            [requireRoute(a.accountId), a.accountId, id],
+          );
+          const found = locked.rows[0],
+            decision = found?.decisions[ordinal],
+            record = decision?.metadata?.find((item) => item.token === reviewToken);
+          if (!found || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
+            throw new ProblemError('conflict');
+          const starting =
+            (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
+            (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
+          if (
+            starting &&
+            (found.state !== 'active' ||
+              found.expires_at.getTime() <= Date.now() ||
+              decision?.reviewId !== record.sourceReviewToken ||
+              entryImportMetadataDigest(found.rows[ordinal]) !== record.sourceDigest)
+          )
+            throw new ProblemError('conflict');
+          record.confirmation = mergeListImportMetadataConfirmation(record.confirmation, confirmation);
+          await save(tx, a, id, ordinal, decision!);
+          return { ordinal, reviewToken };
+        },
+      );
+    },
+    async isCurrent({ actor, id, ordinal }, reviewed) {
+      const latest = await load(actor, id, true),
+        currentDecision = latest.decisions[ordinal],
+        currentRow = latest.rows[ordinal];
+      if (
+        latest.state !== 'active' ||
+        latest.expires_at.getTime() <= Date.now() ||
+        !currentDecision ||
+        !currentRow ||
+        currentDecision.reviewId !== reviewed.sourceReviewToken ||
+        entryImportMetadataDigest(currentRow) !== reviewed.sourceDigest
+      )
+        return false;
+      const profile = await metadataProfile(actor, currentDecision),
+        matching = await match(actor, currentRow);
+      return (
+        entryImportMetadataDigest(matching) === currentDecision.matchDigest &&
+        profile?.digest === reviewed.profileDigest &&
+        profile.incarnationId === reviewed.incarnationId
+      );
+    },
+    async isCancelled({ actor, id }) {
+      try {
+        const latest = await load(actor, id, true);
+        return latest.state !== 'active' || latest.expires_at.getTime() <= Date.now();
+      } catch (error) {
+        if (error instanceof LibraryNotFoundError) return true;
+        throw error;
+      }
+    },
+    admission: ({ actor, id, ordinal }, reviewed) => metadataAdmission(actor, id, ordinal, reviewed),
+  });
+
+  async function metadataView(
     actor: Actor,
     id: string,
     ordinal: number,
     token: string,
-    confirmation: EntryImportMetadataReview['confirmation'],
-  ) {
-    if (!confirmation) return;
-    const stateDigest = entryImportMetadataDigest(confirmation);
-    await mutation(
-      actor,
-      'metadata-progress',
-      `${id}:${ordinal}:${token}:progress:${stateDigest}`,
-      { id, ordinal, reviewToken: token, stateDigest },
-      async (tx, a) => {
-        const locked = await tx.query<Upload>(
-          'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
-          [requireRoute(a.accountId), a.accountId, id],
-        );
-        const found = locked.rows[0],
-          decision = found?.decisions[ordinal],
-          record = decision?.metadata?.find((item) => item.token === token);
-        if (!found || !record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-          throw new ProblemError('conflict');
-        const starting =
-          (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
-          (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-        if (
-          starting &&
-          (found.state !== 'active' ||
-            found.expires_at.getTime() <= Date.now() ||
-            decision?.reviewId !== record.sourceReviewToken ||
-            entryImportMetadataDigest(found.rows[ordinal]) !== record.sourceDigest)
-        )
-          throw new ProblemError('conflict');
-        record.confirmation = confirmation;
-        await save(tx, a, id, ordinal, decision!);
-        return { ordinal, reviewToken: token };
-      },
-    );
+    reconcile = false,
+  ): Promise<EntryImportMetadataView> {
+    return metadataCoordinator.view({ actor, id, ordinal, reviewToken: token, reconcile });
   }
+
+  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
+    return metadataCoordinator.review({ actor, id, ordinal, sourceReviewToken, key });
+  }
+
   async function applyMetadata(
     actor: Actor,
     id: string,
@@ -1353,283 +1413,15 @@ export function createVndbImport(config: Config) {
     recordCommand?: (outcome: CommandOutcome<unknown>) => void,
     signal?: AbortSignal,
   ) {
-    const selections = parseEntryImportMetadataSelections(fields),
-      selectionDigest = entryImportMetadataDigest(selections);
-    let upload = await load(actor, id, true),
-      decision = upload.decisions[ordinal],
-      record = decision?.metadata?.find((item) => item.token === reviewToken);
-    if (!record)
-      return { reviewToken, fields: selections.map((item) => ({ field: item.field, status: 'stale' as const })) };
-    if (record.confirmation && record.confirmation.selectionDigest !== selectionDigest)
-      throw new ProblemError('conflict');
-    if (record.confirmation?.outcome) return record.confirmation.outcome;
-    if (!record.confirmation) {
-      const confirmation: NonNullable<EntryImportMetadataReview['confirmation']> = {
-        nativeAdmission: 'vndb-source-v1',
-        fields: selections,
-        selectionDigest,
-        annotationKey: `vndb:${id}:${ordinal}:${reviewToken}:annotations`,
-        provenanceKey: `vndb:${id}:${ordinal}:${reviewToken}:provenance`,
-        annotationStarted: false,
-        provenanceStarted: false,
-      };
-      await mutation(
-        actor,
-        'metadata-confirm',
-        `${id}:${ordinal}:${reviewToken}`,
-        { id, ordinal, reviewToken, fields: selections },
-        async (tx, a) => {
-          const locked = await tx.query<Upload>(
-            'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
-            [requireRoute(a.accountId), a.accountId, id],
-          );
-          const found = locked.rows[0],
-            current = found?.decisions[ordinal],
-            metadata = current?.metadata?.find((item) => item.token === reviewToken);
-          if (!found || !metadata) throw new ProblemError('conflict');
-          if (metadata.confirmation) {
-            if (metadata.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
-            return { ordinal, reviewToken };
-          }
-          if (found.state !== 'active' || found.expires_at.getTime() <= Date.now()) throw new ProblemError('conflict');
-          metadata.confirmation = confirmation;
-          assertEntryImportMetadataHistorySize(current!.metadata ?? []);
-          await save(tx, a, id, ordinal, current!);
-          return { ordinal, reviewToken };
-        },
-      );
-      upload = await load(actor, id, true);
-      decision = upload.decisions[ordinal];
-      record = decision?.metadata?.find((item) => item.token === reviewToken);
-    }
-    if (!record?.confirmation || !decision) throw new ProblemError('conflict');
-    if (record.confirmation.outcome) return record.confirmation.outcome;
-    const view = await metadataView(actor, id, ordinal, reviewToken, true);
-    if (view.status !== 'current' && !record.confirmation.annotationStarted && !record.confirmation.provenanceStarted) {
-      const outcome: EntryImportMetadataOutcome = {
-        reviewToken,
-        fields: selections.map((item) => ({ field: item.field, status: 'stale' })),
-      };
-      record.confirmation.outcome = outcome;
-      await persistMetadataConfirmation(actor, id, ordinal, reviewToken, record.confirmation);
-      return outcome;
-    }
-    const row = upload.rows[ordinal];
-    if (!row) throw new ProblemError('not_found');
-    const result = await applyEntryImportMetadataCommands({
+    return metadataCoordinator.apply({
       actor,
-      subjectId: record.subjectId,
-      provider: 'vndb',
-      recordId: row.identifier!.value,
+      id,
+      ordinal,
       reviewToken,
-      personal: view.personal,
-      proposals: view.proposals,
-      selections,
-      baselineAnnotationRevision: record.annotationRevision,
-      confirmation: record.confirmation,
-      native: personalEntries,
-      admission: metadataAdmission(actor, id, ordinal, record),
-      persist: (confirmation) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, confirmation),
-      isCurrent: async () => {
-        const latest = await load(actor, id, true),
-          currentDecision = latest.decisions[ordinal],
-          currentRow = latest.rows[ordinal];
-        if (
-          latest.state !== 'active' ||
-          latest.expires_at.getTime() <= Date.now() ||
-          !currentDecision ||
-          !currentRow ||
-          currentDecision.reviewId !== record!.sourceReviewToken ||
-          entryImportMetadataDigest(currentRow) !== record!.sourceDigest
-        )
-          return false;
-        const profile = await metadataProfile(actor, currentDecision),
-          matching = await match(actor, currentRow);
-        return (
-          entryImportMetadataDigest(matching) === currentDecision.matchDigest &&
-          profile?.digest === record!.profileDigest &&
-          profile.incarnationId === record!.incarnationId
-        );
-      },
+      fields,
       ...(recordCommand === undefined ? {} : { record: recordCommand }),
-      isCancelled: async () => {
-        try {
-          const latest = await load(actor, id, true);
-          return latest.state !== 'active' || latest.expires_at.getTime() <= Date.now();
-        } catch (error) {
-          if (error instanceof LibraryNotFoundError) return true;
-          throw error;
-        }
-      },
       ...(signal === undefined ? {} : { signal }),
     });
-    return result.outcome;
-  }
-  async function save(
-    tx: import('../command/command.ts').CommandTransaction,
-    account: AccountActor,
-    id: string,
-    ordinal: number,
-    decision: Decision,
-  ) {
-    const saved = await tx.query(
-      `UPDATE library.vndb_import
-      SET decisions=jsonb_set(decisions,ARRAY[$4::text],$5::jsonb)
-      WHERE route=$1 AND account_id=$2 AND upload_id=$3
-        AND octet_length(jsonb_set(decisions,ARRAY[$4::text],$5::jsonb)::text)<=$6`,
-      [
-        requireRoute(account.accountId),
-        account.accountId,
-        id,
-        String(ordinal),
-        JSON.stringify(decision),
-        VNDB_DECISIONS_BYTES,
-      ],
-    );
-    if (saved.rowCount !== 1) throw new ProblemError('conflict');
-  }
-  async function applyEntry(
-    actor: Actor,
-    id: string,
-    item: { ordinal: number; reviewId: string },
-    initial: Decision | undefined,
-    record: (outcome: CommandOutcome<unknown>) => void,
-  ) {
-    let decision = initial;
-    if (!decision || decision.reviewId !== item.reviewId || stateActionOf(decision) === null)
-      return { ordinal: item.ordinal, reviewId: item.reviewId, status: 'stale' as const };
-    if (['applied', 'skipped', 'unsupported', 'stale'].includes(decision.status))
-      return { ordinal: item.ordinal, reviewId: item.reviewId, status: decision.status };
-    if (decision.baseline && !decision.replace)
-      return { ordinal: item.ordinal, reviewId: item.reviewId, status: 'skipped' as const };
-    if (!pendingState(decision)) {
-      const started = await mutation(
-        actor,
-        'start',
-        `${decision.commandKey}:start`,
-        { id, item },
-        async (tx, account) => {
-          const locked = await tx.query<Upload>(
-            `SELECT * FROM library.vndb_import
-          WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
-            [requireRoute(account.accountId), account.accountId, id],
-          );
-          const found = locked.rows[0]?.decisions[item.ordinal];
-          if (!found || found.reviewId !== item.reviewId) throw new ProblemError('conflict');
-          found.status = 'applying';
-          await save(tx, account, id, item.ordinal, found);
-          return { reviewId: found.reviewId };
-        },
-      );
-      record(started);
-    }
-    // Reload frozen operands even when the start command was replayed.
-    decision = (await load(actor, id, true)).decisions[item.ordinal];
-    if (!decision || decision.reviewId !== item.reviewId || !pendingState(decision))
-      return { ordinal: item.ordinal, reviewId: item.reviewId, status: 'stale' as const };
-    let status: Decision['status'] = 'failed';
-    let receipt: Decision['receipt'];
-    try {
-      const result = await entries.putEntry(
-        actor,
-        decision.targetId!,
-        {
-          state: decision.state!,
-          ...(decision.baseline
-            ? {
-                revision: decision.baseline.revision,
-                ...(decision.baseline.incarnationId ? { incarnationId: decision.baseline.incarnationId } : {}),
-              }
-            : {}),
-        },
-        decision.commandKey,
-        decision.guard!,
-      );
-      record(result);
-      status = 'applied';
-      receipt = {
-        partition: result.partition,
-        epoch: result.epoch,
-        position: String(result.position),
-        transactionId: result.transactionId,
-      };
-    } catch (error) {
-      if (error instanceof GrantDeniedError) throw error;
-      if (
-        error instanceof LibraryConflictError ||
-        error instanceof LibraryNotFoundError ||
-        (error instanceof ProblemError && error.code === 'conflict')
-      )
-        status = 'stale';
-      else if (
-        error instanceof LibraryEntryInvalidError ||
-        (error instanceof ProblemError && error.code === 'unsupported_library_profile')
-      )
-        status = 'unsupported';
-      // Transport/unknown failures retain the original operands and command for retry.
-    }
-    const finished = await mutation(
-      actor,
-      'finish',
-      `${decision.commandKey}:finish:${status}`,
-      { id, item, status, ...(receipt ? { receipt } : {}) },
-      async (tx, account) => {
-        const locked = await tx.query<Upload>(
-          'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
-          [requireRoute(account.accountId), account.accountId, id],
-        );
-        const found = locked.rows[0]?.decisions[item.ordinal];
-        if (found?.reviewId === item.reviewId && found.status !== 'applied') {
-          found.status = status;
-          if (receipt) found.receipt = receipt;
-          await save(tx, account, id, item.ordinal, found);
-        }
-        return { status: found?.status ?? status };
-      },
-    );
-    record(finished);
-    return { ordinal: item.ordinal, reviewId: item.reviewId, status: finished.value.status };
-  }
-  async function applyScore(
-    actor: Actor,
-    id: string,
-    item: { ordinal: number; scoreReviewId: string },
-    initial: Decision | undefined,
-    record: (outcome: CommandOutcome<unknown>) => void,
-  ) {
-    const score = initial?.score;
-    if (!score || score.reviewId !== item.scoreReviewId)
-      return { outcome: { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId, status: 'stale' as const } };
-    if (score.status === 'unavailable' || ['applied', 'skipped', 'stale', 'failed'].includes(score.status))
-      return { outcome: { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId, status: score.status } };
-    const result = await mutation(
-      actor,
-      'score-unavailable',
-      `${score.commandKey}:admission-unavailable`,
-      { id, scoreReviewId: item.scoreReviewId },
-      async (tx, account) => {
-        const locked = await tx.query<Upload>(
-          `SELECT * FROM library.vndb_import
-          WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
-          [requireRoute(account.accountId), account.accountId, id],
-        );
-        const stored = locked.rows[0];
-        if (!stored || stored.state !== 'active' || stored.expires_at.getTime() <= Date.now())
-          return { status: 'cancelled' as const };
-        const found = stored.decisions[item.ordinal];
-        if (!found?.score || found.score.reviewId !== item.scoreReviewId) return { status: 'stale' as const };
-        if (['applied', 'skipped', 'stale', 'failed', 'unavailable'].includes(found.score.status))
-          return { status: found.score.status };
-        found.score.status = 'unavailable';
-        await save(tx, account, id, item.ordinal, found);
-        return { status: 'unavailable' as const };
-      },
-    );
-    record(result);
-    if (result.value.status === 'cancelled') return { stopped: 'cancelled' as const };
-    return {
-      outcome: { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId, status: result.value.status },
-    };
   }
   async function apply(
     actor: Actor,

@@ -3330,6 +3330,12 @@ is introduced.
 
 ## VNDB retained-source admission and retry
 
+VNDB and Bangumi share `list-import-metadata-coordinator.ts` for review identity, history limits, field selection,
+confirmation phases and uncertain results. Their adapters retain the native storage boundaries: VNDB locks and saves
+its bounded upload document with the same-home source fence, while Bangumi locks its header and addressed row and
+keeps its own cancellation and expiry behavior. Both still dispatch through the existing annotation and source-
+observation command owners.
+
 The [VNDB owner contract](../../../../docs/library-import-vndb.md) binds each explicit state, metadata, label and
 occurrence-date choice to its retained source review. Refreshed metadata tokens do not follow corrected matches;
 new label operands include the observed match digest. Notes and partial-date raw spelling survive native review.
@@ -3338,6 +3344,11 @@ State, metadata and date reconciliation retries the original native operands and
 expiry. The native source fence rejects fresh effects; private reads independently require retained, unexpired source.
 Personal annotation/observation commands reuse the trusted admission preparation/callback protocol after receipt
 lookup, preserving existing callers' digests. Original in-flight VNDB metadata digests remain unchanged.
+
+MAL and AniList remain on their current metadata orchestration and continue to use the shared proposal vocabulary and
+native command executor. MAL still mutates one upload document under its explicit deadline; AniList still loads and
+saves one row and rechecks its profile digest. Those are the concrete constraints for a later adapter migration; no
+four-provider migration is claimed here.
 
 Expired label-preview reconciliation is still unavailable. V4 retains its private inert parsed evidence contract;
 native recovery consumers still refuse it. Focused HTTP cases cover actual lost native acknowledgements, expiry,

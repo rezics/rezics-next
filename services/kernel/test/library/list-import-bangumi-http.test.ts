@@ -138,6 +138,38 @@ test('own native HTTP preview, identifier match, explicit unmatched target, skip
   expect((await f.send('other', 'GET', `${root}/${uploadId}`)).status).toBe(404);
   expect((await f.send('other', 'POST', `${root}/${uploadId}:apply`, { rows: confirmed })).status).toBe(404);
 });
+
+test('metadata review uses explicit field consent and keeps one selection per confirmation', async () => {
+  const { uploadId } = await preview([record()]),
+    sourceReview = await review(uploadId, 0),
+    metadata = await ok(
+      await send('POST', `/${uploadId}:reviewMetadata`, {
+        ordinal: 0,
+        sourceReviewToken: sourceReview.token,
+      }),
+    ),
+    view = await ok(await send('GET', `/${uploadId}/metadata/0?reviewToken=${metadata.reviewToken}`));
+  expect(view).toMatchObject({
+    status: 'current',
+    proposals: { note: { state: 'value', value: 'private note sentinel' } },
+  });
+
+  const fields = [{ field: 'note', action: 'adopt' }],
+    request = { ordinal: 0, reviewToken: metadata.reviewToken, fields },
+    first = await ok(await send('POST', `/${uploadId}:applyMetadata`, request));
+  expect(first).toMatchObject({ fields: [{ field: 'note', status: 'applied' }] });
+  expect(await ok(await send('POST', `/${uploadId}:applyMetadata`, request))).toEqual(first);
+  expect(
+    (await send('POST', `/${uploadId}:applyMetadata`, {
+      ...request,
+      fields: [{ field: 'privacy', action: 'adopt' }],
+    })).status,
+  ).toBe(409);
+
+  const entry = (await ok(await send('GET', `/v1/libraryEntries/${matched}/personal`))).personalEntry;
+  expect(entry.note).toBe('private note sentinel');
+  expect(entry.sourceObservations.some((item: { provider: string }) => item.provider === 'bangumi')).toBe(false);
+}, 120000);
 test('conflict preservation, guarded replacement, stale review refresh and original command retry', async () => {
   const { uploadId } = await preview([{ ...record(), type: 2 }]);
   const initial = await review(uploadId, 0);
