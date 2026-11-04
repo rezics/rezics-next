@@ -591,7 +591,6 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         response: { 200: QuestionManagementResponseSchema, ...aggregateFailures, 409: problemSchema('conflict') },
         detail: {
           ...publicReadDetail('rating.question_management', 'realm:read'),
-          security: bearer,
           'x-resource-types': ['community.realm'],
         },
       },
