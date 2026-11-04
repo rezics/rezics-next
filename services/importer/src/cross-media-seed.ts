@@ -816,7 +816,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     if (!vnIds.has(text(row, 'id'))) continue;
     aliases.add(text(row, 'aid'));
     const mapping = mapSourceEnumeration('vndb', 'credit_type', text(row, 'role'));
-    if (!mapping?.term || mapping.status === 'omitted') {
+    if (!mapping?.term) {
       gap(
         'vndb',
         'vn_staff',
@@ -825,6 +825,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       );
       continue;
     }
+    // The family coordinator replaces this coarse edge when its exact current role Concept maps.
     edge({
       source: 'vndb',
       alias: crossMediaAliases.vndb,
