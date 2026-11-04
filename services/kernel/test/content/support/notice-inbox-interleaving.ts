@@ -2,6 +2,12 @@ import type { Pool, PoolClient } from 'pg';
 
 type QueryInput = string | { text?: string };
 
+function isPoolClient(client: unknown): client is PoolClient {
+  return typeof client === 'object' && client !== null &&
+    'query' in client && typeof client.query === 'function' &&
+    'release' in client && typeof client.release === 'function';
+}
+
 /** Runs a native transition after the first current bounded public-identity read in an Inbox request. */
 export async function afterInboxActorProfile<T>(
   pool: Pool,
@@ -20,7 +26,8 @@ export async function afterInboxActorProfile<T>(
       if (args.length !== 0 || typeof connection !== 'object' || connection === null || !('then' in connection))
         return connection;
       return Promise.resolve(connection).then((client) => {
-        const nativeClient = client as PoolClient;
+        if (!isPoolClient(client)) throw new TypeError('Expected a native Inbox query client');
+        const nativeClient = client;
         return new Proxy(nativeClient, {
           get(target, property) {
             if (property === 'query') {
