@@ -10,9 +10,26 @@ export type MembershipOperation = Readonly<{
   role: 'owner' | 'member' | null;
   reservationId?: string;
 }>;
-export type Holder = { accountId: string; role: 'owner' | 'member'; reservationId?: string };
+export type MembershipActionAdvice = 'allowed' | 'last-owner' | 'unavailable';
+export type MembershipIdentity = {
+  id: string;
+  kind: 'actor' | 'organization';
+  handle: string | null;
+  displayName: string | null;
+};
+export type Holder = {
+  accountId: string;
+  account: MembershipIdentity | null;
+  role: 'owner' | 'member';
+  actions: { changeRole: MembershipActionAdvice; remove: MembershipActionAdvice };
+};
 export type MembershipPage =
-  | { kind: 'ready'; organizationId: string; role: 'owner' | 'member'; holders: Holder[]; next: string | null }
+  | {
+      kind: 'ready';
+      organizationId: string;
+      viewer: { accountId: string; role: 'owner' | 'member'; leave: MembershipActionAdvice };
+      members: { state: 'ready'; holders: Holder[]; next: string | null } | { state: 'unavailable' };
+    }
   | { kind: 'signed-out' | 'denied' | 'missing' | 'preparing' | 'conflict' | 'unavailable' };
 export type MembershipOutcome =
   | 'acknowledged'
@@ -40,20 +57,23 @@ function record(value: unknown): value is Record<string, unknown> {
 function closed(value: Record<string, unknown>, fields: string[]) {
   return Object.keys(value).every((key) => fields.includes(key));
 }
-function text(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 4096;
+function text(value: unknown, max = 4096): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= max;
 }
 function role(value: unknown): value is Holder['role'] {
   return value === 'owner' || value === 'member';
 }
-function identity(value: unknown): boolean {
+function advice(value: unknown): value is MembershipActionAdvice {
+  return value === 'allowed' || value === 'last-owner' || value === 'unavailable';
+}
+function identity(value: unknown, accountId: string): value is MembershipIdentity {
   return (
     record(value) &&
     closed(value, ['id', 'kind', 'handle', 'displayName']) &&
-    membershipId(value.id) &&
-    ['actor', 'organization'].includes(String(value.kind)) &&
-    (value.handle === null || typeof value.handle === 'string') &&
-    (value.displayName === null || typeof value.displayName === 'string')
+    value.id === accountId &&
+    (value.kind === 'actor' || value.kind === 'organization') &&
+    (value.handle === null || typeof value.handle === 'string' && value.handle.length <= 256) &&
+    (value.displayName === null || typeof value.displayName === 'string' && value.displayName.length <= 256)
   );
 }
 export function isMembershipOperation(value: unknown): value is MembershipOperation {
@@ -105,48 +125,72 @@ export function membershipSessionMatches(session: AccountSessionResult, accountI
   );
 }
 
-/** The separately authorized holder list is presentation only. Command metadata
- * always comes from the exact selected-member point below. */
-export function parseMembershipPage(body: unknown, organizationId: string): MembershipPage {
+/** The roster and action advice are presentation only. Command metadata always
+ * comes from the exact selected-member point below. */
+export function parseMembershipPage(body: unknown, organizationId: string, accountId: string): MembershipPage {
   const unavailable = { kind: 'unavailable' } as const;
   if (
     !record(body) ||
-    !closed(body, ['account', 'self', 'role', 'operator', 'relation', 'members', 'responsibilities']) ||
-    !identity(body.account) ||
-    !record(body.account) ||
-    body.account.id !== organizationId ||
-    body.account.kind !== 'organization' ||
-    typeof body.self !== 'boolean' ||
-    !(role(body.role) || body.role === null) ||
+    !closed(body, ['organizationId', 'viewer', 'members']) ||
+    body.organizationId !== organizationId ||
+    !record(body.viewer) ||
+    !closed(body.viewer, ['accountId', 'role', 'leave']) ||
+    body.viewer.accountId !== accountId ||
+    !role(body.viewer.role) ||
+    !advice(body.viewer.leave) ||
+    (body.viewer.role === 'member' && body.viewer.leave === 'last-owner') ||
     !record(body.members) ||
+    !(body.members.state === 'ready' || body.members.state === 'unavailable')
+  )
+    return unavailable;
+  if (body.members.state === 'unavailable') {
+    if (!closed(body.members, ['state'])) return unavailable;
+    return {
+      kind: 'ready',
+      organizationId,
+      viewer: { accountId, role: body.viewer.role, leave: body.viewer.leave },
+      members: { state: 'unavailable' },
+    };
+  }
+  if (
     !closed(body.members, ['state', 'items', 'next']) ||
     !Array.isArray(body.members.items) ||
     body.members.items.length > 20 ||
     !(body.members.next === null || text(body.members.next))
   )
     return unavailable;
-  if (body.members.state === 'denied' || body.role === null) return { kind: 'denied' };
-  if (body.members.state !== 'ready') return unavailable;
   const holders: Holder[] = [];
   for (const item of body.members.items) {
     if (
       !record(item) ||
-      !closed(item, ['accountId', 'account', 'role', 'reservationId']) ||
+      !closed(item, ['accountId', 'account', 'role', 'actions']) ||
       !membershipId(item.accountId) ||
       !role(item.role) ||
-      !(item.account === null || identity(item.account)) ||
-      (record(item.account) && item.account.id !== item.accountId) ||
+      !(item.account === null || identity(item.account, item.accountId)) ||
       holders.some((row) => row.accountId === item.accountId) ||
-      (item.reservationId !== undefined && !text(item.reservationId))
+      !record(item.actions) ||
+      !closed(item.actions, ['changeRole', 'remove']) ||
+      !advice(item.actions.changeRole) ||
+      !advice(item.actions.remove) ||
+      (item.actions.changeRole === 'last-owner' && item.role !== 'owner') ||
+      (item.actions.remove === 'last-owner' && item.role !== 'owner') ||
+      (body.viewer.role === 'member' &&
+        (item.actions.changeRole !== 'unavailable' || item.actions.remove !== 'unavailable'))
     )
       return unavailable;
     holders.push({
       accountId: item.accountId,
+      account: item.account === null ? null : { ...item.account },
       role: item.role,
-      ...(item.reservationId === undefined ? {} : { reservationId: item.reservationId }),
+      actions: { changeRole: item.actions.changeRole, remove: item.actions.remove },
     });
   }
-  return { kind: 'ready', organizationId, role: body.role, holders, next: body.members.next as string | null };
+  return {
+    kind: 'ready',
+    organizationId,
+    viewer: { accountId, role: body.viewer.role, leave: body.viewer.leave },
+    members: { state: 'ready', holders, next: body.members.next as string | null },
+  };
 }
 function readFailure(status: number): Exclude<MembershipPage, { kind: 'ready' }> {
   if (status === 401) return { kind: 'signed-out' };
@@ -182,7 +226,7 @@ const readPage = createServerFn({ method: 'POST' })
         return { kind: 'denied' };
       const headers = {
         Accept: 'application/json',
-        Origin: request.headers.get('origin')!,
+        Origin: issuer,
         Cookie: request.headers.get('cookie') ?? '',
       };
       const sessionResponse = await fetch(new URL('/session', issuer), {
@@ -194,48 +238,19 @@ const readPage = createServerFn({ method: 'POST' })
       if (sessionResponse.status !== 200) return readFailure(sessionResponse.status);
       const session: unknown = await sessionResponse.json();
       if (!record(session) || session.account_id !== data.accountId) return { kind: 'denied' };
-      // Real native cookie-to-bearer issuance, exclusively on the server. No
-      // caller-controlled principal, client, scope or destination is accepted.
-      const tokenResponse = await fetch(new URL('/token', issuer), {
+      // Auth binds the fresh management proof to its trusted native page port.
+      // The caller cannot supply a principal, client, scope or kernel target.
+      const pageResponse = await fetch(new URL('/account-management/organizations/page', issuer), {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({ organizationId: data.organizationId, ...(data.cursor ? { cursor: data.cursor } : {}) }),
         redirect: 'error',
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(8000),
       });
-      if (tokenResponse.status !== 200) return readFailure(tokenResponse.status);
-      const token: unknown = await tokenResponse.json();
-      if (!record(token) || !text(token.access_token) || token.token_type !== 'Bearer') return { kind: 'unavailable' };
-      const { env } = await import('cloudflare:workers');
-      const kernelOrigin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-      if (!kernelOrigin) return { kind: 'unavailable' };
-      const kernel = new URL(kernelOrigin);
-      if (
-        kernel.username ||
-        kernel.password ||
-        kernel.search ||
-        kernel.hash ||
-        kernel.pathname !== '/' ||
-        !(
-          kernel.protocol === 'https:' ||
-          (import.meta.env.DEV &&
-            kernel.protocol === 'http:' &&
-            ['localhost', '127.0.0.1', '[::1]'].includes(kernel.hostname))
-        )
-      )
-        return { kind: 'unavailable' };
-      const url = new URL(`/v1/accounts/${data.organizationId}/management`, kernel);
-      if (data.cursor) url.searchParams.set('membersCursor', data.cursor);
-      const response = await fetch(url, {
-        headers: { Accept: 'application/json', Authorization: `Bearer ${token.access_token}` },
-        redirect: 'error',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
-      });
-      return response.status === 200
-        ? parseMembershipPage(await response.json(), data.organizationId)
-        : readFailure(response.status);
+      return pageResponse.status === 200
+        ? parseMembershipPage(await pageResponse.json(), data.organizationId, data.accountId)
+        : readFailure(pageResponse.status);
     } catch {
       return { kind: 'unavailable' };
     }

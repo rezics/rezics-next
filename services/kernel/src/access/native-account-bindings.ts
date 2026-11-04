@@ -8,6 +8,10 @@ import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './a
 import { createAccountProfileAccess, type AccountProfileAccess } from './account-profile-source.ts';
 import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
 import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
+import {
+  createOrganizationMembershipPageAccess,
+  type OrganizationMembershipPageAccess,
+} from './organization-membership-page-source.ts';
 import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
 import { accessClock, installAccessClock } from './access-clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -267,6 +271,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   });
   const trustedAccess: TrustedAccessPorts &
     ManagementMembershipAccess &
+    OrganizationMembershipPageAccess &
     AutomatedOperatorAccess &
     AccountProfileAccess &
     OrganizationDeletionPageAccess &
@@ -300,6 +305,13 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     ...createManagementMembershipAccess({
       pool,
       access,
+      clock: accessClock(access),
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...createOrganizationMembershipPageAccess({
+      pool,
+      access,
+      tokens: referenceKeys,
       clock: accessClock(access),
       accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
     }),
