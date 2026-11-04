@@ -369,8 +369,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       await render(null);
       await render(h(LiteraryProfile, { ...props(fixture), session }));
       await until(() => !!type());
-      if (session === 'signed-in')
-        await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
+      if (session === 'signed-in') await until(() => host.textContent!.includes(m.identity_intake_authority_allowed()));
     };
     const add = async (property: string, scope: HTMLElement = host) => {
       await change(propertyControl(panel(scope)), property);
