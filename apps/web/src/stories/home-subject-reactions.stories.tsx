@@ -42,10 +42,8 @@ function HomeSubjectReactionStory({ scenario }: { scenario: Scenario }) {
             ...(scenario === 'signed-out' ? {} : { viewer: { state: 'available', kind: 'love' } }),
             action: scenario === 'signed-out' ? 'sign_in' : 'allowed',
           };
-    const row = {
-      ...source,
-      summary: { ...source.summary, subjectReactions },
-    } as FeedItem;
+    const summary = { ...source.summary, subjectReactions } as unknown as typeof source.summary;
+    const row = { ...source, summary } as FeedItem;
     return {
       state: 'ready' as const,
       page: { ...recorded, feedItems: [row] } as FeedPage,
@@ -59,7 +57,7 @@ function HomeSubjectReactionStory({ scenario }: { scenario: Scenario }) {
           result={result}
           locale={getLocale()}
           signedIn={scenario !== 'signed-out'}
-          onRetry={scenario === 'unavailable' ? () => setRetryCount((count) => count + 1) : undefined}
+          {...(scenario === 'unavailable' ? { onRetry: () => setRetryCount((count) => count + 1) } : {})}
         />
       </div>
     </QueryClientProvider>
