@@ -108,6 +108,46 @@ const reactionFreshness = t.Unsafe<ReactionCountFreshness>(
     closed,
   ),
 );
+/** Feed-local only: Semantic summaries and public Search caches carry no viewer slot. */
+const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as const;
+export const FeedSubjectReactionKindSchema = t.Union(subjectReactionKinds.map((kind) => t.Literal(kind)));
+export type FeedSubjectReactionKind = Static<typeof FeedSubjectReactionKindSchema>;
+const subjectReactionCounts = t.Object(
+  {
+    like: t.Optional(t.Integer({ minimum: 1 })),
+    love: t.Optional(t.Integer({ minimum: 1 })),
+    laugh: t.Optional(t.Integer({ minimum: 1 })),
+    insightful: t.Optional(t.Integer({ minimum: 1 })),
+    sad: t.Optional(t.Integer({ minimum: 1 })),
+  },
+  closed,
+);
+export const FeedSubjectReactionsSchema = t.Object(
+  {
+    target: t.Object({ targetKind: t.Literal('subject'), targetId: uuid }, closed),
+    counts: t.Union([
+      t.Object(
+        { state: t.Literal('available'), values: subjectReactionCounts, asOf: t.Union([reactionFreshness, t.Null()]) },
+        closed,
+      ),
+      t.Object({ state: t.Literal('unavailable') }, closed),
+    ]),
+    viewer: t.Optional(t.Union([
+      t.Object({ state: t.Literal('available'), kind: t.Union([FeedSubjectReactionKindSchema, t.Null()]) }, closed),
+      t.Object({ state: t.Literal('unavailable') }, closed),
+    ])),
+    action: t.Union([
+      t.Literal('sign_in'), t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable'),
+    ]),
+  },
+  closed,
+);
+export type FeedSubjectReactions = Static<typeof FeedSubjectReactionsSchema>;
+const feedSubjectSummary = t.Object(
+  { ...SubjectSummarySchema.properties, subjectReactions: t.Optional(FeedSubjectReactionsSchema) },
+  closed,
+);
+
 export type FeedContentSummary = {
   author?: FeedAuthor;
   excerpt?: string;
@@ -230,7 +270,7 @@ export const FeedItemSchema = t.Union([
       ...common,
       source: t.Literal('discovery'),
       key: semanticKey,
-      summary: SubjectSummarySchema,
+      summary: feedSubjectSummary,
       destination: destination('subject'),
     },
     closed,
@@ -280,7 +320,7 @@ export const FeedItemSchema = t.Union([
       ...common,
       source: t.Literal('continue'),
       key: semanticKey,
-      summary: SubjectSummarySchema,
+      summary: feedSubjectSummary,
       destination: destination('subject'),
       continue: continuePageSchema.properties.subjects.items,
     },
@@ -291,7 +331,7 @@ export const FeedItemSchema = t.Union([
       ...common,
       source: t.Literal('following'),
       key: semanticKey,
-      summary: SubjectSummarySchema,
+      summary: feedSubjectSummary,
       destination: destination('subject'),
     },
     closed,

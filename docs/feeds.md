@@ -384,6 +384,63 @@ new Access preparation or final authority check; existing Following support, Con
 revalidation still run for the entire output before return. The native reaction command, relay and source watermark
 remain their existing authorities.
 
+## Selected Subject reaction composition
+
+`prepareFeedSubjectReactions(dependencies: ContentReadDependencies, actor: Actor, items: readonly FeedItem[],
+deadline: number): Promise<FeedSubjectReactionComposition>` prepares at most 20 displayed rows. Its `finish()`
+returns `Promise<readonly FeedItem[]>` after rechecking exact native Subject identity and the prepared Access/account
+observations. It is a page composition seam; feed assembly and Home controls still need to install it. The page
+owner must finish it after foreign hydration, repeat its own source witnesses, and rewind every affected lane on
+failure. It does not replace `projectFeedReactions` or its thread/post/review fields.
+
+Only the three feed-local Semantic summary variants admit optional `subjectReactions: FeedSubjectReactions`.
+Semantic's `SubjectSummarySchema` and shared public summaries remain unchanged. `target` uses the native
+`{targetKind:'subject',targetId}` operand. `counts` is `{state:'available',values,asOf}` or `{state:'unavailable'}`;
+`values` admits only positive like/love/laugh/insightful/sad counts. A covered zero is an available empty map.
+`asOf` uses the native target's oldest count-row watermark and admits null without claiming source convergence.
+Missing aggregate coverage carries no values or watermark. A successful authenticated `viewer` is
+`{state:'available',kind:<native kind or null>}`; unavailable slots use `{state:'unavailable'}`. Anonymous reads omit
+`viewer` entirely. `action` is `sign_in`, `allowed`, `denied` or `unavailable`; advice comes from the writer's Global
+Context `reaction:set` operand and never authorizes a subsequent command. Missing count coverage disables advice.
+
+Decision: an exact selected Subject ID that redirects, changes type or loses readability is withheld without refill;
+its reaction slot is never rebound to a survivor card.
+
+The composition deduplicates selected IDs before count/slot reads, groups identity checks by represented home and
+uses the installed native coverage and viewer readers. It copies selected Subject cards before preparation and
+never mutates the source summary. Initial and final identity checks include visibility, latest redirect, current
+type and security revision. Native reaction aggregation and merge reconciliation retain their existing owners.
+Dependency failure propagates to the page owner rather than returning a guessed count or authenticated null slot.
+
+### Cost: selected Subject reaction preparation and confirmation
+
+- **Touches:** S exact selected Subject Access preparations, one Global Context action preparation for an account,
+  two identity/readability observations, native count-home batches, one account-home viewer batch, two action advice
+  evaluations and final security-revision comparison. Each identity observation owns one physical Kernel pool RR
+  snapshot (`BEGIN`, statement timeout, partition binding and `COMMIT`, or `ROLLBACK`). Foreign Access preparation
+  releases its connections before either snapshot; include its native Account/Auth, grant/denial, scope, eligibility,
+  operator and client pool work from the installed Access producers, not just the outer Kernel statements. Retained
+  native Subject summaries, their copies, identity rows, sparse five-kind maps, target watermarks and viewer slots
+  all count toward materialized and serialized UTF-8 bytes. A failed preparation returns no partial projection and
+  a same-input retry repeats preparation, reads and confirmation; page source retry remains the assembler's work.
+- **Bound:** S <= 20 selected unique Subjects, H <= S represented partitions, five admitted Subject kinds, and the
+  existing 20 displayed / 160 raw / one-round selection ceilings. Each identity observation adds H SQL statements,
+  one batched partition statement and three transaction/control statements; across both that is 2H + 8 statements,
+  plus H native count statements and at most one viewer statement. Exact identity prefixes read at most S Subject
+  and S latest-redirect rows per observation; the redirect primary key ends in sequence, so selected merge history
+  is sought backwards with LIMIT 1. Counts seek at most seven native total rows per ID (the shared native reader's
+  physical bound), admit only the five Subject kinds and preserve zero-row coverage. The authenticated viewer
+  statement seeks at most S slots; anonymous reads have no viewer or action-advice work. Add S Access preparations,
+  2S native read verifications, one account action preparation and two action verifications with their own nested
+  producer bounds; these are not zero-cost booleans. Concealed/redirected rows consume their selected slots and
+  reduce output without refill. Retained projection rows/bytes are O(S * 5) plus the already-admitted Subject
+  summaries and their copies; sparse serialized output does not prove examined-row bounds.
+- **Growth check:** the remaining mounted-page acceptance must hold S, H, limits and admitted bytes fixed while
+  independently growing unrelated reactions, selected identity/merge history and account/authority history at
+  256/1024/4096. Capture actual plans, examined rows/blocks, SQL/control work, all native pool/runner phases and
+  materialized/serialized bytes for covered zero, unavailable, stale, denied and same-input retry. The composition's
+  focused native scenarios do not establish those growth bounds or mounted delivery.
+
 ## Native review question witnesses
 
 Content's [native witness reader](../services/kernel/src/content/README.md#review-backed-question-witnesses)

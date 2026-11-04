@@ -1937,6 +1937,9 @@ account. A grant on an individual subject does not authorize reactions. Unknown 
 found. A merged subject id resolves to its survivor, and the slot is written on that survivor. Subjects have no board, Realm
 participation or board Access step.
 
+The feed-local selected Subject reaction composition and its operation costs are owned by
+[Feeds](../../../../docs/feeds.md#selected-subject-reaction-composition); it uses these native writers and aggregates.
+
 Exact post GETs include the current viewer slot and projected per-kind counts through the same readers as thread
 GETs, enabling a bounded point reconciliation after an uncertain reaction. This adds one actor-home slot seek and
 one target-home count read (at most seven kinds) without changing native commands, the relay or ranking.
