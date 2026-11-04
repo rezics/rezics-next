@@ -32,7 +32,7 @@ function select(host: HTMLElement, value: string) {
 }
 const apply = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('.auth-locale-actions button')!.click();
 
-test('real shell offers eight autonyms, stages/cancels with focus, and changes the mounted presentation', async () => {
+test('real shell offers eight autonyms, stages/cancels with focus, and preserves rapid/restored choices', async () => {
   initializeDocumentLocale('en');
   const p = await open(<Page />, {});
   const options = [...p.host.querySelectorAll('option')];
@@ -58,6 +58,23 @@ test('real shell offers eight autonyms, stages/cancels with focus, and changes t
   expect(document.cookie).toBe(`${cookieName}=es`);
   expect(applyDocumentLocale('../../unsupported')).toBe('unsupported');
   expect(getLocale()).toBe('es');
+  await flush(() => {
+    select(p.host, 'ja');
+    select(p.host, 'de');
+  });
+  await flush(() => apply(p.host));
+  expect(getLocale()).toBe('de');
+  await flush(() => select(p.host, 'es'));
+  await flush(() => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event));
+  document.cookie = `${cookieName}=fr; path=/`;
+  await flush(() => {
+    restoreDocumentLocale();
+    window.dispatchEvent(new dom.Event('pageshow') as unknown as Event);
+  });
+  expect(p.host.querySelector('select')!.value).toBe('fr');
+  expect(document.cookie).toBe(`${cookieName}=fr`);
+  expect(p.host.querySelector('.auth-locale-actions')).toBeNull();
+  expect(p.calls).toHaveLength(0);
 });
 
 test('blocked persistence preserves exact hydration language and reports the current-document choice', async () => {
@@ -95,26 +112,4 @@ test('blocked persistence preserves exact hydration language and reports the cur
     if (cookie) Object.defineProperty(document, 'cookie', cookie);
     else Reflect.deleteProperty(document, 'cookie');
   }
-});
-
-test('rapid draft replacement and restored choice cannot republish a departed selection', async () => {
-  initializeDocumentLocale('en');
-  const p = await open(<Page />, {});
-  await flush(() => {
-    select(p.host, 'ja');
-    select(p.host, 'de');
-  });
-  await flush(() => apply(p.host));
-  expect(getLocale()).toBe('de');
-  await flush(() => select(p.host, 'es'));
-  await flush(() => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event));
-  document.cookie = `${cookieName}=fr; path=/`;
-  await flush(() => {
-    restoreDocumentLocale();
-    window.dispatchEvent(new dom.Event('pageshow') as unknown as Event);
-  });
-  expect(p.host.querySelector('select')!.value).toBe('fr');
-  expect(document.cookie).toBe(`${cookieName}=fr`);
-  expect(p.host.querySelector('.auth-locale-actions')).toBeNull();
-  expect(p.calls).toHaveLength(0);
 });
