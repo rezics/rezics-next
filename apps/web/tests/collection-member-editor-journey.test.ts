@@ -238,7 +238,7 @@ test('Curator can add and edit Collection members without an always-open form wa
       await page.getByRole('textbox', { name: `${m.library_member_note()}: Snow Country`, exact: true }).inputValue(),
     ).toBe('Keep my unsaved note');
     expect(await page.locator('[data-conflict-basis]').count()).toBe(0);
-    await editNote('Saved note');
+    await page.getByRole('textbox', { name: `${m.library_member_note()}: Snow Country`, exact: true }).fill('Saved note');
     await page.getByRole('button', { name: m.library_collection_save(), exact: true }).click();
     await page.locator('[data-collection-save]').waitFor({ state: 'detached' });
     await page.getByText('Saved note', { exact: true }).waitFor();
