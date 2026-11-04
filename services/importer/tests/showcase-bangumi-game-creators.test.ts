@@ -15,12 +15,24 @@ test('selected Game planning preserves type-4 staff occurrences and excludes Gam
       if (provider === 'bangumi' && table === 'subject') {
         yield { id: 101, name: 'STEINS;GATE', type: 4 };
         yield { id: 104, name: 'STEINS;GATE', type: 2 };
+        yield { id: 102, name: 'CLANNAD', type: 2 };
+        yield { id: 103, name: 'Fate/stay night', type: 2 };
       }
-      if (provider === 'vndb' && table === 'vn_titles')
+      if (provider === 'vndb' && table === 'vn_titles') {
         yield { id: 'v1', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
-      if (provider === 'vndb' && table === 'vn') yield { id: 'v1', olang: 'ja', alias: null };
-      if (provider === 'vndb' && table === 'entry_meta')
+        yield { id: 'v2', lang: 'ja', official: 't', title: 'CLANNAD', latin: null };
+        yield { id: 'v3', lang: 'ja', official: 't', title: 'Fate/stay night', latin: null };
+      }
+      if (provider === 'vndb' && table === 'vn') {
+        yield { id: 'v1', olang: 'ja', alias: null };
+        yield { id: 'v2', olang: 'ja', alias: null };
+        yield { id: 'v3', olang: 'ja', alias: null };
+      }
+      if (provider === 'vndb' && table === 'entry_meta') {
         yield { id: 'v1', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
+        yield { id: 'v2', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
+        yield { id: 'v3', revision: '1', lastmod: '2026-10-25 00:00:00+00' };
+      }
       if (provider === 'bangumi' && table === 'subject-persons') yield* rows;
       if (provider === 'bangumi' && table === 'person-characters')
         yield { subject_id: 101, person_id: 12, character_id: 21, summary: 'Voice association' };
