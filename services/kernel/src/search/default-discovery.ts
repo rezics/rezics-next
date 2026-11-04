@@ -10,7 +10,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
-import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
+import {
+  createReviewDiscoverySource,
+  REVIEW_DISCOVERY_PAGE_LIMIT,
+  type ReviewDiscoverySource,
+} from '../content/review-discovery.ts';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -397,7 +401,7 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
       if (continuation !== null && after === null)
         throw new TypeError('Review continuation has no native full-key frontier');
       const cursor = continuation === null ? null : { ...after!, token: continuation };
-      const page = await source.pageWithCut(partition, cursor, limit);
+      const page = await source.pageWithCut(partition, cursor, Math.min(limit, REVIEW_DISCOVERY_PAGE_LIMIT));
       if (page.state === 'changed') throw new DiscoveryPopulationCutChangedError('review');
       if (page.state !== 'ready')
         throw new DiscoveryProducerCoverageError({

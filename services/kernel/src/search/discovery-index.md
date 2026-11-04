@@ -79,7 +79,7 @@ Content's native `spaceDiscoverySource` returns the complete `SpaceDiscoveryDepe
 `nativeSpaceDiscoveryAdapter.source.dependencies`. Search retains the entire ready result, including opaque
 `generation`, `cut` and capability fields, in `discovery_generation.capability` with the observed physical UUID and
 allocation incarnation. Population, relay, reconciliation, activation and final disclosure recheck that binding.
-Collection pages also retain their native partition epoch; Review retains the signed `pageWithCut` continuation and
+Collection pages also retain their native partition epoch; Review caps each request at Content's native `REVIEW_DISCOVERY_PAGE_LIMIT`, retains the signed `pageWithCut` continuation and
 rejects a changed cut instead of retrying it indefinitely. Installed machinery and matching counts confer no coverage.
 
 Decision: replace the physical candidate on a native capability or epoch change, retaining the active target while the
