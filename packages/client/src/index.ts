@@ -332,6 +332,15 @@ export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
   });
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 
+type SubjectSourceStatisticsRoute = Routes['subjects'][':id']['source-statistics'];
+export type SourceStatisticListResponse = SubjectSourceStatisticsRoute['get']['response'][200];
+export type SourceStatistic = SourceStatisticListResponse[number];
+export type SourceStatisticWriteInput = SubjectSourceStatisticsRoute[':source']['put']['body'];
+export type SourceStatisticWriteResult = SubjectSourceStatisticsRoute[':source']['put']['response'][200];
+export type SourceStatisticClearInput = SubjectSourceStatisticsRoute[':source']['$clear']['post']['body'];
+export type SourceStatisticClearResult = SubjectSourceStatisticsRoute[':source']['$clear']['post']['response'][204];
+export type SourceStatisticFigures = NonNullable<SourceStatistic['figures']>;
+
 /** Home and Following share the installed feedItems response declaration. */
 export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
