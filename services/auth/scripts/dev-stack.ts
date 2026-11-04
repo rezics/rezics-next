@@ -412,6 +412,13 @@ function printPersona(keys: DevelopmentKeys, accountId: string) {
   console.log(`Local persona: developer@rezics.test\nPassword: ${keys.password}\nAccount: ${accountId}`);
 }
 
+/** Native transport is private; Auth still validates requests at its public issuer. */
+export function issuerRequest(request: Request): Request {
+  const url = new URL(request.url);
+  url.host = new URL(origins.issuer).host;
+  return new Request(url, request);
+}
+
 async function serveHost() {
   const composition = await assemble();
   try {
@@ -428,7 +435,7 @@ async function serveHost() {
       if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
       if (new URL(request.url).pathname === '/local-turnstile.js')
         return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
-      return composition.host.handler(request);
+      return composition.host.handler(issuerRequest(request));
     },
   });
   const stop = async () => {

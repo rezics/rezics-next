@@ -1,7 +1,20 @@
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { developmentKeys, localDatabase, openLocalShowcase, publicKey } from '../scripts/dev-stack.ts';
+import { developmentKeys, issuerRequest, localDatabase, openLocalShowcase, publicKey } from '../scripts/dev-stack.ts';
+
+test('native loopback transport retains the public issuer and original request evidence', async () => {
+  const request = new Request('http://127.0.0.1:3100/signin', {
+    method: 'POST',
+    headers: { origin: 'http://127.0.0.1:4200', 'content-type': 'application/json' },
+    body: '{}',
+  });
+  const forwarded = issuerRequest(request);
+  expect(forwarded.url).toBe('http://127.0.0.1:4200/signin');
+  expect(forwarded.headers.get('origin')).toBe('http://127.0.0.1:4200');
+  expect(forwarded.method).toBe('POST');
+  expect(await forwarded.text()).toBe('{}');
+});
 
 test('first-run secrets remain private and stable across setup retries', async () => {
   await mkdir(resolve(import.meta.dir, '../../../.temp'), { recursive: true });

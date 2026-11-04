@@ -7,7 +7,8 @@ runs that same step before seeding. It opens mounted anonymous GET groups plus M
 facets/filters (`search_advanced`) through authorized native platform commands. Failures stop setup with the group,
 native error and retry task. Production defaults and native action/resource checks are unchanged.
 The local host passes the same complete catalogue of mounted and internal Access actions to native bindings,
-Access and Auth client registration; native-only actions such as `account:manage` retain their ordinary checks.
+Access and Auth client registration; native-only actions such as `account:manage` retain their ordinary checks. The private loopback transport reconstructs
+the public issuer URL before invoking Auth, preserving request headers and body for its normal origin checks.
 
 `@rezics/auth` is a separate workspace and PostgreSQL store. It owns password
 credentials, Better Auth sessions, registered clients, consent and signing keys.
