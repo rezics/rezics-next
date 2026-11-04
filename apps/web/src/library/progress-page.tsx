@@ -1404,7 +1404,7 @@ function SessionRow({
     }
   }
   const entries: MenuEntry[] = [
-    ...(session.allowedActions?.edit.allowed !== false
+    ...(readable && session.allowedActions?.edit.allowed === true
       ? [
           {
             type: 'link' as const,

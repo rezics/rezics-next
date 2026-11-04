@@ -66,6 +66,9 @@ const request = mock(() => {
 mock.module('../src/library/progress-server', () => ({
   startProgressSession: request,
   finishProgressSession: request,
+  recordProgressSession: request,
+  readProgressSession: request,
+  readProgressDetail: request,
   readProgressChoices: request,
   readCurrentViewerProgressIndex: request,
 }));
