@@ -190,11 +190,7 @@ export function selectManagementOperationStepUp(query: string): ManagementOperat
     return { kind: 'management', pending: state.value };
   if (marker === 'rename') {
     const review = pendingRenameReviewStepUpState();
-    if (
-      review.kind === 'pending' &&
-      review.value.returnTo === returnTo &&
-      review.value.phase === 'awaiting'
-    )
+    if (review.kind === 'pending' && review.value.returnTo === returnTo && review.value.phase === 'awaiting')
       return { kind: 'review', pending: review.value };
   }
   return { kind: 'invalid' };

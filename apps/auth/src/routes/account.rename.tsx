@@ -415,7 +415,11 @@ function RenameReview({
         ) : current.kind === 'management-auth-required' ? (
           <>
             <p>{m.auth_rename_management_auth_required()}</p>
-            {message ? <ErrorAlert ref={alert} tabIndex={-1}>{message}</ErrorAlert> : null}
+            {message ? (
+              <ErrorAlert ref={alert} tabIndex={-1}>
+                {message}
+              </ErrorAlert>
+            ) : null}
             <Button
               type="button"
               disabled={pending}
@@ -433,7 +437,9 @@ function RenameReview({
                 <p>{m.auth_rename_current({ handle: current.target.handle ?? m.auth_rename_no_handle() })}</p>
               </>
             ) : null}
-            <ErrorAlert ref={alert} tabIndex={-1}>{m.auth_rename_denied()}</ErrorAlert>
+            <ErrorAlert ref={alert} tabIndex={-1}>
+              {m.auth_rename_denied()}
+            </ErrorAlert>
           </>
         ) : current.kind === 'unavailable' ? (
           <>

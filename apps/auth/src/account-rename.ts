@@ -60,10 +60,7 @@ async function readNativeRenamePage(_accountId: string): Promise<unknown> {
   return result.body;
 }
 
-export function parseRenamePage(
-  body: unknown,
-  accountId: string,
-): RenameRead {
+export function parseRenamePage(body: unknown, accountId: string): RenameRead {
   if (!record(body)) return { kind: 'unavailable' };
   if (body.state === 'signed-out' && Object.keys(body).join(',') === 'state') return { kind: 'signed-out' };
   if (
@@ -149,9 +146,7 @@ export function parseRenamePage(
   return { kind: 'ready', target };
 }
 
-export async function loadRenameTarget(
-  readPage: RenamePageReader = readNativeRenamePage,
-): Promise<RenameRead> {
+export async function loadRenameTarget(readPage: RenamePageReader = readNativeRenamePage): Promise<RenameRead> {
   const session = await loadAccountSession();
   if (session.kind === 'signed-out') return { kind: 'signed-out' };
   if (session.kind !== 'ready') return { kind: 'unavailable' };

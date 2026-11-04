@@ -79,7 +79,11 @@ export function createAccountProfileAccess(deps: {
     const { profile } = await readEditableAccountProfile(deps.access, profileContext, accountId);
     if (profile.id !== accountId || profile.kind !== 'actor') throw new AuthBindingDeniedError();
     requireAccessDeadline(deadline);
-    return { actor, context: profileContext, profile: { id: profile.id, kind: 'actor' as const, handle: profile.handle } };
+    return {
+      actor,
+      context: profileContext,
+      profile: { id: profile.id, kind: 'actor' as const, handle: profile.handle },
+    };
   }
   return {
     async readRenameAccountProfile({ human, accountId, deadline }) {

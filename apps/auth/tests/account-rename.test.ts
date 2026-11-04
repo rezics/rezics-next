@@ -65,10 +65,7 @@ test('rename page distinguishes advice, refusal, dependency loss and native acti
   ).toEqual({ kind: 'management-auth-required', accountId });
   expect(parseRenamePage({ state: 'refused' }, accountId)).toEqual({ kind: 'refused' });
   expect(
-    parseRenamePage(
-      { ...admitted('private_handle'), authActions: { state: 'unavailable' } },
-      accountId,
-    ),
+    parseRenamePage({ ...admitted('private_handle'), authActions: { state: 'unavailable' } }, accountId),
   ).toMatchObject({ kind: 'unavailable', target: { handle: 'private_handle' } });
   expect(parseRenamePage(admitted(null), accountId)).toMatchObject({
     kind: 'ready',
@@ -126,7 +123,9 @@ test('password step-up verifies the exact rename session and returns without exe
       });
     return new Response(null, { status: 404 });
   }) as typeof fetch;
-  expect(await confirmStepUp('person@example.test', 'password', url.slice(url.indexOf('?')), 'https://auth.test')).toEqual({
+  expect(
+    await confirmStepUp('person@example.test', 'password', url.slice(url.indexOf('?')), 'https://auth.test'),
+  ).toEqual({
     ok: true,
     target: 'https://auth.test/account/rename',
   });

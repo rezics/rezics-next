@@ -97,11 +97,7 @@ function fixture() {
       };
     },
   };
-  const profileHandler = accountProfileReadTransport(
-    service,
-    async () => new Response(null, { status: 404 }),
-    access,
-  );
+  const profileHandler = accountProfileReadTransport(service, async () => new Response(null, { status: 404 }), access);
   const handler = accountRenamePageTransport(service, profileHandler, pageAccess);
   globalThis.fetch = (async (path, init) => {
     expect(init?.credentials).toBe('same-origin');

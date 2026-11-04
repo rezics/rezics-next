@@ -133,9 +133,13 @@ test('the actual host returns safe rename readiness and never reads the private 
       authActions: { state: 'ready', operations: [{ operationId: 'auth.account.rename' }] },
     });
     source = 'refused';
-    expect(await (await host.handler(request('/account-management/rename-page', {}))).json()).toEqual({ state: 'refused' });
+    expect(await (await host.handler(request('/account-management/rename-page', {}))).json()).toEqual({
+      state: 'refused',
+    });
     source = 'unavailable';
-    expect(await (await host.handler(request('/account-management/rename-page', {}))).json()).toEqual({ state: 'unavailable' });
+    expect(await (await host.handler(request('/account-management/rename-page', {}))).json()).toEqual({
+      state: 'unavailable',
+    });
     human = { ...exact, account_id: otherId, scope: ['account:update', 'account:read'] };
     expect(await (await host.handler(request('/account-management/rename-page', {}))).json()).toMatchObject({
       state: 'management-auth-required',

@@ -20,11 +20,7 @@ type NativeRenamePage = {
 
 /** Producer-owned bounded seam. It is reached only after Auth admits the exact rename profile. */
 export interface AccountRenamePageAccess {
-  readRenameAccountPage(input: {
-    human: SessionProof;
-    accountId: string;
-    deadline: number;
-  }): Promise<NativeRenamePage>;
+  readRenameAccountPage(input: { human: SessionProof; accountId: string; deadline: number }): Promise<NativeRenamePage>;
 }
 
 type RenamePageBody =
@@ -79,7 +75,11 @@ function closePage(value: unknown, accountId: string, human: SessionProof): Rena
     sourceActions.operations.length <= 8
   ) {
     const operations = sourceActions.operations.map((item) => {
-      if (!record(item) || Object.keys(item).sort().join(',') !== 'action,operationId,resource' || !record(item.resource))
+      if (
+        !record(item) ||
+        Object.keys(item).sort().join(',') !== 'action,operationId,resource' ||
+        !record(item.resource)
+      )
         throw new TransportDenied(503);
       if (
         typeof item.operationId !== 'string' ||
@@ -175,7 +175,9 @@ export function accountRenamePageTransport(
             // Issuance also checks native authority. Confirm the exact Auth
             // session still exists without treating a changed native floor as
             // sign-out.
-            return (await service.internal.isProofSessionCurrent(human)) ? { state: 'refused' } : { state: 'signed-out' };
+            return (await service.internal.isProofSessionCurrent(human))
+              ? { state: 'refused' }
+              : { state: 'signed-out' };
           }
           if (Date.now() >= deadline) return { state: 'unavailable' };
           return page;
@@ -186,7 +188,9 @@ export function accountRenamePageTransport(
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
       if (status === 401) {
         try {
-          return response({ state: (await service.internal.hasCurrentAuthSession(request.headers)) ? 'refused' : 'signed-out' });
+          return response({
+            state: (await service.internal.hasCurrentAuthSession(request.headers)) ? 'refused' : 'signed-out',
+          });
         } catch {
           return response({ state: 'unavailable' });
         }

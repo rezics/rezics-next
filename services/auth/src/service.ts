@@ -1277,13 +1277,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         ).rows[0];
         return Boolean(
           current &&
-            current.userId === proof.account_id &&
-            current.clientId === proof.client_id &&
-            current.grantedScope === proof.scope.join(' ') &&
-            current.authnEpoch === proof.authn_epoch &&
-            current.authTime === proof.auth_time &&
-            current.authMethods === proof.amr.join(' ') &&
-            current.expiresAt.getTime() > Date.now(),
+          current.userId === proof.account_id &&
+          current.clientId === proof.client_id &&
+          current.grantedScope === proof.scope.join(' ') &&
+          current.authnEpoch === proof.authn_epoch &&
+          current.authTime === proof.auth_time &&
+          current.authMethods === proof.amr.join(' ') &&
+          current.expiresAt.getTime() > Date.now(),
         );
       },
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
