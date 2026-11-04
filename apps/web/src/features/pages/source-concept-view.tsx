@@ -11,7 +11,7 @@ import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
 import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './source-concept-reading/hierarchy';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
-import { originatingReturn } from './source-concept-reading/origin';
+import { originatingConceptReturn } from './source-concept-reading/origin';
 import {
   ConceptTaggedWorks,
   type ConceptWorksRoutePatch,
@@ -34,7 +34,9 @@ type Props = {
 };
 
 export function SourceConceptView(props: Props) {
-  const admission = useCatalogueLifetime(JSON.stringify(['concept-explore', props.id, props.locale, props.role]));
+  const admission = useCatalogueLifetime(
+    JSON.stringify(['concept-explore', props.id, props.locale, props.role, props.returnTo]),
+  );
   return <ConceptVisitView key={admission.generation} {...props} admission={admission} />;
 }
 
@@ -64,7 +66,7 @@ function ConceptVisitView({
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
 }) {
   const o = { locale: locale as never };
-  const returnTo = originatingReturn(suppliedReturn);
+  const returnTo = originatingConceptReturn(suppliedReturn, locale);
   const visit = useConceptVisit({ id, role, transport, initial, admission });
   const { read, error, busy } = visit;
   const source = useCatalogueLifetime(

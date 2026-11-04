@@ -220,3 +220,96 @@ test('distinguishes exact empty from lagging empty and offers restart for an inv
   expect((dispatches[0] as { cursor?: string }).cursor).toBe('opaque-current');
   expect(state.status).toBe('restart');
 });
+
+test('work-tag visits keep the supported original window and focus while the destination consumes only its native role and qualifiers', async () => {
+  const { workTagReturnHref, workTagReturn, workTagOriginatingReturn, subjectVisitReturn } =
+    await import('../src/features/pages/subject-visit-navigation');
+  const { originatingConceptReturn, originatingReturn } =
+    await import('../src/features/pages/source-concept-reading/origin');
+  const { SubjectConceptTags } = await import('../src/features/pages/subject-slots');
+  const source = `/en/subjects/${workId}/novel/relations?realm=${schemeId}&node=tags&cursor=opaque%2Fpage&property=schema%3Agenre#connections`;
+  const selection = {
+    statement: otherConceptId,
+    property: 'schema:genre',
+    spoiler: 1 as const,
+    focus: 'evidence' as const,
+  };
+  const returned = workTagReturnHref(source, `/en/subjects/${workId}/novel`, 'en', selection);
+  expect(returned.split('#')[0]).toBe(source.split('#')[0]);
+  expect(workTagReturn(new URL(returned, 'https://site.test').hash)).toEqual(selection);
+  expect(originatingConceptReturn(returned, 'en')).toBe(returned);
+  expect(subjectVisitReturn(returned, 'en')).toBe(returned);
+  expect(originatingReturn(returned)).toBeUndefined();
+  expect(workTagOriginatingReturn(returned, 'ja')).toBeUndefined();
+  expect(originatingConceptReturn('https://elsewhere.test/work', 'en')).toBeUndefined();
+  expect(originatingConceptReturn(returned + '&focus=browse', 'en')).toBeUndefined();
+  const restart = workTagReturnHref(
+    '/en/subjects/invalid/name?cursor=lost',
+    `/en/subjects/${workId}/novel`,
+    'en',
+    selection,
+  );
+  expect(restart).toBe(`/en/subjects/${workId}/novel#work-tags?${new URLSearchParams({ ...selection, spoiler: '1' })}`);
+
+  const subject = {
+    id: workId,
+    type: 'schema:Book',
+    labels: { en: 'A novel' },
+    statements: {
+      'schema:genre': [
+        {
+          id: otherConceptId,
+          property: { id: 'schema:genre', data_type: 'wikibase-item' },
+          rank: 'normal',
+          value: { type: 'value', content: conceptId },
+          qualifiers: [
+            {
+              property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+              value: { type: 'value', content: { amount: '+1', unit: '1' } },
+            },
+          ],
+          references: [],
+        },
+      ],
+    },
+  } as unknown as Subject;
+  const html = renderToStaticMarkup(
+    createElement(SubjectConceptTags, {
+      subject,
+      related: {
+        [conceptId]: { type: 'skos:Concept', labels: { en: 'Fantasy' }, redirect: schemeId },
+      } as unknown as Related,
+      locale: 'en',
+      definitions: recording.release,
+      spoilerThreshold: 1,
+      currentHref: source,
+    }),
+  );
+  const href = /href="([^"]+)"/.exec(html)![1]!.replaceAll('&amp;', '&');
+  const address = new URL(href, 'https://site.test');
+  expect(address.pathname).toContain(conceptId);
+  expect(address.pathname).not.toContain(schemeId);
+  expect([...address.searchParams.keys()]).toEqual(['role', 'returnTo', 'tagQualifiers', 'spoiler']);
+  const query = address.searchParams;
+  const request = conceptWorksRequest(
+    {
+      conceptId,
+      property: query.get('role')!,
+      scheme: schemeId,
+      qualifiers: JSON.parse(query.get('tagQualifiers')!),
+      spoilerThreshold: 1,
+    },
+    admission,
+    schemes,
+    'en',
+  );
+  expect(request?.spoilerThreshold).toBe(1);
+  expect(conceptLeaf(request!.filter as FilterDocument)?.statement).toMatchObject({
+    property: 'schema:genre',
+    in: [conceptId],
+    qualifiers: [{ property: 'rezics:spoilerLevel', in: ['1'] }],
+  });
+  expect(originatingConceptReturn(query.get('returnTo'), 'en')?.split('#')[0]).toBe(source.split('#')[0]);
+  expect(JSON.stringify(request)).not.toContain('opaque/page');
+  expect(JSON.stringify(request)).not.toContain('returnTo');
+});

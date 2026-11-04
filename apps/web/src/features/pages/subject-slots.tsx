@@ -11,13 +11,6 @@ import { ClassificationAssessmentSection } from './subject-classification-assess
 import type { ClassificationAssessmentHandlers } from './subject-classification-assessment-view';
 import type { ClassificationAssessmentSession } from './subject-classification-assessment-controller';
 import type { Statistic } from './subject-ratings';
-import { subjectHref } from '../../subject/subject-href';
-import { facetProperties, readNativeSpoilerLevel } from '@rezics/filter';
-import type { Release } from '@rezics/definitions';
-import { pickText } from '@rezics/composition';
-import type { Related, Subject } from '../../subject/types';
-import { typeExtends } from './graph-browser';
-import { bestRank, pageText, spoilerLevel, type Stmt } from './shared';
 
 /** Only fields from the successful public subject read; no Library state or private commerce DTO. */
 export type SubjectPurchaseContext = Readonly<{ subjectId: string; subjectType: string; locale: string }>;
@@ -121,75 +114,7 @@ export function SubjectExploreSlot({
   );
 }
 
-/** Public Concept chips come only from this work's released, disclosed item relations. */
-export function SubjectConceptTags({
-  subject,
-  related,
-  definitions,
-  locale,
-  spoilerThreshold,
-}: {
-  subject: Subject;
-  related: Related;
-  definitions: Pick<Release, 'types' | 'properties'>;
-  locale: string;
-  spoilerThreshold: number;
-}) {
-  if (!typeExtends(definitions, subject.type, 'schema:CreativeWork')) return null;
-  const sourceType = definitions.types[subject.type];
-  if (!sourceType) return null;
-  const workHref = subjectHref({ id: subject.id, label: pickText(subject.labels, locale).text }, locale).href;
-  const tags = facetProperties(definitions, [subject.type]).flatMap((property) => {
-    if (definitions.properties[property]?.datatype !== 'wikibase-item') return [];
-    const statements = Object.hasOwn(subject.statements, property)
-      ? (subject.statements[property] as unknown as Stmt[])
-      : [];
-    return bestRank(statements).flatMap((statement) => {
-      if (
-        statement.rank === 'deprecated' ||
-        statement.value.type !== 'value' ||
-        statement.property.data_type !== 'wikibase-item' ||
-        typeof statement.value.content !== 'string' ||
-        spoilerLevel(statement) > spoilerThreshold
-      )
-        return [];
-      const hasSpoilerQualifier = statement.qualifiers.some(
-        (qualifier) => qualifier.property.id === 'rezics:spoilerLevel',
-      );
-      const qualifiers = statement.qualifiers.flatMap((qualifier) => {
-        if (qualifier.property.id !== 'rezics:spoilerLevel') return [];
-        const level = readNativeSpoilerLevel(qualifier.value.content);
-        return level === null ? [] : [{ property: qualifier.property.id, in: [level] }];
-      });
-      if (hasSpoilerQualifier && qualifiers.length === 0) return [];
-      const originalId = statement.value.content;
-      const entry = Object.hasOwn(related, originalId) ? related[originalId] : undefined;
-      if (!entry?.type || !typeExtends(definitions, entry.type, 'skos:Concept')) return [];
-      const id = entry.redirect ?? originalId;
-      const label = pageText(entry.labels, locale).text;
-      if (!label) return [];
-      const address = catalogueEntries.concepts({ id, label, locale });
-      const query = new URLSearchParams({ role: property, returnTo: workHref });
-      if (qualifiers.length) query.set('tagQualifiers', JSON.stringify(qualifiers));
-      return [{ key: `${property}:${statement.id}`, href: `${address.href}?${query}`, label }];
-    });
-  });
-  if (!tags.length) return null;
-  return (
-    <section data-slot="subject-concept-tags" className="min-w-0 space-y-2">
-      <h2 className="font-sans text-lg font-semibold">{m.subject_tags({}, { locale: locale as never })}</h2>
-      <ul className="flex flex-wrap gap-2">
-        {tags.slice(0, 24).map((tag) => (
-          <li key={tag.key}>
-            <a href={tag.href} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-              {tag.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
+export { SubjectConceptTags } from './showcase-work/tags-view';
 
 /** Additive Organization companion; no extra subject fetch and no View-enum widening. */
 export function OrganizationHistorySlot({

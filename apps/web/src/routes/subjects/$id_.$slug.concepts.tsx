@@ -1,7 +1,7 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { SourceConceptSession } from '../../features/catalogue/source-concept-explorer/session';
 import { getLocale } from '../../paraglide/runtime.js';
-import { originatingReturn } from '../../features/pages/source-concept-reading/origin';
+import { originatingConceptReturn } from '../../features/pages/source-concept-reading/origin';
 import { m } from '../../paraglide/messages.js';
 import type { ConceptWorksRoutePatch } from '../../features/catalogue/concept-works/view';
 
@@ -21,7 +21,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
     const cursor = search.cursor;
     let invalid = false;
     if (role !== undefined && (typeof role !== 'string' || role.length > 128)) invalid = true;
-    if (returnTo !== undefined && !originatingReturn(returnTo)) invalid = true;
+    if (returnTo !== undefined && !originatingConceptReturn(returnTo, getLocale())) invalid = true;
     if (pin !== undefined && (typeof pin !== 'string' || pin.length > 128)) throw notFound();
     if (property !== undefined && (typeof property !== 'string' || property.length < 1 || property.length > 128))
       invalid = true;
@@ -36,7 +36,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       invalid = true;
     return {
       role: typeof role === 'string' && role.length <= 128 ? role : undefined,
-      returnTo: originatingReturn(returnTo),
+      returnTo: originatingConceptReturn(returnTo, getLocale()),
       pinUnsupported: pin !== undefined,
       property: typeof property === 'string' && property.length <= 128 ? property : undefined,
       scheme: typeof scheme === 'string' && /^[0-9a-f-]{36}$/i.test(scheme) ? scheme : undefined,
