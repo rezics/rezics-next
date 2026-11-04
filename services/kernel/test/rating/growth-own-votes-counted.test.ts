@@ -40,9 +40,9 @@ for (const axis of countedAxes)
             ].map((key) => [key, 'constant' as const]),
           ),
           limits: {
-            preparePhases: 5,
-            readPhases: 4,
-            finishPhases: 4,
+            preparePhases: 3,
+            readPhases: 2,
+            finishPhases: 2,
             cleanupStatements: 3,
             connections: 1,
             materializedBytes: 4_194_304,
@@ -76,9 +76,9 @@ for (const axis of countedAxes)
         expect(sample.counted!.accessEvaluations!.value).toBeGreaterThan(0);
         expect(sample.counted!.cleanupStatements!.value).toBe(3);
         const counted = sample.counted!;
-        expect(counted.preparePhases!.value).toBe(5);
-        expect(counted.readPhases!.value).toBe(4);
-        expect(counted.finishPhases!.value).toBe(4);
+        expect(counted.preparePhases!.value).toBe(3);
+        expect(counted.readPhases!.value).toBe(2);
+        expect(counted.finishPhases!.value).toBe(2);
         expect(counted.poolQueries!.value).toBe(
           counted.prepareQueries!.value +
             counted.readQueries!.value +
