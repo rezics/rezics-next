@@ -119,6 +119,8 @@ async function mount(
           />
         </QueryClientProvider>,
       );
+    });
+    await act(async () => {
       await tick();
     });
   };
