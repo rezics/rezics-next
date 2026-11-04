@@ -24,10 +24,10 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Owner can lend or borrow an eligible copy, browse overdue and open loans, extend a due date, return it and read exact history through the mounted API and page."
-    - "A conflicting open loan, stale version, copy disposal, concealed identity, account retirement and forged foreign copy never create an unauthorized loan or disclose private party data."
+    - 'Owner can lend or borrow an eligible copy, browse overdue and open loans, extend a due date, return it and read exact history through the mounted API and page.'
+    - 'A conflicting open loan, stale version, copy disposal, concealed identity, account retirement and forged foreign copy never create an unauthorized loan or disclose private party data.'
     - Original create/extend/return receipts survive lost acknowledgements and refresh without a duplicate loan; cursor membership changes are explicit and cleanup remains bounded.
-    - "Independent 64/512/4096 native cases price all participating pools, indexes, authorization, locks, receipts, dispatch, hydration, serialization, retention and cleanup."
+    - 'Independent 64/512/4096 native cases price all participating pools, indexes, authorization, locks, receipts, dispatch, hydration, serialization, retention and cleanup.'
   failing: true
   workerOwned: true
 estimate:

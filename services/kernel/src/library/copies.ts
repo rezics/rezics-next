@@ -235,7 +235,12 @@ async function lockOwned(tx: CommandTransaction, route: number, accountId: strin
 }
 
 /** Copy loan creation locks the same copy row before inserting, so disposal and deletion serialize with lending. */
-async function assertNoOpenLoan(tx: CommandTransaction, route: number, accountId: string, copyId: string): Promise<void> {
+async function assertNoOpenLoan(
+  tx: CommandTransaction,
+  route: number,
+  accountId: string,
+  copyId: string,
+): Promise<void> {
   const open = await tx.query(
     `SELECT loan_id FROM library.copy_loan
      WHERE route=$1 AND account_id=$2 AND copy_id=$3 AND returned_on IS NULL LIMIT 1`,
