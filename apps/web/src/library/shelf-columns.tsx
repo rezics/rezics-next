@@ -49,7 +49,8 @@ export function ShelfColumnsControl({
     const { columns: _columns, ...rest } = view;
     void navigate({
       to: '/library',
-      search: (previous) => replaceShelfAddress(previous, { ...rest, ...(columns ? { columns, columnsExplicit: true } : {}) }),
+      search: (previous) =>
+        replaceShelfAddress(previous, { ...rest, ...(columns ? { columns, columnsExplicit: true } : {}) }),
     });
   };
   return (

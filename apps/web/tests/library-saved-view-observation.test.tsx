@@ -138,10 +138,7 @@ function routeDataContext() {
               view={presentation.intent}
               typeLabel={presentation.intent.type === book ? 'Book' : 'Creative work'}
             />
-            <a
-              data-testid="ordinary-type-link"
-              href={ordinaryTypeHref(presentation.intent)}
-            >
+            <a data-testid="ordinary-type-link" href={ordinaryTypeHref(presentation.intent)}>
               Ordinary type link
             </a>
           </main>
@@ -266,7 +263,9 @@ test('mounted Library boundary resolves saved scopes, carries deliberate URL cho
     await act(async () => typeAction!.click());
     await tick();
     expect(readTypes).toHaveBeenCalledTimes(1);
-    const destination = [...visit.host.querySelectorAll('a')].find((node) => node.textContent?.trim() === 'Creative work');
+    const destination = [...visit.host.querySelectorAll('a')].find(
+      (node) => node.textContent?.trim() === 'Creative work',
+    );
     expect(destination).toBeDefined();
     const firstDestination = searchParams(destination!.href);
     expect(firstDestination).toEqual({ type: creativeWork, state: 'planned' });
@@ -322,7 +321,9 @@ test('mounted Library boundary resolves saved scopes, carries deliberate URL cho
     });
     expect(visit.router.state.location.search).toHaveProperty('cursor', 'native-cursor');
 
-    const ordinaryType = [...visit.host.querySelectorAll('a')].find((node) => node.dataset.testid === 'ordinary-type-link')!;
+    const ordinaryType = [...visit.host.querySelectorAll('a')].find(
+      (node) => node.dataset.testid === 'ordinary-type-link',
+    )!;
     expect(searchParams(ordinaryType.href)).toEqual({
       type: book,
       state: 'planned',
@@ -420,7 +421,10 @@ test('same-account ABA retires the visit through route variants, while a fresh a
 
 test('removed, failed, and pending session observations retire each mounted Library snapshot', async () => {
   for (const [index, mode] of (['removed', 'failed', 'pending'] as const).entries()) {
-    const visit = await mountVisit(personalData(snapshot(`session-${mode}-${index}`)), new URLSearchParams({ type: book }).toString());
+    const visit = await mountVisit(
+      personalData(snapshot(`session-${mode}-${index}`)),
+      new URLSearchParams({ type: book }).toString(),
+    );
     try {
       expect(current(visit.host)?.dataset.layout).toBe('table');
       const query = visit.client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
@@ -428,7 +432,12 @@ test('removed, failed, and pending session observations retire each mounted Libr
       if (mode === 'removed') {
         visit.client.removeQueries({ queryKey: sessionQuery.queryKey, exact: true });
       } else if (mode === 'failed') {
-        query!.setState({ ...query!.state, status: 'error', error: new Error('session unavailable'), fetchStatus: 'idle' });
+        query!.setState({
+          ...query!.state,
+          status: 'error',
+          error: new Error('session unavailable'),
+          fetchStatus: 'idle',
+        });
       } else {
         query!.setState({ ...query!.state, data: undefined, status: 'pending', error: null, fetchStatus: 'fetching' });
       }

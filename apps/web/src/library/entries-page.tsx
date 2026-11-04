@@ -12,7 +12,13 @@ import type { LibraryRestoreReceipt, LibraryRestoreResult, PersonalLibraryView }
 import { Exposure, useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
-import { explicitShelfDisplay, shelfHref, shelfSort, type ShelfDisplay, type ShelfPresentationIntent } from './shelf-params';
+import {
+  explicitShelfDisplay,
+  shelfHref,
+  shelfSort,
+  type ShelfDisplay,
+  type ShelfPresentationIntent,
+} from './shelf-params';
 import type { ShelfPresentationResolution } from './shelf-preferences';
 import { ShelfEntries, ShelfScoreUnavailable } from './shelf-view';
 import { DisplayControls, SortControls, EntriesFirstPage } from './entries-current';
@@ -111,10 +117,7 @@ export function PersonalLibraryPage({
   };
   const firstPage: ShelfPresentationIntent = { ...intent };
   delete firstPage.cursor;
-  const saveQuerySearch = new URL(
-    shelfHref(locale, firstPage),
-    'https://rezics.local',
-  ).searchParams;
+  const saveQuerySearch = new URL(shelfHref(locale, firstPage), 'https://rezics.local').searchParams;
   const saveQuerySelection = admitSavedQuerySelection({
     ...(page.type ? { type: page.type } : {}),
     search: saveQuerySearch,

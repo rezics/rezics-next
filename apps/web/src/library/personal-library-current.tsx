@@ -410,11 +410,7 @@ function PersonalLibraryRead({
           {m.library_heading()}
           <ShelfSummaryCount page={summary.page} locale={address.locale} />
         </h1>
-        <ShelfSummaryNavigation
-          summary={summary}
-          locale={address.locale}
-          view={presentation?.intent ?? input}
-        />
+        <ShelfSummaryNavigation summary={summary} locale={address.locale} view={presentation?.intent ?? input} />
         <p role={query.isError || query.data ? 'alert' : 'status'}>
           {query.isError || query.data ? m.error_message() : m.library_sort_preparing()}
         </p>

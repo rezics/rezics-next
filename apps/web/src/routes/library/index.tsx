@@ -208,5 +208,7 @@ export const Route = createFileRoute('/library/')({
 function LibraryRoute() {
   const rawSearch = Route.useSearch();
   const data = Route.useLoaderData();
-  return <LibraryPresentationBoundary data={data} rawSearch={rawSearch} locale={getLocale()} readLabel={readLabelShelf} />;
+  return (
+    <LibraryPresentationBoundary data={data} rawSearch={rawSearch} locale={getLocale()} readLabel={readLabelShelf} />
+  );
 }

@@ -150,8 +150,7 @@ export function resolveShelfPresentation(
           ? 'all'
           : 'application';
   const unsupportedSavedSort =
-    savedSortPreference &&
-    (!savedSort || savedSort.orderBy === 'personalScore')
+    savedSortPreference && (!savedSort || savedSort.orderBy === 'personalScore')
       ? savedSortPreference.field.replaceAll('_', ' ')
       : undefined;
   const unsupportedSort = search.orderBy === undefined ? unsupportedSavedSort : undefined;
@@ -178,11 +177,8 @@ export function resolveShelfPresentation(
       layout: layoutSource,
       size: search.size !== undefined ? 'url' : saved.gridSize ? 'saved' : 'application',
       columns: search.columns !== undefined ? 'url' : saved.tableColumns ? 'saved' : 'application',
-      sort: search.orderBy !== undefined || search.direction !== undefined
-        ? 'url'
-        : savedSort
-          ? 'saved'
-          : 'application',
+      sort:
+        search.orderBy !== undefined || search.direction !== undefined ? 'url' : savedSort ? 'saved' : 'application',
     },
     unsupported: {
       ...(unsupportedSort ? { sort: unsupportedSort } : {}),
@@ -209,9 +205,18 @@ export function replaceShelfAddress(
   next: ShelfPresentationIntent,
 ): Record<string, unknown> {
   const result = { ...previous };
-  const addressKeys = ['type', 'state', 'label', 'orderBy', 'direction', 'layout', 'size', 'columns', 'cursor'] as const;
-  for (const key of addressKeys)
-    delete result[key];
+  const addressKeys = [
+    'type',
+    'state',
+    'label',
+    'orderBy',
+    'direction',
+    'layout',
+    'size',
+    'columns',
+    'cursor',
+  ] as const;
+  for (const key of addressKeys) delete result[key];
   for (const key of addressKeys) {
     const value = next[key];
     if (typeof value === 'string') result[key] = value;

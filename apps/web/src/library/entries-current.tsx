@@ -159,10 +159,7 @@ export function DisplayControls({
           </nav>
         ) : null}
         {state ? (
-          <a
-            className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            href={shelfHref(locale, clearStateView)}
-          >
+          <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={shelfHref(locale, clearStateView)}>
             {m.library_clear_state()}
           </a>
         ) : null}
@@ -226,21 +223,14 @@ export function DisplayControls({
         </ToggleGroup>
       ) : null}
       {state ? (
-        <a
-          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-          href={shelfHref(locale, clearStateView)}
-        >
+        <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={shelfHref(locale, clearStateView)}>
           {m.library_clear_state()}
         </a>
       ) : null}
       <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
         {m.library_shelf_restore_defaults()}
       </a>
-      <PresentationNotice
-        {...(presentation ? { presentation } : {})}
-        display={display}
-        {...(label ? { label } : {})}
-      />
+      <PresentationNotice {...(presentation ? { presentation } : {})} display={display} {...(label ? { label } : {})} />
     </div>
   );
 }
@@ -309,7 +299,9 @@ export function SortControls({
       {type ? <input type="hidden" name="type" value={type} /> : null}
       {display.layoutExplicit ? <input type="hidden" name="layout" value={display.layout} /> : null}
       {display.sizeExplicit ? <input type="hidden" name="size" value={display.size} /> : null}
-      {display.columnsExplicit && display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
+      {display.columnsExplicit && display.columns ? (
+        <input type="hidden" name="columns" value={display.columns} />
+      ) : null}
       {/* A disabled selected option is not a successful form control. Retain the explicit score address. */}
       {unavailableOrder ? <input type="hidden" name="orderBy" value={selection.orderBy} /> : null}
       <label className="grid min-w-0 max-w-full gap-1 text-sm">

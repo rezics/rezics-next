@@ -136,11 +136,7 @@ export function LibraryShelfPreferenceBoundary({
 }) {
   const client = useQueryClient();
   const observation = browserObservation(client);
-  const reader = useSyncExternalStore(
-    observation.subscribe,
-    observation.getSnapshot,
-    observation.getServerSnapshot,
-  );
+  const reader = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const viewer = useSession();
   const visit = useRef<LibraryShelfPreferenceVisit | null>(null);
   visit.current ??= new LibraryShelfPreferenceVisit(generationRegistry(client));

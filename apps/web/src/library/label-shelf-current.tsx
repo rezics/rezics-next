@@ -140,12 +140,7 @@ export function CurrentLabelShelf({
         ? initial
         : { state: 'preparing' };
     return (
-      <LabelShelfPage
-        page={serverPage}
-        locale={locale}
-        display={display}
-        {...(presentation ? { presentation } : {})}
-      />
+      <LabelShelfPage page={serverPage} locale={locale} display={display} {...(presentation ? { presentation } : {})} />
     );
   }
   const enrolled = origin.capture(...readGroups);
@@ -161,9 +156,7 @@ export function CurrentLabelShelf({
               ? 'closed'
               : 'preparing',
     };
-    return (
-      <LabelShelfPage page={page} locale={locale} display={display} {...(presentation ? { presentation } : {})} />
-    );
+    return <LabelShelfPage page={page} locale={locale} display={display} {...(presentation ? { presentation } : {})} />;
   }
   return (
     <LabelShelfRead
