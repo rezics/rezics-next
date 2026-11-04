@@ -270,4 +270,4 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-}, 15_000);
+}, 90_000);

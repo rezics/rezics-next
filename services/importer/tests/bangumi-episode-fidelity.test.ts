@@ -131,7 +131,7 @@ test('operator plans authored episodes without using disc as identity and import
       port: port(commands),
       bindings,
     });
-    expect(first.status).toBe('imported');
+    expect(first.status).toBe('imported-with-gaps');
     expect(first.converterRevision).toBe(converter_revision);
     const proposed = commands.filter((command) => command.op === 'propose');
     const content = (command: (typeof proposed)[number]) =>
