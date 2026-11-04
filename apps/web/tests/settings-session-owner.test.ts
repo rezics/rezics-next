@@ -15,6 +15,7 @@ import {
 import { readingMutation, sendReading } from '../src/settings/reading-preferences';
 import type {
   CollectionVisibilityWrite,
+  OwnedCollection,
   PreferenceWriteResult,
   NotificationWriteResult,
   SettingsPage,
@@ -47,7 +48,15 @@ const page = {
   notifications,
   page: settingsPreferencePage(notifications, 4),
 };
-const collection = { id: 'owned', title: 'Reading', visibility: 'private' as const, revision: 7 };
+const collection: OwnedCollection = {
+  id: 'owned',
+  title: 'Reading',
+  kind: 'curated',
+  membershipKind: 'curated',
+  visibility: 'private',
+  revision: 7,
+  allowedVisibilityActions: ['unlisted', 'public'],
+};
 const empty: VerificationSnapshot = {
   accountId: 'alice',
   verificationRequest: null,

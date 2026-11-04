@@ -8,8 +8,17 @@ import {
 import type { OwnedCollection } from '../src/settings/preferences';
 import type { CollectionPrivacyRead } from '../src/settings/collection-privacy-data';
 
-const initial: OwnedCollection = { id: 'collection-1', title: 'Books to revisit', visibility: 'private', revision: 7 };
-const receipt: OwnedCollection = { ...initial, visibility: 'public', revision: 8 };
+const row = (visibility: OwnedCollection['visibility'], revision: number): OwnedCollection => ({
+  id: 'collection-1',
+  title: 'Books to revisit',
+  kind: 'curated',
+  membershipKind: 'curated',
+  visibility,
+  revision,
+  allowedVisibilityActions: (['private', 'unlisted', 'public'] as const).filter((value) => value !== visibility),
+});
+const initial = row('private', 7);
+const receipt = row('public', 8);
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -54,7 +63,7 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   expect(commands[1]).toBe(original);
   expect(editor.snapshot().phase).toBe('reloading');
   await editor.edit('private');
-  readback.resolve({ ok: true, value: { ...initial, visibility: 'unlisted', revision: 10 } });
+  readback.resolve({ ok: true, value: row('unlisted', 10) });
   await retry;
   expect(reads).toBe(1);
   expect(editor.snapshot()).toMatchObject({
@@ -74,7 +83,7 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
 test('definite conflict and refusal retain the choice until Reload deliberately adopts the current native row', async () => {
   for (const reason of ['conflict', 'forbidden', 'closed', 'invalid'] as const) {
     let readFails = true;
-    const current = { ...initial, visibility: 'unlisted' as const, revision: 12 };
+    const current = row('unlisted', 12);
     const editor = new CollectionPrivacyEditor(initial, {
       save: async () => ({ ok: false, reason }),
       read: async () => (readFails ? { ok: false, reason: 'unavailable' } : { ok: true, value: current }),
@@ -192,7 +201,7 @@ test('a replay refused before receipt lookup cannot discard an earlier unknown-o
 
 test('an exhausted list refresh replaces old pages, and a failed refresh retries its first page honestly', async () => {
   const reads: (string | null)[] = [];
-  const fresh = { ...initial, title: 'Current reading', visibility: 'unlisted' as const, revision: 10 };
+  const fresh = { ...row('unlisted', 10), title: 'Current reading' };
   const response = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
   const pager = new CollectionPrivacyPager(async (cursor) => {
     reads.push(cursor);

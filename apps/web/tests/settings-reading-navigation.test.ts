@@ -9,6 +9,7 @@ import { NotificationEditor, notificationsNeedNavigationDecision } from '../src/
 import { CollectionPrivacyEditor, CollectionPrivacyPager } from '../src/settings/collection-privacy-recovery';
 import { VerificationRecovery } from '../src/settings/verification-recovery';
 import type { AgentVerificationRequest, VerificationInput } from '../src/settings/verification-core';
+import type { OwnedCollection } from '../src/settings/preferences';
 import {
   collectionPrivacyNeedsNavigationDecision,
   settingsDraftViewerIsCurrent,
@@ -180,7 +181,15 @@ test('notice originals and later drafts require a decision until exact recovery 
 });
 
 test('Collection row decisions retain unknown originals through denied reads and release on row teardown', async () => {
-  const collection = { id: 'collection', title: 'Reading', visibility: 'private' as const, revision: 1 };
+  const collection: OwnedCollection = {
+    id: 'collection',
+    title: 'Reading',
+    kind: 'curated' as const,
+    membershipKind: 'curated' as const,
+    visibility: 'private' as const,
+    revision: 1,
+    allowedVisibilityActions: ['unlisted', 'public'],
+  };
   const editor = new CollectionPrivacyEditor(collection, {
     save: async () => ({ ok: false, reason: 'unavailable' }),
     read: async () => ({ ok: false, reason: 'forbidden' }),
@@ -193,8 +202,8 @@ test('Collection row decisions retain unknown originals through denied reads and
   expect(navigation.needsDecision()).toBe(false);
   await editor.edit('public');
   const original = editor.snapshot().attempt;
-  await editor.edit('private');
-  expect(editor.snapshot().desired).toBe(editor.snapshot().current.visibility);
+  await editor.edit('unlisted');
+  expect(editor.snapshot().desired).toBe('unlisted');
   const leaving = navigation.block('/settings', '/collections/collection');
   navigation.stay();
   expect(await leaving).toBe(true);

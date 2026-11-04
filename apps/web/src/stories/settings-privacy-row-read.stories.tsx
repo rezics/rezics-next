@@ -33,9 +33,27 @@ type Story = StoryObj;
 const initial: OwnedCollection = {
   id: recording.collection.id,
   title: recording.collection.title,
+  kind: 'curated',
+  membershipKind: 'curated',
   revision: recording.collection.revision,
   visibility: 'public',
+  allowedVisibilityActions: ['private', 'unlisted'],
 };
+const withVisibility = (
+  collection: OwnedCollection,
+  visibility: OwnedCollection['visibility'],
+  revision = commandRevision(collection),
+): OwnedCollection => ({
+  ...collection,
+  visibility,
+  revision,
+  allowedVisibilityActions: (['private', 'unlisted', 'public'] as const).filter((value) => value !== visibility),
+});
+
+function commandRevision(collection: OwnedCollection) {
+  if (collection.revision === null) throw new Error('Logical Collections do not have a command revision');
+  return collection.revision;
+}
 
 type RequestJournal = {
   pageReads: number;
@@ -74,7 +92,7 @@ function createJourney(report: (journal: RequestJournal) => void) {
         writeVisibility: input.visibility,
         writeHasIdempotencyKey: input.idempotencyKey ? 'yes' : 'no',
       };
-      current = { ...current, visibility: 'unlisted', revision: current.revision + 1 };
+      current = withVisibility(current, 'unlisted', commandRevision(current) + 1);
       journal.conflictCurrentVisibility = current.visibility;
       publish();
       if (journal.writes !== 1) throw new Error('Unexpected additional Collection visibility write');

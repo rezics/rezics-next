@@ -23,7 +23,7 @@ export type CollectionPrivacyIO = {
   read: (id: string) => Promise<CollectionPrivacyRead<OwnedCollection>>;
 };
 type EditorState = {
-  current: OwnedCollection;
+  current: OwnedCollection | null;
   desired: CollectionVisibility;
   attempt: VisibilityAttempt | null;
   readRefusal: 'closed' | 'forbidden' | null;
@@ -70,27 +70,53 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   ) {
     super({ current, desired: current.visibility, attempt: null, readRefusal: null, phase: 'idle' }, isCurrent);
   }
-  needsListRestartProtection = () =>
-    this.state.attempt !== null ||
-    this.state.desired !== this.state.current.visibility ||
-    this.state.phase === 'saving' ||
-    this.state.phase === 'reloading';
+  override dispose = () => {
+    this.state = {
+      current: null,
+      desired: 'private',
+      attempt: null,
+      readRefusal: null,
+      phase: 'idle',
+    };
+    this.disposed = true;
+    this.generation++;
+    this.listeners.forEach((listener) => listener());
+    this.listeners.clear();
+  };
+  needsListRestartProtection = () => {
+    const current = this.state.current;
+    return (
+      this.state.attempt !== null ||
+      (current !== null && this.state.desired !== current.visibility) ||
+      this.state.phase === 'saving' ||
+      this.state.phase === 'reloading'
+    );
+  };
   /** A fresh list may update a clean mounted row, but cannot resolve its command or replace a draft. */
   receive(current: OwnedCollection) {
     if (!this.live()) return;
+    const existing = this.state.current;
     if (
+      !existing ||
       this.needsListRestartProtection() ||
       this.state.readRefusal ||
-      current === this.state.current ||
-      current.id !== this.state.current.id ||
-      current.revision < this.state.current.revision ||
-      (current.revision === this.state.current.revision && current.visibility !== this.state.current.visibility)
+      current === existing ||
+      current.id !== existing.id ||
+      (existing.revision !== null && current.revision !== null && current.revision < existing.revision) ||
+      (current.revision === existing.revision && current.visibility !== existing.visibility)
     )
       return;
     this.update({ current, desired: current.visibility, phase: 'idle' });
   }
   async edit(desired: CollectionVisibility) {
     if (!this.live() || !this.canWrite()) return;
+    const current = this.state.current;
+    if (
+      !current ||
+      current.revision === null ||
+      (desired !== current.visibility && !current.allowedVisibilityActions.includes(desired))
+    )
+      return;
     if (this.state.readRefusal) return;
     this.edits++;
     this.update({ desired });
@@ -98,11 +124,18 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   }
   async submit() {
     if (!this.live() || !this.canWrite()) return;
+    const current = this.state.current;
     if (this.state.readRefusal || this.state.attempt || !['idle', 'saved', 'review'].includes(this.state.phase)) return;
-    if (this.state.desired === this.state.current.visibility) return;
+    if (
+      !current ||
+      current.revision === null ||
+      this.state.desired === current.visibility ||
+      !current.allowedVisibilityActions.includes(this.state.desired)
+    )
+      return;
     const attempt = Object.freeze({
-      collectionId: this.state.current.id,
-      revision: this.state.current.revision,
+      collectionId: current.id,
+      revision: current.revision,
       visibility: this.state.desired,
       idempotencyKey: crypto.randomUUID(),
     });
@@ -139,6 +172,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       const receipt = answer.collection;
       if (
         receipt.id !== attempt.collectionId ||
+        receipt.revision === null ||
         receipt.revision !== attempt.revision + 1 ||
         receipt.visibility !== attempt.visibility
       ) {
@@ -169,6 +203,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       const current = read.value;
       if (
         current.id !== receipt.id ||
+        current.revision === null ||
         current.revision < receipt.revision ||
         (current.revision === receipt.revision && current.visibility !== receipt.visibility)
       ) {
@@ -187,13 +222,15 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   }
   async reload() {
     if (!this.live()) return;
+    const current = this.state.current;
+    if (!current) return;
     if (this.state.phase === 'saving' || this.state.phase === 'reloading') return;
     const generation = this.generation;
     const edits = this.edits;
     const previous = this.state.phase;
     this.update({ phase: 'reloading', nativeFailure: undefined });
     try {
-      const read = await this.io.read(this.state.current.id);
+      const read = await this.io.read(current.id);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.update({
@@ -205,9 +242,9 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         return;
       }
       if (
-        read.value.id !== this.state.current.id ||
-        read.value.revision < this.state.current.revision ||
-        (read.value.revision === this.state.current.revision && read.value.visibility !== this.state.current.visibility)
+        read.value.id !== current.id ||
+        (current.revision !== null && read.value.revision !== null && read.value.revision < current.revision) ||
+        (read.value.revision === current.revision && read.value.visibility !== current.visibility)
       )
         throw new Error('Stale Collection read');
       const desired = edits === this.edits ? read.value.visibility : this.state.desired;
@@ -253,9 +290,21 @@ export class CollectionPrivacyPager extends Observable<PageState> {
     super({ collections: [], next: null, loaded: false, loading: false, failure: null }, isCurrent);
   }
   override dispose = () => {
-    this.update({ loading: false, ...(this.state.restarting ? { restarting: false } : {}) });
+    this.state = {
+      collections: [],
+      next: null,
+      loaded: false,
+      loading: false,
+      failure: null,
+      restarting: false,
+      restartBlocked: false,
+    };
+    this.failedRequest = null;
+    this.rows.clear();
     this.disposed = true;
     this.generation++;
+    this.listeners.forEach((listener) => listener());
+    this.listeners.clear();
   };
   /** Read-only registration: drafts and immutable commands remain inside their mounted row editors. */
   registerRow = (row: Pick<CollectionPrivacyEditor, 'needsListRestartProtection' | 'subscribe'>) => {

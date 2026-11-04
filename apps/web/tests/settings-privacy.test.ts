@@ -58,11 +58,29 @@ function collection(id: string, title: string, visibility: 'private' | 'unlisted
     visibility,
     revision,
     curatorAccountId: 'alice',
+    membershipKind: 'curated',
+    allowedVisibilityActions: (['private', 'unlisted', 'public'] as const).filter((value) => value !== visibility),
     state: 'active',
     memberCount: 0,
     orderEpoch: 0,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
+  };
+}
+
+function ownerPage(collections: unknown[], next: string | null) {
+  return { ownerManagement: 'owner', ownerAccountId: 'alice', collections, next };
+}
+
+function owned(id: string, title: string, visibility: 'private' | 'unlisted' | 'public', revision = 7): OwnedCollection {
+  return {
+    id,
+    title,
+    kind: 'curated',
+    membershipKind: 'curated',
+    visibility,
+    revision,
+    allowedVisibilityActions: (['private', 'unlisted', 'public'] as const).filter((value) => value !== visibility),
   };
 }
 
@@ -72,17 +90,16 @@ test('privacy page reads one bounded owner page at a time and preserves its curs
     fetch: (async (input, init) => {
       const current = new Request(input, init);
       calls.push(current);
-      return Response.json({
-        collections: [collection(`c${calls.length}`, 'Reading list', 'unlisted')],
-        next: calls.length === 1 ? 'cursor-2' : null,
-      });
+      return Response.json(ownerPage([collection(`c${calls.length}`, 'Reading list', 'unlisted')], calls.length === 1 ? 'cursor-2' : null));
     }) as typeof fetch,
   });
   const first = await readOwnedCollections(client, request(), env, null);
   expect(first.collections.map((item) => item.id)).toEqual(['c1']);
   expect(first.next).toBe('cursor-2');
   expect(calls).toHaveLength(1);
-  expect(new URL(calls[0]!.url).pathname).toBe('/v1/accounts/alice/collections');
+  expect(new URL(calls[0]!.url).pathname).toBe('/v1/collections');
+  expect(new URL(calls[0]!.url).searchParams.get('curatorAccountId')).toBe('alice');
+  expect(new URL(calls[0]!.url).searchParams.get('ownerManagement')).toBe('true');
   expect(new URL(calls[0]!.url).searchParams.get('limit')).toBe('20');
   expect(calls[0]!.headers.get('authorization')).toBe('Bearer page-token');
 
@@ -92,8 +109,8 @@ test('privacy page reads one bounded owner page at a time and preserves its curs
   expect(new URL(calls[1]!.url).searchParams.get('cursor')).toBe('cursor-2');
 });
 
-test('first-page cost stays fixed for 5 and 50 Collections, then grows by one read per requested page', async () => {
-  for (const size of [5, 50]) {
+test('first-page cost stays fixed for 5, 50 and 500 Collections, then grows by one read per requested page', async () => {
+  for (const size of [5, 50, 500]) {
     let reads = 0;
     const client = createKernelClient('https://kernel.example.test', {
       fetch: (async (input) => {
@@ -102,12 +119,14 @@ test('first-page cost stays fixed for 5 and 50 Collections, then grows by one re
         const second = url.searchParams.get('cursor') === 'next-page';
         const start = second ? 20 : 0;
         const count = Math.min(20, size - start);
-        return Response.json({
-          collections: Array.from({ length: Math.max(0, count) }, (_, index) =>
-            collection(`c${start + index}`, `Collection ${start + index}`, 'private'),
+        return Response.json(
+          ownerPage(
+            Array.from({ length: Math.max(0, count) }, (_, index) =>
+              collection(`c${start + index}`, `Collection ${start + index}`, 'private'),
+            ),
+            start + count < size ? 'next-page' : null,
           ),
-          next: start + count < size ? 'next-page' : null,
-        });
+        );
       }) as typeof fetch,
     });
     const first = await readOwnedCollections(client, request(), env, null);
@@ -138,6 +157,7 @@ test('visibility changes send the collection revision and expose the server answ
     expect(result).toEqual({ ok: true, collection: expect.objectContaining({ visibility, revision: 8 }) });
     expect(sent?.method).toBe('PATCH');
     expect(new URL(sent!.url).pathname).toBe('/v1/collections/c1');
+    expect(new URL(sent!.url).searchParams.get('ownerManagement')).toBe('true');
     expect(await sent!.clone().json()).toEqual({ revision: 7, visibility });
   }
 });
@@ -196,8 +216,37 @@ test('stale and failed writes report a refusal without inventing a new collectio
 });
 
 test('settings collection rows have a stable privacy-page contract', () => {
-  const page: OwnedCollectionsPage = { collections: [collection('c1', 'Reading list', 'private')], next: null };
+  const page: OwnedCollectionsPage = { collections: [owned('c1', 'Reading list', 'private')], next: null };
   expect(page.collections[0]).toMatchObject({ id: 'c1', title: 'Reading list', visibility: 'private', revision: 7 });
+});
+
+test('the strict owner decoder preserves curated, saved dynamic and logical identity plus native action advice', async () => {
+  const dynamic = { ...collection('saved-dynamic', 'Saved search', 'private', 9), membershipKind: 'dynamic' };
+  const logical = {
+    ...collection('builtin-everything', 'Everything', 'private', 0),
+    membershipKind: 'dynamic',
+    builtinKind: 'everything',
+    builtin: { kind: 'everything' },
+    allowedVisibilityActions: [],
+  };
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async () =>
+      Response.json(ownerPage([collection('curated', 'Private list', 'private'), dynamic, logical], null))) as typeof fetch,
+  });
+  const result = await readOwnedCollections(client, request(), env, null);
+  expect(result.collections).toMatchObject([
+    { id: 'curated', kind: 'curated', membershipKind: 'curated', revision: 7, allowedVisibilityActions: ['unlisted', 'public'] },
+    { id: 'saved-dynamic', kind: 'dynamic', membershipKind: 'dynamic', revision: 9 },
+    { id: 'builtin-everything', kind: 'builtin', builtinKind: 'everything', revision: null, allowedVisibilityActions: [] },
+  ]);
+
+  const wrongOwner = createKernelClient('https://kernel.example.test', {
+    fetch: (async () => Response.json({ ...ownerPage([], null), ownerAccountId: 'someone-else' })) as typeof fetch,
+  });
+  expect(await collectionPrivacyRead(() => readOwnedCollections(wrongOwner, request(), env, null))).toEqual({
+    ok: false,
+    reason: 'unavailable',
+  });
 });
 
 test('A current native read refusal removes retained private Collection row details and controls, while transient next-page failures preserve same-actor readable pages and retry the same cursor', async () => {
@@ -220,9 +269,9 @@ test('A current native read refusal removes retained private Collection row deta
         calls.push(native);
         expect(native.headers.get('authorization')).toBe('Bearer page-token');
         expect(new URL(native.url).searchParams.get('limit')).toBe('20');
-        if (calls.length === 1) return Response.json({ collections: [original], next: 'opaque+/cursor==' });
+        if (calls.length === 1) return Response.json(ownerPage([original], 'opaque+/cursor=='));
         if (calls.length === 2) return Response.json({ code }, { status });
-        return Response.json({ collections: [refreshed], next: null });
+        return Response.json(ownerPage([refreshed], null));
       }) as typeof fetch,
     });
     const pager = new CollectionPrivacyPager((cursor) =>
@@ -284,6 +333,7 @@ test('native row read refusal withholds presentation without resolving or replac
           reads.push(native);
           expect(new URL(native.url).pathname).toBe(`/v1/collections/${original.id}`);
           expect(new URL(native.url).searchParams.get('view')).toBe('FULL');
+          expect(new URL(native.url).searchParams.get('ownerManagement')).toBe('true');
           return response();
         }) as typeof fetch,
       });
@@ -335,8 +385,11 @@ test('native row read refusal withholds presentation without resolving or replac
       const current: OwnedCollection = {
         id: original.id,
         title: 'Fresh native title',
+        kind: 'curated',
+        membershipKind: 'curated',
         visibility: 'public',
         revision: 10,
+        allowedVisibilityActions: ['private', 'unlisted'],
       };
       response = () => Response.json({ collection: { ...original, ...current } });
       await editor.reload();
@@ -373,7 +426,8 @@ test('actor teardown rejects late pages and row reads, and a successful explicit
   row.resolve({ ok: true, value: { ...original, title: 'Late private title', revision: 9 } });
   await Promise.all([loading, reloading]);
   expect(previousPager.snapshot()).toMatchObject({ collections: [], loading: false, next: null });
-  expect(previousEditor.snapshot()).toBe(before);
+  expect(previousEditor.snapshot()).not.toBe(before);
+  expect(previousEditor.snapshot()).toMatchObject({ current: null, attempt: null, desired: 'private' });
   expect(nextPager.snapshot()).toMatchObject({ collections: [], loaded: true });
 
   const replay = Promise.withResolvers<CollectionVisibilityWrite>();
@@ -597,14 +651,14 @@ test('Recover the Collection privacy list from a rejected cursor with original r
   const client = createKernelClient('https://kernel.example.test', {
     fetch: (async (input, init) => {
       calls.push(new Request(input, init));
-      if (calls.length === 1) return Response.json({ collections: [original], next: cursor });
+      if (calls.length === 1) return Response.json(ownerPage([original], cursor));
       if (calls.length <= 3) return Response.json({ code: 'invalid_cursor' }, { status: 400 });
       if (calls.length === 4)
         return Response.json(
           { code: 'dependency_unavailable', retryable: true, request_id: 'refresh-failure' },
           { status: 503, headers: { 'Retry-After': '17' } },
         );
-      return Response.json({ collections: calls.length === 5 ? [current] : [], next: null });
+      return Response.json(ownerPage(calls.length === 5 ? [current] : [], null));
     }) as typeof fetch,
   });
   const pager = new CollectionPrivacyPager((next) =>

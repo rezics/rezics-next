@@ -19,7 +19,7 @@ export function settingsDraftViewerIsCurrent(
 }
 
 export function collectionPrivacyNeedsNavigationDecision(state: ReturnType<CollectionPrivacyEditor['snapshot']>) {
-  return state.attempt !== null || state.desired !== state.current.visibility;
+  return state.attempt !== null || (state.current !== null && state.desired !== state.current.visibility);
 }
 
 type VerificationDraft = Omit<VerificationInput, 'idempotencyKey' | 'subject'> & { subject: string | null };
