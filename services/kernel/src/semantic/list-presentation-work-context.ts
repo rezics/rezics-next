@@ -4,6 +4,7 @@ import { chooseTexts } from '../search/hits.ts';
 import {
   WORK_CONTEXT_LIMITS as limits,
   workContextBytes,
+  workContextKind,
   type CurrentWorkContext,
   type WorkContext,
   type WorkContextStatement,
@@ -20,13 +21,7 @@ export function listWorkPlan(release: Release, typeId: string): WorkPlan | undef
   if (!type) return undefined;
   const identities = [typeId, ...type.bases];
   if (!identities.includes('schema:CreativeWork')) return undefined;
-  const kind = identities.includes('schema:MusicRecording')
-    ? 'recording'
-    : identities.some((id) =>
-          ['bf:Instance', 'wd:Q20631656', 'rezics:AnimeRelease', 'schema:MusicRelease'].includes(id),
-        )
-      ? 'release'
-      : 'work';
+  const kind = workContextKind(identities);
   const properties = type.properties;
   return {
     kind,

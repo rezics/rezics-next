@@ -1,4 +1,10 @@
-import { WorkContextSchema, validWorkContext, workContextBytes, WORK_CONTEXT_LIMITS } from './work-context.ts';
+import {
+  WorkContextSchema,
+  validWorkContext,
+  workContextBytes,
+  workContextKind,
+  WORK_CONTEXT_LIMITS,
+} from './work-context.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
@@ -291,7 +297,10 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
     if (
       context &&
       (!validWorkContext(context, summary.value.id) ||
-        (context.state === 'current' && context.type.id !== summary.value.type))
+        (context.state === 'current' &&
+          (context.type.id !== summary.value.type ||
+            !summary.value.creativeWork ||
+            context.kind !== workContextKind([summary.value.type, ...summary.value.types]))))
     )
       unavailable();
     const figure = (value as { figure?: { questionId: string; populationId: string } }).figure;

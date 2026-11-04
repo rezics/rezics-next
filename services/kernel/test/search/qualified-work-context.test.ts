@@ -97,6 +97,8 @@ test('malformed qualified wire cannot invent direction, dates, cross-statement i
   const malformed = [
     { ...context, subjectId: target },
     { ...context, type: { id: 'schema:Person', labels: {} } },
+    { ...context, kind: 'recording' },
+    { ...context, kind: 'release' },
     { ...context, creators: { state: 'withheld', items: [creator] } },
     { ...context, creators: { state: 'current', overflow: true, items: [creator] } },
     { ...context, creators: { state: 'current', overflow: false, more: '/guessed', items: [creator] } },
@@ -136,6 +138,29 @@ test('unrepresentable dates and oversized qualification retain explicit bounded 
   const draft = prepareListWorkContext(id, 'schema:Book', bundledRelease, [raw], new Set(), ['en']);
   expect(finishListWorkContext(id, draft, new Map(), bundledRelease)).toMatchObject({
     dates: { state: 'current', items: [{ value: { state: 'unsupported' } }] },
+  });
+  const qualified = prepareListWorkContext(
+    id,
+    'schema:Book',
+    bundledRelease,
+    [
+      {
+        ...raw,
+        property: 'schema:author',
+        body: {
+          rank: 'normal',
+          value: { type: 'value', content: target },
+          qualifiers: Array.from({ length: 5 }, () => ({
+            property: 'wdt:P1932',
+            value: { type: 'value', content: 'Credit' },
+          })),
+        },
+      },
+    ],
+    new Set(),
+  );
+  expect(finishListWorkContext(id, qualified, new Map(), bundledRelease)).toMatchObject({
+    creators: { state: 'unavailable', reason: 'native' },
   });
   const contexts = boundWorkContexts(
     Array.from({ length: 100 }, () => ({ ...context, type: { ...context.type, labels: { en: 'x'.repeat(16000) } } })),

@@ -99,6 +99,16 @@ export type WorkContextStatement = Extract<WorkContextSection, { state: 'current
 export type WorkContextValue = WorkContextStatement['value'];
 export type WorkContextQualifier = Extract<WorkContextStatement['qualifiers'], { state: 'current' }>['items'][number];
 
+/** Exact released Type identities and bases own this distinction. */
+export function workContextKind(identities: readonly string[]): CurrentWorkContext['kind'] {
+  if (identities.includes('schema:MusicRecording')) return 'recording';
+  return identities.some((id) =>
+    ['bf:Instance', 'wd:Q20631656', 'rezics:AnimeRelease', 'schema:MusicRelease'].includes(id),
+  )
+    ? 'release'
+    : 'work';
+}
+
 export const workContextBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
 /** Schema validation runs first; these checks bind qualifications, precision and aggregate bytes. */

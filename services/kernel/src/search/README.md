@@ -1912,8 +1912,9 @@ late native final completion. These unit cases remain authored UNRUN.
 
 Decision: the optional `workContext` on a Semantic discovery hit is the current native list projection; Web owns its
 row interface and navigation. Generic `facts`, Character/Person `contexts`, public figures and private viewer facts
-keep their independent contracts. No Subject page is hydrated. This field is published by the mounted aggregate
-Search API and the normal generated Eden client, with `WorkContextSchema` as its wire authority.
+keep their independent contracts. No Subject page is hydrated. The mounted aggregate Search API exposes this field,
+with `WorkContextSchema` as its wire authority. Client and OpenAPI publication use the normal kernel publisher;
+receivers must keep the capability unavailable until those generated artifacts are published.
 
 An absent field means this producer did not request it or the current native Type is not a CreativeWork. A current
 context has `subjectId`, `type: {id, labels}`, `kind: work | release | recording`, and `creators`, `relations`, `dates`.

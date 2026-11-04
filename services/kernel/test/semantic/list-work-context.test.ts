@@ -49,6 +49,7 @@ test('native same-title works retain exact credits, directed releases, partial d
       { en: 'Unknown date' },
       {
         'schema:datePublished': [{ ...citedValue('schema:datePublished', ''), value: { type: 'somevalue' } }],
+        'schema:author': [{ ...citedValue('schema:author', ''), value: { type: 'somevalue' } }],
       },
     );
     const none = await f.create(
@@ -57,6 +58,7 @@ test('native same-title works retain exact credits, directed releases, partial d
       { en: 'No date' },
       {
         'schema:datePublished': [{ ...citedValue('schema:datePublished', ''), value: { type: 'novalue' } }],
+        'schema:contributor': [{ ...citedValue('schema:contributor', ''), value: { type: 'novalue' } }],
       },
     );
     const read = async (ids: string[]) =>
@@ -121,6 +123,12 @@ test('native same-title works retain exact credits, directed releases, partial d
       state: 'somevalue',
     });
     expect(entries((all.get(none)!.workContext as CurrentWorkContext).dates)[0]!.value).toEqual({ state: 'novalue' });
+    expect(entries((all.get(unknown)!.workContext as CurrentWorkContext).creators)[0]!.value).toEqual({
+      state: 'somevalue',
+    });
+    expect(entries((all.get(none)!.workContext as CurrentWorkContext).creators)[0]!.value).toEqual({
+      state: 'novalue',
+    });
     expect(all.get(first)!.workContext).toBeUndefined();
     await f.hide(role);
     const concealed = (await read([work])).get(work)!.workContext as CurrentWorkContext;

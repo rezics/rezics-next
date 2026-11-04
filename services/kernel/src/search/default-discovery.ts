@@ -192,11 +192,12 @@ async function enrichDiscoveryPage(
       hits: page.hits.map((hit) => {
         if (hit.summary.kind !== 'subject') return hit;
         const current = bySubject.get(hit.key.id);
+        const workContext = byContext.get(hit.key.id);
         const figure = snapshot.figures?.get(hit.key.id)?.figure;
         return {
           ...hit,
           ...(current ? { facts: current.facts } : {}),
-          ...(byContext.get(hit.key.id) ? { workContext: byContext.get(hit.key.id) } : {}),
+          ...(workContext ? { workContext } : {}),
           ...(figure && hit.summary.value.creativeWork ? { figure: { ...figure, scale: { ...figure.scale } } } : {}),
         };
       }),
