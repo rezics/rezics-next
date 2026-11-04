@@ -103,7 +103,7 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
         <ExportProgress
           records={snap.records}
           pages={snap.pages}
-          statusRef={text ? undefined : statusRef}
+          statusRef={text ? null : statusRef}
           onCancel={() => void act((current) => current.cancel())}
         />
       ) : null}
@@ -130,7 +130,7 @@ function ExportSession({ visit, ...runtime }: { visit: ExportVisit } & ExportRun
       {terminal ? (
         <ExportTerminal
           stage={snap.stage as 'cancelled' | 'stale' | 'expired' | 'conflict' | 'limit' | 'denied' | 'unavailable'}
-          statusRef={text ? undefined : statusRef}
+          statusRef={text ? null : statusRef}
           onRestart={() => act((current) => current.restart())}
         />
       ) : null}
