@@ -126,7 +126,15 @@ test('native rows open one exact membership inspection and accepted navigation c
     expect(target.href).toBe(`https://site.example/en/subjects/${exampleRecording}/harbour`);
     expect(target.target).toBe('_blank');
     expect(target.rel).toBe('noopener');
-    expect(inspection.querySelector(`a[href*="${repeated[0]!.holder}"][href$="relation-edit"]`)).not.toBeNull();
+    const correction = inspection.querySelector<HTMLAnchorElement>(`a[href*="${repeated[0]!.holder}"][href$="relation-edit"]`)!;
+    expect(correction.target).toBe('_blank');
+    expect(correction.rel).toBe('noopener');
+    const selectedText = mounted.host.textContent;
+    correction.focus();
+    correction.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    window.dispatchEvent(new Event('focus'));
+    expect(document.activeElement).toBe(correction);
+    expect(mounted.host.textContent).toBe(selectedText);
     await mounted.click(m.candidate_close());
     expect(mounted.host.querySelector('[data-slot="album-track-inspection"]')).toBeNull();
     expect(document.activeElement).toBe(firstOpener);
@@ -151,12 +159,7 @@ test('native rows open one exact membership inspection and accepted navigation c
     expect(mounted.host.querySelector('[data-slot="album-track-inspection"]')).toBeNull();
     expect(mounted.host.textContent).toContain(m.album_tracks_complete());
     expect(document.activeElement?.textContent).toBe(m.album_tracks_title());
-    const retained = mounted.host.textContent;
-    const correction = Array.from(mounted.host.querySelectorAll<HTMLAnchorElement>('a')).find(
-      (node) => node.textContent === m.album_tracks_correction(),
-    )!;
-    correction.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(mounted.host.textContent).toBe(retained);
+    expect(mounted.host.querySelectorAll('a')).toHaveLength(0);
     expect(addresses.length).toBe(2);
   } finally {
     await mounted.close();
