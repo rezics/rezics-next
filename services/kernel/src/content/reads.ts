@@ -2513,8 +2513,10 @@ async function readExactPublishedRulesInternal(
               signature: JSON.stringify([selected ?? null, revision ?? null, thread ?? null, board ?? null]),
               title: null,
               authorId: null,
+            threadId: null,
               boardId: null,
               boardTitle: null,
+            mediaIds: [],
               currentRevision: false,
               revisionAllowed: false,
             });
@@ -2600,7 +2602,41 @@ async function readExactPublishedRulesInternal(
         });
     }
   }
-  return output;
+  const authoring = new Map<string, ExactPublishedRulesAuthoringObservation>();
+  if (includeAuthoring) {
+    for (const ref of refs) {
+      const key = `${ref.realmId}/${ref.postId}/${ref.revisionId}`;
+      const before = initial.value.authoring.get(key);
+      const after = final.value.authoring.get(key);
+      if (!before || !after || before.state !== after.state || before.signature !== after.signature) {
+        authoring.set(key, { state: 'concealed' });
+      } else if (after.state === 'erased') {
+        authoring.set(key, { state: 'erased' });
+      } else if (after.state === 'available') {
+        const rules = output.get(key);
+        if (rules && after.authorId && after.threadId && after.boardId) {
+          authoring.set(key, {
+            state: 'available',
+            rules,
+            title: after.title,
+            authorId: after.authorId,
+            threadId: after.threadId,
+            boardId: after.boardId,
+            boardTitle: after.boardTitle,
+            mediaIds: after.mediaIds,
+            currentRevision: after.currentRevision,
+            revisionAction:
+              before.revisionAllowed === after.revisionAllowed
+                ? after.revisionAllowed
+                  ? 'allowed'
+                  : 'denied'
+                : 'unavailable',
+          });
+        } else authoring.set(key, { state: 'concealed' });
+      } else authoring.set(key, { state: 'concealed' });
+    }
+  }
+  return { rules: output, authoring };
 }
 
 export type NoticePostReference = Readonly<{ threadId: string; postId: string | null }>;
@@ -2813,41 +2849,7 @@ export async function readNoticePostContexts(
       }
     }
   }
-  const authoring = new Map<string, ExactPublishedRulesAuthoringObservation>();
-  if (includeAuthoring) {
-    for (const ref of refs) {
-      const key = `${ref.realmId}/${ref.postId}/${ref.revisionId}`;
-      const before = initial.value.authoring.get(key);
-      const after = final.value.authoring.get(key);
-      if (!before || !after || before.state !== after.state || before.signature !== after.signature) {
-        authoring.set(key, { state: 'concealed' });
-      } else if (after.state === 'erased') {
-        authoring.set(key, { state: 'erased' });
-      } else if (after.state === 'available') {
-        const rules = output.get(key);
-        if (rules && after.authorId && after.threadId && after.boardId) {
-          authoring.set(key, {
-            state: 'available',
-            rules,
-            title: after.title,
-            authorId: after.authorId,
-            threadId: after.threadId,
-            boardId: after.boardId,
-            boardTitle: after.boardTitle,
-            mediaIds: after.mediaIds,
-            currentRevision: after.currentRevision,
-            revisionAction:
-              before.revisionAllowed === after.revisionAllowed
-                ? after.revisionAllowed
-                  ? 'allowed'
-                  : 'denied'
-                : 'unavailable',
-          });
-        } else authoring.set(key, { state: 'concealed' });
-      } else authoring.set(key, { state: 'concealed' });
-    }
-  }
-  return { rules: output, authoring };
+  return output;
 }
 
 export type NoticeBoardContext = Readonly<{ boardId: string; boardTitle: string | null }>;
