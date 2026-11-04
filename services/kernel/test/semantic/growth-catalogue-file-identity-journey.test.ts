@@ -131,9 +131,9 @@ test('released file page work and response bytes stay fixed as unrelated semanti
       expect(page.catalogue).toMatchObject({ state: 'released', type: 'schema:MediaObject', digest: bundledDigest });
       expect(page.catalogue.definitions.properties).toHaveProperty('wdt:P4092');
       expect(page.viewer.actions.statementPropose).toBe('allowed');
-      expect(Object.values(page.reads).some((read: any) => read.status === 200 && read.body.subject?.id === fileId)).toBe(
-        true,
-      );
+      expect(
+        Object.values(page.reads).some((read: any) => read.status === 200 && read.body.subject?.id === fileId),
+      ).toBe(true);
       return page;
     },
   });

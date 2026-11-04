@@ -4,7 +4,7 @@ types:
   schema:Person: 'personne'
   schema:Organization: 'organisation'
   schema:SoftwareApplication: 'application logicielle'
-  rezics:ReleaseGroup: "groupe de diffusion"
+  rezics:ReleaseGroup: 'groupe de diffusion'
 properties:
   rezics:penNameOf: 'pseudonyme de'
   wdt:P186: fabriqué à partir de
@@ -62,12 +62,12 @@ properties:
   rezics:editionCounterpart: 'Autre version du livre'
   rezics:bangumiLegacyVersion: 'Version associée (ancien code Bangumi)'
   rezics:expansionCounterpart: 'Extension ou jeu de base'
-  wdt:P4092: "somme de contrôle"
-  wdt:P3575: "taille du fichier"
-  rezics:hashAlgorithm: "algorithme de hachage"
-  rezics:codec: "codec"
-  rezics:fileQuality: "qualité du fichier"
-  rezics:releaseGroup: "groupe de diffusion"
+  wdt:P4092: 'somme de contrôle'
+  wdt:P3575: 'taille du fichier'
+  rezics:hashAlgorithm: 'algorithme de hachage'
+  rezics:codec: 'codec'
+  rezics:fileQuality: 'qualité du fichier'
+  rezics:releaseGroup: 'groupe de diffusion'
 inverseProperties:
   rezics:penNameOf: 'pseudonymes'
   wdt:P186: Utilisé dans
@@ -87,14 +87,14 @@ inverseProperties:
   rezics:summaryOf: 'Versions résumées'
   rezics:sideStoryOf: 'Histoires annexes'
   rezics:bangumiRelatedTo: 'Lien depuis (Bangumi)'
-  rezics:releaseGroup: "fichiers de ce groupe de diffusion"
+  rezics:releaseGroup: 'fichiers de ce groupe de diffusion'
 typeDescriptions:
   wd:Q2095: 'Un aliment ou une substance comestible, comme la farine ; une recette décrit sa préparation.'
   wd:Q2620972: 'Une suite nommée et ordonnée d’épisodes ou de chapitres d’une œuvre, délimitée par ses premiers et derniers numéros.'
   schema:Person: 'Une personne réelle identifiée dans le catalogue, par exemple un auteur ; les personnages fictifs ont un autre type.'
   schema:Organization: 'Une organisation ou un groupe crédité, par exemple une maison d’édition ou un studio.'
   schema:SoftwareApplication: 'Une application identifiable, comme un logiciel de lecture ; les jeux et leurs éditions ont des types distincts.'
-  rezics:ReleaseGroup: "Un groupe source identifié par AniDB et associé aux fichiers qu’il diffuse. Son identité reste distincte de chaque fichier et de chaque publication."
+  rezics:ReleaseGroup: 'Un groupe source identifié par AniDB et associé aux fichiers qu’il diffuse. Son identité reste distincte de chaque fichier et de chaque publication.'
 propertyDescriptions:
   rezics:penNameOf: 'La personne ou organisation derrière ce pseudonyme ou nom collectif.'
   wdt:P186: 'Un aliment ou une recette préparée utilisé comme ingrédient ou composant ; sa quantité et son ordre peuvent être précisés.'
@@ -153,9 +153,9 @@ propertyDescriptions:
   rezics:bangumiLegacyVersion: 'Le lien symétrique de versions issu de l’ancien code Main Version 4013 de Bangumi, sans direction entre original et version.'
   rezics:expansionCounterpart: 'Un jeu de base et un contenu additionnel sans direction précisée ; employer la relation dirigée d’extension lorsque ce sens est connu.'
 
-  wdt:P4092: "Texte exact de la somme de contrôle. L’algorithme de hachage est stocké séparément ; une égalité n’identifie ni ne fusionne les fichiers."
-  wdt:P3575: "Taille du fichier sous forme de quantité décimale exacte en octets, selon la source."
-  rezics:hashAlgorithm: "Code exact de la source indiquant l’algorithme de la somme ; les codes inconnus restent disponibles pour examen."
-  rezics:codec: "Code de codec exact indiqué par la source, y compris les codes encore inconnus."
-  rezics:fileQuality: "Code de qualité exact indiqué par la source, y compris les codes encore inconnus."
-  rezics:releaseGroup: "Groupe source AniDB lisible séparément et associé à ce fichier, distinct d’une publication et d’une copie personnelle."
+  wdt:P4092: 'Texte exact de la somme de contrôle. L’algorithme de hachage est stocké séparément ; une égalité n’identifie ni ne fusionne les fichiers.'
+  wdt:P3575: 'Taille du fichier sous forme de quantité décimale exacte en octets, selon la source.'
+  rezics:hashAlgorithm: 'Code exact de la source indiquant l’algorithme de la somme ; les codes inconnus restent disponibles pour examen.'
+  rezics:codec: 'Code de codec exact indiqué par la source, y compris les codes encore inconnus.'
+  rezics:fileQuality: 'Code de qualité exact indiqué par la source, y compris les codes encore inconnus.'
+  rezics:releaseGroup: 'Groupe source AniDB lisible séparément et associé à ce fichier, distinct d’une publication et d’une copie personnelle.'

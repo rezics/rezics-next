@@ -69,9 +69,7 @@ test('file and group creation offers released grains, grouped fields and the ord
   const fields = catalogueFileCreateFields(release, fileType);
   expect(fields.length).toBeGreaterThan(0);
   expect(fields.every((id) => release.types[fileType]!.properties.includes(id))).toBe(true);
-  expect(fields.some((id) => id === 'wdt:P4092' || id === 'rezics:codec' || id === 'schema:sameAs')).toBe(
-    true,
-  );
+  expect(fields.some((id) => id === 'wdt:P4092' || id === 'rezics:codec' || id === 'schema:sameAs')).toBe(true);
   const grouped = catalogueFileCreateFieldGroups(release, fileType, 'en').flatMap((group) => group.properties);
   expect(grouped).toEqual(fields);
   expect(catalogueFileCreateHashNotice(release, fileType, 'wdt:P4092')).toBe('hash');

@@ -213,13 +213,23 @@ test('the bundled catalogue admits exact file hashes, byte size and directed fil
   expect(types['rezics:AnimeRelease']?.properties).toContain('schema:associatedMedia');
   expect(types['rezics:ReleaseGroup']?.bases).toContain('schema:Organization');
   expect(properties['wdt:P4092']).toMatchObject({ datatype: 'string', qualifiers: ['rezics:hashAlgorithm'] });
-  expect(properties['wdt:P3575']).toMatchObject({ datatype: 'quantity', units: ['http://www.wikidata.org/entity/Q8799'] });
+  expect(properties['wdt:P3575']).toMatchObject({
+    datatype: 'quantity',
+    units: ['http://www.wikidata.org/entity/Q8799'],
+  });
   expect(properties['rezics:releaseGroup']?.relation?.inverse).toBe('rezics:groupFiles');
   expect(properties['schema:encodesCreativeWork']?.relation?.inverse).toBe('rezics:encodedByFile');
   expect(properties['schema:associatedMedia']?.relation?.inverse).toBe('rezics:includedInRelease');
   for (const type of ['rezics:CatalogueFile', 'wd:Q82753', 'wd:Q55327']) expect(types[type]).toBeUndefined();
   for (const locale of ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
-    for (const property of ['wdt:P4092', 'wdt:P3575', 'rezics:hashAlgorithm', 'rezics:codec', 'rezics:fileQuality', 'rezics:releaseGroup']) {
+    for (const property of [
+      'wdt:P4092',
+      'wdt:P3575',
+      'rezics:hashAlgorithm',
+      'rezics:codec',
+      'rezics:fileQuality',
+      'rezics:releaseGroup',
+    ]) {
       expect(properties[property]?.labels[locale]).toBeTruthy();
       expect(properties[property]?.descriptions?.[locale]).toBeTruthy();
     }

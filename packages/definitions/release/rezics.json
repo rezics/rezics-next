@@ -32,10 +32,7 @@
         "zh-Hant": "動畫發行版"
       },
       "mappings": [],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "bf:hasPart",
         "marcrel:fds",
@@ -104,10 +101,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:datePublished",
-          "schema:director"
-        ]
+        "keyFacts": ["schema:datePublished", "schema:director"]
       },
       "schemaOrgType": "https://schema.org/CreativeWork",
       "descriptions": {
@@ -133,13 +127,8 @@
         "zh-Hans": "集",
         "zh-Hant": "集"
       },
-      "mappings": [
-        "wd:Q1983062"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q1983062"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -207,11 +196,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:director",
-          "schema:datePublished",
-          "schema:duration"
-        ]
+        "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"]
       },
       "schemaOrgType": "https://schema.org/Episode",
       "library": {
@@ -241,10 +226,7 @@
         "zh-Hant": "媒體物件"
       },
       "mappings": [],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -310,13 +292,8 @@
         "zh-Hans": "电影",
         "zh-Hant": "電影"
       },
-      "mappings": [
-        "wd:Q11424"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q11424"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -385,11 +362,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:director",
-          "schema:datePublished",
-          "schema:duration"
-        ]
+        "keyFacts": ["schema:director", "schema:datePublished", "schema:duration"]
       },
       "schemaOrgType": "https://schema.org/Movie",
       "library": {
@@ -418,13 +391,8 @@
         "zh-Hans": "季",
         "zh-Hant": "季"
       },
-      "mappings": [
-        "wd:Q3464665"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q3464665"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -493,11 +461,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:director",
-          "schema:datePublished",
-          "schema:numberOfEpisodes"
-        ]
+        "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"]
       },
       "schemaOrgType": "https://schema.org/TVSeason",
       "library": {
@@ -526,14 +490,8 @@
         "zh-Hans": "TV 动画",
         "zh-Hant": "TV 動畫"
       },
-      "mappings": [
-        "wd:Q5398426"
-      ],
-      "bases": [
-        "schema:CreativeWorkSeries",
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q5398426"],
+      "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -605,11 +563,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:director",
-          "schema:datePublished",
-          "schema:numberOfEpisodes"
-        ]
+        "keyFacts": ["schema:director", "schema:datePublished", "schema:numberOfEpisodes"]
       },
       "schemaOrgType": "https://schema.org/TVSeries",
       "library": {
@@ -638,13 +592,8 @@
         "zh-Hans": "版本",
         "zh-Hant": "版本"
       },
-      "mappings": [
-        "wd:Q3331189"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q3331189"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -710,11 +659,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:author",
-          "schema:datePublished",
-          "schema:numberOfPages"
-        ]
+        "keyFacts": ["schema:author", "schema:datePublished", "schema:numberOfPages"]
       },
       "schemaOrgType": "https://schema.org/Book",
       "library": {
@@ -743,13 +688,8 @@
         "zh-Hans": "书籍",
         "zh-Hant": "書籍"
       },
-      "mappings": [
-        "wd:Q47461344"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q47461344"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -800,11 +740,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:author",
-          "schema:datePublished",
-          "schema:wordCount"
-        ]
+        "keyFacts": ["schema:author", "schema:datePublished", "schema:wordCount"]
       },
       "schemaOrgType": "https://schema.org/Book",
       "library": {
@@ -833,12 +769,8 @@
         "zh-Hans": "角色",
         "zh-Hant": "角色"
       },
-      "mappings": [
-        "wd:Q95074"
-      ],
-      "bases": [
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q95074"],
+      "bases": ["schema:Thing"],
       "properties": [
         "schema:abstract",
         "schema:alternateName",
@@ -855,14 +787,7 @@
         "wdt:P3180",
         "wdt:P6296"
       ],
-      "facets": [
-        "schema:keywords",
-        "schema:gender",
-        "wdt:P1853",
-        "schema:birthDate",
-        "schema:height",
-        "schema:weight"
-      ],
+      "facets": ["schema:keywords", "schema:gender", "wdt:P1853", "schema:birthDate", "schema:height", "schema:weight"],
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
@@ -893,9 +818,7 @@
         "zh-Hant": "概念"
       },
       "mappings": [],
-      "bases": [
-        "schema:Thing"
-      ],
+      "bases": ["schema:Thing"],
       "properties": [
         "foaf:focus",
         "schema:image",
@@ -937,15 +860,8 @@
         "zh-Hant": "概念體系"
       },
       "mappings": [],
-      "bases": [
-        "schema:Thing"
-      ],
-      "properties": [
-        "schema:image",
-        "schema:name",
-        "schema:sameAs",
-        "schema:url"
-      ],
+      "bases": ["schema:Thing"],
+      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
       "facets": [],
       "coverRatio": "5:7",
       "listPresentation": {
@@ -977,15 +893,8 @@
         "zh-Hant": "食物"
       },
       "mappings": [],
-      "bases": [
-        "schema:Thing"
-      ],
-      "properties": [
-        "schema:image",
-        "schema:name",
-        "schema:sameAs",
-        "schema:url"
-      ],
+      "bases": ["schema:Thing"],
+      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
       "facets": [],
       "coverRatio": "5:7",
       "listPresentation": {
@@ -1016,20 +925,9 @@
         "zh-Hans": "组织",
         "zh-Hant": "組織"
       },
-      "mappings": [
-        "wd:Q43229"
-      ],
-      "bases": [
-        "schema:Thing"
-      ],
-      "properties": [
-        "rezics:penNameOf",
-        "schema:image",
-        "schema:name",
-        "schema:sameAs",
-        "schema:url",
-        "wdt:P3180"
-      ],
+      "mappings": ["wd:Q43229"],
+      "bases": ["schema:Thing"],
+      "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
       "facets": [],
       "coverRatio": "5:7",
       "listPresentation": {
@@ -1060,12 +958,8 @@
         "zh-Hans": "人物",
         "zh-Hant": "人物"
       },
-      "mappings": [
-        "wd:Q5"
-      ],
-      "bases": [
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q5"],
+      "bases": ["schema:Thing"],
       "properties": [
         "rezics:penNameOf",
         "schema:birthDate",
@@ -1082,9 +976,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:birthDate"
-        ]
+        "keyFacts": ["schema:birthDate"]
       },
       "schemaOrgType": "https://schema.org/Person",
       "descriptions": {
@@ -1111,18 +1003,8 @@
         "zh-Hant": "發佈組"
       },
       "mappings": [],
-      "bases": [
-        "schema:Organization",
-        "schema:Thing"
-      ],
-      "properties": [
-        "rezics:penNameOf",
-        "schema:image",
-        "schema:name",
-        "schema:sameAs",
-        "schema:url",
-        "wdt:P3180"
-      ],
+      "bases": ["schema:Organization", "schema:Thing"],
+      "properties": ["rezics:penNameOf", "schema:image", "schema:name", "schema:sameAs", "schema:url", "wdt:P3180"],
       "facets": [],
       "coverRatio": "5:7",
       "listPresentation": {
@@ -1152,18 +1034,9 @@
         "zh-Hans": "软件应用程序",
         "zh-Hant": "軟體應用程式"
       },
-      "mappings": [
-        "wd:Q166142"
-      ],
-      "bases": [
-        "schema:Thing"
-      ],
-      "properties": [
-        "schema:image",
-        "schema:name",
-        "schema:sameAs",
-        "schema:url"
-      ],
+      "mappings": ["wd:Q166142"],
+      "bases": ["schema:Thing"],
+      "properties": ["schema:image", "schema:name", "schema:sameAs", "schema:url"],
       "facets": [],
       "coverRatio": "5:7",
       "listPresentation": {
@@ -1195,10 +1068,7 @@
         "zh-Hant": "故事篇章"
       },
       "mappings": [],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1226,12 +1096,7 @@
         "wdt:P179",
         "wdt:P361"
       ],
-      "facets": [
-        "schema:contributor",
-        "schema:genre",
-        "schema:keywords",
-        "wdt:P179"
-      ],
+      "facets": ["schema:contributor", "schema:genre", "schema:keywords", "wdt:P179"],
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
@@ -1261,13 +1126,8 @@
         "zh-Hans": "电子游戏",
         "zh-Hant": "電子遊戲"
       },
-      "mappings": [
-        "wd:Q7889"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q7889"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1366,13 +1226,8 @@
         "zh-Hans": "追加内容",
         "zh-Hant": "追加內容"
       },
-      "mappings": [
-        "wd:Q209163"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q209163"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1552,13 +1407,8 @@
         "zh-Hans": "卷",
         "zh-Hant": "卷"
       },
-      "mappings": [
-        "wd:Q1238720"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q1238720"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1613,11 +1463,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:author",
-          "schema:datePublished",
-          "schema:numberOfPages"
-        ]
+        "keyFacts": ["schema:author", "schema:datePublished", "schema:numberOfPages"]
       },
       "schemaOrgType": "https://schema.org/PublicationVolume",
       "descriptions": {
@@ -1643,14 +1489,8 @@
         "zh-Hans": "漫画",
         "zh-Hant": "漫畫"
       },
-      "mappings": [
-        "wd:Q21198342"
-      ],
-      "bases": [
-        "schema:CreativeWorkSeries",
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q21198342"],
+      "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1706,11 +1546,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:author",
-          "schema:datePublished",
-          "schema:genre"
-        ]
+        "keyFacts": ["schema:author", "schema:datePublished", "schema:genre"]
       },
       "schemaOrgType": "https://schema.org/ComicSeries",
       "descriptions": {
@@ -1736,12 +1572,8 @@
         "zh-Hans": "食谱",
         "zh-Hant": "食譜"
       },
-      "mappings": [
-        "wd:Q219239"
-      ],
-      "bases": [
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q219239"],
+      "bases": ["schema:Thing"],
       "properties": [
         "schema:abstract",
         "schema:author",
@@ -1769,10 +1601,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:cookTime",
-          "schema:suitableForDiet"
-        ]
+        "keyFacts": ["schema:cookTime", "schema:suitableForDiet"]
       },
       "schemaOrgType": "https://schema.org/Recipe",
       "library": {
@@ -1801,14 +1630,8 @@
         "zh-Hans": "丛书",
         "zh-Hant": "叢書"
       },
-      "mappings": [
-        "wd:Q277759"
-      ],
-      "bases": [
-        "schema:CreativeWorkSeries",
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q277759"],
+      "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1882,11 +1705,7 @@
         "zh-Hant": "系列"
       },
       "mappings": [],
-      "bases": [
-        "schema:CreativeWorkSeries",
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "bases": ["schema:CreativeWorkSeries", "schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -1915,12 +1734,7 @@
         "wdt:P179",
         "wdt:P361"
       ],
-      "facets": [
-        "schema:genre",
-        "schema:keywords",
-        "schema:contributor",
-        "wdt:P179"
-      ],
+      "facets": ["schema:genre", "schema:keywords", "schema:contributor", "wdt:P179"],
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
@@ -1951,11 +1765,7 @@
         "zh-Hant": "視覺小說"
       },
       "mappings": [],
-      "bases": [
-        "schema:VideoGame",
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "bases": ["schema:VideoGame", "schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -2015,11 +1825,7 @@
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:author",
-          "schema:datePublished",
-          "schema:genre"
-        ]
+        "keyFacts": ["schema:author", "schema:datePublished", "schema:genre"]
       },
       "schemaOrgType": "https://schema.org/VideoGame",
       "library": {
@@ -2048,13 +1854,8 @@
         "zh-Hans": "音乐专辑",
         "zh-Hant": "音樂專輯"
       },
-      "mappings": [
-        "wd:Q482994"
-      ],
-      "bases": [
-        "schema:CreativeWork",
-        "schema:Thing"
-      ],
+      "mappings": ["wd:Q482994"],
+      "bases": ["schema:CreativeWork", "schema:Thing"],
       "properties": [
         "rezics:alternativeSetting",
         "rezics:alternativeVersion",
@@ -2087,20 +1888,11 @@
         "wdt:P361",
         "wdt:P5732"
       ],
-      "facets": [
-        "schema:contributor",
-        "wdt:P179",
-        "schema:genre",
-        "schema:keywords",
-        "schema:inLanguage"
-      ],
+      "facets": ["schema:contributor", "wdt:P179", "schema:genre", "schema:keywords", "schema:inLanguage"],
       "coverRatio": "5:7",
       "listPresentation": {
         "imageAspect": "portrait",
-        "keyFacts": [
-          "schema:datePublished",
-          "schema:genre"
-        ]
+        "keyFacts": ["schema:datePublished", "schema:genre"]
       },
       "schemaOrgType": "https://schema.org/MusicAlbum",
       "descriptions": {
@@ -2152,12 +1944,7 @@
           "zh-Hant": "收錄此作品的發行版"
         }
       },
-      "targets": [
-        "schema:Episode",
-        "schema:Movie",
-        "schema:TVSeason",
-        "schema:TVSeries"
-      ],
+      "targets": ["schema:Episode", "schema:Movie", "schema:TVSeason", "schema:TVSeries"],
       "descriptions": {
         "de": "Ein eigenständig identifiziertes Anime-Werk in dieser Sammelveröffentlichung; die tatsächliche Serie, den Film, die Staffel oder Folge verknüpfen.",
         "en": "An independently identified anime work included in this anthology publication; link the actual series, film, season or episode.",
@@ -2204,9 +1991,7 @@
           "zh-Hant": "包含此檔案的發行版"
         }
       },
-      "targets": [
-        "schema:MediaObject"
-      ],
+      "targets": ["schema:MediaObject"],
       "descriptions": {
         "de": "Eine Katalogdatei, die dieser identifizierten Anime-Veröffentlichung zugeordnet ist; die Verknüpfung macht die Datei nicht zur Veröffentlichung.",
         "en": "A catalogue file associated with this identified anime publication release; the link does not make the file the release.",
@@ -2262,9 +2047,7 @@
         "zh-Hans": "详情描述网址",
         "zh-Hant": "詳細描述網址"
       },
-      "mappings": [
-        "wd:P973"
-      ],
+      "mappings": ["wd:P973"],
       "datatype": "url",
       "multivalued": true,
       "qualifiers": [],
@@ -2296,18 +2079,13 @@
         "zh-Hans": "时长",
         "zh-Hant": "片長"
       },
-      "mappings": [
-        "wd:P2047"
-      ],
+      "mappings": ["wd:P2047"],
       "datatype": "quantity",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -2323,15 +2101,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "http://www.wikidata.org/entity/Q11574"
-            ]
+            "enum": ["http://www.wikidata.org/entity/Q11574"]
           }
         }
       },
-      "units": [
-        "http://www.wikidata.org/entity/Q11574"
-      ],
+      "units": ["http://www.wikidata.org/entity/Q11574"],
       "minimum": 0,
       "descriptions": {
         "de": "Die angegebene Laufzeit als nichtnegative ganzzahlige Menge in Sekunden (wd:Q11574), etwa 1440 für 24 Minuten.",
@@ -2379,9 +2153,7 @@
           "zh-Hant": "編碼此單集的檔案"
         }
       },
-      "targets": [
-        "schema:Episode"
-      ],
+      "targets": ["schema:Episode"],
       "descriptions": {
         "de": "Die Episode, die diese genaue Katalogdatei enthält; die Beziehung belegt weder Besitz noch einen Gesehen-Status.",
         "en": "The episode encoded by this exact catalogue file; the relation does not establish possession or watched state.",
@@ -2405,19 +2177,13 @@
         "zh-Hans": "结束日期",
         "zh-Hant": "結束日期"
       },
-      "mappings": [
-        "wd:P582"
-      ],
+      "mappings": ["wd:P582"],
       "datatype": "time",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "time",
-          "precision",
-          "calendarmodel"
-        ],
+        "required": ["time", "precision", "calendarmodel"],
         "additionalProperties": false,
         "properties": {
           "time": {
@@ -2425,11 +2191,7 @@
             "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
           },
           "precision": {
-            "enum": [
-              9,
-              10,
-              11
-            ]
+            "enum": [9, 10, 11]
           },
           "calendarmodel": {
             "const": "http://www.wikidata.org/entity/Q1985727"
@@ -2459,9 +2221,7 @@
         "zh-Hans": "集数",
         "zh-Hant": "集數"
       },
-      "mappings": [
-        "wd:P1545"
-      ],
+      "mappings": ["wd:P1545"],
       "datatype": "string",
       "multivalued": false,
       "qualifiers": [],
@@ -2496,12 +2256,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2510,10 +2265,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:filmDistributionOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Filmveröffentlichungen",
           "en": "Film distributions",
@@ -2525,10 +2277,7 @@
           "zh-Hant": "發行的影片版本"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die für den Vertrieb dieser Filmveröffentlichung genannt wird; keine fremden Werk-Credits übernehmen.",
         "en": "A person or organization credited with distributing this moving-image publication; do not copy a work's unrelated credits.",
@@ -2552,9 +2301,7 @@
         "zh-Hans": "所属实体",
         "zh-Hant": "所屬實體"
       },
-      "mappings": [
-        "wd:P361"
-      ],
+      "mappings": ["wd:P361"],
       "datatype": "wikibase-item",
       "multivalued": false,
       "qualifiers": [],
@@ -2578,10 +2325,7 @@
           "zh-Hant": "集數"
         }
       },
-      "targets": [
-        "schema:TVSeason",
-        "schema:TVSeries"
-      ],
+      "targets": ["schema:TVSeason", "schema:TVSeries"],
       "descriptions": {
         "de": "Die Fernsehserie oder Staffel, zu der diese Folge gehört.",
         "en": "The television series or season containing this episode.",
@@ -2611,10 +2355,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -2630,15 +2371,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "1"
-            ]
+            "enum": ["1"]
           }
         }
       },
-      "units": [
-        "1"
-      ],
+      "units": ["1"],
       "minimum": 0,
       "descriptions": {
         "de": "Die Folgenzahl dieses Werks oder dieser Staffel als nichtnegative, einheitenlose ganzzahlige Menge.",
@@ -2663,9 +2400,7 @@
         "zh-Hans": "首播平台",
         "zh-Hant": "首播平台"
       },
-      "mappings": [
-        "wd:P449"
-      ],
+      "mappings": ["wd:P449"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -2688,9 +2423,7 @@
           "zh-Hant": "首播作品"
         }
       },
-      "targets": [
-        "schema:Organization"
-      ],
+      "targets": ["schema:Organization"],
       "descriptions": {
         "de": "Die von der Quelle als ursprünglicher Sender bezeichnete Organisation, nicht jeder spätere Vertrieb.",
         "en": "The organization identified by the source as the original broadcaster; not every later distributor.",
@@ -2714,19 +2447,13 @@
         "zh-Hans": "开始日期",
         "zh-Hant": "開始日期"
       },
-      "mappings": [
-        "wd:P580"
-      ],
+      "mappings": ["wd:P580"],
       "datatype": "time",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "time",
-          "precision",
-          "calendarmodel"
-        ],
+        "required": ["time", "precision", "calendarmodel"],
         "additionalProperties": false,
         "properties": {
           "time": {
@@ -2734,11 +2461,7 @@
             "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
           },
           "precision": {
-            "enum": [
-              9,
-              10,
-              11
-            ]
+            "enum": [9, 10, 11]
           },
           "calendarmodel": {
             "const": "http://www.wikidata.org/entity/Q1985727"
@@ -2768,15 +2491,10 @@
         "zh-Hans": "版本或翻译原作",
         "zh-Hant": "原作品"
       },
-      "mappings": [
-        "wd:P629"
-      ],
+      "mappings": ["wd:P629"],
       "datatype": "wikibase-item",
       "multivalued": false,
-      "qualifiers": [
-        "schema:sameAs",
-        "wdt:P648"
-      ],
+      "qualifiers": ["schema:sameAs", "wdt:P648"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2797,9 +2515,7 @@
           "zh-Hant": "版本"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das Werk, das diese Ausgabe oder Veröffentlichung verkörpert; das Werk selbst verknüpfen, kein persönliches Exemplar.",
         "en": "The creative work embodied by this edition or release; link the work itself, not another personal copy.",
@@ -2823,9 +2539,7 @@
         "zh-Hans": "ISBN-13",
         "zh-Hant": "ISBN-13"
       },
-      "mappings": [
-        "wd:P212"
-      ],
+      "mappings": ["wd:P212"],
       "datatype": "external-id",
       "multivalued": false,
       "qualifiers": [],
@@ -2858,18 +2572,13 @@
         "zh-Hans": "总页数",
         "zh-Hant": "頁數"
       },
-      "mappings": [
-        "wd:P1104"
-      ],
+      "mappings": ["wd:P1104"],
       "datatype": "quantity",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -2885,15 +2594,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "1"
-            ]
+            "enum": ["1"]
           }
         }
       },
-      "units": [
-        "1"
-      ],
+      "units": ["1"],
       "minimum": 1,
       "descriptions": {
         "de": "Die Seitenzahl der Ausgabe als einheitenlose ganzzahlige Menge von mindestens 1.",
@@ -2918,19 +2623,10 @@
         "zh-Hans": "出版者",
         "zh-Hant": "出版者"
       },
-      "mappings": [
-        "wd:P123"
-      ],
+      "mappings": ["wd:P123"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "schema:sameAs",
-        "wdt:P1932",
-        "wdt:P3180",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3180", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -2939,10 +2635,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:publisherOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Veröffentlichte Werke",
           "en": "Publisher of",
@@ -2954,10 +2647,7 @@
           "zh-Hant": "出版作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die als Herausgeber oder Verlag dieser Ausgabe oder Veröffentlichung genannt wird.",
         "en": "A person or organization credited with publishing this edition or release.",
@@ -2981,19 +2671,10 @@
         "zh-Hans": "译者",
         "zh-Hant": "譯者"
       },
-      "mappings": [
-        "wd:P655"
-      ],
+      "mappings": ["wd:P655"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "schema:sameAs",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518",
-        "wdt:P648"
-      ],
+      "qualifiers": ["schema:position", "schema:sameAs", "wdt:P1932", "wdt:P3831", "wdt:P518", "wdt:P648"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3002,10 +2683,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:translatorOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Übersetzte Werke",
           "en": "Translator of",
@@ -3017,10 +2695,7 @@
           "zh-Hant": "翻譯作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die für die Übersetzung dieser Ausgabe oder Veröffentlichung genannt wird.",
         "en": "A person or organization credited with translating this edition or publication.",
@@ -3044,18 +2719,13 @@
         "zh-Hans": "词数",
         "zh-Hant": "詞數"
       },
-      "mappings": [
-        "wd:P6570"
-      ],
+      "mappings": ["wd:P6570"],
       "datatype": "quantity",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -3063,15 +2733,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "1"
-            ]
+            "enum": ["1"]
           }
         }
       },
-      "units": [
-        "1"
-      ],
+      "units": ["1"],
       "minimum": 0,
       "descriptions": {
         "de": "Exakte Wortzahl des Buchwerks als einheitenlose ganze Zahl; weder Zeichenanzahl noch Seitenzahl einer Ausgabe.",
@@ -3096,9 +2762,7 @@
         "zh-Hans": "Bangumi角色标识符",
         "zh-Hant": "Bangumi角色識別碼"
       },
-      "mappings": [
-        "wd:P6296"
-      ],
+      "mappings": ["wd:P6296"],
       "datatype": "external-id",
       "multivalued": false,
       "qualifiers": [],
@@ -3131,9 +2795,7 @@
         "zh-Hans": "血型",
         "zh-Hant": "血型"
       },
-      "mappings": [
-        "wd:P1853"
-      ],
+      "mappings": ["wd:P1853"],
       "datatype": "wikibase-item",
       "multivalued": false,
       "qualifiers": [],
@@ -3156,9 +2818,7 @@
           "zh-Hant": "此血型的主體"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Die ausdrücklich angegebene Blutgruppe als Konzept, etwa A; fehlende Angaben bleiben unbekannt.",
         "en": "The explicitly stated blood type as a Concept, such as A; unknown remains unknown.",
@@ -3185,9 +2845,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": false,
-      "qualifiers": [
-        "rezics:spoilerLevel"
-      ],
+      "qualifiers": ["rezics:spoilerLevel"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3207,9 +2865,7 @@
           "zh-Hant": "此性別的主體"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Das ausdrücklich beschriebene Geschlecht der fiktiven Figur als Konzept; kein biologisches Geschlecht ableiten.",
         "en": "The fictional character's explicitly described gender as a Concept; do not infer biological sex.",
@@ -3233,18 +2889,13 @@
         "zh-Hans": "高度",
         "zh-Hant": "高度"
       },
-      "mappings": [
-        "wd:P2048"
-      ],
+      "mappings": ["wd:P2048"],
       "datatype": "quantity",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -3260,17 +2911,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
           },
           "unit": {
-            "enum": [
-              "http://www.wikidata.org/entity/Q11573",
-              "http://www.wikidata.org/entity/Q174728"
-            ]
+            "enum": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"]
           }
         }
       },
-      "units": [
-        "http://www.wikidata.org/entity/Q11573",
-        "http://www.wikidata.org/entity/Q174728"
-      ],
+      "units": ["http://www.wikidata.org/entity/Q11573", "http://www.wikidata.org/entity/Q174728"],
       "minimum": 0,
       "descriptions": {
         "de": "Die angegebene Körpergröße als nichtnegative Menge in Zentimetern (wd:Q174728) oder Metern (wd:Q11573), mit ursprünglicher Einheit.",
@@ -3295,18 +2940,13 @@
         "zh-Hans": "质量",
         "zh-Hant": "質量"
       },
-      "mappings": [
-        "wd:P2067"
-      ],
+      "mappings": ["wd:P2067"],
       "datatype": "quantity",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -3322,17 +2962,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
           },
           "unit": {
-            "enum": [
-              "http://www.wikidata.org/entity/Q11570",
-              "http://www.wikidata.org/entity/Q41803"
-            ]
+            "enum": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"]
           }
         }
       },
-      "units": [
-        "http://www.wikidata.org/entity/Q11570",
-        "http://www.wikidata.org/entity/Q41803"
-      ],
+      "units": ["http://www.wikidata.org/entity/Q11570", "http://www.wikidata.org/entity/Q41803"],
       "minimum": 0,
       "descriptions": {
         "de": "Die angegebene Masse als nichtnegative Menge in Kilogramm (wd:Q11570) oder Gramm (wd:Q41803), mit ursprünglicher Einheit.",
@@ -3381,9 +3015,7 @@
           "zh-Hant": "下位概念"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein übergeordnetes Konzept in der Hierarchie, etwa Fiktion über Science-Fiction.",
         "en": "A broader Concept in the classification hierarchy, such as fiction above science fiction.",
@@ -3430,9 +3062,7 @@
           "zh-Hant": "近似概念"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein anderes Konzept mit eng entsprechender Bedeutung; weder Gleichsetzung noch automatische Filtererweiterung.",
         "en": "A distinct Concept with a closely corresponding meaning; not equivalence and not automatic filter expansion.",
@@ -3479,9 +3109,7 @@
           "zh-Hant": "指向此主體的概念"
         }
       },
-      "targets": [
-        "schema:Thing"
-      ],
+      "targets": ["schema:Thing"],
       "descriptions": {
         "de": "Das Katalogsubjekt, für das dieses Klassifikationskonzept steht.",
         "en": "The catalogue subject that this classification concept stands for.",
@@ -3505,14 +3133,10 @@
         "zh-Hans": "类型",
         "zh-Hant": "類型"
       },
-      "mappings": [
-        "wd:P136"
-      ],
+      "mappings": ["wd:P136"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "rezics:spoilerLevel"
-      ],
+      "qualifiers": ["rezics:spoilerLevel"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3532,9 +3156,7 @@
           "zh-Hant": "此類型的作品"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Genrekonzept für dieses Werk, etwa Science-Fiction.",
         "en": "A genre Concept classifying this work, such as science fiction.",
@@ -3581,9 +3203,7 @@
           "zh-Hant": "此概念體系的概念"
         }
       },
-      "targets": [
-        "skos:ConceptScheme"
-      ],
+      "targets": ["skos:ConceptScheme"],
       "descriptions": {
         "de": "Das Begriffssystem, zu dem dieses Konzept gehört.",
         "en": "The Concept Scheme to which this concept belongs.",
@@ -3610,9 +3230,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "rezics:spoilerLevel"
-      ],
+      "qualifiers": ["rezics:spoilerLevel"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -3632,9 +3250,7 @@
           "zh-Hant": "使用此標籤的主體"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Schlagwortkonzept zur Klassifikation des Subjekts; keine kommagetrennte Zeichenfolge und kein persönliches Bibliotheksetikett.",
         "en": "A tag Concept classifying the subject; not a comma-separated string or a personal library label.",
@@ -3658,9 +3274,7 @@
         "zh-Hans": "作品形式",
         "zh-Hant": "作品形式"
       },
-      "mappings": [
-        "wd:P7937"
-      ],
+      "mappings": ["wd:P7937"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -3683,9 +3297,7 @@
           "zh-Hant": "此形式的作品"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Konzept für die Werkform, etwa Roman; getrennt von Genre und Katalogtyp.",
         "en": "A Concept identifying the form of the work, such as a novel; separate from its genre and catalogue Type.",
@@ -3715,10 +3327,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "language",
-          "document"
-        ],
+        "required": ["language", "document"],
         "additionalProperties": false,
         "properties": {
           "language": {
@@ -3756,15 +3365,10 @@
       "mappings": [],
       "datatype": "monolingualtext",
       "multivalued": true,
-      "qualifiers": [
-        "rezics:spoilerLevel"
-      ],
+      "qualifiers": ["rezics:spoilerLevel"],
       "value": {
         "type": "object",
-        "required": [
-          "text",
-          "language"
-        ],
+        "required": ["text", "language"],
         "additionalProperties": false,
         "properties": {
           "text": {
@@ -3814,9 +3418,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Ein Werk mit denselben Hauptfiguren in einer anderen Welt oder Zeitlinie.",
         "en": "A work placing the same principal characters in a different world or timeline.",
@@ -3853,9 +3455,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Eine andere Erzählfassung mit derselben Welt und denselben Figuren.",
         "en": "A different telling with the same setting and characters.",
@@ -3892,9 +3492,7 @@
         "order": "name",
         "inverse": "none"
       },
-      "targets": [
-        "wd:Q2620972"
-      ],
+      "targets": ["wd:Q2620972"],
       "descriptions": {
         "de": "Der Handlungsabschnitt, für den dieser Auftritt oder diese Mitwirkung gilt.",
         "en": "The story arc to which this particular appearance or credit applies.",
@@ -3931,9 +3529,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Ein Werk und sein begleitendes Artbook, ohne festzulegen, welches der beiden das Artbook ist.",
         "en": "A work linked to its companion artbook, without identifying which endpoint is the artbook.",
@@ -3957,9 +3553,7 @@
         "zh-Hans": "作者",
         "zh-Hant": "作者"
       },
-      "mappings": [
-        "wd:P50"
-      ],
+      "mappings": ["wd:P50"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [
@@ -3980,10 +3574,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:authorOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Verfasste Werke",
           "en": "Author of",
@@ -3995,10 +3586,7 @@
           "zh-Hant": "著作"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die als Urheber dieses Werks oder dieser Veröffentlichung genannt wird.",
         "en": "A person or organization credited as an author of this work or publication.",
@@ -4035,9 +3623,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Die symmetrische Versionsbeziehung aus Bangumis eingestelltem Main-Version-Code 4013 ohne Richtung zwischen Original und Fassung.",
         "en": "The symmetric version link preserved from Bangumi's retired Main Version code 4013; it gives no original/version direction.",
@@ -4061,9 +3647,7 @@
         "zh-Hans": "Bangumi人物标识符",
         "zh-Hant": "Bangumi人物識別碼"
       },
-      "mappings": [
-        "wd:P6298"
-      ],
+      "mappings": ["wd:P6298"],
       "datatype": "external-id",
       "multivalued": false,
       "qualifiers": [],
@@ -4119,9 +3703,7 @@
           "zh-Hant": "關聯來源（Bangumi）"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Bangumis ausdrückliche Sonstiges-Beziehung zu einem Werk; sie bewahrt diese Quellenangabe ohne erfundene Beziehungsart.",
         "en": "Bangumi's explicit Other relation to another work; it preserves that source assertion without inventing a relation kind.",
@@ -4145,9 +3727,7 @@
         "zh-Hans": "Bangumi主题标识符",
         "zh-Hant": "Bangumi主題識別碼"
       },
-      "mappings": [
-        "wd:P5732"
-      ],
+      "mappings": ["wd:P5732"],
       "datatype": "external-id",
       "multivalued": false,
       "qualifiers": [],
@@ -4180,19 +3760,13 @@
         "zh-Hans": "出生日期",
         "zh-Hant": "出生日期"
       },
-      "mappings": [
-        "wd:P569"
-      ],
+      "mappings": ["wd:P569"],
       "datatype": "time",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "time",
-          "precision",
-          "calendarmodel"
-        ],
+        "required": ["time", "precision", "calendarmodel"],
         "additionalProperties": false,
         "properties": {
           "time": {
@@ -4200,11 +3774,7 @@
             "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
           },
           "precision": {
-            "enum": [
-              9,
-              10,
-              11
-            ]
+            "enum": [9, 10, 11]
           },
           "calendarmodel": {
             "const": "http://www.wikidata.org/entity/Q1985727"
@@ -4234,17 +3804,10 @@
         "zh-Hans": "登场角色",
         "zh-Hant": "登場角色"
       },
-      "mappings": [
-        "wd:P674"
-      ],
+      "mappings": ["wd:P674"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "rezics:spoilerLevel",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["rezics:spoilerLevel", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -4253,10 +3816,7 @@
         "group": "appearance",
         "order": "name",
         "inverse": "rezics:appearsIn",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Auftritte in",
           "en": "Appears in",
@@ -4268,9 +3828,7 @@
           "zh-Hant": "登場作品"
         }
       },
-      "targets": [
-        "wd:Q95074"
-      ],
+      "targets": ["wd:Q95074"],
       "descriptions": {
         "de": "Eine Figur, die in diesem Werk auftritt; Rolle, Handlungsabschnitt und Spoilerstufe können den Auftritt präzisieren.",
         "en": "A character appearing in this work; qualify the appearance with its role, arc or spoiler level where stated.",
@@ -4307,9 +3865,7 @@
         "order": "name",
         "inverse": "none"
       },
-      "targets": [
-        "wd:Q95074"
-      ],
+      "targets": ["wd:Q95074"],
       "descriptions": {
         "de": "Die fiktive Figur, die bei dieser Sprechrolle dargestellt wird.",
         "en": "The fictional character portrayed in this voice credit.",
@@ -4336,9 +3892,7 @@
       "mappings": [],
       "datatype": "string",
       "multivalued": true,
-      "qualifiers": [
-        "rezics:hashAlgorithm"
-      ],
+      "qualifiers": ["rezics:hashAlgorithm"],
       "value": {
         "type": "string",
         "minLength": 1,
@@ -4380,9 +3934,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Ein durch einen Figuren-Crossover verbundenes Werk; Gastfigur und gastgebendes Werk werden damit nicht festgelegt.",
         "en": "A work connected by a character crossover; this link alone identifies neither the guest nor the host work.",
@@ -4406,17 +3958,10 @@
         "zh-Hans": "创作作品或主题贡献者",
         "zh-Hant": "創作作品或主題貢獻者"
       },
-      "mappings": [
-        "wd:P767"
-      ],
+      "mappings": ["wd:P767"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -4425,10 +3970,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:contributorOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Mitwirkung an",
           "en": "Contributed to",
@@ -4440,10 +3982,7 @@
           "zh-Hant": "參與作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation mit einer anderen Aufgabe; deren genaue Funktion wird als Rollenkonzept angegeben.",
         "en": "A person or organization credited in another job; specify that job with a detailed-role Concept.",
@@ -4512,9 +4051,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Ein Werk derselben Franchise in einem anderen Medium; die Adaptionsrichtung bleibt offen.",
         "en": "A work in the same franchise in another medium; this link alone does not say which adapts the other.",
@@ -4538,19 +4075,13 @@
         "zh-Hans": "最后更新",
         "zh-Hant": "最後更新"
       },
-      "mappings": [
-        "wd:P5017"
-      ],
+      "mappings": ["wd:P5017"],
       "datatype": "time",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "time",
-          "precision",
-          "calendarmodel"
-        ],
+        "required": ["time", "precision", "calendarmodel"],
         "additionalProperties": false,
         "properties": {
           "time": {
@@ -4558,11 +4089,7 @@
             "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
           },
           "precision": {
-            "enum": [
-              9,
-              10,
-              11
-            ]
+            "enum": [9, 10, 11]
           },
           "calendarmodel": {
             "const": "http://www.wikidata.org/entity/Q1985727"
@@ -4592,19 +4119,13 @@
         "zh-Hans": "出版日期",
         "zh-Hant": "出版日期"
       },
-      "mappings": [
-        "wd:P577"
-      ],
+      "mappings": ["wd:P577"],
       "datatype": "time",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "time",
-          "precision",
-          "calendarmodel"
-        ],
+        "required": ["time", "precision", "calendarmodel"],
         "additionalProperties": false,
         "properties": {
           "time": {
@@ -4612,11 +4133,7 @@
             "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
           },
           "precision": {
-            "enum": [
-              9,
-              10,
-              11
-            ]
+            "enum": [9, 10, 11]
           },
           "calendarmodel": {
             "const": "http://www.wikidata.org/entity/Q1985727"
@@ -4646,19 +4163,13 @@
         "zh-Hans": "死亡日期",
         "zh-Hant": "逝世日期"
       },
-      "mappings": [
-        "wd:P570"
-      ],
+      "mappings": ["wd:P570"],
       "datatype": "time",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "time",
-          "precision",
-          "calendarmodel"
-        ],
+        "required": ["time", "precision", "calendarmodel"],
         "additionalProperties": false,
         "properties": {
           "time": {
@@ -4666,11 +4177,7 @@
             "pattern": "^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$"
           },
           "precision": {
-            "enum": [
-              9,
-              10,
-              11
-            ]
+            "enum": [9, 10, 11]
           },
           "calendarmodel": {
             "const": "http://www.wikidata.org/entity/Q1985727"
@@ -4713,9 +4220,7 @@
         "order": "name",
         "inverse": "none"
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Konzept für die genaue Tätigkeit oder Auftrittsrolle; kein frei formulierter Name im Abspann.",
         "en": "A Concept identifying the detailed staff job or appearance role; not a free-text credit name.",
@@ -4739,17 +4244,10 @@
         "zh-Hans": "开发者",
         "zh-Hant": "開發者"
       },
-      "mappings": [
-        "wd:P178"
-      ],
+      "mappings": ["wd:P178"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -4758,10 +4256,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:developerOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Entwickelte Werke",
           "en": "Developer of",
@@ -4773,10 +4268,7 @@
           "zh-Hant": "開發作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die für die Entwicklung genannt wird.",
         "en": "A person or organization credited with development.",
@@ -4800,17 +4292,10 @@
         "zh-Hans": "导演",
         "zh-Hant": "導演"
       },
-      "mappings": [
-        "wd:P57"
-      ],
+      "mappings": ["wd:P57"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -4819,10 +4304,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:directorOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Regiearbeiten",
           "en": "Director of",
@@ -4834,10 +4316,7 @@
           "zh-Hant": "執導作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die für die Regie dieses Werks oder dieser Ausgabe genannt wird.",
         "en": "A person or organization credited with directing this work or publication.",
@@ -4874,9 +4353,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Eine andere Buchfassung oder Ausgabe; diese symmetrische Beziehung legt weder Original noch Werk-Ausgabe-Richtung fest.",
         "en": "Another book version or edition; this symmetric link identifies neither an original nor a work-to-edition direction.",
@@ -4913,9 +4390,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Ein Grundspiel und Zusatzinhalt ohne festgelegte Erweiterungsrichtung; bei bekannter Richtung dient die gerichtete Erweiterungsbeziehung.",
         "en": "A base game and add-on linked without identifying which expands the other; use the directed expansion relation when known.",
@@ -5009,10 +4484,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -5028,15 +4500,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
           },
           "unit": {
-            "enum": [
-              "http://www.wikidata.org/entity/Q8799"
-            ]
+            "enum": ["http://www.wikidata.org/entity/Q8799"]
           }
         }
       },
-      "units": [
-        "http://www.wikidata.org/entity/Q8799"
-      ],
+      "units": ["http://www.wikidata.org/entity/Q8799"],
       "descriptions": {
         "de": "Dateigröße als exakte Dezimalmenge in Byte, entsprechend der Quelle.",
         "en": "File size as a decimal quantity in bytes, preserving the source amount exactly.",
@@ -5124,17 +4592,10 @@
         "zh-Hans": "插画家",
         "zh-Hant": "插畫家"
       },
-      "mappings": [
-        "wd:P110"
-      ],
+      "mappings": ["wd:P110"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -5143,10 +4604,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:illustratorOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Illustrierte Werke",
           "en": "Illustrator of",
@@ -5158,10 +4616,7 @@
           "zh-Hant": "插畫作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die für Illustrationen dieses Werks oder dieser Ausgabe genannt wird.",
         "en": "A person or organization credited with illustrations for this work or publication.",
@@ -5287,10 +4742,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "text",
-          "language"
-        ],
+        "required": ["text", "language"],
         "additionalProperties": false,
         "properties": {
           "text": {
@@ -5330,14 +4782,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "rezics:listSection",
-        "rezics:note",
-        "schema:position",
-        "schema:sameAs",
-        "wdt:P1114",
-        "wdt:P1932"
-      ],
+      "qualifiers": ["rezics:listSection", "rezics:note", "schema:position", "schema:sameAs", "wdt:P1114", "wdt:P1932"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -5357,10 +4802,7 @@
           "zh-Hant": "用於"
         }
       },
-      "targets": [
-        "schema:Recipe",
-        "wd:Q2095"
-      ],
+      "targets": ["schema:Recipe", "wd:Q2095"],
       "descriptions": {
         "de": "Ein Lebensmittel oder zubereitetes Rezept als Zutat oder Bestandteil; Menge und Listenposition können ergänzt werden.",
         "en": "A food or prepared recipe used as a material or component; qualify its quantity and list order where known.",
@@ -5384,17 +4826,10 @@
         "zh-Hans": "作曲",
         "zh-Hant": "作曲者"
       },
-      "mappings": [
-        "wd:P86"
-      ],
+      "mappings": ["wd:P86"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -5403,10 +4838,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:musicByOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Kompositionen",
           "en": "Composer of",
@@ -5418,10 +4850,7 @@
           "zh-Hant": "作曲作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die als Komponist der Musik genannt wird.",
         "en": "A person or organization credited with composing the music.",
@@ -5451,10 +4880,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "text",
-          "language"
-        ],
+        "required": ["text", "language"],
         "additionalProperties": false,
         "properties": {
           "text": {
@@ -5497,10 +4923,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "text",
-          "language"
-        ],
+        "required": ["text", "language"],
         "additionalProperties": false,
         "properties": {
           "text": {
@@ -5537,9 +4960,7 @@
         "zh-Hans": "开放图书馆标识符",
         "zh-Hant": "開放圖書館識別碼"
       },
-      "mappings": [
-        "wd:P648"
-      ],
+      "mappings": ["wd:P648"],
       "datatype": "external-id",
       "multivalued": false,
       "qualifiers": [],
@@ -5575,9 +4996,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position"
-      ],
+      "qualifiers": ["schema:position"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -5598,9 +5017,7 @@
           "zh-Hant": "系列成員"
         }
       },
-      "targets": [
-        "schema:CreativeWorkSeries"
-      ],
+      "targets": ["schema:CreativeWorkSeries"],
       "descriptions": {
         "de": "Die Reihe, zu der dieses Mitglied gehört; der Positionsqualifikator hält seine Nummer fest.",
         "en": "The series containing this member; its position qualifier records the member's ordinal.",
@@ -5648,10 +5065,7 @@
           "zh-Hant": "筆名"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Die Person oder Organisation hinter diesem Pseudonym oder Kollektivnamen.",
         "en": "The person or organization behind this pen name or collective name.",
@@ -5675,9 +5089,7 @@
         "zh-Hans": "系列序号",
         "zh-Hant": "順序"
       },
-      "mappings": [
-        "wd:P1545"
-      ],
+      "mappings": ["wd:P1545"],
       "datatype": "string",
       "multivalued": false,
       "qualifiers": [],
@@ -5710,17 +5122,10 @@
         "zh-Hans": "制作人",
         "zh-Hant": "製作人"
       },
-      "mappings": [
-        "wd:P162"
-      ],
+      "mappings": ["wd:P162"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -5729,10 +5134,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:producerOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Produzierte Werke",
           "en": "Producer of",
@@ -5744,10 +5146,7 @@
           "zh-Hant": "製作作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die für die Produktion genannt wird.",
         "en": "A person or organization credited with production.",
@@ -5771,17 +5170,10 @@
         "zh-Hans": "制作商",
         "zh-Hant": "製作商"
       },
-      "mappings": [
-        "wd:P272"
-      ],
+      "mappings": ["wd:P272"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -5790,10 +5182,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:productionCompanyOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Produktionen",
           "en": "Productions",
@@ -5805,10 +5194,7 @@
           "zh-Hant": "參與製作的作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Die Person oder Organisation, die als Produktionsfirma genannt wird.",
         "en": "The person or organization credited as the production company.",
@@ -5838,10 +5224,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -5862,9 +5245,7 @@
           }
         }
       },
-      "units": [
-        "*"
-      ],
+      "units": ["*"],
       "descriptions": {
         "de": "Die Menge des Aussageobjekts mit Einheit und gegebenenfalls angegebenen Unter- und Obergrenzen.",
         "en": "The amount of the statement's object, with its unit and any stated lower and upper bounds.",
@@ -5911,9 +5292,7 @@
           "zh-Hant": "此發佈組的檔案"
         }
       },
-      "targets": [
-        "rezics:ReleaseGroup"
-      ],
+      "targets": ["rezics:ReleaseGroup"],
       "descriptions": {
         "de": "Die unabhängig lesbare AniDB-Quellgruppe dieser Datei, getrennt von Veröffentlichung und persönlicher Kopie.",
         "en": "The independently readable AniDB source group associated with this file, separate from a publication release and personal copy.",
@@ -5940,9 +5319,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:inLanguage"
-      ],
+      "qualifiers": ["schema:inLanguage"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -5952,11 +5329,7 @@
         "order": "name",
         "inverse": "none"
       },
-      "targets": [
-        "bf:Instance",
-        "rezics:AnimeRelease",
-        "wd:Q20631656"
-      ],
+      "targets": ["bf:Instance", "rezics:AnimeRelease", "wd:Q20631656"],
       "descriptions": {
         "de": "Die für eine bestimmte Sprache gewählte repräsentative Ausgabe oder Veröffentlichung dieses Werks, ein Wert je Sprache.",
         "en": "The edition or release chosen to represent this work for a qualified language, one value per language.",
@@ -5980,9 +5353,7 @@
         "zh-Hans": "精确匹配",
         "zh-Hant": "精確匹配"
       },
-      "mappings": [
-        "wd:P2888"
-      ],
+      "mappings": ["wd:P2888"],
       "datatype": "url",
       "multivalued": true,
       "qualifiers": [],
@@ -6027,9 +5398,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Ein Werk mit gemeinsamen Figuren, aber einer unabhängigen Geschichte.",
         "en": "A work sharing characters but telling an unrelated story.",
@@ -6066,9 +5435,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Ein Werk in derselben Welt oder Zeitlinie mit anderen Hauptfiguren.",
         "en": "A work sharing the world or timeline with a different principal cast.",
@@ -6092,17 +5459,10 @@
         "zh-Hans": "编剧",
         "zh-Hant": "編劇"
       },
-      "mappings": [
-        "wd:P58"
-      ],
+      "mappings": ["wd:P58"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -6111,10 +5471,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:screenwriterOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "inverseLabels": {
           "de": "Drehbucharbeiten",
           "en": "Screenwriter of",
@@ -6126,10 +5483,7 @@
           "zh-Hant": "編劇作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine Person oder Organisation, die für das Drehbuch genannt wird.",
         "en": "A person or organization credited with writing the screenplay.",
@@ -6177,9 +5531,7 @@
           "zh-Hant": "番外篇"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das Haupterzählwerk, zu dem diese ergänzende Nebengeschichte gehört.",
         "en": "The main narrative work to which this supplementary side story belongs.",
@@ -6209,10 +5561,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -6228,15 +5577,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "1"
-            ]
+            "enum": ["1"]
           }
         }
       },
-      "units": [
-        "1"
-      ],
+      "units": ["1"],
       "minimum": 0,
       "maximum": 2,
       "descriptions": {
@@ -6265,11 +5610,7 @@
       "mappings": [],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "rezics:firstPart",
-        "rezics:lastPart",
-        "schema:position"
-      ],
+      "qualifiers": ["rezics:firstPart", "rezics:lastPart", "schema:position"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -6290,9 +5631,7 @@
           "zh-Hant": "所屬作品"
         }
       },
-      "targets": [
-        "wd:Q2620972"
-      ],
+      "targets": ["wd:Q2620972"],
       "descriptions": {
         "de": "Ein Handlungsabschnitt dieses Werks; Qualifikatoren nennen Reihenfolge sowie erste und letzte Folgen- oder Kapitelnummer.",
         "en": "A story arc belonging to this work; qualifiers give its order and first and last episode or chapter numbers.",
@@ -6340,9 +5679,7 @@
           "zh-Hant": "總集篇"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das vollständige Erzählwerk, das dieses Rückblick- oder Zusammenfassungswerk verkürzt wiedergibt.",
         "en": "The full narrative work condensed by this recap or summary work.",
@@ -6366,9 +5703,7 @@
         "zh-Hans": "官方网站",
         "zh-Hant": "URL"
       },
-      "mappings": [
-        "wd:P856"
-      ],
+      "mappings": ["wd:P856"],
       "datatype": "url",
       "multivalued": false,
       "qualifiers": [],
@@ -6432,9 +5767,7 @@
         "zh-Hans": "视觉小说数据库标识符",
         "zh-Hant": "視覺小說數據庫識別碼"
       },
-      "mappings": [
-        "wd:P3180"
-      ],
+      "mappings": ["wd:P3180"],
       "datatype": "external-id",
       "multivalued": false,
       "qualifiers": [],
@@ -6467,18 +5800,10 @@
         "zh-Hans": "配音演员",
         "zh-Hant": "配音員"
       },
-      "mappings": [
-        "wd:P725"
-      ],
+      "mappings": ["wd:P725"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:position",
-        "wdt:P1932",
-        "wdt:P3831",
-        "wdt:P453",
-        "wdt:P518"
-      ],
+      "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P453", "wdt:P518"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -6487,10 +5812,7 @@
         "group": "credit",
         "order": "position",
         "inverse": "rezics:voiceActorOf",
-        "filter": [
-          "wdt:P3831",
-          "wdt:P518"
-        ],
+        "filter": ["wdt:P3831", "wdt:P518"],
         "slotKey": "wdt:P453",
         "inverseLabels": {
           "de": "Sprechrollen in",
@@ -6503,10 +5825,7 @@
           "zh-Hant": "配音作品"
         }
       },
-      "targets": [
-        "schema:Organization",
-        "schema:Person"
-      ],
+      "targets": ["schema:Organization", "schema:Person"],
       "descriptions": {
         "de": "Eine genannte Stimme; der Qualifikator für die Figurenrolle bezeichnet die gespielte Figur.",
         "en": "A credited voice performer; the character-role qualifier identifies the character portrayed.",
@@ -6530,18 +5849,13 @@
         "zh-Hans": "最低年龄",
         "zh-Hant": "最低年齡"
       },
-      "mappings": [
-        "wd:P2899"
-      ],
+      "mappings": ["wd:P2899"],
       "datatype": "quantity",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -6557,15 +5871,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "http://www.wikidata.org/entity/Q577"
-            ]
+            "enum": ["http://www.wikidata.org/entity/Q577"]
           }
         }
       },
-      "units": [
-        "http://www.wikidata.org/entity/Q577"
-      ],
+      "units": ["http://www.wikidata.org/entity/Q577"],
       "minimum": 0,
       "maximum": 18,
       "descriptions": {
@@ -6591,9 +5901,7 @@
         "zh-Hans": "发行方式",
         "zh-Hant": "發行格式"
       },
-      "mappings": [
-        "wd:P437"
-      ],
+      "mappings": ["wd:P437"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -6616,9 +5924,7 @@
           "zh-Hant": "此媒介的發行版本"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Konzept für Vertriebsform oder physischen Datenträger der Veröffentlichung, etwa eine optische Disc.",
         "en": "A Concept identifying the release's distribution format or physical medium, such as an optical disc.",
@@ -6642,9 +5948,7 @@
         "zh-Hans": "资料片原作",
         "zh-Hant": "資料片原作"
       },
-      "mappings": [
-        "wd:P8646"
-      ],
+      "mappings": ["wd:P8646"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -6667,9 +5971,7 @@
           "zh-Hant": "擴充作品"
         }
       },
-      "targets": [
-        "schema:VideoGame"
-      ],
+      "targets": ["schema:VideoGame"],
       "descriptions": {
         "de": "Das Grundspiel, das dieses eigenständig identifizierte Zusatzwerk erweitert; keine Werkzuordnung einer Softwareveröffentlichung.",
         "en": "The base game expanded by this independently identified add-on work; not the work represented by a software release.",
@@ -6693,9 +5995,7 @@
         "zh-Hans": "上一项",
         "zh-Hant": "上一項"
       },
-      "mappings": [
-        "wd:P155"
-      ],
+      "mappings": ["wd:P155"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -6719,9 +6019,7 @@
           "zh-Hant": "續作"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das vorherige Werk oder die vorherige Veröffentlichung, auf die dieses Werk oder diese Veröffentlichung folgt.",
         "en": "The prior work or release that this work or release follows.",
@@ -6745,14 +6043,10 @@
         "zh-Hans": "游戏平台",
         "zh-Hant": "遊戲平台"
       },
-      "mappings": [
-        "wd:P400"
-      ],
+      "mappings": ["wd:P400"],
       "datatype": "wikibase-item",
       "multivalued": true,
-      "qualifiers": [
-        "schema:inLanguage"
-      ],
+      "qualifiers": ["schema:inLanguage"],
       "value": {
         "type": "string",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -6772,9 +6066,7 @@
           "zh-Hant": "此平台的遊戲"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Plattformkonzept, auf dem Spiel oder Veröffentlichung läuft; ein Sprachqualifikator kann die Zuordnung von Plattform und Sprache bewahren.",
         "en": "A platform Concept on which the game or release runs; a language qualifier can preserve the platform-language association.",
@@ -6798,9 +6090,7 @@
         "zh-Hans": "GTIN",
         "zh-Hant": "GTIN"
       },
-      "mappings": [
-        "wd:P3962"
-      ],
+      "mappings": ["wd:P3962"],
       "datatype": "external-id",
       "multivalued": false,
       "qualifiers": [],
@@ -6839,10 +6129,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -6858,15 +6145,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "1"
-            ]
+            "enum": ["1"]
           }
         }
       },
-      "units": [
-        "1"
-      ],
+      "units": ["1"],
       "minimum": 1,
       "descriptions": {
         "de": "Die Untergrenze eines angegebenen Spielerzahlbereichs als einheitenloser ganzzahliger Qualifikator der Spielerzahl; aus einer Einzelzahl nicht ableiten.",
@@ -6891,20 +6174,13 @@
         "zh-Hans": "游玩人数",
         "zh-Hant": "遊玩人數"
       },
-      "mappings": [
-        "wd:P1873"
-      ],
+      "mappings": ["wd:P1873"],
       "datatype": "quantity",
       "multivalued": false,
-      "qualifiers": [
-        "schema:minValue"
-      ],
+      "qualifiers": ["schema:minValue"],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -6920,15 +6196,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "1"
-            ]
+            "enum": ["1"]
           }
         }
       },
-      "units": [
-        "1"
-      ],
+      "units": ["1"],
       "minimum": 1,
       "descriptions": {
         "de": "Maximale Spielerzahl als einheitenlose ganze Zahl; bei einem angegebenen Bereich die Obergrenze verwenden und die Untergrenze separat qualifizieren.",
@@ -6953,9 +6225,7 @@
         "zh-Hans": "隶属于",
         "zh-Hant": "隸屬於"
       },
-      "mappings": [
-        "wd:P31"
-      ],
+      "mappings": ["wd:P31"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -6978,9 +6248,7 @@
           "zh-Hant": "此類型的發行版本"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Konzept für die Veröffentlichungsart, etwa vollständig, teilweise oder Testversion; nicht der Katalogtyp des Subjekts.",
         "en": "A release-type Concept, such as complete, partial or trial; not the catalogue Type of the subject.",
@@ -7004,9 +6272,7 @@
         "zh-Hans": "软件引擎",
         "zh-Hant": "引擎"
       },
-      "mappings": [
-        "wd:P408"
-      ],
+      "mappings": ["wd:P408"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -7029,9 +6295,7 @@
           "zh-Hant": "使用此引擎的遊戲"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Konzept, das die verwendete Spiel-Engine bezeichnet.",
         "en": "A Concept naming the software engine used by this game.",
@@ -7061,10 +6325,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -7080,15 +6341,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "http://www.wikidata.org/entity/Q7727"
-            ]
+            "enum": ["http://www.wikidata.org/entity/Q7727"]
           }
         }
       },
-      "units": [
-        "http://www.wikidata.org/entity/Q7727"
-      ],
+      "units": ["http://www.wikidata.org/entity/Q7727"],
       "minimum": 0,
       "descriptions": {
         "de": "Reine Garzeit als nichtnegative ganze Zahl in Minuten (wd:Q7727), etwa 25; keine Uhrzeit und keine gesamte Vorbereitungs- oder Ruhezeit.",
@@ -7119,10 +6376,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "text",
-          "language"
-        ],
+        "required": ["text", "language"],
         "additionalProperties": false,
         "properties": {
           "text": {
@@ -7165,10 +6419,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "language",
-          "document"
-        ],
+        "required": ["language", "document"],
         "additionalProperties": false,
         "properties": {
           "language": {
@@ -7209,10 +6460,7 @@
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -7228,15 +6476,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "1"
-            ]
+            "enum": ["1"]
           }
         }
       },
-      "units": [
-        "1"
-      ],
+      "units": ["1"],
       "minimum": 1,
       "descriptions": {
         "de": "Anzahl der Portionen als einheitenlose ganzzahlige Menge von mindestens 1, etwa 4; keine frei formulierte Portionsangabe.",
@@ -7284,9 +6528,7 @@
           "zh-Hant": "適用此飲食的食譜"
         }
       },
-      "targets": [
-        "skos:Concept"
-      ],
+      "targets": ["skos:Concept"],
       "descriptions": {
         "de": "Ein Konzept für die angegebene Ernährungseignung, etwa vegetarisch; nicht aus Zutatennamen ableiten.",
         "en": "A Concept stating the recipe's dietary suitability, such as vegetarian; do not infer it from ingredient names.",
@@ -7310,18 +6552,13 @@
         "zh-Hans": "作品部分数量",
         "zh-Hant": "作品組成部分數量"
       },
-      "mappings": [
-        "wd:P2635"
-      ],
+      "mappings": ["wd:P2635"],
       "datatype": "quantity",
       "multivalued": false,
       "qualifiers": [],
       "value": {
         "type": "object",
-        "required": [
-          "amount",
-          "unit"
-        ],
+        "required": ["amount", "unit"],
         "additionalProperties": false,
         "properties": {
           "amount": {
@@ -7337,17 +6574,11 @@
             "pattern": "^[+-](?:0|[1-9][0-9]*)$"
           },
           "unit": {
-            "enum": [
-              "http://www.wikidata.org/entity/Q1238720",
-              "http://www.wikidata.org/entity/Q1980247"
-            ]
+            "enum": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"]
           }
         }
       },
-      "units": [
-        "http://www.wikidata.org/entity/Q1238720",
-        "http://www.wikidata.org/entity/Q1980247"
-      ],
+      "units": ["http://www.wikidata.org/entity/Q1238720", "http://www.wikidata.org/entity/Q1980247"],
       "minimum": 0,
       "maximum": 10000000,
       "descriptions": {
@@ -7373,9 +6604,7 @@
         "zh-Hans": "发表于",
         "zh-Hant": "發表於"
       },
-      "mappings": [
-        "wd:P1433"
-      ],
+      "mappings": ["wd:P1433"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -7399,9 +6628,7 @@
           "zh-Hant": "收錄作品"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das größere Werk, in dem diese Reihe veröffentlicht wurde, etwa eine Zeitschrift.",
         "en": "The larger creative work in which this series was published, such as a magazine.",
@@ -7425,9 +6652,7 @@
         "zh-Hans": "区别于",
         "zh-Hant": "相異物"
       },
-      "mappings": [
-        "wd:P1889"
-      ],
+      "mappings": ["wd:P1889"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -7440,9 +6665,7 @@
         "order": "name",
         "symmetric": true
       },
-      "targets": [
-        "wd:Q689445"
-      ],
+      "targets": ["wd:Q689445"],
       "descriptions": {
         "de": "Eine alternative Visual Novel in derselben Welt oder Kontinuität; beide bleiben eigenständige Werke.",
         "en": "An alternative visual novel work in the same setting or continuity; the two remain distinct works.",
@@ -7466,9 +6689,7 @@
         "zh-Hans": "改编自",
         "zh-Hant": "改編自"
       },
-      "mappings": [
-        "wd:P144"
-      ],
+      "mappings": ["wd:P144"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -7492,9 +6713,7 @@
           "zh-Hant": "衍生作品"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das Werk, auf dem diese Visual Novel beruht; bezeichnet die Vorlage statt einer ungerichteten Medienverbindung.",
         "en": "A creative work on which this visual novel is based; identifies the source work rather than an unspecified cross-media connection.",
@@ -7518,9 +6737,7 @@
         "zh-Hans": "所属实体",
         "zh-Hant": "所屬實體"
       },
-      "mappings": [
-        "wd:P361"
-      ],
+      "mappings": ["wd:P361"],
       "datatype": "wikibase-item",
       "multivalued": true,
       "qualifiers": [],
@@ -7544,9 +6761,7 @@
           "zh-Hant": "組成作品"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das größere Werk, zu dem dieses Werk gehört, etwa eine übergeordnete Geschichte oder Zusammenstellung.",
         "en": "The larger work containing this work, such as a parent story or compilation.",
@@ -7594,9 +6809,7 @@
           "zh-Hant": "外傳作品"
         }
       },
-      "targets": [
-        "schema:CreativeWork"
-      ],
+      "targets": ["schema:CreativeWork"],
       "descriptions": {
         "de": "Das Ursprungswerk, aus dem dieses Spin-off hervorgeht.",
         "en": "The original work from which this spin-off work derives.",
@@ -7729,10 +6942,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:Movie",
-            "schema:TVSeries"
-          ]
+          "in": ["schema:Movie", "schema:TVSeries"]
         }
       }
     },
@@ -7751,10 +6961,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "schema:Movie",
-                "schema:TVSeries"
-              ]
+              "in": ["schema:Movie", "schema:TVSeries"]
             }
           },
           {
@@ -7781,9 +6988,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:Movie"
-          ]
+          "in": ["schema:Movie"]
         }
       }
     },
@@ -7800,9 +7005,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "rezics:AnimeRelease"
-          ]
+          "in": ["rezics:AnimeRelease"]
         }
       }
     },
@@ -7819,9 +7022,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:TVSeries"
-          ]
+          "in": ["schema:TVSeries"]
         }
       }
     },
@@ -7838,9 +7039,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:Book"
-          ]
+          "in": ["schema:Book"]
         }
       }
     },
@@ -7859,9 +7058,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "schema:Book"
-              ]
+              "in": ["schema:Book"]
             }
           },
           {
@@ -7888,9 +7085,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "bf:Instance"
-          ]
+          "in": ["bf:Instance"]
         }
       }
     },
@@ -7907,9 +7102,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "wd:Q95074"
-          ]
+          "in": ["wd:Q95074"]
         }
       }
     },
@@ -7928,9 +7121,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "wd:Q95074"
-              ]
+              "in": ["wd:Q95074"]
             }
           },
           {
@@ -7957,9 +7148,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "wd:Q209163"
-          ]
+          "in": ["wd:Q209163"]
         }
       }
     },
@@ -7976,9 +7165,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:VideoGame"
-          ]
+          "in": ["schema:VideoGame"]
         }
       }
     },
@@ -7997,9 +7184,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "schema:VideoGame"
-              ]
+              "in": ["schema:VideoGame"]
             }
           },
           {
@@ -8026,9 +7211,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "wd:Q20631656"
-          ]
+          "in": ["wd:Q20631656"]
         }
       }
     },
@@ -8045,9 +7228,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:ComicSeries"
-          ]
+          "in": ["schema:ComicSeries"]
         }
       }
     },
@@ -8066,9 +7247,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "schema:ComicSeries"
-              ]
+              "in": ["schema:ComicSeries"]
             }
           },
           {
@@ -8095,9 +7274,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:PublicationVolume"
-          ]
+          "in": ["schema:PublicationVolume"]
         }
       }
     },
@@ -8114,9 +7291,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:Recipe"
-          ]
+          "in": ["schema:Recipe"]
         }
       }
     },
@@ -8135,9 +7310,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "schema:Recipe"
-              ]
+              "in": ["schema:Recipe"]
             }
           },
           {
@@ -8166,9 +7339,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "schema:Recipe"
-              ]
+              "in": ["schema:Recipe"]
             }
           },
           {
@@ -8196,10 +7367,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "wd:Q7725310",
-            "schema:BookSeries"
-          ]
+          "in": ["wd:Q7725310", "schema:BookSeries"]
         }
       }
     },
@@ -8218,9 +7386,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "schema:BookSeries"
-              ]
+              "in": ["schema:BookSeries"]
             }
           },
           {
@@ -8247,9 +7413,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "schema:BookSeries"
-          ]
+          "in": ["schema:BookSeries"]
         }
       }
     },
@@ -8266,9 +7430,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "wd:Q7725310"
-          ]
+          "in": ["wd:Q7725310"]
         }
       }
     },
@@ -8285,9 +7447,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "wd:Q689445"
-          ]
+          "in": ["wd:Q689445"]
         }
       }
     },
@@ -8306,9 +7466,7 @@
         "and": [
           {
             "type": {
-              "in": [
-                "wd:Q20631656"
-              ]
+              "in": ["wd:Q20631656"]
             }
           },
           {
@@ -8335,9 +7493,7 @@
       },
       "filter": {
         "type": {
-          "in": [
-            "wd:Q20631656"
-          ]
+          "in": ["wd:Q20631656"]
         }
       }
     }

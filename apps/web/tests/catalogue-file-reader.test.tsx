@@ -153,7 +153,14 @@ test('retired associations cannot add a destination return, and unsupported file
 test('native page action decisions keep denied and unavailable correction controls closed', async () => {
   const result = await catalogueFileProfileFixture('ready').read();
   if (!result.ok) throw new Error('Expected the current recorded catalogue definitions');
-  const denied = renderSubject(ordinaryPage(result.public), result.public, result.release, result.digest, undefined, 'denied');
+  const denied = renderSubject(
+    ordinaryPage(result.public),
+    result.public,
+    result.release,
+    result.digest,
+    undefined,
+    'denied',
+  );
   const unavailable = renderSubject(
     ordinaryPage(result.public),
     result.public,

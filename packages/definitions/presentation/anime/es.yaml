@@ -4,7 +4,7 @@ types:
   schema:Movie: película
   schema:TVSeason: 'temporada'
   schema:TVSeries: serie de televisión
-  schema:MediaObject: "objeto multimedia"
+  schema:MediaObject: 'objeto multimedia'
 properties:
   bf:hasPart: 'obra incluida'
   marcrel:fds: 'distribuidor cinematográfico'
@@ -17,22 +17,22 @@ properties:
   schema:startDate: fecha de inicio
   wdt:P449: emisora original
   wdt:P973: descrito en la URL
-  schema:associatedMedia: "contenido multimedia asociado"
-  schema:encodesCreativeWork: "codifica el episodio"
+  schema:associatedMedia: 'contenido multimedia asociado'
+  schema:encodesCreativeWork: 'codifica el episodio'
 inverseProperties:
   bf:hasPart: 'Publicaciones que incluyen esta obra'
   marcrel:fds: 'Distribuciones cinematográficas'
   schema:isPartOf: 'Episodios'
   wdt:P449: 'Emisiones originales'
-  schema:associatedMedia: "lanzamientos que incluyen este archivo"
-  schema:encodesCreativeWork: "archivos que codifican este episodio"
+  schema:associatedMedia: 'lanzamientos que incluyen este archivo'
+  schema:encodesCreativeWork: 'archivos que codifican este episodio'
 typeDescriptions:
   rezics:AnimeRelease: 'Una publicación o versión distribuida de contenido de anime con identidad propia. Distinta de la obra, episodio, archivo o copia personal; los idiomas y formatos por sí solos no crean lanzamientos separados.'
   schema:Episode: 'Una entrega identificada de una obra de anime, como el episodio 3 o un especial; no un archivo ni una temporada completa.'
   schema:Movie: 'Un largometraje o cortometraje de animación como obra, independiente de sus ediciones distribuidas.'
   schema:TVSeason: 'Una temporada identificada de una serie de animación televisiva, distinta de la serie completa y del episodio.'
   schema:TVSeries: 'Una serie de animación televisiva como obra que abarca temporadas y episodios, distinta de una edición distribuida concreta.'
-  schema:MediaObject: "Un archivo de catálogo identificado de forma independiente. Sus metadatos no prueban posesión, permiso de descarga, disponibilidad de reproducción ni progreso visto."
+  schema:MediaObject: 'Un archivo de catálogo identificado de forma independiente. Sus metadatos no prueban posesión, permiso de descarga, disponibilidad de reproducción ni progreso visto.'
 libraryProfiles:
   anime.series:
     states:
@@ -143,5 +143,5 @@ propertyDescriptions:
   wdt:P449: 'La organización que la fuente identifica como emisora original; no cualquier distribuidor posterior.'
   wdt:P973: 'Una URL de una página que describe esta obra de anime; no equivale a una coincidencia exacta de identidad.'
 
-  schema:associatedMedia: "Un archivo de catálogo asociado a este lanzamiento de anime identificado; el vínculo no convierte el archivo en el lanzamiento."
-  schema:encodesCreativeWork: "El episodio codificado por este archivo de catálogo exacto; la relación no demuestra posesión ni que se haya visto."
+  schema:associatedMedia: 'Un archivo de catálogo asociado a este lanzamiento de anime identificado; el vínculo no convierte el archivo en el lanzamiento.'
+  schema:encodesCreativeWork: 'El episodio codificado por este archivo de catálogo exacto; la relación no demuestra posesión ni que se haya visto.'

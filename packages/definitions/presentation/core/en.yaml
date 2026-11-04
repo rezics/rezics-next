@@ -4,7 +4,7 @@ types:
   schema:Person: person
   schema:Organization: organization
   schema:SoftwareApplication: software application
-  rezics:ReleaseGroup: "release group"
+  rezics:ReleaseGroup: 'release group'
 properties:
   rezics:penNameOf: 'pen name of'
   wdt:P186: made from material
@@ -62,12 +62,12 @@ properties:
   rezics:editionCounterpart: 'Other book version'
   rezics:bangumiLegacyVersion: 'Version counterpart (retired Bangumi code)'
   rezics:expansionCounterpart: 'Expansion or base game'
-  wdt:P4092: "checksum"
-  wdt:P3575: "file size"
-  rezics:hashAlgorithm: "hash algorithm"
-  rezics:codec: "codec"
-  rezics:fileQuality: "file quality"
-  rezics:releaseGroup: "release group"
+  wdt:P4092: 'checksum'
+  wdt:P3575: 'file size'
+  rezics:hashAlgorithm: 'hash algorithm'
+  rezics:codec: 'codec'
+  rezics:fileQuality: 'file quality'
+  rezics:releaseGroup: 'release group'
 inverseProperties:
   rezics:penNameOf: 'pen names'
   wdt:P186: Used in
@@ -88,7 +88,7 @@ inverseProperties:
   rezics:sideStoryOf: 'Side stories'
   rezics:bangumiRelatedTo: 'Related from (Bangumi)'
 
-  rezics:releaseGroup: "files from this release group"
+  rezics:releaseGroup: 'files from this release group'
 propertyDescriptions:
   rezics:penNameOf: 'The person or organization behind this pen name or collective name.'
   wdt:P186: 'A food or prepared recipe used as a material or component; qualify its quantity and list order where known.'
@@ -146,12 +146,12 @@ propertyDescriptions:
   rezics:editionCounterpart: 'Another book version or edition; this symmetric link identifies neither an original nor a work-to-edition direction.'
   rezics:bangumiLegacyVersion: "The symmetric version link preserved from Bangumi's retired Main Version code 4013; it gives no original/version direction."
   rezics:expansionCounterpart: 'A base game and add-on linked without identifying which expands the other; use the directed expansion relation when known.'
-  wdt:P4092: "Exact checksum text. The hash algorithm is stored separately; equality does not identify or merge files."
-  wdt:P3575: "File size as a decimal quantity in bytes, preserving the source amount exactly."
-  rezics:hashAlgorithm: "The exact source code naming the checksum algorithm; unknown codes remain available for review."
-  rezics:codec: "The exact codec code reported by the source, including codes not yet recognized."
-  rezics:fileQuality: "The exact file quality code reported by the source, including codes not yet recognized."
-  rezics:releaseGroup: "The independently readable AniDB source group associated with this file, separate from a publication release and personal copy."
+  wdt:P4092: 'Exact checksum text. The hash algorithm is stored separately; equality does not identify or merge files.'
+  wdt:P3575: 'File size as a decimal quantity in bytes, preserving the source amount exactly.'
+  rezics:hashAlgorithm: 'The exact source code naming the checksum algorithm; unknown codes remain available for review.'
+  rezics:codec: 'The exact codec code reported by the source, including codes not yet recognized.'
+  rezics:fileQuality: 'The exact file quality code reported by the source, including codes not yet recognized.'
+  rezics:releaseGroup: 'The independently readable AniDB source group associated with this file, separate from a publication release and personal copy.'
 typeDescriptions:
   wd:Q2095: 'A food or edible substance, such as flour; a recipe describes how to prepare it.'
   wd:Q2620972: 'A named, ordered span of episodes or chapters within a work, with first and last part numbers.'
@@ -159,4 +159,4 @@ typeDescriptions:
   schema:Organization: 'An organization or credited group, such as a publisher or studio.'
   schema:SoftwareApplication: 'An identified software application, such as a reading tool; game works and their releases have separate Types.'
 
-  rezics:ReleaseGroup: "An AniDB source group linked to the files it releases. Its identity remains separate from each file and publication release."
+  rezics:ReleaseGroup: 'An AniDB source group linked to the files it releases. Its identity remains separate from each file and publication release.'

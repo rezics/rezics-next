@@ -137,10 +137,11 @@ export function fileStreams(release: Definitions, type: string, locale: string):
     const targets = property.targets ?? [];
     const forwardKind = targets.map(kindOf).find((candidate) => candidate !== undefined);
     const inverseKind = Object.entries(release.types)
-      .filter(([owner, definition]) =>
-        definition.properties?.includes(id) &&
-        targets.some((target) => typeIsA(release, type, target)) &&
-        owner !== type,
+      .filter(
+        ([owner, definition]) =>
+          definition.properties?.includes(id) &&
+          targets.some((target) => typeIsA(release, type, target)) &&
+          owner !== type,
       )
       .map(([owner]) => kindOf(owner))
       .find((candidate) => candidate !== undefined);

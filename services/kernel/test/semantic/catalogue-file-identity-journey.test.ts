@@ -104,9 +104,11 @@ async function write(path: string, body: unknown, expected = 200) {
   return result.body;
 }
 async function subject(type: string, label: string, statements: Record<string, unknown[]> = {}) {
-  return (
-    await write('/v1/subjects', { type, labels: { en: label }, statements }, 201)
-  ).subject as { id: string; type: string; statements: Record<string, { id: string }[]> };
+  return (await write('/v1/subjects', { type, labels: { en: label }, statements }, 201)).subject as {
+    id: string;
+    type: string;
+    statements: Record<string, { id: string }[]>;
+  };
 }
 
 test('native file identity, sourced correction, group disclosure and page actions follow current released types', async () => {
@@ -159,15 +161,11 @@ test('native file identity, sourced correction, group disclosure and page action
   expect(factual.body.subject.type).toBe('schema:MediaObject');
   expect(factual.body.subject.statements['rezics:copy']).toBeUndefined();
 
-  const wrongUnit = await send(
-    'POST',
-    '/v1/subjects',
-    {
-      type: 'schema:MediaObject',
-      labels: { en: 'Wrong unit' },
-      statements: { 'wdt:P3575': [fact('wdt:P3575', { amount: '+4', unit: 'wd:Q11574' })] },
-    },
-  );
+  const wrongUnit = await send('POST', '/v1/subjects', {
+    type: 'schema:MediaObject',
+    labels: { en: 'Wrong unit' },
+    statements: { 'wdt:P3575': [fact('wdt:P3575', { amount: '+4', unit: 'wd:Q11574' })] },
+  });
   expect([400, 422]).toContain(wrongUnit.response.status);
   const wrongTarget = await send('POST', '/v1/subjects', {
     type: 'rezics:AnimeRelease',
@@ -193,9 +191,9 @@ test('native file identity, sourced correction, group disclosure and page action
   expect(page.body).not.toHaveProperty('copy');
   expect(page.body).not.toHaveProperty('progress');
   expect(page.body).not.toHaveProperty('entitlement');
-  expect(Object.values(page.body.reads).some((read: any) => read.status === 200 && read.body.subject?.id === first.id)).toBe(
-    true,
-  );
+  expect(
+    Object.values(page.body.reads).some((read: any) => read.status === 200 && read.body.subject?.id === first.id),
+  ).toBe(true);
   const anonymous = await send('POST', '/v1/pages:read', { target: { subject: first.id }, languages: ['en'] }, false);
   expect(anonymous.body.viewer).toMatchObject({ state: 'anonymous', actions: { statementPropose: 'denied' } });
 

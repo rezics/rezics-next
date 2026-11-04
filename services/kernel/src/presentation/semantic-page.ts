@@ -60,10 +60,7 @@ export function cataloguePageMetadata(
   const propertyIds = new Set(release.types[type]?.properties ?? []);
   const inversePropertyIds = new Set<string>();
   for (const [id, property] of Object.entries(release.properties)) {
-    if (
-      property.relation &&
-      (property.targets ?? []).some((target) => typeIsA(release, type, target))
-    ) {
+    if (property.relation && (property.targets ?? []).some((target) => typeIsA(release, type, target))) {
       propertyIds.add(id);
       inversePropertyIds.add(id);
     }
@@ -87,7 +84,9 @@ export function cataloguePageMetadata(
   for (const property of Object.values(properties)) for (const target of property.targets ?? []) addType(target);
   for (const [owner, definition] of Object.entries(release.types))
     if ((definition.properties ?? []).some((id) => inversePropertyIds.has(id))) addType(owner);
-  const typeDefinitions = Object.fromEntries([...types].flatMap((id) => (release.types[id] ? [[id, release.types[id]]] : [])));
+  const typeDefinitions = Object.fromEntries(
+    [...types].flatMap((id) => (release.types[id] ? [[id, release.types[id]]] : [])),
+  );
   return {
     state: 'released',
     type,

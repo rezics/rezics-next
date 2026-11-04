@@ -4,7 +4,7 @@ types:
   schema:Movie: 영화
   schema:TVSeason: 시즌
   schema:TVSeries: 텔레비전 시리즈
-  schema:MediaObject: "미디어 개체"
+  schema:MediaObject: '미디어 개체'
 properties:
   bf:hasPart: '수록 작품'
   marcrel:fds: '영화 배급자'
@@ -17,22 +17,22 @@ properties:
   schema:startDate: 시작일
   wdt:P449: 다음에서 본방송을 함
   wdt:P973: 기술되어 있는 URL
-  schema:associatedMedia: "관련 미디어"
-  schema:encodesCreativeWork: "이 에피소드를 인코딩"
+  schema:associatedMedia: '관련 미디어'
+  schema:encodesCreativeWork: '이 에피소드를 인코딩'
 inverseProperties:
   bf:hasPart: '이 작품을 수록한 발행판'
   marcrel:fds: '배급한 발행판'
   schema:isPartOf: '에피소드'
   wdt:P449: '최초 방영 작품'
-  schema:associatedMedia: "이 파일을 포함한 발행물"
-  schema:encodesCreativeWork: "이 에피소드를 인코딩한 파일"
+  schema:associatedMedia: '이 파일을 포함한 발행물'
+  schema:encodesCreativeWork: '이 에피소드를 인코딩한 파일'
 typeDescriptions:
   rezics:AnimeRelease: '작품 자체와 별개로 식별되는 애니메이션의 발행판 또는 배급판. 에피소드, 재생 파일, 개인 소장본과 구별하며 언어나 형식 차이만으로 별도 출시판을 만들지 않습니다.'
   schema:Episode: '3화나 특별편처럼 개별적으로 식별되는 애니메이션의 한 회차입니다. 재생 파일이나 시즌 전체가 아닙니다.'
   schema:Movie: '장편 또는 단편 애니메이션 영화 작품입니다. 배급된 개별 판본과 독립적입니다.'
   schema:TVSeason: 'TV 애니메이션에서 별도로 식별되는 한 시즌입니다. 시리즈 전체나 개별 에피소드와 구별합니다.'
   schema:TVSeries: '시즌과 에피소드를 아우르는 TV 애니메이션 시리즈 작품입니다. 특정 발행판과는 별개입니다.'
-  schema:MediaObject: "독립적으로 식별되는 카탈로그 파일입니다. 메타데이터는 소유, 다운로드 권한, 재생 가능 여부 또는 시청 진행을 증명하지 않습니다."
+  schema:MediaObject: '독립적으로 식별되는 카탈로그 파일입니다. 메타데이터는 소유, 다운로드 권한, 재생 가능 여부 또는 시청 진행을 증명하지 않습니다.'
 libraryProfiles:
   anime.series:
     states:
@@ -135,5 +135,5 @@ propertyDescriptions:
   wdt:P449: '출처가 최초 방송사로 명시한 조직입니다. 이후의 모든 배급사를 뜻하지 않습니다.'
   wdt:P973: '이 애니메이션 작품을 설명하는 페이지의 URL입니다. 동일 실체의 정확한 일치와 구별합니다.'
 
-  schema:associatedMedia: "식별된 애니메이션 발행 릴리스와 연결된 카탈로그 파일입니다. 이 연결이 파일을 발행물과 동일하게 만들지는 않습니다."
-  schema:encodesCreativeWork: "이 정확한 카탈로그 파일에 인코딩된 에피소드입니다. 이 관계는 소유나 시청 상태를 증명하지 않습니다."
+  schema:associatedMedia: '식별된 애니메이션 발행 릴리스와 연결된 카탈로그 파일입니다. 이 연결이 파일을 발행물과 동일하게 만들지는 않습니다.'
+  schema:encodesCreativeWork: '이 정확한 카탈로그 파일에 인코딩된 에피소드입니다. 이 관계는 소유나 시청 상태를 증명하지 않습니다.'

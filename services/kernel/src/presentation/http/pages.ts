@@ -440,32 +440,32 @@ export function pageRoutes<App>(
       const pageCatalogue = subject
         ? cataloguePageMetadata(definitionRelease?.release, definitionRelease?.digest, subject.type)
         : undefined;
-      const pageViewer = pageCatalogue?.state === 'released'
-        ? async () => {
-            let statementPropose: 'allowed' | 'denied' | 'unavailable';
-            try {
-              const check = await accessCheck(
-                authority.deps.access,
-                actor,
-                'statement:propose',
-                resource,
-                { pool, deadline: job.deadline },
-              );
-              statementPropose = (await admission.run('normal', job, () => withConnection(pool, (client) => check(client))))
-                ? 'allowed'
-                : 'denied';
-            } catch (error) {
-              if (!(error instanceof AccessUnavailableError)) throw error;
-              statementPropose = 'unavailable';
+      const pageViewer =
+        pageCatalogue?.state === 'released'
+          ? async () => {
+              let statementPropose: 'allowed' | 'denied' | 'unavailable';
+              try {
+                const check = await accessCheck(authority.deps.access, actor, 'statement:propose', resource, {
+                  pool,
+                  deadline: job.deadline,
+                });
+                statementPropose = (await admission.run('normal', job, () =>
+                  withConnection(pool, (client) => check(client)),
+                ))
+                  ? 'allowed'
+                  : 'denied';
+              } catch (error) {
+                if (!(error instanceof AccessUnavailableError)) throw error;
+                statementPropose = 'unavailable';
+              }
+              return {
+                state: actor.kind === 'account' ? ('account' as const) : ('anonymous' as const),
+                ...(actor.kind === 'account' ? { account: actor.accountId } : {}),
+                context: selected?.context.id ?? GLOBAL_CONTEXT,
+                actions: { statementPropose },
+              };
             }
-            return {
-              state: actor.kind === 'account' ? ('account' as const) : ('anonymous' as const),
-              ...(actor.kind === 'account' ? { account: actor.accountId } : {}),
-              context: selected?.context.id ?? GLOBAL_CONTEXT,
-              actions: { statementPropose },
-            };
-          }
-        : undefined;
+          : undefined;
       return pageAnswer({
         release: definitionRelease?.release,
         continuationOnlyLists: !('subject' in target) || !target.view || target.view === 'overview',
