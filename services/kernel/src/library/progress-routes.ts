@@ -698,7 +698,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         detail: detail('progress_session.discovery', 'progress_session:list'),
       },
       async ({ query, actor, admission, job, request, set }) => {
-        requireAccount(actor);
+        const viewer = requireAccount(actor);
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
           mapped(async () => {
@@ -727,7 +727,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
                 {
                   pool,
                   access: dependencies.access,
-                  actor,
+                  actor: viewer,
                   routeKey: dependencies.routeKey,
                   deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
                 },
@@ -741,8 +741,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
               viewerState: 'signed_in' as const,
               progressSessions: result.sessions.map(({ session }) => {
                 const active = session.state === 'active';
-                const readable = actor.scopes.includes('progress_session:read');
-                const writable = actor.scopes.includes('progress_session:update');
+                const readable = viewer.scopes.includes('progress_session:read');
+                const writable = viewer.scopes.includes('progress_session:update');
                 const action = (allowed: boolean, reason: 'session_not_active' | 'not_authorized' | null) => ({
                   allowed,
                   reason,

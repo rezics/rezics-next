@@ -628,7 +628,7 @@ export async function loadProgressIndex(
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
     page = await readList(client, subjectId, authorization);
   }
-  const sessions = page.progressSessions.map((session) => presentSession(session, session.presentation));
+  const sessions = page.progressSessions.map((session) => presentSession(session));
   const selectedSubject =
     sessions.find((session) => session.subjectId === subjectId)?.subject ??
     (subjectId ? await readSelectedSubject(client, subjectId, authorization) : null);
