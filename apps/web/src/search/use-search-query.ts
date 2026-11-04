@@ -3,7 +3,6 @@ import { useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useReaderAddress, useWorkspaceAdmission } from '../session/reader';
 import { searchQueryOptions } from './search-queries';
-import { searchRequiresCurrentReader } from './scoped-search-lifetime';
 import { searchPageForRecovery, searchUnavailablePage } from './search-recovery';
 import { discoverySearchHref, searchLoaderDeps, type SearchLoaderDeps } from './search-params';
 
@@ -16,9 +15,9 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
   const admission = useWorkspaceAdmission(operations);
   const address = useReaderAddress(null, undefined, locale);
   const options = searchQueryOptions(locale, params, reader);
-  // The public route loader has already re-read this address. An immediately stale observer would
+  // The route loader has already re-read this address. An immediately stale observer would
   // dispatch a second request when it changes keys after that loader has completed.
-  const query = useQuery({ ...options, staleTime: searchRequiresCurrentReader(params) ? 0 : Infinity });
+  const query = useQuery({ ...options, staleTime: Infinity, refetchOnMount: false });
   const owner = JSON.stringify([
     locale,
     reader,

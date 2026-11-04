@@ -12,7 +12,7 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
     ...(scoped ? personalRead : publicRead),
     staleTime: 0,
     gcTime: scoped ? 0 : 60_000,
-    refetchOnMount: scoped ? 'always' : false,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,
