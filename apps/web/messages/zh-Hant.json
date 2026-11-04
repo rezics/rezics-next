@@ -9365,5 +9365,16 @@
   "library_vndb_browse_inspection_dates": "日期來自原生資料庫，以 UTC 顯示。",
   "library_vndb_browse_inspection_no_progress": "這筆資料庫項目未提供進行中的進度紀錄。請開啟作品或資料庫使用可用操作。",
   "library_vndb_browse_inspection_rating": "這次資料庫讀取未包含評分。請開啟作品查看目前的評分操作。",
-  "library_vndb_browse_inspection_work": "開啟作品"
+  "library_vndb_browse_inspection_work": "開啟作品",
+  "library_copy_editor_edit_description": "編輯此副本，儲存或取消後返回庫存。",
+  "library_copy_editor_create_description": "選擇版本及可用的副本類型與狀態，亦可在下方填寫選填資料。",
+  "library_copy_editor_optional_title": "副本選填資料",
+  "library_copy_editor_optional_description": "位置、來源、日期及備註皆可留空。收起欄位仍會保留已輸入的內容。",
+  "library_copy_editor_dates_hint": "請使用日曆日期，兩個日期均可留空。",
+  "library_copy_editor_correct_fields": "請修正以下欄位後再儲存，已輸入的內容均已保留。",
+  "library_copy_editor_character_count": "{count} / {limit} 個字元",
+  "library_copy_editor_pending": "副本操作正在處理中。請保持編輯器開啟，直到結果確認。",
+  "library_copy_editor_uncertain": "操作結果尚未確認。重試會傳送原始請求及原始內容，之後的編輯不會包含在此次重試中。",
+  "library_copy_editor_retry_save": "重試原始儲存",
+  "library_copy_editor_retry_delete": "重試原始刪除"
 }

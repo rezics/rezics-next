@@ -1,11 +1,10 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, type ReactNode } from 'react';
+import { act, createContext, useContext, useLayoutEffect, type ReactNode } from 'react';
 import type { CopiesPageData, CopyItem, CopyRemoved } from '../src/library/copies-read';
 import { m } from '../src/paraglide/messages.js';
 
-// Mounted outcome regressions, deliberately left UNRUN at the source-only delivery boundary.
-// Reuse Puck's installed DOM; presentation/admission and native services have their own acceptance.
+// Mounted production forms and ResponsiveDialog; native admission and rendered acceptance remain separate.
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
@@ -64,14 +63,67 @@ mock.module('@tanstack/react-router', () => ({
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
+// Keep the public ResponsiveDialog and its stable portal real. The primitive boundary
+// exposes native dismissal callbacks without claiming a browser interaction pass.
+type Shell = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onOpenChangeComplete?: ((open: boolean) => void) | undefined;
+  finalFocus?: (() => HTMLElement | false) | undefined;
+  children: ReactNode;
+};
+const shells: (Shell & { mobile: boolean })[] = [];
+const Dismiss = createContext<(open: boolean) => void>(() => {});
+function ShellRoot(props: Shell & { mobile: boolean }) {
+  shells.push(props);
+  useLayoutEffect(() => {
+    if (!props.open) {
+      const target = props.finalFocus?.();
+      if (target && target.isConnected) target.focus();
+      props.onOpenChangeComplete?.(false);
+    }
+  }, [props.open]);
+  return props.open ? (
+    <Dismiss.Provider value={props.onOpenChange}>
+      <div role="dialog" data-mobile={props.mobile}>
+        {props.children}
+      </div>
+    </Dismiss.Provider>
+  ) : null;
+}
+function Close({ children }: { children: ReactNode }) {
+  const dismiss = useContext(Dismiss);
+  return (
+    <button type="button" onClick={() => dismiss(false)}>
+      {children}
+    </button>
+  );
+}
+function Content({ children, finalFocus }: { children: ReactNode; finalFocus?: () => HTMLElement | false }) {
+  useLayoutEffect(
+    () => () => {
+      const target = finalFocus?.();
+      if (target && target.isConnected) target.focus();
+    },
+    [],
+  );
+  return <div>{children}</div>;
+}
 mock.module('@rezics/ui/shadcn/dialog', () => ({
-  Dialog: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
-  DialogContent: Part,
+  Dialog: (props: Shell) => <ShellRoot {...props} mobile={false} />,
+  DialogContent: Content,
   DialogHeader: Part,
   DialogTitle: Part,
+  DialogDescription: Part,
+  DialogClose: Close,
 }));
 mock.module('@rezics/ui/bottom-sheet', () => ({
-  BottomSheet: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
+  BottomSheet: (props: Shell & { closeLabel: string }) => (
+    <ShellRoot {...props} mobile>
+      <Close>{props.closeLabel}</Close>
+      {props.children}
+    </ShellRoot>
+  ),
 }));
 mock.module('@rezics/ui/menu', () => ({
   Menu: ({ entries }: { entries: { label: string; onSelect: () => void }[] }) => (
@@ -114,6 +166,8 @@ window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   for (const requests of Object.values(calls)) requests.length = 0;
+  shells.length = 0;
+  window.happyDOM.setWindowSize({ width: 1440, height: 900 });
   root = createRoot(host);
 });
 afterEach(async () => {
@@ -213,13 +267,13 @@ function field(label: string) {
 async function text(label: string, value: string) {
   const input = field(label);
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    Object.getOwnPropertyDescriptor(input.constructor.prototype, 'value')!.set!.call(input, value);
     input.dispatchEvent(new window.Event('input', { bubbles: true }));
   });
 }
 
 describe('Late Copy editor and Undo responses cannot modify a replacement page or close a newer editor', () => {
-  for (const boundary of ['close/reopen', 'replacement page'] as const) {
+  for (const boundary of ['replacement page'] as const) {
     for (const operation of ['create', 'update', 'delete'] as const) {
       for (const outcome of ['success', 'refusal', 'rejection'] as const) {
         test(`Late Copy ${operation} ${outcome} cannot affect a newer editor after ${boundary}`, async () => {
@@ -228,8 +282,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
           await render(page);
           const old = await start(operation, original);
           const replacement = item('Replacement', original.id);
-          if (boundary === 'close/reopen') await click(m.library_copy_cancel(), form());
-          else await render(pageOf(replacement));
+          await render(pageOf(replacement));
           await click(m.library_copy_add());
           const current = form();
           const key = current.dataset.idempotencyKey;
@@ -250,7 +303,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
           expect(button(m.library_copy_add_submit(), current).disabled).toBe(true);
           expect(current.querySelector('[role="alert"]')).toBeNull();
           expect(rows()).toHaveLength(1);
-          expect(rows()[0]!.textContent).toContain(boundary === 'close/reopen' ? 'Original' : 'Replacement');
+          expect(rows()[0]!.textContent).toContain('Replacement');
           expect(rows()[0]!.textContent).not.toContain('Late write');
           expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.editor_undo())).toBe(false);
           await settle(pending, { ok: false, reason: 'invalid' });
@@ -284,7 +337,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
         disposedOn: null,
         note: 'Another copy of the same edition',
       },
-      headers: { 'x-csrf-token': 'current-session' },
+      headers: new Headers({ 'x-csrf-token': 'current-session' }),
     };
     expect(latest('create').input).toEqual(payload);
     await reject(latest('create'));
@@ -318,7 +371,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
         disposedOn: null,
         note: 'Saved',
       },
-      headers: { 'x-csrf-token': 'current-session' },
+      headers: new Headers({ 'x-csrf-token': 'current-session' }),
     };
     expect(calls.update).toHaveLength(1);
     expect(latest('update').input).toEqual(payload); // An unchanged historical status is omitted.
@@ -350,7 +403,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
     expect(calls.update).toHaveLength(2);
     expect(latest('delete').input).toEqual({
       data: { id: copy.id, revision: 4, idempotencyKey: saved.idempotencyKey },
-      headers: { 'x-csrf-token': 'current-session' },
+      headers: new Headers({ 'x-csrf-token': 'current-session' }),
     });
     const deleted = receipt();
     await settle(latest('delete'), deleted);
@@ -359,7 +412,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
     const undo = latest('undo').input;
     expect(undo).toMatchObject({
       data: { id: copy.id, ...deleted.undo },
-      headers: { 'x-csrf-token': 'current-session' },
+      headers: new Headers({ 'x-csrf-token': 'current-session' }),
     });
     await reject(latest('undo'));
     await click(m.editor_undo());
@@ -438,6 +491,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
     await submit();
     expect(calls.create).toHaveLength(0);
     await click(m.library_copy_cancel(), form());
+    await click(m.library_copy_draft_navigation_discard(), window.document);
     await click(m.library_copy_add());
     await choose('edition-a');
     const current = latest('subject');
@@ -483,7 +537,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
     expect(row('Replacement').textContent).toContain('Accepted status');
   });
 
-  for (const boundary of ['close', 'unmount'] as const) {
+  for (const boundary of ['unmount'] as const) {
     for (const operation of ['create', 'update', 'delete'] as const) {
       test(`${operation} forms stop callbacks on ${boundary}, even before a parent unmounts a closed form`, async () => {
         const onCreated = mock(() => {});
@@ -510,12 +564,112 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
           await click(m.library_copy_delete(), form());
           await click(m.library_copy_delete_confirm(), form());
         } else await submit();
-        if (boundary === 'close') await click(m.library_copy_cancel(), form());
-        else await act(async () => root.render(null));
+        await click(m.library_copy_cancel(), form());
+        expect(window.document.body.textContent).toContain(m.library_copy_draft_navigation_pending());
+        expect(onClose).not.toHaveBeenCalled();
+        await act(async () => root.render(null));
         await settle(latest(operation), operation === 'delete' ? receipt() : { ok: true, copy });
         for (const callback of [onCreated, onSaved, onRemoved, onKey]) expect(callback).not.toHaveBeenCalled();
-        expect(onClose).toHaveBeenCalledTimes(boundary === 'close' ? 1 : 0);
+        expect(onClose).not.toHaveBeenCalled();
       });
     }
   }
+});
+
+async function resize(width: number) {
+  await act(async () => {
+    window.happyDOM.setWindowSize({ width, height: 844 });
+  });
+  await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+}
+
+test('actual create and edit controls, validation and selection survive both presentations; replacement retires the form', async () => {
+  const copy = item();
+  const page = pageOf(copy);
+  await render(page);
+  for (const mode of ['create', 'edit'] as const) {
+    if (mode === 'create') await click(m.library_copy_add());
+    else await edit(copy);
+    await click(m.library_copy_more(), form());
+    await text(m.library_copy_location(), '📚'.repeat(201));
+    const current = form();
+    const input = field(m.library_copy_location());
+    await click(m.library_copy_less(), current);
+    await submit();
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(window.document.activeElement).toBe(input);
+    expect(input.closest('[hidden]')).toBeNull();
+    input.setSelectionRange(2, 6, 'backward');
+    const key = current.dataset.idempotencyKey;
+    for (const width of [390, 1440, 390]) {
+      await resize(width);
+      expect(shells.at(-1)!.mobile).toBe(width < 768);
+      expect(form()).toBe(current);
+      expect(field(m.library_copy_location())).toBe(input);
+      expect(window.document.activeElement).toBe(input);
+      expect([input.selectionStart, input.selectionEnd, input.selectionDirection]).toEqual([2, 6, 'backward']);
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(current.dataset.idempotencyKey).toBe(key);
+    }
+    expect(calls[mode === 'create' ? 'create' : 'update']).toHaveLength(0);
+    await render(pageOf(copy));
+    expect(current.isConnected).toBe(false);
+  }
+});
+
+test('presentation changes retain conflict review and pending/uncertain intent including original credentials', async () => {
+  const copy = item();
+  await render(pageOf(copy));
+  await edit(copy);
+  await submit();
+  await resize(390);
+  const current = form();
+  await settle(latest('update'), { ok: false, reason: 'conflict' });
+  await click(m.library_copy_conflict_review_open(), current);
+  const reviewed = { ...copy, revision: 9, note: 'Explicitly reviewed' };
+  await settle(latest('detail'), { ok: true, copy: reviewed });
+  await resize(1440);
+  expect(form()).toBe(current);
+  expect(current.textContent).toContain('Explicitly reviewed');
+  expect(current.dataset.idempotencyKey).toBe(copy.idempotencyKey);
+  await click(m.library_copy_conflict_review_accept(), current);
+  await submit();
+  const original = latest('update').input;
+  await resize(390);
+  await reject(latest('update'));
+  await click(m.library_copy_more(), current);
+  await text(m.library_copy_source(), 'Later visible edit');
+  await resize(1440);
+  await submit();
+  expect(latest('update').input).toEqual(original);
+  expect((original as { data: { revision: number } }).data.revision).toBe(9);
+  expect(current.textContent).toContain(m.library_copy_editor_pending());
+});
+
+test('shell dismissal uses the draft decision; completed close returns only to a current connected inventory launcher', async () => {
+  const copy = item();
+  await render(pageOf(copy));
+  const launcher = button(m.library_copy_add());
+  launcher.focus();
+  await click(m.library_copy_add());
+  await click(m.library_copy_more(), form());
+  await text(m.library_copy_location(), 'Draft');
+  const oldShell = shells.at(-1)!;
+  await act(async () => oldShell.onOpenChange(false));
+  expect(form()).not.toBeNull();
+  await click(m.library_copy_draft_navigation_discard(), window.document);
+  expect(form()).toBeNull();
+  expect(window.document.activeElement).toBe(launcher);
+  await click(m.library_copy_add());
+  const newForm = form();
+  await act(async () => {
+    oldShell.onOpenChange(false);
+    oldShell.onOpenChangeComplete?.(false);
+  });
+  expect(form()).toBe(newForm);
+  await render(pageOf(copy));
+  const replacementLauncher = button(m.library_copy_add());
+  replacementLauncher.focus();
+  await act(async () => oldShell.finalFocus?.());
+  expect(window.document.activeElement).toBe(replacementLauncher);
 });

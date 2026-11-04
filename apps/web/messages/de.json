@@ -9362,5 +9362,16 @@
   "library_vndb_browse_inspection_dates": "Native Bibliotheksdaten werden in UTC angezeigt.",
   "library_vndb_browse_inspection_no_progress": "Diese Zeile enthält keine aktive Fortschrittssitzung. Öffnen Sie das Werk oder die Bibliothek für verfügbare Aktionen.",
   "library_vndb_browse_inspection_rating": "Diese Bibliothekslesung enthält keine Bewertungen. Öffnen Sie das Werk für die aktuellen Bewertungsaktionen.",
-  "library_vndb_browse_inspection_work": "Werk öffnen"
+  "library_vndb_browse_inspection_work": "Werk öffnen",
+  "library_copy_editor_edit_description": "Bearbeite dieses Exemplar und kehre mit Speichern oder Abbrechen zum Bestand zurück.",
+  "library_copy_editor_create_description": "Wähle eine Ausgabe sowie eine verfügbare Art und einen Status. Weitere Angaben sind unten möglich.",
+  "library_copy_editor_optional_title": "Optionale Angaben zum Exemplar",
+  "library_copy_editor_optional_description": "Ort, Quelle, Datumsangaben und Notizen sind optional. Beim Zuklappen bleiben die Eingaben erhalten.",
+  "library_copy_editor_dates_hint": "Gib Kalenderdaten ein oder lasse die Datumsfelder leer.",
+  "library_copy_editor_correct_fields": "Korrigiere diese Felder vor dem Speichern. Deine Eingaben wurden beibehalten.",
+  "library_copy_editor_character_count": "{count} / {limit} Zeichen",
+  "library_copy_editor_pending": "Der Befehl für das Exemplar wird verarbeitet. Lass den Editor geöffnet, bis das Ergebnis bestätigt ist.",
+  "library_copy_editor_uncertain": "Das Ergebnis ist unbestätigt. Beim Wiederholen wird die ursprüngliche Anfrage mit den ursprünglichen Werten gesendet. Spätere Änderungen sind nicht enthalten.",
+  "library_copy_editor_retry_save": "Ursprüngliches Speichern wiederholen",
+  "library_copy_editor_retry_delete": "Ursprüngliches Löschen wiederholen"
 }

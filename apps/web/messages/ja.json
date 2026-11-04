@@ -9365,5 +9365,16 @@
   "library_vndb_browse_inspection_dates": "日付はライブラリの元の日付を UTC で表示しています。",
   "library_vndb_browse_inspection_no_progress": "この行には進行中の進捗セッションが含まれていません。作品またはライブラリで利用可能な操作を確認してください。",
   "library_vndb_browse_inspection_rating": "このライブラリ読み込みには評価が含まれていません。作品を開いて現在の評価操作を確認してください。",
-  "library_vndb_browse_inspection_work": "作品を開く"
+  "library_vndb_browse_inspection_work": "作品を開く",
+  "library_copy_editor_edit_description": "この所蔵を編集し、保存またはキャンセルして一覧に戻ります。",
+  "library_copy_editor_create_description": "版と利用可能な所蔵の種類・状態を選択してください。下に任意の詳細も入力できます。",
+  "library_copy_editor_optional_title": "所蔵の任意項目",
+  "library_copy_editor_optional_description": "場所、入手元、日付、メモは任意です。項目を閉じても入力内容は保持されます。",
+  "library_copy_editor_dates_hint": "日付を入力するか、空欄のままにしてください。",
+  "library_copy_editor_correct_fields": "保存する前に次の項目を修正してください。入力内容は保持されています。",
+  "library_copy_editor_character_count": "{count} / {limit} 文字",
+  "library_copy_editor_pending": "所蔵の操作を処理中です。結果が確認されるまで編集画面を開いたままにしてください。",
+  "library_copy_editor_uncertain": "結果が未確認です。再試行では元の入力内容を含む元のリクエストを送信します。その後の編集は再試行に含まれません。",
+  "library_copy_editor_retry_save": "元の保存を再試行",
+  "library_copy_editor_retry_delete": "元の削除を再試行"
 }

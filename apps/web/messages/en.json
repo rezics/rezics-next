@@ -9458,5 +9458,16 @@
   "library_vndb_browse_inspection_dates": "Dates are the native Library dates, displayed in UTC.",
   "library_vndb_browse_inspection_no_progress": "This Library row supplies no active progress session. Open the work or Library for the available controls.",
   "library_vndb_browse_inspection_rating": "Ratings are not included in this Library read. Open the work to see its current rating controls.",
-  "library_vndb_browse_inspection_work": "Open work"
+  "library_vndb_browse_inspection_work": "Open work",
+  "library_copy_editor_edit_description": "Edit this Copy, then save or cancel to return to your inventory.",
+  "library_copy_editor_create_description": "Choose an edition and its available kind and status. Optional details can be added below.",
+  "library_copy_editor_optional_title": "Optional Copy details",
+  "library_copy_editor_optional_description": "Location, source, dates and notes are optional. Hiding these fields keeps their entered values.",
+  "library_copy_editor_dates_hint": "Use calendar dates, or leave either date blank.",
+  "library_copy_editor_correct_fields": "Correct these fields before saving. Your entered values have been kept.",
+  "library_copy_editor_character_count": "{count} / {limit} characters",
+  "library_copy_editor_pending": "The Copy command is pending. Keep this editor open until its result is confirmed.",
+  "library_copy_editor_uncertain": "The result is unconfirmed. Retry sends the original request, including its original values; later edits are not part of that retry.",
+  "library_copy_editor_retry_save": "Retry original save",
+  "library_copy_editor_retry_delete": "Retry original deletion"
 }

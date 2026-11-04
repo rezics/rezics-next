@@ -9362,5 +9362,16 @@
   "library_vndb_browse_inspection_dates": "日期来自原生资料库，以 UTC 显示。",
   "library_vndb_browse_inspection_no_progress": "此资料库条目未提供进行中的进度记录。请打开作品或资料库使用可用操作。",
   "library_vndb_browse_inspection_rating": "本次资料库读取未包含评分。请打开作品查看当前的评分操作。",
-  "library_vndb_browse_inspection_work": "打开作品"
+  "library_vndb_browse_inspection_work": "打开作品",
+  "library_copy_editor_edit_description": "编辑此副本，保存或取消后返回库存。",
+  "library_copy_editor_create_description": "选择版本及可用的副本类型与状态，也可在下方填写选填资料。",
+  "library_copy_editor_optional_title": "副本选填资料",
+  "library_copy_editor_optional_description": "位置、来源、日期及备注均可留空。收起字段仍会保留已输入的内容。",
+  "library_copy_editor_dates_hint": "请使用日历日期，两个日期均可留空。",
+  "library_copy_editor_correct_fields": "请修正以下字段后再保存，已输入的内容均已保留。",
+  "library_copy_editor_character_count": "{count} / {limit} 个字符",
+  "library_copy_editor_pending": "副本操作正在处理中。请保持编辑器打开，直到结果确认。",
+  "library_copy_editor_uncertain": "操作结果尚未确认。重试会发送原始请求及原始内容，之后的编辑不会包含在此次重试中。",
+  "library_copy_editor_retry_save": "重试原始保存",
+  "library_copy_editor_retry_delete": "重试原始删除"
 }

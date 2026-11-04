@@ -43,6 +43,12 @@ export function ResponsiveDialog({
   const allowReturnFocus = useRef(true);
   const finalFocusRef = useRef(finalFocus);
   const focusedControlId = useRef<string | null>(null);
+  const textSelection = useRef<{
+    control: HTMLInputElement | HTMLTextAreaElement;
+    start: number;
+    end: number;
+    direction: 'forward' | 'backward' | 'none' | null;
+  } | null>(null);
   const controlSequence = useRef(0);
   const transferSequence = useRef(0);
   const switching = useRef(false);
@@ -73,6 +79,21 @@ export function ResponsiveDialog({
   // mobileRef is updated during render, so compare against the last rendered presentation separately.
   const previousMobile = useRef(mobile);
   if (previousMobile.current !== mobile) {
+    // Read before React removes the outgoing primitive. Input types without text selection
+    // return null; native date/number controls keep their own installed behavior.
+    const focused = typeof document === 'undefined' ? null : document.activeElement;
+    if (focused && portalHost?.contains(focused) && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA')) {
+      const control = focused as HTMLInputElement | HTMLTextAreaElement;
+      textSelection.current =
+        control.selectionStart === null || control.selectionEnd === null
+          ? null
+          : {
+              control,
+              start: control.selectionStart,
+              end: control.selectionEnd,
+              direction: control.selectionDirection,
+            };
+    } else textSelection.current = null;
     previousMobile.current = mobile;
     switching.current = true;
     transferSequence.current += 1;
@@ -105,7 +126,7 @@ export function ResponsiveDialog({
         return;
       }
 
-      if (switching.current && focusedSurface) return;
+      if (switching.current) return;
       const returnTarget = resolveFocusTarget(finalFocusRef.current);
       if (closingEpisode.current !== null && element !== returnTarget) allowReturnFocus.current = false;
       focusedControlId.current = null;
@@ -137,7 +158,12 @@ export function ResponsiveDialog({
             )
           : undefined;
         control?.focus({ preventScroll: true });
+        const selection = textSelection.current;
+        if (selection && selection.control === control && control.isConnected) {
+          selection.control.setSelectionRange(selection.start, selection.end, selection.direction ?? undefined);
+        }
       }
+      textSelection.current = null;
       switching.current = false;
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(restore);

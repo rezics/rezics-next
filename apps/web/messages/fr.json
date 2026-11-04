@@ -9362,5 +9362,16 @@
   "library_vndb_browse_inspection_dates": "Les dates natives de la bibliothèque sont affichées en UTC.",
   "library_vndb_browse_inspection_no_progress": "Cette ligne ne fournit aucune session de progression active. Ouvrez l’œuvre ou la bibliothèque pour les commandes disponibles.",
   "library_vndb_browse_inspection_rating": "Cette lecture ne contient pas de notes. Ouvrez l’œuvre pour voir ses commandes de notation actuelles.",
-  "library_vndb_browse_inspection_work": "Ouvrir l’œuvre"
+  "library_vndb_browse_inspection_work": "Ouvrir l’œuvre",
+  "library_copy_editor_edit_description": "Modifiez cet exemplaire, puis enregistrez ou annulez pour revenir à votre inventaire.",
+  "library_copy_editor_create_description": "Choisissez une édition ainsi que son type et son état disponibles. Vous pouvez ajouter des informations facultatives ci-dessous.",
+  "library_copy_editor_optional_title": "Informations facultatives sur l’exemplaire",
+  "library_copy_editor_optional_description": "Le lieu, la source, les dates et les notes sont facultatifs. Masquer les champs conserve les valeurs saisies.",
+  "library_copy_editor_dates_hint": "Indiquez des dates du calendrier ou laissez les champs de date vides.",
+  "library_copy_editor_correct_fields": "Corrigez ces champs avant d’enregistrer. Les valeurs saisies ont été conservées.",
+  "library_copy_editor_character_count": "{count} / {limit} caractères",
+  "library_copy_editor_pending": "L’opération sur l’exemplaire est en cours. Gardez l’éditeur ouvert jusqu’à la confirmation du résultat.",
+  "library_copy_editor_uncertain": "Le résultat n’est pas confirmé. Réessayer envoie la demande d’origine avec ses valeurs d’origine ; les modifications ultérieures ne sont pas incluses.",
+  "library_copy_editor_retry_save": "Réessayer l’enregistrement d’origine",
+  "library_copy_editor_retry_delete": "Réessayer la suppression d’origine"
 }

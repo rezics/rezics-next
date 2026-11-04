@@ -9362,5 +9362,16 @@
   "library_vndb_browse_inspection_dates": "Las fechas nativas de la biblioteca se muestran en UTC.",
   "library_vndb_browse_inspection_no_progress": "Esta fila no incluye una sesión de progreso activa. Abre la obra o la biblioteca para ver los controles disponibles.",
   "library_vndb_browse_inspection_rating": "Esta lectura no incluye valoraciones. Abre la obra para ver sus controles de valoración actuales.",
-  "library_vndb_browse_inspection_work": "Abrir obra"
+  "library_vndb_browse_inspection_work": "Abrir obra",
+  "library_copy_editor_edit_description": "Edita este ejemplar y guarda o cancela para volver al inventario.",
+  "library_copy_editor_create_description": "Elige una edición y su tipo y estado disponibles. Puedes añadir datos opcionales más abajo.",
+  "library_copy_editor_optional_title": "Datos opcionales del ejemplar",
+  "library_copy_editor_optional_description": "La ubicación, la fuente, las fechas y las notas son opcionales. Al ocultar los campos se conservan sus valores.",
+  "library_copy_editor_dates_hint": "Usa fechas del calendario o deja cualquiera de las fechas en blanco.",
+  "library_copy_editor_correct_fields": "Corrige estos campos antes de guardar. Se han conservado los valores introducidos.",
+  "library_copy_editor_character_count": "{count} / {limit} caracteres",
+  "library_copy_editor_pending": "La operación del ejemplar está pendiente. Mantén el editor abierto hasta que se confirme el resultado.",
+  "library_copy_editor_uncertain": "El resultado no está confirmado. Reintentar envía la solicitud original con sus valores originales; las ediciones posteriores no forman parte del reintento.",
+  "library_copy_editor_retry_save": "Reintentar el guardado original",
+  "library_copy_editor_retry_delete": "Reintentar la eliminación original"
 }

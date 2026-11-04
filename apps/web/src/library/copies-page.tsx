@@ -2,12 +2,7 @@ import type { CoverRatio } from '@rezics/ui/cover';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { ContentItem } from '@rezics/ui/content-item';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
-import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import { useIsMobile } from '@rezics/ui/hooks/use-mobile';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
 import { Link } from '@tanstack/react-router';
 import { useLayoutEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
@@ -34,11 +29,15 @@ import { CopiesFallback } from './copies-fallback';
 import { UndoNotice } from './copies-undo';
 import type { CopyRemoved } from './copies-read';
 import { undoCopy } from './copies-actions';
-import { copyFieldInputIsTooLong } from './copy-field-input';
+import {
+  CopyChoiceField,
+  CopyOptionalFields,
+  CopyValidationSummary,
+  invalidCopyFields,
+  type CopyDraft as Draft,
+} from './copy-fields';
 import { CopyInventoryFilters } from './copy-inventory-filters';
 export { CopiesFallback } from './copies-fallback';
-const inputClass =
-  'min-h-11 min-w-0 max-w-full w-full rounded-lg border border-border bg-background px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const target =
   'min-h-11 min-w-11 max-w-full cursor-pointer whitespace-normal py-2 text-center [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const button = `${target} inline-flex items-center justify-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`;
@@ -50,139 +49,6 @@ const dateText = (value: string) =>
     : '';
 const blank = (value: string): string | null => (value === '' ? null : value);
 
-function DateField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  const id = useId();
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <input
-        id={id}
-        type="date"
-        lang={locale()}
-        className={inputClass}
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-    </Field>
-  );
-}
-
-function TextField({
-  field,
-  label,
-  value,
-  onChange,
-  showError,
-}: {
-  field: 'location' | 'source';
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  showError: boolean;
-}) {
-  const id = useId();
-  const descriptionId = useId();
-  const tooLong = showError && copyFieldInputIsTooLong(field, value);
-  const description = tooLong
-    ? field === 'location'
-      ? m.library_copy_field_input_location_too_long()
-      : m.library_copy_field_input_source_too_long()
-    : field === 'location'
-      ? m.library_copy_field_input_location_limit()
-      : m.library_copy_field_input_source_limit();
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <input
-        id={id}
-        className={inputClass}
-        value={value}
-        aria-invalid={tooLong || undefined}
-        aria-describedby={descriptionId}
-        autoComplete="off"
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-      <p id={descriptionId} role={tooLong ? 'alert' : undefined} className="text-sm text-muted-foreground">
-        {description}
-      </p>
-    </Field>
-  );
-}
-
-function NoteField({
-  value,
-  onChange,
-  showError,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  showError: boolean;
-}) {
-  const id = useId();
-  const descriptionId = useId();
-  const tooLong = showError && copyFieldInputIsTooLong('note', value);
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>{m.library_copy_note()}</FieldLabel>
-      <Textarea
-        id={id}
-        className="min-h-28 min-w-0 max-w-full"
-        rows={4}
-        value={value}
-        aria-invalid={tooLong || undefined}
-        aria-describedby={descriptionId}
-        autoComplete="off"
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-      <p id={descriptionId} role={tooLong ? 'alert' : undefined} className="text-sm text-muted-foreground">
-        {tooLong ? m.library_copy_field_input_note_too_long() : m.library_copy_field_input_note_limit()}
-      </p>
-    </Field>
-  );
-}
-
-function ChoiceField({
-  name,
-  label,
-  value,
-  choices,
-  onChange,
-}: {
-  name: string;
-  label: string;
-  value: string;
-  choices: { id: string; label: string; labelLanguage?: string }[];
-  onChange: (value: string) => void;
-}) {
-  const id = useId();
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <NativeSelect
-        id={id}
-        name={name}
-        className={`${inputClass} [&_select]:min-h-11`}
-        value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      >
-        {choices.map((choice) => (
-          <NativeSelectOption key={choice.id} value={choice.id} lang={choice.labelLanguage}>
-            {choice.label}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-    </Field>
-  );
-}
-
-type Draft = {
-  status: string;
-  location: string;
-  source: string;
-  acquiredOn: string;
-  disposedOn: string;
-  note: string;
-};
 const draftOf = (copy?: CopyItem): Draft => ({
   status: copy?.status ?? '',
   location: copy?.location ?? '',
@@ -217,7 +83,9 @@ export function CopyForm({
   onRemoved,
   onKey,
   originating,
+  finalFocus = () => false,
 }: {
+  finalFocus?: (() => HTMLElement | false) | undefined;
   originating?: CopiesOrigin | undefined;
   copy?: CopyItem;
   profile?: CopyProfile | undefined;
@@ -236,10 +104,10 @@ export function CopyForm({
   onKey: (key: string) => void;
 }) {
   const [copy, setCopy] = useState(initialCopy);
+  const [shellOpen, setShellOpen] = useState(true);
   const [conflicted, setConflicted] = useState(false);
   const [review, setReview] = useState<ConflictReview>({ state: 'idle' });
   const reviewing = useRef(false);
-  const mobile = useIsMobile();
   const lookup = useRef(0);
   const [edition, setEdition] = useState<EntityPickerSubject | null>(null);
   const [editionProfile, setEditionProfile] = useState<CopySubjectResult | { state: 'idle' | 'loading' }>({
@@ -272,7 +140,13 @@ export function CopyForm({
   const [pending, setPending] = useState(false);
   const [showFieldErrors, setShowFieldErrors] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const moreId = useId();
+  const fieldsId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [validationAttempt, setValidationAttempt] = useState(0);
+  const invalidFields = showFieldErrors ? invalidCopyFields(draft) : [];
+  useLayoutEffect(() => {
+    if (validationAttempt) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [validationAttempt]);
   const confirmationId = useId();
   const deleteControl = useRef<HTMLButtonElement>(null);
   const cancelDelete = useRef<HTMLButtonElement>(null);
@@ -280,7 +154,7 @@ export function CopyForm({
   const wasConfirming = useRef(false);
   useLayoutEffect(() => {
     if (confirming) cancelDelete.current?.focus();
-    else if (wasConfirming.current) deleteControl.current?.focus();
+    else if (wasConfirming.current && deleteControl.current?.isConnected) deleteControl.current.focus();
     wasConfirming.current = confirming;
   }, [confirming]);
   const deleteStarted = useRef<number | null>(null);
@@ -321,10 +195,15 @@ export function CopyForm({
     if (!current()) return;
     active.current = false;
     lookup.current += 1;
-    onClose();
+    if (inline) onClose();
+    else setShellOpen(false);
   }
   function requestClose() {
     if (!current()) return;
+    if (confirming && !busy.current) {
+      setConfirming(false);
+      return;
+    }
     if (departure.current) departure.current.requestClose();
     else close();
   }
@@ -398,6 +277,7 @@ export function CopyForm({
       setConflicted(false);
       setFailure(null);
       setReview({ state: 'idle' });
+      setShowFieldErrors(false);
       onReviewed?.(next);
     };
     // Reuse the single existing departure choice when accepting would discard a draft.
@@ -418,11 +298,10 @@ export function CopyForm({
     )
       return;
     if (!intent.current) {
-      const invalid = (['location', 'source', 'note'] as const).some((field) =>
-        copyFieldInputIsTooLong(field, draft[field]),
-      );
-      if (invalid) {
+      if (invalidCopyFields(draft).length) {
+        setMore(true);
         setShowFieldErrors(true);
+        setValidationAttempt((attempt) => attempt + 1);
         return;
       }
     }
@@ -612,6 +491,7 @@ export function CopyForm({
     </div>
   ) : (
     <form
+      ref={formRef}
       method="post"
       action={`/${locale()}/library/copies`}
       aria-label={title}
@@ -627,6 +507,27 @@ export function CopyForm({
         }
       }}
     >
+      {copy?.subject ? (
+        <section
+          aria-label={m.library_copy_edition()}
+          className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3"
+        >
+          <div className="w-14 shrink-0">
+            <SubjectCover subject={copy.subject} ratio={rowRatio([copy.subject])} size="fill" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm text-muted-foreground">{m.library_copy_edition()}</p>
+            <p
+              lang={displayLibraryTitle(copy.subject.label, locale()).lang}
+              className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]"
+            >
+              {displayLibraryTitle(copy.subject.label, locale()).text}
+            </p>
+            {copy.subject.typeLabel ? <p className="text-sm text-muted-foreground">{copy.subject.typeLabel}</p> : null}
+          </div>
+        </section>
+      ) : null}
+      <CopyValidationSummary fields={invalidFields} prefix={fieldsId} />
       <input type="hidden" name="intent" value={copy ? 'update' : 'create'} />
       <input type="hidden" name="idempotencyKey" value={copy?.idempotencyKey ?? addKey} />
       <input
@@ -636,7 +537,11 @@ export function CopyForm({
       />
       <input type="hidden" name="sendKind" value={String(sendKind)} />
       {!copy && !subjectId ? (
-        <CopyEditionPicker value={edition} disabled={pending} onChange={(subject) => void chooseEdition(subject)} />
+        <CopyEditionPicker
+          value={edition}
+          disabled={pending || !!intent.current}
+          onChange={(subject) => void chooseEdition(subject)}
+        />
       ) : null}
       {!copy && !subjectId && editionProfile.state !== 'idle' && editionProfile.state !== 'ready' ? (
         <div className="space-y-2">
@@ -660,7 +565,7 @@ export function CopyForm({
       ) : null}
       {!copy && selected ? (
         choices!.kinds.length > 1 ? (
-          <ChoiceField
+          <CopyChoiceField
             name="kind"
             label={m.library_copy_kind()}
             value={kind}
@@ -715,12 +620,16 @@ export function CopyForm({
           {statusEditable ? (
             <>
               <p className="text-sm text-muted-foreground">{m.library_current_choices()}</p>
-              <ChoiceField
+              <CopyChoiceField
                 name="status"
                 label={m.library_copy_new_status()}
                 value={draft.status}
                 choices={[
-                  { id: copy.status, label: copy.statusLabel ?? copy.status },
+                  {
+                    id: copy.status,
+                    label: copy.statusLabel ?? copy.status,
+                    ...(copy.statusLabelLanguage ? { labelLanguage: copy.statusLabelLanguage } : {}),
+                  },
                   ...statusChoices.filter((status) => status.id !== copy.status),
                 ]}
                 onChange={(value) => change('status', value)}
@@ -735,7 +644,7 @@ export function CopyForm({
           ) : null}
         </div>
       ) : selected ? (
-        <ChoiceField
+        <CopyChoiceField
           name="status"
           label={m.library_copy_status()}
           value={draft.status}
@@ -744,44 +653,23 @@ export function CopyForm({
         />
       ) : null}
       {editable ? (
-        <>
-          <button
-            type="button"
-            className={`${target} text-left text-sm text-primary underline underline-offset-4`}
-            aria-controls={moreId}
-            aria-expanded={more}
-            onClick={() => current() && setMore(!more)}
-          >
-            {more ? m.library_copy_less() : m.library_copy_more()}
-          </button>
-          <div id={moreId} hidden={!more} className="min-w-0 space-y-4">
-            <TextField
-              field="location"
-              label={m.library_copy_location()}
-              value={draft.location}
-              onChange={(value) => change('location', value)}
-              showError={showFieldErrors}
-            />
-            <TextField
-              field="source"
-              label={m.library_copy_source()}
-              value={draft.source}
-              onChange={(value) => change('source', value)}
-              showError={showFieldErrors}
-            />
-            <DateField
-              label={m.library_copy_acquired()}
-              value={draft.acquiredOn}
-              onChange={(value) => change('acquiredOn', value)}
-            />
-            <DateField
-              label={m.library_copy_disposed()}
-              value={draft.disposedOn}
-              onChange={(value) => change('disposedOn', value)}
-            />
-            <NoteField value={draft.note} onChange={(value) => change('note', value)} showError={showFieldErrors} />
-          </div>
-        </>
+        <CopyOptionalFields
+          draft={draft}
+          prefix={fieldsId}
+          expanded={more}
+          showErrors={showFieldErrors}
+          onExpandedChange={(expanded) => current() && setMore(expanded)}
+          onChange={change}
+        />
+      ) : null}
+      {pending ? (
+        <p role="status" className="rounded-lg bg-muted p-3 text-sm">
+          {m.library_copy_editor_pending()}
+        </p>
+      ) : intent.current ? (
+        <p role="status" className="rounded-lg bg-muted p-3 text-sm">
+          {m.library_copy_editor_uncertain()}
+        </p>
       ) : null}
       {failure ? <p role="alert">{failure}</p> : null}
       {conflicted ? (
@@ -815,14 +703,24 @@ export function CopyForm({
           </div>
         </div>
       ) : null}
-      <div className="flex flex-wrap gap-3">
+      <div className="sticky bottom-0 z-10 flex flex-wrap gap-3 border-t border-border bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {editable ? (
           <button
             type="submit"
             className={button}
-            disabled={pending || conflicted || !headers(copy ? 'copy.update' : 'copy.create')}
+            disabled={
+              pending ||
+              conflicted ||
+              confirming ||
+              intent.current?.operation === 'delete' ||
+              !headers(copy ? 'copy.update' : 'copy.create')
+            }
           >
-            {copy ? m.library_copy_save() : m.library_copy_add_submit()}
+            {intent.current && intent.current.operation !== 'delete'
+              ? m.library_copy_editor_retry_save()
+              : copy
+                ? m.library_copy_save()
+                : m.library_copy_add_submit()}
           </button>
         ) : null}
         {copy ? (
@@ -830,12 +728,18 @@ export function CopyForm({
             type="button"
             ref={deleteControl}
             className={quiet}
-            disabled={pending || conflicted || !editable || !headers('copy.delete')}
+            disabled={
+              pending ||
+              conflicted ||
+              !editable ||
+              (intent.current !== null && intent.current.operation !== 'delete') ||
+              !headers('copy.delete')
+            }
             onClick={() =>
               current() && (!intent.current || intent.current.operation === 'delete') && setConfirming(true)
             }
           >
-            {m.library_copy_delete()}
+            {intent.current?.operation === 'delete' ? m.library_copy_editor_retry_delete() : m.library_copy_delete()}
           </button>
         ) : null}
         <button type="button" className={quiet} onClick={requestClose}>
@@ -865,20 +769,20 @@ export function CopyForm({
   return (
     <Exposure operation={copy ? 'copy.get' : 'copy.create'}>
       {navigation}
-      {mobile ? (
-        <BottomSheet open onOpenChange={(open) => !open && requestClose()} title={title}>
-          {content}
-        </BottomSheet>
-      ) : (
-        <Dialog open onOpenChange={(open) => !open && requestClose()}>
-          <DialogContent className="[&_[data-slot=dialog-close]]:min-h-11 [&_[data-slot=dialog-close]]:min-w-11">
-            <DialogHeader>
-              <DialogTitle>{title}</DialogTitle>
-            </DialogHeader>
-            {content}
-          </DialogContent>
-        </Dialog>
-      )}
+      <ResponsiveDialog
+        open={shellOpen}
+        onOpenChange={(open) => !open && requestClose()}
+        onOpenChangeComplete={(open) => {
+          if (!open) onClose();
+        }}
+        title={title}
+        description={copy ? m.library_copy_editor_edit_description() : m.library_copy_editor_create_description()}
+        closeLabel={m.library_copy_cancel()}
+        finalFocus={finalFocus}
+        className="sm:max-w-xl"
+      >
+        {content}
+      </ResponsiveDialog>
     </Exposure>
   );
 }
@@ -929,10 +833,11 @@ export function CopyRow({
   returnTo,
 }: {
   copy: CopyItem;
-  onEdit: () => void;
+  onEdit: (launcher: HTMLButtonElement | null) => void;
   ratio: CoverRatio;
   returnTo?: string | undefined;
 }) {
+  const launcher = useRef<HTMLButtonElement>(null);
   const pageLocale = locale();
   const localizedTitle = copy.subject ? displayLibraryTitle(copy.subject.label, pageLocale) : null;
   const subjectLink = copy.subject
@@ -1045,6 +950,7 @@ export function CopyRow({
               type="button"
               className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted"
               aria-label={m.library_copy_more_actions()}
+              ref={launcher}
             >
               <EllipsisIcon aria-hidden="true" className="size-5" />
             </button>
@@ -1053,7 +959,7 @@ export function CopyRow({
             {
               type: 'item',
               label: m.library_copy_edit(),
-              onSelect: onEdit,
+              onSelect: () => onEdit(launcher.current),
             },
           ]}
         />
@@ -1108,6 +1014,7 @@ function LoadedCopiesPage({
   const [editing, setEditing] = useState<CopyItem | null | undefined>(undefined);
   const [detailState, setDetailState] = useState<'loading' | 'ready' | 'unavailable' | 'forbidden'>('ready');
   const inspection = useRef(0);
+  const editorLauncher = useRef<HTMLElement | null>(null);
   const active = useRef(true);
   const latestRemoval = useRef(removed);
   const restoreIntent = useRef<{
@@ -1133,9 +1040,10 @@ function LoadedCopiesPage({
     inspection.current += 1;
     setEditing(undefined);
   };
-  async function inspect(copy: CopyItem) {
+  async function inspect(copy: CopyItem, launcher = editorLauncher.current) {
     if (!currentPage('copy.get')) return;
     const current = ++inspection.current;
+    editorLauncher.current = launcher;
     setEditorKey(current);
     setEditing({
       ...copy,
@@ -1203,8 +1111,9 @@ function LoadedCopiesPage({
           <button
             type="button"
             className={button}
-            onClick={() => {
+            onClick={(event) => {
               if (!currentPage('copy.create')) return;
+              editorLauncher.current = event.currentTarget;
               setEditorKey(++inspection.current);
               setDetailState('ready');
               setEditing(null);
@@ -1283,7 +1192,7 @@ function LoadedCopiesPage({
                 copy={copy}
                 ratio={rowRatio([copy.subject])}
                 returnTo={returnTo}
-                onEdit={() => void inspect(copy)}
+                onEdit={(launcher) => void inspect(copy, launcher)}
               />
             ))}
           </ul>
@@ -1389,6 +1298,10 @@ function LoadedCopiesPage({
               currentEditor(operation) ? (originating ? originating.headers(operation) : csrfHeaders()) : null,
             readDetail: (id) => (originating ? originating.readDetail(id) : readCopyDetail({ data: { id } })),
             readSubject: (id) => (originating ? originating.readSubject(id) : readCopySubject({ data: id })),
+          }}
+          finalFocus={() => {
+            const launcher = editorLauncher.current;
+            return currentPage() && inspection.current === editorKey && launcher?.isConnected ? launcher : false;
           }}
           detailState={detailState}
           onRetryDetail={editing ? () => void inspect(editing) : undefined}
