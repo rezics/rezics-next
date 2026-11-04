@@ -120,7 +120,9 @@ function admit(release: Release) {
   return release;
 }
 
-function client(mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable' | 'withheld-source' | 'unsafe-source' | 'wrong-type') {
+function client(
+  mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable' | 'withheld-source' | 'unsafe-source' | 'wrong-type',
+) {
   const quotation = item(
     quote,
     'schema:Quotation',
@@ -301,9 +303,7 @@ test('quotation reading keeps multilingual text, two contexts, missing and restr
   );
   const withheld = await readQuotationPage(client('withheld-source'), 'Bearer reader', definitions, work, 'en', {});
   expect(withheld.ok && withheld.selected?.statements[0]?.sourceStatus).toBe('withheld');
-  expect(
-    withheld.ok && withheld.selected?.statements[0]?.references[0]?.parts[0]?.status,
-  ).toBe('withheld');
+  expect(withheld.ok && withheld.selected?.statements[0]?.references[0]?.parts[0]?.status).toBe('withheld');
   const unsafe = await readQuotationPage(client('unsafe-source'), 'Bearer reader', definitions, work, 'en', {});
   expect(unsafe.ok && unsafe.selected?.statements[0]?.sourceStatus).toBe('unsupported');
   expect(unsafe.ok && unsafe.selected?.statements[0]?.references[0]?.parts[0]?.href).toBeUndefined();

@@ -69,9 +69,10 @@ function textStatus(text: QuotationText, locale: string) {
 function SourcePart({ part, locale }: { part: QuotationPart; locale: string }) {
   const status = partStatus(part, locale);
   const value = part.value ?? part.id;
-  const internalHref = part.status === 'current' && part.id && part.value
-    ? subjectHref({ id: part.id, label: part.value }, locale).href
-    : undefined;
+  const internalHref =
+    part.status === 'current' && part.id && part.value
+      ? subjectHref({ id: part.id, label: part.value }, locale).href
+      : undefined;
   const externalHref = part.status === 'current' && part.href && webUrl(part.href) ? part.href : undefined;
   return (
     <li className="min-w-0 break-words">
@@ -97,15 +98,16 @@ function QuotationStatement({ text, locale }: { text: QuotationText; locale: str
   const o = option(locale);
   const unavailable = textStatus(text, locale);
   const document = text.body?.ok ? text.body.document : undefined;
-  const content = document?.availability === 'available' && document.body ? (
-    <div lang={document.language} className="max-w-prose">
-      <DocumentBody document={document.body} locale={locale} />
-    </div>
-  ) : text.text !== undefined ? (
-    <p lang={text.language} className="max-w-prose whitespace-pre-wrap">
-      {text.text}
-    </p>
-  ) : null;
+  const content =
+    document?.availability === 'available' && document.body ? (
+      <div lang={document.language} className="max-w-prose">
+        <DocumentBody document={document.body} locale={locale} />
+      </div>
+    ) : text.text !== undefined ? (
+      <p lang={text.language} className="max-w-prose whitespace-pre-wrap">
+        {text.text}
+      </p>
+    ) : null;
   return (
     <section
       className="min-w-0 space-y-3 rounded-md border p-4 [overflow-wrap:anywhere]"
@@ -145,7 +147,9 @@ function QuotationStatement({ text, locale }: { text: QuotationText; locale: str
                 data-source-reference-hash={reference.hash}
                 data-statement-id={reference.statementId}
               >
-                <p className="text-sm text-muted-foreground">{m.quotation_source_reference({ hash: reference.hash }, o)}</p>
+                <p className="text-sm text-muted-foreground">
+                  {m.quotation_source_reference({ hash: reference.hash }, o)}
+                </p>
                 {reference.parts.length ? (
                   <ul className="space-y-1">
                     {reference.parts.map((part) => (
@@ -214,7 +218,12 @@ export function QuotationView({
 
   const current = !pending && !query.isFetching && !query.isError ? query.data : undefined;
   const read = current?.ok ? current : undefined;
-  const error = current && !current.ok ? current : query.isError ? { ok: false as const, reason: 'unavailable' as const } : undefined;
+  const error =
+    current && !current.ok
+      ? current
+      : query.isError
+        ? { ok: false as const, reason: 'unavailable' as const }
+        : undefined;
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const factsHref = subjectHref({ id, label: title.text }, locale).href;
   const origin = returnTo ?? factsHref;
@@ -248,10 +257,7 @@ export function QuotationView({
 
   const loading = pending || query.isPending || query.isFetching;
   return (
-    <article
-      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
-      aria-busy={loading}
-    >
+    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]" aria-busy={loading}>
       <ViewHeading label={m.quotation_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.quotation_intro({}, o)}</p>
       {loading && <p role="status">{m.quotation_loading({}, o)}</p>}
@@ -271,9 +277,7 @@ export function QuotationView({
       )}
       {read?.admitted && (
         <div className="space-y-4">
-          {read.rows.length === 0 && read.unsupportedCount === 0 && (
-            <p role="status">{m.quotation_empty({}, o)}</p>
-          )}
+          {read.rows.length === 0 && read.unsupportedCount === 0 && <p role="status">{m.quotation_empty({}, o)}</p>}
           {read.unsupportedCount > 0 && <p role="status">{m.quotation_unsupported({}, o)}</p>}
           {read.rows.length > 0 && (
             <nav aria-label={m.quotation_title({}, o)}>

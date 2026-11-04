@@ -27,9 +27,30 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
     state: 'current' as const,
     observation: 'recorded quotation observation',
     contexts: [
-      { kind: 'speaker' as const, status: 'current' as const, property: 'schema:spokenByCharacter', statementId: textStatementId, id: speakerId, label: 'Okabe Rintaro' },
-      { kind: 'credited' as const, status: 'current' as const, property: 'schema:creator', statementId: textStatementId, id: creditedId, label: 'MAGES.' },
-      { kind: 'work' as const, status: 'current' as const, property: 'schema:isPartOf', statementId: textStatementId, id: workId, label: 'Steins;Gate' },
+      {
+        kind: 'speaker' as const,
+        status: 'current' as const,
+        property: 'schema:spokenByCharacter',
+        statementId: textStatementId,
+        id: speakerId,
+        label: 'Okabe Rintaro',
+      },
+      {
+        kind: 'credited' as const,
+        status: 'current' as const,
+        property: 'schema:creator',
+        statementId: textStatementId,
+        id: creditedId,
+        label: 'MAGES.',
+      },
+      {
+        kind: 'work' as const,
+        status: 'current' as const,
+        property: 'schema:isPartOf',
+        statementId: textStatementId,
+        id: workId,
+        label: 'Steins;Gate',
+      },
       { kind: 'voice' as const, status: 'unknown' as const },
     ],
     statements: [
@@ -40,7 +61,13 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
         text: 'I will return. The source and the speaker remain distinct.',
         language: 'en',
         qualifiers: [
-          { property: 'schema:creator', label: 'Credited person', status: 'current' as const, id: creditedId, value: 'MAGES.' },
+          {
+            property: 'schema:creator',
+            label: 'Credited person',
+            status: 'current' as const,
+            id: creditedId,
+            value: 'MAGES.',
+          },
         ],
         references: [
           {
@@ -50,8 +77,19 @@ function quotationFixture(state: State): Extract<QuotationRead, { ok: true }> {
             parts:
               state === 'sourced'
                 ? [
-                    { property: 'schema:url', label: 'Source URL', status: 'current' as const, value: sourceUrl, href: sourceUrl },
-                    { property: 'schema:publisher', label: 'Edition', status: 'current' as const, value: 'Archive scan 42' },
+                    {
+                      property: 'schema:url',
+                      label: 'Source URL',
+                      status: 'current' as const,
+                      value: sourceUrl,
+                      href: sourceUrl,
+                    },
+                    {
+                      property: 'schema:publisher',
+                      label: 'Edition',
+                      status: 'current' as const,
+                      value: 'Archive scan 42',
+                    },
                   ]
                 : [{ property: 'schema:url', label: 'Source URL', status: 'withheld' as const }],
           },

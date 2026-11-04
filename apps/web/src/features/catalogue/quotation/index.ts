@@ -450,7 +450,10 @@ export async function readQuotationPage(
       if (chosen) {
         const target = await client.subjects({ id: chosen }).get({ headers: headersOf(authorization, session) });
         if (target.status !== 200 || !target.data) return candidateFailure(target.status);
-        if (target.data.subject.id !== chosen || !typeExtends(release, target.data.subject.type, quotationRequested.type))
+        if (
+          target.data.subject.id !== chosen ||
+          !typeExtends(release, target.data.subject.type, quotationRequested.type)
+        )
           return candidateFailure(409);
         session = tokenOf(target) ?? session;
         const detail = await quotationRow(client, authorization, release, target.data, locale, session);
