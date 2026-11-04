@@ -97,7 +97,7 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
     retrying,
     retryDisabled: waiting,
     retryFailed,
-    recovery,
+    ...(recovery ? { recovery } : {}),
   };
   return isDependencyUnavailableError(error) ? (
     <DependencyUnavailablePage {...retryProps} />

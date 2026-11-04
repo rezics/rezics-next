@@ -1,11 +1,7 @@
 import { prepareExposure } from '../../kernel/exposure';
 import { requirePrivatePageAccess } from '../../session/guard';
-import {
-  isSessionUnavailablePage,
-  loadPrivatePage,
-  sessionUnavailablePage,
-  SessionUnavailablePrompt,
-} from '../../session/private-page';
+import { loadPrivatePage } from '../../session/private-page';
+import { SessionUnavailableError } from '../../session/unavailable';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, notFound } from '@tanstack/react-router';
@@ -184,8 +180,7 @@ export const Route = createFileRoute('/library/')({
           }),
           readCurrentShelfPreferences(),
         ]);
-        if ('sessionUnavailable' in page && page.sessionUnavailable)
-          return sessionUnavailablePage(context.sessionAccess.signInHref);
+        if ('sessionUnavailable' in page && page.sessionUnavailable) throw new SessionUnavailableError();
         return { ...page, shelfSnapshot };
       }
       const requested = {
@@ -223,7 +218,6 @@ function LibraryRoute() {
   const rawSearch = Route.useSearch();
   const search = validateShelfSearch(rawSearch);
   const data = Route.useLoaderData();
-  if (isSessionUnavailablePage(data)) return <SessionUnavailablePrompt signInHref={data.signInHref} />;
   const snapshot = 'shelfSnapshot' in data ? data.shelfSnapshot : undefined;
   const locale = getLocale();
   const viewer = useSession();

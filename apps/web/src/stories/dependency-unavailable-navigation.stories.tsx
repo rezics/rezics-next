@@ -68,7 +68,7 @@ function PrivateLoaderBoundary({ restored }: { restored: boolean }) {
       },
       errorComponent: (props) => <div data-original-error="">{props.error instanceof Error ? props.error.message : 'Reader failed'}</div>,
       component: function PrivatePage() {
-        const data = page.useLoaderData();
+        const data = page.useLoaderData() as { title: string };
         return <h1>{data.title}</h1>;
       },
     });

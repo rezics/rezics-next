@@ -287,7 +287,7 @@ async function documentResponse(request: Request, response: Response): Promise<R
     fallbackLocale: () => extractLocaleFromRequestAsync(request),
     stylesheet: async () => (await import('./styles.css?url')).default,
     nonce: (source) => requestNonce(source) ?? createNonce(source),
-    issuer: (env as Partial<SessionEnv>).AUTH_ISSUER,
+    ...((env as Partial<SessionEnv>).AUTH_ISSUER ? { issuer: (env as Partial<SessionEnv>).AUTH_ISSUER } : {}),
     development: import.meta.env.DEV,
   });
 }
