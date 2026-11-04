@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { act, createElement as h } from 'react';
 import { dirname } from 'node:path';
+import { planReads, platformRegistry } from '@rezics/composition';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import definitions from '../../../packages/definitions/release/rezics.json';
@@ -61,8 +62,12 @@ function row(n = 10, voice = false) {
 }
 function page() {
   const result = qualifiedRelationsPage();
+  const reading = subjectBody(result)!;
   result.subject = id(1);
-  Object.assign(subjectBody(result)!.subject, { id: id(1), type: 'wd:Q95074' });
+  Object.assign(reading.subject, { id: id(1), type: 'wd:Q95074' });
+  result.document = { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'identity' } }] };
+  const plan = planReads(platformRegistry, result.document, { subject: id(1), context: result.context });
+  result.reads = Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: reading }]));
   return result;
 }
 function visit(cursor?: string, failed = false): Extract<ConnectionVisit, { ok: true }> {

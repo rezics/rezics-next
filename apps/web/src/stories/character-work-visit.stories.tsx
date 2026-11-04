@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { pickText } from '@rezics/composition';
+import { pickText, planReads, platformRegistry } from '@rezics/composition';
 import release from '../../../../packages/definitions/release/rezics.json';
 import { OverviewContext, type OverviewValue } from '../features/pages/overview';
 import { SubjectConnections } from '../features/pages/subject-connections-view';
@@ -10,8 +10,12 @@ import { subjectBody } from '../features/pages/subject';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const page = qualifiedRelationsPage();
+const reading = subjectBody(page)!;
 page.subject = id(1);
-Object.assign(subjectBody(page)!.subject, { id: id(1), type: 'wd:Q95074' });
+Object.assign(reading.subject, { id: id(1), type: 'wd:Q95074' });
+page.document = { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'identity' } }] };
+const plan = planReads(platformRegistry, page.document, { subject: id(1), context: page.context });
+page.reads = Object.fromEntries(Object.keys(plan.reads).map((key) => [key, { status: 200, body: reading }]));
 const title = '海の物語と忘れられた街の長い作品名／跨媒體角色登場與原始來源的繁體中文長標題';
 const summary = (n: number, label: string, type = 'schema:Book') => ({
   id: id(n),
