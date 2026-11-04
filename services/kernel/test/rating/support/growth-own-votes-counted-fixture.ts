@@ -154,6 +154,10 @@ export async function createCountedGrowthFixture() {
          closure_state='legacy' WHERE route=$1 AND original=$2`,
       [sourceRoute, original, terminal, controlHome],
     );
+    await db.admin.query(
+      'UPDATE semantic.identity_epoch_dirty SET captured_revision=revision WHERE route=$1 AND original=$2',
+      [sourceRoute, original],
+    );
     const group = (
       await db.admin.query(
         'SELECT generation FROM semantic.identity_epoch_group WHERE partition_no=$1 AND terminal=$2',
@@ -386,8 +390,8 @@ export async function createCountedGrowthFixture() {
           }
           // Relevant pending authority is a negative observation, then the identical request retries after cleanup.
           await db.pool.query(
-            'UPDATE semantic.identity_epoch_group SET pending_job=$3,pending_epoch=published_epoch+1 WHERE partition_no=$1 AND terminal=$2',
-            [controlHome, terminal, pendingJob],
+            'UPDATE semantic.identity_epoch_control SET pending_job=$2,pending_epoch=published_epoch+1 WHERE partition_no=$1',
+            [controlHome, pendingJob],
           );
           try {
             counters.preparePhases!++;
@@ -396,8 +400,8 @@ export async function createCountedGrowthFixture() {
             expect(pending).toMatchObject({ status: 'preparing', reason: 'identity-pending', retry: 'same-input' });
           } finally {
             await db.pool.query(
-              'UPDATE semantic.identity_epoch_group SET pending_job=NULL,pending_epoch=NULL WHERE partition_no=$1 AND terminal=$2',
-              [controlHome, terminal],
+              'UPDATE semantic.identity_epoch_control SET pending_job=NULL,pending_epoch=NULL WHERE partition_no=$1',
+              [controlHome],
             );
             counters.cleanupStatements!++;
           }
@@ -557,6 +561,11 @@ export async function createCountedGrowthFixture() {
             `UPDATE rating.vote SET counted_target=NULL WHERE route=$1 AND voter_id=$2 AND question_id=$3
            AND target_id<>ALL($4::uuid[]) AND counted_target IS NOT NULL`,
             [voterRoute, actor.accountId, STANDARD_QUESTION_ID, [terminal, clear]],
+          );
+        if (axis === 'selected retained votes' || axis === 'identity/source/authority history')
+          await db.admin.query(
+            'UPDATE semantic.identity_epoch_dirty SET captured_revision=revision WHERE route=$1 AND original=ANY($2::uuid[])',
+            [sourceRoute, [original, ...originals.values()]],
           );
         // Count the exact physical prefix, not a global table size or returned DTO cardinality.
         const prefixes = {
