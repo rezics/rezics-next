@@ -233,7 +233,12 @@ test('upload failure retries only the owned file, removal stays a draft, and una
   await submit(boundary.controller, selected);
   boundary.requests[0]!.result.reject(new Error('Upload refused'));
   await settle();
-  expect(boundary.controller.snapshot()).toEqual({ phase: 'error', url: 'blob:owned-0', advice: 'allowed' });
+  expect(boundary.controller.snapshot()).toEqual({
+    phase: 'error',
+    url: 'blob:owned-0',
+    stage: 'reservation',
+    advice: 'allowed',
+  });
   expect(editor.snapshot().draft?.avatar).toEqual(initial.avatar);
   boundary.controller.retry();
   expect(boundary.requests[1]?.file).toBe(selected);
@@ -640,6 +645,7 @@ test('advice recovery preserves an uncertain reservation and its original upload
     now = 2_000;
     boundary.controller.retryAdvice();
     await settle();
+    await settle();
     expect(boundary.controller.snapshot()).toMatchObject({
       phase: 'error',
       url: originalUrl,
@@ -657,6 +663,7 @@ test('advice recovery preserves an uncertain reservation and its original upload
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     now = 5_000;
     boundary.controller.retryAdvice();
+    await settle();
     await settle();
     expect(boundary.controller.snapshot()).toMatchObject({
       phase: 'error',
