@@ -223,7 +223,11 @@ async function makeSurface(
       if (predicate()) return;
       await settle();
     }
-    throw new Error(`Timed out waiting for ${label}`);
+    throw new Error(
+      `Timed out waiting for ${label}; session=${JSON.stringify(client.getQueryData(['session']))}; ` +
+        `standing=${JSON.stringify(client.getQueryState(['realm-membership', realmId, subject]))}; ` +
+        `adviceReads=${joinAdviceReads.length}; standingReads=${standingReads.length}; text=${host.textContent}`,
+    );
   }
 
   async function updateConfig(next: SurfaceConfig, nextClient = client) {
