@@ -5,10 +5,7 @@ import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuati
 import { parseProofMetadata } from './verification.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
-/**
- * A worker's prompt is one argument, which Linux limits to 128 KiB: a 127 KB brief failed every launch with E2BIG
- * (2026-10-29). Briefs link evidence files instead of pasting them. Declared paths share this bound.
- */
+/** Prompt size diagnostic threshold. Large prompts still reach the provider and may meet the OS argument limit. */
 export const MAX_BRIEF_BYTES = defaultPolicy.brief.bytes;
 export const BRIEF_AUTHORITY_HINT = 'link an owner document section or quote the decision in the brief';
 export const SUPERSEDED_CHECK_HINT = 'remove superseded check instructions from the brief';
@@ -25,13 +22,21 @@ export function supersededCheckInstructionParagraph(markdown: string): boolean {
     );
 }
 
-export function assertBriefDispatchable(markdown: string, mainCheckout?: string): void {
-  if (markdown.includes('.temp/goal/'))
-    throw new Error(`brief must not reference .temp/goal/; ${BRIEF_AUTHORITY_HINT}`);
+export function assertBriefDispatchable(
+  markdown: string,
+  mainCheckout?: string,
+  byteBudget = MAX_BRIEF_BYTES,
+): string[] {
+  const warnings: string[] = [];
+  if (markdown.includes('.temp/goal/')) warnings.push(`references .temp/goal/; ${BRIEF_AUTHORITY_HINT}`);
   if (mainCheckout && markdown.includes(mainCheckout))
-    throw new Error(`brief must not reference the main checkout path; ${BRIEF_AUTHORITY_HINT}`);
+    warnings.push(`references the main checkout path; ${BRIEF_AUTHORITY_HINT}`);
   if (supersededCheckInstructionParagraph(markdown))
-    throw new Error(`brief holds superseded check instructions; ${SUPERSEDED_CHECK_HINT}`);
+    warnings.push(`contains superseded check instructions; ${SUPERSEDED_CHECK_HINT}`);
+  const bytes = Buffer.byteLength(markdown, 'utf8');
+  if (bytes > byteBudget)
+    warnings.push(`brief is ${bytes} bytes; diagnostic budget is ${byteBudget} bytes`);
+  return warnings;
 }
 
 function pathImpliesStories(path: string): boolean {
@@ -404,12 +409,7 @@ export function parseBrief(
   ownership: RiskOwnership,
   policy: BriefPolicy = defaultPolicy.brief,
 ): Brief {
-  const bytes = Buffer.byteLength(markdown, 'utf8');
-  if (bytes > policy.bytes)
-    throw new Error(
-      `brief is ${bytes} bytes; keep it under ${policy.bytes} bytes and link evidence files instead of pasting them`,
-    );
-  assertBriefDispatchable(markdown);
+  const lintWarnings = assertBriefDispatchable(markdown, undefined, policy.bytes);
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) throw new Error('brief needs Markdown front matter');
   const raw = object(Bun.YAML.parse(match[1]!), 'front matter');
@@ -482,6 +482,7 @@ export function parseBrief(
       throw new Error(`estimate.${key} must be a positive integer`);
   const continuationRequest = continuation(raw.continuation);
   const brief: Brief = {
+    ...(lintWarnings.length ? { lintWarnings } : {}),
     ...(continuationRequest ? { continuation: continuationRequest } : {}),
     goal,
     manager,

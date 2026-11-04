@@ -27,6 +27,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { runIntegration } from './integration-cli.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { WorkerStore } from './store.ts';
+import { assertBriefDispatchable, MAX_BRIEF_BYTES } from './briefs.ts';
 import { brief as fixtureBrief, harness, markdown, temporaryDirectory } from './test-support.ts';
 
 const NOW = Date.UTC(2026, 10, 2, 12, 0);
@@ -227,6 +228,36 @@ test('a refused brief moves to failed with its reason, and the owner gets one ev
   expect(events[0]!.event.kind).toBe('instruction');
   expect(events[0]!.event.summary).toContain('Backlog dispatch refused 2 brief(s): bad-one.md');
   expect(events[0]!.event.summary).toContain(failed);
+});
+
+test('dispatch reports prompt and brief lints while retaining the task in dispatched', async () => {
+  const f = fixture();
+  const dispatch = f.runtime.dispatch;
+  f.runtime.dispatch = async (file) => {
+    const result = await dispatch(file);
+    const taskId = typeof result === 'string' ? result : result.taskId;
+    return {
+      taskId,
+      lintWarnings: assertBriefDispatchable(readFileSync(file, 'utf8'), '/main/checkout'),
+    };
+  };
+  const content = [
+    markdown,
+    'See `.temp/goal/notes.md` and `/main/checkout`.',
+    '',
+    'A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
+    'x'.repeat(MAX_BRIEF_BYTES + 1),
+  ].join('\n');
+  brief(f.state, 'web', 'linted.md', 1, content);
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(sweep.dispatched).toHaveLength(1);
+  expect(sweep.dispatched[0]?.lintWarnings).toHaveLength(4);
+  expect(sweep.dispatched[0]?.lintWarnings?.join('\n')).toContain('diagnostic budget');
+  expect(sweep.refused).toEqual([]);
+  expect(existsSync(join(f.state, 'backlog', 'web', 'failed'))).toBe(false);
+  expect(readdirSync(join(f.state, 'backlog', 'web', 'dispatched'))).toContain('task-1-linted.md');
 });
 
 test('refused revisions with the same filename keep separate briefs and reasons', async () => {

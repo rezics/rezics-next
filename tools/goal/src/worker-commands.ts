@@ -264,6 +264,7 @@ export async function runWorkerCommand(
             [
               `Flow efficiency: ${result.flowEfficiency === null ? 'unknown' : `${(result.flowEfficiency * 100).toFixed(1)}%`}`,
               `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
+              `Over-budget launches by layer: ${JSON.stringify(result.overBudgetLaunchesByLayer)}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
               `Urgent: ${result.urgent.tasks.length} tasks; ${result.urgent.integrated} integrated (${result.urgent.tasks.join(', ') || 'none'}); excluded from throughput.`,
               ...result.stages.map((s) => `${s.stage}: total ${s.totalMs}ms, p50 ${s.p50Ms}ms, p90 ${s.p90Ms}ms`),

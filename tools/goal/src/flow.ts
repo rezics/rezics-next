@@ -15,7 +15,8 @@ export const FLOW_STAGES = [
   'integration',
   'promotion',
 ] as const;
-export type FlowStage = (typeof FLOW_STAGES)[number];
+type LifecycleStage = (typeof FLOW_STAGES)[number];
+export type FlowStage = LifecycleStage | 'manager';
 export type FlowEvent = {
   taskId: string;
   attempt: number;
@@ -87,7 +88,7 @@ const summarize = (values: number[]) => {
     p90Ms: percentile(sorted, 0.9),
   };
 };
-const startActions: Record<FlowStage, string[]> = {
+const startActions: Record<LifecycleStage, string[]> = {
   dispatch: ['dispatched'],
   start: ['requested'],
   check: ['requested'],
@@ -98,7 +99,7 @@ const startActions: Record<FlowStage, string[]> = {
   integration: ['requested'],
   promotion: ['requested'],
 };
-const endActions: Record<FlowStage, string[]> = {
+const endActions: Record<LifecycleStage, string[]> = {
   dispatch: ['started'],
   start: ['started'],
   check: ['released'],
@@ -111,7 +112,7 @@ const endActions: Record<FlowStage, string[]> = {
 };
 function attemptIntervals(
   events: FlowEvent[],
-  stage: FlowStage,
+  stage: LifecycleStage,
   starts: string[],
   ends: string[],
 ): {
@@ -169,7 +170,7 @@ function nextIntervalBoundary(
     );
 }
 
-function stageDurations(events: FlowEvent[], stage: FlowStage): number[] {
+function stageDurations(events: FlowEvent[], stage: LifecycleStage): number[] {
   if (stage === 'dispatch') {
     const dispatch = events.find((e) => e.stage === 'dispatch' && e.action === 'dispatched');
     const started =
@@ -193,7 +194,7 @@ export type FlowTask = Pick<Task, 'id'> & {
   terminalState?: Task['state'];
 };
 
-function terminalCloses(state: Task['state'] | undefined, stage: FlowStage): boolean {
+function terminalCloses(state: Task['state'] | undefined, stage: LifecycleStage): boolean {
   return (
     state === 'cancelled' ||
     state === 'stopped' ||
@@ -318,6 +319,18 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
   for (const e of ordered)
     if (e.stage === 'worker' && e.action === 'started')
       attemptCounts.set(e.taskId, (attemptCounts.get(e.taskId) ?? 0) + 1);
+  const overBudgetLaunchesByLayer: Record<string, number> = {};
+  for (const event of ordered) {
+    if (!['worker', 'manager'].includes(event.stage) || event.action !== 'started' || !event.detail) continue;
+    try {
+      const prompt = (JSON.parse(event.detail) as { prompt?: { overBudget?: unknown } }).prompt;
+      if (!Array.isArray(prompt?.overBudget)) continue;
+      for (const layer of new Set(prompt.overBudget.filter((name): name is string => typeof name === 'string')))
+        overBudgetLaunchesByLayer[layer] = (overBudgetLaunchesByLayer[layer] ?? 0) + 1;
+    } catch {
+      // Older or malformed event details do not contribute prompt measurements.
+    }
+  }
   const eligible = taskRows.filter((t) => t.elapsedMs !== null && t.workingMs !== null);
   const goals = [...new Set(tasks.map((t) => t.brief.goal))].map((goal) => {
     const members = tasks.filter((t) => t.brief.goal === goal);
@@ -379,6 +392,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     attemptsPerIntegrated: integrated.size
       ? [...integrated].reduce((n, id) => n + (attemptCounts.get(id) ?? 0), 0) / integrated.size
       : null,
+    overBudgetLaunchesByLayer,
   };
 }
 

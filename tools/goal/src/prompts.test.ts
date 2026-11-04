@@ -16,6 +16,7 @@ import {
   applyRenderedPrompt,
   DEFAULT_PROMPT_DIRECTORY,
   fillTemplate,
+  renderManagerOpening,
   renderWorkerPrompt,
   type RenderedPrompt,
 } from './prompts.ts';
@@ -172,6 +173,7 @@ test('every template renders within its byte budget for the six golden tasks, an
     expect(rendered.roleBytes).toBeLessThanOrEqual(roleBudget);
     expect(rendered.conditionBytes).toBeLessThanOrEqual(defaultPolicy.prompt.conditionBytes);
     expect(rendered.manifest.layers.total).toBeLessThanOrEqual(defaultPolicy.prompt.workerTotalBytes);
+    expect(rendered.manifest.overBudget).toEqual([]);
     if (name === 'dev-implementation.txt')
       expect(rendered.roleBytes + rendered.conditionPromptBytes).toBeLessThanOrEqual(5000);
     if (update) writeFileSync(path, rendered.prompt);
@@ -179,14 +181,41 @@ test('every template renders within its byte budget for the six golden tasks, an
   }
 });
 
-test('a render over a budget refuses the launch and names the measured size of each layer', () => {
+test('a worker render over its budgets launches with layer sizes, budgets and over-budget names', () => {
   const policy = {
     ...defaultPolicy,
+    brief: { ...defaultPolicy.brief, bytes: 1 },
     prompt: { ...defaultPolicy.prompt, workerRoleBytes: 10, conditionBytes: 10, workerTotalBytes: 10 },
   };
-  expect(() => renderWorkerPrompt({ task: worker(contract()), mainCheckout: MAIN, policy })).toThrow(
-    /prompt exceeds budget: role \d+\/10 bytes, conditions \d+\/10 bytes, brief \d+ bytes, total \d+\/10 bytes/,
-  );
+  const rendered = renderWorkerPrompt({ task: worker(contract()), mainCheckout: MAIN, policy });
+  expect(rendered.manifest.budgets).toEqual({ role: 10, conditions: 10, brief: 1, total: 10 });
+  expect(rendered.manifest.layers).toEqual({
+    role: rendered.roleBytes,
+    conditions: rendered.conditionBytes,
+    brief: rendered.briefBytes,
+    total: Buffer.byteLength(rendered.prompt),
+  });
+  expect(rendered.manifest.overBudget).toEqual(['role', 'conditions', 'brief', 'total']);
+});
+
+test('manager role templates keep their budget and oversized manager renders launch with measurements', () => {
+  const input = {
+    spec: { id: 'manager', goal: 'fixture', brief: 'Manage the fixture.', cwd: '/missing', engine: 'codex' as const },
+    backlogPath: '/backlog',
+    command: 'goal',
+  };
+  const standard = renderManagerOpening(input);
+  expect(standard.roleBytes).toBeLessThanOrEqual(defaultPolicy.prompt.managerRoleBytes);
+  const rendered = renderManagerOpening({
+    ...input,
+    policy: {
+      ...defaultPolicy,
+      prompt: { ...defaultPolicy.prompt, managerRoleBytes: 1, managerOpeningBytes: 1 },
+    },
+  });
+  expect(rendered.manifest.layers).toEqual({ role: rendered.roleBytes, opening: rendered.openingBytes });
+  expect(rendered.manifest.budgets).toEqual({ role: 1, opening: 1 });
+  expect(rendered.manifest.overBudget).toEqual(['role', 'opening']);
 });
 
 test('a minimal-verification launch of a brief that requires browser checks records deferredAcceptance and names that item', () => {
@@ -230,12 +259,12 @@ test('a minimal-verification launch of a brief that requires browser checks reco
   }
 });
 
-test('dispatch refuses a brief that references .temp/goal/, an absolute main-checkout path, or a superseded check-instruction paragraph', () => {
-  expect(() => assertBriefDispatchable('See `.temp/goal/notes.md`.')).toThrow(BRIEF_AUTHORITY_HINT);
-  expect(() => assertBriefDispatchable(`Keep files under ${MAIN}.`, MAIN)).toThrow(BRIEF_AUTHORITY_HINT);
-  expect(() =>
-    assertBriefDispatchable('A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.'),
-  ).toThrow(SUPERSEDED_CHECK_HINT);
+test('dispatch lints report local state, main checkout and superseded check instructions without refusal', () => {
+  expect(assertBriefDispatchable('See `.temp/goal/notes.md`.')[0]).toContain(BRIEF_AUTHORITY_HINT);
+  expect(assertBriefDispatchable(`Keep files under ${MAIN}.`, MAIN)[0]).toContain(BRIEF_AUTHORITY_HINT);
+  expect(
+    assertBriefDispatchable('A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.')[0],
+  ).toContain(SUPERSEDED_CHECK_HINT);
 });
 
 test('a new attempt record holds the prompt manifest, and attempts --json exports it', async () => {

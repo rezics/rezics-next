@@ -16,7 +16,15 @@ import {
 } from './verification.ts';
 import { acceptanceRequirements, devProductBrief } from './briefs.ts';
 import type { AttemptRef } from './contracts.ts';
-import type { AcceptanceRequirement, Attempt, Brief, PromptManifest, Task } from './types.ts';
+import type {
+  AcceptanceRequirement,
+  Attempt,
+  Brief,
+  PromptBudgetManifest,
+  PromptLayer,
+  PromptManifest,
+  Task,
+} from './types.ts';
 
 export const DEFAULT_PROMPT_DIRECTORY = join(import.meta.dir, '../prompts');
 export const CONDITION_IDS = [
@@ -365,16 +373,6 @@ function promptView(input: WorkerPromptInput): PromptView {
   };
 }
 
-function budgetMessage(layers: { name: string; bytes: number; budget?: number }[]): string {
-  return layers
-    .map((layer) =>
-      layer.budget === undefined
-        ? `${layer.name} ${layer.bytes} bytes`
-        : `${layer.name} ${layer.bytes}/${layer.budget} bytes`,
-    )
-    .join(', ');
-}
-
 function loadCondition(
   directory: string,
   id: ConditionId,
@@ -469,17 +467,23 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
   const briefBytes = bytes(briefText);
   const totalBytes = bytes(prompt);
   const layers = [
-    { name: 'role', bytes: roleBytes, budget: roleBudget },
-    { name: 'conditions', bytes: conditionBytes, budget: policy.prompt.conditionBytes },
-    { name: 'brief', bytes: briefBytes },
-    { name: 'total', bytes: totalBytes, budget: policy.prompt.workerTotalBytes },
+    { name: 'role' as const, bytes: roleBytes, budget: roleBudget },
+    { name: 'conditions' as const, bytes: conditionBytes, budget: policy.prompt.conditionBytes },
+    { name: 'brief' as const, bytes: briefBytes, budget: policy.brief.bytes },
+    { name: 'total' as const, bytes: totalBytes, budget: policy.prompt.workerTotalBytes },
   ];
-  if (
-    roleBytes > roleBudget ||
-    conditionBytes > policy.prompt.conditionBytes ||
-    totalBytes > policy.prompt.workerTotalBytes
-  )
-    throw new Error(`prompt exceeds budget: ${budgetMessage(layers)}`);
+  const budgetManifest = {
+    layers: Object.fromEntries(layers.map(({ name, bytes }) => [name, bytes])) as {
+      role: number;
+      conditions: number;
+      brief: number;
+      total: number;
+    },
+    budgets: Object.fromEntries(layers.map(({ name, budget }) => [name, budget])) as Partial<
+      Record<PromptLayer, number>
+    >,
+    overBudget: layers.filter(({ bytes, budget }) => bytes > budget).map(({ name }) => name),
+  };
   return {
     prompt,
     deferredAcceptance: deferred,
@@ -493,7 +497,7 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
       conditions: Object.fromEntries(renderedConditions.map((item) => [item.id, item.sha])),
       brief: gitBlobSha(task.brief.markdown),
       policy: policyHash(policy),
-      layers: { role: roleBytes, conditions: conditionBytes, brief: briefBytes, total: totalBytes },
+      ...budgetManifest,
     },
   };
 }
@@ -547,8 +551,7 @@ export function renderManagerOpening(input: {
   command: string;
   policy?: ControlPolicy | undefined;
   promptDirectory?: string | undefined;
-  warn?: (message: string) => void;
-}): { prompt: string; roleBytes: number; openingBytes: number } {
+}): { prompt: string; roleBytes: number; openingBytes: number; manifest: PromptBudgetManifest } {
   const policy = input.policy ?? defaultPolicy;
   const directory = input.promptDirectory ?? DEFAULT_PROMPT_DIRECTORY;
   const roleFile = readTemplate(join(directory, 'manager.md'));
@@ -574,18 +577,17 @@ export function renderManagerOpening(input: {
   const prompt = collapse([roleText, goalText, input.spec.brief, input.continuationText].filter(Boolean).join('\n\n'));
   const roleBytes = bytes(roleText);
   const openingBytes = bytes(prompt);
-  if (roleBytes > policy.prompt.managerRoleBytes)
-    throw new Error(
-      `prompt exceeds budget: ${budgetMessage([
-        { name: 'role', bytes: roleBytes, budget: policy.prompt.managerRoleBytes },
-        { name: 'opening', bytes: openingBytes, budget: policy.prompt.managerOpeningBytes },
-      ])}`,
-    );
-  if (openingBytes > policy.prompt.managerOpeningBytes)
-    (input.warn ?? console.warn)(
-      `manager opening is ${openingBytes} bytes; budget is ${policy.prompt.managerOpeningBytes}`,
-    );
-  return { prompt, roleBytes, openingBytes };
+  const layers = { role: roleBytes, opening: openingBytes };
+  const budgets = {
+    role: policy.prompt.managerRoleBytes,
+    opening: policy.prompt.managerOpeningBytes,
+  };
+  const manifest: PromptBudgetManifest = {
+    layers,
+    budgets,
+    overBudget: (Object.keys(layers) as ('role' | 'opening')[]).filter((layer) => layers[layer] > budgets[layer]),
+  };
+  return { prompt, roleBytes, openingBytes, manifest };
 }
 
 export function applyRenderedPrompt(

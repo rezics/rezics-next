@@ -567,13 +567,13 @@ protocol or representation meaning; they are not operator limits.
 | `policy.launchSmoke.launchErrors`                     | `8`                                  | Launch errors retained in a smoke evidence snapshot.                                                                                                                                        |
 | `policy.launchSmoke.resultCharacters`                 | `400`                                | Failed resumed-worker result excerpt characters.                                                                                                                                            |
 | `policy.launchSmoke.drainWaitMs`                      | `5000`                               | Wait for an owned worker start to settle during smoke cleanup (ms).                                                                                                                         |
-| `policy.prompt.workerRoleBytes`                       | `3500`                               | Worker role-template budget (UTF-8 bytes).                                                                                                                                                  |
-| `policy.prompt.conditionBytes`                        | `1500`                               | Combined condition-template body budget in one prompt (UTF-8 bytes).                                                                                                                        |
-| `policy.prompt.workerTotalBytes`                      | `20000`                              | Worker prompt total budget (UTF-8 bytes).                                                                                                                                                   |
-| `policy.prompt.managerRoleBytes`                      | `5000`                               | Manager role-template budget (UTF-8 bytes).                                                                                                                                                 |
-| `policy.prompt.managerOpeningBytes`                   | `30000`                              | Manager opening budget (UTF-8 bytes); oversize openings warn until Goal files finish migrating.                                                                                             |
-| `policy.prompt.researchRoleBytes`                     | `2500`                               | Research role-template budget (UTF-8 bytes).                                                                                                                                                |
-| `policy.brief.bytes`                                  | `12288`                              | Maximum brief and owner-decision input size (UTF-8 bytes).                                                                                                                                  |
+| `policy.prompt.workerRoleBytes`                       | `3500`                               | Worker role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                        |
+| `policy.prompt.conditionBytes`                        | `1500`                               | Combined condition-template measurement budget in one prompt (UTF-8 bytes); overruns do not block launch.                                                                                   |
+| `policy.prompt.workerTotalBytes`                      | `20000`                              | Worker prompt total measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                          |
+| `policy.prompt.managerRoleBytes`                      | `5000`                               | Manager role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                       |
+| `policy.prompt.managerOpeningBytes`                   | `30000`                              | Manager opening measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                             |
+| `policy.prompt.researchRoleBytes`                     | `2500`                               | Research role-template measurement budget (UTF-8 bytes); overruns do not block launch.                                                                                                      |
+| `policy.brief.bytes`                                  | `12288`                              | Brief lint threshold (UTF-8 bytes); over-budget briefs dispatch with a warning.                                                                                                             |
 | `policy.brief.pathCharacters`                         | `65536`                              | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                            | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated              | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
@@ -935,7 +935,8 @@ integration, attempts per integrated task, and the length and oldest age of the 
 and promotion queues. Its guard ledger prices registered attempt endings and landing refusals over seven days by
 firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
 firings and under 10% rewritten are marked `repairable in place`. The hourly report groups guard endings by GuardId.
-Missing lifecycle events stay unknown; reports do not backfill old tasks. Check-slot request,
+It also counts launched worker and manager prompts over budget by layer. Missing lifecycle
+events stay unknown; reports do not backfill old tasks. Check-slot request,
 acquisition and release events are distinct, so slot waiting is excluded from worker working time. The stage with the
 most waiting is named as the bottleneck.
 
@@ -1223,11 +1224,14 @@ using `worker-result.schema.json`, including any concrete blocker and the approa
 Workers, managers and researchers receive prompts rendered from `tools/goal/prompts/`: `worker.md`, `manager.md`,
 `research.md`, and `conditions/<id>.md`. The renderer reads those files from disk at each launch, cached by
 modification time and size. Budgets are `policy.prompt` (worker role 3,500 bytes, conditions 1,500, worker total
-20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. A render
-over a budget refuses the launch and names each layer's measured size; a manager opening over its budget logs a
-warning until Goal files finish migrating. Each attempt records a prompt manifest: git blob SHAs of `AGENTS.md`, the
-role template, each condition and the brief; a hash of the policy object; and rendered bytes per layer.
-`attempts --json` exports it.
+20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. Worker
+and manager renders always launch when a size exceeds its budget. Their manifests retain per-layer sizes, budgets and
+over-budget layer names; hourly flow reports count over-budget launches by layer. The brief lints for byte size,
+`.temp/goal/`, main-checkout paths and superseded check instructions are stored on the task and included in backlog
+dispatch results. Committed-template golden renders still assert role and condition budgets so template growth is
+caught during development. Each worker attempt records the git blob SHAs of `AGENTS.md`, the role template, each
+condition and the brief, plus the policy hash and layer measurements; manager sessions retain their opening
+measurements. `attempts --json` exports worker manifests.
 Decision: task-specific worker guidance renders after the contract to keep the reusable role within its byte budget while retaining the frozen repair line in the role template.
 
 ### Research
