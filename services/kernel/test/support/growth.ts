@@ -57,6 +57,8 @@ import {
   profileStatements,
   statementAttributions,
   statementOccurrences,
+  type FoldedStatementOccurrences,
+  type RawStatementOccurrences,
   type StatementOccurrences,
 } from './growth-report.ts';
 import { appendGrowthProfile, growthProfileExportMode, type GrowthProfileExportMode } from './growth-profile-output.ts';
@@ -430,6 +432,18 @@ export type GrowthReport = {
   readonly shadow: Readonly<Record<Metric, ShadowVerdict>>;
   readonly counted?: Readonly<Record<string, { readonly limits?: number; readonly bounds?: Bound }>>;
 };
+
+type GrowthReportWithOccurrences<T extends StatementOccurrences> = Omit<GrowthReport, 'samples'> & {
+  readonly samples: readonly (Omit<GrowthReport['samples'][number], 'occurrenceRepetitions'> & {
+    readonly occurrenceRepetitions: readonly T[];
+  })[];
+};
+
+/** Report type for the default raw capture mode, whose occurrence records retain native documents. */
+export type RawGrowthReport = GrowthReportWithOccurrences<RawStatementOccurrences>;
+
+/** Report type for folded capture mode, whose occurrence records retain bounded summaries only. */
+export type CostFoldedGrowthReport = GrowthReportWithOccurrences<FoldedStatementOccurrences>;
 
 export type ShadowVerdict = (
   | SeriesClassification
@@ -1031,7 +1045,19 @@ async function assertRunTransactionsClosed(run: Awaited<ReturnType<typeof captur
     await assertMeasuredTransactionsSettled(target, backends);
 }
 
-export async function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport> {
+export function checkGrowth(
+  db: GrowthDatabase,
+  check: GrowthCheck & { readonly captureMode: 'cost-folded' },
+): Promise<CostFoldedGrowthReport>;
+export function checkGrowth(
+  db: GrowthDatabase,
+  check: GrowthCheck & { readonly captureMode?: 'raw' },
+): Promise<RawGrowthReport>;
+export function checkGrowth(db: GrowthDatabase, check: GrowthCheck): Promise<GrowthReport>;
+export async function checkGrowth(
+  db: GrowthDatabase,
+  check: GrowthCheck,
+): Promise<GrowthReport | RawGrowthReport | CostFoldedGrowthReport> {
   if (check.captureMode !== undefined && check.captureMode !== 'raw' && check.captureMode !== 'cost-folded')
     throw new TypeError(`${check.name}: captureMode must be 'raw' or 'cost-folded'`);
   if (check.captureMode === 'cost-folded' && check.aggregateCaptures !== undefined)
