@@ -139,8 +139,7 @@ test('a failed inventory cursor keeps its retry wait while a deliberate cursor-f
     async (cursor) => {
       reads.push(cursor);
       if (reads.length === 1) return { ok: true, value: { collections: [initial], next: 'exact-next-page' } };
-      if (reads.length === 2)
-        return { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '30' } };
+      if (reads.length === 2) return { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '30' } };
       return { ok: true, value: { collections: [receipt], next: null } };
     },
     undefined,

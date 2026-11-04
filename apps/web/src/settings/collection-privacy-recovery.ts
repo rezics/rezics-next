@@ -103,10 +103,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   private commandWaiting = () => this.commandRetryAt > this.now();
   private currentReadWaiting = () => this.currentReadRetryAt > this.now();
   private retainCommandWait = (failure: NativePreferenceFailure | undefined) => {
-    this.commandRetryAt = Math.max(
-      this.commandRetryAt,
-      preferenceRetryDeadline(failure?.retryAfter, this.now()),
-    );
+    this.commandRetryAt = Math.max(this.commandRetryAt, preferenceRetryDeadline(failure?.retryAfter, this.now()));
   };
   private retainCurrentReadWait = (failure: NativePreferenceFailure | undefined) => {
     this.currentReadRetryAt = Math.max(
