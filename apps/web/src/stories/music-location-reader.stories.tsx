@@ -1,16 +1,31 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { MusicLocationReader } from '../features/catalogue/music-location-reader/view';
+import type { MusicLocationTransport } from '../features/catalogue/music-location-reader/model';
 import { musicLocationExample, type MusicLocationExample } from '../features/catalogue/music-location-reader/examples';
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 
-function MusicLocationStory({ scenario = 'admitted-place' }: { scenario?: MusicLocationExample }) {
+type Scenario = MusicLocationExample | 'retained-failed-navigation' | 'current-refresh';
+function MusicLocationStory({ scenario = 'admitted-place' }: { scenario?: Scenario }) {
   const locale = getLocale();
-  const fixture = useMemo(() => musicLocationExample(scenario, locale), [scenario, locale]);
+  const [recovery, setRecovery] = useState<{ generation: number; stream?: string | undefined }>({ generation: 0 });
+  const base =
+    scenario === 'retained-failed-navigation' || scenario === 'current-refresh' ? 'admitted-place' : scenario;
+  const fixture = useMemo(() => musicLocationExample(base, locale), [base, locale, recovery.generation]);
+  const transport = useMemo<MusicLocationTransport>(
+    () => async (address) => {
+      if (scenario === 'retained-failed-navigation' && address.stream === 'in:schema:location')
+        return { ok: false, reason: 'unavailable' };
+      if (scenario === 'current-refresh' && recovery.generation === 0 && address.stream === 'in:schema:location')
+        return { ok: false, reason: 'stale' };
+      return fixture.read(address);
+    },
+    [fixture, scenario, recovery.generation],
+  );
   const title = Object.values(fixture.public.subject.labels)[0] ?? 'Music context';
   return (
     <PatternStory path={`/subjects/${fixture.address.id}/music-context`} visitor="Signed Out">
@@ -23,7 +38,9 @@ function MusicLocationStory({ scenario = 'admitted-place' }: { scenario?: MusicL
             source={fixture.source}
             reader={null}
             locale={locale}
-            transport={fixture.read}
+            transport={transport}
+            refresh={async (stream) => setRecovery({ generation: recovery.generation + 1, stream })}
+            restoreStream={recovery.stream}
           />
         </main>
       </AppShell>
@@ -55,7 +72,7 @@ export const AdmittedPlace: Story = {
     const target = await canvas.findByRole('link', { name: m.album_tracks_open() });
     await expect(target).toHaveAttribute('href', expect.stringContaining('/en/subjects/'));
     await expect(target).toHaveAttribute('target', '_blank');
-    await expect(canvas.getByText('Venue for')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Venue for' })).toBeVisible();
     await expect(canvas.getByText(/2024/)).toBeVisible();
   },
 };
@@ -66,3 +83,21 @@ export const SparseSubject: Story = { args: { scenario: 'sparse' } };
 export const HiddenDestination: Story = { args: { scenario: 'hidden-target' } };
 export const UnsupportedType: Story = { args: { scenario: 'unsupported' } };
 export const RetiredObservation: Story = { args: { scenario: 'retired' } };
+
+export const RetainedFailedNavigation: Story = {
+  args: { scenario: 'retained-failed-navigation' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Venue for' }));
+    await expect(canvas.getByRole('button', { name: m.music_location_retry() })).toBeVisible();
+    await expect(canvas.getByText(m.music_location_retained_help())).toBeVisible();
+  },
+};
+export const CurrentSubjectRefresh: Story = {
+  args: { scenario: 'current-refresh' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Venue for' }));
+    await expect(canvas.getByRole('button', { name: m.music_location_refresh() })).toBeVisible();
+  },
+};
