@@ -4,7 +4,6 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { converter_revision as selectedFamilyRevision } from '@rezics/conversion/cross-media-entities';
 import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
 import { extractBangumiSubjectNames } from '../../../packages/conversion/src/bangumi-subject-names.ts';
 import {
@@ -13,7 +12,7 @@ import {
   seedCrossMedia,
   type CrossMediaPort,
 } from '../src/cross-media-seed.ts';
-import { createSourceRegistration } from '../src/source-registry.ts';
+import { bangumiCrossMediaSeedRevision, createSourceRegistration } from '../src/source-registry.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const bookId = 990401;
@@ -151,7 +150,7 @@ test('selected Book names stay source-bound through ordinary and default imports
     expect(firstNames.every((command) => command.statement.property.id === 'schema:name')).toBe(true);
     expect(firstNames.every((command) => command.source.source === crossMediaAliases.bangumi)).toBe(true);
     expect(firstNames.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
-    expect(firstNames.every((command) => command.source.converter_revision === selectedFamilyRevision)).toBe(true);
+    expect(firstNames.every((command) => command.source.converter_revision === bangumiCrossMediaSeedRevision)).toBe(true);
     expect(firstNames.every((command) => command.source.digest === firstNames[0]!.source.digest)).toBe(true);
     expect(
       firstNames.every((command) => {
