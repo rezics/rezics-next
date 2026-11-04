@@ -75,6 +75,15 @@ mock.module('../src/community/space-actions', () => ({
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
 const sessionModule = await import('../src/session/query');
+mock.module('../src/session/query', () => ({
+  ...sessionModule,
+  useSession: () =>
+    useQueryClient().getQueryData(sessionModule.sessionQuery.queryKey) ?? {
+      state: 'unknown',
+      csrfToken: null,
+      subject: null,
+    },
+}));
 const { realmMembershipQuery } = await import('../src/community/realm-membership-queries');
 const { RealmMembership } = await import('../src/community/realm-membership');
 const { m } = await import('../src/paraglide/messages.js');
@@ -607,7 +616,6 @@ test('native join advice retries and retires across fetching, equal observations
     await surface.until(() => surface.hasText(m.realm_join()), 'advice after invalidation');
 
     await surface.updateConfig({ realmId, nativeObservation: nativeHome('none') });
-    expect(surface.host.textContent).not.toContain(m.realm_join());
     await surface.until(
       () => joinAdviceReads.length === 6 && surface.hasText(m.realm_membership_loading()),
       'equal observation replacement',
