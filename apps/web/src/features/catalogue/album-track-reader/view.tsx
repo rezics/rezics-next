@@ -119,7 +119,12 @@ export function AlbumTrackWindow({
     setBusy(false);
     if (result.ok) {
       setPage(result);
-      if (keyboard && trigger === document.activeElement) focusHeading();
+      if (
+        keyboard &&
+        trigger &&
+        (trigger === document.activeElement || (!trigger.isConnected && document.activeElement === document.body))
+      )
+        focusHeading();
     } else {
       setFailure(result);
       if (result.reason !== 'unavailable') setPage(undefined);
