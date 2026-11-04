@@ -2141,14 +2141,25 @@ The [diary contract](../../../../docs/library-consumption-diary.md) owns exact H
 Two bounded page observations fence revision/retirement races around one batched current Semantic summary read.
 Each fetch returns at most 26 compact rows. There are no per-occurrence session/profile reads or subject scans.
 Native summary authorization controls labels; private stored subject IDs do not disclose catalogue fields.
-Audit dates are explicit and historical metadata is unavailable until its separate owner is installed.
+Audit dates are explicit. Installed historical dates and private assessment retain their independent journal revision
+and meaning. Each observation probes nine optional column keys; incomplete date installation yields unavailable dates,
+and unsupported assessment installation/meaning omits the field instead of fabricating a clear. Native progress and
+accepted historical profile presentation remain readable independently. Reflection stays on addressed journal detail.
+
+Reported-year summary and filtered diary share the existing all-time source generation. Even reflection/assessment
+correction invalidates a filtered continuation while leaving year membership unchanged; original command receipt replay
+changes neither. Missing schema/coverage is unavailable. Request abort checks fence both observations, slot creation
+and final serialization. [Inclusive composed cost](../../../../docs/library-consumption-statistics.md#composed-occurrence-continuity-cost)
+charges all native pools, repeated authority, indexed counters, receipts/retries, nine-key catalog probes, serialization,
+locks and lifecycle/cleanup work separately from population-dependent index blocks and background campaigns.
 
 `diary_navigation` retains at most eight keys per owner, with absolute 15-minute expiry, native caller and partition
 binding, indexed cancellation and reuse of expired slots. Keys retain no facts or permission result. The account
 lock serializes allocation with terminal fencing. The existing erasure graph appends an indexed navigation phase
 without shifting durable phase numbers; its native probe includes the new store. Expired metadata remains bounded
 and is reclaimed in place or by cancellation/terminal cleanup. Shared erasure closure remains with its owners.
-Focused scenarios live in `test/library/diary.test.ts`; broader acceptance remains deferred to integration.
+Focused scenarios live in `test/library/diary.test.ts` and `test/library/diary-continuity.test.ts`; native three-scale,
+frozen acceptance, full Kernel and rendered review remain controller-owned and unexecuted here.
 
 ### Session page
 
@@ -2483,7 +2494,7 @@ No Search registration, index, Home engine or hydration authorization is impleme
   even without an indexable witness. Decision: full pages continue after the last examined key; short pages end,
   allowing one final empty page at an exact multiple. Rebuilding starts again at null using current native truth.
 - Available items are `status:'indexable'` plus `value:{kind:'collection',key,revision,title,description,
-  presentationKind,coverMediaId,membershipKind,output}`. Curated output is null. Saved dynamic output is only
+presentationKind,coverMediaId,membershipKind,output}`. Curated output is null. Saved dynamic output is only
   `{route,collectionId,generation}`, verified by the installed `collection-source-output-head.sql` Publication
   witness, its Core commit and current source fence. No rule, personal population, private totals or members cross.
 - Hidden/deleted/absent keys return `status:'withdrawn'` with the key alone. Public dynamic rows without a current

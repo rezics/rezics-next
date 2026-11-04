@@ -120,3 +120,34 @@ Web performs one summary call per page visit; the summary's reader remains bound
 owner-index reads. Its design-visible source/statement bound is documented above: constant database rows and
 statements, with logarithmic index seek blocks as the owner count grows. This Web increment adds no summary engine
 query, projection or worker. Three-scale growth acceptance remains with the normal dev verifier and was not run here.
+
+## Composed occurrence continuity cost
+
+Reported-year summary and filtered diary now expose this same maintained source generation. Counts preserve their
+existing meanings; reflection/assessment corrections change currentness without changing membership, and exact
+original receipt replay changes neither. A summary revision and each occurrence's journal revision have separate
+purposes: compare summary generations before displaying a bucket as current, and use the addressed journal revision
+only for that occurrence's correction. Missing year coverage remains unavailable, including empty requested buckets.
+
+For diary cap L=25, the complete reader adds two nine-key PostgreSQL catalog observations (at most 18 attribute rows)
+to its two indexed source pages (at most 52 rows), two coverage/head probes, native account/partition authority and
+one batch of at most 50 distinct Subject/version IDs. Include every nested Access/Semantic pool, its repeated source
+observations and locks, operational-time mint/release, connection transactions and deadline admission. Catalog probes
+are fixed-key work; session and owner B-tree seek blocks grow with population even while returned rows and statements
+stay bounded. Serialization retains two compact observations plus bounded summary fields, 2,048 input token characters
+and 65,536 response bytes. It never serializes reflection, history or whole source rows to detect optional installation.
+
+Correction pays the existing exact source lock, journal CAS, owner fencing, command dispatch and immutable receipt,
+the all-time old/new owner/Subject counter transitions, and native indexes. Effective finish/state changes also pay
+the existing at-most-four reported-year bucket/Subject transitions; reflection/assessment-only changes skip those
+transitions. Retry still pays admission, authority and original-receipt lookup/serialization across all native pools;
+only a new accepted source mutation adds receiving work. Archive/import recovery retains its own reviewed operands,
+receipt identity and writers; V1/V2 absence, fixed V3 assessment meaning and inert V4 evidence are unchanged.
+
+Fresh multi-page navigation allocates one of eight owner slots; continuation probes its exact key without extending
+its lifetime. Cancellation deletes one original key; absolute expiry reuses one slot, and terminal cleanup deletes at
+most eight indexed keys per page. Source retirement/erasure additionally pays all existing child/history pages,
+receipts, counter transitions, locks, dispatch and background lifecycle work. Those campaigns grow with retained
+source/history; a fixed navigation cap does not make the whole journey constant. Three-scale native execution at
+64/512/4096, retained handles, rendered review, frozen acceptance and full Kernel checks remain controller-owned and
+unexecuted here. These are inclusive source bounds, not measured rows, blocks, statements, bytes or timing results.

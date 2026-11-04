@@ -79,7 +79,9 @@ complete. A missing schema, marker, counter coverage or preparation is unavailab
 ## Delivery and Web integration
 
 `currentness:{state:'snapshot',revision}` binds counts and coverage to one admitted database statement snapshot.
-The opaque whole-owner revision changes when year derivation changes; `empty-v1` identifies no initialized source.
+Decision: the opaque whole-owner revision is the installed all-time source generation, so every accepted native source
+mutation, including private reflection/assessment correction, invalidates an older occurrence navigation basis without
+rebuilding unchanged year membership. Original receipt replay preserves the generation. `empty-v1` identifies no source.
 It is not a journal or progress precondition, and is not numerically ordered. The reader holds the current owner
 account share lock through response preparation and rechecks native standing/authentication floor before commit.
 It rereads the coverage/maintenance heads at delivery and refuses a changed revision or fence. It checks deadline and abort immediately before returning the encoded response, with no intervening asynchronous

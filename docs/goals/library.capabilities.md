@@ -158,6 +158,16 @@ query shape and lifecycle. Focused typed-client scenarios extend `services/kerne
 Web318 continued by Web142 remains the history interface owner. Frozen acceptance, Web integration and executed
 whole-caller native64/512/4096 growth remain deferred to integration.
 
+Composed continuity uses the installed all-time source generation for both summary and filtered diary, including
+reflection/assessment corrections that leave membership unchanged. Exact original-key receipt replay preserves
+currentness and the addressed occurrence; null/zero and independent journal/progress revisions stay distinct.
+Unfiltered history tolerates absent optional journal columns with unavailable dates and omitted unsupported assessment.
+The existing Web diary guards unavailable dates. `services/kernel/test/library/diary-continuity.test.ts` adds persisted
+repeats, correction across buckets, private values, historical profile display, concealment, eight-slot exhaustion,
+original cancellation, absolute expiry and terminal cleanup. Inclusive source cost is in the
+[statistics contract](../library-consumption-statistics.md#composed-occurrence-continuity-cost); native three-scale,
+frozen, full-Kernel and rendered review remain controller-owned, with no execution result claimed here.
+
 ## Capability map
 
 ### 1. Shared curated and built-in Collections

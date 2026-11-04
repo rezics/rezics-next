@@ -10,18 +10,30 @@ export type DiaryOccurrence = {
   recordedStartedAt: string;
   recordedCompletedAt: string | null;
   /** Read from the installed journal owner; unknown dates stay null, with their original precision. */
-  reportedDates: { availability: 'available' } & Pick<ProgressSessionJournal, 'revision' | 'startDate' | 'finishDate'>;
-  assessment: ProgressSessionJournalAssessment;
+  reportedDates:
+    | ({ availability: 'available' } & Pick<ProgressSessionJournal, 'revision' | 'startDate' | 'finishDate'>)
+    | { availability: 'unavailable' };
+  /** Omitted when the optional assessment columns or their meaning are unsupported. Null units are a clear. */
+  assessment?: ProgressSessionJournalAssessment;
   subject: DiarySubject | null;
   versionSubject: DiarySubject | null;
 };
 
 /** A bounded, authorized label only; full catalogue and accepted progress meaning belong to detail. */
-export type DiarySubject = { id: string; label: string | null; language: string | null };
+export type DiarySubject = {
+  id: string;
+  label: string | null;
+  language: string | null;
+};
 
 /** An omitted month selects the whole year; unallocated selects only year precision. */
 export type DiaryFilter = { year: number; month?: number | 'unallocated' };
-export type DiaryQuery = { limit?: number; cursor?: string; year?: number; month?: number | 'unallocated' };
+export type DiaryQuery = {
+  limit?: number;
+  cursor?: string;
+  year?: number;
+  month?: number | 'unallocated';
+};
 
 export type DiaryPage = {
   occurrences: DiaryOccurrence[];

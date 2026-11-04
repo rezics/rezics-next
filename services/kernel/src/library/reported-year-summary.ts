@@ -43,7 +43,14 @@ type Head = {
   unsupported: string;
   revision: string;
 };
-type Bucket = { bucket: number; completed: string; subjects: string; unknown: string; month: string; day: string };
+type Bucket = {
+  bucket: number;
+  completed: string;
+  subjects: string;
+  unknown: string;
+  month: string;
+  day: string;
+};
 
 // All keys are addressed. Completeness is equality against the installed all-time
 // source counter, never an inferred empty owner or a migration's synthetic marker.
@@ -54,7 +61,7 @@ const headSql = `SELECT i.complete,
   COALESCE(a.retained_sessions,0)::text AS retained,
   COALESCE(y.missing_finish,0)::text AS missing,
   COALESCE(y.unsupported_finish,0)::text AS unsupported,
-  COALESCE(y.revision::text,'empty-v1') AS revision
+  COALESCE(a.revision::text,'empty-v1') AS revision
 FROM library.consumption_statistics_installation i
 LEFT JOIN library.reported_year_owner y ON y.route=$1 AND y.account_id=$2
 LEFT JOIN library.consumption_statistics_owner a ON a.route=$1 AND a.account_id=$2
@@ -66,10 +73,23 @@ FROM library.reported_year_bucket WHERE route=$1 AND account_id=$2 AND year=$3 O
 
 /** Shared coverage and source revision for summary-to-diary navigation; no preparation. */
 export async function reportedYearRevision(client: Pick<PoolClient, 'query'>, route: number, accountId: string) {
-  const head = (await client.query<Head>(headSql, [route, accountId])).rows[0];
-  if (!head?.complete || !head.ready || head.initialized !== head.retained)
-    throw new ProblemError('dependency_unavailable');
-  return head.revision;
+  try {
+    const head = (await client.query<Head>(headSql, [route, accountId])).rows[0];
+    if (!head?.complete || !head.ready || head.initialized !== head.retained)
+      throw new ProblemError('dependency_unavailable');
+    // The all-time source generation also receives reflection/assessment corrections.
+    // Membership counters stay unchanged, but an old occurrence revision cannot masquerade as current.
+    return head.revision;
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error.code === '42P01' || error.code === '42703')
+    )
+      throw new ProblemError('dependency_unavailable');
+    throw error;
+  }
 }
 
 function counts(row?: Bucket): ReportedYearCounts {
@@ -134,7 +154,10 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }) {
             await authorize();
             // One statement snapshot covers both heads and the 14 fixed keys. A
             // later source mutation is a later snapshot, never partial receiving.
-            const result = await client.query<{ head: Head; buckets: Bucket[] }>(
+            const result = await client.query<{
+              head: Head;
+              buckets: Bucket[];
+            }>(
               `WITH head AS (${headSql}), buckets AS (${bucketsSql})
              SELECT row_to_json(head) AS head,
                COALESCE((SELECT json_agg(buckets ORDER BY bucket) FROM buckets),'[]'::json) AS buckets FROM head`,

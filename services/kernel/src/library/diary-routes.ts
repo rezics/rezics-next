@@ -81,7 +81,10 @@ const reportedDate = t.Union([
   t.Null(),
 ]);
 const assessment = t.Object(
-  { meaningRevision: t.Literal(1), units: t.Union([t.Integer({ minimum: 0, maximum: 20 }), t.Null()]) },
+  {
+    meaningRevision: t.Literal(1),
+    units: t.Union([t.Integer({ minimum: 0, maximum: 20 }), t.Null()]),
+  },
   closed,
 );
 const diaryPageSchema = t.Unsafe<DiaryPage>(
@@ -97,16 +100,19 @@ const diaryPageSchema = t.Unsafe<DiaryPage>(
             revision: t.Integer({ minimum: 1 }),
             recordedStartedAt: t.String(),
             recordedCompletedAt: nullable,
-            reportedDates: t.Object(
-              {
-                availability: t.Literal('available'),
-                revision: t.Integer({ minimum: 0 }),
-                startDate: reportedDate,
-                finishDate: reportedDate,
-              },
-              closed,
-            ),
-            assessment,
+            reportedDates: t.Union([
+              t.Object(
+                {
+                  availability: t.Literal('available'),
+                  revision: t.Integer({ minimum: 0 }),
+                  startDate: reportedDate,
+                  finishDate: reportedDate,
+                },
+                closed,
+              ),
+              t.Object({ availability: t.Literal('unavailable') }, closed),
+            ]),
+            assessment: t.Optional(assessment),
             subject,
             versionSubject: subject,
           },
@@ -163,7 +169,14 @@ export function diaryRoutes(
       {
         query: t.Object(
           {
-            limit: t.Optional(t.Numeric({ minimum: 1, maximum: DIARY_LIMIT, multipleOf: 1, default: 20 })),
+            limit: t.Optional(
+              t.Numeric({
+                minimum: 1,
+                maximum: DIARY_LIMIT,
+                multipleOf: 1,
+                default: 20,
+              }),
+            ),
             cursor: t.Optional(token),
             year: t.Optional(t.Numeric({ minimum: 1, maximum: 9999, multipleOf: 1 })),
             month: t.Optional(
@@ -185,7 +198,7 @@ export function diaryRoutes(
       async ({ actor, query, admission, job, request }) =>
         admission.run('normal', job, async () => {
           if (request.signal.aborted) throw new ProblemError('deadline_exceeded');
-          return reads().list(actor, query, job.deadline);
+          return reads().list(actor, query, job.deadline, request.signal);
         }),
     )
     .post(
@@ -195,7 +208,10 @@ export function diaryRoutes(
         transform: ({ set }) => {
           set.headers['cache-control'] = 'private, no-store';
         },
-        response: { 200: t.Object({ cancelled: t.Literal(true) }, closed), ...failures },
+        response: {
+          200: t.Object({ cancelled: t.Literal(true) }, closed),
+          ...failures,
+        },
         detail: detail('library_diary.cancel'),
       },
       async ({ actor, body, admission, job }) =>

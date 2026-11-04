@@ -32,7 +32,13 @@ import {
   type DiaryNavigation,
 } from './diary-store.ts';
 
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock: KernelClock; routeKey: Uint8Array };
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock: KernelClock;
+  routeKey: Uint8Array;
+};
 type Client = Pick<PoolClient, 'query'>;
 type PageOptions = DiaryQuery;
 
@@ -92,7 +98,10 @@ function filterOf(options: PageOptions): DiaryFilter | null {
       (!Number.isInteger(options.month) || options.month < 1 || options.month > 12))
   )
     throw new ProblemError('invalid_request');
-  return { year: options.year, ...(options.month === undefined ? {} : { month: options.month }) };
+  return {
+    year: options.year,
+    ...(options.month === undefined ? {} : { month: options.month }),
+  };
 }
 
 function filterKey(filter: DiaryFilter | null) {
@@ -104,7 +113,10 @@ export function createDiaryReads(deps: Dependencies) {
   const { pool, access, clock, tokens } = deps;
 
   function binding(owner: AccountActor): CursorBinding {
-    return { operation: 'library.diary', parameters: { accountId: owner.accountId, caller: callerOf(owner) } };
+    return {
+      operation: 'library.diary',
+      parameters: { accountId: owner.accountId, caller: callerOf(owner) },
+    };
   }
 
   function decode(owner: AccountActor, token: string, now: Date, limit?: number, filter: DiaryFilter | null = null) {
@@ -214,11 +226,15 @@ export function createDiaryReads(deps: Dependencies) {
   }
 
   return {
-    async list(actor: Actor, options: PageOptions, deadline: number): Promise<DiaryPage> {
+    async list(actor: Actor, options: PageOptions, deadline: number, signal?: AbortSignal): Promise<DiaryPage> {
       const owner = ownerOf(actor);
       const limit = sizeOf(options);
       const filter = filterOf(options);
       const route = routeOf(owner.accountId)!;
+      const alive = () => {
+        if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
+      };
+      alive();
       return withRequestDeadline(deadline, () =>
         within(deadline, async () => {
           await admitGroup({
@@ -232,6 +248,7 @@ export function createDiaryReads(deps: Dependencies) {
           let after: DiaryKey | null = null;
           let navigation: DiaryNavigation | null = null;
           const before = await snapshot(owner, deadline, async (client, epoch, now) => {
+            alive();
             const revision = filter ? await reportedYearRevision(client, route, owner.accountId) : null;
             if (options.cursor !== undefined) {
               const decoded = decode(owner, options.cursor, now, limit, filter);
@@ -239,7 +256,11 @@ export function createDiaryReads(deps: Dependencies) {
               navigation = await currentNavigation(client, owner, decoded.id, epoch, now);
               after = decoded.after;
             }
-            return { epoch, revision, rows: await diaryRows(client, route, owner.accountId, after, limit + 1, filter) };
+            return {
+              epoch,
+              revision,
+              rows: await diaryRows(client, route, owner.accountId, after, limit + 1, filter),
+            };
           });
           const shown = before.rows.slice(0, limit);
           const ids = [
@@ -256,11 +277,13 @@ export function createDiaryReads(deps: Dependencies) {
           }));
           const more = before.rows.length > limit;
           navigation = await snapshot(owner, deadline, async (client, epoch, now) => {
+            alive();
             if (epoch !== before.epoch) throw new ProblemError('stale_cursor');
             const current = await diaryRows(client, route, owner.accountId, after, limit + 1, filter);
             if (filter && (await reportedYearRevision(client, route, owner.accountId)) !== before.revision)
               throw new ProblemError('conflict');
             if (JSON.stringify(current) !== JSON.stringify(before.rows)) throw new ProblemError('conflict');
+            alive();
             if (navigation) return currentNavigation(client, owner, navigation.id, epoch, now);
             return more ? createDiaryNavigation(client, route, owner.accountId, callerOf(owner), epoch, now) : null;
           });
@@ -280,12 +303,20 @@ export function createDiaryReads(deps: Dependencies) {
           const result: DiaryPage = {
             occurrences,
             order: 'recorded_started_desc_id_desc',
-            ...(before.revision ? { currentness: { state: 'snapshot' as const, revision: before.revision } } : {}),
+            ...(before.revision
+              ? {
+                  currentness: {
+                    state: 'snapshot' as const,
+                    revision: before.revision,
+                  },
+                }
+              : {}),
             next: more && last ? token([last.recordedStartedAt, last.id]) : null,
             continuation: token([]),
             expiresAt: navigation?.expiresAt ?? null,
           };
           if (Buffer.byteLength(JSON.stringify(result)) > DIARY_PAYLOAD_BYTES) throw new ProblemError('overloaded');
+          alive();
           return result;
         }),
       );

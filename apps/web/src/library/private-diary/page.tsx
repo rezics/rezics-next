@@ -206,7 +206,9 @@ export function PrivateDiaryPage({
           </p>
           <p className="mt-1 text-sm">{m.library_diary_statistics_scope({ scope: statistics.scope })}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {m.library_diary_currentness({ state: statistics.currentness.state })}
+            {m.library_diary_currentness({
+              state: statistics.currentness.state,
+            })}
           </p>
         </section>
       ) : !retired && authenticated && address.year === undefined ? (
@@ -234,7 +236,11 @@ export function PrivateDiaryPage({
           <Link
             className="mt-2 inline-flex min-h-11 items-center rounded-md border px-3"
             to="/library/history"
-            search={{ year: address.year, month: address.month, returnTo: currentReturn }}
+            search={{
+              year: address.year,
+              month: address.month,
+              returnTo: currentReturn,
+            }}
           >
             {m.library_diary_restart()}
           </Link>
@@ -285,11 +291,25 @@ export function PrivateDiaryPage({
                   <dl className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2">
                     <div>
                       <dt className="text-sm font-medium">{m.library_diary_reported_start()}</dt>
-                      <dd>{reportedDate(occurrence.reportedDates.startDate, m.library_diary_date_unknown())}</dd>
+                      <dd>
+                        {reportedDate(
+                          occurrence.reportedDates.availability === 'available'
+                            ? occurrence.reportedDates.startDate
+                            : null,
+                          m.library_diary_date_unknown(),
+                        )}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-sm font-medium">{m.library_diary_reported_finish()}</dt>
-                      <dd>{reportedDate(occurrence.reportedDates.finishDate, m.library_diary_date_unknown())}</dd>
+                      <dd>
+                        {reportedDate(
+                          occurrence.reportedDates.availability === 'available'
+                            ? occurrence.reportedDates.finishDate
+                            : null,
+                          m.library_diary_date_unknown(),
+                        )}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-sm font-medium">{m.library_diary_recorded_start()}</dt>

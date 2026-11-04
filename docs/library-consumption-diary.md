@@ -24,15 +24,25 @@ The typed Eden client exposes `client.v1.libraryDiary.get({ query: { limit, curs
     revision: number;
     recordedStartedAt: string;
     recordedCompletedAt: string | null;
-    reportedDates: {
-      availability: 'available';
-      revision: number;
-      startDate: { year: number; month?: number; day?: number } | null;
-      finishDate: { year: number; month?: number; day?: number } | null;
-    };
-    assessment: { meaningRevision: 1; units: number | null };
-    subject: { id: string; label: string | null; language: string | null } | null;
-    versionSubject: { id: string; label: string | null; language: string | null } | null;
+    reportedDates:
+      | {
+          availability: 'available';
+          revision: number;
+          startDate: { year: number; month?: number; day?: number } | null;
+          finishDate: { year: number; month?: number; day?: number } | null;
+        }
+      | { availability: 'unavailable' };
+    assessment?: { meaningRevision: 1; units: number | null };
+    subject: {
+      id: string;
+      label: string | null;
+      language: string | null;
+    } | null;
+    versionSubject: {
+      id: string;
+      label: string | null;
+      language: string | null;
+    } | null;
   }>;
   order: 'recorded_started_desc_id_desc';
   next: string | null;
@@ -57,7 +67,7 @@ continuation. It never selects the subject's newest session in place of the addr
 
 Show `recordedStartedAt` as **Recorded start** and `recordedCompletedAt` as **Recorded completion**. Detail's existing
 `startedAt` and `completedAt` have that same audit meaning. None is a person-reported historical date. The optional
-historical-date owner is now installed: `reportedDates.availability` is `available`, with its independent journal
+historical-date owner supplies `reportedDates.availability: available`, with its independent journal
 revision and accepted partial `startDate` and `finishDate`. Unknown dates remain `null`; unknown components remain
 absent. Decision: project the installed journal's date columns in the same bounded session seek, preserving its
 precision and independent revision while keeping recording order unchanged. Reflection remains on addressed detail.
@@ -67,8 +77,17 @@ when all dates are unknown. After a date correction, retry the current page or r
 during page rendering yields the same `409 conflict` recovery as a progress correction.
 
 The bounded occurrence row also returns its private `assessment:{meaningRevision:1,units}` value. Units are integers
-0–20 in steps of 1 and display as `units / 2`; `null` means no current assessment. This field is read from the same
+0–20 in steps of 1 and display as `units / 2`; `null` units mean no current assessment. This field is read from the same
 indexed progress-session row and is not derived from a public Subject vote or question.
+
+Decision: unfiltered history remains readable when optional journal columns are absent; return only
+`reportedDates: { availability: 'unavailable' }` when its revision/date columns are incomplete, and omit `assessment`
+when its columns or stored meaning are unsupported. Available unknown dates remain null. Supported cleared assessment
+units remain null and numeric zero remains a value. The response type above therefore also admits the unavailable
+reported-dates object. No missing installation is repaired by GET. Addressed native progress and historical profile
+presentation stay independent; journal reads/writes still require their own installed owner. A fixed nine-key catalog
+probe per source observation selects only installed projections; neither reflection nor other session values are
+serialized to discover installation. Recheck installation on the second observation rather than cache it.
 
 ## Currentness and recovery
 
@@ -144,12 +163,20 @@ the existing addressed Session/journal, including earlier repeats, as described 
 A filtered page includes `currentness: { state: 'snapshot', revision: string }`, comparable to the summary's
 currentness. Replace the displayed summary if its revision differs before presenting the opened count as current.
 The sealed cursor binds the exact year/bucket in addition to owner, authority, limit, partition and absolute expiry.
-The existing reported-year owner revision is conservatively bound: any summary-source mutation, even in another year,
+The existing all-time source revision is conservatively bound: any source mutation, even in another year,
 invalidates filtered continuation with `409 stale_cursor`. A finish correction, completion change, retirement or
 deletion therefore requires refreshing both counts and first page. Revision changes during rendering produce
 `409 conflict`; retry the same request (a now-stale cursor still requires restart). No historical snapshot is retained.
 Unfiltered navigation retains its live deletion/anchor and correction behavior. Cancellation and expiry use the
 same eight slots for both forms; stale revision handles can still cancel their exact slot.
+
+Summary and filtered diary use the installed all-time source generation, including reflection-only and assessment-only
+journal corrections. Membership counts need no rebuild for these edits, but the old accepted occurrence revision
+cannot remain a current navigation basis. Original command receipt replay performs no source mutation and preserves
+this generation even after a newer correction. Reconcile the original receipt by its exact Session, key, body and
+journal revision before reading current values; a repeat's latest Session never substitutes for that identity.
+An aborted page checks its request lifetime before either observation, before allocating a slot and after encoding.
+A slot committed immediately before cancellation remains bounded until original cancellation or absolute expiry.
 
 Two partial native indexes seek `(route,account_id,journal_finish_year[,coalesced-month],started_at DESC,session_id DESC)`
 for valid completed rows. Coalesced month 13 is an internal indexed key only; the public value is `unallocated`.
@@ -172,6 +199,10 @@ locking; subsequent writes pay two native index updates rather than a new aggreg
 
 The focused diary test now exercises typed year/month/unallocated requests, repeats across pages, summary revision
 agreement, addressed reopening, filter substitution, cancellation, correction, retirement and invalid query shapes.
+`services/kernel/test/library/diary-continuity.test.ts` composes maintained derivation with two repeats, partial/unknown
+dates, independent private reflection/assessment, null/zero, stale revisions, exact original receipt replay after a
+newer correction, year/unallocated movement, historical profile presentation, concealment, eight-slot exhaustion,
+absolute expiry/reuse, original cancellation, terminal cleanup and optional journal installation.
 Whole-caller rows/buffers/bytes at native64/512/4096, nested disclosure/lifecycle work and Web acceptance remain unmeasured
 and deferred to integration. Reference comparison read `legacy-final:apps/web/features/library/reading-stats.tsx`
 (twelve visible months), Yamtrack `src/app/statistics.py` (explicit date range selection) and Ryot
