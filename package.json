@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@rezics/auth": "workspace:*",
+    "@rezics/bounds": "workspace:*",
     "@rezics/client": "workspace:*",
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",

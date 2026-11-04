@@ -366,10 +366,11 @@ The actual registered workflow remains `library.membersPreparation`. A locator c
 `SelectedInvocation` has one immutable `deadline`, `select(locator): Promise<SelectedEpisode>`,
 `source<T>((deadline) => Promise<T>): Promise<T>`, and `apply(episode, body)` / `failure(episode, body)` returning
 `Promise<SelectedOutcome>`. Each body receives the genuine `OperationalTransaction`; it returns
-`{kind:'continue'|'failure'|'obsolete'|'complete', version:string, continuation?:string}`. A complete outcome currently
-refuses `selected-runtime-final-source-physical-authority-unavailable`. Commerce owns real Source, conditional
-native update, subject/exhaustion checks, failure and continuation SQL. No synthetic Source observation is accepted
-as final authority by this producer. A selected episode is opaque and private to its original invocation. Replay
+`{kind:'continue'|'failure'|'obsolete'|'complete', version:string, continuation?:string}`. The selected Members
+producer declares its complete released Source child in `scope-members-source-declaration.ts`; the declaration
+composes Library metadata, bounded Search work, repeated Collection source-state reads and the source transaction's
+commit/rollback envelope. It permits dispatch only. The producer rechecks current Source, Scope, owner fence and
+episode before applying exhaustion. A selected episode is opaque and private to its original invocation. Replay
 exposes only its committed `result` data. It cannot restart Source or apply.
 
 The useful-work sequence is `select` (native first transaction), `source` (after that transaction releases), `apply`
@@ -466,13 +467,13 @@ owner-update lock contention through sequential COMMIT/ROLLBACK, attempt replace
 and escaped-capability rejection. Source fixtures pin issuance and native lock interaction. All new native/unit/
 source/growth/full acceptance remains UNRUN at delivery; the controller owns integration and acceptance.
 
-Remaining receiving prerequisites: current Commerce native episode schema/body and its complete literal SQL prices;
-genuine complete Source child and currentness/physical operands; bounded repair with changed incarnation/generation;
-and separately authentic selected cleanup authority/admission. Neither autonomous idle cleanup funding nor final
-physical/retention acknowledgment is supplied. Selected control/association records must be preserved across restore;
-the new retained selected records are not an all-copy absence receipt or a substitute for owner physical accounting.
-Existing Source refusal remains closed. Installing the updated dependency patch and applying the forward core
-migration belong to receiving integration; this source edit does not mutate the shared installed dependency.
+Remaining receiving prerequisites: bounded repair with changed incarnation/generation and separately authentic
+selected cleanup authority/admission. Neither autonomous idle cleanup funding nor final physical/retention
+acknowledgment is supplied. Selected control/association records must be preserved across restore; the new retained
+selected records are not an all-copy absence receipt or a substitute for owner physical accounting. The selected
+Source body now admits its declared bound and requires current Source, Scope, owner and episode checks before
+completion. Installing the updated dependency patch and applying the forward core migration belong to receiving
+integration; this source edit does not mutate the shared installed dependency.
 
 Source read for this surface: pinned installed 5.5.3-preview `dbos`, `dbos-executor`, `client`, `decorators`,
 `system_database`, `serialization`, and SDK migration sources; existing patch; reference

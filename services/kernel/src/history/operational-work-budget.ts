@@ -1,13 +1,15 @@
 import type { Pool, PoolClient } from 'pg';
+import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import { currentOperationalResources, type OperationalTransaction } from '../command/operational.ts';
-import type { WorkClient } from '../work/client.ts';
+import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
+import { assertWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import { OPERATIONAL_WORK_AXES } from './operational-work-axes.ts';
 
-/** The eight native axes. This allocation belongs only to the operational History producer. */
+/** Complete native dimensions used by the operational History producer. */
 export { OPERATIONAL_WORK_AXES };
-export type OperationalWorkCost = Readonly<Record<(typeof OPERATIONAL_WORK_AXES)[number], number>>;
+export type OperationalWorkCost = Bound;
 const cost = (nativeRows: number, nativePoints: number, statements: number, bytes: number): OperationalWorkCost =>
-  Object.freeze({
+  declareBound({
     candidateKeys: 0,
     nativeRows,
     identityMetadataRows: 0,
@@ -16,19 +18,9 @@ const cost = (nativeRows: number, nativePoints: number, statements: number, byte
     witnessKeys: 0,
     statements,
     bytes,
+    engineRequests: 0,
   });
-export function sumOperationalWork(...parts: readonly OperationalWorkCost[]): OperationalWorkCost {
-  if (parts.some((part) => OPERATIONAL_WORK_AXES.some((axis) => !Number.isSafeInteger(part[axis]) || part[axis] < 0)))
-    throw new TypeError('Invalid operational work declaration');
-  const total = Object.freeze(
-    Object.fromEntries(
-      OPERATIONAL_WORK_AXES.map((axis) => [axis, parts.reduce((total, part) => total + part[axis], 0)]),
-    ),
-  ) as OperationalWorkCost;
-  if (OPERATIONAL_WORK_AXES.some((axis) => !Number.isSafeInteger(total[axis])))
-    throw new TypeError('Operational work declaration overflow');
-  return total;
-}
+export const sumOperationalWork = sumBounds;
 const times = (n: number, part: OperationalWorkCost) => sumOperationalWork(...Array.from({ length: n }, () => part));
 
 // Each family touch: erasure, fence including its FK, and up to nine coverage rows.
@@ -141,9 +133,6 @@ export const OPERATIONAL_WORK_LOCAL_DECLARATION = sumOperationalWork(
     ),
   ),
 );
-/** Absolute retry count for one original. Contention shares this original; it is not a refill. */
-export const OPERATIONAL_WORK_ATTEMPT_BOUND = 3;
-
 export class OperationalWorkUnavailable extends Error {
   constructor(readonly gap: string) {
     super(gap);
@@ -161,66 +150,12 @@ export function operationalWorkDeadlineClient(client: PoolClient, deadline: numb
     }),
   };
 }
-export type OperationalWorkOriginal = Readonly<{ pool: Pool; deadline: number; workClient?: WorkClient }>;
-type Balance = { claimed: boolean; attempts: number };
-const originals = new WeakMap<OperationalWorkOriginal, Balance>();
-const transactionOriginals = new WeakMap<OperationalTransaction, OperationalWorkOriginal>();
-export function attachOperationalWorkOriginal(tx: OperationalTransaction, original: OperationalWorkOriginal): void {
-  const resources = currentOperationalResources(tx);
-  if (
-    transactionOriginals.has(tx) ||
-    resources.pool !== original.pool ||
-    resources.deadline !== original.deadline ||
-    (original.workClient !== undefined && resources.workClient !== original.workClient) ||
-    !originals.get(original)?.claimed
-  )
-    throw new TypeError('Foreign or repeated operational History original');
-  transactionOriginals.set(tx, original);
-}
-/** Identity, Pool, absolute deadline and optional WorkClient. This is not a funded ledger. */
-export function openOperationalWorkOriginal(
-  pool: Pool,
-  deadline: number,
-  workClient?: WorkClient,
-): OperationalWorkOriginal {
-  if (!Number.isFinite(deadline) || Date.now() >= deadline)
-    throw new OperationalWorkUnavailable('operational-work-deadline');
-  const original = Object.freeze(workClient ? { pool, workClient, deadline } : { pool, deadline });
-  originals.set(original, { attempts: 0, claimed: false });
-  return original;
-}
-/** Executor entry, before time, Access, checkout or BEGIN. Contention retains this same original. */
-export function claimOperationalWorkOriginal(
-  original: OperationalWorkOriginal,
-  pool: Pool,
-  workClient: WorkClient,
-  deadline: number,
-): OperationalWorkOriginal {
-  const balance = originals.get(original);
-  if (
-    !balance ||
-    balance.claimed ||
-    original.pool !== pool ||
-    original.deadline !== deadline ||
-    (original.workClient !== undefined && original.workClient !== workClient) ||
-    Date.now() >= deadline
-  )
-    throw new OperationalWorkUnavailable('operational-work-original-unavailable');
-  balance.claimed = true;
-  return original;
-}
-export function debitOperationalWorkAttempt(original: OperationalWorkOriginal): void {
-  const balance = originals.get(original);
-  if (!balance?.claimed || Date.now() >= original.deadline)
-    throw new OperationalWorkUnavailable('operational-work-original-unavailable');
-  if (++balance.attempts > OPERATIONAL_WORK_ATTEMPT_BOUND)
-    throw new OperationalWorkUnavailable('operational-work-original-attempt-bound');
-}
-
 declare const transfer: unique symbol;
 export type OperationalWorkTransfer = { readonly [transfer]: true };
 type Transfer = {
-  original: OperationalWorkOriginal;
+  original: WorkExecutionOriginal;
+  pool: Pool;
+  deadline: number;
   phase: OperationalWorkPhase;
   custodyId: string;
   state: 'live' | 'committed' | 'invalid';
@@ -231,22 +166,27 @@ const byTransaction = new WeakMap<OperationalTransaction, Set<OperationalWorkTra
 /** Executor/producer internal. Public issuance verifies the genuine live transaction first. */
 export function issueOperationalWorkTransfer(
   tx: OperationalTransaction,
-  original: OperationalWorkOriginal,
+  original: WorkExecutionOriginal,
   phase: OperationalWorkPhase,
   custodyId: string,
 ): OperationalWorkTransfer {
   const resources = currentOperationalResources(tx);
-  if (
-    transactionOriginals.get(tx) !== original ||
-    resources.pool !== original.pool ||
-    resources.deadline !== original.deadline
-  )
+  if (resources.deadline <= Date.now())
     throw new OperationalWorkUnavailable('operational-work-native-transfer-unavailable');
+  assertWorkExecutionOriginal(tx, original);
   const issued = byTransaction.get(tx) ?? new Set<OperationalWorkTransfer>();
   if ([...issued].some((token) => transfers.get(token)?.phase === phase))
     throw new TypeError('Operational work phase already transferred');
   const token = Object.freeze({}) as OperationalWorkTransfer;
-  transfers.set(token, { original, phase, custodyId, state: 'live', used: false });
+  transfers.set(token, {
+    original,
+    pool: resources.pool,
+    deadline: resources.deadline,
+    phase,
+    custodyId,
+    state: 'live',
+    used: false,
+  });
   issued.add(token);
   byTransaction.set(tx, issued);
   return token;
@@ -257,7 +197,6 @@ export function finishOperationalWorkTransfers(tx: OperationalTransaction, commi
     binding.state = committed ? 'committed' : 'invalid';
   }
   byTransaction.delete(tx);
-  transactionOriginals.delete(tx);
 }
 export function consumeOperationalWorkTransfer(
   pool: Pool,
@@ -272,10 +211,10 @@ export function consumeOperationalWorkTransfer(
     bound.phase !== phase ||
     bound.custodyId !== custodyId ||
     bound.state !== 'committed' ||
-    bound.original.pool !== pool ||
-    Date.now() >= bound.original.deadline
+    bound.pool !== pool ||
+    Date.now() >= bound.deadline
   )
     throw new OperationalWorkUnavailable('operational-work-native-transfer-unavailable');
   bound.used = true;
-  return Object.freeze({ deadline: bound.original.deadline });
+  return Object.freeze({ deadline: bound.deadline });
 }

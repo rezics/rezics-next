@@ -51,6 +51,8 @@ import { ProblemError } from '../http/problem.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import type { WorkClient } from '../work/client.ts';
+import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
+import { openWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import {
@@ -59,8 +61,6 @@ import {
   type OperationalWorkRegistration,
 } from '../history/operational-work.ts';
 import {
-  openOperationalWorkOriginal,
-  type OperationalWorkOriginal,
   type OperationalWorkTransfer,
 } from '../history/operational-work-budget.ts';
 
@@ -151,7 +151,7 @@ export interface MembersPreparation {
     actor: Actor,
     collectionId: string,
     definitions: readonly PreparationDefinition[],
-    options?: { deadline?: number; history?: OperationalWorkOriginal; runtime?: boolean },
+    options?: { deadline?: number; history?: WorkExecutionOriginal; runtime?: boolean },
   ): Promise<
     Readonly<{
       episodes: readonly PreparingEpisode[];
@@ -405,7 +405,7 @@ export function createMembersPreparation(config: {
       if (options.runtime && !options.history) {
         options = {
           ...options,
-          history: openOperationalWorkOriginal(config.pool, deadline, config.workClient),
+          history: openWorkExecutionOriginal(config.pool, deadline, config.workClient),
         };
       }
       const authorization = await accessCommandAuthorization(
@@ -794,11 +794,64 @@ export function createMembersPreparation(config: {
     },
 
     async readWorkDefinition(tx, locator) {
-      if (!(await service.readRetainedDefinition(tx, locator))) return null;
-      // Immutable meaning and a locator cannot supply the producer's missing Source declaration or authority.
-      throw new ProblemError('dependency_unavailable', {
-        detail: 'members-preparation-source-authority-unavailable',
-      });
+      if (!hasLiveOperationalTransaction(tx)) return null;
+      const resources = currentOperationalResources(tx);
+      if (
+        resources.pool !== config.pool ||
+        resources.workClient !== config.workClient ||
+        resources.mode !== 'work-step' ||
+        resources.accounts.length !== 1 ||
+        resources.accounts[0] !== locator.ownerAccountId ||
+        resources.partition !== partitionOf(locator.route)
+      )
+        return null;
+      if (resources.kind !== 'library.membersPreparation.source')
+        throw new ProblemError('dependency_unavailable', { detail: 'Members Source requires its admitted Work phase' });
+      const state = await readPreparationStep(tx, locator);
+      if (!state) return null;
+      const [retained] = (
+        await tx.query<{ canonicalBasis: string; basisDigest: Buffer }>(
+          `SELECT canonical_basis AS "canonicalBasis",basis_digest AS "basisDigest"
+           FROM library.members_preparation
+           WHERE route=$1 AND owner_account_id=$2 AND collection_id=$3 AND episode_id=$4 AND state='live'`,
+          [locator.route, locator.ownerAccountId, locator.collectionId, locator.episodeId],
+        )
+      ).rows;
+      if (!retained || retained.canonicalBasis !== state.basis) return null;
+      const definition = await restorePreparationDefinition(
+        locator.ownerAccountId,
+        locator.collectionId,
+        retained,
+        (digest) => readRelease(tx, digest),
+      );
+      const current = await readPreparationSource(tx, locator);
+      const identity = current?.scope.key.source.kind === 'library' ? current.scope.key.source.identity : null;
+      if (
+        !current ||
+        current.source.route !== locator.route ||
+        current.source.collectionId !== locator.collectionId ||
+        current.source.incarnation !== state.incarnation ||
+        current.source.basis.digest.length !== 64 ||
+        !/^[0-9a-f]{64}$/.test(current.source.basis.digest) ||
+        current.scope.captureId.length === 0 ||
+        current.scope.committedRevision < 0n ||
+        !identity ||
+        identity.route !== locator.route ||
+        identity.collectionId !== locator.collectionId ||
+        identity.accountId !== locator.ownerAccountId ||
+        identity.incarnation !== state.incarnation ||
+        identity.generation !== state.generation ||
+        identity.scope !== 'curated' ||
+        identity.ownerEpoch !== current.source.stamp.epoch ||
+        !identity.receivingEpoch ||
+        !identity.effectKey
+      )
+        return null;
+      return {
+        definition,
+        sourceIdentity: identity,
+        observation: current.source,
+      };
     },
   };
   return service;
@@ -947,20 +1000,17 @@ export async function readPreparationOwnerFence(
   return row.generation;
 }
 
-/** Native association/currentness inside a genuine selected apply, never the expired request handoff.
- * The installed selected producer still refuses final Source/physical completion after the owned body.
- */
+/** Native source/currentness inside a genuine selected apply, never the expired request handoff. */
 export async function checkMembersPreparationCompletion(
   tx: OperationalTransaction,
   locator: PreparationLocator,
 ): Promise<
   | Readonly<{ status: 'obsolete' }>
-  | Readonly<{
-      status: 'unavailable';
-      operand: 'selected-runtime-final-source-physical-authority-unavailable';
-    }>
+  | Readonly<{ status: 'current' }>
+  | Readonly<{ status: 'unavailable' }>
 > {
-  if (!(await readPreparationStep(tx, locator))) return { status: 'obsolete' };
+  const state = await readPreparationStep(tx, locator);
+  if (!state) return { status: 'obsolete' };
   const association = await original.run(tx, {
     route: locator.route,
     owner_account_id: locator.ownerAccountId,
@@ -968,10 +1018,21 @@ export async function checkMembersPreparationCompletion(
     episode_id: locator.episodeId,
   });
   if (!association) return { status: 'obsolete' };
-  // SelectedInvocation owns the fresh, nonrenewable executor admission and native result.
-  // Its finishSelectedEpisode currently refuses complete with this exact operand. Native
-  // exhaustion/association cannot replace the missing complete Source/physical authority.
-  return { status: 'unavailable', operand: 'selected-runtime-final-source-physical-authority-unavailable' };
+  const source = await readPreparationSource(tx, locator);
+  if (
+    !source ||
+    source.source.route !== locator.route ||
+    source.source.collectionId !== locator.collectionId ||
+    source.scope.key.scopeId !== 'collection-source' ||
+    source.scope.key.source.kind !== 'library' ||
+    source.scope.key.source.identity.scope !== 'curated' ||
+    source.scope.key.source.identity.accountId !== locator.ownerAccountId ||
+    source.scope.key.source.identity.collectionId !== locator.collectionId ||
+    source.scope.key.source.identity.generation !== state.generation ||
+    source.source.incarnation !== state.incarnation
+  )
+    return { status: 'unavailable' };
+  return { status: 'current' };
 }
 
 export type PreparationStepState = NonNullable<Awaited<ReturnType<typeof readPreparationStep>>>;

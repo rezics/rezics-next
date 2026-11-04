@@ -2,10 +2,12 @@ import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import type { WorkClient } from '../../src/work/client.ts';
 import {
-  claimOperationalWorkOriginal,
-  debitOperationalWorkAttempt,
-  openOperationalWorkOriginal,
-  OPERATIONAL_WORK_ATTEMPT_BOUND,
+  claimWorkExecutionOriginal,
+  debitWorkExecutionAttempt,
+  openWorkExecutionOriginal,
+} from '../../src/work/selected-runtime.ts';
+import { WORK_EXECUTION_ATTEMPT_BOUND } from '../../src/work/selected-runtime-cost.ts';
+import {
   OPERATIONAL_WORK_LOCAL_DECLARATION,
   OPERATIONAL_WORK_REGISTRATION,
 } from '../../src/history/operational-work-budget.ts';
@@ -54,18 +56,18 @@ test('History original is opened from static bounds and refuses a fourth attempt
   const pool = {} as Pool;
   const work = {} as WorkClient;
   const deadline = Date.now() + 60_000;
-  expect(() => openOperationalWorkOriginal(pool, Date.now() - 1, work)).toThrow('deadline');
-  const history = openOperationalWorkOriginal(pool, deadline, work);
-  expect(() => debitOperationalWorkAttempt(history)).toThrow('original-unavailable');
+  expect(() => openWorkExecutionOriginal(pool, Date.now() - 1, work)).toThrow('deadline');
+  const history = openWorkExecutionOriginal(pool, deadline, work);
+  expect(() => debitWorkExecutionAttempt(history)).toThrow('original-unavailable');
   for (const [p, w, d, token] of [
     [{} as Pool, work, deadline, history],
     [pool, {} as WorkClient, deadline, history],
     [pool, work, deadline + 1, history],
     [pool, work, deadline, { ...history }],
   ] as const)
-    expect(() => claimOperationalWorkOriginal(token, p, w, d)).toThrow('original-unavailable');
-  expect(claimOperationalWorkOriginal(history, pool, work, deadline)).toBe(history);
-  expect(() => claimOperationalWorkOriginal(history, pool, work, deadline)).toThrow('original-unavailable');
-  for (let attempt = 0; attempt < OPERATIONAL_WORK_ATTEMPT_BOUND; attempt++) debitOperationalWorkAttempt(history);
-  expect(() => debitOperationalWorkAttempt(history)).toThrow('attempt-bound');
+    expect(() => claimWorkExecutionOriginal(token, p, w, d)).toThrow('original-unavailable');
+  expect(claimWorkExecutionOriginal(history, pool, work, deadline)).toBe(history);
+  expect(() => claimWorkExecutionOriginal(history, pool, work, deadline)).toThrow('original-unavailable');
+  for (let attempt = 0; attempt < WORK_EXECUTION_ATTEMPT_BOUND; attempt++) debitWorkExecutionAttempt(history);
+  expect(() => debitWorkExecutionAttempt(history)).toThrow('attempt-bound');
 });

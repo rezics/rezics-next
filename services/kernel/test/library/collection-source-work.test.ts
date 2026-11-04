@@ -1,6 +1,16 @@
 import { expect, test } from 'bun:test';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
-import type { WorkDimensions } from '../../src/library/collection-source.ts';
+import { type WorkDimensions } from '../../src/library/collection-source.ts';
+import { runOperationalTransaction } from '../../src/command/operational.ts';
+import {
+  COLLECTION_SOURCE_WORK_COST,
+  readCollectionSourceWorkState,
+  seekCollectionSourceWorkGroup,
+} from '../../src/library/collection-source-work-native.ts';
+import type { ScopeWorkContext } from '../../src/search/scope-work-context.ts';
+import { definition, membersPreparationRuntime } from './support/members-preparation-runtime.ts';
+const workDimensions = ({ engineRequests: _engineRequests, ...dimensions }: typeof COLLECTION_SOURCE_WORK_COST.state) =>
+  dimensions;
 const footprint: WorkDimensions = {
   candidateKeys: 2,
   identityMetadataRows: 3,
@@ -98,4 +108,54 @@ test('compose snapshots each child ceiling once and retains failed child charges
   expect([...reads.values()]).toEqual(Object.keys(footprint).map(() => 1));
   expect(work.receipt()).toEqual({ reservationId: 'native-reservation', used: childBound });
   expect(() => work.assertReady()).toThrow(failure.message);
+});
+
+test('selected Collection source refuses an undeclared context before IO and seeks under static limits without a ledger', async () => {
+  const runtime = await membersPreparationRuntime();
+  try {
+    const fixture = await runtime.fixture();
+    const reservation = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()]);
+    const locator = reservation.episodes[0]!.locator;
+    const deadline = Date.now() + 5000;
+    const page = await runOperationalTransaction(
+      runtime.db.pool,
+      {
+        mode: 'work-step',
+        partition: locator.route,
+        kind: 'library.membersPreparation.source',
+        accounts: [locator.ownerAccountId],
+        workClient: runtime.workClient,
+        deadline,
+      },
+      async (tx) => {
+        let statements = 0;
+        const query = tx.query.bind(tx);
+        tx.query = ((...args: Parameters<typeof tx.query>) => {
+          statements++;
+          return query(...args);
+        }) as typeof tx.query;
+        const undeclared = { kind: 'undeclared-source', tx, locator } as unknown as ScopeWorkContext;
+        await expect(
+          readCollectionSourceWorkState(runtime.db.pool, undeclared, {
+            access: runtime.kernel.testAccess,
+            deadline,
+          }),
+        ).rejects.toMatchObject({ code: 'semantic_not_ready' });
+        expect(statements).toBe(0);
+        const work: ScopeWorkContext = { kind: 'members-preparation', tx, locator };
+        const state = await readCollectionSourceWorkState(runtime.db.pool, work, {
+          access: runtime.kernel.testAccess,
+          deadline,
+        });
+        const first = await seekCollectionSourceWorkGroup(work, state, null, { deadline });
+        return { state, first };
+      },
+    );
+    expect(page.state.metadata.state).toBe('active');
+    expect(page.state.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST.state));
+    expect(page.first.subjectId).toBeNull();
+    expect(page.first.work.used).toEqual(workDimensions(COLLECTION_SOURCE_WORK_COST.seek));
+  } finally {
+    await runtime.close();
+  }
 });

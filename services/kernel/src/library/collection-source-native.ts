@@ -417,11 +417,7 @@ async function readOnly<T>(
 function validate(ref: Ref) {
   if (routeOf(ref.collectionId) !== ref.route) throw new TypeError('Invalid native Collection reference');
 }
-async function observe(
-  client: QueryClient,
-  ref: Ref,
-  work: NativeCollectionWork,
-): Promise<NativeCollectionMetadata | null> {
+async function observe(client: QueryClient, ref: Ref): Promise<NativeCollectionMetadata | null> {
   validate(ref);
   const row = (
     await client.query<Header>(headerSQL, bind(headerQuery, { route: ref.route, collection_id: ref.collectionId }))
@@ -480,8 +476,8 @@ async function observe(
   });
 }
 /** Structural producer read only. Maintenance/custody do not obtain reader authority from this result. */
-async function observeWorking(client: QueryClient, ref: Ref, work: NativeCollectionWork) {
-  const metadata = await observe(client, ref, work);
+async function observeWorking(client: QueryClient, ref: Ref) {
+  const metadata = await observe(client, ref);
   if (!metadata || metadata.membershipKind !== 'dynamic' || metadata.visibility === 'private') return metadata;
   if (
     !metadata.curatorAccountId ||
@@ -504,7 +500,7 @@ async function observeWorking(client: QueryClient, ref: Ref, work: NativeCollect
 
 export function readNativeCollectionWorkingMetadata(pool: Pool, ref: Ref, options: Options) {
   return call(pool, options, async (work) => ({
-    metadata: await readOnly(pool, options, work, (client) => observeWorking(client, ref, work)),
+    metadata: await readOnly(pool, options, work, (client) => observeWorking(client, ref)),
   }));
 }
 
@@ -514,7 +510,7 @@ export async function observeNativePublicCollectionOutput(
   ref: Ref,
   work: NativeCollectionWork,
 ): Promise<NativeCollectionMetadata | null> {
-  const metadata = await observe(client, ref, work);
+  const metadata = await observe(client, ref);
   return metadata?.state === 'active' &&
     metadata.membershipKind === 'dynamic' &&
     metadata.visibility !== 'private' &&
@@ -534,6 +530,50 @@ export function readNativeCollectionMetadataWithWork(
 ) {
   return withLibraryIdentityWork(pool, work, () => metadataCall(pool, ref, options, work));
 }
+
+/** Selected Source adapter: exact metadata statements and multiplicity, with no allowance or work ledger. */
+export async function readNativeCollectionMetadataForWork(
+  pool: Pool,
+  ref: Ref,
+  options: Readonly<{ deadline: number; tx: OperationalTransaction; working?: boolean }>,
+): Promise<{ metadata: NativeCollectionMetadata | null }> {
+  const { tx, deadline } = options;
+  const resources = currentOperationalResources(tx);
+  if (
+    !hasLiveOperationalTransaction(tx) ||
+    resources.pool !== pool ||
+    resources.mode !== 'work-step' ||
+    !Number.isFinite(deadline) ||
+    deadline > resources.deadline ||
+    Date.now() >= deadline
+  )
+    throw new ProblemError('semantic_not_ready');
+  const allowed = new Set([headerSQL, referenceSQL, nativeCollectionPartitionMetadataSQL, outputHead.sql, fenceSQL].map(normal));
+  const calls = new Set<string>();
+  const client: QueryClient = {
+    query: (async (config: string | QueryConfig, parameters: unknown[] = []) => {
+      if (Date.now() >= deadline || !hasLiveOperationalTransaction(tx))
+        throw new ProblemError('semantic_not_ready');
+      const sql = typeof config === 'string' ? config : config.text;
+      const values = (typeof config === 'string' ? parameters : config.values) ?? [];
+      const key = normal(sql);
+      if (!allowed.has(key) || calls.has(key)) throw new ProblemError('dependency_unavailable');
+      const bound = nativeCollectionFootprint(sql, values);
+      if (!bound) throw new ProblemError('dependency_unavailable');
+      const requestBytes = Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values));
+      if (requestBytes > bound.bytes) throw new ProblemError('dependency_unavailable');
+      calls.add(key);
+      const result = await tx.query({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) });
+      const resultBytes = Buffer.byteLength(JSON.stringify(result.rows) ?? '');
+      if (result.rows.length > 1 || resultBytes > bound.bytes - requestBytes)
+        throw new ProblemError('dependency_unavailable');
+      return result;
+    }) as QueryClient['query'],
+  };
+  return {
+    metadata: await (options.working ? observeWorking(client, ref) : observe(client, ref)),
+  };
+}
 function metadataCall(pool: Pool, ref: Ref, options: Options, sharedWork?: NativeCollectionWork) {
   const owner = admittedOwnerWorkingSource(pool, ref.collectionId);
   return call(
@@ -541,7 +581,7 @@ function metadataCall(pool: Pool, ref: Ref, options: Options, sharedWork?: Nativ
     options,
     async (work) => ({
       metadata: await readOnly(pool, options, work, async (client) => {
-        const metadata = await (owner ? observeWorking(client, ref, work) : observe(client, ref, work));
+        const metadata = await (owner ? observeWorking(client, ref) : observe(client, ref));
         if (
           owner &&
           metadata?.membershipKind === 'dynamic' &&
@@ -558,7 +598,7 @@ function metadataCall(pool: Pool, ref: Ref, options: Options, sharedWork?: Nativ
 export function readNativeCollectionScopeIdentity(pool: Pool, input: Ref & Options) {
   return call(pool, input, async (work) => ({
     identity: await readOnly(pool, input, work, async (client) => {
-      const metadata = await observe(client, input, work);
+      const metadata = await observe(client, input);
       if (!metadata || metadata.state !== 'active') return null;
       return (
         (
@@ -608,7 +648,7 @@ export function authorizeNativeCollectionMetadata(
       },
       async verify({ client }) {
         try {
-          current = await observe(client as PoolClient, metadata, work);
+          current = await observe(client as PoolClient, metadata);
           // A public read floor authorizes the selected output, never the curator's working facts.
           return !owner && current?.state === 'active' && current.visibility !== 'private';
         } catch (error) {
@@ -627,7 +667,7 @@ export function authorizeNativeCollectionMetadata(
     return readOnly(pool, context, work, async (client) => {
       const allowed = await check(client, context.at);
       if (failure) throw failure;
-      current ??= await observe(client, metadata, work);
+      current ??= await observe(client, metadata);
       if (!allowed || !current || current.state !== 'active' || current.incarnation !== metadata.incarnation)
         return { authorized: false };
       if (current.visibility !== 'private' && !owner) return { authorized: true };
@@ -664,8 +704,8 @@ export function authorizeNativeCollectionMetadata(
 }
 async function currentSource(client: QueryClient, metadata: NativeCollectionMetadata, work: NativeCollectionWork) {
   const current = await (workingMetadata.has(metadata)
-    ? observeWorking(client, metadata, work)
-    : observe(client, metadata, work));
+    ? observeWorking(client, metadata)
+    : observe(client, metadata));
   if (!current || current.state !== 'active') throw new ProblemError('not_found');
   if (
     current.incarnation !== metadata.incarnation ||

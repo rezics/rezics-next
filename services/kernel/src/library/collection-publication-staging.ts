@@ -315,13 +315,10 @@ export async function stageCollectionPublicationStep(
       evidence.deadline > resources.deadline
     )
       throw unavailable();
-    const source = await work.compose((allowance) =>
-      readCollectionSourceWorkState(options.pool, evidence.work!, {
-        access: evidence.access,
-        deadline: evidence.deadline,
-        allowance,
-      }),
-    );
+    const source = await readCollectionSourceWorkState(options.pool, evidence.work, {
+      access: evidence.access,
+      deadline: evidence.deadline,
+    });
     if (
       !isDeepStrictEqual(source.definition, structuredClone(native)) ||
       !isDeepStrictEqual(source.observation, native.observation)
@@ -464,13 +461,10 @@ export async function stageCollectionPublicationStep(
     settlement.cancel();
     // Whole-result equality includes original authority/output/phase, not just its rule digest or Source ID.
     if (!isDeepStrictEqual(await admit(tx, locator, work), native)) throw unavailable();
-    const finalSource = await work.compose((allowance) =>
-      readCollectionSourceWorkState(options.pool, evidence.work!, {
-        access: evidence.access,
-        deadline: evidence.deadline,
-        allowance,
-      }),
-    );
+    const finalSource = await readCollectionSourceWorkState(options.pool, evidence.work, {
+      access: evidence.access,
+      deadline: evidence.deadline,
+    });
     if (
       !isDeepStrictEqual(finalSource.definition, structuredClone(native)) ||
       finalSource.generation !== source.generation ||

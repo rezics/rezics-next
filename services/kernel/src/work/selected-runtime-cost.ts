@@ -1,10 +1,12 @@
-import { OPERATIONAL_WORK_AXES } from '../history/operational-work-axes.ts';
+import { BOUND_AXES, declareBound, sumBounds, type Bound } from '@rezics/bounds';
 
-export const SELECTED_AXES = [...OPERATIONAL_WORK_AXES, 'engineRequests'] as const;
-export type SelectedCost = Readonly<Record<(typeof SELECTED_AXES)[number], number>>;
+export const SELECTED_AXES = BOUND_AXES;
+export type SelectedCost = Bound;
+/** One original Work execution keeps its absolute deadline and admits at most three attempts. */
+export const WORK_EXECUTION_ATTEMPT_BOUND = 3;
 /** Named fields, never positional conversion from a foreign declaration. */
 export const selectedCost = (rows: number, points: number, statements: number, bytes: number): SelectedCost =>
-  Object.freeze({
+  declareBound({
     candidateKeys: 0,
     nativeRows: rows,
     identityMetadataRows: 0,
@@ -15,14 +17,7 @@ export const selectedCost = (rows: number, points: number, statements: number, b
     emptySeeks: points,
     engineRequests: 0,
   });
-export function sumSelectedCost(...parts: readonly SelectedCost[]): SelectedCost {
-  if (parts.some((part) => SELECTED_AXES.some((axis) => !Number.isSafeInteger(part[axis]) || part[axis] < 0)))
-    throw new TypeError('Unknown or nonfinite selected work declaration');
-  const total = Object.fromEntries(SELECTED_AXES.map((axis) => [axis, parts.reduce((n, part) => n + part[axis], 0)]));
-  if (SELECTED_AXES.some((axis) => !Number.isSafeInteger(total[axis])))
-    throw new TypeError('Selected declaration overflow');
-  return Object.freeze(total) as SelectedCost;
-}
+export const sumSelectedCost = sumBounds;
 const times = (n: number, part: SelectedCost) => sumSelectedCost(...Array.from({ length: n }, () => part));
 /** Literal complete LOCAL dispatch partitions, including the separate terminal release ceiling.
  * These are documented static bounds. Dispatch admits declared SQL and multiplicity, not a remaining ledger. */

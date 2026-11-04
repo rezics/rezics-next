@@ -130,7 +130,8 @@ becomes initial positive custody.
 `receive`, `replay`, `retirement`, after registration while the authentic original is live. Tokens bind the custody
 locator, actual Pool, phase and absolute original deadline. Copies, foreign locators/Pools, repeated issuance/spend,
 precommit use, expired or rolled-back attempts refuse before checkout. Reusing a durable original cannot extend
-that original's deadline. `OPERATIONAL_WORK_ATTEMPT_BOUND` is 3; callers do not buy those attempts from a ledger.
+that original's deadline. The attempt limit belongs to Work as `WORK_EXECUTION_ATTEMPT_BOUND = 3`; History validates
+its original through the Work execution port and does not own a second attempt counter.
 
 `resolveCommittedOperationalWork(pool, locator, transfer)` performs one bounded committed read, holding the actual
 partition/family/head/original fences through its source-home COMMIT, then releases the client before returning

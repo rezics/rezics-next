@@ -383,24 +383,18 @@ export function createCollectionSource(dependencies: {
       if (input.work) {
         const collectionId = 'collectionId' in input ? input.collectionId : input.source.observation.collectionId;
         if (collectionId !== input.work.locator.collectionId) throw new ProblemError('semantic_not_ready');
-        const current = await l.run((allowance) =>
-          readCollectionSourceWorkState(dependencies.pool, input.work!, {
-            access: dependencies.access,
-            deadline: input.deadline,
-            allowance,
-          }),
-        );
+        const current = await readCollectionSourceWorkState(dependencies.pool, input.work, {
+          access: dependencies.access,
+          deadline: input.deadline,
+        });
         if ('source' in input && !isDeepStrictEqual(input.source.observation, current.observation))
           throw new ProblemError('semantic_not_ready');
         const result = await body(l, current);
         // This is a fresh native admission on the SAME live Core client, not a cached getter verdict.
-        const final = await l.run((allowance) =>
-          readCollectionSourceWorkState(dependencies.pool, input.work!, {
-            access: dependencies.access,
-            deadline: input.deadline,
-            allowance,
-          }),
-        );
+        const final = await readCollectionSourceWorkState(dependencies.pool, input.work, {
+          access: dependencies.access,
+          deadline: input.deadline,
+        });
         if (
           !isDeepStrictEqual(current.definition, final.definition) ||
           current.generation !== final.generation ||
@@ -448,12 +442,9 @@ export function createCollectionSource(dependencies: {
     if (!raw) return partial('allowance');
     const window =
       input.work && current
-        ? await l.run((allowance) =>
-            readCollectionSourceWorkGroup(input.work!, current, input.subjectId, after, raw, {
-              deadline: input.deadline,
-              allowance,
-            }),
-          )
+        ? await readCollectionSourceWorkGroup(input.work, current, input.subjectId, after, raw, {
+            deadline: input.deadline,
+          })
         : await useCanonical(l, () =>
             readCanonicalSourceGroup(dependencies.pool, {
               route: obs.route,
@@ -577,12 +568,9 @@ export function createCollectionSource(dependencies: {
         while (l.allowance().remaining.candidateKeys > 0 && candidates.length < 100) {
           const seek =
             input.work && current
-              ? await l.run((allowance) =>
-                  seekCollectionSourceWorkGroup(input.work!, current, coveredThrough, {
-                    deadline: input.deadline,
-                    allowance,
-                  }),
-                )
+              ? await seekCollectionSourceWorkGroup(input.work, current, coveredThrough, {
+                  deadline: input.deadline,
+                })
               : await useCanonical(l, () =>
                   seekCanonicalSourceGroup(dependencies.pool, {
                     route: obs.route,

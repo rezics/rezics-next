@@ -404,9 +404,8 @@ async function readMembersDefinition(
     workClient: resources.workClient,
     access: options.access,
   });
-  // Library alone locks the current namespace/owner/episode and immutable definition.
-  // Its unavailable native producer must propagate; no local permission or fabricated episode substitutes.
-  if ((await preparation.admitStep(tx, locator)) !== true) throw new ProblemError('semantic_not_ready');
+  // The same-client getter locks and checks the current episode, Collection and Source in this Work phase.
+  // No request-side permission or fabricated episode substitutes for that native state.
   const native = await preparation.readWorkDefinition(tx, locator);
   if (
     !hasLiveOperationalTransaction(tx) ||

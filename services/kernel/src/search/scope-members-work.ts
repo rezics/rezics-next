@@ -38,7 +38,6 @@ import {
   membersGroupDimensions,
   membersOrdinalProbeDimensions,
   membersSnapshotScopeDimensions,
-  membersSource,
   membersTerminalDimensions,
   meterMembersDefinition,
   withMembersWorkBudget,
@@ -116,9 +115,7 @@ export async function readMembersSnapshot(
           () => readCollectionPublicationScopeWorkDefinition(workContext, input),
         )),
   );
-  const source = await membersSource(work, 1, (allowance) =>
-    readCollectionSourceWorkState(input.pool, input.work, { ...input, allowance }),
-  );
+  const source = await readCollectionSourceWorkState(input.pool, input.work, input);
   if (!isDeepStrictEqual(source.definition, native)) throw unavailable();
   const scopeValues = [
     native.sourceIdentity.route,
@@ -253,15 +250,13 @@ async function group(execution: MembersExecution, subject: string, work: NativeC
     const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
     const driver = last && drivers[last.driver];
     if (last && (!driver || last.driver < 1 || last.driver > 4)) throw unavailable();
-    const page = await membersSource(work, 1, (allowance) =>
-      readCollectionSourceWorkGroup(
-        execution.input.work,
-        execution.snapshot.source,
-        subject,
-        last && driver ? { driver, storedSubjectId: last.original, factId: last.fact } : null,
-        limit,
-        { deadline: execution.input.deadline, allowance },
-      ),
+    const page = await readCollectionSourceWorkGroup(
+      execution.input.work,
+      execution.snapshot.source,
+      subject,
+      last && driver ? { driver, storedSubjectId: last.original, factId: last.fact } : null,
+      limit,
+      { deadline: execution.input.deadline },
     );
     saved.keys.push(
       ...page.rows.map(({ key }) => ({

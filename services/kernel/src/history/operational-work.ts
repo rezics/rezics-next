@@ -5,6 +5,11 @@ import { currentOperationalResources, enqueueIntent, type OperationalTransaction
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient, WorkIntent } from '../work/client.ts';
+import type {
+  HistoryExecutionPort,
+  WorkExecutionOriginal,
+} from '../command/execution-contract.ts';
+import { assertWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import { receiveOperationalHistoryWork } from '../work/history-enqueue.ts';
 import { guardHistoryAccounts } from './gates.ts';
 import { encodeLocator, validateScope, type HistoryScope } from './locator.ts';
@@ -14,9 +19,7 @@ import {
   consumeOperationalWorkTransfer,
   finishOperationalWorkTransfers,
   OperationalWorkUnavailable,
-  attachOperationalWorkOriginal,
   operationalWorkDeadlineClient,
-  type OperationalWorkOriginal,
   type OperationalWorkPhase,
   type OperationalWorkTransfer,
 } from './operational-work-budget.ts';
@@ -56,7 +59,9 @@ export type OperationalWorkRegistration = Readonly<{
   readonly [registration]: true;
 }>;
 type Attempt = {
-  original: OperationalWorkOriginal;
+  original: WorkExecutionOriginal;
+  pool: Pool;
+  deadline: number;
   transactionId: string;
   registration?: {
     encoded: string;
@@ -69,16 +74,21 @@ type Attempt = {
   };
 };
 const attempts = new WeakMap<OperationalTransaction, Attempt>();
-export function beginOperationalHistoryAttempt(tx: OperationalTransaction, original: OperationalWorkOriginal): void {
-  currentOperationalResources(tx);
+export function beginOperationalHistoryAttempt(tx: OperationalTransaction, original: WorkExecutionOriginal): void {
+  const resources = currentOperationalResources(tx);
   if (attempts.has(tx)) throw new TypeError('Operational History attempt already open');
-  attachOperationalWorkOriginal(tx, original);
-  attempts.set(tx, { original, transactionId: randomUUID() });
+  assertWorkExecutionOriginal(tx, original);
+  attempts.set(tx, {
+    original,
+    pool: resources.pool,
+    deadline: resources.deadline,
+    transactionId: randomUUID(),
+  });
 }
 function attempt(tx: OperationalTransaction): Attempt {
   const resources = currentOperationalResources(tx);
   const state = attempts.get(tx);
-  if (!state || state.original.pool !== resources.pool || state.original.deadline !== resources.deadline)
+  if (!state || state.pool !== resources.pool || state.deadline !== resources.deadline)
     throw new OperationalWorkUnavailable('operational-work-original-not-opted-in');
   return state;
 }
@@ -753,3 +763,11 @@ export async function receiveCommittedOperationalWork(
 ): Promise<'registered-pending-source-currentness' | 'registered-pending-position' | 'uncaptured'> {
   return receiveOperationalHistoryWork(pool, client, origin, transfer);
 }
+
+/** History-owned persistence adapter selected by the Kernel composition roots. */
+export const historyExecutionPort: HistoryExecutionPort = Object.freeze({
+  begin: beginOperationalHistoryAttempt,
+  finalize: finalizeOperationalHistoryAttempt,
+  finish: finishOperationalHistoryAttempt,
+  enqueueCapture: operationalHistoryEnqueueCapture,
+});

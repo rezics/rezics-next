@@ -1,6 +1,7 @@
 import canonicalize from 'canonicalize';
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import { Pool, type PoolClient, type QueryResult } from 'pg';
+import type { KernelExecutionContract } from '../command/execution-contract.ts';
 import { WORK_QUEUES, type WorkQueueName } from './queues.ts';
 
 export const DBOS_SCHEMA = 'dbos';
@@ -8,6 +9,7 @@ export const WORK_APPLICATION = 'rezics-kernel';
 export type WorkClient = DBOSClient & {
   close(): Promise<void>;
   discoverLegacyLeaveChild(workflowId: string): Promise<string | null>;
+  readonly executionContract?: KernelExecutionContract;
 };
 const selectedClientPools = new WeakMap<DBOSClient, Pool>();
 const legacyDiscoveryIndexSetup = new WeakMap<Pool, Promise<void>>();

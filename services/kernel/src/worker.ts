@@ -2,6 +2,9 @@ import pg from 'pg';
 import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
+import { bindExecutionContract } from './command/execution-contract.ts';
+import { historyExecutionPort } from './history/operational-work.ts';
+import { workExecutionPort } from './work/selected-runtime.ts';
 import { KERNEL_WORK_MODULES } from './work/modules.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
@@ -71,6 +74,7 @@ export async function startWorker(
   let client: Awaited<ReturnType<typeof createWorkClient>>;
   try {
     client = await createWorkClient(config.databaseUrl, pool);
+    bindExecutionContract(client, workExecutionPort, historyExecutionPort);
   } catch (error) {
     await pool.end();
     throw error;

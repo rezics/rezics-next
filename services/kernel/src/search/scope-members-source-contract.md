@@ -2,15 +2,11 @@
 
 ## Search declaration
 
-`scope-members-source-declaration.ts` exports `MEMBERS_PREPARATION_SOURCE_DECLARATION`,
-`MEMBERS_PREPARATION_SOURCE_PATHS`, `MEMBERS_PREPARATION_SOURCE_MISSING_DECLARATIONS`, and
-`sumMembersPreparationSourceTerms`. The declaration is explicitly `incomplete`: it contains a finite known subtotal
-and the body-derived path maxima, but has no `cost` field. A `WorkAllowance`, `WorkReceipt`, per-call ceiling or this
-subtotal cannot be installed as `SelectedChildren.source`. Search-owned snapshot, terminal, group, closure-facts and
-ordinal-probe terms now use each producer's row, point, candidate, witness, statement and SQL/parameter byte
-projection. Each term's multiplicity is the mutually exclusive envelope of the id and ordinal call maxima; facts
-queries use limit 50, the remaining those 50 calls require. Child Library, Semantic, Core and Selected Runtime
-declarations still keep the nine-axis quote uncomposed.
+`scope-members-source-declaration.ts` exports the complete
+`MEMBERS_PREPARATION_SOURCE_DECLARATION` and its `cost`. The declaration composes Library's fixed metadata prefix,
+the existing Search step ceiling, the maximum eight Collection source-state checks and the source transaction's
+commit/rollback envelope. Its cost is a static dispatch description; it neither creates a ledger nor authorizes a
+Source observation. The id and ordinal branches remain mutually exclusive.
 
 The shared axes are candidateKeys, nativeRows, identityMetadataRows, nativePoints, witnessKeys, statements, bytes,
 emptySeeks and engineRequests. Library's existing `MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata` is the one
@@ -24,14 +20,13 @@ fence reads. Their components are:
 | 2 × owner fence     |             0 |          2 |                    0 |            2 |           0 |          2 |      2,048 |          2 |              0 |
 | Known subtotal      |             0 |         45 |                    0 |           45 |           0 |         16 | 19,924,992 |         45 |              0 |
 
-These are the literals in `members-preparation-cost.ts`; the Search export sums that branch by name. They do not
-price Search's nested scope work or any other owner. `scope-members-work-cost.ts` also names the actual query-meter
-projections: point reads have 4 rows, 1 point, 1 statement, 1 empty seek and 512 bytes plus SQL and serialized
-parameters; preparation reads have 32 rows, 4 points, 1 statement, 1 empty seek and 65,536 projected bytes; canonical
-scope reads have 64 rows, 8 points, 1 statement, 1 empty seek and 65,536 projected bytes. A cold release body read
-also has a size query and projects `6 × (compressed ? 1,073,741,824 : storedBytes) + 1,024` bytes, plus its SQL and
-serialized parameters. These query ceilings are active only while `withMembersWorkBudget` is active, so they do not
-price the three direct Library getters in the released Source body and are not a whole invocation quote.
+These are the literals in `members-preparation-cost.ts`; the Source cost includes this whole prefix. The existing
+Search query meter covers retained definitions, immutable release reads and nested filter evidence while the
+released Search body runs under `withMembersWorkBudget`. A cold release body read performs a size query before its
+bounded projection. Collection metadata, source-scope, head and generation queries use the literal limits in
+`COLLECTION_SOURCE_WORK_COST`; each statement also checks its request bytes, result bytes and one-call multiplicity
+before or after dispatch. Seek and group calls validate their indexed arguments and bounded page sizes. These
+Collection state/group/seek calls do not consume `CollectionSourceLedger` allowance.
 
 ## Reached body and finite path maxima
 
@@ -41,7 +36,8 @@ caps its candidate prefix at 2 and evaluates at most the first candidate. `ordin
 its terminal and earliest ordinal, then evaluates at most one subject. Evaluation runs two closure/currentness
 passes. The closure is bounded by 100 raw keys; with the `ids.length + raw.keys.length <= 100` check, one pass has
 at most 49 terminal lookups, 50 fact queries, 98 owner fact reads and 98 pinned-release reads. The earliest-ordinal
-scan has at most 99 member probes. These are call maxima, not costs; nested native statement prices are still needed.
+scan has at most 99 member probes. The Search body remains within its existing finite step ceiling, while the
+separate Collection source-state reads are composed at the id path maximum.
 
 | Reached operation                    |     id path |     ordinal path | Derivation                                                                                  |
 | ------------------------------------ | ----------: | ---------------: | ------------------------------------------------------------------------------------------- |
@@ -61,24 +57,11 @@ a successful callback commits it. Those finishes are mutually exclusive. After t
 native declarations separately cover one apply, failure association/write, or restart drain/reset/repair path. Do
 not add those already-declared native statements to the Source field a second time.
 
-The source declaration remains incomplete because the required owners have not supplied these finite child prices
-or physical authority:
-
-| Owner                                              | Body                                                                                                 | Missing from the nine axes                                                                                                                                        |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Library                                            | `MembersPreparation.readWorkDefinition` and retained release reconstruction                          | Current `NativeSourceIdentity`, current `CollectionSourceObservation`, cold release and header statement/row/point/byte bounds, same-client revalidation cost     |
-| Library                                            | `readCollectionSourceWorkState`, `createCollectionSource.prepare`, id prefix and raw ordinal prefix  | Per-call cost declarations and transitive native statement, row, point, empty-seek and byte bounds                                                                |
-| Semantic                                           | `createIdentityScopedObservations.revalidate`                                                        | A finite child quote for the capture/revision fence, including reached failure and cleanup                                                                        |
-| Search                                             | `readMembersSnapshot`, `membersTerminal`, `group`, `closure` facts queries and `firstMembersOrdinal` | Delivered: named finite terms with envelope multiplicities and SQL/parameter byte projections. Revalidation, Collection Source and owner providers stay separate. |
-| Library                                            | Owner fact providers, accepted release body reads and `readOwnerFilterCandidate`                     | Transitive native statements and the bounded fact/release byte projections over both closure passes                                                               |
-| Core                                               | `runOperationalTransaction` around `readReleasedPreparationSource`                                   | Work-step setup, time/owner fences, and commit or rollback/connection cleanup cost                                                                                |
-| Commerce successor with Library producer ownership | `MEMBERS_SELECTED_CHILDREN.source` and `checkMembersPreparationCompletion`                           | The complete `SelectedCost`, the installed source field, and final physical-source authority                                                                      |
-
-`MEMBERS_SELECTED_CHILDREN` currently declares native children but no `source`. `SelectedInvocation.source` therefore
-refuses before dispatch. `readWorkDefinition` also throws `dependency_unavailable` for a live retained episode, and
-`checkMembersPreparationCompletion` currently returns `selected-runtime-final-source-physical-authority-unavailable`.
-Keep preparation typed unavailable until those owners supply the missing declarations and authority. No allowance
-transfer, refill, ledger, second runtime or scope admission follows from this static work.
+`MEMBERS_SELECTED_CHILDREN.source` installs this bound before registration. The selected callback still obtains
+native identity and current Source/Scope on its admitted client, compares the captured definition and observations
+after Search, and checks them again in apply before recording progress or completion. Undeclared Source contexts
+refuse before SQL; unavailable dependencies produce the existing typed unavailable outcome. Static declarations
+cannot turn a receipt, locator or retained complete flag into currentness or disclosure authority.
 
 ## Same-client binding interface
 
@@ -113,10 +96,10 @@ export type MembersPreparationWorkDefinition = Readonly<{
 ```
 
 The retained `definition` is immutable meaning only: its accepted filter, `id` or `ordinal` sort, and exact release
-digest/body reconstructed from the retained canonical basis. It is not current Source authority. `readRetainedDefinition`
-currently recovers that meaning on the same live, fenced client. `readWorkDefinition` must build the Source fields
-from its own native reads; it cannot implement the producer by recursively calling Search's
-`readMembersPreparationWorkDefinition`, which validates this producer result and currently fails closed.
+digest/body reconstructed from the retained canonical basis. It is not current Source authority. `readWorkDefinition`
+admits only the selected Source transaction, locks the current live episode and Collection, restores the canonical
+definition on that client, and builds Source fields from its own native reads. Search's
+`readMembersPreparationWorkDefinition` validates the resulting tuple on the same transaction.
 
 For the required curated source, `NativeSourceIdentity` is the existing account identity with exactly these current
 fields: `route`, `collectionId`, `accountId`, `incarnation`, `generation`, `ownerEpoch`, `receivingEpoch`,
@@ -145,13 +128,13 @@ field on `MembersPreparationWorkDefinition`: Search reads its actual `captureId`
 `canonical_source_scope`, verifies the identity digest against those values, and calls Semantic revalidation on the
 same transaction.
 
-The producer and validator must retain the same live `OperationalTransaction` and Core client, exact route/owner/
-Collection/episode, work-step mode and owner partition. Preserve the reserved incarnation/generation, immutable
+The producer and validator retain the same live `OperationalTransaction` and Core client, exact route/owner/
+Collection/episode, work-step mode and owner partition. They preserve the reserved incarnation/generation, immutable
 basis/filter/order/release, current capture/revision, owner fence, and Source/identity fences. Search validates the
 result in `readMembersPreparationWorkDefinition`; `advancePreparation` compares the initial and final definition,
 Scope observation and owner fence before returning. After the Source transaction releases, selected apply reads
 current Source and Scope again and restarts if the retained state, observation or owner fence changed.
 
-Do not reconstruct an Actor, copy a capability, reuse a closed client, cast Command to Operational, synthesize Source
-identity, add a writer, or expand permissions. Accounts retirement/erasure gates and the permanent writer gates stay
-in force.
+The implementation does not reconstruct an Actor, copy a capability, reuse a closed client, cast Command to
+Operational, synthesize Source identity, add a writer, or expand permissions. Accounts retirement/erasure gates and
+the permanent writer gates stay in force.

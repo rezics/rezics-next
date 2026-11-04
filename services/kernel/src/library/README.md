@@ -228,15 +228,12 @@ Current implementation evidence is narrower than the capability:
   disclosure, public/frozen input support, retained preparation/default worker integration and physical bounds still
   require combined native verification; source typing does not certify those outcomes.
 - Members preparation's private [C3 parent composition](members-preparation-contract.md#cost-and-required-native-evidence)
-  is a documented static equation: `declareMembersPreparationParent` names every child bound, including constant
-  History registration and receiving. History opens with `openOperationalWorkOriginal` from those static ceilings;
-  callers do not buy dispatch from a NativeCollectionWork ledger on this path. The History original keeps its
-  three-attempt bound. Decision: NativeCollectionWork remains the Library SQL observer for identity, catalogue,
-  Search and publication; the Members → History → Work selected path uses documented static bounds.
-  Native producer/dispatch integration and useful prepared pages remain required. Neither the equation nor a
-  retained locator grants Source authority. The Source declaration/receiver, final native physical verification,
-  bounded result/frontier storage, completed readback and coordinated cleanup remain integration work; the runtime
-  stays unmounted.
+  retains its documented History, Core, Access and cleanup terms. History opens its original through the Work
+  execution port and keeps the same three-attempt limit. `MEMBERS_PREPARATION_SOURCE_DECLARATION` adds the selected
+  Source phase: Library's metadata prefix, the existing bounded Search step ceiling, up to eight Collection source
+  state checks, and transaction commit/rollback. Static declarations permit known dispatch; native source, owner,
+  scope and identity checks establish currentness. Decision: Collection state reads use literal statement caps;
+  Search's existing bounded work remains responsible for its nested filter evidence.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
@@ -2924,9 +2921,10 @@ current Source and filter binding.
 
 The exact producer declarations include `id | ordinal`. Native reservation, touch and step admission persist
 private episodes and locator-only intents. `readRetainedDefinition` recovers their exact canonical meaning and
-immutable accepted release only on the same live, fenced client; it does not establish current Source authority.
-Default `library.membersPreparation` work remains explicitly unavailable and produces no ready result or custody
-acknowledgment. Retained runtime and ordered-result bodies are installed below; useful prepared consumption and finite sparse-source completion require the full Source/physical binding.
+immutable accepted release only on the same live, fenced client; `readWorkDefinition` combines it with current
+native Source identity and observation on that client. The selected consumer admits its released Source call only
+with the complete declared bound, then applies the returned page after current Source, Scope, owner and episode
+checks. Prepared-result reads still require their committed selected completion and current disclosure authority.
 Native metadata reservations retain route-leading owner controls, exact-basis live uniqueness and indexed
 LRU/idle retirement. `createMembersPreparation` uses Core request admission and current `collection:read`;
 duplicate admission neither touches nor enqueues. An explicit History original registers the actual
@@ -2946,12 +2944,13 @@ to the producer's exact selected native tuple inside apply/failure and retains t
 
 The installed Search `members-preparation` work context uses `sourcePrefix`/`evaluate` for id order and
 `ordinalPrefix` for curated order. The Source body opens a genuine new operational transaction under the selected
-invocation's unchanged deadline; no closed transaction or expired request transfer crosses the handoff. It retains
-at most a 4096-byte frontier and advances at most 100 raw keys per step. Later native getters use the actual client's
-immutable captured release and Source/Scope metadata. Apply rechecks the current owner, episode, incarnation,
-generation and complete observation. A generation repair drains at most 100 results, advances the exact version and
-retains a private repair checkpoint until child-first removal finishes; its next step has the native version's
-deterministic continuation ID. Every successful continuation is enqueued on the apply transaction.
+invocation's unchanged deadline; no closed transaction or expired request transfer crosses the handoff. Its fixed
+bound includes repeated metadata and source-state checks. It retains at most a 4096-byte frontier and advances at
+most 100 raw keys per step. Later native getters use the actual client's immutable captured release and
+Source/Scope metadata. Apply rechecks the current owner, episode, incarnation, generation and complete observation;
+exhaustion commits a complete result only after these checks. A generation repair drains at most 100 results,
+advances the exact version and retains a private repair checkpoint until child-first removal finishes; its next step
+has the native version's deterministic continuation ID. Every successful continuation is enqueued on the apply transaction.
 
 Prepared-result reads independently require a committed native selected completion with the exact header version,
 original digest, restore generation and reserved tuple, then current Source/Scope and disclosure. Missing native
@@ -2983,20 +2982,12 @@ Collection note reading, Dynamic recovery, locale, mutation and uncertain-intent
   recovery cases are authored but unrun. Compiler status establishes no native budget, finite useful page or erasure
   acceptance. The controller owns those deferred checks.
 
-The selected producer now supplies lifetime-safe later selection, apply, reached failure and committed replay.
-`MEMBERS_SELECTED_CHILDREN` declares each owned native SQL dispatch by literal text, bound and named cost. Its
-complete Source child declaration remains absent: the inner Search receipts do not price the whole released
-Source transaction, currentness, owner checks and closure. Therefore `SelectedInvocation.source` refuses with
-`selected-runtime-source-declaration-unavailable` before invoking that body; the authentic reached-failure phase
-can record the failed episode without advancing its version. No guessed zero, renewed allowance or second payer
-replaces that missing operand.
-
-Final completion independently remains refused by the installed producer with
-`selected-runtime-final-source-physical-authority-unavailable`. Members preserves that exact operand and never
-sets a successful complete header from exhaustion. Required foreign authority must cover the actual current Source,
-SDK inventory restoration/retirement and independent physical closure, under the selected original's real identity
-and lifetime. Local association and native version progress prove none of those facts. Runtime admission opens History
-from static bounds; the local subtotal is a documented equation, not a quote that buys dispatch.
+The selected producer supplies lifetime-safe selection, apply, reached failure and committed replay.
+`MEMBERS_SELECTED_CHILDREN` declares each owned native SQL dispatch by literal text, bound and named cost, and
+`SelectedInvocation.source` uses the complete static Source declaration. Unknown Source statements or multiplicity
+still refuse before useful I/O. Final completion follows the authentic Source result plus fresh current Source,
+Scope, owner and episode checks in the apply transaction; a retained locator or serializable bound grants none of
+that authority. Runtime admission opens History through the Work execution port from static bounds.
 Library A5's existing participant probes and drains added results, headers (including bases/frontiers/original
 associations and selected lookup coordinates) and owner controls in child-first order. This local inventory is not shared-history minimization,
 all-copy absence or a blanket erasure/restore acknowledgement.
@@ -3009,7 +3000,8 @@ the released Source declaration and final current physical Source authority rema
 dependencies; this equation does not enable the adapters.
 
 Decision: NativeCollectionWork remains the Library SQL observer for identity, catalogue, Search and publication.
-The Members → History → Work selected path uses documented static bounds and `openOperationalWorkOriginal`.
+The selected Members Source declares its whole bounded path statically while nested Search query owners retain
+their existing ledger; History originals open through Work's `openWorkExecutionOriginal` port.
 `runMembersPreparationRequest` opens History from those bounds, commits the native episode before Source, and
 runs cleanup on success or failure. History's registration/readback prices come from its exports. Native
 registration, Source authority, result production and mounted dispatch remain separate required runtime work.
@@ -3316,9 +3308,9 @@ price remains unknown; this native declaration supplies no guessed zero or repla
 ### Members preparation funding
 
 `members-preparation-budget.ts` retains the existing complete parent declaration and child-transfer protocol.
-Members, Core, Access, Source, executor controls, retries, rollback and cleanup must all have explicit declarations
-before any child receives funding. Missing Source prices remain unavailable. Engine execution still needs its
-own owner's declaration; this native composition grants no engine allowance.
+The request-side Members, Core, Access, executor controls, retries, rollback and cleanup terms stay separate from
+the selected Work Source declaration. The latter is a static dispatch bound and creates no allowance or Source
+authority; Search's existing per-operation ledger remains inside its own producer.
 
 Decision: prepay the complete operational History child once and bind its single-use original to the parent's
 Pool, WorkClient and absolute deadline; retries and committed transfers share that allocation.
@@ -3332,15 +3324,14 @@ enqueue in the same transaction. Resolve, verify, receive, replay and retirement
 Core's actual COMMIT. Duplicate admission produces no new registration. Calls without this option retain the
 reservation protocol and its existing statement schedule.
 
-This is an integration seam, not a mounted funded worker. It supplies neither current Source observations nor
-physical execution authority. Receiving remains pending Source currentness, results remain preparing, and
-retirement cannot claim Source completion. Source capture, native completion, result reads and deletion cleanup
-must be connected before prepared/direct dispatch is mounted.
+This request-side declaration does not fund or authorize the selected Source phase. The selected Work path uses its
+own same-client Source and currentness checks, then applies or records an unavailable outcome through the original
+History/Work execution. Result disclosure and deletion cleanup continue to use their existing native authority.
 
-`MembersPreparation.readRetainedDefinition` now recovers the exact owner/Collection-bound canonical definition
-after same-client native episode admission and immutable-release validation. It supplies data only. Obsolete
-episodes return null; valid live episodes still make `readWorkDefinition` unavailable until current Source
-binding is implemented. A retained complete flag supplies no authority.
+`MembersPreparation.readRetainedDefinition` recovers the exact owner/Collection-bound canonical definition after
+same-client native episode admission and immutable-release validation. `readWorkDefinition` returns it only with
+the current native Source identity and observation on that client. Obsolete or stale episodes return null; the
+retained complete flag remains data and cannot replace a fresh Source check.
 
 ### Retained Kind controls
 

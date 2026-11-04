@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { runOperationalTransaction, type OperationalTransaction } from '../../src/command/operational.ts';
 import type { PreparationLocator } from '../../src/library/members-preparation.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import { openOperationalWorkOriginal } from '../../src/history/operational-work-budget.ts';
+import { openWorkExecutionOriginal } from '../../src/work/selected-runtime.ts';
 import {
   operationalWorkSource,
   receiveCommittedOperationalWork,
@@ -135,7 +135,7 @@ test('retained recovery rejects digest, canonical, namespace and immutable-relea
 test('one History original registers the real native reservation and transfers committed receiving and readback work', async () => {
   const fixture = await native.fixture();
   const deadline = Date.now() + 60_000;
-  const history = openOperationalWorkOriginal(native.db.pool, deadline, native.workClient);
+  const history = openWorkExecutionOriginal(native.db.pool, deadline, native.workClient);
   const result = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()], { history });
   expect(result.episodes[0]!.state).toBe('preparing');
   expect(result.history).toBeDefined();

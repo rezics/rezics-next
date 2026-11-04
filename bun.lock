@@ -6,6 +6,7 @@
       "name": "rezics",
       "devDependencies": {
         "@rezics/auth": "workspace:*",
+        "@rezics/bounds": "workspace:*",
         "@rezics/client": "workspace:*",
         "@rezics/definitions": "workspace:*",
         "@rezics/document": "workspace:*",
@@ -122,6 +123,13 @@
     },
     "packages/auth-contract": {
       "name": "@rezics/auth-contract",
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+      },
+    },
+    "packages/bounds": {
+      "name": "@rezics/bounds",
+      "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "1.4.4",
       },
@@ -325,6 +333,7 @@
         "@rezics/access": "workspace:*",
         "@rezics/auth": "workspace:*",
         "@rezics/auth-contract": "workspace:*",
+        "@rezics/bounds": "workspace:*",
         "@rezics/composition": "workspace:*",
         "@rezics/definitions": "workspace:*",
         "@rezics/document": "workspace:*",
@@ -1051,6 +1060,8 @@
     "@rezics/auth-contract": ["@rezics/auth-contract@workspace:packages/auth-contract"],
 
     "@rezics/auth-pages": ["@rezics/auth-pages@workspace:apps/auth"],
+
+    "@rezics/bounds": ["@rezics/bounds@workspace:packages/bounds"],
 
     "@rezics/client": ["@rezics/client@workspace:packages/client"],
 

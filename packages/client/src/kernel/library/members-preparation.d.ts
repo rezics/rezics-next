@@ -135,14 +135,13 @@ export declare function readPreparationSource(tx: OperationalTransaction, locato
     }>;
 } | null>;
 export declare function readPreparationOwnerFence(tx: OperationalTransaction, locator: PreparationLocator, definition: PreparationDefinition): Promise<string | null>;
-/** Native association/currentness inside a genuine selected apply, never the expired request handoff.
- * The installed selected producer still refuses final Source/physical completion after the owned body.
- */
+/** Native association/currentness inside a genuine selected apply, never the expired request handoff. */
 export declare function checkMembersPreparationCompletion(tx: OperationalTransaction, locator: PreparationLocator): Promise<Readonly<{
     status: 'obsolete';
 }> | Readonly<{
+    status: 'current';
+}> | Readonly<{
     status: 'unavailable';
-    operand: 'selected-runtime-final-source-physical-authority-unavailable';
 }>>;
 export type PreparationStepState = NonNullable<Awaited<ReturnType<typeof readPreparationStep>>>;
 type ReaderDependencies = {

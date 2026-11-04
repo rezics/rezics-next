@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
+import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling } from '@rezics/bounds';
 import canonicalize from 'canonicalize';
 import {
   enqueueIntent,
@@ -21,6 +22,7 @@ import {
 import { verifyOperationalWorkReplay } from '../../src/history/operational-work-receiving.ts';
 import { minimizeHistoryWork } from '../../src/history/durable.ts';
 import { HistoryRegistry } from '../../src/history/registry.ts';
+import { OPERATIONAL_WORK_LOCAL_DECLARATION } from '../../src/history/operational-work-budget.ts';
 import { encodeLocator } from '../../src/history/locator.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { WorkIntent } from '../../src/work/client.ts';
@@ -37,6 +39,27 @@ beforeAll(async () => {
 afterAll(async () => {
   await native?.close();
 });
+
+test('shared bounds compose finite History declarations and refuse invalid or overflowing dimensions', () => {
+  const zero = declareBound(Object.fromEntries(BOUND_AXES.map((axis) => [axis, 0])));
+  const page = declareBound({ ...zero, candidateKeys: 2, statements: 1, bytes: 256 });
+  const composed = sumBounds(page, page);
+  expect(composed).toMatchObject({ candidateKeys: 4, statements: 2, bytes: 512 });
+  expect(repeatBound(page, 3)).toMatchObject({ candidateKeys: 6, statements: 3, bytes: 768 });
+  expect(OPERATIONAL_WORK_LOCAL_DECLARATION.engineRequests).toBe(0);
+  expect(withinCeiling(composed, declareBound({ ...composed, statements: 2 }))).toBe(true);
+  expect(withinCeiling(composed, page)).toBe(false);
+  expect(() => declareBound({ ...zero, unsupported: 1 })).toThrow('Invalid bound declaration axes');
+  expect(() => declareBound({ ...zero, bytes: -1 })).toThrow('Invalid bound declaration value: bytes');
+  expect(() => declareBound({ ...zero, bytes: Number.MAX_SAFE_INTEGER + 1 })).toThrow(
+    'Invalid bound declaration value: bytes',
+  );
+  const omitted = { ...zero } as Record<string, number>;
+  delete omitted.bytes;
+  expect(() => declareBound(omitted)).toThrow('Invalid bound declaration axes');
+  expect(() => sumBounds({ ...page, bytes: Number.MAX_SAFE_INTEGER }, page)).toThrow('Bound declaration overflow');
+});
+
 function reservation() {
   const ownerAccountId = native.actor.accountId;
   const route = routeOf(ownerAccountId)!;

@@ -8,9 +8,16 @@ import {
   type OperationalOptions,
   type OperationalTransaction,
 } from '../command/operational.ts';
-import { assertSelectedWorkClient, type WorkClient, type WorkIntent } from './client.ts';
+import {
+  type ExecutionTransaction,
+  type SelectedExecutionPhase,
+  type WorkExecutionOriginal,
+  type WorkExecutionPort,
+} from '../command/execution-contract.ts';
+import { assertSelectedWorkClient, enqueueWorkIntent, type WorkClient, type WorkIntent } from './client.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { SELECTED_AXES, type SelectedCost } from './selected-runtime-cost.ts';
+import { isBound } from '@rezics/bounds';
+import { WORK_EXECUTION_ATTEMPT_BOUND, type SelectedCost } from './selected-runtime-cost.ts';
 import {
   associateSelectedEpisode,
   finishSelectedEpisode,
@@ -63,6 +70,86 @@ export class SelectedRuntimeUnavailable extends Error {
 }
 function refuse(gap: string): never {
   throw new SelectedRuntimeUnavailable(gap);
+}
+export class WorkExecutionUnavailable extends Error {
+  constructor(readonly gap: string) {
+    super(gap);
+  }
+}
+type ExecutionOriginalState = { pool: Pool; client: WorkClient; deadline: number; claimed: boolean; attempts: number };
+const executionOriginals = new WeakMap<WorkExecutionOriginal, ExecutionOriginalState>();
+const executionTransactions = new WeakMap<ExecutionTransaction, WorkExecutionOriginal>();
+
+/** Work creates this opaque original once; retries retain its pool, client and absolute deadline. */
+export function openWorkExecutionOriginal(
+  pool: Pool,
+  deadline: number,
+  client: WorkClient,
+): WorkExecutionOriginal {
+  if (!Number.isFinite(deadline) || Date.now() >= deadline)
+    throw new WorkExecutionUnavailable('work-execution-deadline');
+  const original = Object.freeze({}) as WorkExecutionOriginal;
+  executionOriginals.set(original, { pool, client, deadline, claimed: false, attempts: 0 });
+  return original;
+}
+/** Executor entry claims the exact original before authorization, checkout or BEGIN. */
+export function claimWorkExecutionOriginal(
+  original: WorkExecutionOriginal,
+  pool: Pool,
+  client: WorkClient,
+  deadline: number,
+): WorkExecutionOriginal {
+  const state = executionOriginals.get(original);
+  if (
+    !state ||
+    state.claimed ||
+    state.pool !== pool ||
+    state.client !== client ||
+    state.deadline !== deadline ||
+    Date.now() >= deadline
+  )
+    throw new WorkExecutionUnavailable('work-execution-original-unavailable');
+  state.claimed = true;
+  return original;
+}
+export function debitWorkExecutionAttempt(original: WorkExecutionOriginal): void {
+  const state = executionOriginals.get(original);
+  if (!state?.claimed || Date.now() >= state.deadline)
+    throw new WorkExecutionUnavailable('work-execution-original-unavailable');
+  if (++state.attempts > WORK_EXECUTION_ATTEMPT_BOUND)
+    throw new WorkExecutionUnavailable('work-execution-attempt-bound');
+}
+function assertExecutionTransaction(tx: ExecutionTransaction, original: WorkExecutionOriginal): void {
+  const state = executionOriginals.get(original);
+  const resources = currentOperationalResources(tx as OperationalTransaction);
+  if (
+    executionTransactions.get(tx) !== original ||
+    !state?.claimed ||
+    state.pool !== resources.pool ||
+    state.client !== resources.workClient ||
+    state.deadline !== resources.deadline
+  )
+    throw new WorkExecutionUnavailable('work-execution-original-transaction-unavailable');
+}
+/** Work owner check used by History's native transfer adapter. */
+export function assertWorkExecutionOriginal(tx: ExecutionTransaction, original: WorkExecutionOriginal): void {
+  assertExecutionTransaction(tx, original);
+}
+function bindWorkExecutionOriginal(tx: ExecutionTransaction, original: WorkExecutionOriginal): void {
+  const state = executionOriginals.get(original);
+  const resources = currentOperationalResources(tx as OperationalTransaction);
+  if (
+    executionTransactions.has(tx) ||
+    !state?.claimed ||
+    state.pool !== resources.pool ||
+    state.client !== resources.workClient ||
+    state.deadline !== resources.deadline
+  )
+    throw new WorkExecutionUnavailable('work-execution-original-transaction-unavailable');
+  executionTransactions.set(tx, original);
+}
+function finishWorkExecutionTransaction(tx: ExecutionTransaction): void {
+  executionTransactions.delete(tx);
 }
 /** Reviewed literal native statements, each with its complete child declaration and multiplicity.
  * This is a dispatch description, never a Source or user authorization capability. */
@@ -131,8 +218,7 @@ function scope(state: Original, locator: SelectedLocator): void {
     refuse('selected-runtime-episode-changed');
   state.locator ??= Object.freeze({ ...locator });
 }
-declare const phase: unique symbol;
-export type SelectedOperationalPhase = { readonly [phase]: true };
+export type SelectedOperationalPhase = SelectedExecutionPhase;
 type Phase = { original: Original; locator: SelectedLocator; kind: 'select' | 'apply' | 'failure'; used: boolean };
 const phases = new WeakMap<SelectedOperationalPhase, Phase>();
 const transactionSelections = new WeakMap<OperationalTransaction, Original>();
@@ -331,10 +417,7 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
       const sourceCost = declarations?.source;
       if (
         declarations &&
-        (declarations.native.some((item) =>
-          SELECTED_AXES.some((axis) => !Number.isSafeInteger(item.cost[axis]) || item.cost[axis] < 0),
-        ) ||
-          (sourceCost && SELECTED_AXES.some((axis) => !Number.isSafeInteger(sourceCost[axis]) || sourceCost[axis] < 0)))
+        (declarations.native.some((item) => !isBound(item.cost)) || (sourceCost && !isBound(sourceCost)))
       )
         throw new TypeError('Invalid selected native declaration');
       const lifecycle: Lifecycle = {
@@ -468,3 +551,17 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
     },
   });
 }
+
+/** Work-owned adapter installed on each native WorkClient by the Kernel composition roots. */
+export const workExecutionPort: WorkExecutionPort = Object.freeze({
+  openOriginal: openWorkExecutionOriginal,
+  claimOriginal: claimWorkExecutionOriginal,
+  debitAttempt: debitWorkExecutionAttempt,
+  bindOriginal: bindWorkExecutionOriginal,
+  finishTransaction: finishWorkExecutionTransaction,
+  openSelectedPhase(pool: Pool, options: unknown) {
+    return openSelectedOperationalPhase(pool, options as OperationalOptions) as SelectedExecutionPhase | undefined;
+  },
+  selectedEnqueue: selectedOperationalEnqueue,
+  enqueue: enqueueWorkIntent,
+});

@@ -38,7 +38,9 @@ import sourceMetadata from './members-preparation-source.sql';
 import ownerFence from './owner-filter-native-binding-fence.sql';
 import { collectionPublicationScopeRuntime } from '../search/work.ts';
 import { scopeAllowance } from '../search/scope-execution.ts';
+import { meterMembersDefinition, withMembersWorkBudget } from '../search/scope-members-work-cost.ts';
 import { MEMBERS_PREPARATION_STEP_CEILING, MEMBERS_PREPARATION_LOCAL_COST } from './members-preparation-cost.ts';
+import { MEMBERS_PREPARATION_SOURCE_COST } from '../search/scope-members-source-declaration.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import {
@@ -46,7 +48,6 @@ import {
   readPreparationScope,
   readPreparationSource,
   readPreparationOwnerFence,
-  checkMembersPreparationCompletion,
 } from './members-preparation.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { routeOf } from '../route/route.ts';
@@ -65,14 +66,14 @@ type Dependencies = Pick<WorkContext, 'pool' | 'client' | 'clock'> & {
 };
 type Input = PreparationIntent['input'];
 type OrderedSource = ReturnType<typeof createSearchScopeSource>;
-type OrderedRequest = Parameters<OrderedSource['sourcePrefix']>[1] | Parameters<OrderedSource['ordinalPrefix']>[1];
 
 const nativeCost = (cost: Readonly<WorkDimensions>) => ({ ...cost, engineRequests: 0 });
 /** Literal invocation-wide owned dispatch multiplicities. Native SQL performs no engine requests.
- * Source remains undeclared until its complete child bound is supplied; the runtime refuses that
- * reached branch before dispatch, while permitting a real native failure result.
+ * The complete Source child is declared before registration; the declaration permits dispatch but
+ * never substitutes for same-client Source, Scope, owner and episode checks.
  */
 export const MEMBERS_SELECTED_CHILDREN: SelectedChildren = {
+  source: MEMBERS_PREPARATION_SOURCE_COST,
   native: [
     { sql: step.sql, limit: 4, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.step) },
     { sql: sourceMetadata.sql, limit: 1, cost: nativeCost(MEMBERS_PREPARATION_LOCAL_COST.sourceMetadata) },
@@ -145,11 +146,11 @@ type PreparationAdvance = Readonly<{
 }>;
 type PreparationRunnerInput = Readonly<{
   work: MembersPreparationWorkContext;
+  budget: NativeCollectionWork;
   definition: PreparationDefinition;
   retained: PreparationStepState;
   order: SearchScopeOrder['kind'];
   deadline: number;
-  allowance?: OrderedRequest['allowance'];
 }>;
 
 /** Owned integration boundary. Ordinary Actor/LeafOptions execution cannot replace native work admission.
@@ -169,19 +170,13 @@ async function advancePreparation(
     access: authorization.access,
     clock: deps.clock,
   });
-  const native = await service.readWorkDefinition(input.work.tx, input.work.locator);
+  const work = input.budget;
+  const native = await meterMembersDefinition(input.work.tx, () =>
+    service.readWorkDefinition(input.work.tx, input.work.locator),
+  );
   const scope = await readPreparationScope(input.work.tx, input.work.locator);
   if (!native || !scope) return { status: 'unavailable' };
   const ownerFence = await readPreparationOwnerFence(input.work.tx, input.work.locator, input.definition);
-  const work = new NativeCollectionWork(
-    input.allowance ??
-      scopeAllowance(
-        100,
-        `${input.work.locator.episodeId}:${input.retained.version}`,
-        MEMBERS_PREPARATION_STEP_CEILING,
-      ),
-    input.deadline,
-  );
   const source = createSearchScopeSource({
     ...runtime,
     evidence: {
@@ -268,7 +263,9 @@ async function advancePreparation(
       }
     }
   }
-  const final = await service.readWorkDefinition(input.work.tx, input.work.locator);
+  const final = await meterMembersDefinition(input.work.tx, () =>
+    service.readWorkDefinition(input.work.tx, input.work.locator),
+  );
   const finalScope = await readPreparationScope(input.work.tx, input.work.locator);
   if (
     !isDeepStrictEqual(native, final) ||
@@ -382,18 +379,25 @@ async function readReleasedPreparationSource(
         access: authorization.access,
         clock: deps.clock,
       });
-      // Immutable release and exact expanded basis are re-read on the actual Source client.
-      const native = await service.readWorkDefinition(tx, locator);
-      if (!native)
-        throw new ProblemError('dependency_unavailable', { detail: 'Members Source definition is unavailable' });
-      const advance = await advancePreparation(deps, {
-        work: { kind: 'members-preparation', tx, locator },
-        definition: native.definition,
-        retained: state,
-        order: native.definition.sort,
+      const budget = new NativeCollectionWork(
+        scopeAllowance(100, `${locator.episodeId}:${state.version}`, MEMBERS_PREPARATION_STEP_CEILING),
         deadline,
+      );
+      return withMembersWorkBudget(budget, async () => {
+        // Immutable release and exact expanded basis are re-read on the actual Source client.
+        const native = await meterMembersDefinition(tx, () => service.readWorkDefinition(tx, locator));
+        if (!native)
+          throw new ProblemError('dependency_unavailable', { detail: 'Members Source definition is unavailable' });
+        const advance = await advancePreparation(deps, {
+          work: { kind: 'members-preparation', tx, locator },
+          budget,
+          definition: native.definition,
+          retained: state,
+          order: native.definition.sort,
+          deadline,
+        });
+        return { state, definition: native.definition, advance };
       });
-      return { state, definition: native.definition, advance };
     },
   );
 }
@@ -445,13 +449,7 @@ async function applyPreparationAdvance(
     return restartPreparation(tx, locator, state);
   const observation = preparationObservation(result.source, result.scope, result.ownerFence);
   if (state.observation !== null && state.observation !== observation) return restartPreparation(tx, locator, state);
-  let completionOperand: string | null = null;
-  if (state.complete || result.exhausted) {
-    const completion = await checkMembersPreparationCompletion(tx, locator);
-    if (completion.status === 'obsolete') return { kind: 'obsolete', version: state.version };
-    completionOperand = completion.operand;
-    if (state.complete) throw new ProblemError('dependency_unavailable', { detail: completionOperand });
-  }
+  if (state.complete) return { kind: 'complete', version: state.version };
   if (
     Buffer.byteLength(result.checkpoint) > 4096 ||
     result.subjects.length > 100 ||
@@ -470,12 +468,12 @@ async function applyPreparationAdvance(
     observation,
     subjects: [...result.subjects],
     exhausted: result.exhausted,
-    complete: false,
-    failure: completionOperand ? 'dependency_unavailable' : null,
+    complete: result.exhausted,
+    failure: null,
   });
   if (!applied) throw new ProblemError('dependency_unavailable', { detail: 'Members native apply raced' });
-  // Actual Source progress and the precise failed completion outcome commit atomically. No empty ready result.
-  if (completionOperand) return { kind: 'failure', version: applied.version };
+  // The final native Source/Scope/owner checks above precede this atomic completed result.
+  if (result.exhausted) return { kind: 'complete', version: applied.version };
   const continuation = await continueEpisode(tx, locator, `step:${applied.version}`);
   return { kind: 'continue', version: applied.version, continuation };
 }

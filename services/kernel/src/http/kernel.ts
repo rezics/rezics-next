@@ -85,6 +85,9 @@ import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
+import { bindExecutionContract } from '../command/execution-contract.ts';
+import { historyExecutionPort } from '../history/operational-work.ts';
+import { workExecutionPort } from '../work/selected-runtime.ts';
 import { recentSearchRoutes } from '../search/recent-searches.ts';
 import { searchRoutes } from '../search/http/routes.ts';
 import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
@@ -403,12 +406,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
             }),
     ...(dependencies.realmRoleReader === undefined ? {} : { realmRoleReader: dependencies.realmRoleReader }),
   });
+  const bindKernelExecution = (client: WorkClient) =>
+    bindExecutionContract(client, workExecutionPort, historyExecutionPort);
   let opened: Promise<WorkClient> | undefined;
   const workClient = (): Promise<WorkClient> => {
-    if (dependencies.workClient) return Promise.resolve(dependencies.workClient);
+    if (dependencies.workClient) return Promise.resolve(bindKernelExecution(dependencies.workClient));
     const url = dependencies.pool.options.connectionString;
     if (!url) return Promise.reject(new Error('Work client requires the pool connection string'));
-    opened ??= createWorkClient(url);
+    opened ??= createWorkClient(url).then(bindKernelExecution);
     return opened;
   };
   const subjects = subjectRoutes(

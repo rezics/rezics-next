@@ -4,7 +4,7 @@ import { AccessUnavailableError, classifyUnavailability, CommandUnavailableError
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
-import { enqueueWorkIntent, type WorkClient, type WorkIntent } from '../work/client.ts';
+import type { WorkClient, WorkIntent } from '../work/client.ts';
 import {
   DEFAULT_REQUEST_DEADLINE_MS,
   mintReadTime,
@@ -17,24 +17,10 @@ import {
 } from './command.ts';
 import { enterCommandGate } from './gate.ts';
 import fence from './operational-fence.sql';
-import {
-  beginOperationalHistoryAttempt,
-  finalizeOperationalHistoryAttempt,
-  finishOperationalHistoryAttempt,
-  operationalHistoryEnqueueCapture,
-} from '../history/operational-work.ts';
-import {
-  openOperationalWorkOriginal,
-  claimOperationalWorkOriginal,
-  debitOperationalWorkAttempt,
-  type OperationalWorkOriginal,
-} from '../history/operational-work-budget.ts';
-
-import {
-  openSelectedOperationalPhase,
-  selectedOperationalEnqueue,
-  type SelectedOperationalPhase,
-} from '../work/selected-runtime.ts';
+import type {
+  SelectedExecutionPhase,
+  WorkExecutionOriginal,
+} from './execution-contract.ts';
 
 declare const operational: unique symbol;
 export type OperationalTransaction = Pick<PoolClient, 'query'> & { readonly [operational]: true };
@@ -51,9 +37,9 @@ type CommonOptions = {
   /** Trusted service configuration only. */
   clock?: () => Date;
   /** Separate native History producer admission. Existing callers keep their ordinary behaviour. */
-  operationalHistory?: true | OperationalWorkOriginal;
+  operationalHistory?: true | WorkExecutionOriginal;
   /** Private phase capability issued only by the authentic selected invocation runner. */
-  selectedRuntime?: SelectedOperationalPhase;
+  selectedRuntime?: SelectedExecutionPhase;
   /** Trusted transaction observation; callbacks cannot replace persistence. */
   transactionObservation?: {
     beforeCommit(): void | Promise<void>;
@@ -120,8 +106,10 @@ export async function enqueueIntent(tx: OperationalTransaction, intent: WorkInte
     [...intent.input.accounts].sort().some((id, index) => id !== state.accounts[index])
   )
     throw new TypeError('Operational intent must name exactly its fenced accounts');
-  const selectedCapture = selectedOperationalEnqueue(tx, intent);
-  const historyCapture = operationalHistoryEnqueueCapture(tx, intent);
+  const execution = state.workClient.executionContract;
+  if (!execution) throw new TypeError('Kernel execution contract is not bound to the WorkClient');
+  const selectedCapture = execution.work.selectedEnqueue(tx, intent);
+  const historyCapture = execution.history.enqueueCapture(tx, intent);
   const capture =
     selectedCapture || historyCapture
       ? (created: boolean) => {
@@ -129,7 +117,7 @@ export async function enqueueIntent(tx: OperationalTransaction, intent: WorkInte
           selectedCapture?.(created);
         }
       : undefined;
-  await enqueueWorkIntent(state.workClient, state.client, intent, capture);
+  await execution.work.enqueue(state.workClient, state.client, intent, capture);
 }
 
 const remaining = (deadline: number) => Math.max(1, Math.floor(deadline - Date.now()));
@@ -154,6 +142,8 @@ export async function runOperationalTransaction<T>(
     new Set(options.accounts).size !== options.accounts.length
   )
     throw new TypeError(`Invalid accounts for ${kind}`);
+  const execution = options.workClient.executionContract;
+  if (!execution) throw new TypeError('Kernel execution contract is not bound to the WorkClient');
   const accounts = Object.freeze([...options.accounts].sort());
   if (options.mode !== 'request' && options.mode !== 'work-step') throw new TypeError('Invalid operational mode');
   const authorization = options.authorization;
@@ -182,14 +172,16 @@ export async function runOperationalTransaction<T>(
           requestedBy: options.basis.requestedBy,
         })
       : null;
-  const selected = options.selectedRuntime ? openSelectedOperationalPhase(pool, options) : undefined;
+  const selected = options.selectedRuntime ? execution.work.openSelectedPhase(pool, options) : undefined;
   const deadline = selected?.deadline ?? options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const attemptLimit = options.attemptLimit ?? Number.MAX_SAFE_INTEGER;
   if (!Number.isSafeInteger(attemptLimit) || attemptLimit < 1) throw new TypeError(`Invalid attempt limit for ${kind}`);
   // One original, Pool and absolute deadline across contention. Attempt count is a static bound.
   const historyOriginal = options.operationalHistory
-    ? claimOperationalWorkOriginal(
-        options.operationalHistory === true ? openOperationalWorkOriginal(pool, deadline) : options.operationalHistory,
+    ? execution.work.claimOriginal(
+        options.operationalHistory === true
+          ? execution.work.openOriginal(pool, deadline, options.workClient)
+          : options.operationalHistory,
         pool,
         options.workClient,
         deadline,
@@ -202,7 +194,7 @@ export async function runOperationalTransaction<T>(
     attempts++;
     let time: AuthoritativeTime | undefined;
     try {
-      if (historyOriginal) debitOperationalWorkAttempt(historyOriginal);
+      if (historyOriginal) execution.work.debitAttempt(historyOriginal);
       const gate = await enterCommandGate(pool, partition, deadline);
       if (gate.status !== 'acquired') throw unavailable(gate.status);
       try {
@@ -255,21 +247,24 @@ export async function runOperationalTransaction<T>(
                 ...(options.admission ? { admission: options.admission } : {}),
               });
               if (selected) await selected.hold(tx, client);
-              if (historyOriginal) beginOperationalHistoryAttempt(tx, historyOriginal);
+              if (historyOriginal) {
+                execution.work.bindOriginal(tx, historyOriginal);
+                execution.history.begin(tx, historyOriginal);
+              }
               for (const id of accounts) await fenceOperationalAccount(tx, id);
               selected?.guardBody();
               const value = await body(tx);
               await authorization?.finalize?.(tx, attempt, evidence);
               if (Date.now() >= deadline) throw unavailable('deadline');
               if (selected) await selected.hold(tx, client);
-              await finalizeOperationalHistoryAttempt(tx);
+              await execution.history.finalize(tx);
               await options.transactionObservation?.beforeCommit();
               live.delete(tx);
               active = false;
               await client.query(`SET LOCAL statement_timeout = '${remaining(deadline)}ms'`);
               selected?.assertLive();
               await client.query('COMMIT');
-              finishOperationalHistoryAttempt(tx, true);
+              execution.history.finish(tx, true);
               return value;
             });
           } catch (error) {
@@ -279,7 +274,8 @@ export async function runOperationalTransaction<T>(
           } finally {
             active = false;
             live.delete(tx);
-            finishOperationalHistoryAttempt(tx, false);
+            execution.history.finish(tx, false);
+            execution.work.finishTransaction(tx);
             selected?.finish();
           }
         });

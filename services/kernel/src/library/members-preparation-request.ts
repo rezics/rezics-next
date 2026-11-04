@@ -1,9 +1,9 @@
 import type { Pool } from 'pg';
 import {
-  openOperationalWorkOriginal,
   OPERATIONAL_WORK_LOCAL_DECLARATION,
   sumOperationalWork,
 } from '../history/operational-work-budget.ts';
+import { openWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
@@ -79,7 +79,7 @@ export async function runMembersPreparationRequest<T>(
   const [basis] = preparationDefinitionBases(actor.accountId, collectionId, [input.definition]);
   if (!basis) throw new ProblemError('dependency_unavailable');
   const deadline = input.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-  const history = openOperationalWorkOriginal(dependencies.pool, deadline, dependencies.workClient);
+  const history = openWorkExecutionOriginal(dependencies.pool, deadline, dependencies.workClient);
   let outcome: { ok: true; value: T } | { ok: false; error: unknown };
   try {
     const reserved = await dependencies.preparation.reserve(actor, collectionId, [basis.definition], {

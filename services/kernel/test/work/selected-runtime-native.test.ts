@@ -5,6 +5,9 @@ import pg from 'pg';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeSelectedRuntime } from '../../src/work/selected-runtime.ts';
+import { bindExecutionContract } from '../../src/command/execution-contract.ts';
+import { historyExecutionPort } from '../../src/history/operational-work.ts';
+import { workExecutionPort } from '../../src/work/selected-runtime.ts';
 import { newId } from '../../src/route/route.ts';
 import type { SelectedIdentity } from '../../src/work/selected-runtime.ts';
 
@@ -29,6 +32,7 @@ type LifecycleScenario = {
 async function nativeScenario() {
   const db = await openGrowthDatabase();
   const work = await createWorkClient(db.url, db.pool);
+  bindExecutionContract(work, workExecutionPort, historyExecutionPort);
   const sdk = DBOS as typeof DBOS & {
     registerSelectedStep(
       body: (mode: string) => Promise<string>,
@@ -58,7 +62,11 @@ async function nativeScenario() {
   let escapedUsefulCall: (() => Promise<unknown>) | undefined;
   let releaseQueries = 0;
   const originalRegister = sdk.registerSelectedStep;
-  sdk.registerSelectedStep = ((body, config, lifecycle) => {
+  sdk.registerSelectedStep = ((
+    body: (mode: string) => Promise<string>,
+    config: { name: string; retriesAllowed?: boolean; maxAttempts?: number; intervalSeconds?: number },
+    lifecycle: unknown,
+  ) => {
     const trustedLifecycle = lifecycle as {
       open(): Promise<{
         deadline: number;
@@ -75,7 +83,7 @@ async function nativeScenario() {
         return {
           deadline: admission.deadline,
           run: <T>(run: () => Promise<T>) => admission.run(run),
-          async reserve(dispatch) {
+          async reserve(dispatch: 'issue' | 'release') {
             scenario.dispatches.push(dispatch);
             await admission.reserve(dispatch);
             if (dispatch === 'release') {

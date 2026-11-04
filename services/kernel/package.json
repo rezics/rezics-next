@@ -24,6 +24,7 @@
     "@rezics/access": "workspace:*",
     "@rezics/auth": "workspace:*",
     "@rezics/auth-contract": "workspace:*",
+    "@rezics/bounds": "workspace:*",
     "@rezics/composition": "workspace:*",
     "@rezics/definitions": "workspace:*",
     "@rezics/document": "workspace:*",
