@@ -96,7 +96,10 @@ export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runti
                 [
                   process.execPath,
                   join(runtime.mainCheckout, 'tools/goal/scripts/efficiency-report.ts'),
-                  '--send', '--scheduled', '--bucket', completedUtcHour(Date.now()).start,
+                  '--send',
+                  '--scheduled',
+                  '--bucket',
+                  completedUtcHour(Date.now()).start,
                 ],
                 runtime.mainCheckout,
                 signal,
@@ -128,12 +131,15 @@ async function regenerate(): Promise<void> {
   }
   if (Date.now() - previous < (settings.policy ?? defaultPolicy).maintenance.derivedRefreshMs) return;
   const head = Bun.spawnSync(['git', 'rev-parse', settings.integrationBranch], {
-    cwd: settings.mainCheckout, stdout: 'pipe', stderr: 'pipe',
+    cwd: settings.mainCheckout,
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
   if (head.exitCode !== 0) throw new Error(head.stderr.toString());
   const result = await regenerateDerivedHead(
     { settings, ...(settings.derivedFiles ? { derivedFiles: settings.derivedFiles } : {}) },
-    head.stdout.toString().trim(), settings.integrationBranch,
+    head.stdout.toString().trim(),
+    settings.integrationBranch,
   );
   if (!result.retry) {
     writeFileSync(`${path}.tmp`, JSON.stringify({ at: Date.now() }), { mode: 0o600 });

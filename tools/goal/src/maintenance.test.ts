@@ -27,7 +27,10 @@ test('a sweep expires on policy budget, reports skipped steps and releases its l
     expect(errors.join('\n')).toContain('budget exhausted (30ms)');
     expect(errors.join('\n')).toContain('maintenance detect:');
     let detected = false;
-    runtime.deliverReminders = async () => { detected = true; return 0; };
+    runtime.deliverReminders = async () => {
+      detected = true;
+      return 0;
+    };
     expect(await runMaintenance('detect', runtime)).toBe(0);
     expect(detected).toBe(true);
   } finally {

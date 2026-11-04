@@ -1283,35 +1283,35 @@ export async function sync(options: Options = {}): Promise<number> {
         publicationStarted = true;
         const published = publish(checkout, 'sync', main, commit, paths, source, print);
         try {
-        const ref = (name: string) => published.updates.find((update) => update.ref === `refs/heads/${name}`);
-        const pair = (update: RefUpdate | undefined) =>
-          update ? { previous: update.previous, current: update.next } : undefined;
-        const stabilizeMove = pair(ref(STABILIZE));
-        const devMove = pair(ref(DEV));
-        appendHistory(join(state, 'cp-sync-history.log'), {
-          time: now.toISOString(),
-          action: 'sync',
-          main: { previous: main, current: commit },
-          paths,
-          source,
-          ...(stabilizeMove ? { stabilize: stabilizeMove } : {}),
-          ...(devMove ? { dev: devMove } : {}),
-        });
-        for (const update of published.updates)
-          print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
-        for (const warning of published.warnings) print(`cp-sync: ${warning}`);
-        // The published commit is the one just checked, so its suite failures are the next sync's baseline.
-        if (checks.some((check) => check.kind === 'suite'))
-          writeBaseline(baselineFile(state, commit, baselineChecks), {
-            version: 1,
-            main: commit,
-            checks: checksKey(baselineChecks),
-            time: new Date().toISOString(),
-            ran: verdict.ran,
-            failures: verdict.failures,
+          const ref = (name: string) => published.updates.find((update) => update.ref === `refs/heads/${name}`);
+          const pair = (update: RefUpdate | undefined) =>
+            update ? { previous: update.previous, current: update.next } : undefined;
+          const stabilizeMove = pair(ref(STABILIZE));
+          const devMove = pair(ref(DEV));
+          appendHistory(join(state, 'cp-sync-history.log'), {
+            time: now.toISOString(),
+            action: 'sync',
+            main: { previous: main, current: commit },
+            paths,
+            source,
+            ...(stabilizeMove ? { stabilize: stabilizeMove } : {}),
+            ...(devMove ? { dev: devMove } : {}),
           });
-        if (!(await reinstall(checkout, main, commit, paths, logs, print)))
-          throw new Refusal('The main checkout install failed.');
+          for (const update of published.updates)
+            print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
+          for (const warning of published.warnings) print(`cp-sync: ${warning}`);
+          // The published commit is the one just checked, so its suite failures are the next sync's baseline.
+          if (checks.some((check) => check.kind === 'suite'))
+            writeBaseline(baselineFile(state, commit, baselineChecks), {
+              version: 1,
+              main: commit,
+              checks: checksKey(baselineChecks),
+              time: new Date().toISOString(),
+              ran: verdict.ran,
+              failures: verdict.failures,
+            });
+          if (!(await reinstall(checkout, main, commit, paths, logs, print)))
+            throw new Refusal('The main checkout install failed.');
           await resident.restart(checkout);
           if (interrupted) throw new Refusal('Publication interrupted.');
           print('cp-sync: observing resident workers and gate outcomes for ten minutes after publication.');
@@ -1380,6 +1380,14 @@ export async function rollback(options: Options = {}): Promise<number> {
       const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
       const resident = options.resident ?? residentControl;
       let moved = false;
+      let interrupted = false;
+      const interrupt = (signal: NodeJS.Signals) => {
+        interrupted = true;
+        if (activeChild) killGroup(activeChild.pid, 'SIGKILL');
+        print(`cp-sync: ${signal}; completing rollback host recovery before exit.`);
+      };
+      process.once('SIGINT', interrupt);
+      process.once('SIGTERM', interrupt);
       try {
         // Main only moves forward (the repository's reference-transaction hook), so the rollback is a new commit
         // holding the earlier tree.
@@ -1413,6 +1421,7 @@ export async function rollback(options: Options = {}): Promise<number> {
         if (!(await reinstall(checkout, current, commit, paths, logs, print)))
           throw new Refusal('The rolled-back checkout install failed.');
         await resident.restart(checkout);
+        if (interrupted) throw new Refusal('Rollback interrupted.');
         print(`cp-sync: ${MAIN} runs the ${CONTROL_PLANE} of ${short(target.main.previous)} again.`);
         return 0;
       } catch (error) {
@@ -1441,6 +1450,8 @@ export async function rollback(options: Options = {}): Promise<number> {
         print('cp-sync: retained the published code with a running host; rollback failed.');
         return 1;
       } finally {
+        process.off('SIGINT', interrupt);
+        process.off('SIGTERM', interrupt);
         release();
       }
     },

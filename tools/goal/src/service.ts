@@ -196,7 +196,8 @@ export async function reportServices(
     failed ||=
       health.code !== 0 ||
       /^(LoadState=not-found|ActiveState=failed|Result=(?!success\b)\S+)/m.test(health.output) ||
-      (unit !== SERVICE_UNITS[2] && unit !== SERVICE_UNITS[4] &&
+      (unit !== SERVICE_UNITS[2] &&
+        unit !== SERVICE_UNITS[4] &&
         /^ActiveState=(inactive|deactivating)$/m.test(health.output));
     if (action === 'logs') {
       const logs = await run(['journalctl', '--user', '--unit', unit, '--no-pager', `--lines=${policy.logLines}`]);
