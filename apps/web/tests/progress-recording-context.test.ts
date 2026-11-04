@@ -1,6 +1,5 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
-import { createKernelClient } from '@rezics/client';
 import type { LibraryProfile } from '@rezics/definitions';
 import type { NativeProgressPresentation, NativeProgressSession } from '../src/library/progress-reads';
 import type { Release } from '../src/subject/definitions';
@@ -19,6 +18,8 @@ test('Record and correct exact progress and a selected-field journal with retain
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
     HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    Document: window.Document,
     Element: window.Element,
     Node: window.Node,
     DocumentFragment: window.DocumentFragment,
@@ -72,6 +73,7 @@ test('Record and correct exact progress and a selected-field journal with retain
   const writes: { body: unknown; authorization: string | null; key: string | null }[] = [];
   let session: NativeProgressSession;
 
+  const { createKernelClient } = await import('@rezics/client');
   const client = createKernelClient('https://kernel.test', {
     fetch: (async (input, init) => {
       const req = new Request(input, init);
@@ -259,8 +261,9 @@ test('Record and correct exact progress and a selected-field journal with retain
     const enter = async (dialog: HTMLElement, value: string) => {
       const input = dialog.querySelector('input[inputmode="decimal"]')!;
       await act(async () => {
+        input.focus();
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        input.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
       });
       return input;
     };
@@ -319,8 +322,9 @@ test('Record and correct exact progress and a selected-field journal with retain
     const setField = async (label: string, value: string) => {
       const input = field(label);
       await act(async () => {
+        input.focus();
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
-        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        input.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
       });
     };
     expect(field(m.library_occurrence_start_date()).value).toBe('2024');
