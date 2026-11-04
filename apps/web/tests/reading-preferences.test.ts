@@ -110,11 +110,14 @@ test('reset is an explicit native-default patch of the reviewed version', () => 
   expect(readingReset({ ...known, advice: undefined })).toBeNull();
 });
 
-test('a lost acknowledgement never becomes success without current readback', async () => {
+test('a lost acknowledgement retry confirms its command while current values still need readback', async () => {
   const fixture = readingFixture('unavailable');
   const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
   expect(await sendReading(fixture.io, input, false, latest)).toMatchObject({ kind: 'uncertain' });
-  expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({ kind: 'uncertain' });
+  expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({
+    kind: 'confirmed-read-failed',
+    receipt: { spoilerLevel: 1, version: 1 },
+  });
   expect(fixture.calls[1]).toBe(input);
   expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
 });

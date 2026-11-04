@@ -149,6 +149,7 @@ export async function readReading(
 
 export type ReadingAttemptResult =
   | { kind: 'confirmed'; preferences: ReadingPreferences; receipt: ReadingPreferences }
+  | { kind: 'confirmed-read-failed'; receipt: ReadingPreferences; reason: string; failure?: NativePreferenceFailure }
   | { kind: 'uncertain'; reason: string; failure?: NativePreferenceFailure; operation?: 'read' }
   | { kind: 'rejected'; reason: string; failure?: NativePreferenceFailure };
 
@@ -186,12 +187,12 @@ export async function sendReading(
   const current = await readReading(io, () => Math.max(receipt.version, currentVersion()));
   if (!current.ok)
     return {
-      kind: 'uncertain',
-      operation: 'read',
+      kind: 'confirmed-read-failed',
+      receipt,
       reason: current.reason,
       ...(current.failure ? { failure: current.failure } : {}),
     };
   if (current.preferences.version === receipt.version && !sameReading(current.preferences, receipt))
-    return { kind: 'uncertain', reason: 'unavailable' };
+    return { kind: 'confirmed-read-failed', receipt, reason: 'unavailable' };
   return { kind: 'confirmed', preferences: current.preferences, receipt };
 }
