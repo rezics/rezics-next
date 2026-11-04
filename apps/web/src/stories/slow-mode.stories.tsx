@@ -20,6 +20,13 @@ const meta = {
   title: 'Pages/Community/Board slow mode',
   parameters: {
     layout: 'fullscreen',
+    viewport: {
+      defaultViewport: 'slowMode390',
+      options: {
+        slowMode390: { name: '390 × 844', styles: { width: '390px', height: '844px' } },
+        slowMode1280: { name: '1280 × 900', styles: { width: '1280px', height: '900px' } },
+      },
+    },
     docs: {
       description: {
         component:
@@ -32,22 +39,25 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const draft = fromPlainText('A reply kept while the board enforces its posting interval.', 'blocks');
+const longDraft = fromPlainText('A long draft that remains readable while the posting interval is active. '.repeat(24), 'blocks');
 const boardId = recorded.thread.boardId;
 
 function policy(
   intervalSeconds: SlowModePolicy['intervalSeconds'],
   nextEligibleAt: string | null = null,
+  options: { canChange?: boolean; exempt?: boolean; admissionState?: SlowModePolicy['admissionState'] } = {},
 ): Extract<SlowModeRead, { kind: 'available' }> {
+  const admissionState = options.admissionState ?? (nextEligibleAt ? 'interval' : 'ready');
   return {
     kind: 'available',
     policy: {
       intervalSeconds,
       retryAt: nextEligibleAt,
       nextEligibleAt,
-      canChange: true,
-      exempt: false,
-      admissionState: nextEligibleAt ? 'interval' : 'ready',
-      retryAfterSeconds: 0,
+      canChange: options.canChange ?? true,
+      exempt: options.exempt ?? false,
+      admissionState,
+      retryAfterSeconds: admissionState === 'pending' ? 1 : 0,
     },
   };
 }
@@ -64,12 +74,23 @@ function Host({ port, children }: { port: SlowModePort; children: ReactNode }) {
   return <SlowModePortProvider port={port}>{children}</SlowModePortProvider>;
 }
 
-function Journey({ initial, refuse }: { initial: SlowModeRead; refuse?: boolean }) {
+function Journey({
+  initial,
+  refuse,
+  unknown,
+  body = draft,
+}: {
+  initial: SlowModeRead;
+  refuse?: boolean;
+  unknown?: boolean;
+  body?: typeof draft;
+}) {
   const [current, setCurrent] = useState(initial);
   const port = useMemo<SlowModePort>(
     () => ({
       read: async () => current,
       change: async ({ intervalSeconds }) => {
+        if (unknown) return { kind: 'unknown' };
         if (current.kind !== 'available') return { kind: 'unavailable' };
         const next = policy(intervalSeconds, current.policy.nextEligibleAt);
         setCurrent(next);
@@ -87,7 +108,7 @@ function Journey({ initial, refuse }: { initial: SlowModeRead; refuse?: boolean 
             titleRequired
             boardId={boardId}
             initialKey="0192f3a0-6c1e-7b2a-9d4e-000000000092"
-            initialBody={draft}
+            initialBody={body}
             onSubmit={async () =>
               refuse
                 ? { ok: false as const, reason: 'rate-limited' as const, retryAfter: 0 }
@@ -151,5 +172,81 @@ export const ExplicitResubmission: Story = {
     await userEvent.click(retry);
     await waitFor(() => expect(view.getAllByRole('alert').length).toBeGreaterThan(0));
     await expect(view.getByLabelText(m.thread_title_label())).toHaveValue('Retry after the board refusal');
+  },
+};
+
+export const ManagerControlsCurrentPolicy: Story = {
+  name: 'Manager controls a current nonpreset policy',
+  render: () => <Journey initial={policy(45)} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const group = await view.findByRole('radiogroup', { name: m.slow_mode_setting_legend() });
+    const preset = within(group).getByRole('radio', {
+      name: m.slow_mode_interval_seconds({ seconds: 30 }),
+    });
+    preset.focus();
+    await userEvent.keyboard(' ');
+    await expect(preset).toBeChecked();
+  },
+};
+
+export const OrdinaryWriter: Story = {
+  name: 'Ordinary writer',
+  render: () => <Journey initial={policy(45, null, { canChange: false })} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }));
+    await expect(view.queryByRole('radiogroup', { name: m.slow_mode_setting_legend() })).not.toBeInTheDocument();
+  },
+};
+
+export const PendingWriter: Story = {
+  name: 'Writer with a pending admission',
+  render: () => <Journey initial={policy(300, null, { admissionState: 'pending' })} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByText(m.slow_mode_preparing());
+    await expect(view.queryByText(m.slow_mode_next_now())).not.toBeInTheDocument();
+  },
+};
+
+export const MaximumLongInterval: Story = {
+  name: 'Maximum interval with a long draft',
+  render: () => (
+    <Journey
+      initial={policy(86400, new Date(Date.now() + 86400_000).toISOString())}
+      body={longDraft}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const title = await view.findByLabelText(m.thread_title_label());
+    await userEvent.type(title, 'A deliberately long title that wraps at a narrow viewport.');
+    await view.findByText(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 86400 }) }));
+    await expect(title).toHaveValue('A deliberately long title that wraps at a narrow viewport.');
+  },
+};
+
+export const DeniedManager: Story = {
+  name: 'Denied setting admission',
+  render: () => <Journey initial={{ kind: 'denied' }} />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.queryByRole('radiogroup', { name: m.slow_mode_setting_legend() })).not.toBeInTheDocument();
+    await expect(view.queryByRole('button', { name: m.slow_mode_apply() })).not.toBeInTheDocument();
+  },
+};
+
+export const UnknownSettingIntent: Story = {
+  name: 'Unknown setting intent',
+  render: () => <Journey initial={policy(45)} unknown />,
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await view.findByRole('radiogroup', { name: m.slow_mode_setting_legend() });
+    await userEvent.click(view.getByRole('radio', { name: m.slow_mode_interval_seconds({ seconds: 300 }) }));
+    await userEvent.click(await view.findByRole('button', { name: m.slow_mode_apply() }));
+    await view.findByRole('alert', { name: m.slow_mode_unknown() });
+    await userEvent.click(await view.findByRole('button', { name: m.slow_mode_retry() }));
+    await expect(view.getByRole('alert')).toHaveTextContent(m.slow_mode_unknown());
   },
 };

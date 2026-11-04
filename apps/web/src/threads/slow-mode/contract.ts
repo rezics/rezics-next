@@ -22,6 +22,10 @@ export type SlowModePort = {
     boardId: string;
     intervalSeconds: SlowModeInterval;
     idempotencyKey: string;
+    subject: string;
+    csrfToken: string;
+    credentialMode: string;
+    scopeKey: string;
     signal?: AbortSignal;
   }): Promise<SlowModeChange>;
 };

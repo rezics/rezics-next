@@ -1,6 +1,6 @@
 import { QueryClientContext, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useLayoutEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
-import { sessionCsrfToken, sessionQuery } from '../../session/query';
+import { sessionQuery } from '../../session/query';
 import type { SlowModePort, SlowModeRead } from './contract';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
@@ -24,7 +24,7 @@ const productionPort: SlowModePort = {
         intervalSeconds: input.intervalSeconds,
         idempotencyKey: input.idempotencyKey,
       },
-      headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' },
+      headers: { 'X-CSRF-Token': input.csrfToken },
     });
   },
 };
@@ -34,9 +34,12 @@ export function useSlowModePort(): SlowModePort {
 }
 
 export type SlowModeVisit = {
+  id: string;
   boardId: string;
   subject: string;
   csrfToken: string;
+  credentialMode: string;
+  scopeKey: string;
   controller: AbortController;
   current: (signal?: AbortSignal) => boolean;
   retire: () => void;
@@ -45,6 +48,8 @@ export type SlowModeVisit = {
 function sessionIdentity(session: SessionValue | undefined): string {
   return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
 }
+
+let nextVisitId = 0;
 
 function useSessionValue(): SessionValue | undefined {
   const client = useContext(QueryClientContext);
@@ -55,8 +60,12 @@ function useSessionValue(): SessionValue | undefined {
   );
 }
 
-/** Private visit bound to board, viewer and CSRF. Replacement retires mounted work. */
-export function useSlowModeVisit(boardId: string | undefined): SlowModeVisit | null {
+/** Private visit bound to its source, selection, credential mode, viewer and CSRF. */
+export function useSlowModeVisit(
+  boardId: string | undefined,
+  scopeKey = 'board',
+  credentialMode = 'session',
+): SlowModeVisit | null {
   const client = useContext(QueryClientContext);
   const session = useSessionValue();
   const owner = sessionIdentity(session);
@@ -70,12 +79,15 @@ export function useSlowModeVisit(boardId: string | undefined): SlowModeVisit | n
   const visit = useMemo(() => {
     if (!ready || !boardId || !session?.subject || !session.csrfToken) return null;
     const state: SlowModeVisit & { retired: boolean; owner: string } = {
+      id: String(++nextVisitId),
       controller: new AbortController(),
       retired: false,
       owner,
       boardId,
       subject: session.subject,
       csrfToken: session.csrfToken,
+      credentialMode,
+      scopeKey,
       retire() {
         state.retired = true;
         state.controller.abort();
@@ -87,7 +99,7 @@ export function useSlowModeVisit(boardId: string | undefined): SlowModeVisit | n
       },
     };
     return state;
-  }, [boardId, client, owner, ready, session?.csrfToken, session?.subject]);
+  }, [boardId, client, credentialMode, owner, ready, scopeKey, session?.csrfToken, session?.subject]);
   useLayoutEffect(() => {
     if (!visit) return;
     if (!visit.retired && visit.controller.signal.aborted) visit.controller = new AbortController();
@@ -98,17 +110,29 @@ export function useSlowModeVisit(boardId: string | undefined): SlowModeVisit | n
 }
 
 export function slowModeQueryKey(visit: SlowModeVisit) {
-  return ['board-slow-mode', visit.boardId, visit.subject, visit.csrfToken] as const;
+  return [
+    'board-slow-mode',
+    visit.id,
+    visit.scopeKey,
+    visit.credentialMode,
+    visit.boardId,
+    visit.subject,
+    visit.csrfToken,
+  ] as const;
 }
 
-export function useSlowModeRead(boardId: string | undefined): {
+export function useSlowModeRead(
+  boardId: string | undefined,
+  scopeKey = 'board',
+  credentialMode = 'session',
+): {
   visit: SlowModeVisit | null;
   read: SlowModeRead | undefined;
   preparing: boolean;
   reload: () => void;
 } {
   const port = useSlowModePort();
-  const visit = useSlowModeVisit(boardId);
+  const visit = useSlowModeVisit(boardId, scopeKey, credentialMode);
   const query = useQuery({
     staleTime: 0,
     enabled: !!visit,

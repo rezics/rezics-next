@@ -84,6 +84,8 @@ function EligibilityCopy({
 type EligibilityProps = {
   boardId: string;
   refusal: WriteFailure | null;
+  scopeKey?: string;
+  credentialMode?: string;
   advice?: import('../thread-page').ThreadPageObservation['slowMode'] | undefined;
 };
 
@@ -136,8 +138,8 @@ function ComposedEligibility({
   );
 }
 
-function PointEligibility({ boardId, refusal }: EligibilityProps) {
-  const { visit, read, preparing, reload } = useSlowModeRead(boardId);
+function PointEligibility({ boardId, refusal, scopeKey, credentialMode }: EligibilityProps) {
+  const { visit, read, preparing, reload } = useSlowModeRead(boardId, scopeKey, credentialMode);
   const receivedAt = useRef({ refusal, at: Date.now() });
   if (receivedAt.current.refusal !== refusal) receivedAt.current = { refusal, at: Date.now() };
   if (!visit) return null;
@@ -178,14 +180,24 @@ function applyChange(
   if (result.kind === 'applied') remember({ kind: 'available', policy: result.policy });
 }
 
-export function SlowModeSetting({ boardId, onApplied }: { boardId: string; onApplied?: () => void }) {
-  const { visit, read, preparing, reload } = useSlowModeRead(boardId);
+export function SlowModeSetting({
+  boardId,
+  scopeKey,
+  credentialMode,
+  onApplied,
+}: {
+  boardId: string;
+  scopeKey?: string;
+  credentialMode?: string;
+  onApplied?: () => void;
+}) {
+  const { visit, read, preparing, reload } = useSlowModeRead(boardId, scopeKey, credentialMode);
   if (!visit) return null;
   if (read?.kind === 'denied') return null;
   if (read?.kind === 'available' && !read.policy.canChange) return null;
   return (
     <SlowModeSettingForm
-      key={`${visit.boardId}:${visit.subject}:${visit.csrfToken}`}
+      key={visit.id}
       visit={visit}
       read={read}
       preparing={preparing}
@@ -216,7 +228,15 @@ function SlowModeSettingForm({
   const [pending, setPending] = useState(false);
   const [needsReview, setNeedsReview] = useState(false);
   const commandKey = useRef(crypto.randomUUID());
-  const exact = useRef<{ interval: SlowModeInterval; key: string; sender: typeof port.change } | null>(null);
+  const exact = useRef<{
+    interval: SlowModeInterval;
+    key: string;
+    sender: typeof port.change;
+    subject: string;
+    csrfToken: string;
+    credentialMode: string;
+    scopeKey: string;
+  } | null>(null);
   const policy = read?.kind === 'available' ? read.policy : undefined;
   const selected = draft ?? policy?.intervalSeconds ?? 0;
   const busy = pending || preparing || needsReview || outcome?.kind === 'unknown';
@@ -234,7 +254,15 @@ function SlowModeSettingForm({
       return;
     const command = retry
       ? exact.current
-      : { interval: selected, key: commandKey.current, sender: port.change.bind(port) };
+      : {
+          interval: selected,
+          key: commandKey.current,
+          sender: port.change.bind(port),
+          subject: visit.subject,
+          csrfToken: visit.csrfToken,
+          credentialMode: visit.credentialMode,
+          scopeKey: visit.scopeKey,
+        };
     if (!command) return;
     if (!retry) exact.current = command;
     setPending(true);
@@ -245,6 +273,10 @@ function SlowModeSettingForm({
         boardId: visit.boardId,
         intervalSeconds: command.interval,
         idempotencyKey: command.key,
+        subject: command.subject,
+        csrfToken: command.csrfToken,
+        credentialMode: command.credentialMode,
+        scopeKey: command.scopeKey,
         signal: owner,
       });
       if (!visit.current(owner)) return;

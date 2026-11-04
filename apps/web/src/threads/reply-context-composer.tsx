@@ -1,5 +1,6 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import type { CreatedPost, WriteFailure } from './actions';
 import { PostComposer } from './composer';
 import { ReplyContext, type ReplyParents } from './reply-context';
@@ -10,6 +11,7 @@ export function ThreadReplyComposer({
   parents,
   pending,
   onCancel,
+  credentialMode,
   canSubmit = true,
   ...composer
 }: {
@@ -22,6 +24,7 @@ export function ThreadReplyComposer({
   slowModeAdvice?: import('./thread-page').ThreadPageObservation['slowMode'] | undefined;
   containerId: string;
   boardId?: string;
+  credentialMode: string;
   focusRequest: number;
   onPendingChange: (pending: boolean) => void;
   onSubmit: (input: ReplyCommand) => Promise<{ ok: true; value: CreatedPost } | WriteFailure>;
@@ -32,6 +35,8 @@ export function ThreadReplyComposer({
       {...composer}
       canSubmit={canSubmit}
       replyTargetId={parentId}
+      slowModeScopeKey={JSON.stringify([boardId, containerId, parentId, getLocale(), credentialMode])}
+      slowModeCredentialMode={credentialMode}
       replyContext={
         parentId === null || !canSubmit ? null : (
           <div className="mb-3 flex min-w-0 flex-wrap items-start gap-2" role="status" aria-atomic="true">

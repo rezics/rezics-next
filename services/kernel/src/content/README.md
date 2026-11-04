@@ -3342,13 +3342,21 @@ cannot be associated with an account after migration; they contain no identifier
 
 ### Cost: board slow-mode status
 
-- Touches: the route's existing before/after board and Realm disclosure, one mode point read, one actor-key point
-  read across current and legacy hashes, one pending-permit existence probe, and the existing explicit Access check.
-- Bound: two Content statements and one fixed-size result, in addition to the existing bounded disclosure and
-  Access work. At most two actor rows and one boolean pending result are examined; no identity or history scan.
-  Retry timestamps and the response body are constant-size.
-- Growth check: controller native acceptance must keep the selected board and actor fixed while unrelated actors,
-  threads and command history grow at 256, 1024 and 4096; include ready, interval, pending, anonymous and exempt reads.
+- Touches: bearer authentication; the existing before/after Board and Realm disclosure; two policy samples; each
+  sample reads one mode row, probes the current and legacy actor digests, probes one active permit, and performs the
+  explicit `moderation:takedown` Access check. The final sample supplies the response. Reading pages repeat the
+  policy sample after thread, reply, Board, author, action, reaction and watch hydration.
+- Bound: four mode/actor/permit Content statements across the two samples, plus the two existing bounded Board and
+  Realm disclosures and two explicit Access checks. Each actor lookup examines at most two primary-key rows; the
+  permit probe returns one boolean through `board_slow_permit_one_active_actor_idx`, which excludes completed
+  history. The response and its serialization are fixed-size. B-tree blocks grow logarithmically; `LIMIT` does not
+  prove a physical bound.
+- Growth check: `test/content/board-slow-policy-journey.test.ts` holds the selected Board and actor fixed while
+  completed permits and unrelated active reservations grow independently at 256, 1024 and 4096. It checks stable
+  statement counts and response bytes, then inspects the actor primary-key and active-permit physical paths. The
+  remaining integrated growth check must also independently grow unrelated Boards, thread homes/posts and Access
+  history at those scales, and account for every participating pool, control, preparation, evaluation, runner,
+  examined prefix, row, block, parameter copy and serialized byte.
 
 ### Cost: setting changes
 

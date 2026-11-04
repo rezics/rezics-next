@@ -495,12 +495,24 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         return contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
-            if (!(await readRealmBoard(dependencies, id, context)).value) throw new ProblemError('not_found');
+            const initial = await readRealmBoard(dependencies, id, context);
+            if (!initial.value) throw new ProblemError('not_found');
             const value = await readBoardSlowMode(dependencies, actor, id, job.deadline);
+            const finalValue = await readBoardSlowMode(dependencies, actor, id, job.deadline);
             const final = await readRealmBoard(dependencies, id, context);
             if (!final.value) throw new ProblemError('not_found');
+            if (
+              JSON.stringify(sessionComponent(initial.anchor)) !== JSON.stringify(sessionComponent(final.anchor)) ||
+              value.intervalSeconds !== finalValue.intervalSeconds ||
+              value.canChange !== finalValue.canChange ||
+              value.exempt !== finalValue.exempt ||
+              value.admissionState !== finalValue.admissionState
+            )
+              throw new ProblemError('dependency_unavailable', {
+                detail: 'The board policy authority changed during inspection',
+              });
             session.record(sessionComponent(final.anchor));
-            return value;
+            return finalValue;
           }),
         );
       },

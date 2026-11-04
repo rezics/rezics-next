@@ -67,7 +67,9 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useLocation } = await import(
+    '@tanstack/react-router'
+  );
   const { PostComposer } = await import('../src/threads/composer');
   const { AuthoringDepartureProvider } = await import('../src/threads/authoring-departure');
   const { sessionQuery } = await import('../src/session/query');
@@ -80,15 +82,27 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   const body = fromPlainText('A draft that must survive a cooldown refusal.', 'blocks');
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'slow-mode-session' };
   let read: SlowModeRead = { kind: 'unavailable' };
-  const changes: { intervalSeconds: number; idempotencyKey: string }[] = [];
+  let heldReads = 0;
+  const delayedReads: ((value: SlowModeRead) => void)[] = [];
+  const changes: {
+    intervalSeconds: number;
+    idempotencyKey: string;
+    subject: string;
+    csrfToken: string;
+    credentialMode: string;
+    scopeKey: string;
+  }[] = [];
   const port: SlowModePort = {
-    read: async () => read,
-    change: async ({ intervalSeconds, idempotencyKey }) => {
-      changes.push({ intervalSeconds, idempotencyKey });
+    read: async () => {
+      if (heldReads === 0) return read;
+      heldReads--;
+      return new Promise((resolve) => delayedReads.push(resolve));
+    },
+    change: async ({ intervalSeconds, idempotencyKey, subject, csrfToken, credentialMode, scopeKey }) => {
+      changes.push({ intervalSeconds, idempotencyKey, subject, csrfToken, credentialMode, scopeKey });
       if (changes.length === 1) return { kind: 'unknown' };
       if (read.kind !== 'available') return { kind: 'unavailable' };
-      read = { kind: 'available', policy: { ...read.policy, intervalSeconds } };
-      return { kind: 'applied', policy: read.policy };
+      return { kind: 'applied', policy: { ...read.policy, intervalSeconds } };
     },
   };
   const submits: { key: string; title: string }[] = [];
@@ -105,13 +119,20 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     routeTree: createRootRoute({
       component: function Page() {
         const [key] = useState('0192f3a0-6c1e-7b2a-9d4e-000000000091');
+        const location = useLocation();
         return (
           <AuthoringDepartureProvider>
             <SlowModePortProvider port={port}>
-              <SlowModeSetting boardId={recorded.thread.boardId} />
+              <SlowModeSetting
+                boardId={recorded.thread.boardId}
+                scopeKey={location.href}
+                credentialMode="session"
+              />
               <PostComposer
                 titleRequired
                 boardId={recorded.thread.boardId}
+                slowModeScopeKey={location.href}
+                slowModeCredentialMode="session"
                 initialKey={key}
                 initialBody={body}
                 onSubmit={async (input) => {
@@ -182,10 +203,20 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       await user.click(sameKeyRetry!);
     });
     await appeared(m.slow_mode_saved());
-    expect(changes).toEqual(Array(2).fill({ intervalSeconds: 30, idempotencyKey: changes[0]!.idempotencyKey }));
+    expect(changes).toEqual(Array(2).fill(changes[0]));
+    expect(changes[0]).toMatchObject({
+      intervalSeconds: 30,
+      subject: owner.subject,
+      csrfToken: owner.csrfToken,
+      credentialMode: 'session',
+    });
     expect(host.textContent).toContain(
       m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 30 }) }),
     );
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['board-slow-mode'] });
+    });
+    await appeared(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }));
     await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
     const send = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
     await act(async () => {
@@ -203,6 +234,33 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     expect(submits).toHaveLength(2);
     expect(submits[1]!.key).toBe(submits[0]!.key);
     expect(host.textContent).toContain(m.slow_mode_saved());
+    heldReads = 2;
+    await act(async () => {
+      await router.navigate({ to: '/en/other' as never });
+    });
+    for (let attempt = 0; attempt < 25 && delayedReads.length === 0; attempt++)
+      await act(async () => {
+        await Promise.resolve();
+      });
+    expect(delayedReads).toHaveLength(2);
+    await act(async () => {
+      await router.navigate({ to: '/en/compose' as never });
+    });
+    await appeared(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }));
+    const latePolicy: SlowModeRead = {
+      kind: 'available',
+      policy: {
+        intervalSeconds: 86400,
+        retryAt: null,
+        nextEligibleAt: null,
+        canChange: true,
+        exempt: false,
+        admissionState: 'ready',
+        retryAfterSeconds: 0,
+      },
+    };
+    await act(async () => delayedReads.forEach((resolve) => resolve(latePolicy)));
+    expect(host.textContent).not.toContain(m.slow_mode_interval_seconds({ seconds: 86400 }));
     client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
     for (let attempt = 0; attempt < 25 && host.textContent?.includes(m.slow_mode_saved()); attempt++)
       await act(async () => {

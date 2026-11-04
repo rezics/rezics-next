@@ -21,9 +21,11 @@ the unsent draft and existing departure protection. Uncertain submits keep the o
 
 ## Private caller retirement
 
-Eligibility and setting reads are private to the mounted board, signed-in viewer, CSRF token and component lifetime.
-Session replacement, board change and unmount retire in-flight work. Late results cannot restore a retired visit or
-write into a replacement caller. Setting commands keep the original idempotency key while the outcome is unknown.
+Eligibility and setting reads are private to the mounted source, selected thread and parent, locale, credential mode,
+signed-in viewer, CSRF token and component lifetime. Account or session generation changes, route/source or selection
+replacement, locale or credential-mode changes, and unmount retire in-flight work. Returning to a route starts a new
+visit key, so late results cannot populate the returning visit. An uncertain setting command retains its original
+sender, CSRF token, credential mode, interval, scope and idempotency key for an explicit same-command retry.
 
 ## Native refusal recovery
 
