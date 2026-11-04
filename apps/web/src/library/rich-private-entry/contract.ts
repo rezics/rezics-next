@@ -45,7 +45,7 @@ export function annotationVersion(entry: PersonalEntry, guard: PersonalEntryGuar
 export type AnnotationConfirmation = {
   entry: PersonalEntry;
   draft: AnnotationDraft;
-  body: PersonalEntryAnnotationWrite;
+  body: PersonalEntryAnnotationWrite & { entryGuard: PersonalEntryGuard };
   viewer: string;
   csrfToken: string;
   credential: string;
@@ -62,7 +62,7 @@ export function annotationConfirmation(
   // Capture field operands and guard independently of subsequent received values and edits.
   const captured = {
     ...body,
-    entryGuard: Object.freeze({ ...body.entryGuard }),
+    entryGuard: Object.freeze({ ...guard }),
     note: Object.freeze({ ...body.note }),
     priority: Object.freeze({ ...body.priority }),
   };
