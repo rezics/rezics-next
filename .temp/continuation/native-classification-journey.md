@@ -1,44 +1,36 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/rating/classification-ballot.ts",
-    "services/kernel/src/rating/classification-ballot-projector.ts",
-    "services/kernel/src/rating/classification-ballot-*.sql",
-    "services/kernel/src/rating/register.ts",
-    "services/kernel/src/rating/routes.ts",
-    "services/kernel/src/rating/schemas.ts",
-    "services/kernel/src/rating/work-module.ts",
-    "services/kernel/src/rating/README.md",
-    "services/kernel/db/rating/**",
-    "services/kernel/test/rating/classification-ballot.test.ts",
-    "services/kernel/test/rating/support/*classification-ballot*.ts"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [
-    "6abb3637-6f74-4b87-8b9c-f73a098c24c6"
-  ],
-  "estimate": {
-    "lines": 1000,
-    "files": 12
-  },
-  "inseparable": true,
-  "acceptance": {
-    "tests": [
-      "Finish the original signed-account classification journey through production default runners and the existing installed Subject receiver: exact command recovery, private own state, five-ballot aggregate and unavailable/retry states.",
-      "Retain suspension, reinstatement, erasure, association/Subject loss during reads, late delivery and replacement, plus independent native 256/1024/4096 selected-history and unrelated growth with strict physical prefixes."
-    ]
-  }
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/rating/classification-ballot.ts',
+      'services/kernel/src/rating/classification-ballot-projector.ts',
+      'services/kernel/src/rating/classification-ballot-*.sql',
+      'services/kernel/src/rating/register.ts',
+      'services/kernel/src/rating/routes.ts',
+      'services/kernel/src/rating/schemas.ts',
+      'services/kernel/src/rating/work-module.ts',
+      'services/kernel/src/rating/README.md',
+      'services/kernel/db/rating/**',
+      'services/kernel/test/rating/classification-ballot.test.ts',
+      'services/kernel/test/rating/support/*classification-ballot*.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': ['6abb3637-6f74-4b87-8b9c-f73a098c24c6'],
+  'estimate': { 'lines': 1000, 'files': 12 },
+  'inseparable': true,
+  'acceptance':
+    {
+      'tests':
+        [
+          'Finish the original signed-account classification journey through production default runners and the existing installed Subject receiver: exact command recovery, private own state, five-ballot aggregate and unavailable/retry states.',
+          'Retain suspension, reinstatement, erasure, association/Subject loss during reads, late delivery and replacement, plus independent native 256/1024/4096 selected-history and unrelated growth with strict physical prefixes.',
+        ],
+    },
 }
 ---
 
