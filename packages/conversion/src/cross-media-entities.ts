@@ -25,8 +25,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
+import {
+  projectBangumiCharacterMeasurements,
+  type BangumiCharacterMeasurementProjection,
+} from './bangumi-character-measurements.ts';
 
-export const converter_revision = 'cross-media-entities@7';
+export const converter_revision = 'cross-media-entities@8';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxClassificationAssociations: 64,
@@ -668,9 +672,28 @@ type Projected = {
   nameFacts?: { language: string; text: string }[];
   maxCommands?: number;
   minimumAge?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
+  characterMeasurements?: BangumiCharacterMeasurementProjection;
   ignored?: ConversionDiagnostic;
   diagnostics?: ConversionDiagnostic[];
 };
+
+function releasedCharacterQuantity(
+  property: 'schema:height' | 'schema:weight',
+  quantity: { amount: string; unit: string },
+): boolean {
+  const character = bundledRelease.types['wd:Q95074'];
+  const definition = bundledRelease.properties[property];
+  const amountPattern = (
+    definition?.value as { properties?: { amount?: { pattern?: unknown } } } | undefined
+  )?.properties?.amount?.pattern;
+  return (
+    character?.properties.includes(property) === true &&
+    definition?.datatype === 'quantity' &&
+    definition.units?.includes(quantity.unit) === true &&
+    typeof amountPattern === 'string' &&
+    new RegExp(amountPattern, 'u').test(quantity.amount)
+  );
+}
 
 function projectStaffNames(
   raw: object,
@@ -1103,12 +1126,17 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   const normalized: Normalized = { id: nativeId, name: label };
   let minimumAge: Projected['minimumAge'];
   const diagnostics: ConversionDiagnostic[] = [];
+  let characterMeasurements: BangumiCharacterMeasurementProjection | undefined;
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
   if (kind === 'bangumi-character') {
     const characterKind = own(raw, 'type', '/type');
     if (characterKind !== undefined) normalized.type = characterKind;
     const summary = own(raw, 'summary', '/summary');
     if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
+    characterMeasurements = projectBangumiCharacterMeasurements(own(raw, 'infobox', '/infobox'));
+    if (characterMeasurements.evidence.length)
+      normalized.characterPhysicalProfile = { fields: characterMeasurements.evidence };
+    diagnostics.push(...characterMeasurements.diagnostics);
   }
   if (kind === 'bangumi-person') {
     type = personType(raw);
@@ -1186,6 +1214,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     labels,
     identifier: expected,
     ...(minimumAge ? { minimumAge } : {}),
+    ...(characterMeasurements ? { characterMeasurements } : {}),
     ...(diagnostics.length ? { diagnostics } : {}),
   };
 }
@@ -1285,6 +1314,15 @@ function convert(
     })),
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
+  const measurementCommandKeys = new Map<number, string>();
+  for (const measurement of projected.characterMeasurements?.measurements ?? []) {
+    if (!releasedCharacterQuantity(measurement.property, measurement.quantity)) {
+      diagnostics.push({ pointer: measurement.pointer, code: 'unadmitted_character_quantity' });
+      continue;
+    }
+    measurementCommandKeys.set(facts.length, `physical:${measurement.field}:${measurement.pointer}`);
+    facts.push(fact(measurement.property, measurement.quantity));
+  }
   const extlinks = projected.normalized.extlinks;
   if (Array.isArray(extlinks)) {
     for (const [i, link] of extlinks.entries()) {
@@ -1374,7 +1412,7 @@ function convert(
     for (const [index, statement] of facts.entries())
       proposals.push({
         op: 'propose',
-        key: key(`fact:${index}`, 'facts'),
+        key: key(measurementCommandKeys.get(index) ?? `fact:${index}`, 'facts'),
         source: envelope('facts'),
         subject: context.subjectId,
         statement,
