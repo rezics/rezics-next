@@ -62,6 +62,7 @@ export function ConversationBranches({
   hash,
   listRef,
   renderPost,
+  boardReturn,
 }: {
   model: ConversationPageModel;
   thread: { id: string; title: string | null };
@@ -71,6 +72,7 @@ export function ConversationBranches({
   hash: string;
   listRef: RefObject<HTMLOListElement | null>;
   renderPost: (row: ConversationRow) => ReactNode;
+  boardReturn?: string | undefined;
 }) {
   const [stored, setVisit] = useState(() => initialVisit(scope));
   // Reset presentation in place: keying the region would discard mounted post editors.
@@ -80,7 +82,7 @@ export function ConversationBranches({
   live.current = { scope, current, isCurrent };
   const ownsVisit = () => live.current.scope === scope && live.current.current && live.current.isCurrent();
   const navigation: ParentNavigation = {
-    exactHref: (parentId) => threadLocation(getLocale(), thread, undefined, parentId),
+    exactHref: (parentId) => threadLocation(getLocale(), thread, undefined, parentId, undefined, boardReturn),
   };
   const reveal = (collapsed: ReadonlySet<number>, row: ConversationRow) => {
     const next = new Set(collapsed);

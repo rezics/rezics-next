@@ -9,8 +9,9 @@ import type { BoardPinAdviceSelection, BoardPinAdviceReference } from './board-p
 import type { PageAuthors } from '../identity/read';
 
 type LoadedCommunityBoardPage = Awaited<ReturnType<typeof loadBoardPageWithAuthors>>;
-export type CommunityBoardPage = Omit<LoadedCommunityBoardPage, 'openingCards' | 'authors'> & {
+export type CommunityBoardPage = Omit<LoadedCommunityBoardPage, 'openingCards' | 'openingRows' | 'authors'> & {
   openingCards?: LoadedCommunityBoardPage['openingCards'];
+  openingRows?: LoadedCommunityBoardPage['openingRows'];
   authors: BoardFeedAuthors;
 };
 export type BoardFeedThread = CommunityBoardPage['threads']['threads'][number];

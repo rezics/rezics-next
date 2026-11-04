@@ -16,6 +16,7 @@ import {
   validId,
 } from './cookies.ts';
 import { LOGIN_RETURN_COOKIE, safeRecoveryReturn } from './unavailable';
+import { returnTarget } from './return-target';
 
 const invalid = () => problem(400, 'invalid_request', 'Invalid Request');
 const redirect = (location: string, status = 303) => new Response(null, { status, headers: { location } });
@@ -33,19 +34,6 @@ function oidcFailureNames(error: unknown): string {
     current = current.cause;
   }
   return names.join(' <- ') || typeof error;
-}
-
-function returnTarget(value: string | null, origin: string): string {
-  if (!value?.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/';
-  try {
-    const target = new URL(value, origin);
-    const path = target.pathname + target.search + target.hash;
-    return target.origin === origin && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\')
-      ? path
-      : '/';
-  } catch {
-    return '/';
-  }
 }
 
 async function signIn(request: Request, env: SessionEnv): Promise<Response> {

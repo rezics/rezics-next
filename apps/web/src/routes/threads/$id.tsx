@@ -28,7 +28,17 @@ export const Route = createFileRoute('/threads/$id')({
     caller.assertReadCurrent();
     rememberThreadSlug(head.id, head.title);
     caller.assertReadCurrent();
-    const href = threadLocation(getLocale(), head, deps.cursor, deps.post);
+    const href = threadLocation(
+      getLocale(),
+      head,
+      deps.cursor,
+      deps.post,
+      {
+        ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
+        ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
+      },
+      deps.boardReturn,
+    );
     caller.assertReadCurrent();
     caller.retireFromRouteChange();
     throw redirect({ href, statusCode: 301 });

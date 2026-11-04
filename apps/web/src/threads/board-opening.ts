@@ -32,14 +32,33 @@ function retainOpeningCard(card: BoardOpeningCard): BoardOpeningCard {
   };
 }
 
+/** Exact source pairing survives route serialization without replacing duplicate occurrences by ID. */
+export function boardOpeningMatches(card: BoardOpeningCard, thread: BoardOpeningCard['thread']): boolean {
+  const source = card.thread;
+  return (
+    source.id === thread.id &&
+    source.securityRevision === thread.securityRevision &&
+    source.availability === thread.availability &&
+    source.firstPost.availability === thread.firstPost.availability &&
+    (source.firstPost.availability !== 'available' ||
+      thread.firstPost.availability !== 'available' ||
+      (source.firstPost.revisionId === thread.firstPost.revisionId &&
+        source.firstPost.securityRevision === thread.firstPost.securityRevision))
+  );
+}
+
 /** One supplied response, one replacing page. No identity or media enrichment. */
 export function receiveBoardOpeningPage(response: BoardPageResponse, now = new Date().toISOString()) {
+  const openingRows = {
+    pinnedThreads: response.pinnedThreads.map(retainOpeningCard),
+    threads: response.threads.map(retainOpeningCard),
+  };
   const openingCards: Record<string, BoardOpeningCard> = {};
   const authors: Record<string, AvailableAuthor> = {};
-  for (const card of [...response.pinnedThreads, ...response.threads]) {
+  for (const card of [...openingRows.pinnedThreads, ...openingRows.threads]) {
     // The initial pin observation wins an overlapping ordinary identity.
     if (Object.hasOwn(openingCards, card.thread.id)) continue;
-    const selected = retainOpeningCard(card);
+    const selected = card;
     openingCards[selected.thread.id] = selected;
     if (selected.thread.availability !== 'available') continue;
     for (const author of [selected.authors.thread, selected.authors.openingPost])
@@ -57,6 +76,7 @@ export function receiveBoardOpeningPage(response: BoardPageResponse, now = new D
     board: response.board,
     community: boardCommunitySource(response.board),
     openingCards,
+    openingRows,
     viewer: response.viewer,
     actions: response.actions,
     threads: {

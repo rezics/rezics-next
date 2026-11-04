@@ -57,7 +57,7 @@ import { ClosedErrorPage } from '../../shell/closed';
 import { isThreadPageCursorError } from '../../threads/thread-page-errors';
 import { ThreadPageError } from '../../threads/thread-page-error';
 import { ThreadWatch } from '../../threads/thread-watch';
-import { boardReadingHref, parseBoardReadingReturn } from '../../threads/board-reading';
+import { admittedBoardReturn, boardReturnMatches, boardReturnRestart } from '../../threads/board-navigation';
 import { PageHeading } from '../../shell/page-heading';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 import {
@@ -101,10 +101,17 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     if ('redirect' in page) {
       rememberThreadSlug(page.redirect.id, page.redirect.title);
       caller.assertReadCurrent();
-      const href = threadLocation(getLocale(), page.redirect, deps.cursor, deps.post, {
-        ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
-        ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
-      });
+      const href = threadLocation(
+        getLocale(),
+        page.redirect,
+        deps.cursor,
+        deps.post,
+        {
+          ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
+          ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
+        },
+        deps.boardReturn,
+      );
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
       throw redirect({ href, statusCode: 301 });
@@ -114,10 +121,17 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
     rememberThreadSlug(page.thread.id, title);
     caller.assertReadCurrent();
     if (!sameThreadSlug(params.slug, title)) {
-      const href = threadLocation(getLocale(), { id: page.thread.id, title }, deps.cursor, deps.post, {
-        ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
-        ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
-      });
+      const href = threadLocation(
+        getLocale(),
+        { id: page.thread.id, title },
+        deps.cursor,
+        deps.post,
+        {
+          ...(deps.historyReturn ? { token: deps.historyReturn } : {}),
+          ...(deps.historyRevision ? { revisionId: deps.historyRevision } : {}),
+        },
+        deps.boardReturn,
+      );
       caller.assertReadCurrent();
       caller.retireFromRouteChange();
       throw redirect({ href, statusCode: 301 });
@@ -132,7 +146,12 @@ export const Route = createFileRoute('/threads/$id_/$slug')({
   component: ThreadPage,
   errorComponent: (props) => {
     const { id } = Route.useParams();
-    return isThreadPageCursorError(props.error) ? <ThreadPageError threadId={id} /> : <ClosedErrorPage {...props} />;
+    const { boardReturn } = Route.useSearch();
+    return isThreadPageCursorError(props.error) ? (
+      <ThreadPageError threadId={id} boardReturn={boardReturn} />
+    ) : (
+      <ClosedErrorPage {...props} />
+    );
   },
 });
 
@@ -141,22 +160,36 @@ export function ThreadReadingHeader({
   title,
   watch,
   boardReturn,
+  boardReturnCurrent = true,
 }: {
   page: ThreadReadingPage;
   title: string | null;
   watch?: ReactNode;
-  boardReturn?: string;
+  boardReturn?: string | undefined;
+  boardReturnCurrent?: boolean;
 }) {
+  const origin = admittedBoardReturn(boardReturn);
+  const currentOrigin = origin && boardReturnCurrent && boardReturnMatches(origin, page.board?.id, getLocale());
+  const restart = origin ? boardReturnRestart(origin) : undefined;
   return (
     <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
-      <BoardContext realm={page.realm} board={page.board} prominent />
-      {boardReturn ? (
+      <BoardContext realm={page.realm} board={page.board} boardReturn={currentOrigin ? origin : undefined} prominent />
+      {currentOrigin ? (
         <a
-          href={boardReturn}
+          href={origin}
           className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
         >
           {m.board_reading_return()}
         </a>
+      ) : origin ? (
+        <div role="status" className="space-y-2 text-sm">
+          <p>{m.board_reading_return_unavailable()}</p>
+          {restart ? (
+            <a href={restart} className="inline-flex min-h-11 items-center underline">
+              {m.board_reading_restart()}
+            </a>
+          ) : null}
+        </div>
       ) : null}
       {title || watch ? (
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
@@ -168,7 +201,10 @@ export function ThreadReadingHeader({
       {page.linkedPostUnavailable ? (
         <div role="status" className="space-y-2">
           <p>{m.thread_post_unavailable()}</p>
-          <a href={threadLocation(getLocale(), { id: page.thread.id, title })} className="underline">
+          <a
+            href={threadLocation(getLocale(), { id: page.thread.id, title }, undefined, undefined, undefined, origin)}
+            className="underline"
+          >
             {m.thread_posts_heading()}
           </a>
         </div>
@@ -204,12 +240,21 @@ export function ThreadPage() {
   const location = useLocation();
   const id = Route.useParams().id;
   const slug = Route.useParams().slug;
-  const { cursor, post } = Route.useSearch();
+  const search = threadSearch(Route.useSearch());
+  const { cursor, post, boardReturn } = search;
   const locale = getLocale();
-  const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
-  const boardReturn = parseBoardReadingReturn(
-    (location.state as { boardReadingReturn?: unknown } | undefined)?.boardReadingReturn,
+  const resume = threadLocation(
+    locale,
+    { id },
+    cursor,
+    post,
+    {
+      ...(search.historyReturn ? { token: search.historyReturn } : {}),
+      ...(search.historyRevision ? { revisionId: search.historyRevision } : {}),
+    },
+    boardReturn,
   );
+  const returnTo = location.hash.replace(/^#/, '') === 'reply' ? `${resume.split('#')[0]}#reply` : resume;
   const routeSearch = JSON.stringify(location.search);
   const readScope = useMemo(
     () => ({}),
@@ -444,7 +489,14 @@ export function ThreadPage() {
       if (session === 'signed-in' && updated.viewerId !== undefined && (!subject || updated.viewerId !== subject))
         throw new Error('Current thread reader unavailable');
       nextCaller.assertReadCurrent();
-      const destination = threadLocation(locale, { id: updated.thread.id, title: updated.thread.title }, cursor, post);
+      const destination = threadLocation(
+        locale,
+        { id: updated.thread.id, title: updated.thread.title },
+        cursor,
+        post,
+        undefined,
+        boardReturn,
+      );
       if (!current()) throw new Error('Thread reader changed');
       accepted = true;
       operation.accepted = true;
@@ -508,9 +560,8 @@ export function ThreadPage() {
           <ThreadReadingHeader
             page={visiblePage}
             title={title}
-            {...(boardReturn && visiblePage.board && boardReturn.boardId === visiblePage.board.id
-              ? { boardReturn: boardReadingHref(boardReturn) }
-              : {})}
+            boardReturn={boardReturn}
+            boardReturnCurrent={!currentPageUnavailable}
             watch={
               <ThreadWatch
                 key={JSON.stringify([visiblePage.thread.id, subject ?? null, callbackRevision])}
@@ -985,7 +1036,14 @@ export function ThreadReadingPost({
       actions={
         <FeedActionBar
           locale={getLocale()}
-          href={threadLocation(getLocale(), { id: post.threadId }, undefined, post.id)}
+          href={threadLocation(
+            getLocale(),
+            { id: post.threadId },
+            undefined,
+            post.id,
+            undefined,
+            threadSearch(Object.fromEntries(historyOrigin.searchParams)).boardReturn,
+          )}
           title={m.threads_untitled()}
           signedIn={signedIn}
           plain={target.kind === 'post'}

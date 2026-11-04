@@ -4011,6 +4011,7 @@
   "board_reading_restart_help": "置頂討論已變更。請不帶上一頁、按此排序重新載入此看板。",
   "board_reading_invalid_cursor": "此看板頁已不是目前內容。請按此排序從頭重新載入。",
   "board_reading_return": "返回此看板",
+  "board_reading_return_unavailable": "原來的看板頁面已無法還原。請從這個排序的開頭重新載入。",
   "board_reading_malformed": "無法讀取此看板地址。這不是權限問題。",
   "board_community_members": "{count} 位成員",
   "board_community_members_unknown": "成員人數暫不可用",

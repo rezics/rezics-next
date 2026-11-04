@@ -23,7 +23,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import type { PageAuthors } from '../identity/read';
 import type { SessionState } from '../session/state';
 import { readReplyParent } from './reads';
-import { rememberThreadSlug, threadLocation } from './thread-href';
+import { rememberThreadSlug, threadLocation, threadSearch } from './thread-href';
 import type { ThreadSubject } from './subjects';
 import type { LoadedThreadPage, ThreadPost } from './thread-page';
 import type { readThreadPersonal } from './reads';
@@ -195,6 +195,7 @@ export function ThreadReading({
   authorErasure?: Omit<ComponentProps<typeof AuthorErasureEntry>, 'threadId'>;
 }) {
   const location = useLocation();
+  const boardReturn = threadSearch(location.search).boardReturn;
   const [reading, setReading] = useState({ source: sourcePage, page: sourcePage, redacted: false });
   // Replace the complete disclosure together, including bylines, media, placement and title.
   let page: ThreadReadingPage;
@@ -417,6 +418,7 @@ export function ThreadReading({
                 thread={{ id: thread.id, title: displayTitle }}
                 scope={branchScope}
                 current={pageCurrent}
+                boardReturn={boardReturn}
                 isCurrent={() => isPageCallbackCurrent() && (parentReader?.current() ?? true)}
                 hash={location.hash}
                 listRef={postList}
@@ -498,7 +500,14 @@ export function ThreadReading({
             {pageCurrent && posts.next ? (
               <nav aria-label={m.thread_posts_heading()}>
                 <a
-                  href={threadLocation(getLocale(), { id: thread.id, title: displayTitle }, posts.next)}
+                  href={threadLocation(
+                    getLocale(),
+                    { id: thread.id, title: displayTitle },
+                    posts.next,
+                    undefined,
+                    undefined,
+                    boardReturn,
+                  )}
                   className={buttonVariants({ variant: 'outline', size: 'lg' })}
                 >
                   {m.threads_next_page()}

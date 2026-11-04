@@ -4008,6 +4008,7 @@
   "board_reading_restart_help": "Los debates fijados han cambiado. Recarga este tablón y este orden sin la página anterior.",
   "board_reading_invalid_cursor": "Esta página del tablón ya no es actual. Recarga este orden desde el principio.",
   "board_reading_return": "Volver a este tablón",
+  "board_reading_return_unavailable": "La página original del foro no está disponible. Vuelve a cargar este orden desde el principio.",
   "board_reading_malformed": "No se pudo leer esta dirección del tablón. No es un problema de permiso.",
   "board_community_members": "{count} miembros",
   "board_community_members_unknown": "Número de miembros no disponible",
