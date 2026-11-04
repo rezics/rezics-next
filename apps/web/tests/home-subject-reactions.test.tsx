@@ -219,7 +219,7 @@ test('anonymous Home Subject reactions return to the card, and unknown coverage 
   expect(host.querySelectorAll('[data-slot="reaction-chip"][href]')).toHaveLength(5);
   expect(
     [...host.querySelectorAll<HTMLAnchorElement>('[data-slot="reaction-chip"][href]')].every(
-      (link) => link.href === expected,
+      (link) => link.getAttribute('href') === expected,
     ),
   ).toBe(true);
 
