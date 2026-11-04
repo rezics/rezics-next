@@ -8106,5 +8106,13 @@
   "search_share_close": "Vorschau schließen",
   "relation_actions_unavailable": "Die aktuellen Beziehungsaktionen konnten nicht geladen werden. Bitte erneut laden.",
   "relation_actions_read_only": "Sie können Beziehungen vergleichen. Für Vorschläge ist eine aktuelle Berechtigung erforderlich.",
-  "relation_participants_unreadable": "Ein Beziehungsteilnehmer kann derzeit nicht gelesen werden. Wählen Sie eine lesbare Identität oder laden Sie erneut."
+  "relation_participants_unreadable": "Ein Beziehungsteilnehmer kann derzeit nicht gelesen werden. Wählen Sie eine lesbare Identität oder laden Sie erneut.",
+  "discovery_collection_curator": "Zusammengestellt von",
+  "discovery_collection_curator_unavailable": "Kuration nicht verfügbar",
+  "discovery_collection_preview": "Inhaltsvorschau",
+  "discovery_collection_partial": "Einige Einträge können nicht angezeigt werden.",
+  "discovery_collection_truncated": "Eine Vorschau dieser Sammlung. Für mehr öffnen.",
+  "discovery_collection_empty": "Diese Sammlung ist leer.",
+  "discovery_collection_withheld": "Keine Einträge können angezeigt werden.",
+  "discovery_collection_preview_unavailable": "Inhaltsvorschau nicht verfügbar."
 }

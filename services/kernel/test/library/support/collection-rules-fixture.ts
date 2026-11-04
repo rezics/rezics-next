@@ -24,13 +24,17 @@ const scopes = [
 ];
 
 /** Positive facts and credentials all enter through the real Auth and product APIs. */
-export async function createCollectionRulesFixture() {
+export async function createCollectionRulesFixture(additionalScopes: readonly string[] = []) {
   const base = await createCollectionPresentationFixture();
   try {
     const support = identitySupport(base.runtime.identity);
     const clientId = `collection-rules-${randomUUID()}`;
-    await base.runtime.identity.auth.internal.registerClient({ clientId, firstParty: true, scopes });
-    async function credential(person = 'ordinary', requested = scopes) {
+    await base.runtime.identity.auth.internal.registerClient({
+      clientId,
+      firstParty: true,
+      scopes: [...scopes, ...additionalScopes],
+    });
+    async function credential(person = 'ordinary', requested = [...scopes, ...additionalScopes]) {
       const signed = await support.request('/signin', {
         email: `${person}@identity.test`,
         password: 'private native identity fixture password',

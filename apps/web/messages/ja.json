@@ -8106,5 +8106,13 @@
   "search_share_close": "プレビューを閉じる",
   "relation_actions_unavailable": "現在の関係操作を取得できませんでした。再読み込みしてお試しください。",
   "relation_actions_read_only": "関係を比較できます。提案には現在の権限が必要です。",
-  "relation_participants_unreadable": "関係する対象を現在読み取れません。読み取り可能な対象を選ぶか、再読み込みしてください。"
+  "relation_participants_unreadable": "関係する対象を現在読み取れません。読み取り可能な対象を選ぶか、再読み込みしてください。",
+  "discovery_collection_curator": "選者",
+  "discovery_collection_curator_unavailable": "選者の情報は利用できません",
+  "discovery_collection_preview": "内容のプレビュー",
+  "discovery_collection_partial": "表示できない項目があります。",
+  "discovery_collection_truncated": "このコレクションの一部です。開くと続きを確認できます。",
+  "discovery_collection_empty": "このコレクションは空です。",
+  "discovery_collection_withheld": "表示できる項目はありません。",
+  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。"
 }

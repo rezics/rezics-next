@@ -1,4 +1,10 @@
 /** Native public Collection card hydration. Search candidates and index hints carry no authority here. */
+import {
+  prepareCollectionDiscoveryContext,
+  readDiscoveryMemberKeys,
+  type CollectionDiscoveryContext,
+  type DiscoveryMemberKey,
+} from './collection-discovery-context.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
@@ -24,12 +30,14 @@ export type PublicCollectionDiscoveryContext = Readonly<{
   deadline: number;
   /** Borrowed native read time. Hydration never releases a caller-owned capability. */
   time?: AuthoritativeTime;
+  languages?: readonly string[];
 }>;
 export type PublicCollectionDiscoveryRequest = Readonly<{
   ids: readonly string[];
   context: PublicCollectionDiscoveryContext;
 }>;
 type Card = Omit<CollectionPresentation, 'coverMediaId'> &
+  CollectionDiscoveryContext &
   Readonly<{
     kind: 'collection';
     id: string;
@@ -38,6 +46,7 @@ type Card = Omit<CollectionPresentation, 'coverMediaId'> &
     description: string | null;
     visibility: 'public';
     revision: number;
+    sourceGeneration: string;
   }>;
 export type PublicCollectionDiscoverySummary = Card &
   (
@@ -64,6 +73,7 @@ type Observed = {
   output: CollectionOutputPublication | null;
   authority: boolean;
   signature: string;
+  members: readonly DiscoveryMemberKey[];
 };
 type Round = {
   epoch: number;
@@ -170,6 +180,10 @@ async function round(
         client,
         visible.filter((row) => row.membershipKind === 'dynamic'),
       );
+      const memberKeys = await readDiscoveryMemberKeys(
+        client,
+        visible.map((row) => ({ ...row, outputGeneration: outputs.get(row.id)?.generation ?? null })),
+      );
       const observed = new Map<string, Observed>();
       for (const row of visible) {
         const output = outputs.get(row.id) ?? null;
@@ -177,7 +191,8 @@ async function round(
           row,
           output,
           authority: nativeAuthority(row, output),
-          signature: signature(row, output),
+          members: memberKeys.get(row.id) ?? [],
+          signature: JSON.stringify([signature(row, output), memberKeys.get(row.id) ?? []]),
         });
       }
       await client.query('COMMIT');
@@ -198,10 +213,12 @@ async function round(
 function card(
   observed: Observed,
   presentation: Omit<CollectionPresentation, 'coverMediaId'>,
+  context: CollectionDiscoveryContext,
 ): PublicCollectionDiscoverySummary {
   const { row, output } = observed;
   const common: Card = {
     ...presentation,
+    ...context,
     kind: 'collection',
     id: row.id,
     destination: `/collections/${row.id}`,
@@ -209,6 +226,7 @@ function card(
     description: row.description,
     visibility: 'public',
     revision: row.revision,
+    sourceGeneration: row.sourceGeneration,
   };
   if (row.membershipKind === 'dynamic') {
     if (!output) throw new Error('A dynamic discovery card requires actual native output authority');
@@ -256,6 +274,17 @@ export async function readPublicCollectionDiscoverySummaries(
               );
         presentations.set(id, collectionPresentation(observed.row, cover));
       }
+      const publicContext = await prepareCollectionDiscoveryContext(
+        dependencies.routeKey
+          ? { ...dependencies, routeKey: dependencies.routeKey, deadline: admitted.context.deadline }
+          : null,
+        [...before.rows.values()]
+          .filter((value) => value.authority)
+          .map(({ row, output }) => ({ ...row, outputGeneration: output?.generation ?? null })),
+        new Map([...before.rows].map(([id, observed]) => [id, observed.members])),
+        admitted.context.languages,
+      );
+      if (!(await publicContext.current())) return unavailable('changed');
       const final = await round(dependencies, admitted.ids, admitted.context);
       if (before.epoch !== final.epoch || before.node !== final.node) return unavailable('changed');
       const summaries: PublicCollectionDiscoverySummary[] = [];
@@ -267,7 +296,7 @@ export async function readPublicCollectionDiscoverySummaries(
         if (!original) continue; // Newly public candidates can be picked up by the next request.
         if (!current.authority || !original.authority) return unavailable('native_authority');
         if (current.signature !== original.signature) return unavailable('changed');
-        summaries.push(card(current, presentations.get(id)!));
+        summaries.push(card(current, presentations.get(id)!, publicContext.values.get(id)!));
       }
       requireAccessDeadline(admitted.context.deadline);
       return { state: 'ready', summaries };

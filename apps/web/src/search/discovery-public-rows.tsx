@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Cover } from '@rezics/ui/cover';
 import { m } from '../paraglide/messages.js';
@@ -20,9 +21,15 @@ function PublicCollectionRow({
   summary,
   kind,
   locale,
+  actions,
+  subjectHrefFor,
+  memberKindLabel,
 }: {
   id: string;
   summary: PublicCollectionSummary;
+  actions?: ReactNode;
+  subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
+  memberKindLabel?: ((type: string) => string) | undefined;
   kind: string;
   locale: string;
 }) {
@@ -47,14 +54,74 @@ function PublicCollectionRow({
         </div>
       }
       metadata={
-        <span>
-          {kind}
-          {summary.card.membershipKind === 'curated'
-            ? ` · ${m.library_collection_item_count({ count: summary.card.memberCount }, options(locale))}`
-            : ''}
-        </span>
+        <div>
+          <span>
+            {kind}
+            {summary.card.membershipKind === 'curated'
+              ? ` · ${m.library_collection_item_count({ count: summary.card.memberCount }, options(locale))}`
+              : ''}
+          </span>
+          <p>
+            {summary.card.curator.state === 'available' ? (
+              <>
+                {m.discovery_collection_curator({}, options(locale))}{' '}
+                {summary.card.curator.destination ? (
+                  <a
+                    className="text-primary underline"
+                    href={`/${encodeURIComponent(locale)}${summary.card.curator.destination}`}
+                  >
+                    {summary.card.curator.label || m.discovery_unnamed_account({}, options(locale))}
+                  </a>
+                ) : (
+                  <span>{summary.card.curator.label || m.discovery_unnamed_account({}, options(locale))}</span>
+                )}
+              </>
+            ) : (
+              m.discovery_collection_curator_unavailable({}, options(locale))
+            )}
+          </p>
+        </div>
       }
-      preview={summary.description ? <p className="line-clamp-2 break-words">{summary.description}</p> : undefined}
+      preview={
+        <div className="space-y-2">
+          {summary.description ? <p className="line-clamp-2 break-words">{summary.description}</p> : null}
+          {summary.card.preview.state === 'available' ? (
+            <div>
+              <ul aria-label={m.discovery_collection_preview({}, options(locale))}>
+                {summary.card.preview.members.map((member) => (
+                  <li key={member.id} data-subject-type={member.subject.type}>
+                    <a
+                      className="text-primary underline"
+                      href={
+                        subjectHrefFor?.({ id: member.subject.id, label: member.subject.label?.value ?? '' }) ??
+                        subjectHref({ id: member.subject.id, label: member.subject.label?.value ?? '' }, locale).href
+                      }
+                    >
+                      {member.subject.label?.value || m.subject_value_unlabelled({}, options(locale))}
+                    </a>
+                    {summary.card.presentationKind === null ? (
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        {memberKindLabel?.(member.subject.type) ?? member.subject.type}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {summary.card.preview.partial ? <p>{m.discovery_collection_partial({}, options(locale))}</p> : null}
+              {summary.card.preview.truncated ? <p>{m.discovery_collection_truncated({}, options(locale))}</p> : null}
+            </div>
+          ) : (
+            <p>
+              {summary.card.preview.state === 'empty'
+                ? m.discovery_collection_empty({}, options(locale))
+                : summary.card.preview.state === 'withheld'
+                  ? m.discovery_collection_withheld({}, options(locale))
+                  : m.discovery_collection_preview_unavailable({}, options(locale))}
+            </p>
+          )}
+          {actions ?? <p>{m.library_follow_unavailable({}, options(locale))}</p>}
+        </div>
+      }
     />
   );
 }
@@ -146,7 +213,11 @@ export function DiscoveryPublicRow({
   kind,
   locale,
   subjectHrefFor,
+  actions,
+  memberKindLabel,
 }: {
+  actions?: ReactNode;
+  memberKindLabel?: ((type: string) => string) | undefined;
   hit: PublicDiscoveryHit;
   kind: string;
   locale: string;
@@ -156,7 +227,17 @@ export function DiscoveryPublicRow({
   const summary = hit.summary;
   switch (summary.kind) {
     case 'collection':
-      return <PublicCollectionRow id={id} summary={summary.value} kind={kind} locale={locale} />;
+      return (
+        <PublicCollectionRow
+          id={id}
+          summary={summary.value}
+          kind={kind}
+          locale={locale}
+          subjectHrefFor={subjectHrefFor}
+          actions={actions}
+          memberKindLabel={memberKindLabel}
+        />
+      );
     case 'review':
       return <ReviewRow id={id} summary={summary.value} kind={kind} locale={locale} subjectHrefFor={subjectHrefFor} />;
     case 'space':

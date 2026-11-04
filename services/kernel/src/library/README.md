@@ -1944,6 +1944,37 @@ native card before displaying a Collection. It has no candidate-source import or
   full-key validation, duplicate handling, hidden/missing/removed candidates, completed A with pending B,
   absent native output, Access denial, terminal lifecycle change, withdrawal and final revision changes.
 
+### Collection comparison context and private follow discovery
+
+Decision: public cards show at most three admitted members from the first four native occurrences, with separate
+partial/truncated flags; missing native projection withholds the preview, and private follow advice stays outside cards.
+
+`collection-discovery-context.ts` batches anonymous curator summaries and member summaries after releasing Library
+checkouts. It uses current Account disclosure and exact active handles; a retained null curator is deidentified,
+never a cached label. Curated occurrences preserve `(ordinal_key, member_id)`, duplicates and `orderEpoch`;
+dynamic previews read only the already selected published generation in native Subject order. They never evaluate
+saved rules. Empty, no disclosed members, partial, truncated and unavailable have distinct representations. Public
+`memberCount` retains its native occurrence meaning. Each member retains its own Type and Types when presentation is mixed.
+The card includes native `sourceGeneration`, independent of presentation and viewer state. Final membership and header
+signatures, repeated curator summaries and Semantic currentness protect publication against source/disclosure changes.
+
+Cost: for K <= 100 keys in one partition, each of two native rounds adds at most two lateral statements, each using
+full `(route, collection_id)` keys and LIMIT 4 on the existing ordered membership/output indexes. At most 4K raw keys
+are examined per round; no hidden-prefix refill occurs. Foreign fanout is <= K curator IDs in one bounded producer
+call and <= 4K deduplicated Subject IDs in batches of 100, including each producer's native currentness work. Cover
+work retains its existing bound. Each context is <= 4096 serialized UTF-8 bytes; oversized optional previews become
+unavailable. Labels are <=160 code units, Types <=32 with <=256 code units each. Thus added public context is <=409600
+bytes per native batch, before the existing aggregate transport ceiling. No Library connection spans a foreign read.
+
+`follow-discovery.ts` is the reusable private read seam for Search and Space entry. Input is <=100 unique admitted
+`{ targetId, targetType: collection|space, source }` tuples, not index hints. It derives the home only from the explicit
+Account actor and returns signed-out, unavailable or current account/partition/rows with exact follow/unfollow advice.
+Two fresh home snapshots recheck active actor kind, fencing, authn epoch, partition incarnation and current own-account
+Access for both write directions; reading one's own follow state uses the existing authenticated-account contract, without a read scope. One statement per round seeks <=100 complete `(route, account_id, target_id)` keys;
+there is no target scan or follower count. Source is <=1024 characters; envelopes exceeding 32768 UTF-8 bytes become
+unavailable. Advice is separate from the existing idempotent follow/unfollow commands, which still
+reauthorize native actor retirement and target readability. Other consumers must supply their own current target source.
+
 ### Curator list
 
 - Touches: One `readPublicViews` account probe outside the page transaction hides the list when Collections are off, except for the existing live curator identity check. A hidden list skips the page read. Otherwise, the partition epoch read and `collection-reads-curator-public.sql` on `collection_curator_public_page`, or, for a live grant-capable curator with `collection:read`, the account read and `collection-reads-curator.sql` on `collection_curator_page`. Both statements page active Collections by `updated_at DESC, collection_id DESC`; the public statement also requires public visibility. Their literal predicates match the partial indexes under a generic plan. Each of the two `LIMIT` branches is one index range scan, at most `s + 1` rows, `s` at most 100. The final timestamp order allows a lazy merge of the branches; the exact UTC text remains the cursor key. The repeatable-read transaction still reads the partition epoch. `collection_curator_listing` remains for the store helper ordered by `collection_id`.

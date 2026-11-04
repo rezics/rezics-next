@@ -218,10 +218,13 @@ function summaries(value: PublicCollectionDiscoveryResult, ids: readonly string[
       title: card.title,
       description: card.description,
       revision: card.revision,
+      sourceGeneration: card.sourceGeneration,
       presentationKind: card.presentationKind,
       presentationKindSource: card.presentationKindSource,
       cover: card.cover,
       coverSource: card.coverSource,
+      curator: card.curator,
+      preview: card.preview,
     };
     if (card.membershipKind === 'curated') {
       if (
@@ -355,6 +358,7 @@ export function createNativeCollectionDiscoveryAdapter(
                   actor: context.actor,
                   partition,
                   deadline: context.deadline,
+                  ...(context.languages ? { languages: context.languages } : {}),
                 }),
                 batch,
               );

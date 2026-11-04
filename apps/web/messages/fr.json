@@ -8106,5 +8106,13 @@
   "search_share_close": "Fermer l’aperçu",
   "relation_actions_unavailable": "Les actions actuelles de la relation sont indisponibles. Rechargez pour réessayer.",
   "relation_actions_read_only": "Vous pouvez comparer les relations. Une autorisation actuelle est nécessaire pour proposer.",
-  "relation_participants_unreadable": "Un participant de la relation est illisible actuellement. Choisissez une identité accessible ou rechargez."
+  "relation_participants_unreadable": "Un participant de la relation est illisible actuellement. Choisissez une identité accessible ou rechargez.",
+  "discovery_collection_curator": "Sélection de",
+  "discovery_collection_curator_unavailable": "Responsable indisponible",
+  "discovery_collection_preview": "Aperçu du contenu",
+  "discovery_collection_partial": "Certains éléments ne peuvent pas être affichés.",
+  "discovery_collection_truncated": "Aperçu de cette collection. Ouvrez-la pour en voir plus.",
+  "discovery_collection_empty": "Cette collection est vide.",
+  "discovery_collection_withheld": "Aucun élément ne peut être affiché.",
+  "discovery_collection_preview_unavailable": "Aperçu indisponible."
 }

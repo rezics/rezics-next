@@ -8198,5 +8198,13 @@
   "search_share_close": "Close preview",
   "relation_actions_unavailable": "Current relationship actions could not be read. Reload to try again.",
   "relation_actions_read_only": "You can compare relationships. Proposing requires current permission.",
-  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload."
+  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload.",
+  "discovery_collection_curator": "Curated by",
+  "discovery_collection_curator_unavailable": "Curator unavailable",
+  "discovery_collection_preview": "Contents preview",
+  "discovery_collection_partial": "Some members cannot be shown.",
+  "discovery_collection_truncated": "A preview of this Collection. Open it for more.",
+  "discovery_collection_empty": "This Collection is empty.",
+  "discovery_collection_withheld": "No members can be shown.",
+  "discovery_collection_preview_unavailable": "Contents preview unavailable."
 }

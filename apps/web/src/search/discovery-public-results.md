@@ -9,14 +9,14 @@ The current public row shapes are intentionally small:
 
 | Native key             | Current supplied summary                                                                             | Canonical destination                                                                       |
 | ---------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `library / collection` | `id`, `title`, nullable `description`                                                                | `/{locale}/collections/{id}`                                                                |
+| `library / collection` | `id`, `title`, nullable `description`, native cover/count/presentation, curator and bounded member preview                                                                | `/{locale}/collections/{id}`                                                                |
 | `content / review`     | thread `id`, `kind: review`, nullable `title`, optional current author, excerpt and reviewed Subject | `/{locale}/threads/{id}/{title-slug}` (the ID route uses `thread` when the title is absent) |
 | `community / space`    | `id`, `title`, current `address`, optional summary and Realm title                                   | `/{locale}/spaces/{address}`                                                                |
 
 Decision: Search UI uses `library/collection`, `content/review`, and `community/space` public result tags, and
 derives canonical local links from the admitted full key and current owner summary; absent optional text stays absent.
 
-The row adapter performs no reads, federation, sorting, deduplication or count calculation. It renders only supplied
+The public row adapter performs no reads, federation, sorting, deduplication or count calculation. It renders only supplied
 public titles, descriptions, excerpts, reviewed-Subject context, Space address and Realm title. Collection rules,
 private membership or facts, review votes, and Realm rank figures are not accepted by the closed public summary schemas.
 Missing current summaries or addresses make the whole page unavailable rather than producing a partial row or preview.
@@ -47,9 +47,9 @@ and an admitted destination for overflow. Keep native order, match identity and 
 The receiver must then add the qualified multi-kind navigation/return and retirement acceptance; it must not hydrate
 Subjects to work around this missing native projection.
 
-The retained default Search path now includes ready Collection, review and Space producers in the shared kind
-directory and current-page guard. Collection, review and Space rows use the closed public variants above; private
-Library overlays and owner-specific richer card contexts remain a separate current-reader seam. These source changes
+The retained default Search path includes ready Collection, review and Space producers in the shared kind
+directory and current-page guard. Collection rows include native public curator/member context; their private
+follow advice uses the mounted current-reader seam described below. These source changes
 do not establish native growth or browser acceptance evidence. Subject and Account rows keep their existing summaries
 and routes.
 
@@ -121,3 +121,24 @@ Successful/uncertain overlapping settlement adds exactly one private assembly. E
 final authority check. A false viewer check retires the whole page without restart retry; ordinary producer failure
 retains the independently admitted public page. Cleanup aborts at most one assembly and disposes one page/registry
 subscription per incarnation; it starts no replacement read or continuation protocol.
+
+## Collection curator context and following
+
+Decision: Collection previews show three admitted members from a four-occurrence native prefix, with explicit empty,
+withheld, partial, truncated and unavailable states; follow state stays in the private page envelope.
+
+Curator links use only the currently admitted handle destination. Deidentified/withheld attribution never falls back
+to an index label. Member links address actual Subjects and retain each member Type; Collection cover, presentation,
+public occurrence count and canonical destination retain their existing meaning. All eight locales label context and
+preview states. Ordinary links preserve the browser's Search history, query and continuation.
+
+The mounted personal Search host consumes aggregate `collectionFollows`, checks its account and full source binding,
+and feeds Library's existing `FollowControl`. The adapter makes no per-row GET. It passes explicit reader/credential
+evidence to a no-store BFF and reuses Library's idempotent native follow writer. A confirmed reply refreshes the local
+edge from the command result; a failed/uncertain reply retires that row's aggregate edge and exposes accessible failure
+feedback. Pending never renders following success. Other rows and the cursor stay admitted. The existing permanent
+session/exposure/credential/request/locale/source lifetime guard rejects delayed replies even after A → B → A.
+
+The three personal Search files additionally include this envelope in the existing private byte allowance and suppress
+it when the private page lifetime is unavailable; public cards never receive viewer facts. Browser and native broader
+acceptance remains deferred to integration.
