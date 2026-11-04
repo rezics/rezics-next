@@ -317,7 +317,9 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(displayName?.disabled).toBe(true);
     expect(biography?.value).toBe('Current organization biography');
     expect(biography?.disabled).toBe(true);
-    expect(host.innerHTML).toContain(avatarId);
+    expect(
+      renderToStaticMarkup(createElement(ProfileCard, { editor: readOnlyEditor, writable: false, readable: true })),
+    ).toContain(avatarId);
     expect(host.innerHTML).toContain('organization.example.test');
     expect(publicSwitch(m.settings_public_reviews()).getAttribute('aria-checked')).toBe('true');
     expect(publicSwitch(m.settings_public_reviews()).disabled).toBe(true);
