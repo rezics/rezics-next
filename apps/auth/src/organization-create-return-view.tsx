@@ -9,6 +9,10 @@ export type OrganizationCreateReturnViewProps = {
   phase: OrganizationCreatePhase;
   history?: 'none' | 'unconfirmed' | 'acknowledged';
   pending?: boolean;
+  checkingAdvice?: boolean;
+  adviceReady?: boolean;
+  dismissed?: boolean;
+  dismiss?: () => void;
   handle?: string;
   accountId?: string;
   canRetryCreation?: boolean;
@@ -23,6 +27,10 @@ export function OrganizationCreateReturnView({
   phase,
   history = 'none',
   pending = false,
+  checkingAdvice = false,
+  adviceReady = false,
+  dismissed = false,
+  dismiss,
   handle,
   accountId,
   canRetryCreation = false,
@@ -35,7 +43,9 @@ export function OrganizationCreateReturnView({
   const currentSuccess = phase === 'acknowledged' && Boolean(handle);
   const hasUnknownHistory = history === 'unconfirmed' && !['preflight', 'approval', 'execution'].includes(phase);
   const hasAcknowledgedHistory = history === 'acknowledged';
-  const showUnknown = phase === 'unknown' || phase === 'unresumable' || hasUnknownHistory;
+  const showUnknown =
+    history !== 'acknowledged' && (phase === 'unknown' || phase === 'unresumable' || hasUnknownHistory);
+  const genericHistory = !currentSuccess && (showUnknown || hasAcknowledgedHistory);
   const view = (() => {
     switch (phase) {
       case 'review':
@@ -62,21 +72,25 @@ export function OrganizationCreateReturnView({
           </Alert>
         );
       case 'unknown':
-        return (
-          <Alert role="status">
-            <AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription>
-          </Alert>
-        );
+        return null;
       case 'unavailable':
         return (
           <Alert role="alert">
-            <AlertDescription>{m.auth_account_operation_unavailable()}</AlertDescription>
+            <AlertDescription>
+              {hasAcknowledgedHistory
+                ? m.auth_organization_return_advice_unavailable()
+                : m.auth_account_operation_unavailable()}
+            </AlertDescription>
           </Alert>
         );
       case 'unresumable':
         return (
           <Alert role="alert">
-            <AlertDescription>{m.auth_organization_return_unresumable()}</AlertDescription>
+            <AlertDescription>
+              {hasAcknowledgedHistory
+                ? m.auth_organization_return_advice_unavailable()
+                : m.auth_organization_return_unresumable()}
+            </AlertDescription>
           </Alert>
         );
       case 'acknowledged':
@@ -92,29 +106,40 @@ export function OrganizationCreateReturnView({
             ) : null}
             <a href="/security">{m.auth_security_heading()}</a>
           </div>
-        ) : (
-          <Alert role="status">
-            <AlertDescription>{m.auth_organization_return_acknowledged()}</AlertDescription>
-          </Alert>
-        );
+        ) : null;
     }
   })();
 
-  if (!view && !hasUnknownHistory && !canRetryRead && !canRetryCreation && !signedOut) return null;
+  if (!view && !genericHistory && !canRetryRead && !canRetryCreation && !signedOut) return null;
   return (
     <div ref={focusRef} tabIndex={-1} className="flex flex-col gap-3 outline-none" data-organization-create-return>
-      {hasUnknownHistory && phase !== 'unknown' ? (
+      {genericHistory && !dismissed ? (
         <Alert role="status">
-          <AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription>
+          <AlertDescription>
+            <p>
+              {hasAcknowledgedHistory
+                ? m.auth_organization_return_acknowledged()
+                : m.auth_organization_creation_unknown()}
+            </p>
+            {dismiss ? (
+              <>
+                <p>{m.auth_organization_return_dismiss_help()}</p>
+                <Button type="button" variant="outline" onClick={dismiss}>
+                  {m.auth_organization_return_dismiss()}
+                </Button>
+              </>
+            ) : null}
+          </AlertDescription>
         </Alert>
       ) : null}
-      {hasAcknowledgedHistory && phase !== 'acknowledged' ? (
-        <Alert role="status">
-          <AlertDescription>{m.auth_organization_return_acknowledged()}</AlertDescription>
+      {checkingAdvice ? (
+        <Alert role="status" aria-busy="true">
+          <AlertDescription>{m.auth_organization_creation_checking()}</AlertDescription>
         </Alert>
       ) : null}
+      {adviceReady ? <p role="status">{m.auth_organization_return_advice_ready()}</p> : null}
       {view}
-      {showUnknown || phase === 'unavailable' || signedOut ? (
+      {showUnknown || (hasAcknowledgedHistory && !currentSuccess) || phase === 'unavailable' || signedOut ? (
         <div className="flex flex-wrap items-center gap-3">
           {canRetryRead && readRetry ? (
             <Button type="button" variant="outline" onClick={readRetry}>

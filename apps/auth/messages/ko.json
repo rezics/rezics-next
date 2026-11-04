@@ -254,7 +254,7 @@
   "auth_organization_heading": "조직 만들기",
   "auth_organization_not_open": "REZICS의 이 기능은 아직 열리지 않았습니다.",
   "auth_organization_refused": "생성이 거부되었습니다. 조직 생성 권한과 핸들 사용 가능 여부를 확인하세요.",
-  "auth_organization_return_acknowledged": "페이지를 떠나기 전에 생성 승인을 받았습니다. 새 요청을 시작하기 전에 현재 안내를 확인하세요.",
+  "auth_organization_return_acknowledged": "이 페이지는 조직이 생성되었다는 네이티브 확인 응답을 받았습니다. 현재 세션 정보는 별도로 확인하며, 이 페이지는 이 생성 요청을 다시 보내지 않습니다.",
   "auth_organization_return_creation_retry": "이 생성 다시 시도",
   "auth_organization_return_read_retry": "현재 안내 확인",
   "auth_organization_return_unresumable": "이전 생성 결과가 아직 해결되지 않았습니다. 원래 요청이 현재 계정 또는 복구 정보와 일치하지 않아 안전하게 재개할 수 없습니다. 시작한 계정으로 로그인하거나 보안 설정을 확인하세요. 새 생성 요청은 전송되지 않았습니다.",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "이전 전송 결과가 아직 확인되지 않았습니다. 이 페이지에서는 어느 계정이 전송했는지 확인할 수 없습니다.",
   "auth_consent_history_refused": "최근 승인이 거부되었습니다. 이 거부로 이전의 알 수 없는 결과가 해결되지는 않습니다.",
   "auth_consent_history_dismiss": "이 설명 숨기기",
-  "auth_consent_history_dismiss_explanation": "이 설명을 숨겨도 서비스의 결정을 취소하거나 확정하거나 되돌리지 않습니다. 확인되지 않은 전송 결과는 그대로 남습니다."
+  "auth_consent_history_dismiss_explanation": "이 설명을 숨겨도 서비스의 결정을 취소하거나 확정하거나 되돌리지 않습니다. 확인되지 않은 전송 결과는 그대로 남습니다.",
+  "auth_organization_return_advice_unavailable": "현재 세션 정보를 확인하지 못했습니다. 계속하기 전에 현재 정보를 다시 확인하거나 보안을 여세요.",
+  "auth_organization_return_advice_ready": "현재 세션 정보를 다시 확인했습니다. 이 확인으로 이전 생성의 비공개 세부 정보를 복원할 수는 없습니다. 이 페이지는 다른 생성을 시작하지 않습니다.",
+  "auth_organization_return_dismiss": "설명 숨기기",
+  "auth_organization_return_dismiss_help": "설명을 숨겨도 작업이 취소되거나 되돌려지거나 확인되거나 허가되지 않습니다. 새 생성 요청도 허용되지 않습니다."
 }

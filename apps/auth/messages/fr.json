@@ -254,7 +254,7 @@
   "auth_organization_heading": "Créer une organisation",
   "auth_organization_not_open": "Cette partie de REZICS n’est pas encore ouverte.",
   "auth_organization_refused": "Création refusée. Vérifiez votre droit de créer une organisation et la disponibilité de l’identifiant.",
-  "auth_organization_return_acknowledged": "Cette page a reçu une confirmation de création avant votre départ. Consultez les informations actuelles avant de commencer une autre demande.",
+  "auth_organization_return_acknowledged": "Cette page a reçu la confirmation native de la création de l’organisation. La vérification de la session actuelle est distincte ; cette page ne renverra pas cette demande de création.",
   "auth_organization_return_creation_retry": "Réessayer cette création",
   "auth_organization_return_read_retry": "Vérifier les informations actuelles",
   "auth_organization_return_unresumable": "Le résultat de la création précédente reste indéterminé. La demande initiale ne correspond plus au compte ou aux données de récupération actuels et ne peut pas être reprise en toute sécurité. Connectez-vous au compte qui l’a commencée ou consultez la sécurité. Aucune nouvelle création n’a été envoyée.",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "Un envoi antérieur reste non résolu. Cette page ne peut pas identifier le compte qui l’a envoyé.",
   "auth_consent_history_refused": "La dernière approbation a été refusée. Ce refus ne résout aucun résultat antérieur inconnu.",
   "auth_consent_history_dismiss": "Masquer cette explication",
-  "auth_consent_history_dismiss_explanation": "Masquer cette explication n’annule, ne confirme ni ne révoque une décision du service. Tout envoi non résolu le reste."
+  "auth_consent_history_dismiss_explanation": "Masquer cette explication n’annule, ne confirme ni ne révoque une décision du service. Tout envoi non résolu le reste.",
+  "auth_organization_return_advice_unavailable": "Les informations de la session actuelle n’ont pas pu être vérifiées. Vérifiez-les à nouveau ou ouvrez Sécurité avant de continuer.",
+  "auth_organization_return_advice_ready": "Les informations de la session actuelle sont de nouveau disponibles. Cette vérification ne peut pas rétablir les données privées de la création précédente. Cette page ne lancera pas d’autre création.",
+  "auth_organization_return_dismiss": "Masquer l’explication",
+  "auth_organization_return_dismiss_help": "Masquer cette explication n’annule, ne révoque, ne confirme ni n’autorise aucune opération. Cela ne permet pas une autre demande de création."
 }

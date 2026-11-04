@@ -254,7 +254,7 @@
   "auth_organization_heading": "创建组织",
   "auth_organization_not_open": "REZICS 的此功能尚未开放。",
   "auth_organization_refused": "创建被拒绝。请检查创建组织的权限及用户名是否可用。",
-  "auth_organization_return_acknowledged": "离开前，此页面收到了创建确认。开始其他请求前，请重新查看当前建议。",
+  "auth_organization_return_acknowledged": "本页已收到组织创建成功的原生确认。当前会话信息会另行核查；本页不会再次发送这次创建请求。",
   "auth_organization_return_creation_retry": "重试此次创建",
   "auth_organization_return_read_retry": "检查当前建议",
   "auth_organization_return_unresumable": "先前的创建结果仍未确定。原请求与当前账户或恢复数据不再匹配，无法安全继续。请登录发起请求的账户或查看安全设置。没有发送新的创建请求。",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "先前一次提交的结果尚未确定。此页面无法确定是哪个账号提交的。",
   "auth_consent_history_refused": "最近一次授权被拒绝。这次拒绝无法确定先前未知的结果。",
   "auth_consent_history_dismiss": "隐藏此说明",
-  "auth_consent_history_dismiss_explanation": "隐藏此说明不会取消、确认或撤销服务端的决定。尚未确定的提交结果仍然未知。"
+  "auth_consent_history_dismiss_explanation": "隐藏此说明不会取消、确认或撤销服务端的决定。尚未确定的提交结果仍然未知。",
+  "auth_organization_return_advice_unavailable": "无法核实当前会话信息。请重新查看当前建议，或打开“安全”后再继续。",
+  "auth_organization_return_advice_ready": "当前会话信息已恢复可用。此次核查无法恢复先前创建的私密详情。本页不会发起新的创建。",
+  "auth_organization_return_dismiss": "隐藏说明",
+  "auth_organization_return_dismiss_help": "隐藏此说明不会取消、撤销、确认或授权任何操作，也不会允许再次发起创建请求。"
 }

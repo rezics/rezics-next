@@ -254,7 +254,7 @@
   "auth_organization_heading": "Organisation erstellen",
   "auth_organization_not_open": "Dieser Bereich von REZICS ist noch nicht geöffnet.",
   "auth_organization_refused": "Erstellung verweigert. Prüfe deine Berechtigung zum Erstellen einer Organisation und die Verfügbarkeit des Handles.",
-  "auth_organization_return_acknowledged": "Diese Seite hat vor dem Verlassen eine Bestätigung für eine Erstellung erhalten. Prüfe die aktuellen Hinweise, bevor du einen weiteren Antrag startest.",
+  "auth_organization_return_acknowledged": "Diese Seite hat die native Bestätigung erhalten, dass die Organisation erstellt wurde. Der aktuelle Sitzungsstatus wird getrennt geprüft. Diese Seite sendet diese Erstellung nicht erneut.",
   "auth_organization_return_creation_retry": "Diese Erstellung erneut versuchen",
   "auth_organization_return_read_retry": "Aktuelle Hinweise prüfen",
   "auth_organization_return_unresumable": "Das Ergebnis der früheren Erstellung ist weiterhin ungeklärt. Die ursprüngliche Anfrage stimmt nicht mehr mit dem aktuellen Konto oder den Wiederherstellungsdaten überein und kann daher nicht sicher fortgesetzt werden. Melde dich mit dem Konto an, das sie begonnen hat, oder prüfe die Sicherheitseinstellungen. Es wurde kein neuer Antrag gesendet.",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "Eine frühere Übermittlung ist ungeklärt. Diese Seite kann nicht feststellen, welches Konto sie gesendet hat.",
   "auth_consent_history_refused": "Die letzte Genehmigung wurde abgelehnt. Diese Ablehnung klärt kein früheres unbekanntes Ergebnis.",
   "auth_consent_history_dismiss": "Diese Erklärung ausblenden",
-  "auth_consent_history_dismiss_explanation": "Das Ausblenden dieser Erklärung storniert, bestätigt oder widerruft keine Entscheidung des Dienstes. Ungeklärte Übermittlungen bleiben ungeklärt."
+  "auth_consent_history_dismiss_explanation": "Das Ausblenden dieser Erklärung storniert, bestätigt oder widerruft keine Entscheidung des Dienstes. Ungeklärte Übermittlungen bleiben ungeklärt.",
+  "auth_organization_return_advice_unavailable": "Der aktuelle Sitzungsstatus konnte nicht geprüft werden. Prüfen Sie ihn erneut oder öffnen Sie Sicherheit, bevor Sie fortfahren.",
+  "auth_organization_return_advice_ready": "Der aktuelle Sitzungsstatus ist wieder verfügbar. Frühere private Erstellungsdetails lassen sich dadurch nicht wiederherstellen. Diese Seite startet keine weitere Erstellung.",
+  "auth_organization_return_dismiss": "Erklärung ausblenden",
+  "auth_organization_return_dismiss_help": "Das Ausblenden bricht keine Arbeit ab, macht sie nicht rückgängig und bestätigt oder autorisiert sie nicht. Es erlaubt keinen weiteren Erstellungsauftrag."
 }

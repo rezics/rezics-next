@@ -113,6 +113,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [returned, setReturned] = useState(false);
   const [returnState, setReturnState] = useState<OrganizationCreateReturnState>(initialOrganizationCreateReturn);
   const unresolvedAttempt = useRef<PendingAccountOperationStepUp | null>(null);
+  // Mounted evidence closes this invocation, independently of later advice reads.
+  const acknowledged = useRef(false);
   const [restricted, setRestricted] = useState(false);
   const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [handle, setHandle] = useState('');
@@ -146,38 +148,48 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const recordReturn = useCallback((event: OrganizationCreateReturnEvent) => {
     setReturnState((current) => transitionOrganizationCreateReturn(current, event));
   }, []);
+  const retirePrivate = useCallback(
+    (state: LoadState, event: OrganizationCreateReturnEvent, recovery = false, message = '') => {
+      lifetime.current = null;
+      authority.current = null;
+      submitting.current = false;
+      if (handleInput.current) handleInput.current.value = '';
+      flushSync(() => {
+        setLoadState(state);
+        setAccountId('');
+        setNeedsProfile(false);
+        setReturned(false);
+        setRestricted(false);
+        setRecoveryUnavailable(recovery);
+        setHandle('');
+        setHandleError('');
+        setPending(false);
+        setMessage('');
+        setShowRetry(false);
+        setCreatedHandle('');
+        setCreatedAccountId('');
+        setLoadMessage(message);
+        recordReturn(event);
+      });
+    },
+    [recordReturn],
+  );
   const depart = useCallback(() => {
     const descriptorHandle =
       unresolvedAttempt.current?.operation.kind === 'organization' ? unresolvedAttempt.current.operation.handle : '';
     const draft = review.current.handle || descriptorHandle;
     const marker = pendingAccountOperationStepUpState();
-    // Retire authority and force private DOM removal before the browser can cache this document.
-    lifetime.current = null;
-    authority.current = null;
-    submitting.current = false;
+    // Flush private DOM before the browser can cache this document.
     bypassDeparture.current = true;
-    flushSync(() => {
-      setLoadState('loading');
-      setAccountId('');
-      setNeedsProfile(false);
-      setReturned(false);
-      setRestricted(false);
-      setRecoveryUnavailable(false);
-      setHandle('');
-      setHandleError('');
-      setPending(false);
-      setMessage('');
-      setShowRetry(false);
-      setCreatedHandle('');
-      setCreatedAccountId('');
-      setLoadMessage('');
-      recordReturn({ type: 'return' });
-    });
-    // A retained command, including one whose outcome is unknown, keeps its exact identity.
+    retirePrivate('loading', { type: 'return' });
     if (marker.kind === 'absent' && readPendingOrganizationHandle() === draft) storePendingOrganizationHandle('');
-  }, [recordReturn]);
+  }, [retirePrivate]);
   const departure = router ? (
-    <OrganizationDeparture shouldWarn={shouldWarn} leave={depart} focus={() => handleInput.current?.focus()} />
+    <OrganizationDeparture
+      shouldWarn={shouldWarn}
+      leave={depart}
+      focus={() => (returnFocus.current ?? handleInput.current)?.focus()}
+    />
   ) : null;
 
   useLayoutEffect(() => {
@@ -211,7 +223,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     setRecoveryUnavailable(false);
     const stored = pendingAccountOperationStepUpState();
     const saved = stored.kind === 'pending' ? stored.value : null;
-    if (!unresolvedAttempt.current && saved?.kind === 'organization') {
+    if (!acknowledged.current && !unresolvedAttempt.current && saved?.kind === 'organization') {
       // Storage is a recovery hint, including submitted:false. It cannot prove
       // how far a former mounted page got through approval and execution.
       unresolvedAttempt.current = saved;
@@ -238,6 +250,11 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     void (initial && reload === 0 ? Promise.resolve(initial) : loadAccountSession()).then((result) => {
       if (lifetime.current !== current) return;
       if (result.kind === 'ready') {
+        if (acknowledged.current) {
+          // Current advice cannot reconstruct the acknowledged request's private result.
+          setLoadState('ready');
+          return;
+        }
         const pendingState = pendingAccountOperationStepUpState();
         const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
         const attemptMismatch =
@@ -317,11 +334,12 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   }, [loadState, returnState.phase]);
 
   useLayoutEffect(() => {
-    if (createdHandle) returnFocus.current?.focus();
-  }, [createdHandle]);
+    if (returnState.history === 'acknowledged') returnFocus.current?.focus();
+  }, [returnState.history, createdHandle]);
 
   async function createOrganization() {
     if (
+      acknowledged.current ||
       !lifetime.current ||
       loadState !== 'ready' ||
       submitting.current ||
@@ -361,33 +379,22 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
         !pendingAccountOperationMatches(pendingOperation, accountId, pendingOperation.operationKey, operation));
     if (invalidContinuation) {
       // Missing/replaced storage is not a license to allocate a new command key.
-      lifetime.current = null;
-      authority.current = null;
-      submitting.current = false;
-      flushSync(() => {
-        setLoadState('failure');
-        setAccountId('');
-        setNeedsProfile(false);
-        setHandle('');
-        setHandleError('');
-        setPending(false);
-        setMessage('');
-        setShowRetry(false);
-        setCreatedHandle('');
-        setCreatedAccountId('');
-        setRecoveryUnavailable(true);
-        setLoadMessage(m.auth_account_operation_failure());
-        recordReturn({ type: 'unresumable' });
-      });
+      retirePrivate('failure', { type: 'unresumable' }, true, m.auth_account_operation_failure());
       return;
     }
     const operationKey =
       pendingOperation?.operationKey ??
       unresolvedAttempt.current?.operationKey ??
       operationKeyFor(operation, accountId);
+    let keyStorage: string | null = null;
+    try {
+      keyStorage = window.sessionStorage.getItem('rezics.account-operation.pending');
+    } catch {
+      // Storage may be disabled; the mounted acknowledgement still closes this send.
+    }
     const current = lifetime.current;
     let continuation = JSON.stringify(pendingState);
-    const draft = readPendingOrganizationHandle();
+    let draft = readPendingOrganizationHandle();
     const isCurrent = () => {
       if (lifetime.current !== current) return false;
       if (
@@ -395,24 +402,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
         readPendingOrganizationHandle() === draft
       )
         return true;
-      lifetime.current = null;
-      authority.current = null;
-      submitting.current = false;
-      flushSync(() => {
-        setLoadState('failure');
-        setAccountId('');
-        setNeedsProfile(false);
-        setHandle('');
-        setHandleError('');
-        setPending(false);
-        setMessage('');
-        setShowRetry(false);
-        setCreatedHandle('');
-        setCreatedAccountId('');
-        setRecoveryUnavailable(true);
-        setLoadMessage(m.auth_account_operation_failure());
-        recordReturn({ type: 'unresumable' });
-      });
+      retirePrivate('failure', { type: 'unresumable' }, true, m.auth_account_operation_failure());
       return false;
     };
     const before = await loadAccountSession();
@@ -423,24 +413,13 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       before.clientId !== authority.current?.clientId ||
       JSON.stringify(before.scopes) !== JSON.stringify(authority.current?.scopes)
     ) {
-      lifetime.current = null;
-      authority.current = null;
-      submitting.current = false;
-      flushSync(() => {
-        setLoadState(before.kind === 'signed-out' ? 'signed-out' : 'failure');
-        setAccountId('');
-        setNeedsProfile(false);
-        setHandle('');
-        setHandleError('');
-        setPending(false);
-        setMessage('');
-        setShowRetry(false);
-        setCreatedHandle('');
-        setCreatedAccountId('');
-        setRecoveryUnavailable(false);
-        setLoadMessage(m.auth_account_operation_failure());
-        recordReturn({ type: 'read-unavailable' });
-      });
+      focusAfterReturn.current = true;
+      retirePrivate(
+        before.kind === 'signed-out' ? 'signed-out' : 'failure',
+        { type: 'read-unavailable' },
+        false,
+        m.auth_account_operation_failure(),
+      );
       return;
     }
     // Retain the exact command before sending it: losing this page cannot unlock another creation.
@@ -479,6 +458,34 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       },
     });
     if (!isCurrent()) return;
+    if (result.ok) {
+      // Adopt only generic evidence while the exact callback/descriptor still owns the send.
+      // Cleanup is synchronous and cannot consume a later replacement during the final read.
+      acknowledged.current = true;
+      try {
+        if (
+          keyStorage &&
+          JSON.parse(keyStorage).key === operationKey &&
+          window.sessionStorage.getItem('rezics.account-operation.pending') === keyStorage
+        )
+          forgetOperationKey(operation, accountId);
+      } catch {
+        // Leave an unreadable key untouched rather than erasing another owner.
+      }
+      if (readPendingOrganizationHandle() === draft) storePendingOrganizationHandle('');
+      clearPendingAccountOperationStepUp();
+      continuation = JSON.stringify(pendingAccountOperationStepUpState());
+      draft = readPendingOrganizationHandle();
+      unresolvedAttempt.current = null;
+      if (handleInput.current) handleInput.current.value = '';
+      flushSync(() => {
+        recordReturn({ type: 'acknowledged' });
+        setHandle('');
+        setHandleError('');
+        setMessage('');
+        setShowRetry(false);
+      });
+    }
     const after = await loadAccountSession();
     if (!isCurrent()) return;
     if (
@@ -487,33 +494,17 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       after.clientId !== before.clientId ||
       JSON.stringify(after.scopes) !== JSON.stringify(before.scopes)
     ) {
-      lifetime.current = null;
-      authority.current = null;
-      submitting.current = false;
-      flushSync(() => {
-        setLoadState(after.kind === 'signed-out' ? 'signed-out' : 'failure');
-        setAccountId('');
-        setNeedsProfile(false);
-        setHandle('');
-        setHandleError('');
-        setPending(false);
-        setMessage('');
-        setShowRetry(false);
-        setCreatedHandle('');
-        setCreatedAccountId('');
-        setRecoveryUnavailable(false);
-        setLoadMessage(m.auth_account_operation_failure());
-        recordReturn({ type: 'read-unavailable' });
-      });
+      focusAfterReturn.current = true;
+      retirePrivate(
+        after.kind === 'signed-out' ? 'signed-out' : 'failure',
+        { type: 'read-unavailable' },
+        false,
+        m.auth_account_operation_failure(),
+      );
       return;
     }
     if (!result.ok && result.reason === 'denied' && needsProfile) result = { ok: false, reason: 'step-up' };
     if (result.ok) {
-      forgetOperationKey(operation, accountId);
-      storePendingOrganizationHandle('');
-      clearPendingAccountOperationStepUp();
-      unresolvedAttempt.current = null;
-      recordReturn({ type: 'acknowledged' });
       setCreatedHandle(normalizedHandle);
       setCreatedAccountId(result.accountId);
       submitting.current = false;
@@ -576,6 +567,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   }
 
   function retryRead() {
+    if (pending || loadState === 'loading') return;
     focusAfterReturn.current = true;
     depart();
     flushSync(() => setReload((value) => value + 1));
@@ -612,6 +604,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     (loadState === 'ready' && returnState.phase === 'unavailable' && !pending) ||
     (loadState === 'ready' && returnState.history === 'unconfirmed' && !pending);
   const canRetryCreation =
+    !acknowledged.current &&
     loadState === 'ready' &&
     !pending &&
     !restricted &&
@@ -623,6 +616,13 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       phase={returnPhase}
       history={returnState.history}
       pending={pending}
+      checkingAdvice={acknowledged.current && (pending || loadState === 'loading')}
+      adviceReady={acknowledged.current && loadState === 'ready' && !pending && !createdHandle}
+      dismissed={returnState.dismissed}
+      dismiss={() => {
+        recordReturn({ type: 'dismiss' });
+        returnFocus.current?.focus();
+      }}
       {...(createdHandle ? { handle: createdHandle, accountId: createdAccountId } : {})}
       canRetryRead={canRetryRead}
       canRetryCreation={canRetryCreation}
@@ -670,7 +670,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       </AuthPage>
     );
 
-  if (createdHandle)
+  if (createdHandle || acknowledged.current)
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}

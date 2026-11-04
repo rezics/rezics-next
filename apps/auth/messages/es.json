@@ -254,7 +254,7 @@
   "auth_organization_heading": "Crear una organización",
   "auth_organization_not_open": "Esta parte de REZICS todavía no está abierta.",
   "auth_organization_refused": "Se ha rechazado la creación. Comprueba tu permiso para crear una organización y la disponibilidad del identificador.",
-  "auth_organization_return_acknowledged": "Esta página recibió una confirmación de creación antes de que salieras. Revisa la información actual antes de iniciar otra solicitud.",
+  "auth_organization_return_acknowledged": "Esta página recibió la confirmación nativa de que se creó la organización. La consulta de la sesión actual es independiente; esta página no volverá a enviar esta creación.",
   "auth_organization_return_creation_retry": "Reintentar esta creación",
   "auth_organization_return_read_retry": "Comprobar información actual",
   "auth_organization_return_unresumable": "El resultado de la creación anterior sigue sin resolverse. La solicitud original ya no coincide con la cuenta o los datos de recuperación actuales y no se puede reanudar de forma segura. Inicia sesión con la cuenta que la comenzó o revisa Seguridad. No se envió ninguna creación nueva.",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "Un envío anterior sigue sin resolverse. Esta página no puede identificar qué cuenta lo envió.",
   "auth_consent_history_refused": "La última aprobación fue rechazada. Este rechazo no resuelve ningún resultado anterior desconocido.",
   "auth_consent_history_dismiss": "Ocultar esta explicación",
-  "auth_consent_history_dismiss_explanation": "Ocultar esta explicación no cancela, confirma ni deshace una decisión del servicio. Los envíos sin resolver siguen sin resolverse."
+  "auth_consent_history_dismiss_explanation": "Ocultar esta explicación no cancela, confirma ni deshace una decisión del servicio. Los envíos sin resolver siguen sin resolverse.",
+  "auth_organization_return_advice_unavailable": "No se pudo verificar la información de la sesión actual. Vuelve a consultarla o abre Seguridad antes de continuar.",
+  "auth_organization_return_advice_ready": "La información de la sesión actual vuelve a estar disponible. Esta consulta no permite recuperar los datos privados de la creación anterior. Esta página no iniciará otra creación.",
+  "auth_organization_return_dismiss": "Ocultar explicación",
+  "auth_organization_return_dismiss_help": "Ocultar esta explicación no cancela, deshace, confirma ni autoriza ninguna operación. Tampoco permite otra solicitud de creación."
 }

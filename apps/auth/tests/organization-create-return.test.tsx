@@ -32,7 +32,11 @@ test('read Retry is separate from same-key command retry and a later refusal kee
   await flush(() => page.calls[0]!.resolve(approval()));
   await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
   const original = readPendingAccountOperationStepUp()!;
-  expect(page.host.textContent).toContain('creation result is still unknown');
+  await flush(() => button(page.host, 'Hide explanation')!.click());
+  expect(readPendingAccountOperationStepUp()).toEqual(original);
+  expect(button(page.host, 'Retry this creation')).toBeDefined();
+  expect(page.calls).toHaveLength(2);
+  expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(button(page.host, 'Check current advice')).not.toBeNull();
   expect(button(page.host, 'Retry this creation')).not.toBeNull();
 
@@ -47,7 +51,7 @@ test('read Retry is separate from same-key command retry and a later refusal kee
   expect(page.calls[2]!.body.operation).toEqual(original.operation);
   await flush(() => page.calls[2]!.resolve(approval()));
   await flush(() => page.calls[3]!.resolve(Response.json({ error: 'account_operation_denied' }, { status: 403 })));
-  expect(page.host.textContent).toContain('creation result is still unknown');
+  expect(page.host.textContent).not.toContain('creation result is still unknown');
   expect(page.host.textContent).toContain('Creation was refused');
   expect(readPendingAccountOperationStepUp()?.operationKey).toBe(original.operationKey);
 });

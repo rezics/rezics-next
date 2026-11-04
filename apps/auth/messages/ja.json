@@ -254,7 +254,7 @@
   "auth_organization_heading": "組織を作成",
   "auth_organization_not_open": "REZICSのこの機能はまだ公開されていません。",
   "auth_organization_refused": "作成が拒否されました。組織を作成する権限とハンドルの空き状況を確認してください。",
-  "auth_organization_return_acknowledged": "このページを離れる前に、作成の確認を受け取りました。新しいリクエストを始める前に現在の案内を確認してください。",
+  "auth_organization_return_acknowledged": "このページは、組織が作成されたことを示すネイティブの確認応答を受け取りました。現在のセッションの確認は別に行われます。このページから同じ作成を再送信することはありません。",
   "auth_organization_return_creation_retry": "この作成を再試行",
   "auth_organization_return_read_retry": "現在の案内を確認",
   "auth_organization_return_unresumable": "以前の作成結果は未解決です。元のリクエストは現在のアカウントまたは復旧情報と一致しないため、安全に再開できません。開始時のアカウントでサインインするか、セキュリティを確認してください。新しい作成リクエストは送信されていません。",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "以前の送信結果は未解決です。このページでは、どのアカウントが送信したかを特定できません。",
   "auth_consent_history_refused": "直近の承認は拒否されました。この拒否によって、以前の不明な結果が解決されることはありません。",
   "auth_consent_history_dismiss": "この説明を非表示にする",
-  "auth_consent_history_dismiss_explanation": "この説明を非表示にしても、サービスの判断を取り消し、確定し、元に戻すことはできません。未解決の送信結果は未解決のままです。"
+  "auth_consent_history_dismiss_explanation": "この説明を非表示にしても、サービスの判断を取り消し、確定し、元に戻すことはできません。未解決の送信結果は未解決のままです。",
+  "auth_organization_return_advice_unavailable": "現在のセッション情報を確認できませんでした。再確認するか、「セキュリティ」を開いてから続行してください。",
+  "auth_organization_return_advice_ready": "現在のセッション情報を再び確認できました。この確認では以前の作成に関する非公開の詳細は復元できません。このページでは新たな作成は開始しません。",
+  "auth_organization_return_dismiss": "説明を非表示にする",
+  "auth_organization_return_dismiss_help": "この説明を非表示にしても、処理のキャンセル、取り消し、確認、許可は行われません。新たな作成リクエストも許可されません。"
 }

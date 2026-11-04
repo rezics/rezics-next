@@ -254,7 +254,7 @@
   "auth_organization_heading": "Create an organization",
   "auth_organization_not_open": "This part of REZICS is not open yet.",
   "auth_organization_refused": "Creation was refused. Check your permission to create an organization and whether the handle is available.",
-  "auth_organization_return_acknowledged": "This page received an acknowledgement for a creation before you left. Review current advice before starting another request.",
+  "auth_organization_return_acknowledged": "This page received the native acknowledgement that the organization was created. Current session advice is separate; this page will not send this creation again.",
   "auth_organization_return_creation_retry": "Retry this creation",
   "auth_organization_return_read_retry": "Check current advice",
   "auth_organization_return_unresumable": "The earlier creation result is still unresolved. The original request no longer matches the current account or recovery data, so it cannot be resumed safely. Sign in to the account that began it or review Security. No new creation was sent.",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "An earlier submission is unresolved. This page cannot identify which account submitted it.",
   "auth_consent_history_refused": "The latest approval was refused. This refusal does not resolve any earlier unknown result.",
   "auth_consent_history_dismiss": "Hide this explanation",
-  "auth_consent_history_dismiss_explanation": "Hiding this explanation does not cancel, confirm or undo a native decision. Any unresolved submission remains unresolved."
+  "auth_consent_history_dismiss_explanation": "Hiding this explanation does not cancel, confirm or undo a native decision. Any unresolved submission remains unresolved.",
+  "auth_organization_return_advice_unavailable": "Current session advice could not be verified. Check current advice or open Security before continuing.",
+  "auth_organization_return_advice_ready": "Current session advice is available again. Earlier private creation details cannot be restored from this check. This page will not start another creation.",
+  "auth_organization_return_dismiss": "Hide explanation",
+  "auth_organization_return_dismiss_help": "Hiding this explanation does not cancel, undo, confirm or authorize work. It does not permit another creation request."
 }

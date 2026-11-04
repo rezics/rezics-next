@@ -254,7 +254,7 @@
   "auth_organization_heading": "建立組織",
   "auth_organization_not_open": "REZICS 的此功能尚未開放。",
   "auth_organization_refused": "建立遭拒。請檢查建立組織的權限及使用者名稱是否可用。",
-  "auth_organization_return_acknowledged": "離開前，此頁面收到了建立確認。開始其他請求前，請重新查看目前建議。",
+  "auth_organization_return_acknowledged": "本頁已收到組織建立成功的原生確認。目前的工作階段資訊會另行核查；本頁不會再次傳送這次建立請求。",
   "auth_organization_return_creation_retry": "重試此次建立",
   "auth_organization_return_read_retry": "檢查目前建議",
   "auth_organization_return_unresumable": "先前的建立結果仍未確定。原始請求與目前帳號或復原資料不再相符，無法安全地繼續。請登入發起請求的帳號或查看安全設定。沒有送出新的建立請求。",
@@ -810,5 +810,9 @@
   "auth_consent_history_unattributed": "先前一次提交的結果尚未確定。此頁面無法確定是哪個帳號提交的。",
   "auth_consent_history_refused": "最近一次授權遭到拒絕。這次拒絕無法確定先前未知的結果。",
   "auth_consent_history_dismiss": "隱藏此說明",
-  "auth_consent_history_dismiss_explanation": "隱藏此說明不會取消、確認或撤銷服務端的決定。尚未確定的提交結果仍然未知。"
+  "auth_consent_history_dismiss_explanation": "隱藏此說明不會取消、確認或撤銷服務端的決定。尚未確定的提交結果仍然未知。",
+  "auth_organization_return_advice_unavailable": "無法核實目前的工作階段資訊。請重新查看目前建議，或開啟「安全」後再繼續。",
+  "auth_organization_return_advice_ready": "目前的工作階段資訊已恢復可用。這次核查無法還原先前建立的私密詳細資料。本頁不會發起新的建立。",
+  "auth_organization_return_dismiss": "隱藏說明",
+  "auth_organization_return_dismiss_help": "隱藏此說明不會取消、撤銷、確認或授權任何操作，也不會允許再次發起建立請求。"
 }

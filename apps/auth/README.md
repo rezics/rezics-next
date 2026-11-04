@@ -565,6 +565,29 @@ result acknowledgement make no requests. Return advice uses only the current ses
 performs no organization lookup, list scan or per-row authority read. Step-up keeps its existing exact-operation reads
 after authentication and after the native session observation.
 
+The mounted organization page adopts a validated native creation acknowledgement while its exact original
+lifetime, descriptor and draft are still current, before awaiting the final independent session observation.
+Acknowledgement and checking current advice appear separately. The page stays busy, clears the handle form and
+ends this local send; approval alone never establishes creation. Only an unchanged exact account/client/scopes
+proof on both session reads admits the success handle and membership destination. A failed, signed-out or
+replacement final read synchronously removes private operands, input values, messages and navigation while
+preserving generic acknowledgement. Cleanup at adoption compares the owned marker, operation key and draft;
+a replacement during the final read remains untouched.
+
+Deliberate current-advice Retry and cached restoration each use one bounded `loadAccountSession`/`privateAuthRead`
+with the existing deadline through body completion. They cannot restore lost created details, infer creation from
+a current organization or reopen approve/execute, even if a descriptor survives. Fresh documents assert no new
+historical acknowledgement and follow only the existing exact native continuation rules. A response retired
+before adoption remains unknown. Acknowledgement of the same exact unknown operation still settles that operation;
+a later refusal or ordinary session observation cannot. No created-account reread or persistent completion record
+is added. Entry, before/after reads and native approval/execute retain the whole-call costs above; dismissal,
+focus and language changes add zero I/O, with no polling, hidden prefetch or automatic command retry.
+
+Decision: hiding generic history remains effective across current-advice Retry and cached return in the same
+mounted page; a newly adopted acknowledgement is shown as new evidence. Hiding explains that it cannot cancel,
+undo, confirm or authorize work. It never releases an unknown send exclusion, removes a pending marker or enables
+another creation. The acknowledgement itself closes its invocation; there is no create-another action here.
+
 Both creation pages retire browser callbacks on departure, cached-page restoration and session replacement. Retry restores the exact saved operation and initiating account; organization review uses its saved handle and original key. Automated review keeps the exact selected operator. Leaving never clears an unresolved attempt or reverses native creation; uncertain results require explicit confirmation of the same command and never automatically repeat execution.
 
 ## Automated account creation
