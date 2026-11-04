@@ -73,9 +73,10 @@ export async function changeBoardSlowModeRequest(
     if (!authorization) return { kind: 'denied' };
     const resource = nativeBoardSlowMode(client, input.boardId);
     if (!resource) return { kind: 'unavailable' };
+    const headers = { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) };
     const result = await resource.put(
       { intervalSeconds: input.intervalSeconds },
-      { headers: { authorization, 'idempotency-key': JSON.stringify(input.idempotencyKey) } },
+      { headers },
     );
     if (result.error) return changeOutcome(result.status, result.error.value, input.intervalSeconds);
     return changeOutcome(result.status, result.data, input.intervalSeconds);
