@@ -401,7 +401,7 @@ export async function readAccountDiscoverySummaries(
   requireAccessDeadline(deps.deadline);
   const subjects = subjectIds.length
     ? await optionalSummaries(deps.deadline, () =>
-        readSubjectSummaries({ ...deps, actor: { kind: 'anonymous' } }, subjectIds, options),
+        readSubjectSummaries(options.context ? { ...deps, actor: { kind: 'anonymous' } } : deps, subjectIds, options),
       )
     : new Map<string, SubjectSummary | null>();
   requireAccessDeadline(deps.deadline);
