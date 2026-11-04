@@ -120,6 +120,7 @@ async function show() {
         session: 'anonymous',
         ready: data.recovery?.status === 'ready',
         settled: data.recovery?.status !== 'loading',
+        recoverable: data.recovery?.status === 'unavailable',
         checkpoint: data.discovery?.status === 'ready' ? data.discovery.page.as_of : undefined,
       });
       return (
@@ -216,8 +217,15 @@ test('restart is explicit, duplicate activation is bounded and reader replacemen
   await click('next');
   link('next')?.click();
   expect(reads).toHaveLength(2);
-  await finish(409);
+  await finish(503);
   expect(reads).toHaveLength(2);
+  expect(host.textContent).not.toContain('Mira Reading Room');
+  expect(link('previous').href).not.toContain('cursor=');
+  await click('previous');
+  await finish();
+  await click('next');
+  await finish(409);
+  expect(reads).toHaveLength(4);
   expect(host.querySelector('[data-search-recovery="restart"]')).not.toBeNull();
   expect(host.textContent).not.toContain('Mira Reading Room');
   expect(link('first').href).not.toContain('cursor=');

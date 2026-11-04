@@ -16,7 +16,13 @@ import { searchWindowFocus } from './focus';
 
 const operations = [] as const;
 type Transition = { request: string; from: string | null; to: string | null; action: string };
-type Visit = { request: string; history: SearchWindowHistory; cursor: string | null; checkpoint?: string | undefined };
+type Visit = {
+  request: string;
+  history: SearchWindowHistory;
+  cursor: string | null;
+  checkpoint?: string | undefined;
+  attemptedFrom?: string | null | undefined;
+};
 
 /** A single Search visit owns its address history; browser entries carry only its bounded admitted addresses. */
 export function useSearchWindow({
@@ -26,6 +32,7 @@ export function useSearchWindow({
   ready,
   settled,
   checkpoint,
+  recoverable = false,
   enabled = true,
 }: {
   state: SearchLoaderDeps;
@@ -34,6 +41,7 @@ export function useSearchWindow({
   ready: boolean;
   settled: boolean;
   checkpoint?: string | undefined;
+  recoverable?: boolean;
   enabled?: boolean;
 }) {
   const router = useRouter({ warn: false });
@@ -68,6 +76,8 @@ export function useSearchWindow({
     visit.current = {
       ...visit.current,
       cursor,
+      attemptedFrom:
+        transition?.request === request && transition.to === cursor ? visit.current.attemptedFrom : undefined,
       history: transition?.request === request && transition.to === cursor ? visit.current.history : persisted(),
     };
     if (transition && transition.to !== cursor) {
@@ -84,8 +94,17 @@ export function useSearchWindow({
     }
     current.checkpoint = checkpoint;
     current.history = admitSearchWindow(current.history, state.cursor, pending.current?.from);
+    current.attemptedFrom = undefined;
   }
-  const position = searchWindowPosition(current.history, state.cursor);
+  const admittedPosition = searchWindowPosition(current.history, state.cursor);
+  const position = {
+    ...admittedPosition,
+    previous:
+      admittedPosition.previous ??
+      (recoverable && admittedPosition.index < 0 && current.attemptedFrom !== undefined
+        ? current.history.windows.find((entry) => entry.cursor === current.attemptedFrom)
+        : undefined),
+  };
 
   useLayoutEffect(() => {
     if (!enabled || !settled) return;
@@ -147,6 +166,7 @@ export function useSearchWindow({
     const to = target ?? null;
     focus.current?.capture(request, to, action, event.currentTarget);
     pending.current = { request, from: cursor, to, action };
+    current.attemptedFrom = cursor;
     setBusy(true);
     const href = discoverySearchHref(locale, { ...state, cursor: target });
     void router.navigate({ href }).catch(() => {
