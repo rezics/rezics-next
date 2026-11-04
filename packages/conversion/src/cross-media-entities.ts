@@ -20,7 +20,7 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@3';
+export const converter_revision = 'cross-media-entities@4';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxNames: vndbLimits.maxTitleCandidates,
@@ -29,6 +29,14 @@ export const vndbReleaseNameLimits = Object.freeze({
   titleChars: 1500,
   recordBytes: vndbLimits.recordBytes,
   maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases,
+});
+export const vndbCharacterNameLimits = Object.freeze({
+  maxNames: 64,
+  maxAliases: 64,
+  stringBytes: 4096,
+  maxCodepoints: 1500,
+  recordBytes: 65_536,
+  maxCommands: 257,
 });
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
@@ -277,6 +285,114 @@ function text(value: unknown, pointer: string, max: number, empty = false): stri
   if (typeof value !== 'string' || value.length > max || !value.isWellFormed() || (!empty && !value.trim()))
     fail(pointer);
   return value as string;
+}
+
+const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
+
+function latinLanguageTag(tag: string): string | null {
+  const parts = tag.split('-');
+  if (/^[A-Z][a-z]{3}$/u.test(parts[1] ?? '')) parts[1] = 'Latn';
+  else parts.splice(1, 0, 'Latn');
+  return canonicalLanguageTag(parts.join('-'));
+}
+
+function nameText(value: unknown, pointer: string): string {
+  const result = text(value, pointer, vndbCharacterNameLimits.maxCodepoints);
+  if ([...result].length > vndbCharacterNameLimits.maxCodepoints)
+    fail(pointer, 'invalid_record');
+  if (Buffer.byteLength(result, 'utf8') > vndbCharacterNameLimits.stringBytes) fail(pointer, 'invalid_record');
+  return result;
+}
+
+function latinCell(value: unknown, pointer: string): string | null {
+  if (value === null) return null;
+  if (value === '') return '';
+  return nameText(value, pointer);
+}
+
+function spoilerLevel(value: unknown): number | undefined {
+  if (value === 0 || value === 1 || value === 2) return value;
+  if (value === '0' || value === '1' || value === '2') return Number(value);
+  return undefined;
+}
+
+function dumpRows(value: unknown, pointer: string, cap: number): unknown[] {
+  if (value === undefined) return [];
+  if (utilTypes.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
+    fail(pointer);
+  const array = value as unknown[];
+  const length = Object.getOwnPropertyDescriptor(array, 'length')!.value as number;
+  if (typeof length !== 'number' || length > cap) fail(pointer, 'invalid_record_row_limit');
+  const result = [];
+  for (let i = 0; i < length; i++) {
+    const child = own(array, String(i), `${pointer}/${i}`);
+    if (child === undefined) fail(`${pointer}/${i}`);
+    result.push(child);
+  }
+  return result;
+}
+
+type CharacterName = { id: string; lang: string; name: string; latin: string | null };
+type CharacterAlias = { id: string; spoil: number | null; name: string; latin: string | null };
+
+function projectCharacterNames(
+  raw: object,
+  expected: string,
+): { names: CharacterName[]; aliases: CharacterAlias[]; withheld: ConversionDiagnostic[] } {
+  const names: CharacterName[] = [];
+  const seenName = new Set<string>();
+  for (const [index, value] of dumpRows(
+    own(raw, 'chars_names', '/chars_names'),
+    '/chars_names',
+    vndbCharacterNameLimits.maxNames,
+  ).entries()) {
+    const pointer = `/chars_names/${index}`;
+    const entry = object(value, pointer);
+    const id = text(own(entry, 'id', `${pointer}/id`), `${pointer}/id`, 32);
+    if (id !== expected) fail(`${pointer}/id`, 'invalid_identifier');
+    const language = canonicalLanguageTag(text(own(entry, 'lang', `${pointer}/lang`), `${pointer}/lang`, 64));
+    if (language === null) fail(`${pointer}/lang`);
+    const name = nameText(own(entry, 'name', `${pointer}/name`), `${pointer}/name`);
+    const latin = latinCell(own(entry, 'latin', `${pointer}/latin`), `${pointer}/latin`);
+    const key = JSON.stringify([language, name, latin]);
+    if (seenName.has(key)) continue;
+    seenName.add(key);
+    names.push({ id, lang: language, name, latin });
+  }
+  names.sort(
+    (left, right) =>
+      compareText(left.lang, right.lang) ||
+      compareText(left.name, right.name) ||
+      compareText(left.latin ?? '', right.latin ?? ''),
+  );
+  const aliases: CharacterAlias[] = [];
+  const withheld: ConversionDiagnostic[] = [];
+  const seenAlias = new Set<string>();
+  for (const [index, value] of dumpRows(
+    own(raw, 'chars_alias', '/chars_alias'),
+    '/chars_alias',
+    vndbCharacterNameLimits.maxAliases,
+  ).entries()) {
+    const pointer = `/chars_alias/${index}`;
+    const entry = object(value, pointer);
+    const id = text(own(entry, 'id', `${pointer}/id`), `${pointer}/id`, 32);
+    if (id !== expected) fail(`${pointer}/id`, 'invalid_identifier');
+    const name = nameText(own(entry, 'name', `${pointer}/name`), `${pointer}/name`);
+    const latin = latinCell(own(entry, 'latin', `${pointer}/latin`), `${pointer}/latin`);
+    const spoil = spoilerLevel(own(entry, 'spoil', `${pointer}/spoil`));
+    const key = JSON.stringify([spoil ?? null, name, latin]);
+    if (seenAlias.has(key)) continue;
+    seenAlias.add(key);
+    if (spoil === undefined) withheld.push({ pointer: `${pointer}/spoil`, code: 'unrepresentable_qualifier' });
+    aliases.push({ id, spoil: spoil ?? null, name, latin });
+  }
+  aliases.sort(
+    (left, right) =>
+      (left.spoil ?? 99) - (right.spoil ?? 99) ||
+      compareText(left.name, right.name) ||
+      compareText(left.latin ?? '', right.latin ?? ''),
+  );
+  return { names, aliases, withheld };
 }
 
 function nativeNumber(value: unknown, pointer: string): number {
