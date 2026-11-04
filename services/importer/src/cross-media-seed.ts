@@ -2242,6 +2242,7 @@ export async function seedCrossMedia(
         unresolved.length ||
         sourceIdentityGaps.length ||
         (vndbCredits?.diagnostics.length ?? 0) ||
+        (characterProfile?.omissions.length ?? 0) ||
         episodeDiagnostics.length ||
         fidelity?.gaps.length
           ? 'imported-with-gaps'
@@ -2269,6 +2270,8 @@ export async function seedCrossMedia(
       creditGaps: [],
       vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
       vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
+      vndbCharacterProfileRequirements: characterProfile?.requirements ?? [],
+      vndbCharacterProfileOmissions: characterProfile?.omissions ?? [],
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
