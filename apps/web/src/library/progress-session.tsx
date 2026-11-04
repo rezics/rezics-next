@@ -1,3 +1,4 @@
+import { parseRecord, progressDecimalPlaces } from '@rezics/progress';
 import { progressDecimalIssue, progressLocatorIssue } from './progress-decimal-input';
 import { ProgressDecimalInput, ProgressInputError } from './progress-decimal-input-field';
 import { ProgressAddressCorrection } from './progress-address-correction';
@@ -330,6 +331,14 @@ type LoadedPage = Extract<ProgressSessionPage, { signedIn: true }>;
 type CapturedIntent =
   | { kind: 'record' | 'add' | 'remove'; data: ProgressRecordInput }
   | { kind: 'finish'; data: ProgressFinishInput };
+function freezeCapturedIntent(intent: CapturedIntent): CapturedIntent {
+  if (intent.kind === 'finish')
+    return Object.freeze({ kind: 'finish', data: Object.freeze(structuredClone(intent.data)) });
+  const data = structuredClone(intent.data);
+  if (data.add) Object.freeze(data.add);
+  if (data.remove) Object.freeze(data.remove);
+  return Object.freeze({ kind: intent.kind, data: Object.freeze(data) });
+}
 type EditorLifetime = {
   page: LoadedPage;
   originating?: ProgressDetailOrigin | undefined;
@@ -580,6 +589,8 @@ function SessionEditor({
   const [addText, setAddText] = useState(retainedRecord?.add?.join('\n') ?? '');
   const [removeText, setRemoveText] = useState(retainedRecord?.remove?.join('\n') ?? '');
   const [alert, setAlert] = useState<string | null>(null);
+  const [nativeField, setNativeField] = useState<string | null>(null);
+  const [acknowledged, setAcknowledged] = useState<number | null>(null);
   const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(
     retained?.kind === 'finish' ? retained.data.action : null,
   );
@@ -632,13 +643,23 @@ function SessionEditor({
   };
   const renderToken = {};
   const rendered = useRef(renderToken);
-  rendered.current = renderToken;
+  // An interrupted or no-op render cannot retire handlers belonging to the visible draft.
+  // Only a committed replacement owns the next set of browser events.
+  useLayoutEffect(() => {
+    rendered.current = renderToken;
+  });
   const canHandle = () => rendered.current === renderToken && canEdit();
   function edit(change: () => void) {
     if (canHandle()) change();
   }
   function editRecord(change: () => void) {
-    if (!commandGuards.record || commandGuards.record.isCurrent()) edit(change);
+    if (lifetime.current?.custody.retry || lifetime.current?.custody.flight || review) return;
+    if (!commandGuards.record || commandGuards.record.isCurrent())
+      edit(() => {
+        setNativeField(null);
+        setAcknowledged(null);
+        change();
+      });
   }
 
   function openUpdate() {
@@ -707,6 +728,11 @@ function SessionEditor({
       (originating ? originating.isCurrent() : origin.page === page)
     );
   }
+
+  // Descendants consult the retained reader during rendering as well as in async callbacks.
+  // Event-handler custody changes at commit; reader custody changes only with its source.
+  const currentReader = lifetime.current;
+  const readerIsCurrent = () => isCurrent(currentReader);
 
   const pendingCommand =
     lifetime.current?.custody.retry !== undefined || lifetime.current?.custody.flight !== undefined;
@@ -779,7 +805,6 @@ function SessionEditor({
     }
     if (recording && reason === 'unsupported_library_profile') {
       setUnsupported(true);
-      setEditing(false);
     }
   }
 
@@ -832,9 +857,9 @@ function SessionEditor({
       return;
     const headers = guard ? guard.headers() : csrfHeaders();
     if (!headers) return;
-    origin.custody.retry ??= intent;
+    origin.custody.retry ??= freezeCapturedIntent(intent);
     const captured = origin.custody.retry;
-    const credential = (origin.custody.credential ??= headers);
+    const credential = (origin.custody.credential ??= Object.freeze(Object.fromEntries(new Headers(headers))));
     if (
       captured.kind !== intent.kind ||
       (captured.kind === 'finish' && intent.kind === 'finish' && captured.data.action !== intent.data.action)
@@ -855,6 +880,14 @@ function SessionEditor({
       if (!currentAttempt()) return;
       if (!result.ok) {
         setConflict(result.reason === 'conflict');
+        if (result.reason === 'invalid') {
+          // A definitive field refusal permits a corrected intent; an unknown result never does.
+          delete origin.custody.retry;
+          delete origin.custody.credential;
+          setNativeField(result.field ?? 'record');
+          setReview(null);
+          setKey(crypto.randomUUID());
+        }
         explain(result.reason, captured.kind !== 'finish');
         return;
       }
@@ -865,6 +898,8 @@ function SessionEditor({
       delete origin.custody.retry;
       delete origin.custody.credential;
       setConflict(false);
+      setNativeField(null);
+      setAcknowledged(result.session.revision);
       setReview(null);
       setDraftOpened(false);
       setKey(crypto.randomUUID());
@@ -912,6 +947,24 @@ function SessionEditor({
     } else if (progressDecimalIssue(amount, session.inputRules)) return;
     const intent =
       session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
+    const checked = parseRecord(
+      session.mode,
+      intent,
+      { unit: session.unit, state: session.state },
+      {
+        ...(session.inputRules?.min === undefined ? {} : { minimum: session.inputRules.min }),
+        ...(session.inputRules?.max === undefined ? {} : { maximum: session.inputRules.max }),
+        ...(session.inputRules?.step === undefined || session.inputRules.step === 'any'
+          ? {}
+          : {
+              precision: progressDecimalPlaces(session.inputRules.step),
+            }),
+      },
+    );
+    if (!checked.ok) {
+      setNativeField(checked.field);
+      return;
+    }
     stage({
       kind: 'record',
       data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent },
@@ -944,7 +997,7 @@ function SessionEditor({
   function stage(intent: CapturedIntent) {
     const origin = lifetime.current;
     if (!canHandle() || !isCurrent(origin) || origin.custody.flight) return;
-    setReview(origin.custody.retry ?? intent);
+    setReview(origin.custody.retry ?? freezeCapturedIntent(intent));
     setEditing(true);
   }
 
@@ -1031,12 +1084,17 @@ function SessionEditor({
         {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
           <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>
         ) : null}
+        <ProgressRecordingMeaning session={session} />
+        {nativeField ? (
+          <p role="alert">{m.library_journal_native_refusal({ field: progressFieldLabel(nativeField) })}</p>
+        ) : null}
+        {pendingCommand ? <p role="status">{m.library_journal_retry_identity()}</p> : null}
         {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
         {offered && session.state === 'active' && sessionHasIndependentMeasures(session) ? (
           <IndependentMeasuresVisit
             session={session}
             credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
-            isCurrent={() => canHandle() && (commandGuards.record?.isCurrent() ?? true)}
+            isCurrent={() => readerIsCurrent() && (commandGuards.record?.isCurrent() ?? true)}
             onAcknowledged={(snapshot) => {
               if (!canHandle()) return;
               setSession((current) => mergeIndependentSnapshot(current, snapshot));
@@ -1055,7 +1113,7 @@ function SessionEditor({
             revision: session.revision,
           })}
           credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
-          isCurrent={() => canHandle() && (commandGuards.record?.isCurrent() ?? true)}
+          isCurrent={() => readerIsCurrent() && (commandGuards.record?.isCurrent() ?? true)}
           onRevision={(revision) => {
             if (!canHandle()) return;
             setSession((current) => (revision > current.revision ? { ...current, revision } : current));
@@ -1245,7 +1303,11 @@ function SessionEditor({
 
   const editorContent = (
     <>
-      {offered ? recordForm : null}
+      {offered || draftOpened || pendingCommand ? (
+        <fieldset disabled={busy || pendingCommand || review !== null} className="min-w-0">
+          {recordForm}
+        </fieldset>
+      ) : null}
       {review && review.kind !== 'finish' ? (
         <ProgressCorrectionReview
           data={review.data}
@@ -1255,7 +1317,11 @@ function SessionEditor({
             const origin = lifetime.current;
             if (canHandle() && isCurrent(origin)) void dispatch(review, origin);
           }}
-          onCancel={() => edit(() => setReview(null))}
+          onCancel={() =>
+            edit(() => {
+              if (!lifetime.current?.custody.retry && !lifetime.current?.custody.flight) setReview(null);
+            })
+          }
           onReload={() => void reviewLatest()}
         />
       ) : null}
@@ -1353,7 +1419,11 @@ function SessionEditor({
         </div>
         {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
-      <PrivateOccurrenceControls session={session} isCurrent={canHandle} />
+      <PrivateOccurrenceControls
+        session={session}
+        isCurrent={readerIsCurrent}
+        lifetime={originating?.lifetime ?? originating}
+      />
       {unsupported || session.recordingState === 'unsupported' ? (
         <p role="status">{m.library_progress_no_longer_offered()}</p>
       ) : session.recordingState !== 'supported' ? (
@@ -1368,6 +1438,9 @@ function SessionEditor({
             {m.library_progress_retry()}
           </Button>
         </div>
+      ) : null}
+      {acknowledged !== null ? (
+        <p role="status">{m.library_progress_saved_revision({ revision: acknowledged })}</p>
       ) : null}
       {alert && !editing ? <p role="alert">{alert}</p> : null}
       {session.state === 'active' ? (
@@ -1588,5 +1661,84 @@ function SessionEditor({
       </section>
       {children}
     </article>
+  );
+}
+
+function progressFieldLabel(field: string): string {
+  if (field === 'amount') return m.library_progress_amount();
+  if (field === 'locator') return m.library_progress_locator();
+  if (field === 'position') return m.library_progress_position();
+  if (field === 'measureId' || field === 'unit') return m.library_progress_unit();
+  if (field === 'add' || field === 'remove') return m.library_progress_units();
+  return m.library_progress_record_heading();
+}
+
+/** Explain only the facts supplied for this occurrence, without inventing profile choices or conversions. */
+function ProgressRecordingMeaning({ session }: { session: ProgressSessionView }) {
+  const measures =
+    session.mode === 'scalar_amount' && session.measures?.length
+      ? session.measures
+      : [{ unit: session.unit, unitLabel: session.unitLabel, inputRules: session.inputRules }];
+  const meaning =
+    session.mode === 'scalar_amount'
+      ? m.library_progress_scalar_meaning()
+      : session.mode === 'cursor_position'
+        ? m.library_progress_cursor_meaning()
+        : m.library_progress_units_meaning();
+  return (
+    <details className="space-y-3 rounded-lg border p-3">
+      <summary className="min-h-10 cursor-pointer content-center font-medium">
+        {m.library_progress_profile_rules()}
+      </summary>
+      <p className="text-sm">{meaning}</p>
+      {session.mode === 'scalar_amount' && measures.length > 1 ? (
+        <p className="text-sm">{m.library_progress_independent_meaning()}</p>
+      ) : null}
+      <ul className="space-y-4">
+        {measures.map((measure) => (
+          <li key={measure.unit} className="space-y-2">
+            <p className="font-medium">{measure.unitLabel || m.library_progress_unit_unspecified()}</p>
+            <p className="text-sm text-muted-foreground">{m.library_progress_unit_identity({ unit: measure.unit })}</p>
+            {measure.inputRules ? (
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                {measure.inputRules.min !== undefined ? (
+                  <div>
+                    <dt className="text-muted-foreground">{m.library_progress_minimum()}</dt>
+                    <dd>{measure.inputRules.min}</dd>
+                  </div>
+                ) : null}
+                {measure.inputRules.max !== undefined ? (
+                  <div>
+                    <dt className="text-muted-foreground">{m.library_progress_maximum()}</dt>
+                    <dd>{measure.inputRules.max}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-muted-foreground">{m.library_progress_precision()}</dt>
+                  <dd>
+                    {measure.inputRules.step === 'any'
+                      ? m.library_progress_precision_any()
+                      : m.library_progress_precision_digits({ digits: progressDecimalPlaces(measure.inputRules.step) })}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">{m.library_progress_total_policy()}</dt>
+                  <dd>
+                    {measure.inputRules.total === 'required'
+                      ? m.library_progress_total_required()
+                      : measure.inputRules.total === 'forbidden'
+                        ? m.library_progress_total_forbidden()
+                        : m.library_progress_total_optional()}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-muted-foreground">{m.library_progress_recording_unavailable()}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="text-sm text-muted-foreground">{m.library_progress_completion_explicit()}</p>
+    </details>
   );
 }

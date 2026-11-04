@@ -69,6 +69,8 @@ only its request digest and the small revision/change acknowledgement.
 Historical import adapters may admit dates that fit this contract. They must preserve unsupported source evidence
 privately rather than round it to a supported precision. No importer is part of this producer contract.
 
+Decision: Web reviews an explicit selection for each journal field: untouched preserves it, Clear sends null, and typed empty reflection remains an empty text value; blank date or assessment input requires correction before Save.
+
 ## Web318 receiving contract
 
 Web318 owns the reserved private diary/journal integration. An existing progress detail opens this API by its

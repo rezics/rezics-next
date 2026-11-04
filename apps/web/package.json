@@ -55,7 +55,8 @@
     "satori": "0.63.2",
     "tailwindcss": "4.3.3",
     "typebox": "1.4.3",
-    "valibot": "1.5.0"
+    "valibot": "1.5.0",
+    "@rezics/progress": "workspace:*"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "11.0.0-alpha.8",
