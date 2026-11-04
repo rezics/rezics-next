@@ -1610,6 +1610,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 - Touches: the same selected-family and date-fidelity operator entry points, plus the COPY `releases.gtin` cell on already selected releases. The barcode shares `convertCrossMediaEntity` and the existing public batch/facts group; it does not invent a second identity, uniqueness registry or SourceRegistration option.
 - Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, one optional `schema:gtin` fact per release inside the existing 163-command, 64 KiB, per-record candidate (≤300) and journal budgets. Unknown `0`, null, malformed, unsupported-length and unsafe numeric cells withhold only that fact. Unrelated releases are not scanned.
+
+### Import authored VNDB character names and qualified aliases
+
+- Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@6` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
 ### Import authored VNDB public tag associations
@@ -2053,7 +2059,7 @@ Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
 The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@5`.
+selected release payload and convert them through `cross-media-entities@6`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently

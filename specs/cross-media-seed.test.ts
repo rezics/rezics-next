@@ -45,11 +45,26 @@ function tables() {
   rows['vndb/vn_seiyuu'] = [{ id: 'v1', aid: '2', cid: 'c3', note: 'route' }];
   rows['vndb/chars_vns'] = [
     { id: 'c3', vid: 'v1', role: 'main' },
+    { id: 'c4', vid: 'v2', role: 'side' },
     { id: 'c3', vid: 'v99', role: 'side' },
+  ];
+  rows['vndb/chars_names'] = [
+    { id: 'c3', lang: 'ja', name: '名前', latin: 'Namae' },
+    { id: 'c3', lang: 'zh-Hant', name: '名字', latin: null },
+    { id: 'c4', lang: 'ja', name: 'Shared spelling', latin: null },
+    { id: 'c99', lang: 'ja', name: 'Shared spelling', latin: null },
+  ];
+  rows['vndb/chars_alias'] = [
+    { id: 'c3', spoil: '2', name: 'Shared alias', latin: null },
+    { id: 'c4', spoil: '1', name: 'Shared alias', latin: null },
+    { id: 'c99', spoil: '2', name: 'Shared alias', latin: null },
   ];
   rows['vndb/staff_alias'] = [{ id: 's4', aid: '2', name: 'Actor' }];
   rows['vndb/staff'] = [{ id: 's4', main: '2', prod: null }];
-  rows['vndb/chars'] = [{ id: 'c3', main: null, name: 'Character' }];
+  rows['vndb/chars'] = [
+    { id: 'c3', main: null },
+    { id: 'c4', main: null },
+  ];
   rows['vndb/vn_anime'] = [{ id: 'v1', aid: '123' }];
   const input: CrossMediaTables = {
     async *rows(provider, table) {
@@ -65,7 +80,17 @@ test('three anime/VN franchises elect family membership and retain exact unsuppo
   expect(plan.records.bangumi.map((r) => r.key)).toEqual(['1', '2', '3', '4']);
   expect(plan.records.vndb.map((r) => r.key)).toEqual(['v1', 'v2', 'v3']);
   expect(plan.entities.bangumi.map((r) => r.key).sort()).toEqual(['character:7', 'episode:10', 'person:8']);
-  expect(plan.entities.vndb.map((r) => r.key).sort()).toEqual(['c3', 's4']);
+  expect(plan.entities.vndb.map((r) => r.key).sort()).toEqual(['c3', 'c4', 's4']);
+  const character3 = plan.entities.vndb.find((row) => row.key === 'c3');
+  const character4 = plan.entities.vndb.find((row) => row.key === 'c4');
+  expect(character3?.payload.chars_names).toEqual([
+    { id: 'c3', lang: 'ja', name: '名前', latin: 'Namae' },
+    { id: 'c3', lang: 'zh-Hant', name: '名字', latin: null },
+  ]);
+  expect(character3?.payload.chars_alias).toEqual([{ id: 'c3', spoil: '2', name: 'Shared alias', latin: null }]);
+  expect(character4?.payload.chars_names).toEqual([{ id: 'c4', lang: 'ja', name: 'Shared spelling', latin: null }]);
+  expect(character4?.payload.chars_alias).toEqual([{ id: 'c4', spoil: '1', name: 'Shared alias', latin: null }]);
+  expect(JSON.stringify([character3?.payload, character4?.payload])).not.toContain('c99');
   expect(plan.franchises.clannad.bangumi).toEqual(['2', '4']);
   expect(plan.edges.some((edge) => edge.property === 'wdt:P155' && edge.holder === '4' && edge.target === '2')).toBe(
     true,

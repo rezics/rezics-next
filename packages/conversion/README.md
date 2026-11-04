@@ -20,7 +20,7 @@ The [package exports](package.json) are only these entry points:
 | `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                      |
 | `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                        |
 | `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                            |
-| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `vndbStaffNameLimit`, `CrossMediaEntityConversion`                |
+| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `vndbStaffNameLimit`, `vndbCharacterNameLimits`, `CrossMediaEntityConversion`                |
 
 Each converter takes an input, an optional context, and optional registered
 converter options. The option is `converterRevision`; import the matching
@@ -373,7 +373,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@5` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@6` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -413,6 +413,27 @@ bootstrap label and order remaining distinct names by codepoint.
 
 Focused pure controls live in `tests/vndb-staff-names.test.ts`. Exact credited roles and
 credited-as spelling remain the staff-credit coordinator.
+
+### VNDB character names and aliases
+
+`cross-media-entities@6` projects selected `chars_names` and `chars_alias`
+rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
+`schema:name`; its explicit romanized `latin` cell becomes an unqualified
+`schema:alternateName` using the source language with a `Latn` script subtag.
+VNDB aliases have no language, so `name` uses `und` and its explicit Romanized
+cell uses `und-Latn`. The original `chars_alias.spoil` value qualifies both
+forms through `rezics:spoilerLevel`; unsupported levels withhold the entire
+alias with a source diagnostic. Qualified alias text never enters bootstrap
+labels or aliases.
+
+Decision: language-less aliases use `und`, explicit Latin cells use the
+admitted Latn form, and empty nullable `latin` cells stay in the normalized
+digest without producing an alternate-name fact. Null and empty cells remain
+distinct. Labels and bootstrap aliases choose eligible unqualified values in
+stable language-then-text order, without claiming a source preference. Per
+character limits are 64 localized rows, 64 aliases, 4,096 bytes and 1,500
+codepoints per text, 64 KiB normalized input and 257 proposals. Overflow is
+rejected rather than truncated.
 
 ### VNDB native alternate-name contract
 
