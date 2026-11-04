@@ -50,7 +50,8 @@ export function bangumiTelevisionRun(record: {
       field.key === endKey ||
       field.key === totalKey ||
       field.key === '中文名' ||
-      field.key === '别名'
+      field.key === '别名' ||
+      field.key === '官方网站'
     )
       continue;
     diagnostics.push({
