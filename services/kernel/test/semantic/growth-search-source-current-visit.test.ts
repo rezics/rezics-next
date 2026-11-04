@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -17,25 +17,29 @@ import {
   type Population,
 } from '../support/growth.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
-import type { AccountActor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, type AccountActor, type Actor } from '../../src/request/access.ts';
+import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 let db: GrowthDatabase;
 let source: ReturnType<typeof subjectSource>;
+let realAccess: Awaited<ReturnType<typeof createRealAccess<{ editor: string }>>>;
+let access: ReturnType<Awaited<ReturnType<typeof createRealAccess<{ editor: string }>>>['access']>;
 const hotPartition = 2048;
-const actor: AccountActor = {
-  kind: 'account',
-  accountId: '019a1b2c-3d4e-7f00-8a00-ed170e000072',
-  clientId: 'growth-current-visit',
-  scopes: ['subject:create', 'subject:read'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
+const ACTIONS = ['subject:create', 'subject:read'] as const;
+const accounts = { editor: '019a1b2c-3d4e-7f00-8a00-ed170e000072' };
+const globalResource = { route: 0, id: GLOBAL_CONTEXT };
+const deadline = () => Date.now() + 30_000;
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
   configureTestReceiptKeys(db.pool);
+  realAccess = await createRealAccess(db.admin, accounts, ACTIONS);
+  access = realAccess.access({
+    actions: new Map(ACTIONS.map((action) => [action, { anonymous: action === 'subject:read' }])),
+  });
+  await realAccess.grant(globalResource, 'editor', 'subject:create');
   source = subjectSource(db.pool);
   expect(await bootstrapRelease(db.pool, bundledRelease)).toBe(bundledDigest);
 });
@@ -47,13 +51,23 @@ function digest(seed: string): Uint8Array {
   return createHash('sha256').update(seed).digest();
 }
 
+async function actor(): Promise<AccountActor> {
+  const authenticated: Actor = await access.authenticate(realAccess.bearer('editor'), {
+    pool: db.pool,
+    deadline: deadline(),
+  });
+  if (authenticated.kind !== 'account') throw new TypeError('Growth fixture requires an account actor');
+  return authenticated;
+}
+
 async function writeSubject(route: number, label: string, language: string): Promise<string> {
   const target = { route, id: newId(route) };
+  const key = randomUUID();
   await createSubject(db.pool, {
-    actor,
+    actor: await actor(),
     target,
-    idempotencyKey: randomUUID(),
-    digest: digest(target.id),
+    idempotencyKey: key,
+    digest: digest(key),
     item: {
       type: 'schema:Book',
       labels: { en: label },
@@ -67,7 +81,14 @@ async function writeSubject(route: number, label: string, language: string): Pro
       },
     },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
+    authorization: await accessCommandAuthorization(
+      access,
+      await actor(),
+      'subject:create',
+      globalResource,
+      { pool: db.pool, deadline: deadline() },
+      () => new Error('Denied subject:create'),
+    ),
   });
   return target.id;
 }
