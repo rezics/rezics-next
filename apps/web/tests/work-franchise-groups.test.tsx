@@ -138,7 +138,7 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     locale: 'en',
     subject: id(1),
     subjectLabel: 'Original work',
-    context: { id: id(4) },
+    context: { id: id(4), population: { kind: 'global' } },
     link: (props: any) => h('a', props),
     reader: { spoilerLevel: 0, suitability: 'show' },
     labels: { cover: {}, spoilerHide: 'Hide' },
