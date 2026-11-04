@@ -194,17 +194,27 @@ export function mergeListImportMetadataConfirmation(
     if (!prior || prior.status === 'failed' || prior.status === 'unattempted' || field.status === 'applied')
       fieldOutcomes.set(field.field, field);
   }
+  const {
+    annotationInput: currentAnnotationInput,
+    provenanceInput: currentProvenanceInput,
+    sourceObservationDigest: currentSourceObservationDigest,
+    ...preserved
+  } = current;
+  const annotationInput = currentAnnotationInput ?? next.annotationInput,
+    provenanceInput = currentProvenanceInput ?? next.provenanceInput,
+    sourceObservationDigest = currentSourceObservationDigest ?? next.sourceObservationDigest;
   return {
-    ...current,
+    ...preserved,
     annotationStarted: current.annotationStarted || next.annotationStarted,
     provenanceStarted: current.provenanceStarted || next.provenanceStarted,
-    ...(sourceExpired
-      ? { sourceExpired: true, annotationInput: undefined, provenanceInput: undefined, sourceObservationDigest: undefined }
-      : {
-          annotationInput: current.annotationInput ?? next.annotationInput,
-          provenanceInput: current.provenanceInput ?? next.provenanceInput,
-          sourceObservationDigest: current.sourceObservationDigest ?? next.sourceObservationDigest,
-        }),
+    ...(sourceExpired ? { sourceExpired: true } : {}),
+    ...(!sourceExpired
+      ? {
+          ...(annotationInput === undefined ? {} : { annotationInput }),
+          ...(provenanceInput === undefined ? {} : { provenanceInput }),
+          ...(sourceObservationDigest === undefined ? {} : { sourceObservationDigest }),
+        }
+      : {}),
     annotationReceiptDigest: current.annotationReceiptDigest ?? next.annotationReceiptDigest,
     provenanceReceiptDigest: current.provenanceReceiptDigest ?? next.provenanceReceiptDigest,
     provenanceKind: current.provenanceKind ?? next.provenanceKind,
