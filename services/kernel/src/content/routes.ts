@@ -1347,7 +1347,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           'x-resource-types': ['content.board', 'content.thread'],
           'x-exposure': 'public',
           'x-action': 'board:read',
-          security: writeSecurity,
+          security: readSecurity,
         },
       },
       async ({ params: { id }, body, actor, admission, job, session, set }) => {
