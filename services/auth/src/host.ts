@@ -324,7 +324,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
                   : undefined,
               ),
               (options.trustedAccess as typeof options.trustedAccess & Partial<AutomatedOperatorAccess>)
-                .readAutomatedCreationOperator
+                .readAutomatedCreationPage
                 ? (options.trustedAccess as typeof options.trustedAccess & AutomatedOperatorAccess)
                 : undefined,
             ),

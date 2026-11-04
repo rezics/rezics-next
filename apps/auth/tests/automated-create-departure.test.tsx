@@ -1,5 +1,15 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { creationFixture, approval, button, dom, fill, flush, open, send } from './creation-page-fixture';
+import {
+  creationFixture,
+  automatedOperatorPage,
+  approval,
+  button,
+  dom,
+  fill,
+  flush,
+  open,
+  send,
+} from './creation-page-fixture';
 import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 import { AUTOMATED_PROFILE, restoreAutomatedAttempt } from '../src/automated-account-create';
 const { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
@@ -52,7 +62,7 @@ async function start() {
   const review = async () => {
     await draft();
     await flush(() => send(page.host));
-    await flush(() => page.calls[0]!.resolve(Response.json(operator)));
+    await flush(() => page.calls[0]!.resolve(automatedOperatorPage(human, operator)));
   };
   return { ...page, router, click, navigate, draft, review };
 }

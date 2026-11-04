@@ -76,3 +76,18 @@ export const send = (host: HTMLElement) => host.querySelector<HTMLFormElement>('
 export const leave = () => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event);
 export const approval = () =>
   Response.json({ reference: 'native-approval', expiresAt: new Date(Date.now() + 60000).toISOString() });
+
+/** Closed native selected-page fixture; identity remains admitted presentation only. */
+export const automatedOperatorPage = (accountId: string, operator: object) =>
+  Response.json({
+    viewer: { accountId },
+    readiness: 'review',
+    operator,
+    handleRules: {
+      minLength: 3,
+      maxLength: 64,
+      normalization: 'lowercase',
+      pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]',
+    },
+    action: 'confirm',
+  });

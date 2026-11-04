@@ -1,7 +1,7 @@
 import type { SessionProof } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
-import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
 import { automatedCallerMatches } from './automated-account-transport.ts';
+import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
 
 export type AutomatedCreationOperator = Readonly<{
   id: string;
@@ -9,14 +9,22 @@ export type AutomatedCreationOperator = Readonly<{
   handle: string | null;
   displayName: string | null;
 }>;
-/** Auth-local declaration for the native trusted port, never browser authority. */
+export type AutomatedCreationPage = Readonly<{
+  viewer: { accountId: string };
+  readiness: 'authentication-needed' | 'select-operator' | 'review' | 'refused';
+  operator: AutomatedCreationOperator | null;
+  handleRules: { minLength: 3; maxLength: 64; normalization: 'lowercase'; pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]' };
+  action: 'authenticate' | 'select-operator' | 'confirm' | 'none';
+}>;
+/** Local trusted composition; a browser selection never supplies the human. */
 export interface AutomatedOperatorAccess {
-  readAutomatedCreationOperator(input: {
+  readAutomatedCreationPage(input: {
     human: SessionProof;
-    operatorAccountId: string;
+    operatorAccountId: string | null;
     deadline: number;
-  }): Promise<AutomatedCreationOperator | null>;
+  }): Promise<AutomatedCreationPage>;
 }
+
 const id = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.exec(value)?.[0] === value;
 function fields(value: Record<string, unknown>, names: string[]) {
@@ -35,6 +43,55 @@ export function automatedCreationOperator(value: unknown, operatorAccountId: str
   )
     throw new TransportDenied(503);
   return { id: operatorAccountId, kind: row.kind, handle: row.handle, displayName: row.displayName };
+}
+
+/** Fail closed if a native dependency returns a broader or inconsistent envelope. */
+export function automatedCreationPage(
+  value: unknown,
+  accountId: string,
+  operatorAccountId: string | null,
+): AutomatedCreationPage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TransportDenied(503);
+  const page = value as AutomatedCreationPage;
+  const rules = {
+    minLength: 3,
+    maxLength: 64,
+    normalization: 'lowercase',
+    pattern: '[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]',
+  };
+  const actions = {
+    'authentication-needed': 'authenticate',
+    'select-operator': 'select-operator',
+    review: 'confirm',
+    refused: 'none',
+  };
+  if (
+    !fields(value as Record<string, unknown>, ['viewer', 'readiness', 'operator', 'handleRules', 'action']) ||
+    !page.viewer ||
+    Object.keys(page.viewer).join(',') !== 'accountId' ||
+    page.viewer.accountId !== accountId ||
+    !Object.hasOwn(actions, page.readiness) ||
+    page.action !== actions[page.readiness] ||
+    !page.handleRules ||
+    !fields(page.handleRules, Object.keys(rules)) ||
+    Object.entries(rules).some(([key, expected]) => page.handleRules[key as keyof typeof rules] !== expected) ||
+    (page.readiness === 'select-operator' && operatorAccountId !== null) ||
+    (page.readiness === 'refused' && operatorAccountId === null) ||
+    (page.readiness !== 'review' && page.operator !== null)
+  )
+    throw new TransportDenied(503);
+  const operator =
+    page.readiness === 'review' && operatorAccountId
+      ? automatedCreationOperator(page.operator, operatorAccountId)
+      : null;
+  if (page.readiness === 'review' && !operator) throw new TransportDenied(503);
+  return {
+    viewer: { accountId },
+    readiness: page.readiness,
+    operator,
+    handleRules: page.handleRules,
+    action: page.action,
+  };
 }
 
 export function automatedOperatorTransport(
@@ -63,17 +120,29 @@ export function automatedOperatorTransport(
       return denied(400);
     try {
       const body = await readJsonObject(request);
-      if (!fields(body, ['operatorAccountId']) || !id(body.operatorAccountId)) return denied(400);
+      if (!fields(body, ['operatorAccountId']) || (body.operatorAccountId !== null && !id(body.operatorAccountId)))
+        return denied(400);
       const operatorAccountId = body.operatorAccountId;
       const deadline = Date.now() + 3000;
       const result = await service.internal.withFreshHuman(
         { headers: request.headers, fresh: false },
         async (human) => {
-          if (!automatedCallerMatches(human, human.account_id)) throw new TransportDenied(403);
-          return automatedCreationOperator(
-            await access.readAutomatedCreationOperator({ human, operatorAccountId, deadline }),
+          if (human.amr.length !== 1 || !['pwd', 'pop'].includes(human.amr[0]!)) throw new TransportDenied(403);
+          const page = automatedCreationPage(
+            await access.readAutomatedCreationPage({ human, operatorAccountId, deadline }),
+            human.account_id,
             operatorAccountId,
           );
+          // An ordinary proof cannot admit target disclosure, even from a malformed native port.
+          if (
+            (!automatedCallerMatches(human, human.account_id) || Date.now() / 1000 - human.auth_time > 600) &&
+            page.readiness !== 'authentication-needed'
+          )
+            throw new TransportDenied(503);
+          // Native observation cannot survive replacement of its genuine proof.
+          await service.internal.accessTokenForProof(human);
+          if (Date.now() >= deadline) throw new TransportDenied(503);
+          return page;
         },
       );
       return response(result);
