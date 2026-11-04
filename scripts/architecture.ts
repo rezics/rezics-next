@@ -518,6 +518,7 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
         kind,
         line: before.split("\n").length,
         column: position - before.lastIndexOf("\n"),
+        ordinal: 0,
         targets: [],
       });
     }
@@ -526,7 +527,7 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
     for (let index = 0; index < remaining; index += 1) {
       const position = source.indexOf(specifier);
       const before = source.slice(0, Math.max(position, 0));
-      imports.push({ specifier, kind: "value", line: before.split("\n").length, column: Math.max(position, 0) - before.lastIndexOf("\n"), targets: [] });
+      imports.push({ specifier, kind: "value", line: before.split("\n").length, column: Math.max(position, 0) - before.lastIndexOf("\n"), ordinal: 0, targets: [] });
     }
   }
   const occurrences = new Map<string, number>();
