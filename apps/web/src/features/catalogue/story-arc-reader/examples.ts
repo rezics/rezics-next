@@ -38,19 +38,21 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
     rank: 'normal',
     property: { id: property, data_type: 'wikibase-item' },
     value: { type: 'value', content: target },
-    qualifiers: [
-      { property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: position } },
-      { property: { id: 'rezics:firstPart', data_type: 'string' }, value: { type: 'value', content: '03a' } },
-      { property: { id: 'rezics:lastPart', data_type: 'string' }, value: { type: 'somevalue' } },
-      ...(spoiler
-        ? [
-            {
-              property: { id: 'rezics:spoilerLevel', data_type: 'quantity' as const },
-              value: { type: 'value' as const, content: { amount: '2', unit: '1' } },
-            },
-          ]
-        : []),
-    ].filter((snak) => release.properties[property]!.qualifiers.includes(snak.property.id)),
+    qualifiers: (
+      [
+        { property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: position } },
+        { property: { id: 'rezics:firstPart', data_type: 'string' }, value: { type: 'value', content: '03a' } },
+        { property: { id: 'rezics:lastPart', data_type: 'string' }, value: { type: 'somevalue' } },
+        ...(spoiler
+          ? [
+              {
+                property: { id: 'rezics:spoilerLevel', data_type: 'quantity' as const },
+                value: { type: 'value' as const, content: { amount: '2', unit: '1' } },
+              },
+            ]
+          : []),
+      ] satisfies Statement['qualifiers']
+    ).filter((snak) => release.properties[property]!.qualifiers.includes(snak.property.id)),
     references: [
       {
         hash: 'arc-source',
