@@ -17,12 +17,22 @@ import { m } from '../src/paraglide/messages.js';
 
 const id = '00000000-0000-7000-8000-000000000001';
 const spaceId = '00000000-0000-7000-8000-000000000002';
+const curatorId = '00000000-0000-7000-8000-000000000003';
 const collection: FeedItem = {
   id: 'collection:1',
   source: 'discovery',
   occurredAt: null,
   key: { owner: 'commerce', kind: 'collection', route: 0, id },
-  summary: { id, title: 'Curated books', description: 'A careful selection <script>.' },
+  summary: {
+    id,
+    title: 'Curated books',
+    description: 'A careful selection <script>.',
+    curator: { state: 'available', id: curatorId, label: 'Asha Curator', destination: '/@curator' },
+    presentationKind: null,
+    presentationKindSource: 'empty',
+    cover: null,
+    coverSource: 'none',
+  },
   destination: { kind: 'collection', id, title: 'Curated books' },
 };
 const space: FeedItem = {
@@ -33,13 +43,16 @@ const space: FeedItem = {
   summary: { id: spaceId, title: 'Reading room', address: 'reading-room', summary: '', realm: null },
   destination: { kind: 'space', id: spaceId, title: 'Reading room', address: 'reading-room' },
 };
-const result = (feedItems = [collection, space]) => ({
+const result = (
+  feedItems = [collection, space],
+  sources: FeedPage['sources'] = { discovery: 'ready', following: 'not_requested', continue: 'not_requested' },
+) => ({
   state: 'ready' as const,
   page: {
     feedItems,
     next: null,
     asOf: '2026-11-04T00:00:00Z',
-    sources: { discovery: 'ready', following: 'not_requested', continue: 'not_requested' },
+    sources,
   } satisfies FeedPage,
 });
 
@@ -48,11 +61,15 @@ test('Home public owners keep supplied text, empty and unavailable context, exac
     setLocale(locale, { reload: false });
     const anonymous = renderToStaticMarkup(<HomeFeed result={result()} locale={locale} />);
     expect(anonymous).toContain('A careful selection &lt;script&gt;.');
+    expect(anonymous).toContain(m.home_owner_curator_named({ name: 'Asha Curator' }, { locale }));
+    expect(anonymous).toContain(`/${locale}/@curator`);
+    expect(anonymous).toContain(`/${locale}/collections/${id}`);
     expect(anonymous).toContain('data-owner-description="empty"');
     expect(anonymous).toContain(`/${locale}/spaces/reading-room`);
     expect(anonymous).toContain(m.home_owner_carrier_unavailable({}, { locale }));
     expect(anonymous).toContain(m.home_owner_follow_context({}, { locale }));
     expect(anonymous).not.toContain(m.library_follow_unavailable({}, { locale }));
+    expect(anonymous).not.toContain('data-home-feed-source-status');
     const prepared = renderToStaticMarkup(<HomeFeed result={result()} locale={locale} signedIn />);
     expect(prepared).toContain(m.library_follow_unavailable({}, { locale }));
     expect(prepared).not.toContain('data-slot="follow-control"');
@@ -67,6 +84,52 @@ test('Home public owners keep supplied text, empty and unavailable context, exac
   expect(homeFeedDestination(replaced, 'en')).toBeUndefined();
   expect(renderToStaticMarkup(<HomeFeed result={result([replaced])} locale="en" />)).not.toContain(
     `/collections/${spaceId}`,
+  );
+  const missingSource = renderToStaticMarkup(
+    <HomeFeed
+      result={result([collection], { discovery: 'unavailable', following: 'not_requested', continue: 'not_requested' })}
+      locale="en"
+    />,
+  );
+  expect(missingSource).toContain(
+    m.home_feed_source_unavailable({ source: m.home_feed_discovery({}, { locale: 'en' }) }, { locale: 'en' }),
+  );
+  const preparingSource = renderToStaticMarkup(
+    <HomeFeed
+      result={
+        result([collection], { discovery: 'ready', following: 'preparing', continue: 'not_requested' })
+      }
+      locale="en"
+    />,
+  );
+  expect(preparingSource).toContain(
+    m.home_feed_source_preparing({ source: m.home_feed_following({}, { locale: 'en' }) }, { locale: 'en' }),
+  );
+  expect(preparingSource).not.toContain(
+    m.home_feed_source_unavailable({ source: m.home_feed_following({}, { locale: 'en' }) }, { locale: 'en' }),
+  );
+  const covered = {
+    ...collection,
+    summary: {
+      ...collection.summary,
+      cover: {
+        media: '00000000-0000-7000-8000-000000000004',
+        width: 800,
+        height: 600,
+        placeholder: { thumbhash: 'U~TSbYyZ~qj[j[ayj[j[ayfQfQfQfQfQfQfQ', color: '#123456' },
+        variants: [{ format: 'webp' as const, width: 320 }],
+        focalPoint: null,
+        credit: {
+          rightsHolder: 'Asha Curator',
+          via: { name: 'Collection owner', url: 'https://example.test/cover' },
+          license: 'CC-BY-4.0',
+          obligations: [],
+        },
+      },
+    },
+  };
+  expect(renderToStaticMarkup(<HomeFeed result={result([covered])} locale="en" />)).toContain(
+    'data-home-collection-cover',
   );
 });
 

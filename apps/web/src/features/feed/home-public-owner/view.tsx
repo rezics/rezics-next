@@ -1,9 +1,17 @@
 import type { ReactNode } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Cover } from '@rezics/ui/cover';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
+import { coverSrc } from '../../../media/cover-src';
+import { accountHref } from '../../../subject/subject-href';
 import type { FeedItem } from '../../pages/home-feed-read';
 import { homeFeedDestination, homeFeedTitle } from '../../pages/home-feed-destination';
+
+function curatorHandle(destination: string | null): string | undefined {
+  const match = destination ? /^\/@([A-Za-z0-9][A-Za-z0-9_-]{0,63})$/.exec(destination) : null;
+  return match?.[1];
+}
 
 /** Only native page summaries: no target hydration, membership inference or private cache. */
 export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; locale: string }) {
@@ -18,8 +26,33 @@ export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; local
       : kind === 'space' && 'address' in summary
         ? summary.summary
         : undefined;
+  const title = homeFeedTitle(item, locale);
+  const collectionCover =
+    kind === 'collection' &&
+    'cover' in summary &&
+    'coverSource' in summary &&
+    (summary.coverSource === 'owner' || summary.coverSource === 'member')
+      ? summary.cover
+      : null;
+  const curator = kind === 'collection' && 'curator' in summary ? summary.curator : undefined;
+  const curatorText =
+    curator?.state === 'available' && curator.label?.trim()
+      ? m.home_owner_curator_named({ name: curator.label }, options)
+      : m.home_owner_curator_unavailable({}, options);
+  const handle = curator?.state === 'available' ? curatorHandle(curator.destination) : undefined;
   return (
     <div className="space-y-1 text-sm [overflow-wrap:anywhere]" data-home-public-owner-context={kind}>
+      {collectionCover ? (
+        <div data-home-collection-cover className="max-w-sm">
+          <Cover
+            subject={{ id: summary.id, title, types: [] }}
+            cover={collectionCover}
+            size="fill"
+            src={coverSrc}
+            decorative
+          />
+        </div>
+      ) : null}
       {description ? (
         <p className="line-clamp-4 whitespace-pre-line" data-feed-card-preview>
           <bdi>{description}</bdi>
@@ -32,7 +65,13 @@ export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; local
         </p>
       )}
       {kind === 'collection' ? (
-        <p className="text-muted-foreground">{m.home_owner_curator_unavailable({}, options)}</p>
+        <p className="text-muted-foreground">
+          {handle ? (
+            <a href={accountHref(locale, handle)}>{curatorText}</a>
+          ) : (
+            curatorText
+          )}
+        </p>
       ) : !('realm' in summary) || !summary.realm?.title ? (
         <p className="text-muted-foreground">{m.home_owner_carrier_unavailable({}, options)}</p>
       ) : null}

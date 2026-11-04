@@ -123,6 +123,21 @@ export function HomeFeed({
   const recovery = useHomeReactionRecovery(onRetry);
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
   const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
+  const sourceStatuses = (['discovery', 'following', 'continue'] as const).flatMap((source) => {
+    const state = page?.sources[source];
+    if (state !== 'preparing' && state !== 'unavailable') return [];
+    const label =
+      source === 'discovery'
+        ? m.home_feed_discovery({}, options)
+        : source === 'following'
+          ? m.home_feed_following({}, options)
+          : m.library_continue({}, options);
+    return [
+      state === 'preparing'
+        ? m.home_feed_source_preparing({ source: label }, options)
+        : m.home_feed_source_unavailable({ source: label }, options),
+    ];
+  });
   const results: FeedResultsResult<FeedItem> =
     result.state === 'ready'
       ? {
@@ -199,10 +214,12 @@ export function HomeFeed({
         </HomeFeedControls>
       </div>
       {catalogue}
-      {stream === 'home' ? (
-        <p role="note" className="text-sm text-muted-foreground">
-          {m.home_feed_public_discovery_unavailable({}, options)}
-        </p>
+      {sourceStatuses.length ? (
+        <ul role="status" className="space-y-1 text-sm text-muted-foreground" data-home-feed-source-status>
+          {sourceStatuses.map((status) => (
+            <li key={status}>{status}</li>
+          ))}
+        </ul>
       ) : null}
       <HomeReactionRecovery scope={recovery} locale={locale} onRefresh={onRetry} />
       <FeedResults

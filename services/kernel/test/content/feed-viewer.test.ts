@@ -197,8 +197,17 @@ test('generic Subjects, replies and Collections never imply work identity', () =
     source: 'following',
     occurredAt: null,
     key: { owner: 'library', kind: 'collection', route: 0, id },
-    summary: { id, title: 'Shelf', description: null },
-    destination: { kind: 'collection', id, title: null },
+    summary: {
+      id,
+      title: 'Shelf',
+      description: null,
+      curator: { state: 'unavailable', reason: 'native_projection' },
+      presentationKind: null,
+      presentationKindSource: 'empty',
+      cover: null,
+      coverSource: 'none',
+    },
+    destination: { kind: 'collection', id, title: 'Shelf' },
   };
   const reply: FeedItem = {
     id: 'reply',

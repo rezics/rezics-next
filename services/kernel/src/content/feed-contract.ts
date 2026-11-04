@@ -3,12 +3,12 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { FilterError, parseDiscoveryFilter } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
-import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
+import { CoverSummarySchema, SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
+import type { CollectionCurator } from '../library/collection-discovery-context.ts';
 import type {
   AccountDiscoverySummary,
-  PublicCollectionDiscoverySummary,
   PublicReviewDiscoverySummary,
   PublicSpaceDiscoverySummary,
 } from '../search/discovery.ts';
@@ -243,11 +243,66 @@ const postSummary = t.Unsafe<
     closed,
   ),
 );
-const collectionSummary = t.Unsafe<Pick<CollectionResourceView, 'id' | 'title' | 'description'>>(
-  t.Object({ id: uuid, title: t.String(), description: nullable }, closed),
+export type FeedCollectionSummary = Pick<
+  CollectionResourceView,
+  'id' | 'title' | 'description' | 'presentationKind' | 'presentationKindSource' | 'cover' | 'coverSource'
+> & {
+  curator: CollectionCurator;
+};
+const collectionCurator = t.Unsafe<CollectionCurator>(
+  t.Union([
+    t.Object({ state: t.Literal('available'), id: uuid, label: nullable, destination: nullable }, closed),
+    t.Object(
+      {
+        state: t.Literal('unavailable'),
+        reason: t.Union([t.Literal('deidentified'), t.Literal('withheld'), t.Literal('native_projection')]),
+      },
+      closed,
+    ),
+  ]),
 );
-const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(
-  t.Object({ id: uuid, title: t.String({ minLength: 1 }), description: nullable }, closed),
+const collectionPresentationKindSource = t.Union([
+  t.Literal('owner'),
+  t.Literal('members'),
+  t.Literal('empty'),
+  t.Literal('pending'),
+  t.Literal('mixed'),
+]);
+const collectionCoverSource = t.Union([
+  t.Literal('owner'),
+  t.Literal('member'),
+  t.Literal('none'),
+  t.Literal('pending'),
+]);
+const collectionSummary = t.Unsafe<FeedCollectionSummary>(
+  t.Object(
+    {
+      id: uuid,
+      title: t.String(),
+      description: nullable,
+      curator: collectionCurator,
+      presentationKind: nullable,
+      presentationKindSource: collectionPresentationKindSource,
+      cover: CoverSummarySchema,
+      coverSource: collectionCoverSource,
+    },
+    closed,
+  ),
+);
+const discoveryCollectionSummary = t.Unsafe<FeedCollectionSummary>(
+  t.Object(
+    {
+      id: uuid,
+      title: t.String({ minLength: 1 }),
+      description: nullable,
+      curator: collectionCurator,
+      presentationKind: nullable,
+      presentationKindSource: collectionPresentationKindSource,
+      cover: CoverSummarySchema,
+      coverSource: collectionCoverSource,
+    },
+    closed,
+  ),
 );
 const discoveryReviewSummary = t.Unsafe<
   PublicReviewDiscoverySummary &

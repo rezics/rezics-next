@@ -53,12 +53,30 @@ export function feedDiscoveryItem(hit: DiscoveryUnionHit): Extract<FeedItem, { s
       };
     }
     case 'collection': {
-      if (key.owner !== 'library' || key.kind !== 'collection' || key.id !== summary.value.id)
+      const card = summary.value.card;
+      if (
+        key.owner !== 'library' ||
+        key.kind !== 'collection' ||
+        key.id !== summary.value.id ||
+        card.id !== key.id ||
+        card.destination !== `/collections/${key.id}` ||
+        card.title !== summary.value.title ||
+        card.description !== summary.value.description
+      )
         throw new ProblemError('dependency_unavailable');
       return {
         ...common,
         key: { owner: 'commerce', kind: 'collection', route: key.route, id: key.id },
-        summary: summary.value,
+        summary: {
+          id: summary.value.id,
+          title: summary.value.title,
+          description: summary.value.description,
+          curator: card.curator,
+          presentationKind: card.presentationKind,
+          presentationKindSource: card.presentationKindSource,
+          cover: card.cover,
+          coverSource: card.coverSource,
+        },
         destination: { kind: 'collection', id: key.id, title: summary.value.title },
       };
     }

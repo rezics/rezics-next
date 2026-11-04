@@ -56,6 +56,8 @@ const collection: DiscoveryUnionHit = {
         presentationKindSource: 'owner',
         cover: null,
         coverSource: 'none',
+        curator: { state: 'available', id: subjectId, label: '@reader', destination: '/@reader' },
+        preview: { state: 'empty' },
         membershipKind: 'curated',
         memberCount: 2,
         orderEpoch: 1,
@@ -116,7 +118,16 @@ test('native public summaries map to closed feed identities and canonical destin
     `discovery:content:${reviewId}`,
     `discovery:content:${spaceId}`,
   ]);
-  expect(items[2]?.summary).toEqual(collection.summary.value);
+  expect(items[2]?.summary).toEqual({
+    id: collectionId,
+    title: 'Reading shelf',
+    description: 'Short novels.',
+    curator: { state: 'available', id: subjectId, label: '@reader', destination: '/@reader' },
+    presentationKind: null,
+    presentationKindSource: 'owner',
+    cover: null,
+    coverSource: 'none',
+  });
   expect(items[3]?.summary).toEqual(review.summary.value);
   expect(items[4]?.summary).toEqual(space.summary.value);
 });

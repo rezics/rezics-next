@@ -6,6 +6,7 @@ import { getLocale } from '../paraglide/runtime.js';
 
 const id = '00000000-0000-7000-8000-000000000001';
 const spaceId = '00000000-0000-7000-8000-000000000002';
+const curatorId = '00000000-0000-7000-8000-000000000003';
 const page: FeedPage = {
   feedItems: [
     {
@@ -13,7 +14,16 @@ const page: FeedPage = {
       source: 'discovery',
       occurredAt: null,
       key: { owner: 'commerce', kind: 'collection', route: 0, id },
-      summary: { id, title: 'Books to revisit', description: 'A small selection for slow reading.' },
+      summary: {
+        id,
+        title: 'Books to revisit',
+        description: 'A small selection for slow reading.',
+        curator: { state: 'available', id: curatorId, label: 'Mira Chen', destination: '/@mira' },
+        presentationKind: null,
+        presentationKindSource: 'empty',
+        cover: null,
+        coverSource: 'none',
+      },
       destination: { kind: 'collection', id, title: 'Books to revisit' },
     },
     {
@@ -30,12 +40,22 @@ const page: FeedPage = {
   sources: { discovery: 'ready', following: 'not_requested', continue: 'not_requested' },
 };
 
-function PublicOwners({ prepared = false }: { prepared?: boolean }) {
+function PublicOwners({
+  prepared = false,
+  discoveryState = 'ready',
+}: {
+  prepared?: boolean;
+  discoveryState?: 'ready' | 'preparing' | 'unavailable';
+}) {
   const [stream, setStream] = useState<'home' | 'following'>('home');
+  const resultPage: FeedPage = {
+    ...page,
+    sources: { ...page.sources, discovery: discoveryState },
+  };
   return (
     <div className="p-4">
       <HomeFeed
-        result={{ state: 'ready', page }}
+        result={{ state: 'ready', page: resultPage }}
         locale={getLocale()}
         signedIn={prepared}
         stream={stream}
@@ -61,3 +81,4 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Anonymous: Story = {};
 export const PreparedPrivateStateUnavailable: Story = { args: { prepared: true } };
+export const PartialDiscoveryUnavailable: Story = { args: { discoveryState: 'unavailable' } };

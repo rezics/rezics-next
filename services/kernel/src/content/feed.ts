@@ -21,6 +21,12 @@ import { projectFeedReactions } from './feed-reactions.ts';
 import { prepareFeedReactionAdvice, type FeedReactionAdviceComposition } from './feed-reaction-advice.ts';
 import { prepareFeedSubjectReactions } from './feed-subject-reactions.ts';
 import { feedDiscoveryItem } from './feed-discovery.ts';
+import {
+  feedPublicOwnerWitness,
+  finalizeFeedPublicOwnerContext,
+  hasFeedPublicOwnerItems,
+  retainFeedCollectionCurator,
+} from './feed-public-owner-context.ts';
 import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
 import { openSpaceSubjectPopulation } from './feed-subject-scope.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
@@ -256,14 +262,28 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       if (space) return null;
       const collection = await collections.readCollection(actor, object.id, deadline);
       if (collection.visibility !== 'public') return null;
-      item = {
+      const curatorAccountId = 'curatorAccountId' in collection ? collection.curatorAccountId : null;
+      const collectionItem = {
         id: activity.id,
         source: 'following',
         key: { owner: 'library', kind: 'collection', route: object.route, id: object.id },
         occurredAt: activity.occurredAt,
-        summary: { id: collection.id, title: collection.title, description: collection.description },
+        summary: {
+          id: collection.id,
+          title: collection.title,
+          description: collection.description,
+          curator: {
+            state: 'unavailable',
+            reason: curatorAccountId === null ? 'deidentified' : 'native_projection',
+          },
+          presentationKind: collection.presentationKind,
+          presentationKindSource: collection.presentationKindSource,
+          cover: collection.cover,
+          coverSource: collection.coverSource,
+        },
         destination: { kind: 'collection', id: collection.id, title: collection.title },
-      };
+      } satisfies Extract<FeedItem, { source: 'following'; destination: { kind: 'collection' } }>;
+      item = retainFeedCollectionCurator(collectionItem, curatorAccountId);
     }
     if (item) activitySources.set(item.id, activity);
     return item;
@@ -533,7 +553,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       await Promise.all(names.map(loadLane));
       const sourceWitnesses = new Map(
         names.flatMap((lane) =>
-          lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
+          lanes[lane].flatMap(({ item }) => (item ? [[item.id, feedPublicOwnerWitness(item)] as const] : [])),
         ),
       );
       // Keep rejected candidates in their original slots: they still consume the native
@@ -843,7 +863,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         Object.assign(next, retainedNext);
         const current = new Map(
           selectedLanes.flatMap((lane) =>
-            lanes[lane].flatMap(({ item }) => (item ? [[item.id, JSON.stringify(item)] as const] : [])),
+            lanes[lane].flatMap(({ item }) => (item ? [[item.id, feedPublicOwnerWitness(item)] as const] : [])),
           ),
         );
         for (let index = feedItems.length - 1; index >= 0; index--) {
@@ -884,6 +904,19 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         await spacePopulation?.finish();
         return feedItems;
       };
+      const finalPublicOwnerAdmission = async () => {
+        await finalizeFeedPublicOwnerContext(
+          feedItems,
+          (ids) =>
+            readAccountDiscoverySummaries(
+              { ...deps, actor: { kind: 'anonymous' }, deadline },
+              ids,
+              { languages },
+            ),
+          finalFeedAdmission,
+        );
+        return feedItems;
+      };
       if (personal && stream === 'home')
         viewerPersonalActions = await composeFeedViewerPersonalActions(
           deps,
@@ -891,9 +924,10 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           feedItems,
           deadline,
           languages,
-          finalFeedAdmission,
+          finalPublicOwnerAdmission,
         );
-      else if (stream === 'home' && reactionAdvice?.hasTargets) await finalFeedAdmission();
+      else if ((stream === 'home' && reactionAdvice?.hasTargets) || hasFeedPublicOwnerItems(feedItems))
+        await finalPublicOwnerAdmission();
       if (reactionAdvice) feedItems.splice(0, feedItems.length, ...(await reactionAdvice.finish(feedItems)));
       const hasNext = names.some((lane) => next[lane] !== false && sources[lane] === 'ready');
       return {

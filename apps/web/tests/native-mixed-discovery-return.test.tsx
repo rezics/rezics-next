@@ -53,7 +53,16 @@ function mixedRows(): FeedItem[] {
     source: 'discovery',
     key: { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId },
     occurredAt: null,
-    summary: { id: collectionId, title: 'Reading shelf', description: 'Short novels.' },
+    summary: {
+      id: collectionId,
+      title: 'Reading shelf',
+      description: 'Short novels.',
+      curator: { state: 'unavailable', reason: 'native_projection' },
+      presentationKind: null,
+      presentationKindSource: 'empty',
+      cover: null,
+      coverSource: 'none',
+    },
     destination: { kind: 'collection', id: collectionId, title: 'Reading shelf' },
   };
   const review: FeedItem = {

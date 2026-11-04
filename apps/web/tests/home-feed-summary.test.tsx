@@ -87,7 +87,16 @@ function collectionRow(source: 'following' | 'discovery' = 'following'): FeedIte
         ? { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId }
         : { owner: 'library', kind: 'collection', route: 4660, id: collectionId },
     occurredAt: '2026-11-03T00:00:00Z',
-    summary: { id: collectionId, title: 'Books I come back to', description: 'Short novels.' },
+    summary: {
+      id: collectionId,
+      title: 'Books I come back to',
+      description: 'Short novels.',
+      curator: { state: 'unavailable', reason: 'native_projection' },
+      presentationKind: null,
+      presentationKindSource: 'empty',
+      cover: null,
+      coverSource: 'none',
+    },
     destination: { kind: 'collection', id: collectionId, title: 'Books I come back to' },
   };
 }

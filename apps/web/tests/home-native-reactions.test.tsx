@@ -111,7 +111,16 @@ test.each([1, 10, 20])(
             source: 'following',
             occurredAt: null,
             key: { owner: 'library', kind: 'collection', route: 0, id },
-            summary: { id, title: 'Collection', description: null },
+            summary: {
+              id,
+              title: 'Collection',
+              description: null,
+              curator: { state: 'unavailable', reason: 'native_projection' },
+              presentationKind: null,
+              presentationKindSource: 'empty',
+              cover: null,
+              coverSource: 'none',
+            },
             destination: { kind: 'collection', id, title: 'Collection' },
           },
     );

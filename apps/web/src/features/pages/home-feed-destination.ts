@@ -19,6 +19,18 @@ export function homeFeedTitle(item: FeedItem, locale: string): string {
 export function homeFeedDestination(item: FeedItem, locale: string): string | undefined {
   const destination = item.destination;
   // Public owner links must name the exact disclosed owner, including retained activity rows.
+  if (destination.kind === 'collection') {
+    const owner = item.source === 'discovery' ? 'commerce' : item.source === 'following' ? 'library' : undefined;
+    if (
+      !owner ||
+      item.key.owner !== owner ||
+      item.key.kind !== 'collection' ||
+      item.key.id !== destination.id ||
+      item.summary.id !== destination.id ||
+      destination.title !== item.summary.title
+    )
+      return;
+  }
   if (
     (destination.kind === 'collection' || destination.kind === 'space') &&
     (item.key.id !== destination.id || item.summary.id !== destination.id)
