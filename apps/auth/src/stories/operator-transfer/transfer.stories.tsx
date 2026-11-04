@@ -1,4 +1,4 @@
-import { useLayoutEffect, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { OperatorTransferPage } from '../../routes/operators.transfer';
 import { AuthShell } from '../../frame';
 import {
@@ -62,6 +62,7 @@ function Fixture({
   mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain';
   tone?: 'light' | 'dark';
 }) {
+  const [fixtureReady, setFixtureReady] = useState(false);
   useLayoutEffect(() => {
     const saved = sessionStorage.getItem('rezics.operator-transfer.attempt');
     const original = globalThis.fetch;
@@ -118,13 +119,18 @@ function Fixture({
       }
       return original(input, init);
     }) as typeof fetch;
+    setFixtureReady(true);
     return () => {
       globalThis.fetch = original;
       if (saved === null) sessionStorage.removeItem('rezics.operator-transfer.attempt');
       else sessionStorage.setItem('rezics.operator-transfer.attempt', saved);
     };
   }, [attempt, mode]);
-  return <div className={tone === 'dark' ? 'dark' : ''} data-fixture-tone={tone}><AuthShell>{children}</AuthShell></div>;
+  return (
+    <div className={tone === 'dark' ? 'dark' : ''} data-fixture-tone={tone}>
+      {fixtureReady ? <AuthShell>{children}</AuthShell> : null}
+    </div>
+  );
 }
 const page = (attempt?: TransferAttempt, mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain') => (
   <Fixture {...(attempt ? { attempt } : {})} {...(mode ? { mode } : {})}>

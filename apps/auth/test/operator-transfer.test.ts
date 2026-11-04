@@ -144,6 +144,7 @@ test('Complete native destination acceptance and operator transfer journey prese
 
 test('lost execution response retains the exact key operation and approval; retry never approves again and acknowledgement needs readback', async () => {
   let approves = 0;
+  let transferred = false;
   const executions: unknown[] = [];
   const attempt = source();
   globalThis.fetch = (async (input, init) => {
@@ -159,14 +160,16 @@ test('lost execution response retains the exact key operation and approval; retr
         viewer: { kind: 'ready' },
         review: {
           kind: 'source',
-          relation: {
-            previous: {
-              ...request.previous,
-              operatorAccountId: request.operatorAccountId,
-              reservationId: 'new-reservation',
-            },
-            expectedVersion: '13',
-          },
+          relation: transferred
+            ? {
+                previous: {
+                  ...request.previous,
+                  operatorAccountId: request.operatorAccountId,
+                  reservationId: 'new-reservation',
+                },
+                expectedVersion: '13',
+              }
+            : { previous: request.previous, expectedVersion: request.expectedVersion },
           action: 'allowed',
         },
       });
@@ -176,6 +179,7 @@ test('lost execution response retains the exact key operation and approval; retr
     }
     executions.push(JSON.parse(String(init?.body)));
     if (executions.length === 1) throw new TypeError('lost response');
+    transferred = true;
     return Response.json({ accountId: request.previous.subjectAccountId });
   }) as typeof fetch;
   expect(await submitTransferAttempt(attempt, () => true)).toMatchObject({ kind: 'failure', reason: 'uncertain' });
