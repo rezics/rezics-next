@@ -14,6 +14,9 @@ Use this workflow:
 4. [Measure delivery efficiency](efficiency.md).
 5. [Maintain shared tools and dependencies](maintenance.md).
 
+[Instructions and documentation](documentation.md) owns instruction layers, owner documents, research records and
+size budgets.
+
 [Goal definitions](../goals/README.md) describe what must be completed.
 [Goal tooling](../../tools/goal/README.md) owns dispatch, task state, routing, integration, promotion and recovery.
 

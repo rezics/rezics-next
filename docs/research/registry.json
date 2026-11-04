@@ -1,0 +1,10 @@
+{
+  "reports": [
+    { "path": "docs/research/access-model-gpt-6-astra.md", "topic": "access-model", "researcher": "gpt-6-astra", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
+    { "path": "docs/research/access-model-opus-5-5.md", "topic": "access-model", "researcher": "claude-opus-5-5", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
+    { "path": "docs/research/engineering-modularity-gpt-6-astra.md", "topic": "engineering-modularity", "researcher": "gpt-6-astra", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
+    { "path": "docs/research/engineering-modularity-opus-5-5.md", "topic": "engineering-modularity", "researcher": "claude-opus-5-5", "state": "adopted", "decision": "docs/architecture.md#modules-and-boundaries" },
+    { "path": "docs/research/prompt-and-docs-architecture-gpt-6-astra.md", "topic": "prompt-and-docs-architecture", "researcher": "gpt-6-astra", "state": "adopted", "decision": "docs/development/documentation.md" },
+    { "path": "docs/research/prompt-and-docs-architecture-opus-5-5.md", "topic": "prompt-and-docs-architecture", "researcher": "claude-opus-5-5", "state": "adopted", "decision": "docs/development/documentation.md" }
+  ]
+}
