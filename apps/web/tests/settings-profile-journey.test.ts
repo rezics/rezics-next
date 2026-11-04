@@ -339,6 +339,11 @@ test('field validation matches Accounts limits and refuses credentialed, insecur
     profileFieldErrors({ ...profile, links: [{ label: 'x'.repeat(65), url: 'https://example.test' }] }),
   ).toHaveProperty('label-0');
   expect(() => parseProfileWrite({ before: profile, after: {}, idempotencyKey: crypto.randomUUID() })).toThrow();
+  const write = { before: profile, after: profile, idempotencyKey: crypto.randomUUID() };
+  expect(parseProfileWrite(write).after.avatar).toEqual({ media: profile.avatar?.media });
+  expect(() => parseProfileWrite({ ...write, after: { ...profile, injected: true } })).toThrow();
+  expect(() => parseProfileWrite({ ...write, after: { ...profile, displayName: 'x'.repeat(4097) } })).toThrow();
+  expect(() => parseProfileWrite({ ...write, after: { ...profile, speakersListed: true } })).toThrow();
 });
 
 test('invalid profile submission keeps the exact draft and local avatar without reading or sending a native command', async () => {
