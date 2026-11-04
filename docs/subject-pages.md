@@ -383,6 +383,8 @@ relations stay on the existing relation editor. Unknown source codes stay visibl
 creation, source mapping and adoption remain with Imports. Missing producer capability is named unavailable; Web
 does not fork native commands. One composed `POST /v1/pages:read` response carries selected facts with independently
 cacheable public reads and private, no-store viewer/actions derived from native Access for the actual caller.
+Catalogue file/group pages keep nested `viewer.actions.statementPropose`; other Subject pages return a kind-based
+`viewer` and top-level `actions`, and the two shapes are never mixed on one response.
 
 Correction reuses Subject facts and the relation editor for the exact selected assertion, then returns to this
 release. Native-return links keep the work, existing publisher target selection, candidate reader and Changes.

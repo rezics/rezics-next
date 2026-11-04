@@ -2216,10 +2216,14 @@ tables:
         status: omitted
         reason: Release key anchoring the supersession statement.
       - name: rid
-        status: omitted
-        reason: >-
-          The source endpoint is another release, but immutable profile wd:Q20631656 does not admit wdt:P155. Keep the
-          exact release endpoint as a review gap; do not retarget it to the represented visual novel.
+        status: existing
+        term: wdt:P155
+        'on': wd:Q20631656
+        mapping: wdt:P155
+        meaning: >-
+          The superseded software-release endpoint. Keep that exact release; do not retarget it to the represented visual
+          novel.
+        citations: *id030
   - name: releases_titles
     type: schema:name
     columns:
