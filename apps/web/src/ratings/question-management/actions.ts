@@ -160,7 +160,7 @@ export const readQuestionManagementForViewer = createServerFn({ method: 'GET' })
       return null;
     return { address, visit };
   })
-  .handler(async ({ data, signal }): Promise<QuestionManagementRead> => {
+  .handler(async ({ data }): Promise<QuestionManagementRead> => {
     const locale = requestLocale(getRequest()) ?? 'en';
     if (!data) return { realmId: '', selectedQuestionId: null, cursor: null, locale, viewer: null, state: 'invalid-address' };
     const address = addressView(data.address);
@@ -182,7 +182,7 @@ export const readQuestionManagementForViewer = createServerFn({ method: 'GET' })
         authorization: session.authorization,
         address,
         locale,
-        ...(signal ? { signal } : {}),
+        ...(session.request.signal ? { signal: session.request.signal } : {}),
       });
       if (result.state !== 'ready')
         return { ...address, locale, viewer: session.viewer, state: result.state };

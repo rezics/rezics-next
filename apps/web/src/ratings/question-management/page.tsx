@@ -147,7 +147,10 @@ export function QuestionManagementContent({
       </section>
 
       {page.selected ? (
-        <QuestionManagementInspection question={page.selected.question} onHeading={onSelectedHeading} />
+        <QuestionManagementInspection
+          question={page.selected.question}
+          {...(onSelectedHeading ? { onHeading: onSelectedHeading } : {})}
+        />
       ) : null}
     </div>
   );

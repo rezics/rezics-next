@@ -636,7 +636,7 @@ function SpaceHome({
           ) : null}
           {entered && !managementRestricted && page.realm ? (
             <Link
-              to="/realms/$id_/questions"
+              to="/realms/$id/questions"
               params={{ id: page.realm.id }}
               className="inline-flex rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted focus-visible:outline focus-visible:outline-2"
             >

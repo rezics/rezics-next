@@ -26,7 +26,7 @@ function searchAddress(input: Record<string, unknown>): Search {
   };
 }
 
-export const Route = createFileRoute('/realms/$id_/questions')({
+export const Route = createFileRoute('/realms/$id/questions')({
   beforeLoad: requireSignedIn,
   validateSearch: searchAddress,
   loaderDeps: ({ search }) => search,
