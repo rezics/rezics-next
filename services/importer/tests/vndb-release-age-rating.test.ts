@@ -133,7 +133,11 @@ test('operator refreshes unchanged VNDB COPY releases with explicit age while re
         return { ...result, normalized: result.normalizedRecord };
       },
     };
-    const oldImporter = new Importer({ path, transport: transport(commands, ids, receipts) });
+    const oldImporter = new Importer({
+      path,
+      transport: transport(commands, ids, receipts),
+      destination: { origin: 'https://kernel.import.test' },
+    });
     const oldResult = await oldImporter.runRecords(legacy, records(plan.entities.vndb));
     if (oldResult.status !== 'committed') throw new Error(`${oldResult.status}: ${oldResult.diagnostic}`);
     await oldImporter.close();
