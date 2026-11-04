@@ -179,9 +179,10 @@ test('the selected-family seed qualifies staff and voice credits without alias i
         digest: expect.stringMatching(/^[0-9a-f]{64}$/u),
       }),
     );
-    expect(author.statement.references?.[0]?.parts[0]?.value.content).toBe(
-      'https://vndb.org/v1#/vn_staff/v1/10/scenario',
-    );
+    expect(author.statement.references?.[0]?.parts[0]?.value).toEqual({
+      type: 'value',
+      content: 'https://vndb.org/v1#/vn_staff/v1/10/scenario',
+    });
     expect(qualifiers(author)).toEqual(
       expect.arrayContaining([
         { property: { id: 'wdt:P3831' }, value: { type: 'value', content: scenarioId } },
