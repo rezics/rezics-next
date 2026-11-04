@@ -1568,6 +1568,74 @@ export class MergeTrain {
       this.options.runBootCheck ??
       (this.options.runTypecheck ? undefined : this.options.runGate) ??
       processGroupRunner(timeout, this.options.stateDirectory, process.env, undefined, this.options.policy?.merge);
+    const bootFailureFingerprints = (output: string): string[] => {
+      const assertion = firstFailure(output, policy.merge).assertion;
+      if (!assertion || assertion === 'Gate exited unsuccessfully') return [];
+      return [
+        ...new Set(
+          assertion
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line) => firstFailure(line, policy.merge).fingerprint),
+        ),
+      ];
+    };
+    const bootBaseline = async (): Promise<GateResult> => {
+      const key = `dev-landing-boot:${JSON.stringify({
+        command: bootCommand,
+        timeout,
+        attempts: policy.integration.typecheckAttempts,
+      })}`;
+      let baseline = this.options.queue.baseline(base, key);
+      if (baseline) {
+        appendFileSync(logPath, `Boot check baseline for dev ${base} reused (${baseline.passed ? 'passed' : 'failed'})\n`);
+        return baseline;
+      }
+      const baselineTree = resolve(this.options.worktreeRoot, `boot-baseline-${randomUUID()}`);
+      mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
+      this.git(this.options.mainCheckout, 'worktree', 'add', '--detach', baselineTree, base);
+      try {
+        if (
+          !existsSync(join(baselineTree, 'node_modules')) &&
+          existsSync(join(baselineTree, 'bun.lock')) &&
+          existsSync(join(baselineTree, 'package.json'))
+        )
+          installShared(baselineTree, undefined, undefined, this.options.policy);
+        for (let attempt = 0; attempt < policy.integration.typecheckAttempts; attempt++) {
+          appendFileSync(logPath, `$ ${bootCommand.join(' ')} (required boot check baseline on dev ${base})\n`);
+          try {
+            baseline = await runBoot(bootCommand, baselineTree, logPath);
+          } catch (error) {
+            baseline = {
+              passed: false,
+              output: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+              timedOut: false,
+            };
+          }
+          assertCandidateIntegrity(
+            baselineTree,
+            base,
+            'dev boot check baseline',
+            logPath,
+            this.options.runCandidateGit,
+            this.options.policy?.integration,
+          );
+          if (
+            !compilerInfrastructureFailure(baseline.output, baseline.timedOut) ||
+            attempt + 1 >= policy.integration.typecheckAttempts
+          )
+            break;
+          appendFileSync(logPath, 'Boot check baseline infrastructure failure; retrying once on the same base\n');
+        }
+      } finally {
+        this.git(this.options.mainCheckout, 'worktree', 'remove', '--force', baselineTree);
+      }
+      if (!compilerInfrastructureFailure(baseline.output, baseline.timedOut))
+        this.options.queue.saveBaseline(base, key, baseline);
+      appendFileSync(logPath, `Boot check baseline on dev ${base} ${baseline.passed ? 'passed' : 'failed'}\n`);
+      return baseline;
+    };
     let durationMs = 0;
     for (let attempt = 0; attempt < policy.integration.typecheckAttempts; attempt++) {
       const started = Date.now();
@@ -1598,8 +1666,29 @@ export class MergeTrain {
       if (
         !compilerInfrastructureFailure(result.output, result.timedOut) ||
         attempt + 1 >= policy.integration.typecheckAttempts
-      )
+      ) {
+        if (!result.passed && !compilerInfrastructureFailure(result.output, result.timedOut)) {
+          const baseline = await bootBaseline();
+          if (!baseline.passed && !compilerInfrastructureFailure(baseline.output, baseline.timedOut)) {
+            const existing = new Set(bootFailureFingerprints(baseline.output));
+            const candidate = bootFailureFingerprints(result.output);
+            if (candidate.length && candidate.every((fingerprint) => existing.has(fingerprint))) {
+              appendFileSync(
+                logPath,
+                `Candidate boot failures are already present on dev base ${base}; landing allowed\n`,
+              );
+              return {
+                command: bootCommand,
+                result: { ...result, passed: true },
+                kind: 'boot',
+                durationMs,
+                triggerPaths: boot.paths,
+              };
+            }
+          }
+        }
         return { command: bootCommand, result, kind: 'boot', durationMs, triggerPaths: boot.paths };
+      }
       appendFileSync(logPath, 'Boot check infrastructure failure; retrying once on the same candidate\n');
     }
     throw new Error('Unreachable boot check retry state');

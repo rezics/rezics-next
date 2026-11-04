@@ -285,9 +285,10 @@ worktree. Before advancing dev, it runs one direct root typecheck on the final c
 conflict resolution and formatting, then the `devLandingBoot` command when those changed paths match its trigger
 patterns. `TYPECHECK_CHANGED` contains the actual paths from the batch base to that candidate. Both guards are
 mandatory for single, shared-workspace and batched landings, including when `integration.devLandingChecks` is false.
-A compiler or boot failure leaves dev unchanged and returns its first failing entry to the affected task; unrelated
-batch members remain queued. The boot check records its duration in the landing log. It is landing-time, not
-asynchronous: the command is the start-up and readiness tests in `services/kernel/test/boot`, under
+A compiler failure or a new boot failure leaves dev unchanged and returns its first failing entry to the affected task;
+unrelated batch members remain queued. The train compares normalized boot error fingerprints with the current dev
+base, caches that base result per command, and allows landing when candidate failures are a subset of existing base
+failures. The boot check records its duration in the landing log. It is landing-time, not asynchronous: the command is the start-up and readiness tests in `services/kernel/test/boot`, under
 `policy.integration.bootCheckTimeoutMs` (two minutes). Duration is measured per batch in that log. A passing check
 advances dev with the expected-head check. Source commits remain intact. Each task's trailer commits determine which changes belong to it and whether all its
 commits are on dev; those tasks become integrated. A task with no trailer commits cannot finish by claiming a peer's
