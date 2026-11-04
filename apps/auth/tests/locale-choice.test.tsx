@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
 import { useState } from 'react';
 import { creationFixture, dom, flush, open } from './creation-page-fixture';
+import { hydrateRoot, type Root } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { AuthPage, AuthShell } from '../src/frame';
 import { localeNames } from '../src/locale-choice';
 import {
@@ -63,6 +65,7 @@ test('real shell offers eight autonyms, stages/cancels with focus, and changes t
 
 test('blocked persistence preserves exact hydration language and reports the current-document choice', async () => {
   const cookie = Object.getOwnPropertyDescriptor(document, 'cookie');
+  let root: Root | undefined;
   Object.defineProperty(document, 'cookie', {
     configurable: true,
     get() {
@@ -72,14 +75,21 @@ test('blocked persistence preserves exact hydration language and reports the cur
   });
   try {
     initializeDocumentLocale('fr');
-    const p = await open(<Page />, {});
-    expect(p.host.querySelector('select')!.value).toBe('fr');
-    expect(p.host.querySelector('h1')?.textContent).toBe(m.auth_login_heading({}, { locale: 'fr' }));
-    await flush(() => select(p.host, 'ko'));
-    await flush(() => apply(p.host));
+    const host = document.body.appendChild(document.createElement('div'));
+    host.innerHTML = renderToString(<Page />);
+    const errors: unknown[] = [];
+    await flush(() => {
+      root = hydrateRoot(host, <Page />, { onRecoverableError: (error) => errors.push(error) });
+    });
+    expect(errors).toEqual([]);
+    expect(host.querySelector('select')!.value).toBe('fr');
+    expect(host.querySelector('h1')?.textContent).toBe(m.auth_login_heading({}, { locale: 'fr' }));
+    await flush(() => select(host, 'ko'));
+    await flush(() => apply(host));
     expect(document.documentElement.lang).toBe('ko');
-    expect(p.host.querySelector('[role=status]')?.textContent).toBe(m.auth_locale_temporary());
+    expect(host.querySelector('[role=status]')?.textContent).toBe(m.auth_locale_temporary());
   } finally {
+    await flush(() => root?.unmount());
     if (cookie) Object.defineProperty(document, 'cookie', cookie);
     else Reflect.deleteProperty(document, 'cookie');
   }

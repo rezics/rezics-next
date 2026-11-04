@@ -184,3 +184,18 @@ test('replacement viewer remains authoritative over a late creation after langua
   expect(p.assign).not.toHaveBeenCalled();
   expect(p.unload()).toBe(false);
 });
+
+test('persisted return after language selection cannot resume a departed creation callback', async () => {
+  const p = await setup();
+  await p.draft();
+  await flush(() => send(p.host));
+  await p.locale('zh-Hans');
+  await flush(() => {
+    window.dispatchEvent(new dom.PageTransitionEvent('pagehide', { persisted: true }) as unknown as Event);
+    window.dispatchEvent(new dom.PageTransitionEvent('pageshow', { persisted: true }) as unknown as Event);
+  });
+  await flush(() => p.calls[0]!.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
+  expect(p.calls).toHaveLength(1);
+  expect(p.assign).not.toHaveBeenCalled();
+  expect(p.router.history.location.search).toBe(p.query);
+});
