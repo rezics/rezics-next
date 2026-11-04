@@ -70,20 +70,27 @@ test('a type command keeps its payload and key through unknown readback; clean s
   expect(draft.snapshot()).toBe(retained);
   removeReading();
   removeShelf();
-  draft.editTypeLayout(book, undefined);
+  await draft.reload();
+  draft.editTypeLayout(book, 'grid');
   draft.editTypeLayout(movie, 'list');
   await draft.retry();
-  expect(draft.snapshot().phase).toBe('uncertain'); // Stale readback is never a confirmed save.
+  expect(draft.snapshot().phase).toBe('review'); // The receipt confirms the write; a stale GET needs read recovery.
   expect(commands[1]).toBe(commands[0]);
   expect(commands[0]?.shelf).toEqual({ layouts: { [book]: null } });
+  expect(draft.snapshot().pending).toBeNull();
+  expect(draft.snapshot().confirmedWrite?.input).toBe(commands[0]);
+  expect(draft.snapshot().writeReceipt?.version).toBe(2);
+  expect(draft.snapshot().readResponse.reason).toBe('stale_version');
+  expect(draft.canRetryOriginal()).toBe(false);
+  await draft.retry();
+  expect(commands).toHaveLength(2);
   readback = withShelfAdvice({
     spoilerLevel: 1,
     suitability: 'show',
     version: 3,
     shelf: { ...receipt.shelf, layouts: { ...receipt.shelf?.layouts, [book]: 'table' }, gridSize: 'small' },
   });
-  await draft.retry();
-  expect(commands[2]).toBe(commands[0]);
+  await draft.reload();
   expect(draft.snapshot().phase).toBe('review');
   expect(draft.snapshot().comparison?.input).toBe(commands[0]);
   expect(Object.isFrozen(commands[0])).toBe(true);
@@ -91,44 +98,150 @@ test('a type command keeps its payload and key through unknown readback; clean s
   expect(draft.snapshot().pending).toBeNull();
   expect(draft.snapshot().draft.gridSize).toBe('small');
   expect(draft.snapshot().draft.layouts[movie]).toBe('list');
-  expect(draft.snapshot().draft.layouts[book]).toBe('table');
+  expect(draft.snapshot().draft.layouts[book]).toBe('grid'); // A later local edit stays available for review.
   expect(version).toBe(3);
+  expect(draft.canSubmit()).toBe(false);
+  draft.useCurrent();
+  expect(draft.snapshot().comparison).toBeNull();
+  draft.editTypeLayout(movie, 'list');
   await draft.submit();
-  expect(commands[3]?.shelf).toEqual({ layouts: { [movie]: 'list' } });
-  expect(commands[3]?.idempotencyKey).not.toBe(commands[0]?.idempotencyKey);
+  expect(commands[2]?.shelf).toEqual({ layouts: { [movie]: 'list' } });
+  expect(commands[2]?.idempotencyKey).not.toBe(commands[0]?.idempotencyKey);
   current = false;
   await draft.submit();
-  expect(commands).toHaveLength(4);
+  expect(commands).toHaveLength(3);
+});
+
+test('a confirmed write keeps its receipt while a failed current read retries without replaying it', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    const initial = withShelfAdvice({
+      spoilerLevel: 0,
+      suitability: 'blur',
+      version: 8,
+      shelf: { layouts: { all: 'list' } },
+    });
+    const receipt = withShelfAdvice({ ...initial, version: 9, shelf: { layouts: { all: 'table' } } });
+    const commands: Readonly<PreferenceChange>[] = [];
+    let version = 8;
+    let reads = 0;
+    const draft = new ShelfPreferenceDraftRecovery(
+      initial,
+      {
+        save: async (input) => {
+          commands.push(input);
+          return commands.length === 1
+            ? { ok: false, reason: 'unavailable' }
+            : { ok: true, preferences: receipt };
+        },
+        read: async () => {
+          reads++;
+          if (reads === 1) return { signedIn: true, preferences: initial, securityHref: null };
+          if (reads === 2)
+            return {
+              signedIn: true,
+              state: 'unavailable',
+              failure: { status: 503, code: 'dependency_unavailable', requestId: 'refresh-1', retryAfter: '20' },
+              securityHref: null,
+            };
+          return { signedIn: true, preferences: receipt, securityHref: null };
+        },
+      },
+      {
+        canRead: () => true,
+        canWrite: () => true,
+        version: () => version,
+        onVersionChange: (next) => {
+          version = next;
+        },
+      },
+    );
+    draft.edit({ layout: 'table' }, 'layout');
+    await draft.submit();
+    const original = draft.snapshot().pending?.input;
+    await draft.reload();
+    await draft.retry();
+
+    const readDeadline = now + 20_000;
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(original);
+    expect(draft.snapshot().pending).toBeNull();
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.snapshot().writeReceipt?.version).toBe(9);
+    expect(draft.snapshot().known.shelf.layouts?.all).toBe('table');
+    expect(draft.snapshot().current).toBe(false);
+    expect(draft.snapshot().writeResponse.retryAt).toBe(0);
+    expect(draft.snapshot().readResponse.failure?.requestId).toBe('refresh-1');
+    expect(draft.snapshot().readResponse.retryAt).toBe(readDeadline);
+    expect(draft.canRetryOriginal()).toBe(false);
+
+    await draft.retry();
+    await draft.reload();
+    expect(commands).toHaveLength(2);
+    expect(reads).toBe(2);
+    now = readDeadline;
+    await draft.reload();
+    expect(reads).toBe(3);
+    expect(draft.snapshot().readResponse.retryAt).toBe(0);
+    expect(draft.snapshot().confirmedWrite?.input).toBe(original);
+    expect(draft.snapshot().comparison?.input).toBe(original);
+    expect(draft.snapshot().current).toBe(true);
+    expect(commands).toHaveLength(2);
+    draft.useCurrent();
+    expect(draft.snapshot().comparison).toBeNull();
+    expect(draft.snapshot().confirmedWrite).toBeNull();
+    expect(commands).toHaveLength(2);
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test('a pending reset is retained for navigation and a retired owner cannot accept its late completion', async () => {
   const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
   const { SettingsNavigationDrafts } = await import('../src/settings/reading-navigation');
   let current = true;
+  let episode = 'A1';
   let finish = () => {};
+  let saves = 0;
   const initial = withShelfAdvice({ spoilerLevel: 0, suitability: 'blur', version: 4, shelf: { gridSize: 'large' } });
   const draft = new ShelfPreferenceDraftRecovery(
     initial,
     {
       read: async () => ({ signedIn: false }),
       save: async () => {
+        saves++;
         await new Promise<void>((resolve) => (finish = resolve));
         return { ok: true as const, preferences: withShelfAdvice({ ...initial, version: 5, shelf: {} }) };
       },
     },
-    { canRead: () => current, canWrite: () => current, version: () => 4, onVersionChange() {} },
+    {
+      isCurrent: () => episode === 'A1',
+      canRead: () => current,
+      canWrite: () => current,
+      version: () => 4,
+      onVersionChange() {},
+    },
   );
   const navigation = new SettingsNavigationDrafts();
   navigation.register({ kind: 'shelf', needsDecision: () => current && draft.needsNavigationDecision() });
   const saving = draft.submit(true);
+  const capturedRetry = draft.retry.bind(draft);
   expect(draft.snapshot().pending?.input.shelf).toBeNull();
   expect(navigation.needsDecision()).toBe(true);
   const retained = draft.snapshot();
   current = false;
+  episode = 'B';
+  episode = 'A2';
   navigation.refresh();
+  draft.dispose();
   finish();
   await saving;
+  await capturedRetry();
   expect(draft.snapshot()).toBe(retained);
+  expect(saves).toBe(1);
   expect(navigation.needsDecision()).toBe(false);
 });
 

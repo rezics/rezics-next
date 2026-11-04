@@ -98,6 +98,8 @@ The existing shelf editor adds exact type-URI layouts to its versioned dirty-fie
 
 **Decision:** A refused current Shelf read clears actionable advice and marks retained values unconfirmed; dirty choices and any unresolved original command remain until a deliberate admitted read or exact retry resolves them.
 
+**Decision:** Shelf writes and current reads keep independent retry deadlines. A confirmed original write remains complete when its follow-up read fails, so recovery reloads current values without replaying that command.
+
 ## Account safety
 
 Managed detail captures Retry-After at response receipt in its immutable viewer/target reader. The longest observed

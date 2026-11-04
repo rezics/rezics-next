@@ -185,23 +185,27 @@ test('structured refusals retain the original intent and one absolute retry dead
     await draft.submit();
     const original = draft.snapshot().pending?.input;
     const deadline = now + 30_000;
-    expect(draft.snapshot().retryAt).toBe(deadline);
+    expect(draft.snapshot().writeResponse.retryAt).toBe(deadline);
     draft.edit({ gridSize: 'small' }, 'gridSize');
-    expect(draft.snapshot().retryAt).toBe(deadline);
+    expect(draft.snapshot().writeResponse.retryAt).toBe(deadline);
     expect(Object.isFrozen(original)).toBe(true);
     expect(Object.isFrozen(original?.shelf)).toBe(true);
     await draft.retry();
     expect(commands).toHaveLength(1);
     expect(draft.snapshot().pending?.input).toBe(original);
     now = deadline;
+    readState = 'current';
+    await draft.reload();
+    expect(draft.snapshot().known.version).toBe(4);
     await draft.retry();
     expect(commands).toHaveLength(2);
     expect(commands[1]).toBe(original);
-    expect(draft.snapshot().retryAt).toBe(0);
+    expect(draft.snapshot().writeResponse.retryAt).toBe(0);
 
+    readState = 'closed';
     await draft.reload();
-    expect(draft.snapshot().reason).toBe('read:closed');
-    expect(draft.snapshot().failure?.code).toBe('platform_closed');
+    expect(draft.snapshot().readResponse.reason).toBe('read:closed');
+    expect(draft.snapshot().readResponse.failure?.code).toBe('platform_closed');
     expect(draft.snapshot().pending?.input).toBe(original);
     expect(draft.snapshot().advice).toBeUndefined();
     expect(draft.snapshot().current).toBe(false);
@@ -209,16 +213,16 @@ test('structured refusals retain the original intent and one absolute retry dead
     readState = 'unavailable';
     await draft.reload();
     const readDeadline = now + 60_000;
-    expect(draft.snapshot().reason).toBe('read:unavailable');
-    expect(draft.snapshot().failure?.requestId).toBe('read-unavailable');
-    expect(draft.snapshot().retryAt).toBe(readDeadline);
+    expect(draft.snapshot().readResponse.reason).toBe('read:unavailable');
+    expect(draft.snapshot().readResponse.failure?.requestId).toBe('read-unavailable');
+    expect(draft.snapshot().readResponse.retryAt).toBe(readDeadline);
     await draft.reload();
-    expect(reads).toBe(2);
+    expect(reads).toBe(3);
     now = readDeadline;
     readState = 'forbidden';
     await draft.reload();
-    expect(draft.snapshot().reason).toBe('read:forbidden');
-    expect(draft.snapshot().failure?.status).toBe(403);
+    expect(draft.snapshot().readResponse.reason).toBe('read:forbidden');
+    expect(draft.snapshot().readResponse.failure?.status).toBe(403);
     expect(draft.snapshot().pending?.input).toBe(original);
     expect(draft.snapshot().dirty.has('gridSize')).toBe(true);
 
@@ -227,6 +231,91 @@ test('structured refusals retain the original intent and one absolute retry dead
     expect(draft.snapshot().known.version).toBe(4);
     expect(draft.snapshot().current).toBe(true);
     expect(draft.snapshot().draft.gridSize).toBe('small');
+    expect(draft.snapshot().pending?.input).toBe(original);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('a fresh Shelf read can run during the original command wait without changing it', async () => {
+  const { ShelfPreferenceDraftRecovery } = await import('../src/settings/shelf-preferences');
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    const initial = withShelfAdvice({
+      spoilerLevel: 0,
+      suitability: 'blur',
+      version: 1,
+      shelf: { layouts: { all: 'list' } },
+    });
+    const current = withShelfAdvice({ ...initial, version: 2, shelf: { gridSize: 'small' } });
+    const denied = withShelfAdvice({ ...current, version: 3 }, false);
+    const commands: Readonly<PreferenceChange>[] = [];
+    let reads = 0;
+    let readMode: 'unavailable' | 'current' | 'denied' = 'unavailable';
+    const draft = new ShelfPreferenceDraftRecovery(
+      initial,
+      {
+        save: async (input) => {
+          commands.push(input);
+          return {
+            ok: false,
+            reason: 'unavailable',
+            failure: { status: 503, code: 'dependency_unavailable', requestId: 'write-wait', retryAfter: '30' },
+          };
+        },
+        read: async () => {
+          reads++;
+          if (readMode === 'unavailable')
+            return {
+              signedIn: true,
+              state: 'unavailable',
+              failure: { status: 503, code: 'dependency_unavailable', requestId: 'read-wait', retryAfter: '10' },
+              securityHref: null,
+            };
+          return { signedIn: true, preferences: readMode === 'denied' ? denied : current, securityHref: null };
+        },
+      },
+      owner,
+    );
+    draft.edit({ layout: 'table' }, 'layout');
+    await draft.submit();
+    const original = draft.snapshot().pending?.input;
+    const writeDeadline = now + 30_000;
+    expect(draft.snapshot().writeResponse.retryAt).toBe(writeDeadline);
+    expect(draft.snapshot().writeResponse.reason).toBe('write:unavailable');
+    expect(draft.snapshot().writeResponse.failure?.requestId).toBe('write-wait');
+
+    await draft.reload();
+
+    expect(reads).toBe(1);
+    const readDeadline = now + 10_000;
+    expect(draft.snapshot().writeResponse.retryAt).toBe(writeDeadline);
+    expect(draft.snapshot().readResponse.retryAt).toBe(readDeadline);
+    expect(draft.snapshot().writeResponse.failure?.requestId).toBe('write-wait');
+    expect(draft.snapshot().pending?.input).toBe(original);
+    await draft.reload();
+    expect(reads).toBe(1);
+
+    now = readDeadline;
+    readMode = 'current';
+    await draft.reload();
+    expect(reads).toBe(2);
+    expect(draft.snapshot().readResponse.retryAt).toBe(0);
+    expect(draft.snapshot().writeResponse.retryAt).toBe(writeDeadline);
+    expect(draft.snapshot().writeResponse.failure?.requestId).toBe('write-wait');
+    expect(draft.snapshot().known.version).toBe(current.version);
+    expect(draft.snapshot().current).toBe(true);
+    expect(draft.snapshot().pending?.input).toBe(original);
+
+    now = writeDeadline;
+    readMode = 'denied';
+    await draft.reload();
+    expect(reads).toBe(3);
+    expect(draft.snapshot().advice?.allowedActions.update.allowed).toBe(false);
+    await draft.retry();
+    expect(commands).toHaveLength(1);
     expect(draft.snapshot().pending?.input).toBe(original);
   } finally {
     Date.now = realNow;
