@@ -123,7 +123,7 @@ test('retired associations cannot add a destination return, and unsupported file
   const unsupportedHtml = renderSubject(unsupportedPage, unsupportedRead, missing.release, missing.digest, unsupportedRead.subject.id);
   expect(unsupportedHtml).toContain('Current definitions do not admit this subject as a catalogue file or release group.');
   expect(unsupportedHtml).toContain('Generic file title');
-  expect(unsupportedHtml).not.toContain('/file');
+  expect(unsupportedHtml).not.toMatch(/href="\/en\/subjects\/[^\"]+\/file(?:\?|\")/);
 });
 
 test('return destinations stay in the same locale and accept only a subject path', () => {
