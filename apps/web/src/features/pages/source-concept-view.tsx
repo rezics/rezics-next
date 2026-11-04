@@ -56,8 +56,8 @@ function ConceptVisitView({
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
   admission: ReturnType<typeof useCatalogueLifetime>;
-  worksRoute?: ConceptWorksRouteState;
-  onWorksChange?: (patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void;
+  worksRoute?: ConceptWorksRouteState | undefined;
+  onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
 }) {
   const o = { locale: locale as never };
   const returnTo = originatingReturn(suppliedReturn);

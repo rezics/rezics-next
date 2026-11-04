@@ -40,7 +40,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       type: typeof type === 'string' && type.length <= 128 ? type : undefined,
       includeChildren: children === 'true' || children === true,
       ...(spoiler === '1' || spoiler === '2'
-        ? { spoilerThreshold: spoiler === '1' ? 1 : 2 }
+        ? { spoilerThreshold: spoiler === '1' ? (1 as const) : (2 as const) }
         : {}),
       conditionText: typeof condition === 'string' && condition.length <= 16_384 ? condition : undefined,
       tagQualifiersText: typeof tagQualifiers === 'string' && tagQualifiers.length <= 2048 ? tagQualifiers : undefined,
