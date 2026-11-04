@@ -1,10 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import {
-  consolidationClient,
-  type Confirmation,
-  type ConfirmationInput,
-  type ConsolidationResult,
-} from './client';
+import { consolidationClient, type Confirmation, type ConfirmationInput, type ConsolidationResult } from './client';
 import { ConsolidationReview } from './review';
 
 type Operation = 'review' | 'confirm' | 'apply' | 'retry' | 'cancel' | 'result';
