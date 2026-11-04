@@ -1,4 +1,4 @@
-import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
+import { createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
@@ -65,6 +65,139 @@ function statusMessage(kind: string) {
 export function OrganizationMembersPage({ organizationId }: { organizationId: string }) {
   return <MembershipReview key={organizationId} organizationId={organizationId} />;
 }
+type ReadyMembershipPage = Extract<MembershipPage, { kind: 'ready' }>;
+export function OrganizationMembershipRoster({
+  page,
+  busy,
+  pending,
+  onSelect,
+  onReload,
+}: {
+  page: ReadyMembershipPage;
+  busy: boolean;
+  pending: boolean;
+  onSelect: (accountId: string, role: 'owner' | 'member' | null) => void;
+  onReload: (cursor?: string) => void;
+}) {
+  const members = page.members;
+  return (
+    <section aria-labelledby="organization-members-heading" className="space-y-5">
+      <div>
+        <h2 id="organization-members-heading" className="text-lg font-semibold">
+          {m.auth_members_holders()}
+        </h2>
+        <p>{page.viewer.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
+      </div>
+      {page.viewer.role === 'member' ? (
+        page.viewer.leave === 'allowed' ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || pending}
+            onClick={() => onSelect(page.viewer.accountId, null)}
+          >
+            {m.auth_members_leave_organization()}
+          </Button>
+        ) : (
+          <p role="status">{m.auth_members_leave_unavailable()}</p>
+        )
+      ) : null}
+      {members.state === 'unavailable' ? (
+        <div className="space-y-3">
+          <p role="status">{m.auth_members_inventory_unavailable()}</p>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => onReload()}>
+            {m.auth_inventory_reload()}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <ul className="divide-y" aria-label={m.auth_members_holders()}>
+            {members.holders.map((holder) => {
+              const displayName = holder.account?.displayName?.trim();
+              const handle = holder.account?.handle?.trim();
+              const change = holder.actions.changeRole;
+              const remove = holder.actions.remove;
+              return (
+                <li key={holder.accountId} className="space-y-2 py-4">
+                  <div>
+                    <p className="font-medium">{displayName || (handle ? `@${handle}` : m.auth_members_identity_unavailable())}</p>
+                    {displayName && handle ? <p className="text-sm text-muted-foreground">@{handle}</p> : null}
+                    <p>{holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
+                    <details className="mt-1 text-sm">
+                      <summary className="cursor-pointer">{m.auth_members_account_address()}</summary>
+                      <code className="break-all">{holder.accountId}</code>
+                    </details>
+                  </div>
+                  {page.viewer.role === 'owner' ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {change === 'allowed' ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={busy || pending}
+                            onClick={() => onSelect(holder.accountId, holder.role === 'owner' ? 'member' : 'owner')}
+                          >
+                            {m.auth_members_change_role()}
+                          </Button>
+                        ) : change === 'last-owner' ? (
+                          <Button type="button" variant="outline" disabled aria-describedby={`member-last-owner-${holder.accountId}`}>
+                            {m.auth_members_change_role()}
+                          </Button>
+                        ) : (
+                          <Button type="button" variant="outline" disabled title={m.auth_members_actions_unavailable()}>
+                            {m.auth_members_change_role()}
+                          </Button>
+                        )}
+                        {remove === 'allowed' ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={busy || pending}
+                            onClick={() => onSelect(holder.accountId, null)}
+                          >
+                            {m.auth_members_remove()}
+                          </Button>
+                        ) : remove === 'last-owner' ? (
+                          <Button type="button" variant="outline" disabled aria-describedby={`member-last-owner-${holder.accountId}`}>
+                            {m.auth_members_remove()}
+                          </Button>
+                        ) : (
+                          <Button type="button" variant="outline" disabled title={m.auth_members_actions_unavailable()}>
+                            {m.auth_members_remove()}
+                          </Button>
+                        )}
+                      </div>
+                      {change === 'last-owner' || remove === 'last-owner' ? (
+                        <p id={`member-last-owner-${holder.accountId}`} role="status">
+                          {m.auth_members_last_owner()}
+                        </p>
+                      ) : null}
+                      {change === 'unavailable' || remove === 'unavailable' ? (
+                        <p role="status">{m.auth_members_actions_unavailable()}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          {!members.holders.length ? <p>{m.auth_members_empty_page()}</p> : null}
+          <nav className="flex flex-wrap gap-2" aria-label={m.auth_members_holders()}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => onReload()}>
+              {m.auth_inventory_reload()}
+            </Button>
+            {members.next ? (
+              <Button type="button" variant="outline" disabled={busy} onClick={() => onReload(members.next!)}>
+                {m.auth_inventory_next()}
+              </Button>
+            ) : null}
+          </nav>
+        </>
+      )}
+    </section>
+  );
+}
 // Keep the router adapter local; the review can also be mounted without a router.
 function MembershipNavigation({ choose }: { choose: () => Promise<boolean> }) {
   useBlocker({ shouldBlockFn: async () => !(await choose()), enableBeforeUnload: false });
@@ -107,8 +240,6 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   const [page, setPage] = useState<MembershipPage | null>(null);
   const [accountId, setAccountId] = useState('');
   const [command, setCommand] = useState<MembershipCommand | null>(null);
-  const [member, setMember] = useState('');
-  const [role, setRole] = useState<'owner' | 'member'>('member');
   const [confirmed, setConfirmed] = useState(false);
   const [needsProfile, setNeedsProfile] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -148,7 +279,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     if (command) confirmation.current?.focus();
   }, [command?.operationKey]);
 
-  work.current = !revoked && !observed && (!!member || role !== 'member' || !!command || selecting);
+  work.current = !revoked && !observed && (!!command || selecting);
   function renewActivity() {
     const version = ++lifetime.current;
     activity.current = () => version === lifetime.current;
@@ -166,8 +297,6 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       (!saved.unresolved || observed)
     )
       clearMembershipCommand();
-    setMember('');
-    setRole('member');
     setConfirmed(false);
     setCommand(null);
     setEmail('');
@@ -283,6 +412,22 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   async function select(memberAccountId: string, desired: 'owner' | 'member' | null) {
     const isActive = activity.current;
     if (!isActive() || lock.current || command || !membershipId(memberAccountId) || !accountId) return;
+    if (page?.kind !== 'ready') return;
+    if (desired === null) {
+      if (page.viewer.role === 'member') {
+        if (page.viewer.accountId !== memberAccountId || page.viewer.leave !== 'allowed') return;
+      } else {
+        const holder = page.members.state === 'ready'
+          ? page.members.holders.find((row) => row.accountId === memberAccountId)
+          : undefined;
+        if (!holder || holder.actions.remove !== 'allowed') return;
+      }
+    } else {
+      const holder = page.members.state === 'ready'
+        ? page.members.holders.find((row) => row.accountId === memberAccountId)
+        : undefined;
+      if (page.viewer.role !== 'owner' || !holder || holder.actions.changeRole !== 'allowed') return;
+    }
     if (needsProfile) {
       setReauth(true);
       setNotice('step-up');
@@ -299,8 +444,10 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         else setNotice(current.kind);
         return;
       }
-      if (current.membership?.role === desired || (desired === null && current.membership === null)) {
+      if (!current.membership || current.membership.role === desired) {
         setNotice('conflict');
+        const resultPage = await loadMembershipPage(organizationId, accountId);
+        if (isActive()) installPage(resultPage);
         return;
       }
       const next = newMembershipCommand(accountId, {
@@ -407,8 +554,6 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       setNotice('unavailable');
       return;
     }
-    setMember('');
-    setRole('member');
     setCommand(null);
     setNotice('');
     setReauth(false);
@@ -423,6 +568,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         : m.auth_members_member_effect();
   return (
     <AuthPage heading={m.auth_members_heading()}>
+      {router ? (
+        <Link to="/security" className="inline-flex min-h-11 items-center underline underline-offset-4">
+          {m.auth_members_back()}
+        </Link>
+      ) : null}
       {router ? <MembershipNavigation choose={choose} /> : null}
       {departing ? <DepartureChoice answer={answer} /> : null}
       <p>{m.auth_members_intro()}</p>
@@ -436,104 +586,23 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           </div>
         ) : null}
         {page?.kind !== 'ready' ? (
-          <p role="status">{statusMessage(page?.kind ?? 'loading')}</p>
-        ) : (
-          <>
-            <ul className="divide-y" aria-label={m.auth_members_holders()}>
-              {page.holders.map((holder) => (
-                <li key={holder.accountId} className="space-y-2 py-3">
-                  <p className="break-all">{holder.accountId}</p>
-                  <p>{holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
-                  {holder.reservationId ? (
-                    <p className="break-all">{m.auth_members_reservation({ reservation: holder.reservationId })}</p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || !!command}
-                      onClick={() => void select(holder.accountId, holder.role === 'owner' ? 'member' : 'owner')}
-                    >
-                      {m.auth_members_change_role()}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || !!command}
-                      onClick={() => void select(holder.accountId, null)}
-                    >
-                      {m.auth_members_remove()}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {!page.holders.length ? <p>{m.auth_members_empty_page()}</p> : null}
-            <nav className="flex flex-wrap gap-2" aria-label={m.auth_members_holders()}>
+          <div className="space-y-3" role="status">
+            <p>{statusMessage(page?.kind ?? 'loading')}</p>
+            {page && page.kind !== 'signed-out' && page.kind !== 'denied' && page.kind !== 'missing' ? (
               <Button type="button" variant="outline" disabled={busy} onClick={() => void browse()}>
                 {m.auth_inventory_reload()}
               </Button>
-              {page.next ? (
-                <Button type="button" variant="outline" disabled={busy} onClick={() => void browse(page.next!)}>
-                  {m.auth_inventory_next()}
-                </Button>
-              ) : null}
-            </nav>
-          </>
+            ) : null}
+          </div>
+        ) : (
+          <OrganizationMembershipRoster
+            page={page}
+            busy={busy}
+            pending={!!command}
+            onSelect={(target, role) => void select(target, role)}
+            onReload={(cursor) => void browse(cursor)}
+          />
         )}
-        {accountId && !command && !revoked ? (
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void select(member, role);
-            }}
-          >
-            <Field>
-              <FieldLabel htmlFor="membership-account">{m.auth_members_target()}</FieldLabel>
-              <Input
-                id="membership-account"
-                required
-                value={member}
-                disabled={busy}
-                onChange={(event) => setMember(event.target.value)}
-                pattern="[0-9a-fA-F-]{36}"
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="membership-role">{m.auth_members_role()}</FieldLabel>
-              <select
-                id="membership-role"
-                value={role}
-                disabled={busy}
-                onChange={(event) => setRole(event.target.value as 'owner' | 'member')}
-                className="min-h-11 rounded-md border bg-background px-3"
-              >
-                <option value="member">{m.auth_members_member()}</option>
-                <option value="owner">{m.auth_members_owner()}</option>
-              </select>
-            </Field>
-            <Button type="submit" disabled={busy || !membershipId(member)}>
-              {m.auth_members_review_add()}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !membershipId(member)}
-              onClick={() => void select(member, role)}
-            >
-              {m.auth_members_change_role()}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || !membershipId(member)}
-              onClick={() => void select(member, null)}
-            >
-              {m.auth_members_remove()}
-            </Button>
-          </form>
-        ) : null}
 
         {reauth ? (
           <form onSubmit={(event) => void authenticate(event)} className="space-y-4">

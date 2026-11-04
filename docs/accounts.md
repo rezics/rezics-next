@@ -417,6 +417,16 @@ own anchored current-membership reads, never a [cross-partition join](architectu
 adapter fails closed. See [membership-inverse.ts][membership-inverse], [membership-work.ts][membership-work] and
 [permission.ts][permission]; [Membership work][access-membership] describes the Realm port.
 
+The organization member page observes the current viewer role, disclosed public identities and a bounded current
+roster through its dedicated native source. Roster admission and each role-change, removal or supported self-leave
+advice are separate installed `organization:membership` checks. A read-only owner-count probe explains the last-owner
+restriction; it never authorizes a write, and the membership command repeats its current native checks under lock.
+Missing public identity uses a presentation fallback, while an unavailable roster remains distinct from an empty one.
+Page cursors bind the current viewer and organization. The exact selected-member read remains the reservation/version
+source for a command; roster rows and advice never replace it.
+
+Decision: show the viewer's current role, require separate native roster admission and per-action advice, expose no owner editor to members, and keep commands authoritative for every write.
+
 An account may have at most 1,000 role-bearing organization and Realm memberships combined, admitted atomically
 on its actor anchor; exceeding the cap returns `membership_limit`. Following a Realm is not membership and does
 not consume a slot. This bounds candidates without dropping possible grants as a resource's ACL grows.
