@@ -1,5 +1,5 @@
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { getLocale, locales } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
 import { shelfHref, type ShelfDisplay, type ShelfSearch } from './shelf-params';
 import { libraryNavigation } from './navigation';
@@ -130,27 +130,28 @@ export function ShelfSummaryNavigation({
 }
 
 export function ShelfSummaryFirstUseLinks({ locale }: { locale: string }) {
+  const messageLocale = locales.find((supported) => supported === locale) ?? getLocale();
   return (
     <div className="space-y-3">
-      <p>{m.library_summary_first_use_guidance()}</p>
+      <p>{m.library_summary_first_use_guidance({}, { locale: messageLocale })}</p>
       <div className="flex flex-wrap justify-center gap-2">
         <a className={target} href={`/${locale}/search`}>
-          {m.library_browse()}
+          {m.library_browse({}, { locale: messageLocale })}
         </a>
         <Exposure operation="library_label.list">
           <a className={target} href={`/${locale}/library/labels`}>
-            {m.library_nav_labels()}
+            {m.library_nav_labels({}, { locale: messageLocale })}
           </a>
         </Exposure>
         <Exposure operation="collection.list">
           <a className={target} href={`/${locale}/library/collections`}>
-            {m.library_nav_collections()}
+            {m.library_nav_collections({}, { locale: messageLocale })}
           </a>
         </Exposure>
       </div>
       {firstUseImports.length ? (
         <Exposure operation="library_entry.put">
-          <nav aria-label={m.library_summary_first_use_imports()}>
+          <nav aria-label={m.library_summary_first_use_imports({}, { locale: messageLocale })}>
             <ul className="flex flex-wrap justify-center gap-2">
               {firstUseImports.map((destination) => (
                 typeof destination.href === 'string' ? (
@@ -158,7 +159,7 @@ export function ShelfSummaryFirstUseLinks({ locale }: { locale: string }) {
                     <a className={target} href={`/${locale}${destination.href}`}>
                       {typeof destination.label === 'string'
                         ? destination.label
-                        : destination.label({ locale: getLocale(), pathname: destination.href })}
+                        : destination.label({ locale: messageLocale, pathname: destination.href })}
                     </a>
                   </li>
                 ) : null
