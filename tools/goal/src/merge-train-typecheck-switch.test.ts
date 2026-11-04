@@ -20,6 +20,12 @@ test('the disabled prelanding typecheck skips first, retried, and batched dev la
     expect(firstCommands.some(typecheckCommand)).toBe(false);
     expect(readFileSync(h.outcomes.at(-1)!.logPath, 'utf8')).toContain('Prelanding typecheck skipped');
 
+    h.advanceDev(
+      'scripts/typecheck.ts',
+      `import { existsSync } from 'node:fs';
+if (existsSync('docs/retry.md')) { console.error('root typecheck fixture failure'); process.exit(1); }
+`,
+    );
     Bun.spawnSync(['git', 'branch', 'stabilize', h.head('dev')], { cwd: h.root });
     Object.assign(h.settings, {
       integrationChecks: [{ paths: ['docs/**'], command: ['bun', 'scripts/typecheck.ts'] }],
@@ -27,26 +33,17 @@ test('the disabled prelanding typecheck skips first, retried, and batched dev la
     h.settings.integration.devPrelandingTypecheck = true;
     const retried = h.dispatch('docs/retry.md', [], ['true'], 'fixture', 'stabilize');
     await h.start(retried);
-    let typecheckRuns = 0;
-    await h.train(async (command) => {
-      if (!typecheckCommand(command)) return passed;
-      typecheckRuns += 1;
-      return typecheckRuns === 1
-        ? { passed: false, output: 'root typecheck fixture failure', timedOut: false }
-        : passed;
-    });
+    await h.train();
     expect(h.outcomes.at(-1)).toMatchObject({ taskId: retried.id, passed: false });
+    expect(readFileSync(h.outcomes.at(-1)!.logPath, 'utf8')).toContain('root typecheck fixture failure');
 
     h.settings.integration.devPrelandingTypecheck = false;
     await h.start(retried);
-    const retryCommands: string[][] = [];
-    await h.train(async (command) => {
-      retryCommands.push([...command]);
-      return passed;
-    });
-    expect(retryCommands.some(typecheckCommand)).toBe(false);
+    await h.train();
     expect(h.outcomes.at(-1)).toMatchObject({ taskId: retried.id, passed: true });
-    expect(readFileSync(h.outcomes.at(-1)!.logPath, 'utf8')).toContain('Prelanding typecheck skipped');
+    const retryLog = readFileSync(h.outcomes.at(-1)!.logPath, 'utf8');
+    expect(retryLog).toContain('Prelanding typecheck skipped');
+    expect(retryLog).not.toContain('bun scripts/typecheck.ts');
 
     h.settings.integration.batchSize = 2;
     const batch = [h.dispatch('docs/batch-a.md'), h.dispatch('docs/batch-b.md')];
