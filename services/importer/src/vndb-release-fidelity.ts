@@ -340,10 +340,18 @@ export async function importVndbReleaseFidelity(input: {
   destination?: { origin: string };
 }): Promise<VndbReleaseFidelityResult> {
   const plan = await planVndbReleaseFidelity(input.tables);
-  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
-    vocabularyAdmission: vndbReleaseVocabularyAdmission(input.bindings, plan.facts),
-    recordConcurrency: 1,
-  });
+  const identities = new Map<string, NativeIdentity>();
+  const admission = vndbReleaseVocabularyAdmission(input.bindings, plan.facts, identities);
+  const extras = { vocabularyAdmission: admission, recordConcurrency: 1 as const };
+  // Application pages by record key (r* before v*). Bind works first so release-work rows carry native work identities.
+  await seedCrossMedia(
+    { ...plan, entities: { bangumi: [], vndb: [] } },
+    input.path,
+    input.port,
+    input.destination,
+    extras,
+  );
+  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, extras);
   return { ...result, converterRevision: entityRevision };
 }
 
