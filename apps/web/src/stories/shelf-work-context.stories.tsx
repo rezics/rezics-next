@@ -14,10 +14,12 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
     admitted: ['personal_library', 'reading_progress', 'library_label.assignment_list'],
-    viewport: { options: {
-      phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
-      desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
-    } },
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }, type: 'desktop' },
+      },
+    },
   },
   globals: { viewport: { value: 'desktop1280', isRotated: false } },
 } satisfies Meta;
@@ -30,16 +32,29 @@ function Examples({ layout, labelShelf = false }: { layout: ShelfLayout; labelSh
   const [replacement, setReplacement] = useState(false);
   const entries = replacement ? [] : shelfContextExamples(locale);
   const label = { id: shelfExampleId(800), name: 'Home adaptations' };
-  return <PatternStory visitor="Signed In" path={`/library?layout=${layout}${labelShelf ? `&label=${label.id}` : ''}`}>
-    <section className="mx-auto max-w-6xl space-y-4 p-4">
-      <Button onClick={() => setReplacement(true)}>Replace reader</Button>
-      {labelShelf ? <LabelShelfEntries label={label} locale={locale} layout={layout} size="m" csrfToken={null}
-        isCurrent={() => !replacement} entries={entries.map((entry, index) => {
-          const assignment = { ...entry, id: shelfExampleId(900 + index), labelId: label.id };
-          return { ...assignment, workContext: prepareShelfWorkContext(assignment, contextExampleRelease, locale) };
-        })} /> : <ShelfEntries entries={entries} locale={locale} layout={layout} size="m" isCurrent={() => !replacement} />}
-    </section>
-  </PatternStory>;
+  return (
+    <PatternStory visitor="Signed In" path={`/library?layout=${layout}${labelShelf ? `&label=${label.id}` : ''}`}>
+      <section className="mx-auto max-w-6xl space-y-4 p-4">
+        <Button onClick={() => setReplacement(true)}>Replace reader</Button>
+        {labelShelf ? (
+          <LabelShelfEntries
+            label={label}
+            locale={locale}
+            layout={layout}
+            size="m"
+            csrfToken={null}
+            isCurrent={() => !replacement}
+            entries={entries.map((entry, index) => {
+              const assignment = { ...entry, id: shelfExampleId(900 + index), labelId: label.id };
+              return { ...assignment, workContext: prepareShelfWorkContext(assignment, contextExampleRelease, locale) };
+            })}
+          />
+        ) : (
+          <ShelfEntries entries={entries} locale={locale} layout={layout} size="m" isCurrent={() => !replacement} />
+        )}
+      </section>
+    </PatternStory>
+  );
 }
 export const List: Story = { render: () => <Examples layout="list" /> };
 export const Grid: Story = { render: () => <Examples layout="grid" /> };

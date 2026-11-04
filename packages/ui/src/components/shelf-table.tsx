@@ -167,22 +167,26 @@ export function ShelfTable({
                     </div>
                   ) : id === 'title' ? (
                     <>
-                    {row.href ? <a
-                      className="font-medium hover:underline"
-                      href={row.href}
-                      lang={row.titleLang}
-                      onClick={
-                        row.selectable
-                          ? (event) => {
-                              event.preventDefault();
-                              select(event);
-                            }
-                          : undefined
-                      }
-                    >
-                      {row.title}
-                    </a> : <span>{row.title}</span>}
-                    {row.titleContext}
+                      {row.href ? (
+                        <a
+                          className="font-medium hover:underline"
+                          href={row.href}
+                          lang={row.titleLang}
+                          onClick={
+                            row.selectable
+                              ? (event) => {
+                                  event.preventDefault();
+                                  select(event);
+                                }
+                              : undefined
+                          }
+                        >
+                          {row.title}
+                        </a>
+                      ) : (
+                        <span>{row.title}</span>
+                      )}
+                      {row.titleContext}
                     </>
                   ) : (
                     row[id]

@@ -501,16 +501,19 @@ function ListView({ controls }: { controls: Controls }) {
         const status = stateLabel(entry.state, entry.stateLabel);
         const href = stateHref(entry.state, locale, controls);
         const progress = entryProgress(entry, locale);
-        if (!entry.subject) return (
-          <li key={entry.subjectId} className="space-y-2 border-b py-3">
-            <Tombstone shape="row" labels={{ unavailable: m.library_subject_unavailable() }} />
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              {status ? <span>{status}</span> : null}
-              {progress ? <ProgressRow {...progress} /> : null}
-              <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}><Updated entry={entry} locale={locale} /></EntryMenu>
-            </div>
-          </li>
-        );
+        if (!entry.subject)
+          return (
+            <li key={entry.subjectId} className="space-y-2 border-b py-3">
+              <Tombstone shape="row" labels={{ unavailable: m.library_subject_unavailable() }} />
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {status ? <span>{status}</span> : null}
+                {progress ? <ProgressRow {...progress} /> : null}
+                <EntryMenu row={row} controls={controls} trigger={{ variant: 'ghost' }}>
+                  <Updated entry={entry} locale={locale} />
+                </EntryMenu>
+              </div>
+            </li>
+          );
         return (
           <ShelfListRow
             key={entry.subjectId}
@@ -519,7 +522,12 @@ function ListView({ controls }: { controls: Controls }) {
             cover={coverOf(entry)}
             title={title}
             {...(localizedTitle.lang ? { titleLang: localizedTitle.lang } : {})}
-            meta={<><span>{entry.subject?.typeLabel}</span><ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} /></>}
+            meta={
+              <>
+                <span>{entry.subject?.typeLabel}</span>
+                <ShelfWorkContextView entry={entry} locale={locale} isCurrent={controls.isCurrent} />
+              </>
+            }
             {...(progress ? { progress } : {})}
             {...(status
               ? {
@@ -1089,7 +1097,12 @@ export function LabelShelfEntries({
               href={href(entry)}
               cover={shelfCover(entry.subject)}
               title={title(entry)}
-              meta={<><span>{entry.subject.typeLabel}</span><ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} /></>}
+              meta={
+                <>
+                  <span>{entry.subject.typeLabel}</span>
+                  <ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />
+                </>
+              }
               {...(entry.state ? { status: entry.stateLabel ?? m.library_other() } : {})}
               {...(progress ? { progress } : {})}
               labels={{ select: title(entry), menu: m.library_menu_open() }}
@@ -1140,7 +1153,11 @@ export function LabelShelfEntries({
       cover: shelfCover(entry.subject),
       creator: entry.subject ? (
         <div className="min-w-0 space-y-1">
-          <a className="font-medium break-words hover:underline focus-visible:outline-ring" href={href(entry)} lang={entryTitle.lang}>
+          <a
+            className="font-medium break-words hover:underline focus-visible:outline-ring"
+            href={href(entry)}
+            lang={entryTitle.lang}
+          >
             {entryTitle.text}
           </a>
           <ShelfWorkContextView entry={entry} locale={locale} isCurrent={isCurrent} />

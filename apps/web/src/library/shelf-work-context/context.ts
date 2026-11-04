@@ -23,8 +23,12 @@ export type ShelfWorkContext = {
 
 function identity(entry: ShelfContextSource): string {
   return JSON.stringify([
-    entry.subjectId, entry.subject?.id, entry.revision, entry.incarnationId ?? null,
-    entry.id ?? null, entry.labelId ?? null,
+    entry.subjectId,
+    entry.subject?.id,
+    entry.revision,
+    entry.incarnationId ?? null,
+    entry.id ?? null,
+    entry.labelId ?? null,
   ]);
 }
 
@@ -55,14 +59,20 @@ export function prepareShelfWorkContext(
       // identify works here; quantities and codes remain with their own presentation owners.
       if (
         !definition ||
-        !((value.kind === 'item' && definition.datatype === 'wikibase-item') ||
-          (value.kind === 'time' && definition.datatype === 'time'))
-      ) continue;
+        !(
+          (value.kind === 'item' && definition.datatype === 'wikibase-item') ||
+          (value.kind === 'time' && definition.datatype === 'time')
+        )
+      )
+        continue;
       const formatted = listKeyFacts({ [property]: [value] }, [property], [], locale)[0];
       if (!formatted?.text) continue;
       facts.push({
-        property, role: role.text, ...(role.lang ? { roleLang: role.lang } : {}),
-        text: formatted.text, ...(formatted.lang ? { lang: formatted.lang } : {}),
+        property,
+        role: role.text,
+        ...(role.lang ? { roleLang: role.lang } : {}),
+        text: formatted.text,
+        ...(formatted.lang ? { lang: formatted.lang } : {}),
         ...(value.kind === 'item' && value.id
           ? { href: subjectHref({ id: value.id, label: formatted.text }, locale).href }
           : {}),
