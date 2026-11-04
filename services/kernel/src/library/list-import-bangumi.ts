@@ -22,20 +22,21 @@ import { createEntryCommands, LibraryConflictError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import { parseSourceTimestamp } from './entry-personal-model.ts';
 import {
-  applyEntryImportMetadataCommands,
   ENTRY_IMPORT_METADATA_LIMITS,
   assertEntryImportMetadataHistorySize,
   entryImportMetadataDigest,
   entryPersonalMetadataDigest,
-  metadataObservation,
-  parseEntryImportMetadataSelections,
-  type EntryImportMetadataOutcome,
   type EntryImportMetadataProposal,
   type EntryImportMetadataProposals,
-  type EntryImportMetadataReview,
-  type EntryImportMetadataSelection,
   type EntryImportMetadataView,
 } from './list-import-entry-metadata.ts';
+import {
+  appendListImportMetadataReview,
+  assertListImportMetadataReviewAvailable,
+  createListImportMetadataCoordinator,
+  mergeListImportMetadataConfirmation,
+  selectListImportMetadataConfirmation,
+} from './list-import-metadata-coordinator.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
   parseBangumiUpload,
@@ -625,197 +626,118 @@ export function createBangumiImport(deps: Dependencies) {
     if (!stored.review || stored.review.token !== saved.value.reviewToken) throw new ProblemError('conflict');
     return { ordinal, review: reviewView(stored.review) };
   }
-  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
-    const original = await read(actor, async (tx, a) => {
-      if ((await header(tx, a, id)).cancelled) throw new ProblemError('conflict');
-      return row(tx, a, id, ordinal);
-    });
-    const review = original.review;
-    if (!review || review.token !== sourceReviewToken || !review.target || !review.guard)
-      throw new ProblemError('conflict');
-    if (review.metadata?.some((item) => item.confirmation && !item.confirmation.outcome))
-      throw new ProblemError('conflict');
-    const account = owner(actor),
-      profile = await profileMetadata(actor, review.target);
-    if (
-      !profile ||
-      profile.current.source.kind !== 'supported' ||
-      profile.incarnationId !== (review.current?.incarnationId ?? null)
-    )
-      throw new ProblemError('conflict');
-    const currentSource = profile.current.source;
-    if (
-      currentSource.pin.releaseDigest !== review.guard.releaseDigest ||
-      String(profile.current.anchor.identityEpoch) !== review.guard.identityEpoch
-    )
-      throw new ProblemError('conflict');
-    const personal = await personalEntries.readPersonalEntry(actor, review.target);
-    const requestDigest = entryImportMetadataDigest({ key });
-    const next: EntryImportMetadataReview = {
-      token: randomUUID(),
-      requestDigest,
-      sourceReviewToken,
-      subjectId: review.target,
-      clientId: account.clientId,
-      requestedBy: account.requestedBy ?? null,
-      annotationRevision: personal.annotationRevision,
-      personalDigest: entryPersonalMetadataDigest(personal),
-      sourceDigest: entryImportMetadataDigest(original.evidence),
-      profileDigest: profile.digest,
-      incarnationId: profile.incarnationId,
-    };
-    const saved = await change(actor, 'metadata-review', key, { id, ordinal, sourceReviewToken }, async (tx, a) => {
-      if ((await header(tx, a, id, true)).cancelled) throw new ProblemError('conflict');
-      const locked = await row(tx, a, id, ordinal, true);
-      if (!locked.review || locked.review.token !== sourceReviewToken) throw new ProblemError('conflict');
-      const history = [...(locked.review.metadata ?? [])];
-      const existing = history.find((item) => item.requestDigest === requestDigest);
-      if (existing) return { ordinal, reviewToken: existing.token };
-      if (history.some((item) => item.confirmation && !item.confirmation.outcome)) throw new ProblemError('conflict');
-      if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw new ProblemError('conflict');
-      history.push(next);
-      assertEntryImportMetadataHistorySize(history);
-      locked.review.metadata = history;
-      assertReviewBytes(locked.review);
-      await tx.query(
-        `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
-        [...args(a, id), ordinal, JSON.stringify(locked.review)],
-      );
-      return { ordinal, reviewToken: next.token };
-    });
-    return saved.value;
-  }
-  async function metadataView(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    reviewToken: string,
-  ): Promise<EntryImportMetadataView> {
-    const current = await read(actor, async (tx, a) => {
-      const h = await header(tx, a, id);
-      return { cancelled: h.cancelled, row: await row(tx, a, id, ordinal) };
-    });
-    const review = current.row.review,
-      metadata = review?.metadata?.find((item) => item.token === reviewToken);
-    if (!review || !metadata) throw new ProblemError('conflict');
-    const account = owner(actor),
-      personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId);
-    const profile = await profileMetadata(actor, metadata.subjectId);
-    const sourceCurrent = review.token === metadata.sourceReviewToken;
-    const matches =
-      sourceCurrent &&
-      review.target === metadata.subjectId &&
-      review.guard !== null &&
-      profile !== null &&
-      profile.current.source.kind === 'supported' &&
-      profile.current.source.pin.releaseDigest === review.guard.releaseDigest &&
-      String(profile.current.anchor.identityEpoch) === review.guard.identityEpoch &&
-      profile.incarnationId === metadata.incarnationId &&
-      profile.digest === metadata.profileDigest;
-    const unchanged =
-      account.clientId === metadata.clientId &&
-      (account.requestedBy ?? null) === metadata.requestedBy &&
-      entryImportMetadataDigest(current.row.evidence) === metadata.sourceDigest &&
-      entryPersonalMetadataDigest(personal) === metadata.personalDigest &&
-      personal.annotationRevision === metadata.annotationRevision;
-    const view: EntryImportMetadataView = {
-      status: matches && unchanged ? 'current' : 'stale',
-      reviewToken,
-      sourceReviewToken: metadata.sourceReviewToken,
-      subjectId: metadata.subjectId,
-      personal,
-      proposals: bangumiMetadataProposals(current.row.evidence),
-      outcome: metadata.confirmation?.outcome ?? null,
-    };
-    if (Buffer.byteLength(JSON.stringify(view)) > ENTRY_IMPORT_METADATA_LIMITS.responseBytes)
-      throw new ProblemError('invalid_request');
-    return view;
-  }
-  async function persistMetadataConfirmation(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    token: string,
-    confirmation: EntryImportMetadataReview['confirmation'],
-  ) {
-    if (!confirmation) return;
-    const stateDigest = entryImportMetadataDigest(confirmation);
-    await change(
-      actor,
-      'metadata-progress',
-      `${id}:${ordinal}:${token}:progress:${stateDigest}`,
-      { id, ordinal, reviewToken: token, stateDigest },
-      async (tx, a) => {
-        const h = await header(tx, a, id, true),
-          locked = await row(tx, a, id, ordinal, true),
-          record = locked.review?.metadata?.find((item) => item.token === token);
-        if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
-          throw new ProblemError('conflict');
-        const starting =
-          (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
-          (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
-        if (
-          starting &&
-          (h.cancelled ||
-            locked.review?.token !== record.sourceReviewToken ||
-            entryImportMetadataDigest(locked.evidence) !== record.sourceDigest)
-        )
-          throw new ProblemError('conflict');
-        record.confirmation = confirmation;
-        assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
+  const metadataCoordinator = createListImportMetadataCoordinator({
+    provider: 'bangumi',
+    native: personalEntries,
+    async prepareReview({ actor, id, ordinal, sourceReviewToken }) {
+      const original = await read(actor, async (tx, a) => {
+        if ((await header(tx, a, id)).cancelled) throw new ProblemError('conflict');
+        return row(tx, a, id, ordinal);
+      });
+      const review = original.review;
+      if (!review || review.token !== sourceReviewToken || !review.guard) throw new ProblemError('conflict');
+      const history = review.metadata ?? [];
+      assertListImportMetadataReviewAvailable(history);
+      const account = owner(actor),
+        profile = await profileMetadata(actor, review.target);
+      if (
+        !profile ||
+        profile.current.source.kind !== 'supported' ||
+        profile.incarnationId !== (review.current?.incarnationId ?? null)
+      )
+        throw new ProblemError('conflict');
+      if (
+        profile.current.source.pin.releaseDigest !== review.guard.releaseDigest ||
+        String(profile.current.anchor.identityEpoch) !== review.guard.identityEpoch
+      )
+        throw new ProblemError('conflict');
+      const personal = await personalEntries.readPersonalEntry(actor, review.target);
+      return {
+        history,
+        identity: {
+          sourceReviewToken,
+          subjectId: review.target,
+          clientId: account.clientId,
+          requestedBy: account.requestedBy ?? null,
+          annotationRevision: personal.annotationRevision,
+          personalDigest: entryPersonalMetadataDigest(personal),
+          sourceDigest: entryImportMetadataDigest(original.evidence),
+          profileDigest: profile.digest,
+          incarnationId: profile.incarnationId,
+        },
+      };
+    },
+    async persistReview({ actor, id, ordinal, sourceReviewToken, key }, next) {
+      const saved = await change(actor, 'metadata-review', key, { id, ordinal, sourceReviewToken }, async (tx, a) => {
+        if ((await header(tx, a, id, true)).cancelled) throw new ProblemError('conflict');
+        const locked = await row(tx, a, id, ordinal, true);
+        if (!locked.review || locked.review.token !== sourceReviewToken) throw new ProblemError('conflict');
+        const appended = appendListImportMetadataReview(locked.review.metadata ?? [], next);
+        if (!appended.added) return { ordinal, reviewToken: appended.reviewToken };
+        locked.review.metadata = appended.history;
         assertReviewBytes(locked.review);
         await tx.query(
           `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
           [...args(a, id), ordinal, JSON.stringify(locked.review)],
         );
-        return { ordinal, reviewToken: token };
-      },
-    );
-  }
-  async function applyMetadata(
-    actor: Actor,
-    id: string,
-    ordinal: number,
-    reviewToken: string,
-    fields: unknown,
-    signal?: AbortSignal,
-  ) {
-    const selections = parseEntryImportMetadataSelections(fields),
-      selectionDigest = entryImportMetadataDigest(selections);
-    let initial = await read(actor, async (tx, a) => ({
-      cancelled: (await header(tx, a, id)).cancelled,
-      row: await row(tx, a, id, ordinal),
-    }));
-    const metadata = initial.row.review?.metadata?.find((item) => item.token === reviewToken);
-    if (!metadata)
-      return { reviewToken, fields: selections.map((item) => ({ field: item.field, status: 'stale' as const })) };
-    if (metadata.confirmation && metadata.confirmation.selectionDigest !== selectionDigest)
-      throw new ProblemError('conflict');
-    if (metadata.confirmation?.outcome) return metadata.confirmation.outcome;
-    if (!metadata.confirmation) {
-      const confirmation = {
-        fields: selections,
-        selectionDigest,
-        annotationKey: `bangumi:${id}:${ordinal}:${reviewToken}:annotations`,
-        provenanceKey: `bangumi:${id}:${ordinal}:${reviewToken}:provenance`,
-        annotationStarted: false,
-        provenanceStarted: false,
+        return { ordinal, reviewToken: appended.reviewToken };
+      });
+      return saved.value;
+    },
+    async loadReview({ actor, id, ordinal }, reviewToken) {
+      return read(actor, async (tx, a) => {
+        const stored = await row(tx, a, id, ordinal);
+        return stored.review?.metadata?.find((item) => item.token === reviewToken) ?? null;
+      });
+    },
+    async readView({ actor, id, ordinal }, reviewToken) {
+      const current = await read(actor, async (tx, a) => {
+        const h = await header(tx, a, id);
+        return { cancelled: h.cancelled, row: await row(tx, a, id, ordinal) };
+      });
+      const review = current.row.review,
+        metadata = review?.metadata?.find((item) => item.token === reviewToken);
+      if (!review || !metadata) throw new ProblemError('conflict');
+      const account = owner(actor),
+        personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
+        profile = await profileMetadata(actor, metadata.subjectId);
+      return {
+        review: metadata,
+        observation: {
+          sourceReviewToken: review.token,
+          subjectId: review.target,
+          clientId: account.clientId,
+          requestedBy: account.requestedBy ?? null,
+          sourceDigest: entryImportMetadataDigest(current.row.evidence),
+          profileDigest: profile?.digest ?? null,
+          incarnationId: profile?.incarnationId ?? null,
+          personal,
+          proposals: bangumiMetadataProposals(current.row.evidence),
+          recordId: String(current.row.evidence.source.subject_id),
+          providerCurrent:
+            review.token === metadata.sourceReviewToken &&
+            review.target === metadata.subjectId &&
+            review.guard !== null &&
+            profile !== null &&
+            profile.current.source.kind === 'supported' &&
+            profile.current.source.pin.releaseDigest === review.guard.releaseDigest &&
+            String(profile.current.anchor.identityEpoch) === review.guard.identityEpoch,
+        },
       };
+    },
+    async confirm({ actor, id, ordinal }, reviewToken, proposed) {
       await change(
         actor,
         'metadata-confirm',
         `${id}:${ordinal}:${reviewToken}`,
-        { id, ordinal, reviewToken, selectionDigest },
+        { id, ordinal, reviewToken, selectionDigest: proposed.selectionDigest },
         async (tx, a) => {
           const h = await header(tx, a, id, true),
-            locked = await row(tx, a, id, ordinal, true);
-          const record = locked.review?.metadata?.find((item) => item.token === reviewToken);
+            locked = await row(tx, a, id, ordinal, true),
+            record = locked.review?.metadata?.find((item) => item.token === reviewToken);
           if (!record) throw new ProblemError('conflict');
-          if (record.confirmation) {
-            if (record.confirmation.selectionDigest !== selectionDigest) throw new ProblemError('conflict');
-            return { ordinal, reviewToken };
-          }
-          if (h.cancelled) throw new ProblemError('conflict');
+          const confirmation = selectListImportMetadataConfirmation(record.confirmation, proposed);
+          if (!record.confirmation && h.cancelled) throw new ProblemError('conflict');
           record.confirmation = confirmation;
           assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
           assertReviewBytes(locked.review);
@@ -826,72 +748,102 @@ export function createBangumiImport(deps: Dependencies) {
           return { ordinal, reviewToken };
         },
       );
-      initial = await read(actor, async (tx, a) => ({
-        cancelled: (await header(tx, a, id)).cancelled,
-        row: await row(tx, a, id, ordinal),
-      }));
-    }
-    const rowValue = initial.row,
-      review = rowValue.review,
-      state = review?.metadata?.find((item) => item.token === reviewToken);
-    if (!state?.confirmation) throw new ProblemError('conflict');
-    if (state.confirmation.outcome) return state.confirmation.outcome;
-    const view = await metadataView(actor, id, ordinal, reviewToken);
-    if (view.status !== 'current' && !state.confirmation.annotationStarted && !state.confirmation.provenanceStarted) {
-      const outcome: EntryImportMetadataOutcome = {
-        reviewToken,
-        fields: selections.map((item) => ({ field: item.field, status: 'stale' })),
-      };
-      state.confirmation.outcome = outcome;
-      await persistMetadataConfirmation(actor, id, ordinal, reviewToken, state.confirmation);
-      return outcome;
-    }
-    const result = await applyEntryImportMetadataCommands({
+    },
+    async persist({ actor, id, ordinal }, reviewToken, confirmation) {
+      const stateDigest = entryImportMetadataDigest(confirmation);
+      await change(
+        actor,
+        'metadata-progress',
+        `${id}:${ordinal}:${reviewToken}:progress:${stateDigest}`,
+        { id, ordinal, reviewToken, stateDigest },
+        async (tx, a) => {
+          const h = await header(tx, a, id, true),
+            locked = await row(tx, a, id, ordinal, true),
+            record = locked.review?.metadata?.find((item) => item.token === reviewToken);
+          if (!record?.confirmation || record.confirmation.selectionDigest !== confirmation.selectionDigest)
+            throw new ProblemError('conflict');
+          const starting =
+            (confirmation.annotationStarted && !record.confirmation.annotationStarted) ||
+            (confirmation.provenanceStarted && !record.confirmation.provenanceStarted);
+          if (
+            starting &&
+            (h.cancelled ||
+              locked.review?.token !== record.sourceReviewToken ||
+              entryImportMetadataDigest(locked.evidence) !== record.sourceDigest)
+          )
+            throw new ProblemError('conflict');
+          record.confirmation = mergeListImportMetadataConfirmation(record.confirmation, confirmation);
+          assertEntryImportMetadataHistorySize(locked.review?.metadata ?? []);
+          assertReviewBytes(locked.review);
+          await tx.query(
+            `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+            [...args(a, id), ordinal, JSON.stringify(locked.review)],
+          );
+          return { ordinal, reviewToken };
+        },
+      );
+    },
+    async isCurrent({ actor, id, ordinal }, reviewed) {
+      const latest = await read(actor, async (tx, a) => ({ row: await row(tx, a, id, ordinal) })),
+        latestReview = latest.row.review,
+        latestMetadata = latestReview?.metadata?.find((item) => item.token === reviewed.token);
+      if (
+        !latestReview ||
+        !latestMetadata ||
+        latestReview.token !== latestMetadata.sourceReviewToken ||
+        entryImportMetadataDigest(latest.row.evidence) !== latestMetadata.sourceDigest ||
+        !latestReview.guard
+      )
+        return false;
+      const profile = await profileMetadata(actor, latestMetadata.subjectId);
+      return (
+        !!profile &&
+        profile.current.source.kind === 'supported' &&
+        profile.current.source.pin.releaseDigest === latestReview.guard.releaseDigest &&
+        String(profile.current.anchor.identityEpoch) === latestReview.guard.identityEpoch &&
+        profile.incarnationId === latestMetadata.incarnationId &&
+        profile.digest === latestMetadata.profileDigest
+      );
+    },
+    async isCancelled({ actor, id }) {
+      try {
+        return await read(actor, async (tx, a) => (await header(tx, a, id)).cancelled);
+      } catch (error) {
+        if (error instanceof ProblemError && error.code === 'not_found') return true;
+        throw error;
+      }
+    },
+  });
+
+  async function reviewMetadata(actor: Actor, id: string, ordinal: number, sourceReviewToken: string, key: string) {
+    return metadataCoordinator.review({ actor, id, ordinal, sourceReviewToken, key });
+  }
+
+  async function metadataView(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+  ): Promise<EntryImportMetadataView> {
+    return metadataCoordinator.view({ actor, id, ordinal, reviewToken });
+  }
+
+  async function applyMetadata(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+    fields: unknown,
+    signal?: AbortSignal,
+  ) {
+    return metadataCoordinator.apply({
       actor,
-      subjectId: state.subjectId,
-      provider: 'bangumi',
-      recordId: String(rowValue.evidence.source.subject_id),
+      id,
+      ordinal,
       reviewToken,
-      personal: view.personal,
-      proposals: view.proposals,
-      selections,
-      baselineAnnotationRevision: state.annotationRevision,
-      confirmation: state.confirmation,
-      native: personalEntries,
-      persist: (confirmation) => persistMetadataConfirmation(actor, id, ordinal, reviewToken, confirmation),
-      isCurrent: async () => {
-        const latest = await read(actor, async (tx, a) => ({ row: await row(tx, a, id, ordinal) })),
-          latestReview = latest.row.review,
-          latestMetadata = latestReview?.metadata?.find((item) => item.token === reviewToken);
-        if (
-          !latestReview ||
-          !latestMetadata ||
-          latestReview.token !== latestMetadata.sourceReviewToken ||
-          entryImportMetadataDigest(latest.row.evidence) !== latestMetadata.sourceDigest ||
-          !latestReview.guard
-        )
-          return false;
-        const profile = await profileMetadata(actor, latestMetadata.subjectId);
-        return (
-          !!profile &&
-          profile.current.source.kind === 'supported' &&
-          profile.current.source.pin.releaseDigest === latestReview.guard.releaseDigest &&
-          String(profile.current.anchor.identityEpoch) === latestReview.guard.identityEpoch &&
-          profile.incarnationId === latestMetadata.incarnationId &&
-          profile.digest === latestMetadata.profileDigest
-        );
-      },
-      isCancelled: async () => {
-        try {
-          return await read(actor, async (tx, a) => (await header(tx, a, id)).cancelled);
-        } catch (error) {
-          if (error instanceof ProblemError && error.code === 'not_found') return true;
-          throw error;
-        }
-      },
+      fields,
       ...(signal === undefined ? {} : { signal }),
     });
-    return result.outcome;
   }
   async function apply(actor: Actor, id: string, choices: BangumiChoice[], signal: AbortSignal, deadline: number) {
     if (new Set(choices.map((c) => c.ordinal)).size !== choices.length) throw new ProblemError('invalid_request');
