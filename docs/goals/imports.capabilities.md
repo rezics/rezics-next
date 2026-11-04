@@ -667,7 +667,7 @@ not additional check requests.
   Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
   executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: `releases.olang` uses
   the inventory `language` enumeration plus `inLanguageTag`; COPY `\\N` and unmapped codes withhold only that fact;
-  converter `@5` offers the statement on unchanged dump bytes without a fabricated source revision.
+  converter `@6` offers the statement on unchanged dump bytes without a fabricated source revision.
 - `A production COPY/operator import preserves a supported explicit release GTIN on the existing source Release through candidate inspection, independent native acceptance/adoption and current read. Unknown or invalid source values withhold only that fact; changed barcode, deliberate unchanged-input refresh, reopen and a facts fence preserve ordinary importer identity and delivery semantics.`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-identifiers.test.ts`.
   Frozen scenario names:
@@ -684,6 +684,13 @@ not additional check requests.
   fencing and idempotent reopen. Source semantics decision: 0 means all ages; null and absent mean unknown;
   only canonical COPY integers and Kana API integers from 0 through 18 are admitted. Both files contain authored
   fixtures. This attempt leaves native acceptance deferred under the verification policy; no native pass is claimed.
+- `production operator imports authored VNDB release platforms and media through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-platforms.test.ts`.
+  The focused importer test covers selected COPY rows, multiple values, duplicate normalization, an unknown code and
+  refresh. The connected native file exercises independent source binding adoption, cited platform/media proposals
+  on one Release, unavailable binding refresh and a facts fence; native execution is deferred to integration.
+  Fixtures are authored, not observations. Decision: current VNDB-specific platform and medium schemes keep their
+  exact source codes and make no claim of canonical equivalence.
 - `production operator publishes authored VNDB public tags through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-public-tags.test.ts`.
   Frozen scenario names:

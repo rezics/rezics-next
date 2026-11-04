@@ -194,6 +194,11 @@ export type CrossMediaPlan = {
   relationSnapshotDigest: string;
   relationSnapshotComplete: boolean;
 };
+const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
+  producers_relations: 'id\tpid\trelation',
+  releases_media: 'id\tmedium\tqty',
+  releases_platforms: 'id\tplatform',
+};
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
 }
@@ -1500,6 +1505,8 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
         ensure(columns.join('\t') === 'id\tspoil\tname\tlatin', 'Invalid VNDB chars_alias header');
       if (table === 'chars_names')
         ensure(columns.join('\t') === 'id\tlang\tname\tlatin', 'Invalid VNDB chars_names header');
+      const expectedHeader = VNDB_EXPECTED_HEADERS[table];
+      if (expectedHeader) ensure(columns.join('\t') === expectedHeader, `Invalid VNDB ${table} header`);
       const headerKey = `${provider}/${table}.header`,
         hash = createHash('sha256').update(header!).digest('hex');
       ensure(!this.digests.has(headerKey) || this.digests.get(headerKey) === hash, 'Dump changed during selection');

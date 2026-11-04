@@ -2064,8 +2064,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@6`.
+selected release payload and convert them through `cross-media-entities@7`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2076,7 +2075,7 @@ The production release-language operator
 planner and `convertCrossMediaEntity`. `releases.olang` is a cited literal, not a
 Concept binding. Title language never supplies the whole-release fact. COPY `\\N`
 and codes outside the inventory language enumeration withhold only that statement.
-Decision: converter `@5` offers the new fact on unchanged dump bytes without a
+Decision: converter `@6` offers the new fact on unchanged dump bytes without a
 fabricated source revision; a later absent or unsupported `olang` does not retract
 an independently adopted language.
 
@@ -2086,6 +2085,25 @@ strings become one cited `schema:gtin` fact on the same Release; dump unknown
 only that field. Decision: COPY bigint decimal spelling is preserved; `0` is
 unknown; leading zeros are not invented; barcode equality does not merge
 subjects.
+The release-fidelity operator also reads `releases_platforms` and
+`releases_media` for its selected release keys. Converter `@7` includes these
+child associations in the sanitized digest, so unchanged source bytes can gain
+their proposals through deliberate refresh. It proposes every supported,
+reviewed current platform Concept on `schema:gamePlatform` and medium Concept on
+`wdt:P437` on the same Release. Duplicate associations collapse, unknown or
+unbound codes retain bounded gaps, and `qty` is ignored. The source-specific
+schemes are described in the conversion contract.
+
+- Touches: selected release keys, the two extracted COPY child tables, at most
+  64 schemes/512 Concepts through cached current reads, and ordinary cited
+  Release proposals.
+- Bound: 4,096 selected child rows across both tables, at most 64
+  source-vocabulary rows per Release after date/work rows, and 64 planner gaps.
+  The existing batch and tuple-home fence paths remain in use.
+- Growth check: the focused importer test covers multiple values, duplicate
+  rows, an unsupported code and refresh. The connected native test covers
+  independent acceptance/adoption, current disclosures, unavailable bindings
+  and a facts fence; this attempt defers its execution to integration.
 
 The production VNDB public-tag operator
 [`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and

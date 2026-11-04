@@ -10,7 +10,7 @@ import {
 import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { commandKey, safeSourceUrl, sourceEnvelope } from './support.ts';
 
-export const sourceVocabularyRevision = 'source-vocabulary@1';
+export const sourceVocabularyRevision = 'source-vocabulary@2';
 export const sourceVocabularyLimits = Object.freeze({
   rows: 64,
   commands: BATCH_LIMIT,
@@ -99,6 +99,7 @@ export type BangumiVocabularyRow =
 
 export type VndbVocabularyRow =
   | (RowBase & { kind: 'release-date'; release: NativeIdentity; value: string | null })
+  | (RowBase & { kind: 'release-platform' | 'release-medium'; release: NativeIdentity; code: string })
   | (RowBase & { kind: 'development-status'; subject: NativeIdentity; code: number })
   | (RowBase & { kind: 'release-supersedes'; release: NativeIdentity; endpoint?: NativeIdentity; endpointCode: string })
   | (RowBase & {
