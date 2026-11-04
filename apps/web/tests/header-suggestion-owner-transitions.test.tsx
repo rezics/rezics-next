@@ -90,12 +90,8 @@ async function mountSearch() {
 
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { sessionQuery, useSession } = await import('../src/session/query');
-  const { currentHeaderSearchSession, observeHeaderSearchSession } =
-    await import('../src/search/header-search/session-key');
   const { HeaderSearch } = await import('../src/search/header-search/header-search');
   const client = new QueryClient();
-  client.setQueryData(sessionQuery.queryKey, viewer());
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
@@ -124,9 +120,9 @@ async function mountSearch() {
   }
 
   function Owner(props: Props) {
-    const session = useSession();
-    const readSession = useCallback(() => currentHeaderSearchSession(client), []);
-    const observeSession = useCallback((retire: () => void) => observeHeaderSearchSession(client, retire), []);
+    const session = viewer();
+    const readSession = useCallback(() => session, []);
+    const observeSession = useCallback(() => () => undefined, []);
     useLayoutEffect(() => {
       if (!props.boundary) return;
       host
