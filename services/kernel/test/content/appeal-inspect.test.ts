@@ -14,10 +14,11 @@ afterAll(async () => {
 test('mounted inspection covers each final source independently of parent authorization and selection page', async () => {
   const { people } = fixture;
   const boardId = await fixture.createBoard('Appeal source observation parent');
+  const parentPartition = partitionOf(fixture.routed(boardId));
   let sourceHome: string | undefined;
   for (let attempt = 0; attempt < 16 && sourceHome === undefined; attempt++) {
     const candidate = await fixture.createBoard(`Appeal source observation home ${attempt}`);
-    if (fixture.routed(candidate) !== fixture.routed(boardId)) sourceHome = candidate;
+    if (partitionOf(fixture.routed(candidate)) !== parentPartition) sourceHome = candidate;
   }
   expect(sourceHome).toBeDefined();
   await fixture.grant(boardId, people.reviewer.accountId, ['moderation:read_reports']);
