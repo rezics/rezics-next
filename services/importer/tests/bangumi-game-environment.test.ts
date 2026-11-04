@@ -184,7 +184,10 @@ test('selected authored Game proposes reviewed platform and engine Concepts and 
     );
     expect(ordinary.converter_revision).toBe('bangumi@14');
     expect(ordinary.diagnostics).toContainEqual({ pointer: '/platform', code: 'catalogue_has_no_platform_property' });
-    expect(ordinary.diagnostics).toContainEqual({ pointer: '/infobox/游戏类型', code: 'unsupported_infobox_mapping' });
+    expect(ordinary.diagnostics).toContainEqual({
+      pointer: '/infobox/游戏类型/0',
+      code: 'missing_current_game_genre_binding',
+    });
 
     known.set(pc, {
       subject: {
