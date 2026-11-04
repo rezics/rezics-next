@@ -438,6 +438,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(reviewSwitch.getAttribute('aria-disabled')).toBeNull();
     const viewSaveCount = saveRequests.length;
     await pressSpace(reviewSwitch);
+    await click(button(m.settings_profile_save_activity()));
     await until(() => saveRequests.length === viewSaveCount + 1, 'the public activity command');
     const viewCommand = saveRequests[viewSaveCount]!;
     expect(viewCommand.attempt.scope).toBe('views');
@@ -454,6 +455,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(speakerSwitch.getAttribute('aria-checked')).toBe('false');
     const speakerSaveCount = saveRequests.length;
     await pressSpace(speakerSwitch);
+    await click(button(m.settings_profile_save_activity()));
     await until(() => saveRequests.length === speakerSaveCount + 1, 'organization speaker listing command');
     const speakerCommand = saveRequests[speakerSaveCount]!;
     expect(speakerCommand.attempt.patch).toEqual({ speakersListed: true });
