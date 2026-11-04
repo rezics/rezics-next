@@ -333,7 +333,7 @@ test('passes all work since dev-verified once and advances the ref to the captur
     },
   });
   expect(git(root, 'rev-parse', 'dev-verified')).toBe(second);
-  expect(commands.some((command) => command.includes('bun scripts/typecheck.ts'))).toBe(true);
+  expect(commands.some((command) => command.endsWith('scripts/typecheck.ts'))).toBe(true);
   expect(commands).toContain('affected-check');
   expect(commands).toContain('acceptance kernel-task');
   expect(commands).toContain('acceptance task-two');
@@ -400,7 +400,7 @@ test('infrastructure failure reruns only that command and never reverts a landin
         : { passed: true, output: '', timedOut: false };
     },
   });
-  expect(calls.filter((command) => command.includes('bun scripts/typecheck.ts'))).toHaveLength(2);
+  expect(calls.filter((command) => command.endsWith('scripts/typecheck.ts'))).toHaveLength(2);
   expect(calls.filter((command) => command === 'affected-check')).toHaveLength(1);
   expect(calls.filter((command) => command === 'acceptance kernel-task')).toHaveLength(1);
   expect(git(root, 'rev-parse', 'dev')).toBe(landing);

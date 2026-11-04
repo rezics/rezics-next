@@ -710,19 +710,15 @@ function evidence(
 export function withTreeBun(command: readonly string[], tree: string, fallbackRoot = tree): string[] {
   let index = command[0] === 'env' ? 1 : 0;
   while (command[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[index]!)) index++;
-  let executable: string | undefined;
-  if (command[index] === 'bun') {
-    const artifactRoot = existsSync(join(tree, 'node_modules/bun/package.json')) ? tree : fallbackRoot;
-    executable = repositoryBun(tree, artifactRoot).binary;
-  }
+  if (command[index] !== 'bun') return [...command];
+  const artifactRoot = existsSync(join(tree, 'node_modules/bun/package.json')) ? tree : fallbackRoot;
+  const executable = repositoryBun(tree, artifactRoot).binary;
   const bins = [...new Set([join(tree, 'node_modules/.bin'), join(fallbackRoot, 'node_modules/.bin')])];
   const path = [...bins, process.env.PATH ?? ''].filter(Boolean).join(':');
   return [
     'env',
     `PATH=${path}`,
-    ...command.map((argument, position) =>
-      position === index && argument === 'bun' && executable ? executable : argument,
-    ),
+    ...command.map((argument, position) => (position === index ? executable : argument)),
   ];
 }
 
