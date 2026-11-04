@@ -2017,7 +2017,9 @@ export class Importer {
           command.source.converter_revision === prior.source.converter_revision &&
           command.source.field_group === candidate.field_group &&
           command.subject === candidate.subject &&
-          isDeepStrictEqual(command.statement, prior.statement) &&
+          // The journal stores portable JSON; compare the converter value after that same
+          // normalization so document attributes' runtime prototypes do not force retractions.
+          isDeepStrictEqual(JSON.parse(JSON.stringify(command.statement)), prior.statement) &&
           !retainedProposals.has(command),
       );
       if (unchanged) {
