@@ -65,7 +65,8 @@ test('curated draft departure preserves loaded edits and selection; revert, save
   const editors = await import('../src/library/collection-editor');
   let actions!: ComponentProps<typeof menus.Menu>,
     metadata!: ComponentProps<typeof editors.CollectionMetadataEditor>,
-    members!: ComponentProps<typeof editors.CollectionMemberList>;
+    members!: ComponentProps<typeof editors.CollectionMemberList>,
+    presentation!: ComponentProps<typeof editors.CollectionPresentationFields>;
   const OriginalMenu = menus.Menu,
     OriginalMetadata = editors.CollectionMetadataEditor,
     OriginalMembers = editors.CollectionMemberList;
@@ -82,6 +83,11 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     members = props;
     return <OriginalMembers {...props} />;
   });
+  const OriginalPresentation = editors.CollectionPresentationFields;
+  spyOn(editors, 'CollectionPresentationFields').mockImplementation((props) => {
+    presentation = props;
+    return <OriginalPresentation {...props} />;
+  });
   const edits = await import('../src/library/collection-edit');
   const update = spyOn(edits, 'updateCollection');
   const note = spyOn(edits, 'updateMemberNote').mockResolvedValue({ ok: true, id: 'member' });
@@ -93,6 +99,7 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     ...recording.collection,
     id: 'alpha',
     title: 'Original',
+    presentationTypes: [{ id: 'schema:Book', label: 'Book' }],
     revision: 7,
     visibility: 'private',
     curator: null,
@@ -182,6 +189,20 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     expect(unload()).toBe(false);
     await settle(() => members.onSelectionChange!(page.members[0]!.id, true));
     expect(unload()).toBe(false);
+    await settle(() => presentation.onKindChange('schema:Book'));
+    expect(unload()).toBe(true);
+    const previewTrigger = () => host.querySelector<HTMLButtonElement>('[data-presentation-review-trigger]')!;
+    await settle(() => previewTrigger().click());
+    await navigate('/en/collections/alpha?cursor=presentation');
+    await click(m.library_collection_draft_navigation_stay());
+    expect(presentation.kind).toBe('schema:Book');
+    expect(host.querySelector('[data-presentation-review]')).not.toBeNull();
+    await settle(() => host.querySelector<HTMLButtonElement>('[data-review-return-save]')!.click());
+    expect(document.activeElement).toBe(host.querySelector('[data-collection-save] button[type="submit"]'));
+    expect(update).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-presentation-review]')).toBeNull();
+    await settle(() => presentation.onKindChange(null));
+    expect(unload()).toBe(false);
     await settle(() => metadata.onTitleChange('Draft'));
     expect(unload()).toBe(true);
     await settle(() => metadata.onTitleChange(page.title));
@@ -204,6 +225,7 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     await settle(() => members.onNoteChange!(page.members[0]!.id, page.members[0]!.note ?? ''));
     expect(unload()).toBe(false);
     await settle(() => metadata.onTitleChange('Saved title'));
+    await settle(() => presentation.onKindChange('schema:Book'));
     let finish!: (value: CollectionWriteResult) => void;
     update
       .mockImplementationOnce(
@@ -216,6 +238,10 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     const save = () =>
       settle(() => metadata.onSubmit({ preventDefault() {} } as Parameters<typeof metadata.onSubmit>[0]));
     await save();
+    expect(update.mock.calls[0]![0].data).toMatchObject({ presentationKind: 'schema:Book' });
+    expect(presentation.disabled).toBe(true);
+    await settle(() => presentation.onKindChange(null));
+    expect(presentation.kind).toBe('schema:Book');
     await navigate();
     expect(dialog()!.textContent).toContain(m.library_collection_draft_navigation_pending());
     expect(
@@ -237,6 +263,14 @@ test('curated draft departure preserves loaded edits and selection; revert, save
     expect(router.state.location.pathname).toBe('/away');
     await navigate('/en/collections/alpha');
     await begin();
+    await settle(() => presentation.onKindChange('schema:Book'));
+    await settle(() =>
+      [...host.querySelectorAll<HTMLButtonElement>('[data-collection-save] button')]
+        .find((button) => button.textContent === m.library_collection_cancel())!
+        .click(),
+    );
+    await begin();
+    expect(presentation.kind).toBeNull();
     await settle(() => members.onRemove!(page.members[0]!.id));
     await navigate();
     await click(m.library_collection_draft_navigation_leave());

@@ -5,7 +5,8 @@ import { libraryTitleValue } from '../title';
 import { buildCollectionMemberEditPlan } from '../collection-editor';
 import type { CollectionMember, CollectionVisibility } from '../reads';
 import type { CollectionTypeOption } from '../collection-presentation';
-import { CollectionPresentationSummary } from './presentation';
+import { PresentationChangeSummary } from '../collection-presentation-review/choice-summary';
+import { presentationTypeChoice } from '../collection-presentation-review/model';
 
 /** Review is derived from the same loaded occurrence plan as Save; it never dispatches a command. */
 export function CollectionEditReview({
@@ -17,6 +18,9 @@ export function CollectionEditReview({
   kind,
   types,
   visibility,
+  savedKind = kind,
+  savedCoverMediaId = null,
+  coverMediaId = savedCoverMediaId,
 }: {
   initial: readonly CollectionMember[];
   desired: readonly CollectionMember[];
@@ -26,6 +30,9 @@ export function CollectionEditReview({
   kind: string | null;
   types?: readonly CollectionTypeOption[] | null | undefined;
   visibility: CollectionVisibility | null;
+  savedKind?: string | null;
+  savedCoverMediaId?: string | null;
+  coverMediaId?: string | null;
 }) {
   const operations = buildCollectionMemberEditPlan(initial, desired, firstPage);
   function occurrence(id: string) {
@@ -51,7 +58,17 @@ export function CollectionEditReview({
             ? m.library_visibility_unlisted()
             : m.library_visibility_private()}
       </p>
-      <CollectionPresentationSummary kind={kind} types={types} />
+      <PresentationChangeSummary
+        savedType={presentationTypeChoice(savedKind, savedKind, types, undefined)}
+        draftType={presentationTypeChoice(savedKind, kind, types, undefined)}
+        coverChanged={savedCoverMediaId !== coverMediaId}
+        savedCoverLabel={
+          savedCoverMediaId === null ? m.collection_choice_cover_automatic() : m.collection_choice_cover_explicit()
+        }
+        draftCoverLabel={
+          coverMediaId === null ? m.collection_choice_cover_automatic() : m.collection_choice_cover_explicit()
+        }
+      />
       {operations.length ? (
         <ul className="space-y-2 text-sm">
           {operations.map((operation, index) => (

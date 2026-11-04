@@ -245,3 +245,49 @@ test('native order and reorder preserve duplicate Subject occurrences and later-
   expect(reorderCollectionMembers(initial, 'occurrence-0', 'occurrence-2', false)).toEqual(initial);
   expect(reorderCollectionMembers(initial, 'occurrence-2', 'off-page', true)).toEqual(initial);
 });
+
+test('presentation choice distinguishes automatic, released owner choice and retained unavailable identity without layout semantics', async () => {
+  const { presentationTypeChoice, presentationChoiceState, presentationChanges } =
+    await import('../src/library/collection-presentation-review/model');
+  const { CollectionPresentationFields } = await import('../src/library/collection-editor');
+  const { m } = await import('../src/paraglide/messages.js');
+  const options = [{ id: 'schema:Book', label: 'Released book label' }];
+  expect(presentationTypeChoice(null, null, options, presentations)).toMatchObject({
+    availability: 'automatic',
+    state: 'retained',
+    presentation: null,
+  });
+  expect(presentationTypeChoice(null, 'schema:Book', options, presentations)).toMatchObject({
+    availability: 'released',
+    state: 'replacement',
+    label: 'Released book label',
+    presentation: presentations['schema:Book'],
+  });
+  expect(presentationTypeChoice('retired:Type', 'retired:Type', null, undefined)).toMatchObject({
+    id: 'retired:Type',
+    availability: 'unavailable',
+    state: 'retained',
+    label: null,
+    presentation: null,
+  });
+  expect(presentationChoiceState('retired:Type', null)).toBe('automatic');
+  expect(
+    presentationChanges({ kind: null, coverMediaId: 'saved' }, { kind: 'schema:Book', coverMediaId: 'saved' }),
+  ).toEqual({ type: true, cover: false });
+  const html = renderToStaticMarkup(
+    createElement(CollectionPresentationFields, {
+      types: null,
+      kind: 'retired:Type',
+      savedKind: 'retired:Type',
+      coverMediaId: null,
+      onKindChange() {},
+    }),
+  );
+  expect(html).toContain('value="retired:Type" selected=""');
+  expect(html).toContain(m.library_collection_types_unavailable());
+  expect(html).toContain(m.collection_choice_type_unavailable());
+  expect(html).not.toContain('>retired:Type<');
+  expect(html).not.toContain('data-collection-layout');
+  expect(html).not.toContain('data-collection-presentation="ordered"');
+  expect(collectionMemberRatio(book.subject, {}, presentations)).toBe('5:7');
+});

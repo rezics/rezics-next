@@ -1835,7 +1835,15 @@ function CollectionPageLifetime({
             }}
           >
             <CollectionPresentationFields
-              types={page.presentationTypes}
+              types={draftPage.presentationTypes}
+              savedKind={storedKind}
+              savedCoverMediaId={draftPage.coverMediaId ?? null}
+              savedCover={draftPage.cover ?? null}
+              savedCoverSource={draftPage.coverSource}
+              listPresentations={draftPage.listPresentations}
+              comparisonDefinitions={draftPage.comparisonDefinitions}
+              firstPage={draftPage.firstPage}
+              saveConfirmed={saveConfirmed}
               kind={kind}
               onKindChange={(value) => {
                 if (
@@ -1856,7 +1864,7 @@ function CollectionPageLifetime({
                 )
                   setCoverMediaId(value);
               }}
-              members={page.members}
+              members={draftPage.members}
               disabled={pending || draftFrozen || transfer !== null || !isCurrent('collection.update')}
             />
             <VisibilityField
@@ -2332,8 +2340,11 @@ function CollectionPageLifetime({
             title={title}
             description={description}
             kind={kind}
-            types={page.presentationTypes}
+            types={draftPage.presentationTypes}
             visibility={visibility}
+            savedKind={storedKind}
+            savedCoverMediaId={draftPage.coverMediaId ?? null}
+            coverMediaId={coverMediaId}
           />
         ) : null}
         {editing && owner ? (
