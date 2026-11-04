@@ -87,8 +87,8 @@ export function receiveInboxPage(
       selection: result.selection,
       actions: result.actions,
     };
-    // The last successful page replaces the prior window so retained rows stay bounded by 20.
-    return { ...state, earlier: null, current, result: { ...result, items } };
+    // Keep the query data identity so a later render of the same page is a no-op.
+    return { ...state, earlier: null, current, result };
   }
   if (result && !transient(result)) return { ...state, earlier: null, current: null, result };
   return { ...state, result };
