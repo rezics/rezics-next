@@ -20,12 +20,42 @@ export type ExposureManagementDependencies = {
   routes: readonly MountedRoute[];
 };
 export type ExposureManagementPage = {
+  viewer: { accountId: string; clientId: string };
+  actions: { open: boolean; close: boolean };
   exposureGroups: { group: string; open: boolean; at: string }[];
   next: string | null;
 };
 
-type Catalogue = Readonly<{ groups: readonly string[]; digest: string }>;
+type ExposureAction = keyof ExposureManagementPage['actions'];
+type Catalogue = Readonly<{
+  groups: readonly string[];
+  digest: string;
+  actions: Readonly<Record<ExposureAction, boolean>>;
+}>;
 const catalogues = new WeakMap<readonly MountedRoute[], Catalogue>();
+
+function isInstalledCommand(routes: readonly MountedRoute[], action: ExposureAction): boolean {
+  return routes.some((route) => {
+    const detail = route.hooks?.detail;
+    if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) return false;
+    const metadata = detail as Record<string, unknown>;
+    const types = metadata['x-authority-resource-types'];
+    return (
+      metadata.hide !== true &&
+      route.method.toUpperCase() === 'POST' &&
+      route.path === `/v1/platform/exposure/:group/$${action}` &&
+      metadata.operationId === `exposure.${action}` &&
+      metadata['x-action'] === `exposure:${action}` &&
+      metadata['x-exposure'] === 'public' &&
+      Array.isArray(types) &&
+      types.length === 1 &&
+      types[0] === 'semantic.context' &&
+      metadata['x-authority-resource-id'] === GLOBAL_CONTEXT.id &&
+      (metadata['x-authority-anchor'] === undefined || metadata['x-authority-anchor'] === 'resource') &&
+      metadata['x-account-authority'] === undefined
+    );
+  });
+}
 
 /** Only deployment metadata is retained. Current openings and authority are always read anew. */
 function catalogueOf(routes: readonly MountedRoute[]): Catalogue {
@@ -38,9 +68,14 @@ function catalogueOf(routes: readonly MountedRoute[]): Catalogue {
   const declarations = operations
     .map((op) => JSON.stringify([op.method, op.path, op.operationId, op.action, op.exposure]))
     .sort();
+  const actions = Object.freeze({
+    open: isInstalledCommand(routes, 'open'),
+    close: isInstalledCommand(routes, 'close'),
+  });
   catalogue = Object.freeze({
     groups,
-    digest: createHash('sha256').update(JSON.stringify(declarations)).digest('hex'),
+    actions,
+    digest: createHash('sha256').update(JSON.stringify([declarations, actions])).digest('hex'),
   });
   catalogues.set(routes, catalogue);
   return catalogue;
@@ -87,6 +122,20 @@ export async function readExposureManagementPage(
         requireAccessDeadline(deadline);
         if (!allowed) throw new ProblemError('forbidden');
       }
+
+      async function actionAdvice(): Promise<ExposureManagementPage['actions']> {
+        const advice: ExposureManagementPage['actions'] = { open: false, close: false };
+        for (const action of ['open', 'close'] as const) {
+          if (!catalogue.actions[action]) continue;
+          const check = await accessCheck(dependencies.access, actor, `exposure:${action}`, GLOBAL_CONTEXT, context);
+          advice[action] = await within(deadline, () =>
+            withConnection(dependencies.pool, (client) => check(deadlineClient(client, deadline), time)),
+          );
+          requireAccessDeadline(deadline);
+        }
+        return advice;
+      }
+
       await requireAuthority();
       const binding: ListCursorBinding = {
         route: 'GET /v1/platform/exposure/management',
@@ -106,6 +155,7 @@ export async function readExposureManagementPage(
           throw new ProblemError('invalid_cursor');
         start = position(catalogue.groups, decoded.after[0]);
       }
+      const actionsBefore = await actionAdvice();
       const selected = catalogue.groups.slice(start, start + limit);
       const exposureGroups: ExposureManagementPage['exposureGroups'] = [];
       for (const group of selected) {
@@ -116,8 +166,17 @@ export async function readExposureManagementPage(
         start + selected.length < catalogue.groups.length
           ? await encodeListCursor(dependencies.cursorKeys, binding, { epoch: 1, after: [selected.at(-1)!] }, at)
           : null;
+      const actionsAfter = await actionAdvice();
       await requireAuthority();
-      return { exposureGroups, next };
+      return {
+        viewer: { accountId: actor.accountId, clientId: actor.clientId },
+        actions: {
+          open: actionsBefore.open && actionsAfter.open,
+          close: actionsBefore.close && actionsAfter.close,
+        },
+        exposureGroups,
+        next,
+      };
     } finally {
       releaseOperationalTime(time);
     }

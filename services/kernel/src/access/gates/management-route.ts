@@ -28,6 +28,8 @@ export function exposureManagementRoutes(
       response: {
         200: t.Object(
           {
+            viewer: t.Object({ accountId: t.String(), clientId: t.String() }, closed),
+            actions: t.Object({ open: t.Boolean(), close: t.Boolean() }, closed),
             exposureGroups: t.Array(t.Object({ group: t.String(), open: t.Boolean(), at: t.String() }, closed), {
               maxItems: 100,
             }),

@@ -44,7 +44,7 @@ type CommandTicket = {
 };
 
 const sources = new WeakMap<QueryClient, SessionSource>();
-const unavailable: Page = { status: 'unavailable' };
+const unavailable: Page = { status: 'unavailable', discovery: { status: 'unavailable' } };
 
 function sessionSnapshot(client: QueryClient): SessionSnapshot {
   const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
@@ -245,13 +245,19 @@ export class ExposureVisit {
       !!intent &&
       page.status === 'ready' &&
       hasExposureGroup(page, intent.group) &&
-      page.authority.status === 'available' &&
-      page.authority.offered.includes(intent.action)
+      page.current.actions[intent.action]
     );
   }
 
   get canReview() {
-    return this.mutationCurrent() && !this.busy && !this.operation.intent;
+    const page = this.currentPage;
+    return (
+      this.mutationCurrent() &&
+      page.status === 'ready' &&
+      Object.values(page.current.actions).some(Boolean) &&
+      !this.busy &&
+      !this.operation.intent
+    );
   }
 
   private retainCurrentOperation() {

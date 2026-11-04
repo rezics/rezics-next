@@ -1,13 +1,36 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { PlatformExposurePage } from '../../platform/exposure/page';
 import type { Page } from '../../platform/exposure/data';
 import { m } from '../../paraglide/messages.js';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
 
-// Presentation of the real closed adapter contract. No fabricated groups, native permission or receipts.
-const unavailable: Page = { status: 'unavailable' };
+// Illustrative Page fixtures cover presentation states; they do not claim installed data or native permission proof.
+const unavailable: Page = { status: 'unavailable', discovery: { status: 'unavailable' } };
+const managementOnly: Extract<Page, { status: 'ready' }> = {
+  status: 'ready',
+  discovery: { status: 'unavailable' },
+  current: {
+    status: 'available',
+    viewer: { accountId: 'story-account', clientId: 'story-client' },
+    actions: { open: false, close: false },
+    exposureGroups: [{ group: 'collections', open: false, at: '2026-10-31T00:00:00.123456Z' }],
+    next: null,
+  },
+};
+const openOnly: Extract<Page, { status: 'ready' }> = {
+  status: 'ready',
+  discovery: { status: 'available', groups: ['collections'] },
+  current: {
+    ...managementOnly.current,
+    actions: { open: true, close: false },
+  },
+};
+const invalidContinuation: Page = {
+  status: 'invalid-cursor',
+  discovery: { status: 'available', groups: ['collections'] },
+};
 const meta = {
   title: 'Pages/Platform exposure/Closed native dependency',
   component: PlatformExposurePage,
@@ -67,5 +90,44 @@ export const Denied: Story = {
   args: { initial: { status: 'denied' } },
   play: async ({ canvasElement }) => {
     await closedPageReady(canvasElement, m.exposure_denied());
+  },
+};
+
+export const ManagementOnly: Story = {
+  args: { initial: managementOnly },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByText(m.exposure_state_closed())).toBeVisible();
+    await expect(view.queryByRole('button', { name: m.exposure_action_group({ action: m.exposure_open(), group: 'collections' }) })).toBeNull();
+    await expect(view.queryByRole('button', { name: m.exposure_action_group({ action: m.exposure_close(), group: 'collections' }) })).toBeNull();
+  },
+};
+
+export const InvalidContinuation: Story = {
+  args: { initial: invalidContinuation },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await expect(view.getByText(m.exposure_invalid_cursor())).toBeVisible();
+    await expect(view.getByRole('button', { name: m.exposure_first_page() })).toBeVisible();
+    await expect(view.queryByRole('button', { name: m.exposure_confirm() })).toBeNull();
+  },
+};
+
+export const UncertainCommand: Story = {
+  args: {
+    initial: openOnly,
+    io: {
+      read: async () => openOnly,
+      change: async (operation) => ({ status: 'uncertain', operation, current: openOnly }),
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    await userEvent.click(
+      view.getByRole('button', { name: m.exposure_action_group({ action: m.exposure_open(), group: 'collections' }) }),
+    );
+    await userEvent.click(view.getByRole('button', { name: m.exposure_confirm() }));
+    await expect(view.getByText(m.exposure_uncertain())).toBeVisible();
+    await expect(view.getByRole('button', { name: m.exposure_retry() })).toBeVisible();
   },
 };

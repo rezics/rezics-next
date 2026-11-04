@@ -1,4 +1,6 @@
-import { parseIntent, type Intent, type Outcome } from './data';
+import { parseIntent, type Intent, type Outcome, type Page } from './data';
+
+const unavailable: Page = { status: 'unavailable', discovery: { status: 'unavailable' } };
 
 /** In-memory exclusion and recovery for one immutable public effect. No automatic writes. */
 export class ExposureOperation {
@@ -29,7 +31,7 @@ export class ExposureOperation {
     this.generation++;
     if (this.busy && this.intent) {
       this.unresolved = true;
-      this.outcome ??= { status: 'uncertain', operation: this.intent, current: { status: 'unavailable' } };
+      this.outcome ??= { status: 'uncertain', operation: this.intent, current: unavailable };
     }
     this.busy = false;
   }
@@ -51,7 +53,7 @@ export class ExposureOperation {
     try {
       result = await change(operation, continuation ?? undefined);
     } catch {
-      result = { status: 'uncertain', operation, current: { status: 'unavailable' } };
+      result = { status: 'uncertain', operation, current: unavailable };
     }
     // A refusal after a lost response cannot settle the earlier command.
     if (this.unresolved && result.status === 'not-sent')

@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import {
   commandExposure,
-  globalContext,
   loadExposure,
   parseDiscovery,
   parseIntent,
@@ -17,8 +16,7 @@ import { PlatformExposurePage } from '../src/platform/exposure/page';
 const key = 'd42544e2-c78d-4a2a-8e5b-781a913e3920';
 const intent = (action: 'open' | 'close' = 'open') => parseIntent({ group: 'collections', action, key, body: {} });
 // A local transport fixture, not a recorded native permission or installed Global registry claim.
-const fixtureType = 'fixture.global_context';
-function document(bound = false) {
+function document() {
   return {
     paths: {
       '/v1/collections': {
@@ -32,7 +30,6 @@ function document(bound = false) {
               operationId: `exposure.${action}`,
               'x-action': `exposure:${action}`,
               'x-exposure': 'public',
-              ...(bound ? { 'x-authority-resource-types': [fixtureType] } : {}),
             },
           },
         ]),
@@ -40,29 +37,26 @@ function document(bound = false) {
     },
   };
 }
-function fixture(options: { bound?: boolean; offered?: string[]; changed?: boolean; lose?: boolean } = {}) {
+function fixture(options: { offered?: string[]; changed?: boolean; lose?: boolean; managementUnavailable?: boolean } = {}) {
   const calls: { path: string; method: string; headers: Headers; body: unknown }[] = [];
   let offered = options.offered ?? ['open', 'close'];
+  const current = {
+    viewer: { accountId: 'viewer', clientId: 'exposure-management' },
+    actions: { open: offered.includes('open'), close: offered.includes('close') },
+    exposureGroups: [{ group: 'collections', open: false, at: '2026-10-31T00:00:00.123456Z' }],
+    next: null,
+  };
   const client = createKernelClient('https://kernel.example.test', {
     fetch: (async (input, init) => {
       const request = new Request(input, init);
       const path = new URL(request.url).pathname;
       const body = request.method === 'POST' ? await request.json() : undefined;
       calls.push({ path, method: request.method, headers: request.headers, body });
-      if (path === '/v1/openapi.json') return Response.json(document(options.bound ?? true));
-      if (path === '/v1/viewerActions')
-        return Response.json({
-          resources: [
-            {
-              type: fixtureType,
-              id: globalContext.id,
-              viewerActions: offered.map((action) => ({
-                action: action.includes(':') ? action : `exposure:${action}`,
-                operations: [`exposure.${action}`],
-              })),
-            },
-          ],
-        });
+      if (path === '/v1/openapi.json') return Response.json(document());
+      if (path === '/v1/platform/exposure/management')
+        return options.managementUnavailable
+          ? Response.json({ code: 'dependency_unavailable' }, { status: 503 })
+          : Response.json({ ...current, actions: { open: offered.includes('open'), close: offered.includes('close') } });
       if (/^\/v1\/platform\/exposure\/collections:(open|close)$/.test(path)) {
         if (options.lose) throw new Error('lost response');
         return Response.json({
@@ -89,18 +83,14 @@ test('Manage existing platform exposure data through native open and close actio
     expect(outcome.status).toBe('recorded');
     if (outcome.status !== 'recorded' || outcome.current.status !== 'ready') throw new Error('Missing command result');
     expect(outcome.receipt).toEqual({ group: 'collections', open: action === 'open', changed: false });
-    expect(outcome.current.current.status).toBe('unavailable');
-    expect(outcome.current.inventory).toBe('visible-only');
+    expect(outcome.current.current.actions).toEqual({ open: true, close: true });
     const write = native.calls.find((call) => call.path.endsWith(`:${action}`))!;
     expect(write.method).toBe('POST');
     expect(write.body).toEqual({});
     expect(write.headers.get('idempotency-key')).toBe(key);
     expect(native.calls.every((call) => call.headers.get('authorization') === 'Bearer viewer')).toBe(true);
-    expect(native.calls.filter((call) => call.path === '/v1/viewerActions').map((call) => call.body)).toEqual([
-      { resources: [{ type: fixtureType, id: globalContext.id }] },
-      { resources: [{ type: fixtureType, id: globalContext.id }] },
-    ]);
-    expect(native.calls.at(-1)?.path).toBe('/v1/viewerActions');
+    expect(native.calls.filter((call) => call.path === '/v1/platform/exposure/management')).toHaveLength(2);
+    expect(native.calls.some((call) => call.path === '/v1/openapi.json')).toBe(true);
     native.revoke();
     const deniedReplay = await commandExposure(native.client, 'Bearer viewer', operation);
     expect(deniedReplay.status).toBe('not-sent');
@@ -110,18 +100,16 @@ test('Manage existing platform exposure data through native open and close actio
   }
 });
 
-test('the installed native declaration stays explicitly unavailable; gate admission and scopes cannot confer mutation', async () => {
-  const native = fixture({ bound: false });
+test('viewer-filtered operation declarations and visible groups cannot confer native mutation advice', async () => {
+  const native = fixture({ offered: [] });
   const page = await loadExposure(native.client, 'Bearer viewer');
   expect(page).toMatchObject({
     status: 'ready',
-    groups: ['collections'],
-    inventory: 'visible-only',
-    current: { status: 'unavailable', missing: 'native-current-exposure-management-read' },
-    authority: { status: 'unavailable' },
+    discovery: { status: 'available', groups: ['collections'] },
+    current: { status: 'available', actions: { open: false, close: false } },
   });
   expect((await commandExposure(native.client, 'Bearer viewer', intent())).status).toBe('not-sent');
-  expect(native.calls.every((call) => call.path === '/v1/openapi.json')).toBe(true);
+  expect(native.calls.every((call) => ['/v1/openapi.json', '/v1/platform/exposure/management'].includes(call.path))).toBe(true);
   const gateHolder = fixture({ offered: ['gate:any', 'gate:collections'] });
   expect((await commandExposure(gateHolder.client, 'Bearer viewer', intent())).status).toBe('not-sent');
   expect(gateHolder.calls.some((call) => call.path.endsWith(':open'))).toBe(false);
@@ -183,8 +171,11 @@ test('read failures are unavailable and the real closed page offers no mutation 
   const client = createKernelClient('https://kernel.example.test', {
     fetch: (async () => new Response('offline', { status: 503 })) as typeof fetch,
   });
-  expect(await loadExposure(client, 'Bearer viewer')).toEqual({ status: 'unavailable' });
-  const native = fixture({ bound: false });
+  expect(await loadExposure(client, 'Bearer viewer')).toEqual({
+    status: 'unavailable',
+    discovery: { status: 'unavailable' },
+  });
+  const native = fixture({ managementUnavailable: true });
   const initial: Page = await loadExposure(native.client, 'Bearer viewer');
   const markup = renderToStaticMarkup(
     createElement(PlatformExposurePage, {
@@ -196,7 +187,8 @@ test('read failures are unavailable and the real closed page offers no mutation 
     }),
   );
   expect(markup).toContain('Public status: unknown');
-  expect(markup).toContain('Current configuration actions are unavailable');
+  expect(markup).toContain('Current platform exposure data could not be loaded');
+  expect(markup).toContain('These are groups from your visible catalogue');
   expect(markup).not.toContain('aria-label="Open collections"');
   expect(markup).not.toContain('aria-label="Close collections"');
 });

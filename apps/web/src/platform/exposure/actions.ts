@@ -33,8 +33,8 @@ export const readPlatformExposure = createServerFn({ method: 'GET' })
   .validator(parseExposureQuery)
   .handler(async ({ data }): Promise<Page> => {
     const authorization = await viewer();
-    if (!authorization) return { status: 'signed-out' };
-    if (!configured()) return { status: 'unavailable' };
+    if (!authorization) return { status: 'signed-out', discovery: { status: 'unavailable' } };
+    if (!configured()) return { status: 'unavailable', discovery: { status: 'unavailable' } };
     return loadExposure(kernelClient(), authorization, data);
   });
 
@@ -45,8 +45,10 @@ export const readPlatformExposureBound = createServerFn({ method: 'GET' })
     const request = await prepareViewerRequest();
     const authorization = viewerCredential(request);
     const actualSubject = sessionSubject(request) ?? null;
-    if (!authorization) return { page: { status: 'signed-out' }, sessionSubject: actualSubject };
-    if (!configured()) return { page: { status: 'unavailable' }, sessionSubject: actualSubject };
+    if (!authorization)
+      return { page: { status: 'signed-out', discovery: { status: 'unavailable' } }, sessionSubject: actualSubject };
+    if (!configured())
+      return { page: { status: 'unavailable', discovery: { status: 'unavailable' } }, sessionSubject: actualSubject };
     return { page: await loadExposure(kernelClient(), authorization, data), sessionSubject: actualSubject };
   });
 export const changePlatformExposure = createServerFn({ method: 'POST' })
@@ -57,7 +59,9 @@ export const changePlatformExposure = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<Outcome> => {
     const authorization = await viewer();
-    if (!authorization) return { status: 'not-sent', current: { status: 'signed-out' } };
-    if (!configured()) return { status: 'not-sent', current: { status: 'unavailable' } };
+    if (!authorization)
+      return { status: 'not-sent', current: { status: 'signed-out', discovery: { status: 'unavailable' } } };
+    if (!configured())
+      return { status: 'not-sent', current: { status: 'unavailable', discovery: { status: 'unavailable' } } };
     return commandExposure(kernelClient(), authorization, data.operation, data.query);
   });

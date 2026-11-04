@@ -44,55 +44,76 @@ function ExposureView({
   onConfirm,
   onCancel,
 }: ViewProps) {
-  const offered = page.status === 'ready' && page.authority.status === 'available' ? page.authority.offered : [];
+  const offered = page.status === 'ready' ? (['open', 'close'] as const).filter((action) => page.current.actions[action]) : [];
+  const discovered = page.discovery.status === 'available' ? page.discovery.groups : [];
+  const rows = page.status === 'ready'
+    ? page.current.exposureGroups
+    : discovered.slice(0, 20).map((group) => ({ group, open: undefined, at: undefined }));
   return (
     <article className="mx-auto w-full max-w-3xl space-y-6 pb-8">
       <header className="space-y-3">
         <PageHeading>{m.exposure_title()}</PageHeading>
         <p className="text-muted-foreground">{m.exposure_intro()}</p>
       </header>
-      {(page.status !== 'ready' || page.current.status === 'unavailable') && (
+      {page.status !== 'ready' && (
         <p role="status">{m.exposure_current_unavailable()}</p>
       )}
       <Button variant="outline" disabled={busy} onClick={onReload}>
         {m.exposure_reload()}
       </Button>
+      {(selection.cursor || page.status === 'invalid-cursor') && (
+        <Button variant="outline" disabled={busy} onClick={onFirstPage}>
+          {m.exposure_first_page()}
+        </Button>
+      )}
+      {page.discovery.status === 'unavailable' && <p role="status">{m.exposure_discovery_unavailable()}</p>}
       {page.status !== 'ready' ? (
-        <p role="status">
-          {page.status === 'signed-out'
-            ? m.exposure_signed_out()
-            : page.status === 'denied'
-              ? m.exposure_denied()
-              : m.exposure_unavailable()}
-        </p>
+        <>
+          <p role="status">
+            {page.status === 'signed-out'
+              ? m.exposure_signed_out()
+              : page.status === 'denied'
+                ? m.exposure_denied()
+                : page.status === 'invalid-cursor'
+                  ? m.exposure_invalid_cursor()
+                  : m.exposure_unavailable()}
+          </p>
+          {page.discovery.status === 'available' && (
+            <section aria-labelledby="exposure-groups-heading" className="space-y-4">
+              <h2 id="exposure-groups-heading" className="text-xl font-semibold">
+                {m.exposure_groups()}
+              </h2>
+              <p className="text-muted-foreground">{m.exposure_partial_inventory()}</p>
+              {discovered.length === 0 && <p>{m.exposure_no_visible_groups()}</p>}
+              {rows.map(({ group }) => (
+                <Card key={group}>
+                  <CardHeader>
+                    <CardTitle className="break-all">{group}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p>{m.exposure_unknown()}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </section>
+          )}
+        </>
       ) : (
         <section aria-labelledby="exposure-groups-heading" className="space-y-4">
           <h2 id="exposure-groups-heading" className="text-xl font-semibold">
             {m.exposure_groups()}
           </h2>
-          <p className="text-muted-foreground">
-            {page.current.status === 'available' ? m.exposure_current_page() : m.exposure_partial_inventory()}
-          </p>
+          <p className="text-muted-foreground">{m.exposure_current_page()}</p>
           <div className="flex flex-wrap gap-3">
-            {selection.cursor && (
-              <Button variant="outline" disabled={busy} onClick={onFirstPage}>
-                {m.exposure_first_page()}
-              </Button>
-            )}
-            {page.current.status === 'available' && page.current.next && (
+            {page.current.next && (
               <Button variant="outline" disabled={busy} onClick={onNextPage}>
                 {m.exposure_next_page()}
               </Button>
             )}
           </div>
           {offered.length === 0 && <p>{m.exposure_actions_unavailable()}</p>}
-          {(page.current.status === 'available'
-            ? page.current.exposureGroups.length === 0
-            : page.groups.length === 0) && <p>{m.exposure_no_visible_groups()}</p>}
-          {(page.current.status === 'available'
-            ? page.current.exposureGroups
-            : page.groups.slice(0, 20).map((group) => ({ group, open: undefined, at: undefined }))
-          ).map(({ group, open, at }) => (
+          {page.current.exposureGroups.length === 0 && <p>{m.exposure_no_visible_groups()}</p>}
+          {rows.map(({ group, open, at }) => (
             <Card key={group}>
               <CardHeader>
                 <CardTitle className="break-all">{group}</CardTitle>
@@ -203,8 +224,8 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: Stand
   const intent = operation.intent;
   const outcome = operation.outcome;
   const busy = operation.busy || reading;
-  const offered = page.status === 'ready' && page.authority.status === 'available' ? page.authority.offered : [];
-  const canReview = page.status === 'ready' && page.authority.status === 'available';
+  const offered = page.status === 'ready' ? (['open', 'close'] as const).filter((action) => page.current.actions[action]) : [];
+  const canReview = page.status === 'ready' && Object.values(page.current.actions).some(Boolean);
   const canSend =
     intent && page.status === 'ready' && hasGroup(page, intent.group) && offered.includes(intent.action) ? true : false;
   const update = () => render((value) => value + 1);
@@ -259,7 +280,7 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: Stand
       onReload={() => void read()}
       onFirstPage={() => void read({ limit: selection.limit ?? 20 })}
       onNextPage={() => {
-        if (page.status === 'ready' && page.current.status === 'available' && page.current.next)
+        if (page.status === 'ready' && page.current.next)
           void read({ cursor: page.current.next, limit: selection.limit ?? 20 });
       }}
       onReview={(group, action) => {
@@ -291,7 +312,7 @@ export function PlatformExposureBoundPage({ initial, io }: { initial: ExposureRe
       onReload={() => void visit.read()}
       onFirstPage={() => void visit.read({ limit: visit.selection.limit ?? 20 })}
       onNextPage={() => {
-        if (page.status === 'ready' && page.current.status === 'available' && page.current.next)
+        if (page.status === 'ready' && page.current.next)
           void visit.read({ cursor: page.current.next, limit: visit.selection.limit ?? 20 });
       }}
       onReview={(group, action) => visit.review(group, action)}
@@ -302,12 +323,9 @@ export function PlatformExposureBoundPage({ initial, io }: { initial: ExposureRe
 }
 
 function hasGroup(page: Extract<Page, { status: 'ready' }>, group: string) {
-  return (
-    page.groups.includes(group) ||
-    (page.current.status === 'available' && page.current.exposureGroups.some((row) => row.group === group))
-  );
+  return page.current.exposureGroups.some((row) => row.group === group);
 }
 
 function unavailablePage(): Page {
-  return { status: 'unavailable' };
+  return { status: 'unavailable', discovery: { status: 'unavailable' } };
 }

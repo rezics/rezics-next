@@ -1,64 +1,64 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { globalContext, loadExposure, parseDiscovery } from '../src/platform/exposure/data';
+import { loadExposure, parseDiscovery } from '../src/platform/exposure/data';
 
-const metadata = {
+const openOperation = {
   operationId: 'exposure.open',
   'x-action': 'exposure:open',
   'x-exposure': 'public',
-  'x-authority-resource-types': ['semantic.context'],
-  'x-authority-resource-id': globalContext.id,
 };
-const document = (detail: Record<string, unknown>) => ({
-  paths: { '/v1/platform/exposure/{group}:open': { post: detail } },
+const document = {
+  paths: {
+    '/v1/collections': {
+      get: { operationId: 'collection.list', 'x-action': 'collection:list', 'x-exposure': 'gate:collections' },
+    },
+    '/v1/platform/exposure/{group}:open': { post: openOperation },
+  },
+};
+const management = (open: boolean) => ({
+  viewer: { accountId: 'viewer', clientId: 'exposure-management' },
+  actions: { open, close: false },
+  exposureGroups: [{ group: 'collections', open: false, at: '2026-10-31T00:00:00.123456Z' }],
+  next: null,
 });
 
-test('exposure discovery consumes the genuine mounted fixed Global reference and rejects malformed fixed declarations', () => {
-  expect(parseDiscovery(document(metadata))?.bindings).toEqual([
-    { action: 'open', type: 'semantic.context', id: globalContext.id },
-  ]);
-  for (const invalid of [
-    { 'x-authority-resource-id': null },
-    { 'x-authority-resource-id': '00000000-0000-8000-8000-000000000001' },
-    { 'x-authority-resource-id': `${globalContext.id}\n` },
-    { 'x-authority-resource-types': undefined, 'x-resource-types': ['semantic.context'] },
-    { 'x-authority-resource-types': ['access.account'] },
-    { 'x-authority-resource-types': ['semantic.context', 'access.account'] },
-    { 'x-authority-anchor': 'own-account' },
-    { 'x-account-authority': 'self' },
-  ])
-    expect(parseDiscovery(document({ ...metadata, ...invalid }))?.bindings).toEqual([]);
-});
-
-test('fixed Global exposure controls require the exact native resource, action and operation independently of configuration admission', async () => {
-  for (const [action, operation, id, offered] of [
-    ['exposure:open', 'exposure.open', globalContext.id, ['open']],
-    ['exposure:open', 'exposure.close', globalContext.id, []],
-    ['exposure:manage_read', 'exposure.open', globalContext.id, []],
-    ['gate:any', 'exposure.open', globalContext.id, []],
-    ['exposure:open', 'exposure.open', '00000000-0000-8000-8000-000000000001', null],
-  ] as const) {
+test('viewer-filtered OpenAPI remains partial group discovery and malformed discovery cannot hide native management', async () => {
+  expect(parseDiscovery(document)).toEqual({ status: 'available', groups: ['collections'] });
+  for (const discovery of [Response.json({ paths: { '/broken': { get: {} } } }), new Response('offline', { status: 503 })]) {
     const calls: string[] = [];
     const client = createKernelClient('https://kernel.example.test', {
       fetch: (async (input, init) => {
-        const request = new Request(input, init);
-        const path = new URL(request.url).pathname;
+        const path = new URL(new Request(input, init).url).pathname;
         calls.push(path);
-        expect(request.headers.get('authorization')).toBe('Bearer viewer');
-        if (path === '/v1/openapi.json') return Response.json(document(metadata));
-        if (path !== '/v1/viewerActions') throw new Error(`Unexpected request: ${path}`);
-        expect(await request.json()).toEqual({ resources: [{ type: 'semantic.context', id: globalContext.id }] });
-        return Response.json({
-          resources: [{ type: 'semantic.context', id, viewerActions: [{ action, operations: [operation] }] }],
-        });
+        if (path === '/v1/openapi.json') return discovery;
+        if (path === '/v1/platform/exposure/management') return Response.json(management(true));
+        throw new Error(`Unexpected request: ${path}`);
       }) as typeof fetch,
     });
     const page = await loadExposure(client, 'Bearer viewer');
-    expect(page.status).toBe('ready');
-    if (page.status !== 'ready') throw new Error('Missing discovery page');
-    expect(page.authority).toEqual(
-      offered === null ? { status: 'unavailable' } : { status: 'available', offered: [...offered] },
-    );
-    expect(calls).toEqual(['/v1/openapi.json', '/v1/viewerActions']);
+    expect(page).toMatchObject({
+      status: 'ready',
+      discovery: { status: 'unavailable' },
+      current: { status: 'available', actions: { open: true, close: false } },
+    });
+    expect(calls.sort()).toEqual(['/v1/openapi.json', '/v1/platform/exposure/management']);
   }
+});
+
+test('visible command metadata does not grant advice that the native management response withholds', async () => {
+  const calls: string[] = [];
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: (async (input, init) => {
+      const path = new URL(new Request(input, init).url).pathname;
+      calls.push(path);
+      if (path === '/v1/openapi.json') return Response.json(document);
+      if (path === '/v1/platform/exposure/management') return Response.json(management(false));
+      throw new Error(`Unexpected request: ${path}`);
+    }) as typeof fetch,
+  });
+  const page = await loadExposure(client, 'Bearer viewer');
+  expect(page.status).toBe('ready');
+  if (page.status !== 'ready') throw new Error('Expected the admitted native page');
+  expect(page.current.actions).toEqual({ open: false, close: false });
+  expect(calls.sort()).toEqual(['/v1/openapi.json', '/v1/platform/exposure/management']);
 });

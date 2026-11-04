@@ -1,12 +1,18 @@
 import type { KernelClient } from '@rezics/client';
 
-export const globalContext = Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' });
 export type Action = 'open' | 'close';
 export type Intent = Readonly<{ group: string; action: Action; key: string; body: Readonly<Record<string, never>> }>;
-export type Authority = { status: 'available'; offered: Action[] } | { status: 'unavailable' };
-// Delivered management projection owned by the native current-exposure source.
+export type ViewerContext = Readonly<{ accountId: string; clientId: string }>;
+export type ActionAdvice = Readonly<Record<Action, boolean>>;
 export type CurrentExposure =
-  | { status: 'available'; exposureGroups: { group: string; open: boolean; at: string }[]; next: string | null }
+  | {
+      status: 'available';
+      viewer: ViewerContext;
+      actions: ActionAdvice;
+      exposureGroups: { group: string; open: boolean; at: string }[];
+      next: string | null;
+    }
+  | { status: 'invalid-cursor' | 'signed-out' | 'denied' }
   | { status: 'unavailable'; missing: 'native-current-exposure-management-read' };
 export type ExposureQuery = { cursor?: string; limit?: number };
 export function parseExposureQuery(value: unknown = {}): ExposureQuery {
@@ -24,9 +30,10 @@ export function parseExposureQuery(value: unknown = {}): ExposureQuery {
     ...(typeof value.limit === 'number' ? { limit: value.limit } : {}),
   };
 }
+export type Discovery = { status: 'available'; groups: string[] } | { status: 'unavailable' };
 export type Page =
-  | { status: 'ready'; groups: string[]; inventory: 'visible-only'; current: CurrentExposure; authority: Authority }
-  | { status: 'signed-out' | 'denied' | 'unavailable' };
+  | { status: 'ready'; discovery: Discovery; current: Extract<CurrentExposure, { status: 'available' }> }
+  | { status: 'invalid-cursor' | 'signed-out' | 'denied' | 'unavailable'; discovery: Discovery };
 /** The production reader identity captured from the same prepared request as its credential. */
 export type ExposureReaderEnvelope = Readonly<{ page: Page; sessionSubject: string | null }>;
 export type Outcome =
@@ -78,11 +85,30 @@ export async function readCurrentExposure(
       headers: { authorization },
       fetch: { cache: 'no-store' },
     });
+    if (result.status === 401) return { status: 'signed-out' };
+    if (result.status === 403) return { status: 'denied' };
+    if (
+      result.status === 400 &&
+      query.cursor !== undefined &&
+      object(result.error) &&
+      result.error.code === 'invalid_cursor'
+    )
+      return { status: 'invalid-cursor' };
     const value: unknown = result.data;
     if (
       result.error ||
       !object(value) ||
-      Object.keys(value).length !== 2 ||
+      Object.keys(value).length !== 4 ||
+      !object(value.viewer) ||
+      Object.keys(value.viewer).length !== 2 ||
+      typeof value.viewer.accountId !== 'string' ||
+      value.viewer.accountId.length === 0 ||
+      typeof value.viewer.clientId !== 'string' ||
+      value.viewer.clientId.length === 0 ||
+      !object(value.actions) ||
+      Object.keys(value.actions).length !== 2 ||
+      typeof value.actions.open !== 'boolean' ||
+      typeof value.actions.close !== 'boolean' ||
       !Array.isArray(value.exposureGroups) ||
       value.exposureGroups.length > limit ||
       !(
@@ -114,20 +140,22 @@ export async function readCurrentExposure(
       exposureGroups.push({ group: row.group, open: row.open, at: row.at });
     }
     if (value.next !== null && exposureGroups.length !== limit) return unavailable;
-    return { status: 'available', exposureGroups, next: value.next };
+    return {
+      status: 'available',
+      viewer: { accountId: value.viewer.accountId, clientId: value.viewer.clientId },
+      actions: { open: value.actions.open, close: value.actions.close },
+      exposureGroups,
+      next: value.next,
+    };
   } catch {
     return unavailable;
   }
 }
 
-type Binding = { action: Action; type: string; id: string };
-type Discovery = { groups: string[]; bindings: Binding[]; management: boolean };
 /** Consume only the real viewer-filtered mounted catalogue. Admission is never public opening data. */
 export function parseDiscovery(value: unknown): Discovery | null {
   if (!object(value) || !object(value.paths) || Object.keys(value.paths).length > 4096) return null;
   const groups = new Set<string>();
-  const bindings: Binding[] = [];
-  let management = false;
   let count = 0;
   for (const [path, methods] of Object.entries(value.paths)) {
     if (!object(methods)) return null;
@@ -141,76 +169,19 @@ export function parseDiscovery(value: unknown): Discovery | null {
         groups.add(group);
         if (groups.size > 256) return null;
       } else if (exposure !== 'public') return null;
-      if (
-        path === '/v1/platform/exposure/management' &&
-        method === 'get' &&
-        metadata.operationId === 'exposure.read_management' &&
-        metadata['x-action'] === 'exposure:manage_read' &&
-        exposure === 'public'
-      )
-        management = true;
-      for (const action of ['open', 'close'] as const) {
-        if (
-          method !== 'post' ||
-          path !== `/v1/platform/exposure/{group}:${action}` ||
-          metadata.operationId !== `exposure.${action}` ||
-          metadata['x-action'] !== `exposure:${action}` ||
-          exposure !== 'public'
-        )
-          continue;
-        // Only an actual native resource binding can supply the type. Never guess semantic.context.
-        const types = metadata['x-authority-resource-types'] ?? metadata['x-resource-types'];
-        const fixedId = metadata['x-authority-resource-id'];
-        if (metadata['x-authority-anchor'] !== undefined && metadata['x-authority-anchor'] !== 'resource') continue;
-        if (metadata['x-account-authority'] !== undefined) continue;
-        if (
-          fixedId !== undefined &&
-          (fixedId !== globalContext.id ||
-            !Array.isArray(metadata['x-authority-resource-types']) ||
-            !Array.isArray(types) ||
-            types.length !== 1 ||
-            types[0] !== 'semantic.context')
-        )
-          continue;
-        if (
-          Array.isArray(types) &&
-          types.length === 1 &&
-          typeof types[0] === 'string' &&
-          /^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/.test(types[0])
-        )
-          bindings.push({ action, type: types[0], id: fixedId === undefined ? globalContext.id : fixedId });
-      }
     }
   }
-  return { groups: [...groups].sort(), bindings, management };
+  return { status: 'available', groups: [...groups].sort() };
 }
 
-async function readAuthority(client: KernelClient, authorization: string, bindings: Binding[]): Promise<Authority> {
-  if (bindings.length === 0) return { status: 'unavailable' };
+async function readDiscovery(client: KernelClient, authorization: string): Promise<Discovery> {
   try {
-    const references = [...new Map(bindings.map(({ type, id }) => [`${type}/${id}`, { type, id }])).values()];
-    const result = await client.viewerActions.post(
-      { resources: references },
-      { headers: { authorization }, fetch: { cache: 'no-store' } },
-    );
-    if (result.error || !result.data || result.data.resources.length !== references.length)
-      return { status: 'unavailable' };
-    const offered: Action[] = [];
-    for (const { type, id } of references) {
-      const resources = result.data.resources.filter((item) => item.type === type && item.id === id);
-      if (resources.length !== 1 || !('viewerActions' in resources[0]!)) return { status: 'unavailable' };
-      const resource = resources[0]!;
-      if (!('viewerActions' in resource)) return { status: 'unavailable' };
-      for (const binding of bindings.filter((binding) => binding.type === type && binding.id === id))
-        if (
-          resource.viewerActions.some(
-            (entry) =>
-              entry.action === `exposure:${binding.action}` && entry.operations.includes(`exposure.${binding.action}`),
-          )
-        )
-          offered.push(binding.action);
-    }
-    return { status: 'available', offered: [...new Set(offered)] };
+    const result = await client['openapi.json'].get({
+      headers: { authorization },
+      fetch: { cache: 'no-store', signal: AbortSignal.timeout(2_000) },
+    });
+    const catalogue = result.error || !result.data ? null : parseDiscovery(result.data);
+    return catalogue ?? { status: 'unavailable' };
   } catch {
     return { status: 'unavailable' };
   }
@@ -221,32 +192,17 @@ export async function loadExposure(
   authorization: string,
   query: ExposureQuery = {},
 ): Promise<Page> {
-  try {
-    const result = await client['openapi.json'].get({ headers: { authorization }, fetch: { cache: 'no-store' } });
-    if (result.error || !result.data)
-      return { status: result.status === 401 ? 'signed-out' : result.status === 403 ? 'denied' : 'unavailable' };
-    const catalogue = parseDiscovery(result.data);
-    if (!catalogue) return { status: 'unavailable' };
-    return {
-      status: 'ready',
-      groups: catalogue.groups,
-      inventory: 'visible-only',
-      current: catalogue.management
-        ? await readCurrentExposure(client, authorization, query)
-        : { status: 'unavailable', missing: 'native-current-exposure-management-read' },
-      authority: await readAuthority(client, authorization, catalogue.bindings),
-    };
-  } catch {
-    return { status: 'unavailable' };
-  }
+  const [current, discovery] = await Promise.all([
+    readCurrentExposure(client, authorization, query),
+    readDiscovery(client, authorization),
+  ]);
+  if (current.status === 'available') return { status: 'ready', discovery, current };
+  return { status: current.status, discovery };
 }
 
 /** A private native source page can supply selections independently of public discovery. */
 export function hasExposureGroup(page: Extract<Page, { status: 'ready' }>, group: string): boolean {
-  return (
-    page.groups.includes(group) ||
-    (page.current.status === 'available' && page.current.exposureGroups.some((row) => row.group === group))
-  );
+  return page.current.exposureGroups.some((row) => row.group === group);
 }
 
 export async function commandExposure(
@@ -260,8 +216,7 @@ export async function commandExposure(
   if (
     current.status !== 'ready' ||
     !hasExposureGroup(current, operation.group) ||
-    current.authority.status !== 'available' ||
-    !current.authority.offered.includes(operation.action)
+    !current.current.actions[operation.action]
   )
     return { status: 'not-sent', current };
   try {
