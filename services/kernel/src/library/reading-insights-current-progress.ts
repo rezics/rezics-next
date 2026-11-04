@@ -228,12 +228,7 @@ export function createReadingInsightsCurrentProgressReads(deps: { pool: Pool }) 
           try {
             head = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
           } catch (error) {
-            if (
-              typeof error !== 'object' ||
-              error === null ||
-              !('code' in error) ||
-              error.code !== '42P01'
-            )
+            if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== '42P01')
               throw error;
             await client.query('ROLLBACK TO SAVEPOINT reading_insights_current_progress_schema');
           }
@@ -286,7 +281,10 @@ export function createReadingInsightsCurrentProgressReads(deps: { pool: Pool }) 
               activeSessions: head.active_sessions,
               backlogSessions: head.backlog_sessions,
               coveredSessions: head.covered_sessions,
-              unsupportedSessions: (currentSessions > coveredSessions ? currentSessions - coveredSessions : 0n).toString(),
+              unsupportedSessions: (currentSessions > coveredSessions
+                ? currentSessions - coveredSessions
+                : 0n
+              ).toString(),
             },
             currentness: {
               state: 'snapshot',
@@ -302,7 +300,8 @@ export function createReadingInsightsCurrentProgressReads(deps: { pool: Pool }) 
             throw new ProblemError('dependency_unavailable');
           await authorize();
           const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
-          if (!latest || JSON.stringify(latest) !== JSON.stringify(head)) throw new ProblemError('dependency_unavailable');
+          if (!latest || JSON.stringify(latest) !== JSON.stringify(head))
+            throw new ProblemError('dependency_unavailable');
           alive();
           await client.query('COMMIT');
           committed = true;

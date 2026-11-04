@@ -131,12 +131,11 @@ export const readingInsightsCurrentProgressSchema = t.Unsafe<ReadingInsightsCurr
     t.Object(
       {
         state: t.Literal('unavailable'),
-        reason: t.Union([
-          t.Literal('not_installed'),
-          t.Literal('initializing'),
-          t.Literal('maintenance_unavailable'),
-        ]),
-        coverage: t.Object({ initializedSessions: t.Union([count, t.Null()]), retainedSessions: t.Union([count, t.Null()]) }, closed),
+        reason: t.Union([t.Literal('not_installed'), t.Literal('initializing'), t.Literal('maintenance_unavailable')]),
+        coverage: t.Object(
+          { initializedSessions: t.Union([count, t.Null()]), retainedSessions: t.Union([count, t.Null()]) },
+          closed,
+        ),
       },
       closed,
     ),
