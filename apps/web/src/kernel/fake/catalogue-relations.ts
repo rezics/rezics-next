@@ -189,7 +189,7 @@ export function relationFixture(scenario: RelationScenario = 'ready', locale = '
                           operations: operations.filter((value) => value === 'subject.adopt'),
                         },
                       ].filter((entry) => entry.operations.length)
-                    : [],
+                    : [{ action: 'subject:read', operations: ['subject.list_candidates'] }],
               }),
         })),
       });
