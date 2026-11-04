@@ -203,6 +203,7 @@ export async function createCollectionPresentationFixture() {
         CROSS JOIN unnest($3::text[]) noise(id)`,
         [partitionOf(routeOf(owner.accountId)!), owner.accountId, ids],
       );
+      return ids;
     }
     return {
       growCoverHistory,

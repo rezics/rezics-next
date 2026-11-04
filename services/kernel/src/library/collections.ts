@@ -51,6 +51,7 @@ import {
 } from './collection-presentation.ts';
 import { CollectionOrderRepairRequired, planCollectionPlacement } from './collection-order-placement.ts';
 import { assertCollectionOrderWritable, beginCollectionOrderRepair } from './collection-order.ts';
+import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
 import {
   deleteMember as deleteMemberRow,
   insertCollection,
@@ -843,6 +844,13 @@ export function createCollectionCommands(config: {
           command,
         );
         if (!value) throw new ProblemError('conflict');
+        await captureCollectionMetadataHistory(tx, {
+          route,
+          before: current,
+          after: value,
+          transactionId: command.transactionId,
+          time: authoritativeTimeValue(command.time),
+        });
         if (current.membershipKind === 'dynamic' && current.visibility !== value.visibility)
           await retireCollectionPublicationWork(tx, route, id);
         if ((wasListed && !listed(value)) || (current.visibility !== 'private' && value.visibility === 'private'))

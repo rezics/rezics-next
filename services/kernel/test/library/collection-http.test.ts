@@ -253,6 +253,8 @@ test('all Collection routes mount once and declare their exposure, actions and c
     '/v1/collections': ['get', 'post'],
     '/v1/collections/{collectionId}': ['get', 'patch', 'delete', 'post'],
     '/v1/collections/{collectionId}:restore': ['post'],
+    '/v1/collections/{collectionId}/metadata-history': ['get'],
+    '/v1/collections/{collectionId}/metadata-history/{revision}': ['get'],
     '/v1/collections/{collectionId}/members': ['get', 'post'],
     '/v1/collections/{collectionId}/members/{memberId}': ['patch', 'delete'],
     '/v1/collections/{collectionId}/members/{memberId}:move': ['post'],
@@ -265,6 +267,201 @@ test('all Collection routes mount once and declare their exposure, actions and c
   expect(document.paths['/v1/collections']?.post?.['x-resource-types']).toEqual(['library.collection']);
   expect(new Set(app.routes.map((route) => `${route.method} ${route.path}`)).size).toBe(app.routes.length);
   for (const action of scopes.slice(0, 4)) expect(actionCatalogue(app).has(action)).toBe(true);
+});
+
+test('metadata history keeps addressed private revisions owner-only, bounded and truthful about coverage', async () => {
+  const shelf = await collection();
+  const history = (id: string) => `${path(id)}/metadata-history`;
+  const initial = await json<{
+    collectionId: string;
+    coverage: { coverage: string };
+    items: { revision: number; changedFields: string[] }[];
+    next: string | null;
+    actions: { review: boolean; reapply: boolean };
+  }>(await request('GET', history(shelf.id)));
+  expect(initial).toMatchObject({
+    collectionId: shelf.id,
+    coverage: { coverage: 'complete', knownFromRevision: 1, prunedBeforeRevision: null },
+    items: [],
+    next: null,
+    actions: { review: true, reapply: false },
+  });
+
+  const firstKey = randomUUID();
+  const publicRevision = await json<{ collection: CollectionView }>(
+    await request(
+      'PATCH',
+      path(shelf.id),
+      { revision: 1, title: 'Private title', description: 'Private description', visibility: 'public' },
+      'owner',
+      firstKey,
+    ),
+  );
+  expect(
+    await json(await request('PATCH', path(shelf.id), {
+      revision: 1,
+      title: 'Private title',
+      description: 'Private description',
+      visibility: 'public',
+    }, 'owner', firstKey)),
+  ).toEqual(publicRevision);
+  await problem(await request('GET', history(shelf.id), undefined, 'other'), 404, 'not_found');
+
+  const privateRevision = await json<{ collection: CollectionView }>(
+    await request('PATCH', path(shelf.id), {
+      revision: 2,
+      title: 'Private again',
+      description: null,
+      visibility: 'private',
+    }),
+  );
+  const page = await json<{
+    items: { revision: number; changedFields: string[] }[];
+    coverage: { coverage: string };
+  }>(await request('GET', `${history(shelf.id)}?limit=2`));
+  expect(page.coverage.coverage).toBe('complete');
+  expect(page.items).toEqual([
+    { revision: privateRevision.collection.revision, recordedAt: expect.any(String), changedFields: ['title', 'description', 'visibility'] },
+    { revision: publicRevision.collection.revision, recordedAt: expect.any(String), changedFields: ['title', 'description', 'visibility'] },
+  ]);
+  const firstChange = await json<{
+    revision: number;
+    before: { title: string; description: string | null; visibility: string; cover: { state: string } };
+    after: { title: string; description: string | null; visibility: string; cover: { state: string } };
+    actions: { review: boolean; reapply: boolean };
+  }>(await request('GET', `${history(shelf.id)}/${publicRevision.collection.revision}`));
+  expect(firstChange).toMatchObject({
+    revision: publicRevision.collection.revision,
+    before: { title: shelf.title, description: shelf.description, visibility: 'private', cover: { state: 'none' } },
+    after: { title: 'Private title', description: 'Private description', visibility: 'public', cover: { state: 'none' } },
+    actions: { review: true, reapply: false },
+  });
+  const secondChange = await json<{
+    revision: number;
+    before: { title: string; description: string | null; visibility: string };
+    after: { title: string; description: string | null; visibility: string };
+  }>(await request('GET', `${history(shelf.id)}/${privateRevision.collection.revision}`));
+  expect(secondChange).toMatchObject({
+    revision: privateRevision.collection.revision,
+    before: { title: 'Private title', description: 'Private description', visibility: 'public' },
+    after: { title: 'Private again', description: null, visibility: 'private' },
+  });
+  await problem(await request('GET', `${history(shelf.id)}/${publicRevision.collection.revision}`, undefined, 'other'), 404, 'not_found');
+  await problem(await request('GET', history(shelf.id), undefined, 'other'), 404, 'not_found');
+
+  const stalePage = await json<{ next: string | null }>(await request('GET', `${history(shelf.id)}?limit=1`));
+  expect(stalePage.next).toBeString();
+  await request('PATCH', path(shelf.id), { revision: 3, title: 'Changed after page' });
+  await problem(
+    await request('GET', `${history(shelf.id)}?limit=1&cursor=${encodeURIComponent(stalePage.next!)}`),
+    409,
+    'stale_cursor',
+  );
+  const replayed = await json<{ collection: CollectionView }>(
+    await request('PATCH', path(shelf.id), { revision: 4, title: 'Replay once' }, 'owner', randomUUID()),
+  );
+  const replayKey = randomUUID();
+  const replay = await request('PATCH', path(shelf.id), { revision: 5, title: 'Same transaction' }, 'owner', replayKey);
+  const replayedAgain = await request(
+    'PATCH',
+    path(shelf.id),
+    { revision: 5, title: 'Same transaction' },
+    'owner',
+    replayKey,
+  );
+  expect(await replay.json()).toEqual(await replayedAgain.json());
+  const afterReplay = await json<{ items: { revision: number }[] }>(await request('GET', `${history(shelf.id)}?limit=50`));
+  expect(afterReplay.items.filter((item) => item.revision === 6)).toHaveLength(1);
+  expect(replayed.collection.revision).toBe(5);
+
+  const rollbackShelf = await collection();
+  await db.admin.query(`
+    CREATE FUNCTION library.reject_collection_metadata_history_for_test() RETURNS trigger
+    LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced history append failure'; END $$;
+    CREATE TRIGGER reject_collection_metadata_history_for_test
+    BEFORE INSERT ON library.collection_metadata_history
+    FOR EACH ROW EXECUTE FUNCTION library.reject_collection_metadata_history_for_test();
+  `);
+  try {
+    const rejected = await request('PATCH', path(rollbackShelf.id), { revision: rollbackShelf.revision, title: 'Must roll back' });
+    expect(rejected.status).toBe(500);
+    const current = await db.admin.query<{ revision: number; title: string }>(
+      'SELECT revision,title FROM library.collection WHERE route=$1 AND collection_id=$2',
+      [routeOf(rollbackShelf.id), rollbackShelf.id],
+    );
+    expect(current.rows).toEqual([{ revision: rollbackShelf.revision, title: rollbackShelf.title }]);
+    expect(
+      (await db.admin.query(
+        'SELECT 1 FROM library.collection_metadata_history WHERE route=$1 AND collection_id=$2',
+        [routeOf(rollbackShelf.id), rollbackShelf.id],
+      )).rows,
+    ).toEqual([]);
+  } finally {
+    await db.admin.query(`
+      DROP TRIGGER reject_collection_metadata_history_for_test ON library.collection_metadata_history;
+      DROP FUNCTION library.reject_collection_metadata_history_for_test();
+    `);
+  }
+
+  const reassigned = await collection();
+  const held = await json<{ collection: CollectionView }>(
+    await request('PATCH', path(reassigned.id), { revision: reassigned.revision, title: 'Owner-only historical title' }),
+  );
+  await db.admin.query(
+    `UPDATE library.collection SET curator_account_id=$3,revision=revision+1,updated_at=clock_timestamp()
+     WHERE route=$1 AND collection_id=$2`,
+    [routeOf(reassigned.id), reassigned.id, other],
+  );
+  await problem(await request('GET', `${history(reassigned.id)}/${held.collection.revision}`), 404, 'not_found');
+
+  const unknown = await collection();
+  await db.admin.query('DELETE FROM library.collection_metadata_history_state WHERE route=$1 AND collection_id=$2', [
+    routeOf(unknown.id),
+    unknown.id,
+  ]);
+  const unknownPage = await json<{ coverage: { coverage: string }; items: unknown[] }>(
+    await request('GET', history(unknown.id)),
+  );
+  expect(unknownPage).toEqual({
+    collectionId: unknown.id,
+    basis: expect.any(Object),
+    coverage: { coverage: 'unknown', knownFromRevision: null, prunedBeforeRevision: null },
+    items: [],
+    next: null,
+    actions: { review: true, reapply: false },
+  });
+
+  const retained = await collection();
+  let revision = retained.revision;
+  for (let index = 0; index < 129; index += 1) {
+    const update = await json<{ collection: CollectionView }>(
+      await request('PATCH', path(retained.id), { revision, title: `Bounded change ${index}` }),
+    );
+    revision = update.collection.revision;
+  }
+  let cursor: string | null = null;
+  let count = 0;
+  let coverage = '';
+  do {
+    const nextPage = await json<{
+      items: { revision: number }[];
+      next: string | null;
+      coverage: { coverage: string; knownFromRevision: number | null; prunedBeforeRevision: number | null };
+    }>(await request('GET', `${history(retained.id)}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
+    count += nextPage.items.length;
+    cursor = nextPage.next;
+    coverage = nextPage.coverage.coverage;
+    if (!nextPage.next) expect(nextPage.coverage).toMatchObject({ knownFromRevision: 3, prunedBeforeRevision: 3 });
+  } while (cursor);
+  expect(count).toBe(128);
+  expect(coverage).toBe('partial');
+  await problem(
+    await request('PATCH', path(retained.id), { revision: revision - 1, title: 'Conflict creates no history' }),
+    409,
+    'conflict',
+  );
+  expect((await json<{ items: { revision: number }[] }>(await request('GET', `${history(retained.id)}?limit=50`))).items)
+    .toHaveLength(50);
 });
 
 test('curator creates replays updates conflicts and deletes with only the contracted public view', async () => {

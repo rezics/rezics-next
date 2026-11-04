@@ -159,6 +159,81 @@ const previewCollectionSchema = t.Union([
   embedded(dynamicCollectionSchema, { ...curatorFields, ...previewFields }),
 ]);
 const collectionResponse = t.Object({ collection: collectionResourceSchema }, closed);
+const metadataHistoryField = t.Union([
+  t.Literal('title'),
+  t.Literal('description'),
+  t.Literal('visibility'),
+  t.Literal('presentationKind'),
+  t.Literal('coverMediaId'),
+]);
+const metadataHistoryBasis = t.Object(
+  {
+    collectionRevision: revision,
+    curatorAccountId: id,
+    viewerAccountId: id,
+    authnEpoch: t.Integer({ minimum: 1 }),
+    minimumAuthnEpoch: t.String(),
+  },
+  closed,
+);
+const metadataHistoryCoverage = t.Object(
+  {
+    coverage: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('unknown')]),
+    knownFromRevision: t.Union([revision, t.Null()]),
+    prunedBeforeRevision: t.Union([revision, t.Null()]),
+  },
+  closed,
+);
+const metadataHistoryActions = t.Object({ review: t.Literal(true), reapply: t.Literal(false) }, closed);
+const metadataHistoryPageResponse = t.Object(
+  {
+    collectionId: id,
+    basis: metadataHistoryBasis,
+    coverage: metadataHistoryCoverage,
+    items: t.Array(
+      t.Object(
+        {
+          revision,
+          recordedAt: t.String(),
+          changedFields: t.Array(metadataHistoryField, { minItems: 1, maxItems: 5 }),
+        },
+        closed,
+      ),
+      { maxItems: 50 },
+    ),
+    next: nullableString,
+    actions: metadataHistoryActions,
+  },
+  closed,
+);
+const historicalCover = t.Union([
+  t.Object({ state: t.Literal('none') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+  t.Object({ state: t.Literal('available'), mediaId: id, summary: CoverSummarySchema }, closed),
+]);
+const historicalSnapshot = t.Object(
+  {
+    title: t.String(),
+    description: nullableString,
+    visibility,
+    presentationKind: nullableString,
+    cover: historicalCover,
+  },
+  closed,
+);
+const metadataHistoryChangeResponse = t.Object(
+  {
+    collectionId: id,
+    revision,
+    recordedAt: t.String(),
+    changedFields: t.Array(metadataHistoryField, { minItems: 1, maxItems: 5 }),
+    before: historicalSnapshot,
+    after: historicalSnapshot,
+    basis: metadataHistoryBasis,
+    actions: metadataHistoryActions,
+  },
+  closed,
+);
 const createMetadata = {
   title: t.String(),
   description: t.Optional(nullableString),
@@ -642,6 +717,50 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
             collection: collectionReadView(await read().readCollection(actor, params.collectionId)),
           }),
         ),
+    )
+    .get(
+      '/v1/collections/:collectionId/metadata-history',
+      {
+        params: collectionParams,
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 })),
+          },
+          closed,
+        ),
+        response: { 200: metadataHistoryPageResponse, ...failures },
+        detail: detail('collection.metadata_history.list', 'collection:update'),
+        transform: ({ set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+        },
+      },
+      async ({ params, query, actor, admission, job }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () =>
+          mapped(() => read().readCollectionMetadataHistory(actor, params.collectionId, query, job.deadline)),
+        );
+      },
+    )
+    .get(
+      '/v1/collections/:collectionId/metadata-history/:revision',
+      {
+        params: t.Object(
+          { collectionId: id, revision: t.Numeric({ minimum: 2, maximum: Number.MAX_SAFE_INTEGER, multipleOf: 1 }) },
+          closed,
+        ),
+        response: { 200: metadataHistoryChangeResponse, ...failures },
+        detail: detail('collection.metadata_history.change', 'collection:update'),
+        transform: ({ set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () =>
+          mapped(() => read().readCollectionMetadataHistoryChange(actor, params.collectionId, params.revision, job.deadline)),
+        );
+      },
     )
     .get(
       '/v1/collections/:collectionId/rule',

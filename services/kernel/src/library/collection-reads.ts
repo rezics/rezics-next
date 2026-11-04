@@ -25,6 +25,19 @@ import {
   readablePresentationCover,
   type CollectionPresentation,
 } from './collection-presentation.ts';
+import {
+  COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE,
+  COLLECTION_METADATA_HISTORY_PAGE_SIZE,
+  collectionMetadataHistoryFields,
+  collectionMetadataHistoryEntry,
+  pageCollectionMetadataHistory,
+  readCollectionMetadataHistoryEntry,
+  readCollectionMetadataHistoryState,
+  type CollectionMetadataHistoryBasis,
+  type CollectionMetadataHistoryDetail,
+  type CollectionMetadataHistoryPage,
+  type CollectionMetadataHistorySnapshot,
+} from './collection-metadata-history.ts';
 import { subjectCollections } from './listing.ts';
 import { isOrdinalKey } from './ordinal.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
@@ -306,6 +319,8 @@ export function createCollectionReads(
 
   return {
     readCollection,
+    readCollectionMetadataHistory,
+    readCollectionMetadataHistoryChange,
     readRule,
     listCollections,
     listAccountCollections,
@@ -444,6 +459,196 @@ export function createCollectionReads(
     const row = await loadCollection(viewer, id, deadline, observation);
     if (!row) throw notFound();
     return present(viewer, row, deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS));
+  }
+
+  async function withCurrentMetadataOwner<T>(
+    viewer: Actor,
+    id: string,
+    deadline: number,
+    read: (client: QueryClient, row: StoredCollection, account: Account) => Promise<T>,
+  ): Promise<T> {
+    if (!actor(viewer) || !viewer.scopes.includes('collection:update')) throw notFound();
+    const route = routeOf(id);
+    const accountRoute = routeOf(viewer.accountId);
+    if (route === null || accountRoute === null) throw notFound();
+    const check = await accessCheck(access, viewer, 'collection:update', { route, id }, { pool, deadline });
+    return readOnly(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      const time = await mintReadTime(client, dependencies.clock);
+      const account = await readAccount(client, accountRoute, viewer.accountId);
+      const row = await collectionRead.run(queryOf(client), { route, id });
+      if (
+        !account ||
+        !grantCapable(account, viewer) ||
+        !row ||
+        row.state !== 'active' ||
+        row.curatorAccountId !== viewer.accountId ||
+        !(await check(client, time))
+      )
+        throw notFound();
+      return read(client, row, account);
+    });
+  }
+
+  function metadataHistoryBinding(id: string, viewer: AccountActor, limit: number): CursorBinding {
+    return {
+      operation: 'library.collection.metadata-history',
+      parameters: { collectionId: id, curatorAccountId: viewer.accountId, authnEpoch: viewer.authnEpoch, limit },
+    };
+  }
+
+  function historyBasis(
+    row: StoredCollection,
+    viewer: AccountActor,
+    account: Account,
+  ): CollectionMetadataHistoryBasis {
+    if (row.curatorAccountId === null) throw notFound();
+    return {
+      collectionRevision: row.revision,
+      curatorAccountId: row.curatorAccountId,
+      viewerAccountId: viewer.accountId,
+      authnEpoch: viewer.authnEpoch,
+      minimumAuthnEpoch: account.minimumAuthnEpoch.toString(),
+    };
+  }
+
+  async function readCollectionMetadataHistory(
+    viewer: Actor,
+    id: string,
+    options: { cursor?: string | null; limit?: number } = {},
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+  ): Promise<CollectionMetadataHistoryPage> {
+    if (!actor(viewer)) throw notFound();
+    const limit = options.limit ?? COLLECTION_METADATA_HISTORY_PAGE_SIZE;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE)
+      throw new ProblemError('invalid_request');
+    const cursor = options.cursor ?? null;
+    const binding = metadataHistoryBinding(id, viewer, limit);
+    let afterRevision: number | null = null;
+    let cursorEpoch: number | null = null;
+    let cursorLifetime: string | null = null;
+    if (cursor !== null) {
+      if (cursor.length > MAX_CURSOR_LENGTH) throw invalidCursor();
+      const decoded = decodeCursor(tokens, binding, cursor);
+      if (
+        !decoded.ok ||
+        decoded.after.length !== 2 ||
+        typeof decoded.after[0] !== 'number' ||
+        typeof decoded.after[1] !== 'string'
+      )
+        throw invalidCursor();
+      cursorEpoch = decoded.epoch;
+      afterRevision = decoded.after[0];
+      cursorLifetime = decoded.after[1];
+    }
+    return withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      if (
+        cursorEpoch !== null &&
+        (cursorEpoch !== row.revision || cursorLifetime !== account.minimumAuthnEpoch.toString())
+      )
+        throw new ProblemError('stale_cursor');
+      const route = routeOf(id)!;
+      const coverage = await readCollectionMetadataHistoryState(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+      });
+      const rows = await pageCollectionMetadataHistory(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+        afterRevision,
+        limit: limit + 1,
+      });
+      const hasMore = rows.length > limit;
+      const items = rows.slice(0, limit).map((change) => ({
+        revision: change.revision,
+        recordedAt: new Date(change.recordedAt).toISOString(),
+        changedFields: collectionMetadataHistoryFields(change.changedFields),
+      }));
+      const last = items.at(-1);
+      return {
+        collectionId: id,
+        basis: historyBasis(row, viewer, account),
+        coverage,
+        items,
+        next:
+          hasMore && last
+            ? encodeCursor(tokens, binding, {
+                epoch: row.revision,
+                after: [last.revision, account.minimumAuthnEpoch.toString()],
+              })
+            : null,
+        actions: { review: true, reapply: false },
+      };
+    });
+  }
+
+  async function readCollectionMetadataHistoryChange(
+    viewer: Actor,
+    id: string,
+    revision: number,
+    deadline = deadlineFor(WORK_STEP_DEADLINE_MS),
+  ): Promise<CollectionMetadataHistoryDetail> {
+    if (!Number.isSafeInteger(revision) || revision < 2) throw new ProblemError('invalid_request');
+    if (!actor(viewer)) throw notFound();
+    const route = routeOf(id);
+    if (route === null) throw notFound();
+    const first = await withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      const change = await readCollectionMetadataHistoryEntry(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+        revision,
+      });
+      if (!change) throw notFound();
+      return { basis: historyBasis(row, viewer, account), change: collectionMetadataHistoryEntry(change) };
+    });
+    const mediaIds = [...new Set([first.change.before.coverMediaId, first.change.after.coverMediaId].filter(
+      (value): value is string => value !== null,
+    ))];
+    const covers = new Map<string, Awaited<ReturnType<typeof readablePresentationCover>>>();
+    await Promise.all(
+      mediaIds.map(async (mediaId) => {
+        covers.set(mediaId, await readablePresentationCover(dependencies, viewer, mediaId, deadline));
+      }),
+    );
+    const final = await withCurrentMetadataOwner(viewer, id, deadline, async (client, row, account) => {
+      const change = await readCollectionMetadataHistoryEntry(client, {
+        route,
+        collectionId: id,
+        curatorAccountId: viewer.accountId,
+        revision,
+      });
+      if (!change) throw new ProblemError('dependency_unavailable');
+      return { basis: historyBasis(row, viewer, account), change: collectionMetadataHistoryEntry(change) };
+    });
+    if (JSON.stringify(first) !== JSON.stringify(final)) throw new ProblemError('dependency_unavailable');
+    const present = (snapshot: typeof first.change.before): CollectionMetadataHistorySnapshot => {
+      const summary = snapshot.coverMediaId === null ? null : covers.get(snapshot.coverMediaId) ?? null;
+      const cover = snapshot.coverMediaId === null
+        ? { state: 'none' as const }
+        : summary
+          ? { state: 'available' as const, mediaId: snapshot.coverMediaId, summary }
+          : { state: 'unavailable' as const };
+      return {
+        title: snapshot.title,
+        description: snapshot.description,
+        visibility: snapshot.visibility,
+        presentationKind: snapshot.presentationKind,
+        cover,
+      };
+    };
+    return {
+      collectionId: id,
+      revision,
+      recordedAt: first.change.recordedAt,
+      changedFields: first.change.changedFields,
+      before: present(first.change.before),
+      after: present(first.change.after),
+      basis: first.basis,
+      actions: { review: true, reapply: false },
+    };
   }
 
   async function present(

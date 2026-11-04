@@ -1846,6 +1846,39 @@ Where a named test does not call the operation, or does not grow the rows that o
 - Bound: Library body `R` `O(1)`, `B` `O(L(N))`, `S` 3, plus parent-creation Access checks, own-account authorization and the envelope. The GiST exclusion check on the owner grant is not included in that block bound.
 - Growth check: `test/library/collections.test.ts`: `create cost stays constant as unrelated collections grow`. Whole-command rows and blocks are logarithmic and statements are constant as unrelated Collections grow. The check does not separate the body from the envelope.
 
+### Collection metadata history
+
+Curators can page a bounded, owner-only journal for the revisioned metadata fields `title`, `description`, `visibility`,
+`presentationKind` and `coverMediaId`. Each row is written in the same native transaction as its successful metadata
+revision; exact replays, conflicts, no-op field writes and rolled-back commands add no row. Collection creation sets a
+complete baseline at revision 1 without inventing a change from a nonexistent Collection. Reviewed archive recovery
+creates through the ordinary Collection command, so its baseline uses the same current account and transaction.
+
+Decision: retain at most 128 metadata changes per Collection, page 25 at a time, report new post-install Collections as complete until pruning, pre-install Collections as unknown, and pruned history as partial.
+
+The keyset reader is capped at 50 returned changes and binds cursors to the Collection revision, current curator and
+viewer authentication epoch. Every page and addressed revision requires the current native `collection:update`
+capability, an active unfenced curator account and current Collection ownership. A public or unlisted Collection has
+no public history route. The response carries the current Collection and account-lifetime basis; `review` is allowed
+and `reapply` is unavailable. It never turns a past visibility into current publication consent.
+
+Addressed review returns exact recorded before/after values for those five fields. The transaction identifier is not
+disclosed, and recorded command time remains distinct from source/import timestamps. Historical cover IDs are only
+returned with a current Media cover disclosure; deleted, withheld or unavailable media is represented as unavailable.
+The reader releases the Library connection before Media observations, then rechecks the owner, account lifetime,
+Collection revision and selected journal row. Curator change deletes the former curator's rows on the next metadata
+write and starts unknown coverage for the new owner. Account erasure and terminal Collection cleanup delete the head
+and its bounded rows; ordinary deletion keeps history only inside the existing restore window.
+
+Collection `update` writes, explicit curated publication and dynamic output publication record their actual
+visibility transitions. Archive recovery's metadata baseline uses `insertCollection`; saved-rule edits and membership
+or ordering revisions remain outside this finite metadata journal. The page query examines at most 51 rows and returns
+at most 50; append prunes one indexed oldest row after the 129th retained change; terminal cleanup removes 25 rows per
+transaction. An addressed comparison observes at most two distinct historical Media references and performs a final
+native owner/lifetime/revision check after those observations. Growth evidence must vary Collections, changes and
+historical Media independently at 64, 512 and 4096, and count every participating database/Access pool, negative
+foreign observations, bytes, retries and cleanup; this source contract is not that runtime measurement.
+
 ### Update Collection
 
 - Touches: One active Collection primary-key read and one compare-and-swap primary-key update of title, description or visibility. `listing.changed` is emitted only when active-and-public listed-ness changes. The event subject is the Collection id. Members are not rewritten.
