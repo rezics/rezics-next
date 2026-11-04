@@ -58,7 +58,7 @@ test('reviewed metadata accepts the public transport null-prototype JSON snapsho
       creates++;
       throw reachedBootstrap;
     },
-  } as ReviewedCataloguePort;
+  } as unknown as ReviewedCataloguePort;
   try {
     await expect(seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port })).rejects.toBe(
       reachedBootstrap,

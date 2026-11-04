@@ -75,7 +75,7 @@ export async function runDevelopmentSeed(
       '--client',
       client,
     ],
-    { episodeCatalogueSubjects: reviewedCatalogue.subjects, selection: developmentShowcaseSelection },
+    { reviewedCatalogueSubjects: reviewedCatalogue.subjects, selection: developmentShowcaseSelection },
   );
 }
 

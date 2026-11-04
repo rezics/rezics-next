@@ -14,6 +14,7 @@ import {
   importShowcaseTags,
   parseShowcaseTagKnownBindings,
   planShowcaseTags,
+  projectShowcaseTagTables,
   showcaseTagWeightGapReason,
   showcaseTagWeightProperty,
 } from '../src/showcase-tags.ts';
@@ -259,3 +260,40 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('reviewed tag projection does not spend its association bound on repeated voter rows', async () => {
+  const base = authoredTables();
+  const tables = {
+    async *rows(provider: 'bangumi' | 'vndb', table: string) {
+      if (table === 'tags_vn') {
+        for (let i = 0; i < 300; i++)
+          yield {
+            date: '2026-10-24',
+            tag: 'g311',
+            vid: 'v410',
+            uid: null,
+            vote: '3',
+            spoiler: '0',
+            ignore: 'f',
+            lie: null,
+            notes: null,
+          };
+        yield {
+          date: '2026-10-24',
+          tag: 'g311',
+          vid: 'v999',
+          uid: null,
+          vote: '2',
+          spoiler: '0',
+          ignore: 'f',
+          lie: null,
+          notes: null,
+        };
+      } else yield* base.rows(provider, table);
+    },
+  };
+  const projected = await projectShowcaseTagTables(tables, ['v410', 'v999'], new Set(['g311']));
+  const rows = await Array.fromAsync(projected.tables.rows('vndb', 'tags_vn'));
+  expect(rows.map((row) => row.vid)).toEqual(['v410', 'v999']);
+  expect(projected.truncated).toBe(false);
+});
