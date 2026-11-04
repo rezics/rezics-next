@@ -595,7 +595,7 @@
         "apps/web/src/features/contexts/**",
         "apps/web/src/zones/**"
       ],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/subject/definitions.ts"],
       "allowedDependencies": [
         "client",
         "composition",
@@ -658,7 +658,7 @@
         "apps/web/src/zones/**",
         "apps/web/src/routes/**"
       ],
-      "publicEntries": [],
+      "publicEntries": ["apps/web/src/session/index.ts", "apps/web/src/session/reader.ts"],
       "allowedDependencies": [
         "client",
         "composition",
