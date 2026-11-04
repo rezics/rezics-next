@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
+import native from '@rezics/composition/profiles/platform.json';
 import type { SubjectRead } from '@rezics/client';
 import type { SubjectPageData } from '../src/features/pages/subject';
 import type { PageMessages } from '../src/features/pages/data';
@@ -14,6 +15,9 @@ const { SubjectPage } = await import('../src/features/pages/subject');
 
 const property = 'wdt:P144';
 const context = '00000000-0000-8000-8000-000000000000';
+const workDocument = (native.bases.find(({ base }) => base === 'schema:CreativeWork') as unknown as {
+  views: { overview: CompositionDocument };
+}).views.overview;
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const messages: PageMessages = { unknown: 'Unknown', none: 'None', unlabelled: 'Unlabelled', sources: 'Sources', aliases: 'Aliases', search: 'Search' };
 const relations: Record<string, RelationDefinition> = Object.fromEntries(
@@ -44,17 +48,18 @@ function read(type: string, label: string, work: string, destinationType: string
 }
 
 function pageFor(source: SubjectRead): SubjectPageData {
-  const content = [
+  const content = [workDocument.content[0]!,
     { type: 'SubjectList', props: { id: 'franchise', title: { en: 'Related works' }, property, limit: 8 } },
     ...Object.keys(source.subject.statements).filter((key) => key !== property).map((key) => key === 'schema:author' || key === 'wdt:P725'
       ? { type: 'Credits', props: { id: key, property: key, limit: 8 } }
       : { type: 'SubjectList', props: { id: key, title: { en: 'Parts' }, property: key, limit: 8 } }),
   ];
-  const document = { root: { props: {} }, content } as unknown as CompositionDocument;
+  const document = { ...workDocument, content } as CompositionDocument;
   const plan = planReads(platformRegistry, document, { subject: source.subject.id });
   const reads: SubjectPageData['reads'] = {};
   for (const [key, planned] of Object.entries(plan.reads)) {
-    if (planned.kind !== 'links') { reads[key] = { status: 200, body: source }; continue; }
+    if (planned.kind === 'subject') { reads[key] = { status: 200, body: source }; continue; }
+    if (planned.kind !== 'links') continue;
     const entries = Object.entries(source.related).filter(([, item]) => item.type !== 'wd:Q689445');
     reads[key] = { status: 200, body: { links: entries.map(([targetId, item], i) => ({
       subject: targetId, property: planned.property, statement: id(500 + i), label: Object.values(item.labels)[0] ?? '',
@@ -62,7 +67,7 @@ function pageFor(source: SubjectRead): SubjectPageData {
         label: { value: Object.values(item.labels)[0] ?? '', language: 'ja' }, creativeWork: true, cover: item.cover },
     })), count: { value: entries.length, exact: true }, next: null } };
   }
-  return { subject: source.subject.id, profile: source.subject.release, template: { scope: 'type', key: source.subject.type },
+  return { subject: source.subject.id, profile: source.subject.release, template: { scope: 'base', key: 'schema:CreativeWork' },
     document, views: ['overview', 'relations', 'editions', 'contents', 'credits', 'characters'], reads } satisfies SubjectPageData;
 }
 
