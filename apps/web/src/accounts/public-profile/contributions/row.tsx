@@ -217,6 +217,7 @@ function ContributionVisit({
             <Cover
               subject={{ id: author.id, title: authorName, types: [] }}
               cover={author.avatar}
+              suitability={value.reader.suitability}
               size="fill"
               ratio="1:1"
               src={coverSrc}
