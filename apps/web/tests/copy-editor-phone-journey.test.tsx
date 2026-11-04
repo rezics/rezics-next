@@ -41,7 +41,7 @@ mock.module('../src/library/copies-actions', () => ({
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'current' }) }));
 mock.module('../src/kernel/exposure', () => ({ Exposure: ({ children }: { children: ReactNode }) => children }));
-mock.module('@rezics/ui/hooks/use-is-mobile', () => ({ useIsMobile: () => mobile }));
+mock.module('@rezics/ui/hooks/use-mobile', () => ({ useIsMobile: () => mobile }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 mock.module('@rezics/ui/shadcn/dialog', () => ({
   Dialog: ({ children }: { children: ReactNode }) => <div data-presentation="dialog">{children}</div>,

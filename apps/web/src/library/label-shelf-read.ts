@@ -38,7 +38,7 @@ export type LabelShelfPageData =
   | { state: 'signed-out' }
   | { state: 'denied' }
   | { state: 'preparing' }
-  | { state: 'unavailable' }
+  | { state: 'unavailable'; sessionUnavailable?: true }
   | {
       state: 'loaded';
       label: LibraryLabelSummary;
@@ -117,7 +117,9 @@ async function readLabelShelfPage(
   try {
     const identity = await readSubjectSlotSession(request, sessionEnv);
     if (identity.state === 'signed-out') return finish({ state: 'signed-out' });
-    if (identity.state !== 'signed-in' || !identity.subject.trim()) return finish({ state: 'unavailable' });
+    if (identity.state === 'unavailable')
+      return finish({ state: 'unavailable', ...(identity.sessionUnavailable ? { sessionUnavailable: true } : {}) });
+    if (!identity.subject.trim()) return finish({ state: 'unavailable' });
     provenance.subject = identity.subject;
     const authorization = identity.authorization;
     const exposure = await client.platform.exposure.get({ headers: { authorization } });

@@ -40,7 +40,7 @@ mock.module('../src/library/copies-actions', () => ({
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'current' }) }));
 mock.module('../src/kernel/exposure', () => ({ Exposure: ({ children }: { children: ReactNode }) => children }));
-mock.module('@rezics/ui/hooks/use-is-mobile', () => ({ useIsMobile: () => false }));
+mock.module('@rezics/ui/hooks/use-mobile', () => ({ useIsMobile: () => false }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 const DialogContent = forwardRef<HTMLDivElement, { children: ReactNode }>(({ children }, ref) => (
   <div ref={ref} role="alertdialog">

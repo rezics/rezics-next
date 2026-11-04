@@ -1,5 +1,6 @@
 import { prepareExposure } from '../../kernel/exposure';
-import { requireSignedIn } from '../../session/guard';
+import { requirePrivatePageAccess } from '../../session/guard';
+import { isSessionUnavailablePage, loadPrivatePage, SessionUnavailablePrompt } from '../../session/private-page';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, notFound } from '@tanstack/react-router';
@@ -118,8 +119,9 @@ export const Route = createFileRoute('/library/')({
     },
   },
   beforeLoad: async (context) => {
-    await requireSignedIn(context);
-    await prepareExposure(context.context.queryClient);
+    const sessionAccess = await requirePrivatePageAccess(context);
+    if (sessionAccess.state === 'signed-in') await prepareExposure(context.context.queryClient);
+    return { sessionAccess };
   },
   validateSearch: (search: Record<string, unknown>) => ({
     ...validateShelfSearch(search),
@@ -158,46 +160,49 @@ export const Route = createFileRoute('/library/')({
       undoKey: typeof search.undoKey === 'string' ? search.undoKey : undefined,
     };
   },
-  loader: async ({ deps }) => {
-    if (deps.addressIssues.length) return { addressRecovery: deps.addressIssues };
-    if (deps.label) {
-      const [page, shelfSnapshot] = await Promise.all([
-        readLabelShelf({
-          data: {
-            labelId: deps.label,
-            cursor: deps.cursor,
-            undoLabelId: deps.undoLabelId,
-            undoSubjectId: deps.undoSubjectId,
-            undoAssignmentId: deps.undoAssignmentId,
-            undoRevision: deps.undoRevision,
-            undoKey: deps.undoKey,
-            labelResult: deps.labelResult,
-          },
-        }),
-        readCurrentShelfPreferences(),
-      ]);
+  loader: async ({ context, deps }) =>
+    loadPrivatePage(context.sessionAccess, async () => {
+      if (deps.addressIssues.length) return { addressRecovery: deps.addressIssues };
+      if (deps.label) {
+        const [page, shelfSnapshot] = await Promise.all([
+          readLabelShelf({
+            data: {
+              labelId: deps.label,
+              cursor: deps.cursor,
+              undoLabelId: deps.undoLabelId,
+              undoSubjectId: deps.undoSubjectId,
+              undoAssignmentId: deps.undoAssignmentId,
+              undoRevision: deps.undoRevision,
+              undoKey: deps.undoKey,
+              labelResult: deps.labelResult,
+            },
+          }),
+          readCurrentShelfPreferences(),
+        ]);
+        if ('sessionUnavailable' in page && page.sessionUnavailable)
+          return { sessionUnavailable: true as const, signInHref: context.sessionAccess.signInHref };
+        return { ...page, shelfSnapshot };
+      }
+      const requested = {
+        ...(deps.state ? { state: deps.state } : {}),
+        ...(deps.type ? { type: deps.type } : {}),
+        ...(deps.cursor ? { cursor: deps.cursor } : {}),
+        ...(deps.orderBy ? { orderBy: deps.orderBy } : {}),
+        ...(deps.direction ? { direction: deps.direction } : {}),
+      };
+      const shelfSnapshot = await readCurrentShelfPreferences();
+      const resolved = resolveShelfPresentation(requested, shelfSnapshot.shelf ?? undefined);
+      const page = await readPersonalLibraryCurrent({
+        data: {
+          orderBy: resolved.search.orderBy,
+          direction: resolved.search.direction,
+          ...(resolved.search.state ? { state: resolved.search.state } : {}),
+          ...(resolved.search.type ? { type: resolved.search.type } : {}),
+          ...(resolved.search.cursor ? { cursor: resolved.search.cursor } : {}),
+        },
+      });
       return { ...page, shelfSnapshot };
-    }
-    const requested = {
-      ...(deps.state ? { state: deps.state } : {}),
-      ...(deps.type ? { type: deps.type } : {}),
-      ...(deps.cursor ? { cursor: deps.cursor } : {}),
-      ...(deps.orderBy ? { orderBy: deps.orderBy } : {}),
-      ...(deps.direction ? { direction: deps.direction } : {}),
-    };
-    const shelfSnapshot = await readCurrentShelfPreferences();
-    const resolved = resolveShelfPresentation(requested, shelfSnapshot.shelf ?? undefined);
-    const page = await readPersonalLibraryCurrent({
-      data: {
-        orderBy: resolved.search.orderBy,
-        direction: resolved.search.direction,
-        ...(resolved.search.state ? { state: resolved.search.state } : {}),
-        ...(resolved.search.type ? { type: resolved.search.type } : {}),
-        ...(resolved.search.cursor ? { cursor: resolved.search.cursor } : {}),
-      },
-    });
-    return { ...page, shelfSnapshot };
-  },
+    }),
   head: ({ match, loaderData }) =>
     pageHead(
       {
@@ -213,6 +218,7 @@ function LibraryRoute() {
   const rawSearch = Route.useSearch();
   const search = validateShelfSearch(rawSearch);
   const data = Route.useLoaderData();
+  if (isSessionUnavailablePage(data)) return <SessionUnavailablePrompt signInHref={data.signInHref} />;
   const snapshot = 'shelfSnapshot' in data ? data.shelfSnapshot : undefined;
   const locale = getLocale();
   const viewer = useSession();

@@ -7,6 +7,7 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { isSessionUnavailableError } from '../session/unavailable';
 import { recordedMoneyUnit, recordedTaxBehavior, type StripeMoneyUnit } from './money-schema';
 import { UUID } from './price';
 
@@ -159,6 +160,7 @@ export async function loadCreatorSales(
     if (stale || !authorization) return { kind: 'denied' };
     return await loadPreparedCreatorSales(caller, authorization, query);
   } catch (error) {
+    if (isSessionUnavailableError(error)) throw error;
     return { kind: isPlatformClosedError(error) ? 'denied' : 'unavailable' };
   }
 }
@@ -231,6 +233,7 @@ export const readCreatorSalesCurrent = createServerFn({ method: 'GET' })
       result.page = await loadPreparedCreatorSales(nativeCreatorSalesCaller, authorization, data);
       return result;
     } catch (error) {
+      if (isSessionUnavailableError(error)) throw error;
       return { ...result, page: { kind: isPlatformClosedError(error) ? 'denied' : 'unavailable' } };
     }
   });

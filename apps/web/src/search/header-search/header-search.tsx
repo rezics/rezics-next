@@ -37,7 +37,6 @@ import {
   type HeaderSearchState,
 } from './state';
 import { loadGlobalHeaderSuggestions, loadScopedHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
-import { RezicsMark } from '../../shell/mobile-mark';
 import { RecentPanel, type SearchDiscovery } from '../recent-panel';
 import type { SearchRealmDiscoveryLoader } from '../realm-discovery-section';
 import { applyRecentSearch, type RecentEntry, type RecentHistory } from '../recent-history';
@@ -266,7 +265,7 @@ export function HeaderSearchView({
           expanded && 'hidden',
         )}
       >
-        <RezicsMark />
+        <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
         <span className="truncate">{triggerLabel}</span>
         {keyboardShortcut && (
           <>

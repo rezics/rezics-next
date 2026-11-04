@@ -29,6 +29,7 @@ capabilities and disclosure rules on every page and device.
   Decision: every replacement observation retires selection; browser return uses a fresh admitted reading, never a
   stored private inspection snapshot. Source and story delivery do not claim runtime acceptance.
 - Auth pages support sign-in, sign-up, consent, security settings and step-up through the accounts contract.
+- Signed-out private-route visits keep the safe sign-in redirect; an indeterminate session shows an unavailable prompt with a safe sign-in link, and no private loader runs.
 - The session BFF, upload completion and every download preserve caller identity and current API decisions.
 - Library archive recovery has a separate [entry and private-label recovery visit](../../apps/web/src/library/archive-entry-recovery.md).
   Its upload remains unavailable pending the generated native client and exact review-version confirmation binding;

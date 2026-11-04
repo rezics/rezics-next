@@ -4,7 +4,7 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
-import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
+import { useIsMobile } from '@rezics/ui/hooks/use-mobile';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Textarea } from '@rezics/ui/shadcn/textarea';

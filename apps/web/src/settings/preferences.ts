@@ -6,6 +6,7 @@ import { dynamicCollectionTitle } from '../library/dynamic-collection';
 import { getLocale } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { isSessionUnavailableError } from '../session/unavailable';
 import { securityHrefFromIssuer } from './account-safety-links';
 import {
   collectionPrivacyFailure,
@@ -462,6 +463,7 @@ export async function loadSettingsPage(
       securityHref: securityHref(sessionEnv),
     };
   } catch (error) {
+    if (isSessionUnavailableError(error)) throw error;
     const failure = failureDetails(error);
     return {
       signedIn: true,
