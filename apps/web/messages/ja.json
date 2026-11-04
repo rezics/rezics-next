@@ -572,7 +572,7 @@
   "settings_managed_inventory_retry_wait": "サーバーの指定により、アカウントの読み込みを再試行するまでお待ちください。",
   "settings_managed_organizations_retry_wait": "サーバーの指定により、この組織ページの読み込みを再試行するまでお待ちください。",
   "settings_managed_responsibilities_retry_wait": "サーバーの指定により、この担当記録ページの読み込みを再試行するまでお待ちください。",
-  "settings_managed_load_more": "さらに読み込む",
+  "settings_managed_load_more": "次のページ",
   "settings_managed_restart_list": "最初のページから表示",
   "settings_managed_authority_text": "責任の保留記録は、操作の完了やアカウントを管理する権限を保証するものではありません。",
   "settings_managed_identity_unavailable": "アカウントの公開情報を表示できません。",

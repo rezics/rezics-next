@@ -572,7 +572,7 @@
   "settings_managed_inventory_retry_wait": "서버의 요청에 따라 계정 불러오기를 다시 시도하기 전에 잠시 기다려 주세요.",
   "settings_managed_organizations_retry_wait": "서버의 요청에 따라 이 조직 페이지를 다시 불러오기 전에 잠시 기다려 주세요.",
   "settings_managed_responsibilities_retry_wait": "서버의 요청에 따라 이 책임 기록 페이지를 다시 불러오기 전에 잠시 기다려 주세요.",
-  "settings_managed_load_more": "더 불러오기",
+  "settings_managed_load_more": "다음 페이지",
   "settings_managed_restart_list": "첫 페이지부터 보기",
   "settings_managed_authority_text": "책임 보류 기록은 작업 완료나 해당 계정의 관리 권한을 보장하지 않습니다.",
   "settings_managed_identity_unavailable": "계정의 공개 신원 정보를 표시할 수 없습니다.",

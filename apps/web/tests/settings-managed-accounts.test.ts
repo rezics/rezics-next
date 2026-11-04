@@ -43,7 +43,6 @@ const unavailable: ManagedAccountsResult = {
   code: 'dependency_unavailable',
 };
 
-// These focused oracles are retained for integration; this attempt runs only the workspace typecheck.
 test('A signed-in human can reach their own identity, independent organization membership and operator responsibility pages in settings without treating preparing or reconciling as current authority', async () => {
   const calls: object[] = [];
   const initial = page();
@@ -72,7 +71,7 @@ test('A signed-in human can reach their own identity, independent organization m
   expect(href.hash).toBe('#account');
 });
 
-test('each feed retains its opaque cursor and usable pages across transient failure and deduplicates retried delivery', async () => {
+test('each feed retains its opaque cursor and usable page across transient failure, then replaces that page', async () => {
   const calls: object[] = [];
   let fail = true;
   const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
@@ -95,13 +94,48 @@ test('each feed retains its opaque cursor and usable pages across transient fail
   expect(inventory.snapshot().organizations.next).toBe('signed organization +/=');
   await inventory.more('organizations');
   expect(inventory.snapshot().organizations.next).toBe('next signed organization');
-  expect(inventory.snapshot().organizations.items).toHaveLength(1);
+  expect(inventory.snapshot().organizations.items).toHaveLength(0);
   expect(calls).toEqual([
     {},
     { organizationsCursor: 'signed organization +/=' },
     { operatorsCursor: 'signed operator +/=' },
     { organizationsCursor: 'signed organization +/=' },
   ]);
+});
+
+test('many next pages keep one native window per feed and the first duplicate within that window', async () => {
+  for (const feed of ['organizations', 'responsibilities'] as const) {
+    let sequence = 0;
+    const inventory = new ManagedAccountsInventory(viewer, async () => {
+      const value = page();
+      const key = `${++sequence}`.padStart(12, '0');
+      const id = `019a0000-0000-7000-8000-${key}`;
+      value.organizations.items = Array.from({ length: 20 }, (_, index) => ({
+        ...page().organizations.items[0]!,
+        account: { ...page().organizations.items[0]!.account, id, displayName: index === 0 ? 'First' : 'Duplicate' },
+      }));
+      value.responsibilities.items = Array.from({ length: 20 }, (_, index) => ({
+        ...page().responsibilities.items[0]!,
+        reservationId: id,
+        state: index === 0 ? 'reconciling' : 'current',
+      }));
+      return ready(value);
+    });
+    await inventory.load();
+    const sibling = feed === 'organizations' ? 'responsibilities' : 'organizations';
+    const retained = inventory.snapshot()[sibling];
+    for (let pageNumber = 0; pageNumber < 12; pageNumber++) {
+      const before = inventory.snapshot()[feed].items;
+      await inventory.more(feed);
+      const after = inventory.snapshot();
+      expect(after[feed].items).toHaveLength(1);
+      expect(after[feed].items).not.toEqual(before);
+      expect(after.organizations.items[0]!.account.displayName).toBe('First');
+      expect(after.responsibilities.items[0]!.state).toBe('reconciling');
+      expect(after[sibling]).toBe(retained);
+    }
+    expect(sequence).toBe(13);
+  }
 });
 
 test('denial clears all private pages and invalidates in-flight siblings; disposal and wrong-viewer completions never revive them', async () => {
@@ -258,6 +292,7 @@ test('inventory retry metadata uses the shared seconds and HTTP-date deadlines w
 });
 
 test('independent delayed feed failures keep exact cursors, retained rows and reconciliation while explicit recovery advances only its feed', async () => {
+  let now = Date.parse('Sat, 31 Oct 2026 12:00:00 GMT');
   const calls: ManagedAccountsCursors[] = [];
   const failed = new Set<string>();
   const organizationFailure = managedAccountsFailure(
@@ -270,16 +305,21 @@ test('independent delayed feed failures keep exact cursors, retained rows and re
     { code: 'overloaded', request_id: 'operator-page' },
     { 'Retry-After': 'Sat, 31 Oct 2026 12:00:20 GMT' },
   );
-  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-    calls.push(cursors);
-    const feed = cursors.organizationsCursor ? 'organizations' : cursors.operatorsCursor ? 'responsibilities' : null;
-    if (!feed) return ready(page());
-    if (!failed.has(feed)) {
-      failed.add(feed);
-      return feed === 'organizations' ? organizationFailure : responsibilityFailure;
-    }
-    return ready({ ...page(), [feed]: { ...page()[feed], items: [], next: null } });
-  });
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    async (cursors) => {
+      calls.push(cursors);
+      const feed = cursors.organizationsCursor ? 'organizations' : cursors.operatorsCursor ? 'responsibilities' : null;
+      if (!feed) return ready(page());
+      if (!failed.has(feed)) {
+        failed.add(feed);
+        return feed === 'organizations' ? organizationFailure : responsibilityFailure;
+      }
+      return ready({ ...page(), [feed]: { ...page()[feed], items: [], next: null } });
+    },
+    undefined,
+    () => now,
+  );
   await inventory.load();
   await Promise.all([inventory.more('organizations'), inventory.more('responsibilities')]);
   const bothFailed = inventory.snapshot();
@@ -288,12 +328,17 @@ test('independent delayed feed failures keep exact cursors, retained rows and re
   expect(bothFailed.organizations.items).toEqual(page().organizations.items);
   expect(bothFailed.responsibilities.items).toEqual(page().responsibilities.items);
   await inventory.more('organizations');
+  await inventory.more('responsibilities');
+  expect(calls).toHaveLength(3);
+  now += 2_000;
+  await inventory.more('organizations');
   expect(inventory.snapshot().organizations.next).toBeNull();
   expect(inventory.snapshot().responsibilities).toBe(bothFailed.responsibilities);
+  now += 18_000;
   await inventory.more('responsibilities');
   expect(inventory.snapshot().organizations.next).toBeNull();
   expect(inventory.snapshot().responsibilities.next).toBeNull();
-  expect(inventory.snapshot().responsibilities.items[0]?.state).toBe('reconciling');
+  expect(inventory.snapshot().responsibilities.items).toEqual([]);
   expect(calls).toEqual([
     {},
     { organizationsCursor: 'signed organization +/=' },
@@ -303,7 +348,7 @@ test('independent delayed feed failures keep exact cursors, retained rows and re
   ]);
 });
 
-test('busy initial and selected-feed actions make one request while disposal still permits a fresh lifecycle load', async () => {
+test('busy initial and selected-feed actions coalesce and disposal permanently retires the lifecycle', async () => {
   const calls: ManagedAccountsCursors[] = [];
   let finish: (result: ManagedAccountsResult) => void = () => {};
   const inventory = new ManagedAccountsInventory(viewer, (cursors) => {
@@ -331,8 +376,8 @@ test('busy initial and selected-feed actions make one request while disposal sti
   await fresh;
   finishAbandoned({ ok: false, kind: 'denied', status: 403, code: 'forbidden' });
   await abandoned;
-  expect(inventory.snapshot().account?.id).toBe(viewer);
-  expect(calls).toHaveLength(4);
+  expect(inventory.snapshot().account).toBeNull();
+  expect(calls).toHaveLength(3);
 });
 
 test('Recover a managed inventory feed from a rejected cursor preserving exact original semantic input, native authority and bounded requests', async () => {
@@ -470,7 +515,7 @@ test('first-page replacement coalesces busy actions and preserves an in-flight s
 test('a failed first-page read retains stale pages and explicit recovery until a genuine ready or preparing first page arrives', async () => {
   for (const feed of ['organizations', 'responsibilities'] as const) {
     const calls: ManagedAccountsCursors[] = [];
-    const failure = managedAccountsFailure(503, { code: 'overloaded' }, { 'Retry-After': '2' });
+    const failure = managedAccountsFailure(503, { code: 'overloaded' });
     const fresh = page();
     fresh.organizations = { state: 'preparing', items: [], next: null };
     fresh.responsibilities = { items: [], next: null };
@@ -491,7 +536,7 @@ test('a failed first-page read retains stale pages and explicit recovery until a
     expect(inventory.snapshot()[feed].restartable).toBe(true);
     expect(inventory.snapshot()[feed].busy).toBe(false);
     await inventory.more(feed);
-    expect(calls[3]).toEqual(calls[1]!);
+    expect(calls[3]).toEqual({});
     await inventory.firstPage(feed);
     expect(calls[2]).toEqual({});
     expect(calls[4]).toEqual({});

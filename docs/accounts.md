@@ -143,6 +143,10 @@ handwritten client mirrors and method overrides are not substitutes. After publi
 finishes independent replacement pages, cursor-free restart and admitted detail/back navigation. Installed
 transport, rendering and growth acceptance remain deferred.
 
+Within each native directory page, the first duplicate identity wins; every Next replaces only its selected feed's
+20-row window, and a transient failure of a cursor-free restart retains that exact cursor-free retry. Directory
+identities remain unlinked until the official installed viewer/navigation observation can admit the fixed detail route.
+
 Managed-account settings lead with the supplied display name or handle and an initials avatar. A supplied
 identity without either label uses the unnamed-account treatment; an absent identity uses Identity unavailable.
 Exact supplied account IDs remain selectable inside closed account-detail disclosures for the target, operator,

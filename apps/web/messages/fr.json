@@ -572,7 +572,7 @@
   "settings_managed_inventory_retry_wait": "Le serveur vous demande de patienter avant de réessayer de charger vos comptes.",
   "settings_managed_organizations_retry_wait": "Le serveur vous demande de patienter avant de réessayer de charger cette page d’organisations.",
   "settings_managed_responsibilities_retry_wait": "Le serveur vous demande de patienter avant de réessayer de charger cette page de responsabilités.",
-  "settings_managed_load_more": "Charger la suite",
+  "settings_managed_load_more": "Page suivante",
   "settings_managed_restart_list": "Reprendre à la première page",
   "settings_managed_authority_text": "Une réserve de responsabilité ne confirme ni la fin d’une opération ni le droit de gérer le compte.",
   "settings_managed_identity_unavailable": "L’identité publique du compte n’est pas disponible.",

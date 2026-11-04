@@ -141,25 +141,16 @@ export const IndependentCursors: Story = {
       'Atlas Indexer',
       m.settings_managed_identity_unavailable(),
     ]);
-    for (const [name, id] of [
-      ['Avery Reader', managedViewer],
-      ['Atlas Editors', '019a0000-0000-7000-8000-000000000002'],
-      ['Independent Reading Group', '019a0000-0000-7000-8000-000000000003'],
-      ['Atlas Indexer', '019a0000-0000-7000-8000-000000000005'],
-    ] as const) {
+    for (const name of ['Avery Reader', 'Atlas Editors', 'Independent Reading Group', 'Atlas Indexer']) {
       const heading = canvas.getByRole('heading', { name, level: 4 });
       await expect(heading).toBeVisible();
       const row = within(heading.closest('li')!);
       await expect(row.getAllByRole('heading')).toHaveLength(1);
-      await expect(row.getAllByRole('link')).toHaveLength(1);
-      await expect(row.getByRole('link', { name })).toHaveAttribute(
-        'href',
-        `/${getLocale()}/settings?panel=compact&managedAccount=${id}#account`,
-      );
+      await expect(row.queryByRole('link')).toBeNull();
     }
     await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
     await organizations.findByRole('alert');
-    await expect(organizations.getByRole('link', { name: 'Atlas Editors' })).toBeVisible();
+    await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_load_more() }));
     await expect(responsibilities.queryByRole('button')).toBeNull();
     await userEvent.click(organizations.getByRole('button', { name: m.settings_retry() }));
@@ -173,7 +164,7 @@ export const PartialPreparing: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.managed_preparing_text());
-    await expect(canvas.getByRole('link', { name: 'Atlas Indexer' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.settings_managed_load_more() }));
     await expect(canvas.getByText(m.managed_preparing_text())).toBeVisible();
   },
@@ -197,10 +188,8 @@ export const ReconcilingAndUnavailableIdentity: Story = {
     await expect(unavailable.getByText(m.managed_reconciling())).toBeVisible();
     await expect(canvas.queryByText(m.managed_current())).toBeNull();
     await expect(canvas.getAllByText(m.managed_reconciling())).toHaveLength(2);
-    const href = canvas.getByRole('link', { name: 'Atlas Indexer' }).getAttribute('href')!;
-    await expect(href).toContain('managedAccount=019a0000-0000-7000-8000-000000000005');
-    await expect(href).toContain('panel=compact');
-    await expect(href).toContain('#account');
+    await expect(canvas.queryByRole('link')).toBeNull();
+    await expect(canvas.getByText(m.settings_managed_navigation_unavailable())).toBeVisible();
   },
 };
 
@@ -258,7 +247,7 @@ export const IndependentRetryDelays: Story = {
     );
     await expect(organizationRetry).toBeDisabled();
     await expect(responsibilityRetry).toBeDisabled();
-    await expect(organizations.getByRole('link', { name: 'Atlas Editors' })).toBeVisible();
+    await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await expect(responsibilities.getByText(m.managed_reconciling())).toBeVisible();
     await waitFor(() => expect(organizationRetry).toBeEnabled(), { timeout: 3000 });
     await expect(responsibilityRetry).toBeDisabled();
@@ -284,7 +273,7 @@ export const DenialClearsInventory: Story = {
     await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
     await canvas.findByText(m.managed_denied_text());
     await expect(canvas.queryAllByRole('list')).toHaveLength(0);
-    await expect(canvas.queryByRole('link', { name: 'Atlas Indexer' })).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeNull();
     await expect(canvas.getByRole('button', { name: m.settings_retry() })).toBeEnabled();
   },
 };
@@ -309,11 +298,11 @@ export const InvalidCursorFirstPageRecovery: Story = {
     await userEvent.click(firstPage);
     await expect(firstPage).toBeDisabled();
     await expect(retry).toBeDisabled();
-    await expect(organizations.getByRole('link', { name: 'Atlas Editors' })).toBeVisible();
+    await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await organizations.findByText(m.managed_no_organizations());
     await expect(organizations.queryByRole('button')).toBeNull();
-    await expect(organizations.queryByRole('link')).toBeNull();
-    await expect(canvas.getByRole('link', { name: 'Atlas Indexer' })).toBeVisible();
+    await expect(organizations.queryByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeNull();
+    await expect(canvas.getByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeVisible();
   },
 };
 
@@ -332,7 +321,7 @@ export const StaleCursorIndependentRecovery: Story = {
     await userEvent.click(responsibilities.getByRole('button', { name: m.settings_managed_restart_list() }));
     await responsibilities.findByText(m.managed_no_responsibilities());
     await expect(responsibilities.queryByRole('link')).toBeNull();
-    await expect(organizations.getByRole('link', { name: 'Atlas Editors' })).toBeVisible();
+    await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await expect(organizations.queryByRole('button')).toBeNull();
   },
 };
@@ -350,7 +339,7 @@ export const FailedFirstPageRecovery: Story = {
     const firstPage = organizations.getByRole('button', { name: m.settings_managed_restart_list() });
     await expect(firstPage).toBeDisabled();
     await expect(organizations.getByRole('button', { name: m.settings_retry() })).toBeDisabled();
-    await expect(organizations.getByRole('link', { name: 'Atlas Editors' })).toBeVisible();
+    await expect(organizations.getByRole('heading', { level: 4, name: 'Atlas Editors' })).toBeVisible();
     await expect(organizations.queryByText(m.managed_no_organizations())).toBeNull();
     await waitFor(() => expect(firstPage).toBeEnabled(), { timeout: 3000 });
     await expect(organizations.getByRole('alert')).toBeVisible();
@@ -358,7 +347,7 @@ export const FailedFirstPageRecovery: Story = {
     await organizations.findByText(m.managed_preparing_text());
     await expect(organizations.queryByRole('alert')).toBeNull();
     await expect(organizations.queryByRole('button', { name: m.settings_managed_restart_list() })).toBeNull();
-    await expect(canvas.getByRole('link', { name: 'Atlas Indexer' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeVisible();
   },
 };
 
@@ -374,7 +363,7 @@ export const DeniedFirstPageClearsInventory: Story = {
     await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_restart_list() }));
     await canvas.findByText(m.managed_denied_text());
     await expect(canvas.queryAllByRole('list')).toHaveLength(0);
-    await expect(canvas.queryByRole('link', { name: 'Atlas Indexer' })).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeNull();
     await expect(canvas.queryByRole('button', { name: m.settings_managed_restart_list() })).toBeNull();
     await expect(canvas.getByRole('button', { name: m.settings_retry() })).toBeEnabled();
   },

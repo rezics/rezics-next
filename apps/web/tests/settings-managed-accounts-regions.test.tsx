@@ -42,7 +42,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
 const { within } = await import('storybook/test');
 const { ManagedAccountsSection } = await import('../src/settings/managed-accounts');
-const { managedAccountsFailure, managedAccountHref } = await import('../src/settings/managed-accounts-read');
+const { managedAccountsFailure } = await import('../src/settings/managed-accounts-read');
 const { sessionQuery } = await import('../src/session/query');
 const { managedAccountsExample, managedViewer } = await import('../src/stories/patterns/managed-accounts.fixtures');
 const { m } = await import('../src/paraglide/messages.js');
@@ -170,10 +170,9 @@ test('two mounted inventories name their independent feeds and retain exact spar
     const org = region(a, m.managed_organizations_title());
     const resp = region(a, m.managed_operated_title());
     const otherOrg = region(b, m.managed_organizations_title());
-    const link = within(org).getByRole('link', { name: longName });
-    expect(link.getAttribute('href')).toBe(
-      managedAccountHref('/en/settings?panel=compact#account', initial.organizations.items[0]!.account.id),
-    );
+    const identity = within(org).getByRole('heading', { name: longName, level: 4 });
+    expect(within(a).queryByRole('link')).toBeNull();
+    expect(a.textContent).toContain(m.settings_managed_navigation_unavailable());
     const unavailable = within(resp)
       .getByRole('heading', { level: 4, name: m.settings_managed_identity_unavailable() })
       .closest('li')!;
@@ -197,7 +196,9 @@ test('two mounted inventories name their independent feeds and retain exact spar
     associations(a);
     await first.answer(ready({ ...initial, organizations: { state: 'ready', items: [], next: 'next org +/=' } }));
     expect(org.getAttribute('aria-busy')).toBe('false');
-    expect(within(org).getByRole('link', { name: longName })).toBe(link);
+    expect(within(org).queryByRole('heading', { name: longName, level: 4 })).toBeNull();
+    expect(document.activeElement).toBe(within(org).getByRole('heading', { level: 3 }));
+    expect(org.textContent).toContain(m.managed_no_current_page());
     expect(resp.textContent).toContain(m.settings_managed_responsibilities_retry_wait());
     expect(org.textContent).not.toContain(m.settings_managed_responsibilities_retry_wait());
     associations(a);
@@ -233,7 +234,8 @@ test('two mounted inventories name their independent feeds and retain exact spar
     );
     expect(resp.textContent).toContain(m.managed_no_responsibilities());
     expect(within(resp).queryByRole('button')).toBeNull();
-    expect(org.contains(link)).toBe(true);
+    expect(org.contains(identity)).toBe(false);
+    expect(document.activeElement).toBe(within(resp).getByRole('heading', { level: 3 }));
     expect(within(org).queryByText(m.managed_preparing_text())).toBeNull();
     expect(first.calls).toEqual([
       {},
@@ -340,12 +342,9 @@ test('supplied handle and unnamed fallbacks stay human while unavailable respons
     const viewer = region(inventory, m.managed_your_account());
     const org = region(inventory, m.managed_organizations_title());
     const resp = region(inventory, m.managed_operated_title());
-    const handle = within(viewer).getByRole('link', { name: `@${initial.account.handle}` });
     expect(within(viewer).getByRole('heading', { level: 4 }).textContent).toBe(`@${initial.account.handle}`);
-    const unnamed = within(org).getByRole('link', { name: m.managed_unnamed() });
-    expect(unnamed.getAttribute('href')).toBe(
-      managedAccountHref('/en/settings?panel=compact#account', initial.organizations.items[0]!.account.id),
-    );
+    expect(within(org).getByRole('heading', { name: m.managed_unnamed(), level: 4 })).toBeDefined();
+    expect(within(inventory).queryByRole('link')).toBeNull();
     const unavailable = within(resp)
       .getByRole('heading', { name: m.settings_managed_identity_unavailable() })
       .closest('li')!;
@@ -355,9 +354,9 @@ test('supplied handle and unnamed fallbacks stay human while unavailable respons
       initial.responsibilities.items[1]!.reservationId,
     ])
       expect(inventory.innerHTML).not.toContain(value);
-    handle.focus();
-    unnamed.focus();
-    expect(document.activeElement).toBe(unnamed);
+    const next = button(org, m.settings_managed_load_more());
+    next.focus();
+    expect(document.activeElement).toBe(next);
     associations(inventory);
     expect(feed.calls).toEqual([{}]);
   } finally {
@@ -365,14 +364,13 @@ test('supplied handle and unnamed fallbacks stay human while unavailable respons
   }
 });
 
-test('current-viewer withdrawal withholds every identity and refuses retained controls and ordinary or auxiliary navigation before commit', async () => {
+test('current-viewer withdrawal withholds every identity and refuses retained controls before commit', async () => {
   const feed = source();
   const view = await mounted([feed]);
   try {
     const initial = managedAccountsExample();
     await feed.answer(ready(initial));
     const inventory = view.inventory();
-    const links = [...inventory.querySelectorAll('a')];
     const controls = [...inventory.querySelectorAll('button')];
     await view.click(button(region(inventory, m.managed_organizations_title()), m.settings_managed_load_more()));
     await act(async () => {
@@ -380,16 +378,6 @@ test('current-viewer withdrawal withholds every identity and refuses retained co
         .getQueryCache()
         .find({ queryKey: sessionQuery.queryKey })!
         .setState({ status: 'error', error: new Error('Session unavailable') });
-      for (const link of links)
-        for (const type of ['click', 'auxclick']) {
-          const event = new window.MouseEvent(type, {
-            bubbles: true,
-            cancelable: true,
-            button: type === 'auxclick' ? 1 : 0,
-          });
-          link.dispatchEvent(event);
-          expect(event.defaultPrevented).toBe(true);
-        }
       for (const control of controls) control.click();
       await tick();
     });
@@ -407,6 +395,40 @@ test('current-viewer withdrawal withholds every identity and refuses retained co
     expect(feed.calls).toEqual([{}, { organizationsCursor: initial.organizations.next! }]);
   } finally {
     await view.close();
+  }
+});
+
+test('credential replacement and an A-to-B-to-A transition retire pending directory reads synchronously', async () => {
+  for (const replacement of ['credential', 'viewer'] as const) {
+    const feed = source();
+    const view = await mounted([feed]);
+    try {
+      await feed.answer(ready(managedAccountsExample()));
+      const org = region(view.inventory(), m.managed_organizations_title());
+      const control = button(org, m.settings_managed_load_more());
+      await view.click(control);
+      await act(async () => {
+        view.client.setQueryData(sessionQuery.queryKey, {
+          state: 'signed-in',
+          csrfToken: 'replacement',
+          subject: replacement === 'credential' ? managedViewer : '019a0000-0000-7000-8000-000000000099',
+        });
+        view.client.setQueryData(sessionQuery.queryKey, {
+          state: 'signed-in',
+          csrfToken: 'story-csrf',
+          subject: managedViewer,
+        });
+        control.click();
+        await tick();
+      });
+      expect(feed.calls).toHaveLength(3); // The new lifecycle has one fresh initial read.
+      await feed.answer(ready(managedAccountsExample())); // Retired next-page response.
+      expect(within(view.inventory()).queryByRole('list')).toBeNull();
+      await feed.answer(ready(managedAccountsExample()));
+      expect(within(view.inventory()).getByRole('list', { name: m.managed_your_account() })).toBeDefined();
+    } finally {
+      await view.close();
+    }
   }
 });
 
