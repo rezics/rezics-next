@@ -80,7 +80,13 @@ test('mounted commands retain canonical release identities, exact CAS and both s
   expect(put.Check({ ...input, expectedObservation: 'a'.repeat(64) })).toBe(true);
   const observation = classificationObservation(association, { ...value, confidenceCount: 0, lieCount: 0 });
   expect(observation.payload).toMatchObject({ confidenceCount: 0, lieCount: 0, lie: false });
-  const cleared = { sourceAlias: 'vndb', sourceRecordId: 'v17', sourceAssociationId: 'g123', asOf: value.asOf, cleared: true };
+  const cleared = {
+    sourceAlias: 'vndb',
+    sourceRecordId: 'v17',
+    sourceAssociationId: 'g123',
+    asOf: value.asOf,
+    cleared: true,
+  };
   expect(clear.Check({ ...input, value: cleared })).toBe(true);
   const mutation = Compile(SourceClassificationClearResultSchema);
   const states = SourceClassificationPutSchema.properties.state;

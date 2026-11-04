@@ -311,7 +311,9 @@ type ClassificationCompatibility<Path> = Path extends { 'source-classifications'
 type ClassificationMethod<Verb extends string> = SubjectRoutes extends {
   ':id': { 'source-classifications': infer Methods };
 }
-  ? Methods extends Record<Verb, { post: infer Method }> ? Method : never
+  ? Methods extends Record<Verb, { post: infer Method }>
+    ? Method
+    : never
   : never;
 type MethodBody<Method> = Method extends { body: infer Body } ? Body : never;
 type MethodResult<Method> = Method extends { response: { 200: infer Result } } ? Result : never;

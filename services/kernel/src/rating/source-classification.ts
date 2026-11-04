@@ -32,7 +32,11 @@ import {
 } from './source-classification-semantic.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
 import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
-import { classificationEvidence, classificationProvenanceMatches, currentClassificationRead } from './source-classification-read.ts';
+import {
+  classificationEvidence,
+  classificationProvenanceMatches,
+  currentClassificationRead,
+} from './source-classification-read.ts';
 import lockSubject from './source-provider-lock.sql';
 import {
   lockClassificationHead,
@@ -228,7 +232,9 @@ export function createSourceClassificationProducer(config: SourceClassificationC
         if (!identity || identity.redirect !== null) throw new ProblemError('not_found');
         if (
           !cleared &&
-          (!classificationProvenanceMatches(prepared.semantic, next.payload) || !prepared.fence || prepared.fence.takenDown)
+          (!classificationProvenanceMatches(prepared.semantic, next.payload) ||
+            !prepared.fence ||
+            prepared.fence.takenDown)
         )
           throw new ProblemError('not_found');
         return mode;

@@ -60,10 +60,14 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
         continue;
       }
       if (current?.subjectId !== id || mapping?.state !== 'mapped' || mapping.terminal !== id) continue;
-      const version = await withReadTransaction(config.pool, async (client) => {
-        await partitionReadClient(client, partitionOf(routeOf(id)!));
-        return readItemIdentityVersion(client, id);
-      }, deadline);
+      const version = await withReadTransaction(
+        config.pool,
+        async (client) => {
+          await partitionReadClient(client, partitionOf(routeOf(id)!));
+          return readItemIdentityVersion(client, id);
+        },
+        deadline,
+      );
       if (version && version.redirect === null)
         subjects.set(id, classificationDigest([{ ...mapping, epoch: mapping.epoch.toString() }, version]));
     }
@@ -174,7 +178,14 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
         result.set(key, {
           state: 'available',
           evidence: {
-            stamp: classificationDigest([a, fact, source, defaults, subjects.get(a.subjectId), subjects.get(a.targetId)]),
+            stamp: classificationDigest([
+              a,
+              fact,
+              source,
+              defaults,
+              subjects.get(a.subjectId),
+              subjects.get(a.targetId),
+            ]),
             source: source && 'field_group' in source ? source : null,
           },
         });

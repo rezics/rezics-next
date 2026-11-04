@@ -12,7 +12,10 @@ import type { ClassificationHead } from './source-classification-store.ts';
 export function classificationEvidence(value: ClassificationAssociationResolution | undefined) {
   return value?.state === 'available' ? value.evidence : null;
 }
-export function classificationProvenanceMatches(resolution: ClassificationAssociationResolution | undefined, value: ClassificationPayload) {
+export function classificationProvenanceMatches(
+  resolution: ClassificationAssociationResolution | undefined,
+  value: ClassificationPayload,
+) {
   const evidence = classificationEvidence(resolution);
   if (!evidence) return false;
   return (
