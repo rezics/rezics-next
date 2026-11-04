@@ -8,7 +8,11 @@ import {
   vndbTagsRatingEndpoint,
   vndbTagsRatingDocumentation,
 } from '../../src/semantic/source-tag-weight.ts';
-import { createReleasedDiscoveryFixture, discoveryKey, type ReleasedDiscoveryFixture } from '../support/released-discovery.ts';
+import {
+  createReleasedDiscoveryFixture,
+  discoveryKey,
+  type ReleasedDiscoveryFixture,
+} from '../support/released-discovery.ts';
 
 const sourceSnapshot = new Uint8Array(
   await Bun.file(new URL('../fixtures/vndb-source-weight-v17.json', import.meta.url)).arrayBuffer(),
@@ -29,7 +33,11 @@ afterAll(async () => {
   await fixture?.close();
 }, 180_000);
 
-function candidate(tagId = sourceTag, property: 'schema:genre' | 'schema:keywords' = 'schema:genre', contextId = GLOBAL_CONTEXT) {
+function candidate(
+  tagId = sourceTag,
+  property: 'schema:genre' | 'schema:keywords' = 'schema:genre',
+  contextId = GLOBAL_CONTEXT,
+) {
   return produceVndbSourceTagWeightCandidate({
     endpoint: vndbTagsRatingEndpoint,
     requestBody,
@@ -78,12 +86,9 @@ test('the producer uses the exact aggregate, source association and Context from
     { property: { id: 'rezics:sourceTagWeightMetric' }, value: { type: 'value', content: 'vndbTagsRating' } },
     { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '+2', unit: '1' } } },
   ]);
-  expect(result.candidate.statement.references.flatMap(({ parts }) => parts.map(({ property }) => property.id))).toEqual([
-    'schema:url',
-    'rezics:sourceTagId',
-    'rezics:sourceSnapshot',
-    'schema:url',
-  ]);
+  expect(
+    result.candidate.statement.references.flatMap(({ parts }) => parts.map(({ property }) => property.id)),
+  ).toEqual(['schema:url', 'rezics:sourceTagId', 'rezics:sourceSnapshot', 'schema:url']);
   expect(result.candidate.statement.references[1]?.parts[0]?.value.content).toBe(vndbTagsRatingDocumentation);
 
   const otherContext = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e03';
@@ -201,13 +206,7 @@ test('a released source-weight statement survives native proposal, review, adopt
 
   const propose = async (statement: unknown, headers = discoveryKey()) => {
     const body = { statement };
-    const response = await fixture.request(
-      'editor',
-      'POST',
-      `/v1/subjects/${work.id}/candidates`,
-      body,
-      headers,
-    );
+    const response = await fixture.request('editor', 'POST', `/v1/subjects/${work.id}/candidates`, body, headers);
     return { response, body, headers };
   };
   const firstProposal = await propose(genre.candidate.statement);
@@ -348,9 +347,9 @@ test('a released source-weight statement survives native proposal, review, adopt
   });
   expect(facts(genreFact)).toEqual(proposedFacts(genre.candidate.statement));
   expect(facts(keywordFact)).toEqual(proposedFacts(keyword.candidate.statement));
-  expect(genreFact.qualifiers.find((part: any) => part.property.id === 'rezics:sourceTagWeight')?.value.content.amount).toBe(
-    '+2.59999990463257',
-  );
+  expect(
+    genreFact.qualifiers.find((part: any) => part.property.id === 'rezics:sourceTagWeight')?.value.content.amount,
+  ).toBe('+2.59999990463257');
   expect(JSON.stringify(publicSubject.subject.statements)).not.toMatch(/confidence|vote|popularity/i);
   expect(createHash('sha256').update(sourceSnapshot).digest('hex')).toBe(genre.candidate.source.digest);
 });

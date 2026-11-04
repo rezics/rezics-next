@@ -192,7 +192,8 @@ export function produceVndbSourceTagWeightCandidate(input: VndbSourceTagWeightIn
   )
     return { state: 'unavailable' };
   if (!tagId.test(input.tagId)) return { state: 'unavailable' };
-  const requestBytes = typeof input.requestBody === 'string' ? new TextEncoder().encode(input.requestBody) : input.requestBody;
+  const requestBytes =
+    typeof input.requestBody === 'string' ? new TextEncoder().encode(input.requestBody) : input.requestBody;
   if (requestBytes.byteLength === 0 || requestBytes.byteLength > 2048) return { state: 'unavailable' };
   let request: JsonValue;
   try {
@@ -234,8 +235,7 @@ export function produceVndbSourceTagWeightCandidate(input: VndbSourceTagWeightIn
   if (tag.lie === true) return { state: 'suppressed' };
   if (tag.lie !== false) return { state: 'unavailable' };
   if (tag.rating === null) return { state: 'empty' };
-  if (!isNumber(tag.rating) || !isNumber(tag.spoiler))
-    return { state: 'unavailable' };
+  if (!isNumber(tag.rating) || !isNumber(tag.spoiler)) return { state: 'unavailable' };
   const spoiler = Number(tag.spoiler.sourceNumber);
   if (!Number.isInteger(spoiler) || spoiler < 0 || spoiler > 2) return { state: 'unavailable' };
   const parsedRating = Number(tag.rating.sourceNumber);

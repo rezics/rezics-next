@@ -234,9 +234,11 @@ const checkPattern = new Script(`(pattern) => {
 }`).runInContext(context) as (pattern: string) => { safe: boolean; steps: number };
 
 /** The compiler and release validator's sole pattern safety authority. No proof cache. */
-export function analyzePattern(
-  pattern: unknown,
-): { safe: boolean; steps: number; proof?: 'iri-composition' | 'fixed-hex-digest' } {
+export function analyzePattern(pattern: unknown): {
+  safe: boolean;
+  steps: number;
+  proof?: 'iri-composition' | 'fixed-hex-digest';
+} {
   if (typeof pattern !== 'string' || pattern.length > 256) return { safe: false, steps: 0 };
   try {
     new RegExp(pattern, 'u');

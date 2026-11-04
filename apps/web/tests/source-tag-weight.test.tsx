@@ -80,7 +80,11 @@ function render(page: SubjectPageData, spoilerLevel: 0 | 1 | 2) {
   );
 }
 
-const text = (html: string) => html.replace(/<[^>]+>/gu, ' ').replace(/&amp;/gu, '&').replace(/\s+/gu, ' ');
+const text = (html: string) =>
+  html
+    .replace(/<[^>]+>/gu, ' ')
+    .replace(/&amp;/gu, '&')
+    .replace(/\s+/gu, ' ');
 
 test('public tag chips use the disclosed Concept label and destination, keep source evidence per association, and gate spoilers', async () => {
   const loaded = await loadSubjectPage(kernel, holder);

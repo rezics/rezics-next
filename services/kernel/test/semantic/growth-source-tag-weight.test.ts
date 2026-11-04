@@ -215,9 +215,11 @@ test('source-weighted tag page rows, target disclosure and response bytes stay f
       const statements = read?.subject.statements as Record<string, any[]>;
       const keywordStatements = statements['schema:keywords'] ?? [];
       expect(keywordStatements).toHaveLength(2);
-      expect(keywordStatements.some((statement) =>
-        statement.qualifiers.some((part: any) => part.property.id === 'rezics:sourceTagWeight'),
-      )).toBe(true);
+      expect(
+        keywordStatements.some((statement) =>
+          statement.qualifiers.some((part: any) => part.property.id === 'rezics:sourceTagWeight'),
+        ),
+      ).toBe(true);
       const associationFacts = {
         statements: {
           genre: statements['schema:genre'] ?? [],
