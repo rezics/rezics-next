@@ -55,6 +55,7 @@ import {
   subjectIndexName,
 } from './indices.ts';
 import type { CalendarPhysicalIdentity } from './release-search-calendar.ts';
+import type { ReleaseSearchCandidateReservation } from './release-search-native-stream.ts';
 import {
   RELEASE_GROUPING_LIMITS,
   ReleaseGroupingRestartRequired,
