@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { act } from 'react';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -6,7 +7,7 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, open } from './creation-page-fixture';
+import { creationFixture, approval, button, dom, fill, open } from './creation-page-fixture';
 import { OperatorTransferPage } from '../src/routes/operators.transfer';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
@@ -15,6 +16,12 @@ import {
   type TransferAttempt,
 } from '../src/operator-transfer';
 creationFixture();
+async function flush(action: () => void) {
+  await act(async () => {
+    action();
+    for (let turn = 0; turn < 12; turn++) await Promise.resolve();
+  });
+}
 const initial = {
   kind: 'ready',
   accountId: 'human',

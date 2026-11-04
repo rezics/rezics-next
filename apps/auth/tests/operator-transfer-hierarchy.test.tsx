@@ -85,8 +85,7 @@ afterAll(async () => {
 async function flush(action?: () => void) {
   await act(async () => {
     action?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let turn = 0; turn < 12; turn++) await Promise.resolve();
   });
 }
 async function mount(initial: AccountSessionResult | undefined = session, attempt?: TransferAttempt) {
@@ -96,10 +95,23 @@ async function mount(initial: AccountSessionResult | undefined = session, attemp
   globalThis.fetch = (async (input, init) => {
     const path = String(input);
     calls.push(path);
-    if (path === '/session') return Response.json(sessionBody);
+    if (path === '/session')
+      return Response.json(
+        initial?.kind === 'ready'
+          ? { account_id: initial.accountId, client_id: initial.clientId, scope: initial.scopes }
+          : sessionBody,
+      );
     if (path === OPERATOR_TRANSFER_PAGE_PATH) {
       const body = JSON.parse(String(init?.body));
-      if (body.kind === 'readiness') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } });
+      if (body.kind === 'readiness')
+        return Response.json({
+          viewer:
+            initial?.kind === 'ready' &&
+            (initial.clientId !== OPERATOR_MANAGEMENT_PROFILE.client_id || !initial.scopes?.includes('account:manage'))
+              ? { kind: 'authentication-required', continuation: 'operator-transfer' }
+              : { kind: 'ready' },
+          review: { kind: 'readiness' },
+        });
       if (body.kind === 'source')
         return Response.json({
           viewer: { kind: 'ready' },
@@ -461,7 +473,7 @@ test('current refusal is focused and visible while response diagnostics remain a
   expect(diagnostics.open).toBe(false);
   expect(diagnostics.querySelector('summary')?.textContent).toBe(m.auth_transfer_handoff_diagnostics());
   expect(guide(host).contains(diagnostics)).toBe(false);
-  identities(host);
+  expect(host.querySelector('#transfer-confirm')).toBeNull();
   await disclosure(host);
 });
 
@@ -483,11 +495,48 @@ for (const attempt of [
     const host = await mount(unavailable, attempt);
     const saved = window.sessionStorage.getItem('rezics.operator-transfer.attempt');
     let resolve!: (response: Response) => void;
-    globalThis.fetch = ((input) => {
-      calls.push(String(input));
-      return new Promise<Response>((done) => {
-        resolve = done;
-      });
+    let sessionReads = 0;
+    globalThis.fetch = ((input, init) => {
+      const path = String(input);
+      calls.push(path);
+      if (path === '/session') {
+        sessionReads++;
+        if (sessionReads === 1)
+          return new Promise<Response>((done) => {
+            resolve = done;
+          });
+        return Promise.resolve(Response.json(sessionBody));
+      }
+      if (path === OPERATOR_TRANSFER_PAGE_PATH) {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        return Promise.resolve(
+          Response.json(
+            body.kind === 'readiness'
+              ? { viewer: { kind: 'ready' }, review: { kind: 'readiness' } }
+              : body.kind === 'source'
+                ? {
+                    viewer: { kind: 'ready' },
+                    review: {
+                      kind: 'source',
+                      relation: {
+                        previous: attempt?.request.previous,
+                        expectedVersion: attempt?.request.expectedVersion,
+                      },
+                      action: 'allowed',
+                    },
+                  }
+                : {
+                    viewer: { kind: 'ready' },
+                    review: {
+                      kind: 'destination',
+                      destinationAccountId: attempt?.request.operatorAccountId,
+                      action: 'allowed',
+                    },
+                  },
+          ),
+        );
+      }
+      throw new Error(`Unexpected recovery write: ${path}`);
     }) as typeof fetch;
     const retry = button(host, m.auth_account_delete_retry());
     await flush(() => {
@@ -500,7 +549,7 @@ for (const attempt of [
     await flush(() => resolve(new Response(null, { status: 503 })));
     expect(button(host, m.auth_account_delete_retry()).disabled).toBe(false);
     await flush(() => button(host, m.auth_account_delete_retry()).click());
-    await flush(() => resolve(Response.json(sessionBody)));
+    await flush(() => {});
     expect(window.sessionStorage.getItem('rezics.operator-transfer.attempt')).toBe(saved);
     expect(host.textContent).not.toContain(m.auth_transfer_account_changed());
     if (!attempt) expect(host.querySelector('#transfer-subject')).not.toBeNull();
@@ -512,7 +561,13 @@ for (const attempt of [
       if (attempt.phase === 'accepted') text(host, m.auth_transfer_accepted());
       if (attempt.phase === 'execute') expect(host.textContent).toContain(m.auth_transfer_uncertain());
     }
-    expect(calls).toEqual(['/session', '/session']);
+    expect(calls).toEqual([
+      '/session',
+      '/session',
+      '/session',
+      OPERATOR_TRANSFER_PAGE_PATH,
+      ...(attempt?.phase === 'approve' ? ['/session', OPERATOR_TRANSFER_PAGE_PATH] : []),
+    ]);
   });
 }
 

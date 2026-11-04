@@ -199,7 +199,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       !value.needsProof &&
       value.result?.kind !== 'current' &&
       Boolean(
-        value.attempt ||
+        (value.attempt && !(value.result?.kind === 'acknowledged' && value.result.readback.kind === 'current')) ||
         value.subject.trim() ||
         value.destination.trim() ||
         value.requestText.trim() ||
@@ -430,7 +430,6 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     }
   }
   function showFailure(value: TransferFailure) {
-    setResult(value);
     setNativeAdvice(null);
     if (value.reason === 'uncertain') setUncertain(true);
     if (['account-changed', 'step-up', 'denied'].includes(value.reason)) clearImported();
@@ -442,6 +441,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       retire();
       setInvalidContinuation(true);
     }
+    setResult(value);
   }
   function install(value: TransferAttempt) {
     if (JSON.stringify(restoreTransferAttempt()) !== JSON.stringify(liveAttempt.current)) {
@@ -922,7 +922,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                 {m.auth_transfer_continue_source()}
               </Button>
             ) : null}
-            {attempt.phase !== 'accepted' && result?.kind !== 'current' ? (
+            {attempt.phase !== 'accepted' && result?.kind !== 'current' && result?.kind !== 'acknowledged' ? (
               <form className="auth-login-form" method="post" action="/account-operations/approve" onSubmit={submit}>
                 {attempt.side === 'source' ? (
                   <>
