@@ -143,8 +143,9 @@ test('native Book edition disclosure returns selected work labels and exact empt
       { ...deps, access: assemblyAccess },
       { identities: [assemblyEdition], languages: ['en'] },
     );
-    expect(['withheld', 'unavailable']).toContain(during.results.get(assemblyEdition)?.state);
-    expect(JSON.stringify(during.results.get(assemblyEdition))).not.toContain(assemblyWork);
+    const duringState = during.results.get(assemblyEdition);
+    expect(['withheld', 'unavailable']).toContain(duringState?.state);
+    expect(JSON.stringify(duringState ?? null)).not.toContain(assemblyWork);
 
     const mergeWork = await f.create('schema:Book', {}, { en: 'Redirected work' });
     const survivor = await f.create('schema:Book', {}, { en: 'Survivor work' });
@@ -153,8 +154,9 @@ test('native Book edition disclosure returns selected work labels and exact empt
     const [redirected, kept] = [mergeWork, survivor].sort() as [string, string];
     await f.checked('POST', '/v1/subjects:merge', { subjects: [redirected, kept] });
     const merged = await readCopyWorkDisclosure(deps, { identities: [mergeEdition] });
-    expect(JSON.stringify(merged.results.get(mergeEdition))).not.toContain(redirected);
-    expect(['available', 'unavailable']).toContain(merged.results.get(mergeEdition)?.state);
+    const mergedState = merged.results.get(mergeEdition);
+    expect(JSON.stringify(mergedState ?? null)).not.toContain(redirected);
+    expect(['available', 'unavailable']).toContain(mergedState?.state);
 
     await f.hide(work);
     expect(await observed.current()).toBe(false);
