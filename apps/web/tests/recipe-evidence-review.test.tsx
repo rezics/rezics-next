@@ -2,12 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup as render } from 'react-dom/server';
 import { fromPlainText } from '@rezics/document';
 import type { StatementInput } from '../src/features/catalogue/statement-editor';
-import { RecipeCreateReview, RecipeCorrectionReview } from '../src/features/catalogue/recipe-editor-review';
-import { recipeEvidence } from '../src/features/catalogue/recipe-editor';
-import { recipeFixture, recipeExample } from '../src/kernel/fake/recipe-editor';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { RecipeCreateReview, RecipeCorrectionReview } = await import('../src/features/catalogue/recipe-editor-review');
+const { recipeEvidence } = await import('../src/features/catalogue/recipe-editor');
+const { recipeFixture, recipeExample } = await import('../src/kernel/fake/recipe-editor');
 const part = (id: string, content: unknown) => ({ property: { id }, value: { type: 'value' as const, content } });
 const group = (id: string, content = 'https://cook.example/equal') => ({ parts: [part(id, content)] });
 const locale = 'en';
