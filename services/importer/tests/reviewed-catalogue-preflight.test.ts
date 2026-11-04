@@ -47,7 +47,14 @@ test('reviewed metadata accepts the public transport null-prototype JSON snapsho
   const directory = await mkdtemp(resolve(tmpdir(), 'reviewed-json-'));
   const reachedBootstrap = new Error('Stopped after metadata provenance was checked');
   let creates = 0;
-  const port = {
+  const unexpectedReview = async (): Promise<never> => {
+    throw new Error('Review must not precede bootstrap');
+  };
+  const port: ReviewedCataloguePort = {
+    readReviewedSubject: unexpectedReview,
+    reviewedCandidates: unexpectedReview,
+    acceptReviewedCandidate: unexpectedReview,
+    adoptReviewedCandidates: unexpectedReview,
     fence: async () => ({ fenced: false, securityRevision: null }),
     setSourceRecordMetadata: async ({ command }: Parameters<ReviewedCataloguePort['setSourceRecordMetadata']>[0]) => ({
       record: Object.setPrototypeOf(structuredClone(command.metadata), null),
@@ -58,7 +65,7 @@ test('reviewed metadata accepts the public transport null-prototype JSON snapsho
       creates++;
       throw reachedBootstrap;
     },
-  } as unknown as ReviewedCataloguePort;
+  };
   try {
     await expect(seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port })).rejects.toBe(
       reachedBootstrap,

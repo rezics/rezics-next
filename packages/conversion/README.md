@@ -623,7 +623,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@11` preserves Bangumi character names, physical profiles and person biographies while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property.
+Combined revision decision: `cross-media-entities@11` preserves Bangumi character names, physical profiles and person biographies while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
 
 ### VNDB native alternate-name contract
 

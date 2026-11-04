@@ -43,6 +43,8 @@ import {
 } from './showcase-work-links.ts';
 import {
   deliverBangumiCreatorCredits,
+  bangumiStaffDraft,
+  type BangumiStaffAssociation,
   type BangumiCreatorCreditDraft,
   type BangumiCreatorCreditGap,
 } from './bangumi-creator-credits.ts';
@@ -977,16 +979,7 @@ export async function planCrossMediaSeed(
       );
     }
     if (!importedWorks.has(work)) continue;
-    plan.credits.push({
-      kind: 'staff',
-      work,
-      workType: workType ?? 0,
-      person,
-      roleCode: row.position as number,
-      ...(row.creditedAs === undefined ? {} : { creditedAs: row.creditedAs as string }),
-      path: `/subject-persons/${work}/${personId}/position`,
-      record: row,
-    });
+    plan.credits.push(bangumiStaffDraft(row as BangumiStaffAssociation, workType ?? 0));
   }
   let currentVoiceIndex = 0;
   for await (const row of input.rows('bangumi', 'person-characters')) {
@@ -2566,7 +2559,7 @@ export async function seedCrossMedia(
     const bangumiRegistration = createSelectedFamilySourceRegistration('bangumi', crossMediaAliases.bangumi);
     const credits = await deliverBangumiCreatorCredits({
       alias: crossMediaAliases.bangumi,
-      converterRevision: entityRevision,
+      converterRevision: crossMediaBangumiRevision,
       drafts: plan.credits,
       bindings,
       claim: (owner) => importer.session.bindings.claim(owner),
@@ -3104,7 +3097,7 @@ export async function runCrossMediaSeedCli(
                   review: importPort,
                   publicClient,
                   ...(priorShowcase ? { prior: priorShowcase } : {}),
-                  subjectTypes: [2],
+                  subjectTypes: [2, 4],
                   read,
                 });
                 creditResolution = prepared;
@@ -3419,7 +3412,7 @@ export async function runCrossMediaSeedCli(
                     review: importPort,
                     publicClient,
                     ...(priorShowcase ? { prior: priorShowcase } : {}),
-                    subjectTypes: [2],
+                    subjectTypes: [2, 4],
                     read,
                   });
                   creditResolution = prepared;
