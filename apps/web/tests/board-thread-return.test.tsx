@@ -51,6 +51,12 @@ const { boardSearch, admittedBoardReturn, boardRequestHref, boardReturnRestart }
   await import('../src/threads/board-navigation');
 const { threadSearch, threadLocation } = await import('../src/threads/thread-href');
 const { sessionQuery } = await import('../src/session/query');
+// Another file can import the server isomorphic branch before the browser fixture is installed.
+// Keep this reader explicitly anonymous, matching the real browser-session cache seeded below.
+const sessionHook = spyOn(await import('../src/session/query'), 'useSession').mockReturnValue({
+  state: 'signed-out',
+  csrfToken: null,
+});
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 const { returnTarget } = await import('../src/session/return-target');
@@ -167,6 +173,7 @@ afterAll(() => {
   boardReader.mockRestore();
   threadReader.mockRestore();
   slugReader.mockRestore();
+  sessionHook.mockRestore();
   mock.restore();
   setLocale('en', { reload: false });
   window.happyDOM.abort();
@@ -258,6 +265,16 @@ test('actual mounted Board, duplicate row, reply, sign-in and canonical routes c
     expect(visit.host.querySelector('form')).toBeNull();
     const next = visit.link(m.threads_next_page());
     expect(new URL(next.href).searchParams.get('boardReturn')).toBe(original);
+    await act(async () => {
+      for (const query of visit.client.getQueryCache().findAll({ queryKey: ['thread-page', duplicate.thread.id] }))
+        visit.client.setQueryData(query.queryKey, query.state.data);
+    });
+    expect(visit.link(m.board_reading_return())).toBeUndefined();
+    expect(visit.host.textContent).toContain(m.board_reading_return_unavailable());
+    const retiredRestart = new URL(visit.link(m.board_reading_restart()).href);
+    expect(retiredRestart.searchParams.has('cursor')).toBe(false);
+    expect(retiredRestart.searchParams.get('sort')).toBe('hot');
+    expect(retiredRestart.searchParams.get('returnTo')).toBe(subjectReturn);
     await visit.navigate(original);
     expect(boardCalls.at(-1)).toMatchObject({ cursor, sort: 'hot' });
     expect(visit.host.querySelectorAll('[data-thread-id]')).toHaveLength(2);
