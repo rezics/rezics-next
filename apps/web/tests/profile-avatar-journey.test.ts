@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { spyOn } from 'bun:test';
 import {
   createMediaReservationIntent,
+  readSiteAvatarUploadAdvice,
   uploadAvatar,
   UploadRefusal,
   type MediaReservationIntent,
@@ -612,15 +613,15 @@ test('advice recovery preserves an uncertain reservation and its original upload
   let now = 1_000;
   const clock = spyOn(Date, 'now').mockImplementation(() => now);
   const editor = recoveryEditor();
-  let reads = 0;
-  const readAdvice: AvatarAdviceRead = async () => {
-    reads++;
-    if (reads === 1) return adviceResult(advice(profile().accountId));
-    if (reads === 2) return adviceResult(undefined, { ok: false, retryAfter: '3', responseTime: 2_000 });
-    return adviceResult(advice(profile().accountId), { retryAfter: '1', responseTime: 5_000 });
-  };
-  const boundary = await mountedRecovery(editor, true, readAdvice);
+  const responses = [
+    Response.json(advice(profile().accountId)),
+    new Response(null, { status: 429, headers: { 'retry-after': '3' } }),
+    Response.json(advice(profile().accountId), { headers: { 'retry-after': '1' } }),
+  ];
+  const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () => responses.shift()!);
+  const boundary = await mountedRecovery(editor, true, readSiteAvatarUploadAdvice);
   try {
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     const selected = file();
     await submit(boundary.controller, selected);
     const original = boundary.calls[0]!;
@@ -647,12 +648,13 @@ test('advice recovery preserves an uncertain reservation and its original upload
       advice: 'unavailable',
       adviceRetryAt: 5_000,
     });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(boundary.calls).toHaveLength(1);
     expect(boundary.controller.canRetry()).toBe(false);
 
     now = 4_999;
     boundary.controller.retryAdvice();
-    expect(reads).toBe(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     now = 5_000;
     boundary.controller.retryAdvice();
     await settle();
@@ -663,6 +665,7 @@ test('advice recovery preserves an uncertain reservation and its original upload
       advice: 'allowed',
       adviceRetryAt: 6_000,
     });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(boundary.calls).toHaveLength(1);
 
     now = 7_999;
@@ -678,6 +681,7 @@ test('advice recovery preserves an uncertain reservation and its original upload
     expect(boundary.calls[0]!.intent?.file).toBe(selected);
   } finally {
     boundary.disconnect();
+    fetchSpy.mockRestore();
     clock.mockRestore();
   }
   expect(boundary.revoked).toEqual(boundary.created);
