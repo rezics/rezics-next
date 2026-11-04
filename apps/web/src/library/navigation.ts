@@ -1,4 +1,4 @@
-import { BookOpenText, Compass, Download, FolderPlus, Import, ListChecks, Star } from 'lucide-react';
+import { BookOpenText, Compass, Download, FolderPlus, Image, Import, ListChecks, Star } from 'lucide-react';
 import type { NavigationContribution } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 
@@ -47,6 +47,18 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     operation: 'rating.own_votes_page',
     label: ({ locale }) => m.library_my_ratings_nav({}, { locale }),
     icon: Star,
+  },
+  {
+    id: 'library.own-media',
+    kind: 'navigation',
+    group: 'personal',
+    order: 14.25,
+    href: '/library/media',
+    match: 'exact',
+    signedIn: true,
+    operation: 'media.own',
+    label: ({ locale }) => m.own_media_nav({}, { locale }),
+    icon: Image,
   },
   {
     id: 'library.import-vndb',
