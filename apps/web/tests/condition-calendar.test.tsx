@@ -91,8 +91,8 @@ test('author, combine, repair, apply and reopen precise calendar conditions; sem
     expect(host.textContent).toContain(m.condition_calendar_month());
     expect(host.textContent).toContain(m.condition_calendar_day());
     // Wrapping the occurrence preserves raw repair state and every sibling predicate.
-    await change(bound(), '2024-02-30');
     const lastExecutable = value;
+    await change(bound(), '2024-02-30');
     expect(host.checkValidity()).toBe(false);
     expect(value).toBe(lastExecutable);
     await change(field(''), 'and');
@@ -142,6 +142,13 @@ test('author, combine, repair, apply and reopen precise calendar conditions; sem
     expect(applied).toBe('');
     await change(bound('lte', '/and/0'), '+012345-06');
     expect(host.checkValidity()).toBe(true);
+    const extendedOpen = JSON.parse(JSON.stringify(value));
+    await act(async () => {
+      value = extendedOpen;
+      render();
+    });
+    expect(bound('gte', '/and/0').value).toBe('');
+    expect(bound('lte', '/and/0').value).toBe('+012345-06');
     await change(bound('gte', '/and/0'), '-0044');
     expect(host.checkValidity()).toBe(true);
     await change(bound('gte', '/and/0'), '-');
@@ -168,6 +175,10 @@ test('author, combine, repair, apply and reopen precise calendar conditions; sem
     expect(bound().value).toBe('');
     expect(value).toEqual({ statement: { property: 'schema:datePublished', range: { type: 'time' } } });
     expect(host.checkValidity()).toBe(false);
+    await change(bound(), '2024-02-');
+    await change(field('/statement/property'), 'schema:wordCount');
+    expect(bound().value).toBe('');
+    expect(host.textContent).not.toContain(m.condition_calendar_incomplete());
   } finally {
     if (root) await act(async () => root!.unmount());
     for (const [key, descriptor] of originals) {

@@ -764,7 +764,7 @@ function NodeEditor({
             <>
               {definition?.datatype === 'time' && (
                 <ConditionRangeMode
-                  key={property}
+                  key={`mode:${property}`}
                   range={range}
                   locale={context.locale}
                   onChange={(next) => {
@@ -775,7 +775,7 @@ function NodeEditor({
               )}
               {range.type === 'time' ? (
                 <ConditionCalendarRangeEditor
-                  key={property}
+                  key={`calendar:${property}`}
                   range={range}
                   property={property!}
                   draft={draft}
