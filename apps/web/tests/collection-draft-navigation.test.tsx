@@ -139,7 +139,12 @@ test('curated draft departure preserves loaded edits and selection; revert, save
   const rootRoute = createRootRoute({ component: Outlet });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
-      createRoute({ getParentRoute: () => rootRoute, path: '/en/collections/alpha', component: Screen }),
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: '/en/collections/alpha',
+        validateSearch: (search) => search,
+        component: Screen,
+      }),
       createRoute({ getParentRoute: () => rootRoute, path: '/away', component: () => 'Away' }),
     ]),
     history: createMemoryHistory({ initialEntries: ['/en/collections/alpha'] }),
