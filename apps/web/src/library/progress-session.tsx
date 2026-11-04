@@ -31,7 +31,7 @@ import {
   parseUnitBatch,
   type ProgressChange,
   type ProgressFailure,
-  type ProgressSessionPage,
+  type ProgressSessionPage as ProgressSessionPageRead,
   type ProgressState,
   type ProgressRecordInput,
   type ProgressFinishInput,
@@ -113,7 +113,7 @@ export type ProgressDetailOrigin = {
   viewer: string;
   address: ProgressDetailAddress;
   isCurrent: (write?: boolean) => boolean;
-  refresh: () => Promise<ProgressSessionPage>;
+  refresh: () => Promise<ProgressSessionPageRead>;
   capture?: (operation?: GatedOperation) => ProgressCommandGuard;
   observation?: object | undefined;
   /** Private intent custody survives admission/read replacement, never viewer or address replacement. */
@@ -327,7 +327,7 @@ export function CurrentProgressDetail({ loaded, address }: { loaded: ProgressDet
   );
 }
 
-type LoadedPage = Extract<ProgressSessionPage, { signedIn: true }>;
+type LoadedPage = Extract<ProgressSessionPageRead, { signedIn: true }>;
 type CapturedIntent =
   | { kind: 'record' | 'add' | 'remove'; data: ProgressRecordInput }
   | { kind: 'finish'; data: ProgressFinishInput };
@@ -548,7 +548,7 @@ export function ProgressSessionPage({
   logsCursor,
   originating,
 }: {
-  page: ProgressSessionPage;
+  page: ProgressSessionPageRead;
   children?: ReactNode;
   logsCursor?: string | undefined;
   originating?: ProgressDetailOrigin | undefined;
