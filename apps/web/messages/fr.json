@@ -8746,6 +8746,7 @@
   "library_copy_filter_history": "Les choix décrivent vos exemplaires enregistrés, y compris les valeurs historiques.",
   "library_copy_filter_none": "Aucun choix enregistré pour ce filtre.",
   "library_copy_filter_options_unavailable": "Les choix des filtres sont temporairement indisponibles. Les identifiants sélectionnés sont conservés.",
+  "library_copy_inventory_unavailable": "Les filtres de copies sélectionnés sont temporairement indisponibles. Votre sélection est conservée ; réinitialisez les filtres pour consulter vos copies.",
   "quotation_retry": "Réessayer la lecture",
   "quotation_restart": "Recommencer les citations",
   "quotation_previous": "Page précédente",

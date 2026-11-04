@@ -112,12 +112,22 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
     else if (origin?.subject !== actual?.subject || origin?.authorization !== actual?.authorization) origin = undefined;
     dispatched = true;
   });
-  const page = await loadCopiesPage(client, request, env as Partial<SessionEnv>, {
-    ...(requested.subjectId ? { subjectId: requested.subjectId } : {}),
-    ...(requested.kind ? { kind: requested.kind } : {}),
-    ...(requested.status ? { status: requested.status } : {}),
-    ...(requested.cursor ? { cursor: requested.cursor } : {}),
-  });
+  const page = await loadCopiesPage(
+    client,
+    request,
+    env as Partial<SessionEnv>,
+    {
+      ...(requested.subjectId ? { subjectId: requested.subjectId } : {}),
+      ...(requested.kind ? { kind: requested.kind } : {}),
+      ...(requested.status ? { status: requested.status } : {}),
+      ...(requested.cursor ? { cursor: requested.cursor } : {}),
+    },
+    (authorization) => {
+      // No list dispatch is possible for these predicates. Certify only this fresh preparation;
+      // unfiltered and point reads still require their observed native dispatch below.
+      if (requested.kind || requested.status) origin = prepared(request, authorization);
+    },
+  );
   if (current && !origin?.subject) {
     return {
       sessionSubject: null,

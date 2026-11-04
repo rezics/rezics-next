@@ -8746,6 +8746,7 @@
   "library_copy_filter_history": "Las opciones describen tus ejemplares guardados, incluidos los valores históricos.",
   "library_copy_filter_none": "No hay opciones guardadas para este filtro.",
   "library_copy_filter_options_unavailable": "Las opciones de filtro no están disponibles temporalmente. Se conservan los ID seleccionados.",
+  "library_copy_inventory_unavailable": "Los filtros de copias seleccionados no están disponibles temporalmente. Se conserva la selección; restablece los filtros para ver tus copias.",
   "quotation_retry": "Reintentar la lectura",
   "quotation_restart": "Reiniciar las citas",
   "quotation_previous": "Página anterior",

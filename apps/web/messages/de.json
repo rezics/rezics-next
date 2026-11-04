@@ -8746,6 +8746,7 @@
   "library_copy_filter_history": "Die Auswahl beschreibt gespeicherte Exemplare, einschließlich historischer Werte.",
   "library_copy_filter_none": "Für diesen Filter sind keine Werte gespeichert.",
   "library_copy_filter_options_unavailable": "Filteroptionen sind vorübergehend nicht verfügbar. Ausgewählte IDs bleiben erhalten.",
+  "library_copy_inventory_unavailable": "Die ausgewählten Exemplarfilter sind vorübergehend nicht verfügbar. Ihre Auswahl bleibt erhalten. Setzen Sie die Filter zurück, um Ihre Exemplare anzuzeigen.",
   "quotation_retry": "Lesen erneut versuchen",
   "quotation_restart": "Zitate neu starten",
   "quotation_previous": "Vorherige Seite",

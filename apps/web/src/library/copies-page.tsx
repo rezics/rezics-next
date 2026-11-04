@@ -1290,13 +1290,15 @@ function LoadedCopiesPage({
         </>
       ) : (
         <p role="status" className="text-muted-foreground">
-          {firstPageEmpty
-            ? predicateFilters.length
-              ? m.library_copy_matching_empty()
-              : page.subjectId
-                ? m.library_copy_filtered_empty()
-                : m.library_copy_empty()
-            : m.library_copy_page_empty()}
+          {page.inventoryState === 'unavailable'
+            ? m.library_copy_inventory_unavailable()
+            : firstPageEmpty
+              ? predicateFilters.length
+                ? m.library_copy_matching_empty()
+                : page.subjectId
+                  ? m.library_copy_filtered_empty()
+                  : m.library_copy_empty()
+              : m.library_copy_page_empty()}
         </p>
       )}
       {page.next || recoverable ? (

@@ -3,11 +3,22 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import type { NativeCopyList } from './copies-server';
+/** Presentation state for retained controls and stories; it grants no transport capability. */
+export type CopyInventoryOptions = {
+  kinds: InventoryFacet;
+  statuses: InventoryFacet;
+};
+type InventoryFacet = {
+  state: 'available' | 'unavailable';
+  choices: {
+    id: string;
+    label: string;
+    labelLanguage?: string;
+    meaning: 'available' | 'unsupported' | 'unavailable';
+  }[];
+};
 
-type FilterOptions = NativeCopyList['filterOptions'];
-
-function meaning(value: FilterOptions['kinds']['choices'][number]['meaning']) {
+function meaning(value: CopyInventoryOptions['kinds']['choices'][number]['meaning']) {
   switch (value) {
     case 'available':
       return m.library_copy_filter_available();
@@ -27,7 +38,7 @@ function InventoryFilter({
   name: 'kind' | 'status';
   label: string;
   selected: string | null;
-  facet: FilterOptions['kinds'] | undefined;
+  facet: CopyInventoryOptions['kinds'] | undefined;
 }) {
   const id = useId();
   const description = useId();
@@ -79,7 +90,7 @@ export function CopyInventoryFilters({
   subjectId: string | null;
   kind: string | null;
   status: string | null;
-  filterOptions: FilterOptions | undefined;
+  filterOptions: CopyInventoryOptions | undefined;
   current: () => boolean;
 }) {
   return (

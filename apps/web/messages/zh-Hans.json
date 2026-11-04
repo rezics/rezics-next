@@ -8746,6 +8746,7 @@
   "library_copy_filter_history": "选项来自已保存的馆藏，包括历史值。",
   "library_copy_filter_none": "此筛选没有已保存的选项。",
   "library_copy_filter_options_unavailable": "筛选选项暂时不可用。已选择的 ID 会保留。",
+  "library_copy_inventory_unavailable": "所选复本筛选暂时不可用。已保留您的选择；请重置筛选以浏览复本。",
   "quotation_retry": "重试本次读取",
   "quotation_restart": "从头浏览引文",
   "quotation_previous": "上一页",

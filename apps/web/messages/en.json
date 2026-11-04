@@ -8838,6 +8838,7 @@
   "library_copy_filter_history": "Choices describe your stored holdings, including historical values.",
   "library_copy_filter_none": "There are no stored choices for this filter.",
   "library_copy_filter_options_unavailable": "Filter choices are temporarily unavailable. Selected IDs are retained.",
+  "library_copy_inventory_unavailable": "The selected copy filters are temporarily unavailable. Your selection is retained; reset the filters to browse your copies.",
   "quotation_retry": "Retry this read",
   "quotation_restart": "Restart quotations",
   "quotation_previous": "Previous page",
