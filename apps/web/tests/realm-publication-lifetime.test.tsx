@@ -561,8 +561,12 @@ describe('Complete Realm publication original caller lifetime', () => {
     );
     expect(input).toBeDefined();
     await act(async () => {
+      input!.focus();
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, hostSubject.title);
       input!.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await tick();
+    });
+    await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 300));
     });
     const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
