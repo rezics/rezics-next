@@ -504,10 +504,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       async ({ query, actor, admission, job, set, request }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
-          readNativeModerationDirectory(actor, {
-            ...query,
-            limit: query.limit === undefined ? 20 : Number(query.limit),
-          }, dependencies, { deadline: job.deadline, credential: request.headers.get('authorization') ?? '' }),
+          readNativeModerationDirectory(
+            actor,
+            {
+              ...query,
+              limit: query.limit === undefined ? 20 : Number(query.limit),
+            },
+            dependencies,
+            { deadline: job.deadline, credential: request.headers.get('authorization') ?? '' },
+          ),
         );
       },
     )
