@@ -1618,7 +1618,8 @@ values, an empty disclosed citation list, refused correction and unavailable cor
 
 Decision: Person credit returns carry one bounded assertion locator; Context is revalidated against the fresh native
 window, never used as an authority override. Work, Character and Sources destinations carry that single validated `via`
-address with locale, Realm, native node/cursor and exact assertion focus. Disclosed destinations open separately;
+address with locale, Realm, native node/cursor and exact assertion focus. Slot comparison uses the existing SHA-256
+byte digest so even an unlabelled Character key never appears in a destination or return link. Disclosed destinations open separately;
 explicit return reloads the current native window. `CreditVisitReturn` consumes its locator once on mount and reopens
 only an exact current holder/property/assertion/revision/release/slot and Definition pin in that Context. A missing,
 replaced or newly concealed row reports an unavailable reading and focuses its surviving window, yielding to deliberate

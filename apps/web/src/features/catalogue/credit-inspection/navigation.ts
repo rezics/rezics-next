@@ -1,3 +1,4 @@
+import { catalogueDigest } from '@rezics/definitions/catalogue';
 import { subjectViewHref } from '../../../subject/subject-href';
 import type { CreditAssertion, CreditVisit } from './model';
 
@@ -35,12 +36,17 @@ export function creditReturn(hash: string): CreditReturn | undefined {
       Number(values.revision) > 2147483647)
   )
     return;
+  if (values.slot && values.slot !== 'none' && !/^sha256:[0-9a-f]{64}$/.test(values.slot)) return;
   return values as CreditReturn;
 }
 
 function slotIdentity(credit: CreditAssertion): string {
   const slot = credit.slot;
-  return slot ? JSON.stringify([slot.property, slot.target, slot.sameAs, slot.key, slot.context]) : 'none';
+  return slot
+    ? catalogueDigest(
+        new TextEncoder().encode(JSON.stringify([slot.property, slot.target, slot.sameAs, slot.key, slot.context])),
+      )
+    : 'none';
 }
 
 export function creditLocator(visit: CreditVisit, credit?: CreditAssertion): CreditReturn {

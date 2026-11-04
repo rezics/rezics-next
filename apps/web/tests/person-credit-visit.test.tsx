@@ -160,7 +160,7 @@ test('current Person credit returns from work, Character and Sources with exact 
     }
     await click(m.credit_close());
     await act(async () => {
-      host.querySelectorAll<HTMLButtonElement>('button[data-credit-statement]')[1]!.click();
+      (host.querySelectorAll('button[data-credit-statement]')[1] as HTMLButtonElement).click();
     });
     expect(window.document.querySelector('[role="dialog"]')?.textContent).toContain('The narrator');
     expect(window.document.querySelector('[role="dialog"]')?.textContent).not.toContain('The traveler');
@@ -194,6 +194,14 @@ test('current Person credit returns from work, Character and Sources with exact 
     expect(host.querySelector(`a[href*="${fixture.id}"]`)).toBeNull();
     items = holderItems(section.body, 20)!.items;
     window.history.replaceState(null, '', origin);
+    items = holderItems({ links: [{ ...rows[0], related: {} }] }, 20)!.items;
+    await render('unlabelled-character');
+    expect(window.document.querySelector('[role="dialog"]')).not.toBeNull();
+    for (const link of window.document.querySelectorAll('[role="dialog"] a')) {
+      expect(link.getAttribute('href')).not.toContain(fixture.slot.key!);
+    }
+    await click(m.credit_close());
+    items = holderItems(section.body, 20)!.items;
     await render('context-replaced', { ...visit, context: '00000000-0000-8000-8000-000000000099' });
     expect(window.document.querySelector('[role="dialog"]')).toBeNull();
     expect(host.textContent).toContain(m.credit_return_unavailable());
