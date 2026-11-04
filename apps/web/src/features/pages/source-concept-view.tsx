@@ -330,7 +330,11 @@ export function SourceConceptView({
                   {m.concept_explore_broader({}, o)}
                 </h2>
                 {read.broader.rows.length ? (
-                  <HierarchyLinks rows={read.broader.rows} locale={locale} returnTo={returnTo} />
+                  <HierarchyLinks
+                    rows={read.broader.rows}
+                    locale={locale}
+                    {...(returnTo === undefined ? {} : { returnTo })}
+                  />
                 ) : read.broader.withheld ? (
                   <p role="status">{m.concept_explore_broader_withheld({}, o)}</p>
                 ) : (
@@ -355,7 +359,11 @@ export function SourceConceptView({
                   <p role="status">{m.concept_explore_hierarchy_lagging({}, o)}</p>
                 ) : null}
                 {hierarchy?.rows.length ? (
-                  <HierarchyLinks rows={hierarchy.rows} locale={locale} returnTo={returnTo} />
+                  <HierarchyLinks
+                    rows={hierarchy.rows}
+                    locale={locale}
+                    {...(returnTo === undefined ? {} : { returnTo })}
+                  />
                 ) : hierarchy?.state === 'available' && hierarchy.exactEmpty ? (
                   <p>{m.concept_explore_no_narrower({}, o)}</p>
                 ) : hierarchy?.state === 'available' ? (
