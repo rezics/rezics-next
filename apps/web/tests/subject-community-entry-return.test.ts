@@ -1,7 +1,13 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useLocation } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+  useLocation,
+} from '@tanstack/react-router';
 import { GLOBAL } from '../src/features/pages/subject-ratings';
 import {
   communityBoardHref,
@@ -183,9 +189,9 @@ test('mounted overview and full-view routes retain their exact community return 
   expected.searchParams.set('cursor', cursor);
   expected.searchParams.set('node', 'threads');
   expected.hash = 'subject-community-threads';
-  expect(
-    await mountedReturn(`${base}/discussion?realm=${realmId}&cursor=route-cursor&node=route-node`, true),
-  ).toBe(`${expected.pathname}${expected.search}${expected.hash}`);
+  expect(await mountedReturn(`${base}/discussion?realm=${realmId}&cursor=route-cursor&node=route-node`, true)).toBe(
+    `${expected.pathname}${expected.search}${expected.hash}`,
+  );
 });
 
 test('independent community list mounts need no router when Overview context is missing', () => {
