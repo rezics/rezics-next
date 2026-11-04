@@ -413,7 +413,10 @@ export class ThreadPageCaller {
       if (this.queryStarted && !this.inFlightQuery) this.inFlightQuery = this.source.queryStamp(this.queryKey)?.query;
       this.check();
       const personalChanged = !this.retired && this.observePersonalCache();
-      if (!this.retired && (this.publicResult || personalChanged)) {
+      // Observer option/result notifications can be emitted by rendering useQuery itself.
+      // Only cache state changes should publish another public-reader snapshot.
+      const cacheChanged = event.type === 'added' || event.type === 'updated' || event.type === 'removed';
+      if (!this.retired && ((this.publicResult && cacheChanged) || personalChanged)) {
         this.notify();
       }
     });

@@ -103,9 +103,9 @@ function BoardPage() {
               {...(search.returnTo ? { preparedReturnTo: search.returnTo } : {})}
             />
           )}
-          overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
+          overflow={<BoardCommunityMenu boardId={id} signedIn={session.state === 'signed-in'} />}
           postingInterval={
-            session === 'signed-in' ? (
+            session.state === 'signed-in' ? (
               <SlowModeSetting
                 boardId={id}
                 scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
