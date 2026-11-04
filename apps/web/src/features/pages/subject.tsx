@@ -797,7 +797,7 @@ export function SubjectPage({
       <PageHost actions={page.account ? renderedActions : null} afterHeader={header ? afterHeader : null}>
         <PageData
           artworkSource={page}
-          propertyLabels={page.catalogue?.state === 'released' ? page.catalogue.definitions.properties : undefined}
+          propertyLabels={page.catalogue?.state === 'released' ? page.catalogue.definitions?.properties : undefined}
           locale={locale}
           readingView={view}
           subject={page.subject}
