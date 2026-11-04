@@ -190,4 +190,3 @@ export function sortName(label: string): string {
     .join('')
     .normalize('NFKC');
 }
-
