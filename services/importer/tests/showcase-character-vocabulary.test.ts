@@ -211,8 +211,8 @@ test('default seed publishes selected trait and role vocabulary without a UUID f
       stage: 'concepts',
     });
     expect(prepared.requirements.map((item) => [item.nativeType, item.sourceKey])).toEqual([
-      ['skos:ConceptScheme', 'vndb.character-trait'],
       ['skos:ConceptScheme', 'vndb.char_role'],
+      ['skos:ConceptScheme', 'vndb.character-trait'],
       ['skos:Concept', 'vndb.character-trait:i73'],
       ['skos:Concept', 'vndb.char_role:main'],
       ['skos:Concept', 'vndb.character-trait:i10'],
