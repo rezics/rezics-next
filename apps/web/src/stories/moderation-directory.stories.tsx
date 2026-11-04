@@ -14,7 +14,7 @@ import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { queueViewports } from './patterns/board-report-queue/fixture';
 
-type Mode = 'ready' | 'empty' | 'preparing' | 'unavailable';
+type Mode = 'ready' | 'empty' | 'preparing' | 'unavailable' | 'denied' | 'stale' | 'sparse' | 'loading' | 'closed';
 const longLabel = 'A board with a very long title that wraps without hiding its queue choices — '.repeat(5);
 
 /** The route's prepare/read/page composition with illustrative public source inputs. */
@@ -36,15 +36,15 @@ function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode;
   const read = useCallback(
     async (input: WorkbenchSearch): Promise<WorkbenchRead> => {
       const directory: ModerationDirectoryPage =
-        mode === 'preparing' || mode === 'unavailable'
+        mode === 'preparing' || mode === 'unavailable' || mode === 'denied' || mode === 'stale'
           ? { state: mode, items: [], next: null }
           : {
               state: 'ready',
               source: 'illustrative-native-source',
               validUntil: new Date(Date.now() + 180000).toISOString(),
-              next: null,
+              next: mode === 'sparse' ? 'native-opaque-frontier' : null,
               items:
-                mode === 'empty'
+                mode === 'empty' || mode === 'sparse'
                   ? []
                   : [
                       {
@@ -52,14 +52,14 @@ function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode;
                         label: longLabel,
                         parent: { id: 'parent-realm', label: 'A currently disclosed parent Realm with a long name' },
                         queues: ['reports', 'appeals', 'resolved'],
-                        viewer: { open: 'permitted' },
+                        viewer: { open: mode === 'closed' ? 'denied' : 'permitted' },
                       },
                       {
                         scope: { kind: 'catalogue' },
                         label: 'Global catalogue',
                         parent: null,
                         queues: ['reports', 'resolved'],
-                        viewer: { open: 'permitted' },
+                        viewer: { open: mode === 'closed' ? 'unavailable' : 'permitted' },
                       },
                     ],
             };
@@ -93,7 +93,7 @@ function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode;
   }, [cache, search, read, revision]);
   return (
     <QueryClientProvider client={cache}>
-      {page ? (
+      {page && mode !== 'loading' ? (
         <WorkbenchPage
           key={page.generation}
           page={page}
@@ -146,6 +146,12 @@ export const KeyboardAndLongLabels: Story = {
     await expect(view.getByText(m.moderation_workbench_empty())).toBeVisible();
   },
 };
+export const Loading: Story = { args: { mode: 'loading' } };
+export const SparseContinuation: Story = { args: { mode: 'sparse' } };
+export const Unavailable: Story = { args: { mode: 'unavailable' } };
+export const Denied: Story = { args: { mode: 'denied' } };
+export const Expired: Story = { args: { mode: 'stale' } };
+export const ClosedAdvice: Story = { args: { mode: 'closed' } };
 export const Empty: Story = { args: { mode: 'empty' } };
 export const Preparing: Story = { args: { mode: 'preparing' } };
 export const FailedContinuation: Story = { args: { mode: 'unavailable', continuation: true } };

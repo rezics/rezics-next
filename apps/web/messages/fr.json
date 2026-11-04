@@ -8569,5 +8569,12 @@
   "library_vndb_library_open": "Ouvrir la bibliothèque",
   "library_vndb_library_count": "Entrées actuelles affichées : {count}",
   "library_vndb_library_state": "État dans la bibliothèque : {state}",
-  "library_vndb_library_more": "Ouvrez la bibliothèque pour parcourir davantage d’entrées actuelles."
+  "library_vndb_library_more": "Ouvrez la bibliothèque pour parcourir davantage d’entrées actuelles.",
+  "moderation_directory_continuation_failed": "Impossible de charger cette page de l’annuaire. Réessayez la même page.",
+  "moderation_directory_restart": "Recommencer la recherche de files",
+  "moderation_directory_return": "Revenir à l’annuaire des files",
+  "moderation_directory_return_hint": "Votre page d’annuaire d’origine sera vérifiée à nouveau à votre retour.",
+  "moderation_directory_ready": "Choisissez une file que vous avez actuellement le droit d’ouvrir.",
+  "moderation_directory_retired": "Cette visite privée de l’annuaire est terminée. Recommencez pour vérifier vos files actuelles.",
+  "moderation_directory_expired": "Cette page d’annuaire a expiré. Recommencez pour vérifier l’accès actuel aux files."
 }

@@ -17,6 +17,9 @@ export type WorkbenchSearch = ReportSelection & {
   realmsCursor?: string;
   boardsCursor?: string;
   directoryCursor?: string;
+  /** Captured discovery operands, never authority or an external return destination. */
+  directory?: true;
+  directoryRealm?: string;
   /** Exact appeal inspection beside the captured bounded page; never a later-page scan. */
   case?: string;
 };
@@ -36,6 +39,14 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const queue: WorkbenchQueueKind =
     search.queue === 'appeals' || search.queue === 'resolved' ? search.queue : 'reports';
   const cursor = token(search.cursor, 4096);
+  const directoryCursor = token(search.directoryCursor, 4096);
+  const directoryRealm = token(search.directoryRealm, 128);
+  const directory = search.directory === true || search.directory === 'true' ? true : undefined;
+  const discovery = {
+    ...(directoryCursor ? { directoryCursor } : {}),
+    ...(directory ? { directory } : {}),
+    ...(directory && directoryRealm ? { directoryRealm } : {}),
+  };
   if (search.scope === 'catalogue') {
     return {
       queue,
@@ -43,6 +54,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
       targetKind: 'all',
       order: selection.order,
       scope: 'catalogue',
+      ...discovery,
       ...(cursor ? { cursor } : {}),
     };
   }
@@ -50,7 +62,6 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const board = token(search.board, 128);
   const realmsCursor = token(search.realmsCursor, 4096);
   const boardsCursor = token(search.boardsCursor, 4096);
-  const directoryCursor = token(search.directoryCursor, 4096);
   const history = search.history === true && board ? true : undefined;
   const historyCursor = history ? token(search.historyCursor, 4096) : undefined;
   const historyTargetKind =
@@ -76,7 +87,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
     ...(cursor ? { cursor } : {}),
     ...(realmsCursor ? { realmsCursor } : {}),
     ...(boardsCursor ? { boardsCursor } : {}),
-    ...(directoryCursor ? { directoryCursor } : {}),
+    ...discovery,
   };
 }
 
@@ -89,6 +100,23 @@ export function workbenchWithoutContinuation(search: WorkbenchSearch): Workbench
     ...(search.scope ? { scope: search.scope } : {}),
     ...(search.realm ? { realm: search.realm } : {}),
     ...(search.board ? { board: search.board } : {}),
+    // Queue restarts and filters preserve the independent directory return frontier.
+    ...(search.directory
+      ? {
+          directory: true,
+          directoryCursor: search.directoryCursor,
+          directoryRealm: search.directoryRealm,
+        }
+      : {}),
+  });
+}
+
+/** Fixed local discovery return. Queue cursors, selections and filters never become directory operands. */
+export function workbenchDirectorySearch(search: WorkbenchSearch, restart = false): WorkbenchSearch {
+  const selected = workbenchScope(search);
+  return workbenchSearch({
+    realm: selected.kind === 'board' || selected.kind === 'catalogue' ? search.directoryRealm : search.realm,
+    ...(!restart && search.directoryCursor ? { directoryCursor: search.directoryCursor } : {}),
   });
 }
 
@@ -112,6 +140,8 @@ export function workbenchQueueHref(search: WorkbenchSearch): string {
   if (search.realmsCursor) params.set('realmsCursor', search.realmsCursor);
   if (search.boardsCursor) params.set('boardsCursor', search.boardsCursor);
   if (search.directoryCursor) params.set('directoryCursor', search.directoryCursor);
+  if (search.directory) params.set('directory', 'true');
+  if (search.directoryRealm) params.set('directoryRealm', search.directoryRealm);
   return `/moderation/workbench?${params}`;
 }
 
@@ -142,6 +172,9 @@ export function workbenchReadKey(search: WorkbenchSearch): string {
     search.realmsCursor ?? '',
     search.boardsCursor ?? '',
     search.directoryCursor ?? '',
+    search.directoryRealm ?? '',
+    search.directory ? 'directory' : '',
+    search.case ?? '',
   ]);
 }
 
@@ -159,5 +192,8 @@ export function workbenchCaseHref(item: { kind: 'report' | 'appeal'; id: string 
     ...(search.cursor ? { cursor: search.cursor } : {}),
     ...(search.realm ? { realm: search.realm } : {}),
     queue: search.queue === 'resolved' ? 'resolved' : 'reports',
+    ...(search.directory ? { directory: true } : {}),
+    ...(search.directoryCursor ? { directoryCursor: search.directoryCursor } : {}),
+    ...(search.directoryRealm ? { directoryRealm: search.directoryRealm } : {}),
   });
 }

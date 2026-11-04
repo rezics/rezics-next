@@ -8569,5 +8569,12 @@
   "library_vndb_library_open": "Abrir biblioteca",
   "library_vndb_library_count": "Entradas actuales mostradas: {count}",
   "library_vndb_library_state": "Estado en la biblioteca: {state}",
-  "library_vndb_library_more": "Abre la biblioteca para explorar más entradas actuales."
+  "library_vndb_library_more": "Abre la biblioteca para explorar más entradas actuales.",
+  "moderation_directory_continuation_failed": "No se pudo cargar esta página del directorio. Reintenta la misma página.",
+  "moderation_directory_restart": "Reiniciar la búsqueda de colas",
+  "moderation_directory_return": "Volver al directorio de colas",
+  "moderation_directory_return_hint": "Al volver se comprobará de nuevo tu página original del directorio.",
+  "moderation_directory_ready": "Elige una cola que tengas permiso para abrir actualmente.",
+  "moderation_directory_retired": "Esta visita privada al directorio ha terminado. Reinicia para consultar tus colas actuales.",
+  "moderation_directory_expired": "Esta página del directorio ha caducado. Reinicia para comprobar el acceso actual a las colas."
 }

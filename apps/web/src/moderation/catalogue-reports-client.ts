@@ -36,6 +36,7 @@ type CatalogueReportsClient = Omit<KernelClient, 'catalogue' | 'reports' | 'subj
       get(options: {
         query: { limit: number; cursor?: string };
         headers: { authorization: string };
+        fetch?: { cache: 'no-store'; signal?: AbortSignal };
       }): Promise<NativeResult<CatalogueReportPage>>;
     };
   };
@@ -50,6 +51,7 @@ type CatalogueReportsClient = Omit<KernelClient, 'catalogue' | 'reports' | 'subj
       get(options: {
         query: SubjectReportQuery;
         headers: { authorization: string };
+        fetch?: { cache: 'no-store'; signal?: AbortSignal };
       }): Promise<NativeResult<CatalogueReportPage>>;
     };
   };

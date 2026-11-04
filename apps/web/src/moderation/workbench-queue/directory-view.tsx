@@ -3,7 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { moderationDirectoryPage, type ModerationDirectoryPage } from './directory';
-import { workbenchSearch, type WorkbenchSearch } from './scope';
+import { workbenchDirectorySearch, workbenchSearch, type WorkbenchSearch } from './scope';
 
 const control = 'min-h-11 min-w-11 max-w-full whitespace-normal break-words text-left';
 
@@ -51,8 +51,10 @@ export function ModerationDirectory({
         : observation.state === 'denied'
           ? m.moderation_workbench_denied()
           : observation.state === 'stale'
-            ? m.moderation_workbench_stale()
-            : m.moderation_directory_unavailable();
+            ? m.moderation_directory_expired()
+            : search.directoryCursor
+              ? m.moderation_directory_continuation_failed()
+              : m.moderation_directory_unavailable();
     return (
       <section aria-label={m.moderation_directory_heading()} className="space-y-3">
         <h2 className="text-xl font-semibold">{m.moderation_directory_heading()}</h2>
@@ -66,10 +68,10 @@ export function ModerationDirectory({
           <Button
             className={control}
             onClick={() => {
-              if (!isCurrent || isCurrent()) onSearch(workbenchSearch({ realm: search.realm }));
+              if (!isCurrent || isCurrent()) onSearch(workbenchDirectorySearch(search, true));
             }}
           >
-            {m.moderation_queue_restart()}
+            {m.moderation_directory_restart()}
           </Button>
         ) : null}
       </section>
@@ -79,6 +81,7 @@ export function ModerationDirectory({
   return (
     <section aria-label={m.moderation_directory_heading()} className="space-y-3">
       <h2 className="text-xl font-semibold">{m.moderation_directory_heading()}</h2>
+      {observation.items.length > 0 ? <p role="status">{m.moderation_directory_ready()}</p> : null}
       {observation.items.length === 0 ? (
         <p role="status">{next ? m.moderation_directory_empty_next() : m.moderation_directory_empty()}</p>
       ) : null}
@@ -114,6 +117,9 @@ export function ModerationDirectory({
                         workbenchSearch({
                           queue,
                           order: 'newest',
+                          directory: true,
+                          directoryCursor: search.directoryCursor,
+                          directoryRealm: search.realm,
                           ...(scope.kind === 'board'
                             ? { board: scope.id, ...(entry.parent ? { realm: entry.parent.id } : {}) }
                             : { scope: 'catalogue' }),

@@ -8569,5 +8569,12 @@
   "library_vndb_library_open": "Bibliothek öffnen",
   "library_vndb_library_count": "Angezeigte aktuelle Bibliothekseinträge: {count}",
   "library_vndb_library_state": "Bibliotheksstatus: {state}",
-  "library_vndb_library_more": "Öffne die Bibliothek, um weitere aktuelle Einträge zu sehen."
+  "library_vndb_library_more": "Öffne die Bibliothek, um weitere aktuelle Einträge zu sehen.",
+  "moderation_directory_continuation_failed": "Diese Übersichtsseite konnte nicht geladen werden. Versuche dieselbe Seite erneut.",
+  "moderation_directory_restart": "Warteschlangenübersicht neu starten",
+  "moderation_directory_return": "Zurück zur Warteschlangenübersicht",
+  "moderation_directory_return_hint": "Beim Zurückkehren wird deine ursprüngliche Übersichtsseite erneut geprüft.",
+  "moderation_directory_ready": "Wähle eine Warteschlange, die du derzeit öffnen darfst.",
+  "moderation_directory_retired": "Dieser private Besuch der Übersicht ist beendet. Starte neu, um deine aktuellen Warteschlangen zu prüfen.",
+  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen."
 }

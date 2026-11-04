@@ -8,19 +8,22 @@ import {
   useSyncExternalStore,
   type MouseEvent,
 } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
 import { QueryClientContext } from '@tanstack/react-query';
 import { csrfHeaders } from '../../threads/composer';
 import { actionOnReport } from '../actions';
-import { createPrivateReaderLifetime } from '../private-reader-lifetime';
+import { createPrivateReaderLifetime, privateReaderSessionSource } from '../private-reader-lifetime';
 import type { ReportQueueAction } from '../reports-view-action';
 import { createWorkbenchSelection, WorkbenchSelectionBoundary } from '../workbench-selection';
 import { workbenchReadKey, workbenchWithoutContinuation, type WorkbenchSearch } from './scope';
-import { loadWorkbench, type WorkbenchRead } from './read';
+import { loadWorkbench, type WorkbenchRead, type WorkbenchReader } from './read';
 import { WorkbenchView } from './view';
 
 const nativeReportAction: ReportQueueAction = (data) => actionOnReport({ data, headers: csrfHeaders() });
 
-const nativeWorkbenchRead = (search: WorkbenchSearch) => loadWorkbench({ data: search });
+const nativeWorkbenchRead: WorkbenchReader = (search, signal) => loadWorkbench({ data: search, signal });
 
 export function WorkbenchPage({
   page,
@@ -39,12 +42,13 @@ export function WorkbenchPage({
   onRefresh?: () => Promise<void>;
   onAction?: ReportQueueAction;
   navigation?: { isCurrent: () => boolean; subscribe: (retire: () => void) => () => void };
-  read?: (search: WorkbenchSearch) => Promise<WorkbenchRead>;
+  read?: WorkbenchReader;
 }) {
   const client = useContext(QueryClientContext);
   const [replacement, setReplacement] = useState<{ original: WorkbenchRead; page: WorkbenchRead }>();
   const [reading, setReading] = useState(false);
   const readingRef = useRef(false);
+  const request = useRef<AbortController | null>(null);
   const unresolved = useRef(false);
   const [refreshBlocked, setRefreshBlocked] = useState(false);
   const boundary = useRef<HTMLDivElement>(null);
@@ -56,7 +60,21 @@ export function WorkbenchPage({
   }, [client, page, search, navigation, read]);
   const version = useSyncExternalStore(owner?.subscribe ?? (() => () => {}), owner?.snapshot ?? (() => 0), () => 0);
   useEffect(() => () => owner?.retire(), [owner]);
+  const locale = useRef(page.locale ?? getLocale());
+  if (getLocale() !== locale.current) owner?.retire();
   const retired = Boolean(owner && (!owner.healthy() || (search.history && !owner.available()))) && version >= 0;
+  const admitted = !owner || owner.available();
+  const directorySource = useRef(data.directory?.state === 'ready' ? data.directory.source : null);
+  const changedSource =
+    data.directory?.state === 'ready' &&
+    directorySource.current !== null &&
+    data.directory.source !== directorySource.current;
+  if (data.directory?.state === 'ready' && directorySource.current === null)
+    directorySource.current = data.directory.source;
+  useLayoutEffect(() => {
+    if (retired) request.current?.abort();
+    return () => request.current?.abort();
+  }, [owner, retired]);
   useEffect(() => () => recovery.current?.cancel(), [owner]);
   const view = retired
     ? {
@@ -76,8 +94,21 @@ export function WorkbenchPage({
         directory: undefined,
         history: undefined,
       }
-    : { ...data, search };
-  const isCurrent = () => !retired && (!owner || owner.isCurrent());
+    : {
+        ...data,
+        search,
+        ...(data.directory && (!admitted || changedSource)
+          ? {
+              directory: {
+                state: changedSource ? ('stale' as const) : ('preparing' as const),
+                items: [] as [],
+                next: null,
+              },
+            }
+          : {}),
+      };
+  const isCurrent = () =>
+    !retired && getLocale() === locale.current && (!owner || (owner.available() && owner.isCurrent()));
   const currentRef = useRef(isCurrent);
   currentRef.current = isCurrent;
   const identity = `${view.generation}:${view.readKey}:${search.queue}:${view.state}`;
@@ -124,20 +155,34 @@ export function WorkbenchPage({
     document.addEventListener('keydown', keydown, true);
     document.addEventListener('focusin', focusin, true);
     const ticket = owner?.ticket();
-    const input = { ...search };
+    const input = Object.freeze({ ...search });
+    const controller = new AbortController();
+    request.current = controller;
+    const stopSession = client
+      ? privateReaderSessionSource(client).subscribe(() => {
+          if (!isCurrent()) controller.abort();
+        })
+      : () => {};
+    const stopNavigation = navigation?.subscribe(() => controller.abort());
     readingRef.current = true;
     setReading(true);
     try {
-      const next = await read(input);
+      const next = await read(input, controller.signal);
+      controller.signal.throwIfAborted();
       if (!isCurrent() || (owner && !owner.owns(ticket!))) return;
-      if (next.readKey !== workbenchReadKey(input) || (owner && !(await owner.accepts(next)))) {
+      if (
+        next.readKey !== workbenchReadKey(input) ||
+        (next.locale !== undefined && next.locale !== locale.current) ||
+        (owner && !(await owner.accepts(next)))
+      ) {
         owner?.retire();
         handoff.cancel();
         return;
       }
+      controller.signal.throwIfAborted();
       if (isCurrent() && (!owner || owner.owns(ticket!))) setReplacement({ original: page, page: next });
     } catch {
-      if (isCurrent() && (!owner || owner.owns(ticket!)))
+      if (!controller.signal.aborted && isCurrent() && (!owner || owner.owns(ticket!)))
         setReplacement({
           original: page,
           page: {
@@ -154,11 +199,18 @@ export function WorkbenchPage({
           },
         });
     } finally {
+      stopSession();
+      stopNavigation?.();
+      if (request.current === controller) request.current = null;
       readingRef.current = false;
       if (isCurrent()) setReading(false);
       else handoff.cancel();
     }
   }
+  useLayoutEffect(() => {
+    if (isCurrent() && (document.activeElement === document.body || !document.activeElement?.isConnected))
+      boundary.current?.querySelector<HTMLElement>('article')?.focus();
+  }, [owner]);
   useLayoutEffect(() => {
     const handoff = recovery.current;
     if (!handoff || reading || !isCurrent()) return;
@@ -190,6 +242,20 @@ export function WorkbenchPage({
   return (
     <WorkbenchSelectionBoundary>
       <div ref={boundary} aria-busy={reading}>
+        {reading ? <p role="status">{m.moderation_workbench_preparing()}</p> : null}
+        {retired && page.directory && onRetry ? (
+          <section className="space-y-3">
+            <p role="status">{m.moderation_directory_retired()}</p>
+            <Button
+              className="min-h-11 whitespace-normal"
+              onClick={() => {
+                if (!navigation || navigation.isCurrent()) onRetry();
+              }}
+            >
+              {m.moderation_directory_restart()}
+            </Button>
+          </section>
+        ) : null}
         <WorkbenchView
           key={identity}
           page={view}

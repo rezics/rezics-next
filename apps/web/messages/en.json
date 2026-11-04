@@ -8681,5 +8681,12 @@
   "library_vndb_library_open": "Open Library",
   "library_vndb_library_count": "Current Library entries shown: {count}",
   "library_vndb_library_state": "Library state: {state}",
-  "library_vndb_library_more": "Open Library to browse more current entries."
+  "library_vndb_library_more": "Open Library to browse more current entries.",
+  "moderation_directory_continuation_failed": "This directory page could not be loaded. Retry the same page.",
+  "moderation_directory_restart": "Restart queue discovery",
+  "moderation_directory_return": "Return to queue discovery",
+  "moderation_directory_return_hint": "Your original directory page will be checked again when you return.",
+  "moderation_directory_ready": "Choose a queue you are currently permitted to open.",
+  "moderation_directory_retired": "This private directory visit has ended. Restart to check your current queues.",
+  "moderation_directory_expired": "This directory page has expired. Restart discovery to check current queue access."
 }

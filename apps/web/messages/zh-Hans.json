@@ -8569,5 +8569,12 @@
   "library_vndb_library_open": "打开资料库",
   "library_vndb_library_count": "当前显示的资料库条目：{count}",
   "library_vndb_library_state": "资料库状态：{state}",
-  "library_vndb_library_more": "打开资料库以浏览更多当前条目。"
+  "library_vndb_library_more": "打开资料库以浏览更多当前条目。",
+  "moderation_directory_continuation_failed": "无法加载此目录页面。请重试同一页。",
+  "moderation_directory_restart": "重新发现审核队列",
+  "moderation_directory_return": "返回审核队列目录",
+  "moderation_directory_return_hint": "返回时将重新检查原来的目录页面。",
+  "moderation_directory_ready": "请选择您目前有权打开的队列。",
+  "moderation_directory_retired": "本次私人目录访问已结束。请重新开始以检查目前可用的队列。",
+  "moderation_directory_expired": "此目录页面已过期。请重新发现队列以检查目前的访问权限。"
 }

@@ -127,7 +127,10 @@ export function appealTarget(appeal: Appeal): Appeal['decision']['target'] {
   );
 }
 
-const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
+const auth = (authorization: string, signal?: AbortSignal) => ({
+  headers: { authorization },
+  fetch: { cache: 'no-store' as const, ...(signal ? { signal } : {}) },
+});
 
 export const loadModerationAppeals = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
@@ -210,6 +213,7 @@ export async function readModerationAppealPage(
   authorization: string,
   viewerId: string,
   readerOrigin?: PrivateReaderOrigin | null,
+  signal?: AbortSignal,
 ): Promise<PrivateAppealPage> {
   const identity = {
     readKey: appealReadKey(input),
@@ -218,7 +222,8 @@ export async function readModerationAppealPage(
     generation: crypto.randomUUID(),
   };
   try {
-    const headers = auth(authorization);
+    signal?.throwIfAborted();
+    const headers = auth(authorization, signal);
     const page = await readModerationAppeals(
       {
         boardAppeals: async (id, cursor, inspect) => {
