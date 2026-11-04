@@ -159,7 +159,12 @@ test('selected 20-track window stays fixed at 64/512/4096 unrelated releases and
             const source = newId(grown);
             const target = newId(grown);
             const transaction = randomUUID();
-            const facts = itemFacts(source, { labels: { en: `Unrelated release ${ordinal}` } }, 'schema:MusicRelease', bundledRelease);
+            const facts = itemFacts(
+              source,
+              { labels: { en: `Unrelated release ${ordinal}` } },
+              'schema:MusicRelease',
+              bundledRelease,
+            );
             return {
               'semantic.subject': [
                 {
