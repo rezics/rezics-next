@@ -1,6 +1,6 @@
 version: '3'
 
-dotenv: ['.temp/goal/goal.env']
+dotenv: ['.temp/goal/goal.env', '.temp/local-stack/seed.env']
 env:
   PATH: '{{.ROOT_DIR}}/node_modules/.bin:{{.PATH}}'
 
@@ -10,8 +10,9 @@ tasks:
     cmds: ['go-task --list']
 
   dev:
-    desc: Start the local dev stack (Web, Auth pages, Kernel API and worker)
-    deps: [dev:web, dev:auth, dev:kernel, dev:worker]
+    desc: Start the complete loopback stack (Web, Auth pages and native host, Kernel API and worker)
+    deps: [dev:infra]
+    cmds: ['bun services/auth/scripts/dev-stack.ts start']
 
   dev:infra:
     desc: Start the persistent development PostgreSQL and OpenSearch services
@@ -19,14 +20,34 @@ tasks:
     cmds:
       - bun run --cwd services/kernel db up
       - bun run --cwd services/kernel search up
+      - bun services/auth/scripts/dev-stack.ts setup
+
+  dev:persona:
+    desc: Provision the local developer and cross-media importer credentials
+    deps: [dev:infra]
+    cmds: ['bun services/auth/scripts/dev-stack.ts persona']
+
+  dev:reset:
+    desc: Delete the local Kernel and Auth development databases and regenerate setup (stop task dev first)
+    cmds:
+      - bun run --cwd services/kernel db reset
+      - bun services/auth/scripts/dev-stack.ts reset
+      - task: dev:infra
+
+  dev:auth:host:
+    desc: Start native Auth on loopback with generated development configuration
+    deps: [dev:infra]
+    cmds: ['bun services/auth/scripts/dev-stack.ts host']
 
   dev:web:
     desc: Start the public Web app on loopback (pass Vite flags after --)
-    cmds: ['bun run --cwd apps/web dev {{.CLI_ARGS}}']
+    deps: [dev:infra]
+    cmds: ['bun services/auth/scripts/dev-stack.ts web {{.CLI_ARGS}}']
 
   dev:auth:
-    desc: Start Auth pages (requires configured Auth database and credentials)
-    cmds: ['bun run --cwd apps/auth dev {{.CLI_ARGS}}']
+    desc: Start Auth pages connected to the local native host
+    deps: [dev:infra]
+    cmds: ['bun services/auth/scripts/dev-stack.ts pages {{.CLI_ARGS}}']
 
   dev:kernel:
     desc: Start the Kernel API with development database and search

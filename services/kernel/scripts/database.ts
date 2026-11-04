@@ -9,8 +9,8 @@ const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
 // src/events/effects.ts launches DBOS on this schema.
 const DBOS_SCHEMA = 'dbos';
-const container = 'rezics-kernel-dev';
-const volume = 'rezics-kernel-dev';
+const container = process.env.KERNEL_DATABASE_CONTAINER ?? 'rezics-kernel-dev';
+const volume = process.env.KERNEL_DATABASE_VOLUME ?? container;
 const port = Number(process.env.KERNEL_DATABASE_PORT ?? '54329');
 
 /** Refuse future or duplicate migration versions before they can be applied. */
@@ -74,7 +74,14 @@ export function developmentEnv(existing: string, url: string): string {
   let hasRouteKey = false;
   let hasSessionKeys = false;
   let hasRatingCounterSecret = false;
+  const defaults: Record<string, string> = {
+    KERNEL_RECEIPT_KEYS: `1:${randomBytes(32).toString('base64url')}`,
+    AUTH_ISSUER: 'http://127.0.0.1:4200',
+    AUTH_AUDIENCE: 'https://api.rezics.test',
+    AUTH_JWKS_URL: 'http://127.0.0.1:4200/.well-known/jwks.json',
+  };
   const updated = lines.map((line) => {
+    delete defaults[line.split('=')[0]!];
     if (line.startsWith('DATABASE_URL=')) {
       hasDatabaseUrl = true;
       return `DATABASE_URL=${url}`;
@@ -88,6 +95,7 @@ export function developmentEnv(existing: string, url: string): string {
   if (!hasRouteKey) updated.push(`KERNEL_ROUTE_KEY=${randomBytes(32).toString('base64url')}`);
   if (!hasSessionKeys) updated.push(`KERNEL_SESSION_KEYS=1:${randomBytes(32).toString('base64url')}`);
   if (!hasRatingCounterSecret) updated.push(`KERNEL_RATING_COUNTER_SECRET=${randomBytes(32).toString('base64url')}`);
+  for (const [name, value] of Object.entries(defaults)) updated.push(`${name}=${value}`);
   return `${updated.join('\n')}\n`;
 }
 
@@ -239,10 +247,17 @@ async function up(): Promise<void> {
     ]);
   }
   const url = databaseUrl(port);
-  migrate(url);
+  try {
+    migrate(url);
+  } catch (cause) {
+    throw new Error(
+      'Development database migration failed. If this database predates the rebuilt migrations, reset the local stack with `task dev:reset` (deletes local development data).',
+      { cause },
+    );
+  }
   const envFile = resolve(directory, '.env');
   const existingEnv = (await Bun.file(envFile).exists()) ? await Bun.file(envFile).text() : '';
-  await Bun.write(envFile, developmentEnv(existingEnv, url));
+  await Bun.write(envFile, developmentEnv(existingEnv, url), { mode: 0o600 });
 }
 
 async function main(): Promise<void> {

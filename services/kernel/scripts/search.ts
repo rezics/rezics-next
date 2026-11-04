@@ -7,8 +7,8 @@ import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const imageDirectory = resolve(directory, 'db/search/opensearch');
-const container = 'rezics-search-dev';
-const volume = 'rezics-search-dev';
+const container = process.env.KERNEL_SEARCH_CONTAINER ?? 'rezics-search-dev';
+const volume = process.env.KERNEL_SEARCH_VOLUME ?? container;
 const port = Number(process.env.KERNEL_SEARCH_PORT ?? '59200');
 export const subjectAutoCreateIndexSetting = 'action.auto_create_index=-*subjects-g*,+*';
 
