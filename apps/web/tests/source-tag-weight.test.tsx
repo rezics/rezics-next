@@ -49,8 +49,8 @@ function taggedStatement(id: string, target: string, amount?: string, spoiler = 
             {
               parts: [
                 snak('schema:url', 'url', 'https://vndb.org/v17'),
-                snak('rezics:sourceTagId', 'external-id', 'g3'),
-                snak('rezics:sourceSnapshot', 'external-id', `unversioned:sha256:${'a'.repeat(64)}`),
+                snak('rezics:sourceTagId', 'string', 'g3'),
+                snak('rezics:sourceSnapshot', 'string', `unversioned:sha256:${'a'.repeat(64)}`),
               ],
             },
             { parts: [snak('schema:url', 'url', 'https://api.vndb.org/kana#post-vn')] },
