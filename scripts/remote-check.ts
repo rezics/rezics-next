@@ -6771,11 +6771,13 @@ async function runWithTransportRetries(
       ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
     };
     let managedByRun = false;
+    let uploaded = false;
     try {
       await options.allocated?.({ host: host.name, run: id });
       assertExecutionAllowed(options, signal);
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
       Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
+      uploaded = true;
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
       const lease = await acquire(
@@ -6807,7 +6809,7 @@ async function runWithTransportRetries(
       managedByRun = true;
       return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
-      if (!managedByRun) await cleanupPreparedRun(prepared);
+      if (!managedByRun && uploaded) await cleanupPreparedRun(prepared);
       assertExecutionAllowed(options, signal);
       if (
         !(error instanceof RemoteTransportError) ||
@@ -6894,9 +6896,11 @@ async function tryRemoteCheckOwned(
     connectionId: randomUUID().slice(0, 8),
     ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
   };
+  let uploaded = false;
   try {
     prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
     Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
+    uploaded = true;
     assertExecutionAllowed(options, signal);
     const current = hostsForRound().find(
       ({ name, address, identity }) => name === host.name && address === host.address && identity === host.identity,
@@ -6929,7 +6933,7 @@ async function tryRemoteCheckOwned(
       code: await runLeased(lease, prepared, options, performance.now(), signal),
     };
   } catch (error) {
-    await cleanupPreparedRun(prepared);
+    if (uploaded) await cleanupPreparedRun(prepared);
     throw error;
   }
 }
