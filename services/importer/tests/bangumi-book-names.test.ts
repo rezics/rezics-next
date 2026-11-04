@@ -143,7 +143,12 @@ test('selected Book names stay source-bound through ordinary and default imports
     expect(firstNames.every((command) => command.source.record_revision === 'unversioned')).toBe(true);
     expect(firstNames.every((command) => command.source.converter_revision === selectedFamilyRevision)).toBe(true);
     expect(firstNames.every((command) => command.source.digest === firstNames[0]!.source.digest)).toBe(true);
-    expect(firstNames.every((command) => command.statement.references?.[0]?.parts[0]?.value.content === `https://bgm.tv/subject/${bookId}`)).toBe(true);
+    expect(
+      firstNames.every((command) => {
+        const citation = command.statement.references?.[0]?.parts[0]?.value;
+        return citation?.type === 'value' && citation.content === `https://bgm.tv/subject/${bookId}`;
+      }),
+    ).toBe(true);
     expect(names(sent, String(bookId)).some((command) => ['Scalar title', 'Must not leak'].includes(nameText(command) ?? ''))).toBe(false);
     expect(sent.find((command) => command.op === 'create' && command.source.external_id === String(bookId))).toMatchObject({
       op: 'create',
