@@ -6,14 +6,19 @@ import {
   type ReadingPreferences,
   type SettingsPage,
 } from '../../settings/preferences';
-import type { ReadingIO } from '../../settings/reading-preferences';
+import { readingAdviceFor, type ReadingIO } from '../../settings/reading-preferences';
 
 export type ReadingScenario = 'default' | 'delayed' | 'lost' | 'conflict' | 'unavailable' | 'closed' | 'denied';
 
 /** Interface-only account preference responses, including historical receipts and an independent current version. */
 export function readingFixture(scenario: ReadingScenario = 'default') {
-  const initial: ReadingPreferences = { spoilerLevel: 0, suitability: 'blur', version: 0 };
-  let current = { ...initial };
+  const initial: ReadingPreferences = {
+    spoilerLevel: 0,
+    suitability: 'blur',
+    version: 0,
+    advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }),
+  };
+  let current: ReadingPreferences = { ...initial };
   let notifications = { ...recording.notifications };
   const receipts = new Map<string, { input: string; preferences: ReadingPreferences }>();
   const calls: Readonly<PreferenceChange>[] = [];
@@ -35,7 +40,12 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
           ? { ok: true, preferences: prior.preferences }
           : { ok: false, reason: 'invalid', failure: { status: 422 } };
       if (scenario === 'conflict' && calls.length === 1) {
-        current = { spoilerLevel: 2, suitability: 'show', version: current.version + 1 };
+        current = {
+          spoilerLevel: 2,
+          suitability: 'show',
+          version: current.version + 1,
+          advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }),
+        };
         notifications = { reply: false, mention: true };
       }
       if (scenario === 'delayed') await delay;
@@ -47,6 +57,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
         version: current.version,
       };
       if (next.spoilerLevel !== current.spoilerLevel || next.suitability !== current.suitability) next.version++;
+      next.advice = readingAdviceFor(next);
       current = next;
       receipts.set(input.idempotencyKey, { input: JSON.stringify(input), preferences: { ...current } });
       if ((scenario === 'lost' || scenario === 'unavailable') && calls.length === 1)
@@ -97,6 +108,7 @@ export function readingFixture(scenario: ReadingScenario = 'default') {
     current: () => ({ ...current, notifications: { ...notifications } }),
     concurrent: (values: Partial<Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>> = {}) => {
       current = { ...current, ...values, version: current.version + 1 };
+      current.advice = readingAdviceFor(current);
       notifications = { reply: false, mention: true };
     },
   };
@@ -131,8 +143,16 @@ export const routes: FakeRoute[] = [
       const fixture = readingPageFixture();
       if (!fixture) return;
       const result = await fixture.io.read();
-      if ('preferences' in result)
-        return { status: 200, ...result.preferences, notifications: result.notifications, shelf: {} };
+      if ('preferences' in result) {
+        const { advice, ...values } = result.preferences;
+        return {
+          status: 200,
+          ...values,
+          notifications: result.notifications,
+          shelf: {},
+          ...(advice ?? readingAdviceFor(values)),
+        };
+      }
       if (result.signedIn && 'failure' in result) {
         const { failure } = result;
         return {
@@ -161,9 +181,16 @@ export const routes: FakeRoute[] = [
       const input = parsePreferenceChange({ ...body, idempotencyKey: key });
       if (!input) return;
       const result = await fixture.io.save(input);
-      return result.ok
-        ? { status: 200, ...result.preferences, notifications: fixture.current().notifications, shelf: {} }
-        : { status: result.failure?.status ?? 503, code: result.failure?.code ?? 'dependency_unavailable' };
+      if (!result.ok)
+        return { status: result.failure?.status ?? 503, code: result.failure?.code ?? 'dependency_unavailable' };
+      const { advice, ...values } = result.preferences;
+      return {
+        status: 200,
+        ...values,
+        notifications: fixture.current().notifications,
+        shelf: {},
+        ...(advice ?? readingAdviceFor(values)),
+      };
     },
   },
 ];

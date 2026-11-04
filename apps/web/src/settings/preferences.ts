@@ -1,4 +1,9 @@
-import type { KernelClient } from '@rezics/client';
+import {
+  decodePreferenceAdvice,
+  decodePreferenceValues,
+  type KernelClient,
+  type PreferencePageAdvice,
+} from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { CollectionVisibility } from '../library/reads';
@@ -65,12 +70,15 @@ export type ShelfPreferencePatch = {
   gridSize?: ShelfPreferences['gridSize'] | null;
   tableColumns?: ShelfPreferences['tableColumns'] | null;
 };
+export type ReadingAdvice = PreferencePageAdvice;
 export type ReadingPreferences = {
   spoilerLevel: SpoilerLevel;
   suitability: Suitability;
   version: number;
   /** The bounded native shelf projection is present on account reads and absent in older fixtures. */
   shelf?: ShelfPreferences;
+  /** Owner-supplied choices and actions; absent when the envelope is missing or malformed. */
+  advice?: ReadingAdvice;
 };
 export type NotificationPreferences = Record<string, boolean>;
 export type NotificationPatch = Record<string, boolean | null> | null;
@@ -393,23 +401,31 @@ export function parseNotificationChange(input: unknown): NotificationChange | un
   };
 }
 
-function present(preferences: unknown): ReadingPreferences | undefined {
-  const shelf = isRecord(preferences) ? presentShelf(preferences.shelf) : undefined;
+function presentAdvice(value: unknown, preferences: ReadingPreferences): ReadingAdvice | undefined {
+  const page = decodePreferenceAdvice(value);
   if (
-    !isRecord(preferences) ||
-    !Number.isSafeInteger(preferences.version) ||
-    (preferences.version as number) < 0 ||
-    (preferences.spoilerLevel !== 0 && preferences.spoilerLevel !== 1 && preferences.spoilerLevel !== 2) ||
-    (preferences.suitability !== 'blur' && preferences.suitability !== 'show') ||
-    !shelf
+    !page ||
+    page.reading.effective.spoilerLevel !== preferences.spoilerLevel ||
+    page.reading.effective.suitability !== preferences.suitability ||
+    !page.reading.supported.spoilerLevels.includes(preferences.spoilerLevel) ||
+    !page.reading.supported.suitability.includes(preferences.suitability)
   )
     return undefined;
-  return {
-    spoilerLevel: preferences.spoilerLevel,
-    suitability: preferences.suitability,
-    version: preferences.version as number,
+  return page;
+}
+
+function present(preferences: unknown): ReadingPreferences | undefined {
+  const values = decodePreferenceValues(preferences);
+  const shelf = isRecord(preferences) ? presentShelf(preferences.shelf) : undefined;
+  if (!values || !shelf) return undefined;
+  const reading: ReadingPreferences = {
+    spoilerLevel: values.spoilerLevel,
+    suitability: values.suitability,
+    version: values.version,
     shelf,
   };
+  const advice = presentAdvice(preferences, reading);
+  return advice ? { ...reading, advice } : reading;
 }
 
 function presentNotifications(value: unknown): NotificationPreferences | undefined {

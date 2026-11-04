@@ -4,6 +4,24 @@ Embedded inventory, detail, action-entry and rename-entry reads use a ten-second
 
 Applicant verification requests use the same ten-second account budget, including headers and bodies, with caller cancellation and explicit recovery only. Review and command readback never await optional subject titles: a separate cancellable title read enhances the existing generic label. Subject suggestions require a fresh caller-bound eligibility release; unavailable reads remain retryable failures, never empty or definitive ineligibility. Uncertain commands retain their exact original input and key, and cancellation grants no replay or completion authority. Reviewer transport remains separate.
 
+## Reading
+
+`/settings#reading` inspects the confirmed spoiler and suitability pair, changes an allowed setting, and recovers a
+lost acknowledgement or conflict against the current confirmed result. The page decodes the native preference-page
+envelope: viewer state, bounded supported choices, effective/default values, and owner `read`/`update` actions. Missing
+or malformed choice data is unavailable; the form does not guess the enum. Signed-out local display appearance stays on
+the Display section. A small inert sample shows the selected spoiler/image policy and labels draft versus confirmed
+behavior. Reset, when shown, PATCHes native defaults with the reviewed shared version.
+
+Write authority is the owner `update` action composed with the current session credential, re-evaluated at send and
+after the response. An unresolved original patch and key stay until acknowledgement is certain. A readable-but-not-editable
+result can refresh current values without clearing that original. Session retirement clears private drafts; a stale
+response cannot restore edit authority.
+
+**Decision:** Reset PATCHes `spoilerLevel` 0 and `suitability` `blur` with the reviewed version. Viewer state and
+read/update actions live on the shared preference-page envelope so notification catalogue can add its slice without a
+second preference version.
+
 ## Watches
 
 `/settings#watches` is the existing private destination for a signed-in viewer. It reads one replaceable page for the selected `thread` or `board` kind through the generated `accounts({accountId}).watches.get` operation, with the exact opaque cursor and a limit of 20. Available rows link through existing localized thread or board routes. A withheld row exposes only its personal subscription identity, kind and revision so its owner can still remove it.

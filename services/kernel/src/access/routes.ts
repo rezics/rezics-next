@@ -12,6 +12,7 @@ import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import {
   createPreferenceCommands,
+  projectPreferencePage,
   readAccountPreferences,
   SHELF_GRID_SIZES,
   SHELF_LAYOUTS,
@@ -23,12 +24,13 @@ import {
   SHELF_TABLE_COLUMNS,
   SHELF_TABS,
 } from './preferences.ts';
+import { throwAccessUnavailable } from './unavailable.ts';
 import { NOTIFICATION_KINDS, type Notifications, type NotificationsPatch } from './notification-kinds.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
+import { accessCheck, AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
 import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
 import { readEditableAccountProfile, type EditableAccountProfile } from './account-edit-profile.ts';
 import { createLifecycleCommands, LifecycleDeniedError, normalizeLookupHandle } from './lifecycle.ts';
@@ -322,7 +324,35 @@ const notifications = t.Unsafe<Notifications>(t.Object(notificationFields(t.Bool
 const notificationsPatch = t.Unsafe<NotificationsPatch>(
   t.Object(notificationFields(nullable(t.Boolean()), true), closed),
 );
-const preferences = t.Object({ ...preferenceValues, shelf, notifications, version: t.Integer({ minimum: 0 }) }, closed);
+const preferenceAction = t.Union([
+  t.Object({ allowed: t.Literal(true) }, closed),
+  t.Object({ allowed: t.Literal(false), reason: t.Literal('not_authorized') }, closed),
+]);
+const preferences = t.Object(
+  {
+    ...preferenceValues,
+    shelf,
+    notifications,
+    version: t.Integer({ minimum: 0 }),
+    viewerState: t.Literal('current'),
+    allowedActions: t.Object({ read: preferenceAction, update: preferenceAction }, closed),
+    reading: t.Object(
+      {
+        supported: t.Object(
+          {
+            spoilerLevels: t.Array(preferenceValues.spoilerLevel, { minItems: 1, maxItems: 3, uniqueItems: true }),
+            suitability: t.Array(preferenceValues.suitability, { minItems: 1, maxItems: 2, uniqueItems: true }),
+          },
+          closed,
+        ),
+        effective: t.Object({ ...preferenceValues }, closed),
+        defaults: t.Object({ spoilerLevel: t.Literal(0), suitability: t.Literal('blur') }, closed),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
@@ -960,11 +990,30 @@ export function accessRoutes(
       async ({ params, actor, authorize, admission, job, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         if (actor.accountId !== params.accountId) throw new ProblemError('forbidden');
-        const check = await authorize({ route: routeOf(params.accountId)!, id: params.accountId });
+        const resource = { route: routeOf(params.accountId)!, id: params.accountId };
+        const check = await authorize(resource);
+        let checkUpdate: Awaited<ReturnType<typeof accessCheck>>;
+        try {
+          checkUpdate = await accessCheck(dependencies.access(), actor, 'account:update', resource, {
+            pool: dependencies.pool,
+            deadline: job.deadline,
+          });
+        } catch (error) {
+          throwAccessUnavailable(error, job.deadline);
+          throw error;
+        }
         const value = await admission.run('normal', job, () =>
           withConnection(dependencies.pool, async (client) => {
             if (!(await check(client))) throw new ProblemError('forbidden');
-            return readAccountPreferences(client, params.accountId);
+            const preferences = await readAccountPreferences(client, params.accountId);
+            let writable: boolean;
+            try {
+              writable = await checkUpdate(client);
+            } catch (error) {
+              throwAccessUnavailable(error, job.deadline);
+              throw error;
+            }
+            return projectPreferencePage(preferences, { writable });
           }),
         );
         set.headers['cache-control'] = 'private, no-store';
@@ -1013,7 +1062,7 @@ export function accessRoutes(
           );
           session.record(outcome);
           set.headers['cache-control'] = 'private, no-store';
-          return outcome.value;
+          return projectPreferencePage(outcome.value, { writable: true });
         } catch (error) {
           return denied(error);
         }

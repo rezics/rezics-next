@@ -4,5 +4,15 @@
   "spoilerLevel": 1,
   "suitability": "blur",
   "version": 1,
-  "status": 200
+  "status": 200,
+  "viewerState": "current",
+  "allowedActions": {
+    "read": { "allowed": true },
+    "update": { "allowed": true }
+  },
+  "reading": {
+    "supported": { "spoilerLevels": [0, 1, 2], "suitability": ["blur", "show"] },
+    "effective": { "spoilerLevel": 1, "suitability": "blur" },
+    "defaults": { "spoilerLevel": 0, "suitability": "blur" }
+  }
 }
