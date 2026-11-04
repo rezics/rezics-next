@@ -33,9 +33,19 @@ export function spaceEntryFollowing(
     const rows = new Map<string, SpaceEntryFollow>();
     if (before.state === 'current' && actor.kind === 'account' && before.accountId === actor.accountId) {
       for (const target of targets) {
-        const row = before.rows.find((row) => row.targetId === target.targetId && row.targetType === 'space' && row.source === target.source);
-        rows.set(target.targetId, row ? { state: 'current', following: row.following,
-          action: (row.following ? row.actions.unfollow : row.actions.follow) ? 'allowed' : 'disabled' } : { state: 'unavailable' });
+        const row = before.rows.find(
+          (row) => row.targetId === target.targetId && row.targetType === 'space' && row.source === target.source,
+        );
+        rows.set(
+          target.targetId,
+          row
+            ? {
+                state: 'current',
+                following: row.following,
+                action: (row.following ? row.actions.unfollow : row.actions.follow) ? 'allowed' : 'disabled',
+              }
+            : { state: 'unavailable' },
+        );
       }
     }
     return { rows, current: async () => isDeepStrictEqual(before, await read(actor, targets, deadline)) };

@@ -186,7 +186,7 @@ test('declined media remains explicit while entry and follow advice have indepen
   }
 });
 
- test('shared Library observation follows the exact Space, keeps disabled advice and rejects a changed final edge', async () => {
+test('shared Library observation follows the exact Space, keeps disabled advice and rejects a changed final edge', async () => {
   const { page, cards } = fixture();
   let following = true;
   let calls = 0;
@@ -197,8 +197,12 @@ test('declined media remains explicit while entry and follow advice have indepen
     expect(targets[0]?.targetId).toBe(id);
     expect(targets[0]?.targetType).toBe('space');
     expect(targets[0]?.source).toMatch(/^[a-f0-9]{64}$/);
-    return { state: 'current', accountId: reader, partition: 0,
-      rows: targets.map((target) => ({ ...target, following, actions: { follow: true, unfollow: false } })) };
+    return {
+      state: 'current',
+      accountId: reader,
+      partition: 0,
+      rows: targets.map((target) => ({ ...target, following, actions: { follow: true, unfollow: false } })),
+    };
   });
   const result = await observeSearchSpaceEntries({ page, actor, deadline: 100, read: async () => cards, follow });
   expect(result.page.spaceEntries?.rows[0]?.follow).toEqual({ state: 'current', following: true, action: 'disabled' });
