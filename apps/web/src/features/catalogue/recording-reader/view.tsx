@@ -380,6 +380,7 @@ export function RecordingReader({
   });
   const directionReturn = (statement: string) =>
     recordingStatementReturnHref(currentAddress, read.subject.id, statement, locale) ?? currentAddress;
+  const selectedStatementReturn = selectedFact ? directionReturn(selectedFact.fact.id) : undefined;
   const showRecovery = retryAvailable || retrying;
   const handleRetry = () => {
     if (!retryAvailable || retrying || !onRetry || !active()) return;
@@ -437,7 +438,7 @@ export function RecordingReader({
             {...(context ? { context } : {})}
             link={link}
             {...(currentAddress ? { returnTo: currentAddress } : {})}
-            selectedStatement={selection.selectedStatement}
+            {...(selection.selectedStatement ? { selectedStatement: selection.selectedStatement } : {})}
             onInspect={selection.inspect}
           />
           <FieldGroup
@@ -449,7 +450,7 @@ export function RecordingReader({
             {...(context ? { context } : {})}
             link={link}
             {...(currentAddress ? { returnTo: currentAddress } : {})}
-            selectedStatement={selection.selectedStatement}
+            {...(selection.selectedStatement ? { selectedStatement: selection.selectedStatement } : {})}
             onInspect={selection.inspect}
           />
           <FieldGroup
@@ -461,7 +462,7 @@ export function RecordingReader({
             {...(context ? { context } : {})}
             link={link}
             {...(currentAddress ? { returnTo: currentAddress } : {})}
-            selectedStatement={selection.selectedStatement}
+            {...(selection.selectedStatement ? { selectedStatement: selection.selectedStatement } : {})}
             onInspect={selection.inspect}
           />
         </>
@@ -477,9 +478,7 @@ export function RecordingReader({
           locale={locale}
           {...(context ? { context } : {})}
           link={link}
-          {...(directionReturn(selectedFact.fact.id)
-            ? { statementReturn: directionReturn(selectedFact.fact.id) }
-            : {})}
+          {...(selectedStatementReturn ? { statementReturn: selectedStatementReturn } : {})}
           onClose={selection.close}
           headingRef={selection.inspectionHeading}
         />
