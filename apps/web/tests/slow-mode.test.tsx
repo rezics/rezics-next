@@ -161,6 +161,10 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     }
     expect(host.textContent).toContain(text);
   };
+  const selectedSettingInterval = () =>
+    host
+      .querySelector('[data-slot="board-slow-mode-setting"] [role="radio"][aria-checked="true"]')
+      ?.getAttribute('value');
   try {
     await appeared(m.slow_mode_unavailable());
     expect(host.textContent).toContain(m.slow_mode_next_unavailable());
@@ -210,13 +214,15 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       csrfToken: owner.csrfToken,
       credentialMode: 'session',
     });
-    expect(host.textContent).toContain(
-      m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 30 }) }),
-    );
+    expect(selectedSettingInterval()).toBe('30');
     await act(async () => {
       await client.invalidateQueries({ queryKey: ['board-slow-mode'] });
     });
-    await appeared(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }));
+    await appeared(
+      m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }),
+    );
+    expect(selectedSettingInterval()).toBe('45');
+    expect(host.textContent).toContain(m.slow_mode_saved());
     await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
     const send = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
     await act(async () => {
