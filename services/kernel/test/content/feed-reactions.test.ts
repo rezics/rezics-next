@@ -6,6 +6,12 @@ import { prepareFeedReactionAdvice } from '../../src/content/feed-reaction-advic
 import { feedRoute } from '../../src/content/feed-activity.ts';
 import { newId } from '../../src/route/route.ts';
 
+type FollowingPostItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content'; kind: 'post' } }>;
+
+function isFollowingPostItem(item: FeedItem): item is FollowingPostItem {
+  return item.source === 'following' && item.key.owner === 'content' && item.key.kind === 'post';
+}
+
 test('reaction advice preserves duplicate Home occurrences and drops a post rebound to another parent', async () => {
   const pool = new Pool();
   try {
@@ -46,14 +52,14 @@ test('reaction advice preserves duplicate Home occurrences and drops a post rebo
 
     const reboundPreparation = prepareFeedReactionAdvice([duplicate], contexts, { pool }, actor, Date.now() + 10_000);
     const preparedRow = reboundPreparation.items[0];
-    if (!preparedRow) throw new Error('Prepared post card missing');
-    const rebound = {
+    if (!preparedRow || !isFollowingPostItem(preparedRow)) throw new Error('Prepared post card missing');
+    const rebound: FeedItem = {
       ...preparedRow,
       summary: {
         ...preparedRow.summary,
         parentContext: { kind: 'reply', parent: { state: 'removed', id: otherParentId } },
       },
-    } satisfies FeedItem;
+    };
     const stale = await reboundPreparation.finish([rebound]);
     expect(stale[0]?.summary).not.toHaveProperty('reactionAdvice');
   } finally {
