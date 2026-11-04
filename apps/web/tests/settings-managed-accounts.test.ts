@@ -368,12 +368,19 @@ test('directory response waits fence refresh and sibling controls, survive admit
     let finish: (result: ManagedAccountsResult) => void = () => {};
     const calls: ManagedAccountsCursors[] = [];
     const failure = managedAccountsFailure(400, { code: 'invalid_cursor' }, { 'Retry-After': '20' });
-    const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-      calls.push(cursors);
-      if (calls.length === 1 || calls.length === 4) return ready(page());
-      if (cursors.organizationsCursor) return failure;
-      return new Promise((resolve) => { finish = resolve; });
-    }, () => current, () => now);
+    const inventory = new ManagedAccountsInventory(
+      viewer,
+      async (cursors) => {
+        calls.push(cursors);
+        if (calls.length === 1 || calls.length === 4) return ready(page());
+        if (cursors.organizationsCursor) return failure;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+      () => current,
+      () => now,
+    );
     const refresh = () => inventory.load();
     const next = () => inventory.more('organizations');
     await inventory.load();
@@ -417,7 +424,12 @@ test('directory response waits fence refresh and sibling controls, survive admit
     expect(inventory.snapshot().retryAt).toBeUndefined();
     expect(inventory.snapshot().organizations.failedRequest).toBeUndefined();
     expect(inventory.snapshot().account).toBeNull();
-    const replacement = new ManagedAccountsInventory(viewer, async () => ready(page()), undefined, () => now);
+    const replacement = new ManagedAccountsInventory(
+      viewer,
+      async () => ready(page()),
+      undefined,
+      () => now,
+    );
     await replacement.load();
     expect(replacement.snapshot().account?.id).toBe(viewer);
     expect(replacement.snapshot().retryAt).toBe(0);
