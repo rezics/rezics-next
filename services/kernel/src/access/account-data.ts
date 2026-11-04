@@ -10,6 +10,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import accountRead from './account-read.sql';
 import publicPage from './public-identity-page.sql';
+import publicIdentityObservationRead from './public-identity-observation.sql';
 import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
@@ -55,6 +56,14 @@ export type PublicIdentityFields = {
   automated: boolean;
   operatorId: string | null;
 };
+/** One current public identity plus the native facts needed to reobserve its avatar disclosure. */
+export type PublicIdentityObservation =
+  | DeletedPublicIdentity
+  | (PublicIdentityFields & {
+      avatarMediaId: string | null;
+      nativeState: 'active' | 'suspended';
+      authnFenced: boolean;
+    });
 
 export type AccountLink = { label: string; url: string };
 export type AccountPublicViews = PublicViews & { realms: boolean };
@@ -239,6 +248,64 @@ export async function readPublicIdentities(
   return routes.flatMap((route, index) => {
     const row = found.get(`${route}:${accountIds[index]}`);
     return row ? [row] : [];
+  });
+}
+
+/**
+ * Reads current public identities and only avatar references admitted by the active/unfenced predicate.
+ * Result entries follow request order and repeat for duplicate IDs; native seeks are deduplicated.
+ */
+export async function readPublicIdentityObservations(
+  client: Queryable,
+  accountIds: readonly string[],
+): Promise<PublicIdentityObservation[]> {
+  if (accountIds.length < 1 || accountIds.length > 100) throw new ProblemError('invalid_request');
+
+  const requested: { id: string; route: number }[] = [];
+  const batches = new Map<number, Set<string>>();
+  for (const id of accountIds) {
+    const route = routeOf(id);
+    if (route === null) throw new ProblemError('invalid_request');
+    requested.push({ id, route });
+    const ids = batches.get(route) ?? new Set<string>();
+    ids.add(id);
+    batches.set(route, ids);
+  }
+
+  const found = new Map<string, PublicIdentityObservation>();
+  for (const [route, ids] of batches) {
+    const rows = await publicIdentityObservationRead.run(client, {
+      route,
+      account_ids: [...ids],
+    });
+    for (const row of rows) {
+      if (row.nativeState === 'deleted') {
+        found.set(row.id, {
+          id: row.id,
+          kind: row.kind === 'organization' ? 'organization' : 'actor',
+          state: 'deleted',
+        });
+        continue;
+      }
+      if (row.nativeState !== 'active' && row.nativeState !== 'suspended') continue;
+      found.set(row.id, {
+        id: row.id,
+        kind: row.kind === 'organization' ? 'organization' : 'actor',
+        handle: row.handle,
+        displayName: row.displayName,
+        state: 'active',
+        automated: row.operatorId !== null,
+        operatorId: row.operatorId,
+        avatarMediaId: row.avatarMediaId,
+        nativeState: row.nativeState,
+        authnFenced: row.authnFenced,
+      });
+    }
+  }
+
+  return requested.flatMap(({ id }) => {
+    const observation = found.get(id);
+    return observation ? [observation] : [];
   });
 }
 

@@ -2281,6 +2281,45 @@ is backfilled from accounts already verified when the migration runs. Reversal o
   the 100 requested ids fixed (seed thousands of accounts before scale 1 and analyze); constant rows and statements,
   logarithmic buffers.
 
+### Bounded public identity/avatar observation
+
+Decision: the internal observation reader preserves request order and emits one result per admitted duplicate while
+deduplicating native seeks; `GET /v1/accounts?ids=...` remains first-request stable-unique.
+
+`readPublicIdentityObservations(client: Queryable, accountIds: readonly string[])` accepts 1–100 canonical routable
+account UUIDs. It validates the full input before SQL, derives each route from the UUID, and performs one bounded
+full-key batch per requested route. Results follow input order, including repeated results for duplicate IDs; missing
+and pending accounts are absent. Deleted accounts return only `{ id, kind, state: 'deleted' }`, matching the safe
+tombstone from the thin reader.
+
+Each live result retains the installed thin `PublicIdentityFields` (`id`, kind, handle, display name, public active
+state, automation and operator ID), plus `avatarMediaId`, `nativeState` and `authnFenced`. The latter two are local
+currentness facts: they detect suspended or newly fenced rows even when the thin public identity and absent avatar
+would otherwise compare equal. Deleted observations contain no additional lifecycle or media fields. The SQL reads
+the native `avatar` reference only when `state = 'active' AND NOT authn_fenced`, matching
+`account-public-read.sql`; it never selects `avatar_url`, biography, links, Subject rows or media summaries.
+
+Content composes this source in two observations: batch-read the selected actor IDs; admit only their non-null native
+media references with `readAvatarSummaries`; then batch-read those same IDs again. Compare the complete returned
+observation for each ID, including all public identity fields, `avatarMediaId`, `nativeState` and `authnFenced`; an
+ID-only comparison is insufficient. Keep an actor only when that complete observation is unchanged. A missing second
+row or deleted tombstone drops the prior actor. A changed identity, lifecycle, fence or avatar reference also drops
+it. Media summaries are independently admitted and may be retained, but cannot be attached to a changed actor. A
+concealed, missing or unavailable summary stays unavailable; raw `avatarUrl` is never a fallback. An unavailable or
+deadline-failed second read fails closed instead of reusing the first observation. These separate owner reads do not
+claim cross-owner atomicity or create a stored protocol. Comparing the selected local facts needs no migration,
+account epoch or persisted observation.
+
+The caller supplies the `Queryable` and owns connection and deadline lifetime; the source opens no pool and retries
+no query. For N requested IDs (N ≤ 100), R distinct routes (R ≤ N), and U distinct IDs (U ≤ N), one observation uses
+at most R statements and U account rows. Both observations use at most 2R statements and 2U account rows in total.
+Content's current actor cap of 50 therefore costs at most 100 account statements and 100 account rows across both
+observations, even if every actor uses a different route. Its separate `readAvatarSummaries` composition admits at
+most 50 unique media IDs in at most 50 partition statements and 50 media rows. Content's candidate and final
+source/target reobservations remain its own separately bounded work (up to 200 candidates); none of these bounds
+introduces one profile query per actor, an unbounded scan, runtime price dispatch, or atomicity across owners. The
+native account probes cost O(U log A) blocks per observation and O(2U log A) across both, for A accounts.
+
 ### Agent page lookup
 
 - Touches: one `agent_page` primary-key point read in the subject's route and one anchored `account_pkey(route,

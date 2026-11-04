@@ -5,7 +5,12 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { readPublicAccount, readPublicIdentities, type PublicIdentity } from '../../src/access/account-data.ts';
+import {
+  readPublicAccount,
+  readPublicIdentities,
+  readPublicIdentityObservations,
+  type PublicIdentity,
+} from '../../src/access/account-data.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -184,12 +189,13 @@ function identities(ids: readonly string[]): string {
 }
 
 test('the public batch returns visible identities in first-request order and hides lifecycle details', async () => {
+  const unknown = newId(route);
   const requested = [
     identity.second,
     identity.deleted,
     identity.deletedOrganization,
     identity.pending,
-    newId(route),
+    unknown,
     identity.first,
     identity.second,
     identity.suspended,
@@ -257,6 +263,14 @@ test('the public batch returns visible identities in first-request order and hid
   ]);
   expect(response.headers.get('cache-control')).toBe('no-cache');
   expect(response.headers.get('etag')).toMatch(/^"[A-Za-z0-9_-]+"$/);
+  const observations = await readPublicIdentityObservations(pool, requested);
+  expect(observations.map(({ id }) => id)).toEqual(
+    requested.filter((id) => id !== identity.pending && id !== unknown),
+  );
+  expect(observations.filter(({ state }) => state === 'deleted')).toEqual([
+    { id: identity.deleted, kind: 'actor', state: 'deleted' },
+    { id: identity.deletedOrganization, kind: 'organization', state: 'deleted' },
+  ]);
 });
 
 test('the public identity names no private field for any kind and hides the operator of a deleted account', async () => {
@@ -336,6 +350,7 @@ test('anonymous and authenticated callers receive the same public identity', asy
 test('the next read sees a handle and display name change', async () => {
   const path = identities([identity.renamed]);
   const before = await request(path);
+  const nativeBefore = await readPublicIdentityObservations(pool, [identity.renamed]);
   expect(before.body.accounts).toEqual([
     {
       id: identity.renamed,
@@ -353,6 +368,8 @@ test('the next read sees a handle and display name change', async () => {
     [route, identity.renamed],
   );
   const after = await request(path);
+  const nativeAfter = await readPublicIdentityObservations(pool, [identity.renamed]);
+  expect(nativeAfter).not.toEqual(nativeBefore);
   expect(after.body.accounts).toEqual([
     {
       id: identity.renamed,
@@ -385,6 +402,38 @@ test('the request accepts one to one hundred IDs and rejects malformed or unknow
   expect(response.status).toBe(200);
   expect(body.accounts).toHaveLength(100);
   expect(body.accounts.map(({ id }) => id)).toEqual(batchIds);
+  expect(await readPublicIdentityObservations(pool, batchIds)).toHaveLength(100);
+});
+
+test('the observation validates before SQL and deduplicates native seeks by route', async () => {
+  const query = spyOn(pool, 'query');
+  try {
+    await Promise.all(
+      [[], Array.from({ length: 101 }, () => identity.first), ['not-a-uuid']].map((ids) =>
+        expect(readPublicIdentityObservations(pool, ids)).rejects.toMatchObject({ code: 'invalid_request' }),
+      ),
+    );
+    expect(query).not.toHaveBeenCalled();
+  } finally {
+    query.mockRestore();
+  }
+
+  const otherRoute = route + 1;
+  const other = newId(otherRoute);
+  await admin.query(
+    "INSERT INTO access.account(route,account_id,kind,handle,display_name,state,transaction_id) VALUES ($1,$2,'actor','other_route','Other Route','active',$2)",
+    [otherRoute, other],
+  );
+  const batch = spyOn(pool, 'query');
+  try {
+    const routed = [identity.first, identity.second, other, identity.first];
+    expect((await readPublicIdentityObservations(pool, routed)).map(({ id }) => id)).toEqual(
+      routed,
+    );
+    expect(batch).toHaveBeenCalledTimes(2);
+  } finally {
+    batch.mockRestore();
+  }
 });
 
 test('an account ID array derives each exact route from UUID bytes 10 and 11', () => {
