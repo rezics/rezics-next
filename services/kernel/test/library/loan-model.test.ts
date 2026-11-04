@@ -9,7 +9,7 @@ import {
 
 const accountId = newId(31), copyId = newId(31), id = newId(31);
 const boundary = loanDueBoundary(new Date('2026-11-04T16:00:00.000Z'));
-const draft = { copyId, copyRevision: 7, direction: 'lent', counterparty: { kind: 'name', name: '  @Alice 王  ' },
+const draft = { copyId, copyRevision: 7, direction: 'lent' as const, counterparty: { kind: 'name' as const, name: '  @Alice 王  ' },
   startedOn: '2026-11-01', dueOn: '2026-11-03' };
 const make = (changes = {}) => createLoanRecord({ id, accountId }, parseLoanCreate({ ...draft, ...changes }));
 
@@ -23,7 +23,7 @@ function conflict(run: () => unknown, reason: string) {
 }
 
 test('both directions select an exact copy and capture detached immutable private name operands', () => {
-  for (const direction of ['lent', 'borrowed']) {
+  for (const direction of ['lent', 'borrowed'] as const) {
     const input = { ...draft, direction, counterparty: { ...draft.counterparty } };
     const captured = parseLoanCreate(input), record = createLoanRecord({ id, accountId }, captured);
     input.counterparty.name = 'replacement';
