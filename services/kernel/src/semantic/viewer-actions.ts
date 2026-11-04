@@ -224,7 +224,9 @@ export async function readSubjectCorrectionActions(input: {
 
 export type StatementConsentActions =
   | { state: 'available'; disclosed: boolean; operations: ('statement.disclose' | 'statement.retract')[] }
-  | { state: 'refused' | 'terminal' | 'unavailable' };
+  | { state: 'refused' }
+  | { state: 'terminal' }
+  | { state: 'unavailable' };
 
 /** Read current consent operations through the mounted Global Context catalogue and native candidate custody. */
 export async function readStatementConsentActions(input: {
