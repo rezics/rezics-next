@@ -306,7 +306,7 @@ test('text diagnostics belong to the captured submission, never a replacement, r
   resolve({ status: 422, error });
   const outcome = await pending;
   expect(outcome.recovery).toMatchObject({ status: 'invalid', textError: { query: text, diagnostic } });
-  for (const status of [401, 403, 409, 503]) {
+  for (const status of [400, 401, 403, 409, 503]) {
     const refused = await readSearchOutcome({ ...request, text }, async () => ({ status, error }));
     expect(refused.recovery).not.toHaveProperty('textError');
   }

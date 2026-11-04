@@ -93,6 +93,7 @@ export async function readSearchOutcome(
         body && typeof body === 'object' && 'textDiagnostic' in body ? body.textDiagnostic : undefined,
       );
       if (
+        response.status === 422 &&
         recovery.status === 'invalid' &&
         recovery.problem?.code === 'unsupported_query' &&
         recovery.problem.errors?.some(({ pointer }) => pointer === '/text') &&
