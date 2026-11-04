@@ -6,7 +6,8 @@ import { preparedRatingReader } from './subject-ratings';
 import { isRecord } from './shared';
 
 type BallotHandle = ReturnType<ReturnType<KernelClient['subjects']>['classification-associations']>;
-type GeneratedClassificationRoute = Kernel['~Routes']['v1']['subjects'][':id']['classification-associations'][':associationId'];
+type GeneratedClassificationRoute =
+  Kernel['~Routes']['v1']['subjects'][':id']['classification-associations'][':associationId'];
 type GeneratedBallotInput = GeneratedClassificationRoute['assessment']['put']['body'];
 
 export const CLASSIFICATION_BALLOT_SET = 'classification_ballot:set';
