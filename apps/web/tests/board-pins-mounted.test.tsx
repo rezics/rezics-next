@@ -9,7 +9,6 @@ import type { BoardPinAdviceQuery, BoardPinAdviceResult } from '../src/threads/b
 import type {
   BoardPinBoardRead,
   BoardPinCommand,
-  BoardPinJsonRecord,
   BoardPinProducer,
   BoardPinSender,
 } from '../src/threads/board-pins/contract';
@@ -67,32 +66,38 @@ function sourceRevision(thread: CommunityBoardPage['threads']['threads'][number]
   if (thread.firstPost.availability !== 'available') throw new Error('Expected a disclosed opening revision.');
   return thread.firstPost.revisionId;
 }
-const pinnedAdvice = (page: CommunityBoardPage, full = false): BoardPinAdviceResult => ({
-  state: 'ready',
-  viewer: { kind: 'account', id: sender.subject },
-  boardId: page.board.id,
-  pinRevision: '12',
-  management: 'allowed',
-  threads: [
-    { threadId: page.threads.pinnedThreads[0]!.id, pinned: true, actions: ['unpin'] },
-    { threadId: page.threads.threads[0]!.id, pinned: false, actions: full ? [] : ['pin'] },
-  ],
-});
+const pinnedAdvice = (page: CommunityBoardPage, full = false): BoardPinAdviceResult => {
+  const pinned = page.threads.pinnedThreads[0];
+  const ordinary = page.threads.threads[0];
+  const thread = pinned ?? ordinary!;
+  return {
+    state: 'ready',
+    viewer: { kind: 'account', id: sender.subject },
+    boardId: page.board.id,
+    pinRevision: '12',
+    management: 'allowed',
+    threads: [
+      {
+        threadId: thread.id,
+        pinned: !!pinned,
+        actions: pinned ? ['unpin'] : full ? [] : ['pin'],
+      },
+    ],
+  };
+};
 
 async function pageFixture(): Promise<CommunityBoardPage> {
   const loaded = await loadBoardPageWithAuthors(
     createKernelClient('https://kernel.test', { fetch: createStoryRecordedKernelFetch() }),
     { id: continuationBoardId, cursor: continuationCursor },
   );
-  const pinned = loaded.threads.threads[0]!;
-  const ordinary = loaded.threads.threads.find((thread) => thread.id !== pinned.id)!;
-  if (pinned.firstPost.availability !== 'available' || ordinary.firstPost.availability !== 'available')
-    throw new Error('The recorded Board source needs two disclosed opening revisions.');
+  const ordinary = loaded.threads.threads[0]!;
+  if (ordinary.firstPost.availability !== 'available')
+    throw new Error('The recorded Board source needs a disclosed opening revision.');
   return {
     ...loaded,
     threads: {
       ...loaded.threads,
-      pinnedThreads: [pinned],
       threads: [ordinary],
       next: null,
       pinRevision: '12',
@@ -152,12 +157,10 @@ async function mount(
 test('mounted Board pin controls use only exact current selected advice and preserve unavailable, capacity, and stale outcomes', async () => {
   setLocale('en', { reload: false });
   const page = await pageFixture();
-  const pinned = page.threads.pinnedThreads[0]!;
   const ordinary = page.threads.threads[0]!;
   const allowed = await mount(page, async () => pinnedAdvice(page));
   expect(allowed.queries).toHaveLength(1);
   expect(allowed.queries[0]?.selected).toEqual([
-    { threadId: pinned.id, placeId: page.board.id, sourceRevisionId: sourceRevision(pinned) },
     { threadId: ordinary.id, placeId: page.board.id, sourceRevisionId: sourceRevision(ordinary) },
   ]);
   expect([...allowed.host.querySelectorAll('[data-board-pin-focus="toggle"]')].map((node) => node.textContent)).toEqual(
@@ -199,9 +202,13 @@ test('mounted Board pin controls use only exact current selected advice and pres
 
   const full = await mount(page, async () => pinnedAdvice(page, true));
   expect(full.host.textContent).toContain(m.board_pin_full());
-  expect(full.host.querySelectorAll('[data-board-pin-focus="toggle"]')).toHaveLength(1);
-  expect(full.host.querySelector('[data-board-pin-focus="toggle"]')?.textContent).toBe(m.board_pin_unpin());
+  expect(full.host.querySelector('[data-board-pin-focus="toggle"]')).toBeNull();
   await full.close();
+
+  const pinnedPage = { ...page, threads: { ...page.threads, pinnedThreads: [ordinary], threads: [] } };
+  const pinnedControl = await mount(pinnedPage, async () => pinnedAdvice(pinnedPage));
+  expect(pinnedControl.host.querySelector('[data-board-pin-focus="toggle"]')?.textContent).toBe(m.board_pin_unpin());
+  await pinnedControl.close();
 
   const readOnly = await mount(page, async () => {
     const result = pinnedAdvice(page);
@@ -229,7 +236,6 @@ test('mounted Board pin controls use only exact current selected advice and pres
 test('unknown retry keeps its original command and missing rows move focus to the announced recovery region', async () => {
   setLocale('en', { reload: false });
   const page = await pageFixture();
-  const pinned = page.threads.pinnedThreads[0]!;
   const ordinary = page.threads.threads[0]!;
   const commands: BoardPinCommand[] = [];
   const inspections: BoardPinAdviceQuery[] = [];
@@ -243,8 +249,8 @@ test('unknown retry keeps its original command and missing rows move focus to th
       management: 'allowed',
       threads: query.selected.map(({ threadId }) => ({
         threadId,
-        pinned: threadId === pinned.id,
-        actions: threadId === pinned.id ? ['unpin'] : ['pin'],
+        pinned: false,
+        actions: ['pin'] as const,
       })),
     };
   };
@@ -253,7 +259,7 @@ test('unknown retry keeps its original command and missing rows move focus to th
     boardId: page.board.id,
     management: 'allowed',
     pinRevision: '13',
-    pinnedThreads: [pinned as unknown as BoardPinJsonRecord],
+    pinnedThreads: [],
     threads: [],
     next: null,
     rankRefreshedAt: null,
@@ -299,9 +305,9 @@ test('unknown retry keeps its original command and missing rows move focus to th
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(commands[0]);
   expect(commands[0]).toMatchObject({ boardId: page.board.id, threadId: ordinary.id, action: 'pin', sender });
-  expect(inspections).toHaveLength(2);
-  expect(inspections[1]?.selected).toEqual([
-    { threadId: pinned.id, placeId: page.board.id, sourceRevisionId: sourceRevision(pinned) },
+  expect(inspections).toHaveLength(1);
+  expect(inspections[0]?.selected).toEqual([
+    { threadId: ordinary.id, placeId: page.board.id, sourceRevisionId: sourceRevision(ordinary) },
   ]);
   const recovery = feed.host.querySelector<HTMLElement>('[data-slot="board-pin-focus-recovery"]');
   expect(recovery?.textContent).toBe(m.board_pin_focus_recovery());
