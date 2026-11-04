@@ -2213,6 +2213,27 @@ frozen acceptance, full Kernel and rendered review remain controller-owned and u
 - Bound: The page is `R` `O(s+1)`, `B` `O(L(N)+s)`, `S` 1 or 2, plus the session read, the admit and the partition read.
 - Growth check: `test/library/progress-store.test.ts`: `unit add, unit page and change page touch the same rows and statements at three scales` pages changes at limit 1 at scales 1, 4 and 16 with 500 x scale seeded rows per relation (500, 2,000 and 8,000), with no planner setting: one statement, constant rows, logarithmic blocks and no sequential scan. `test/library/sessions.test.ts`: `statement counts stay equal at three scales of unrelated sessions and units` lists changes at limit 1 and compares statements.
 
+### Physical copy condition primitives
+
+`copy-condition.ts` exports the Library-owned `physical-v1` choices, strict optional-field parser,
+`mergeCopyConditionFields`, `copyConditionAdmission` and `presentCopyCondition`. These are pure helpers for the
+existing writer and detail presentation, not a second command path. Their value/label and absent/unknown/clear
+contract is owned by [Library](../../../../docs/library-and-collections.md#physical-copy-condition).
+Each observation carries its own private accepting kind and profile pin; a merge preserves untouched observations.
+The parser preserves original field presence so old receipt hashes need no compatibility rewrite.
+
+Admission examines only the explicit capability on a released kind; a kind named physical remains unavailable
+without it. The retained Definitions type and closed source schema do not publish that capability yet. No generated
+declaration or client export is added here, and no endpoint or page consumes these primitives yet. Native storage,
+whole-Copy CAS/replay, exact release resolution, retained restore/purge and receiving controls remain implementation
+work. Condition edits must preserve the current loan/disposal authority rather than using a parallel revision.
+
+Helpers inspect two fields and eight fixed values, with constant CPU/bytes and no pools, SQL, network or history
+walk. This is not a bound on the eventual caller. Its native 64/512/4096 growth cases must include original repeated
+command operations, owner/foreign observations and rechecks, accepted/current release lookups, raw keys/lookahead,
+serialization, retries, retention and cleanup across all participating pools under the same request deadline.
+Execution belongs to the controller; no growth measurement is claimed for these primitives.
+
 ### Copy create
 
 - Touches: An account admit, one subject resolve, and one `copy` insert in the owner partition. The event subject is the account id. The payload carries the copy id.
