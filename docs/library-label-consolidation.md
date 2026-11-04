@@ -98,9 +98,14 @@ Decision: each requested review page belongs to one in-memory visit with an immu
 inconsistent evidence retires that visit and requires a new observation. The Web review accumulator retains exact
 null observations, requires every bounded page and refuses confirmation of any non-admissible item. Its request
 and response types derive from the installed root `KernelClient`; the adapter invokes only generated methods.
-The current-owner private request envelope must supply headers and capture current reader/exposure before each
-request. Retirement clears retained evidence. This foundation is not yet mounted on the Labels or shelf surfaces;
-confirmation recovery, results, locale strings and complete native growth coverage remain implementation work.
+The visit-local coordinator accepts a current-owner envelope that captures fresh headers and current reader/exposure
+for each operation, with synchronous retirement notification. Retirement clears review, confirmation and result
+evidence. Confirmation evidence and caller keys are retained before dispatch; unknown acknowledgements replay the
+original addressed command. Native results are preserved verbatim and definite assignment effects refresh both
+assignment readers through the supplied callback. The coordinator never writes assignments directly or stores
+private evidence in a global cache. This foundation is not yet mounted on the Labels or shelf surfaces; the concrete
+owner envelope, selection/catalogue UI, locale strings and complete native growth coverage remain implementation
+work in `.temp/continuation/label-consolidation-workspace.md`.
 
 ## Cost and verification boundary
 
