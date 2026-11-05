@@ -677,6 +677,10 @@ protocol or representation meaning; they are not operator limits.
 | `policy.validation.notifierArgumentCharacters`        | `4096`                               | Maximum characters per notifier argument.                                                                                                                                                   |
 | `policy.validation.hourlyReportMaxTimeoutMs`          | `120000`                             | Maximum accepted notifier deadline (ms).                                                                                                                                                    |
 | `policy.flowHistoryMs`                                | `2592000000`                         | Delivery flow reporting lookback (ms).                                                                                                                                                      |
+| `policy.chain.maximumContextTokens`                   | `150000`                             | Session context at or above which a landed session is not chained.                                                                                                                          |
+| `policy.chain.maximumTasks`                           | `4`                                  | Tasks in one chain of warm sessions, including the first.                                                                                                                                   |
+| `policy.chain.contextTailBytes`                       | `1048576`                            | Transcript bytes read from the end to find the session's context size.                                                                                                                      |
+| `policy.chain.offerWindowMs`                          | `3600000`                            | Age limit for landed-session offers the backlog run still answers (ms).                                                                                                                     |
 | `policy.worker.capacityPauseMs`                       | `10000`                              | Pause before retrying a model-capacity refusal (ms).                                                                                                                                        |
 | `policy.worker.usageLimitRetryPauseMs`                | `180000`                             | Same-pool retry pause for a refusal with fresh allowance left (ms).                                                                                                                         |
 | `policy.worker.usageLimitRefusalWindowMs`             | `3600000`                            | Lookback when counting ambiguous usage-limit refusals (ms).                                                                                                                                 |
@@ -990,7 +994,9 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 
 ### Delivery flow telemetry
 
-`report --flow [--since <time>] [--json]` reads durable flow events. Decision: after one stable sort, `flowReport`
+`report --flow [--since <time>] [--json]` reads durable flow events. Its `chain` section counts offers, chained and unchained
+tasks (integrated, landed lines, worker-hours and lines per worker-hour) and declined offers by reason; see
+[Chained briefs](#chained-briefs). Decision: after one stable sort, `flowReport`
 builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
 reports stage/Goal totals, efficiency, attempts per integrated task, and queue length and age. Its guard ledger prices registered attempt endings and landing refusals over seven days by
 firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
@@ -2274,6 +2280,8 @@ host's socket. The host skips the minute while the previous child is still runni
   pending retry, is cancelled through the `goal cancel` path, at most 20 per Goal per run, longest stopped first. Its
   brief is written to `failed/<task-id>.md` and its blocker and branch to `failed/<task-id>.reason`; each owner
   receives one event per run listing those tasks. Control-plane, stabilize and verification tasks are exempt.
+- **Chained briefs.** Before the dispatch above, each landed session's offer is answered; see
+  [Chained briefs](#chained-briefs).
 - **Low backlog.** A running, active Goal manager whose backlog holds fewer than eight ready briefs receives at most
   one event an hour asking it to keep at least eight. Only non-hidden `*.md` files directly in the Goal's backlog
   directory count as ready; at eight or more, no low-backlog event is sent.
@@ -2289,6 +2297,41 @@ directories. The run's one-line JSON results are appended to `<state>/backlog-ru
 - **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
   is proportional to stopped tasks, not task history.
 - **Growth check:** `tools/goal/src/backlog-growth.test.ts`: `backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps`. It scales settled task/event history with fixed selected work, stopped tasks, and ready entries independently; it records SQLite executions and returned rows, JSON-decoded bytes, and actual backlog-directory enumerations and returned entries. Query plans and returned rows are not physical scan counts. The scenario includes empty backlog and cap continuation; `backlog.test.ts` covers interrupted uncommitted claims and replay after committed dispatch.
+
+#### Chained briefs
+
+A landed attempt offers its provider session to the next brief of its Goal, so the next brief starts in the warm
+session instead of orienting again. Landing records the offer with the session, pool, model, effort, landed paths and
+chain depth. Each minute the backlog run answers every offer from the last `policy.chain.offerWindowMs`, before ordinary
+dispatch, and answers each offer exactly once:
+
+- **Chained.** The oldest settled ordinary brief of the same Goal, with no `after` dependency and the landed brief's
+  target, whose paths overlap the landed paths (shared paths such as documentation do not count) is claimed and
+  dispatched as a new task. The task has its own identity, brief, branch and worktree from current dev, and a `chain`
+  link to the landed attempt. Its first attempt resumes that provider session (`codex resume`, `claude --resume`) with
+  the new brief as its prompt, on the landed attempt's pool and model. If that pool or model is no longer routable, the
+  attempt starts a fresh session. Its attempts, gate outcomes and landing are its own.
+- **Declined.** The session ends as it does without chaining, and the reason is recorded: `maximum-tasks` (the chain
+  already holds `policy.chain.maximumTasks` tasks), `context-unknown` (no transcript reports the session's context),
+  `context-limit` (the latest request's input is at or above `policy.chain.maximumContextTokens`),
+  `no-overlapping-brief`, or `dispatch-refused` (the brief is refused and archived like any refused brief). A declined
+  brief still runs through the ordinary sweep in a fresh session.
+
+Context is the input of the session's latest model request: `last_token_usage.input_tokens` in a Codex rollout, and the
+input with cache reads and writes of the latest assistant message in a Claude transcript. A transcript is read from its
+last `policy.chain.contextTailBytes` bytes. Urgent, verification, research, claim and continuation briefs never chain.
+
+Decision: chain decisions run in the backlog child, not at landing: a chained dispatch creates a worktree and may
+install dependencies, and landing only records the offer.
+
+Decision: product-brief size returns run before chain answers, so a chained brief meets the same size bar as an ordinary
+dispatch.
+
+Decision: `report --flow` states chained and unchained tasks on the same terms: landed lines over the worker time those
+tasks spent, with declined offers counted by reason.
+
+Cost: offers read through the flow table's (stage, action, time) index within the window, and each decision reads the
+Goal's ready briefs until one overlaps. The chain adds at most the sweep's dispatch budget per run.
 
 ### Check result reuse
 

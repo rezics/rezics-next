@@ -16,7 +16,7 @@ export const FLOW_STAGES = [
   'promotion',
 ] as const;
 type LifecycleStage = (typeof FLOW_STAGES)[number];
-export type FlowStage = LifecycleStage | 'manager';
+export type FlowStage = LifecycleStage | 'manager' | 'chain';
 export type FlowEvent = {
   taskId: string;
   attempt: number;
@@ -292,7 +292,8 @@ function projectFlow(ordered: FlowEvent[]) {
       nextQueueAt[i] = queue;
       nextWaitAt[i] = wait;
       const event = ordered[i]!;
-      if (event.stage === 'manager') continue;
+      // Chain decisions neither queue nor wait; only lifecycle stages carry queue and wait boundaries.
+      if (event.stage === 'manager' || event.stage === 'chain') continue;
       const starts = startActions[event.stage];
       const ends = endActions[event.stage];
       if (starts.includes(event.action) || ends.includes(event.action) || event.action === 'closed') queue = i;
@@ -342,6 +343,10 @@ export type FlowTask = Pick<Task, 'id'> & {
   brief: Pick<Task['brief'], 'goal' | 'urgent'>;
   /** Authoritative store snapshot, also covering terminal tasks predating closure events. */
   terminalState?: Task['state'];
+  /** Whether the task continues a landed task's warm session. */
+  chained?: boolean;
+  /** Changed lines of the attempt that landed the task, or null when no landing record has them. */
+  diffLines?: number | null;
 };
 
 function terminalCloses(state: Task['state'] | undefined, stage: LifecycleStage): boolean {
@@ -380,13 +385,14 @@ export function readFlowTasks(db: Database): FlowTask[] {
   return (
     db
       .query(
-        "SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.brief.urgent') AS urgent, json_extract(body, '$.state') AS state FROM worker_tasks ORDER BY sequence",
+        "SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.brief.urgent') AS urgent, json_extract(body, '$.state') AS state, json_extract(body, '$.chain') IS NOT NULL AS chained FROM worker_tasks ORDER BY sequence",
       )
       .all() as {
       id: string;
       goal: string | null;
       urgent: number | null;
       state: Task['state'];
+      chained: number;
     }[]
   )
     .filter((row) => typeof row.goal === 'string')
@@ -394,6 +400,7 @@ export function readFlowTasks(db: Database): FlowTask[] {
       id: row.id,
       brief: { goal: row.goal!, ...(row.urgent === 1 ? { urgent: true } : {}) },
       terminalState: row.state,
+      chained: row.chained === 1,
     }));
 }
 
@@ -573,7 +580,37 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
         return { stage: q.stage, ms };
       })
       .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null;
+  // Chained and unchained tasks are measured on the same terms: landed lines over the worker time those tasks spent.
+  const chainGroup = (chained: boolean) => {
+    const members = tasks.filter((t) => !t.brief.urgent && (t.chained === true) === chained);
+    const ids = new Set(members.map((t) => t.id));
+    const workedMs = taskRows.reduce((total, row) => total + (ids.has(row.taskId) ? (row.workingMs ?? 0) : 0), 0);
+    const landed = members.filter((t) => integrated.has(t.id));
+    const lines = landed.reduce((total, t) => total + (t.diffLines ?? 0), 0);
+    const hours = workedMs / 3_600_000;
+    return {
+      tasks: members.length,
+      integrated: landed.length,
+      linesKnown: landed.filter((t) => typeof t.diffLines === 'number').length,
+      lines,
+      workerHours: hours,
+      linesPerWorkerHour: hours > 0 ? lines / hours : null,
+    };
+  };
+  const declined: Record<string, number> = {};
+  for (const event of ordered)
+    if (event.stage === 'chain' && event.action === 'declined') {
+      const reason = (JSON.parse(event.detail ?? '{}') as { reason?: unknown }).reason;
+      const key = typeof reason === 'string' ? reason : 'unknown';
+      declined[key] = (declined[key] ?? 0) + 1;
+    }
   return {
+    chain: {
+      offered: ordered.filter((e) => e.stage === 'chain' && e.action === 'offered').length,
+      chained: chainGroup(true),
+      unchained: chainGroup(false),
+      declined,
+    },
     urgent: {
       tasks: [...urgent],
       integrated: new Set(

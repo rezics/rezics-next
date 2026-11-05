@@ -70,6 +70,7 @@ import {
 import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-metrics.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
 import { backlogDirectory, sweepBacklog } from './backlog.ts';
+import { chainRuntime } from './chain.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
 import type { BriefContinuation } from './types.ts';
 
@@ -455,6 +456,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           pools: settings.pools,
           running: store.runningAttemptsByPool(),
         },
+        chain: chainRuntime({ settings, store, tasks }),
       }),
     promote: () => promoteNow(),
     verify: () =>
