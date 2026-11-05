@@ -4,7 +4,7 @@ import type { SessionEnv } from '../src/session/client';
 import { newCsrfToken } from '../src/session/csrf';
 import { boundViewer } from '../src/accounts/profile-editor/request';
 import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
-import { parseSubmission, readTarget, writeTarget } from '../src/accounts/profile-editor/data';
+import { parseSubmission, profilePageReadError, readTarget, writeTarget } from '../src/accounts/profile-editor/data';
 import type { ProfilePatch, ProfileValues } from '../src/settings/profile-data';
 import { officialProfileRead } from '../src/settings/editable-profile-source';
 
@@ -77,7 +77,7 @@ function boundary() {
   const editor = new AccountProfileEditor({
     read: async () => {
       const page = await readTarget(client, 'Bearer current-viewer', target);
-      if (page.state !== 'ready') throw new Error(page.state);
+      if (page.state !== 'ready') throw profilePageReadError(page);
       return page.profile;
     },
     save: (attempt) =>
@@ -157,6 +157,7 @@ test('Unknown replies keep the exact key and body; current readback and current 
   api.loseReply();
   await api.editor.confirm();
   const original = api.editor.snapshot().attempt;
+  expect(api.writes[0]?.key).toBe(JSON.stringify(original?.idempotencyKey));
   expect(api.editor.snapshot().phase).toBe('uncertain');
   expect(Object.isFrozen(original?.patch)).toBe(true);
   api.editor.edit({ displayName: 'Later draft' });
@@ -204,6 +205,18 @@ test('Closed input and wrong-target native output never create a replacement tar
   expect(otherEditor.snapshot().known?.accountId).toBe(otherId);
   expect(otherEditor.snapshot().attempt).toBeNull();
   expect(otherEditor.confirmationSnapshot()).toBeNull();
+});
+
+test('delegated profile advice binds the signed-in viewer separately from the selected target', async () => {
+  const api = boundary();
+  const { accountId: id, biography: bio, ...fields } = profile();
+  expect(await readTarget(api.client, 'Bearer current-viewer', target)).toMatchObject({
+    state: 'ready',
+    profile: { accountId, editing: { viewer: { accountId: viewerId }, target: { accountId } } },
+  });
+  api.response(officialProfileRead({ id, handle: null, bio, ...fields }, otherId));
+  expect(await readTarget(api.client, 'Bearer current-viewer', target)).toEqual({ state: 'unavailable' });
+  expect(api.writes).toHaveLength(0);
 });
 
 test('The BFF binds the current cookie viewer and rejects Origin, CSRF and bearer replacement before transport', async () => {

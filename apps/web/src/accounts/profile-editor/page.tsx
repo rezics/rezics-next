@@ -17,11 +17,12 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { sessionQuery, useSession } from '../../session/query';
 import { normalizeSessionObservation } from '../../session/browser-state';
-import { ProfileCard } from '../../settings/profile';
+import { ProfileCard, ProfileFeedback } from '../../settings/profile';
 import { PublicViewsCard } from '../../settings/public-views';
+import { ProfileNavigation } from '../../settings/profile-navigation';
 import { readAccountProfile, saveAccountProfile } from './actions';
 import { AccountProfileEditor } from './editor';
-import type { ProfilePage } from './data';
+import { profilePageReadError, type ProfilePage } from './data';
 
 export function accountProfileHref(accountId: string, locale = getLocale()) {
   return `/${locale}/accounts/${encodeURIComponent(accountId)}/profile`;
@@ -84,7 +85,7 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
         if (next.state === 'ready' && (next.viewerId !== viewerId || next.profile.accountId !== accountId))
           next = { state: 'unavailable' };
         setPage(next);
-        if (next.state !== 'ready') throw new Error(next.state);
+        if (next.state !== 'ready') throw profilePageReadError(next);
         return next.profile;
       },
       save: async (attempt, signal) => {
@@ -131,7 +132,11 @@ function BoundProfile({ accountId, viewerId, csrfToken }: { accountId: string; v
   useEffect(() => {
     void editor.reload();
   }, [editor]);
-  return <AccountProfileView accountId={accountId} editor={editor} page={page} />;
+  return (
+    <ProfileNavigation editor={editor}>
+      <AccountProfileView accountId={accountId} editor={editor} page={page} />
+    </ProfileNavigation>
+  );
 }
 
 export function AccountProfileView({
@@ -165,9 +170,18 @@ export function AccountProfileView({
                   ? m.account_profile_signed_out()
                   : m.account_profile_unavailable()}
           </p>
-          <Button variant="outline" disabled={state.phase === 'reloading'} onClick={() => void editor.reload()}>
-            {m.settings_profile_reload_current()}
-          </Button>
+          {state.attempt ? (
+            <ProfileFeedback
+              editor={editor}
+              scope={state.attempt.scope}
+              writable={page.state === 'unavailable'}
+              readable={page.state !== 'signed-out'}
+            />
+          ) : (
+            <Button variant="outline" disabled={state.phase === 'reloading'} onClick={() => void editor.reload()}>
+              {m.settings_profile_reload_current()}
+            </Button>
+          )}
           {page.state === 'signed-out' ? (
             <a
               className="text-primary underline"

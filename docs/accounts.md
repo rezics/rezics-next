@@ -72,6 +72,13 @@ verification evidence, operator proof or stored avatar URL belongs in this proje
 operation and does not change PATCH validation, public lookup or discovery. Advice is not a durable grant. See the
 [Access read contract][access-public].
 
+Web binds the advice's viewer to the authenticated cookie viewer and its target to the selected immutable account;
+delegated editors and software operators need not be the target. Managed profile PATCH uses the same Structured Field
+command-key encoding as Settings. A lost media-completion response retains successfully stored avatar bytes for
+native observation and explicit recovery; it cannot undo a completion that may already have committed.
+The managed page keeps acknowledgement and unknown delivery visible when readback fails, with deliberate read
+recovery and no replay of an acknowledged command. A matching read alone leaves an unknown command unresolved.
+
 ### Public identity
 
 The public account page is `/@handle`, outside Realms and Zones. `GET /v1/accounts` accepts exactly one selector:

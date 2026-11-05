@@ -16,6 +16,7 @@ type Completion = {
 const reservations = new Map<string, Reservation>();
 const completions: Completion[] = [];
 let nextId = 0;
+let completionStatus = 200;
 const kernel = Bun.serve({
   port: 0,
   hostname: '127.0.0.1',
@@ -34,6 +35,8 @@ const kernel = Bun.serve({
         byteCount: input.byteCount,
         sha256: input.sha256,
       });
+      if (completionStatus !== 200)
+        return Response.json({ code: 'dependency_unavailable' }, { status: completionStatus });
       return Response.json({ media: { id, state: 'uploaded' } });
     }
     return Response.json({
@@ -132,6 +135,7 @@ afterAll(() => {
 
 beforeEach(() => {
   digestFault = null;
+  completionStatus = 200;
 });
 
 function deferred() {
@@ -264,6 +268,21 @@ function uploadResponse(id: string, body: ReadableStream<Uint8Array>, storage: R
   const request = requestFor(id, body, signal);
   return bounded(mediaRequest(request, { KERNEL_ORIGIN: kernel.url.origin, MEDIA: storage }));
 }
+
+test('an unknown native completion retains the uploaded bytes for current observation and exact recovery', async () => {
+  const bytes = new Uint8Array([1, 2, 3]);
+  const id = reservation(bytes.length);
+  let stored = new Uint8Array();
+  const storage = bucket(async (key, stream) => {
+    stored = await consume(stream);
+    return { key };
+  });
+  completionStatus = 503;
+  expect((await uploadResponse(id, bytesStream([bytes]), storage.value))?.status).toBe(503);
+  expect(completions.at(-1)?.id).toBe(id);
+  expect(stored).toEqual(bytes);
+  expect(storage.calls).toEqual({ puts: 1, deletes: 0 });
+});
 
 test('streams one exact measured body, completes once with its digest, and does not delete it', async () => {
   const bytes = new Uint8Array([3, 1, 4, 1, 5, 9]);
