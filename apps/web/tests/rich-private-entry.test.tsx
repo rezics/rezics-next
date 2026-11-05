@@ -373,7 +373,7 @@ test('commands: final Save uses captured operands and identity, duplicate guard,
     ).toEqual({ kind: 'conflict' });
     expect(await sent!.json()).toEqual(body);
     expect(sent!.headers.get('authorization')).toBe('Bearer captured');
-    expect(sent!.headers.get('idempotency-key')).toBe(guard.incarnationId);
+    expect(sent!.headers.get('idempotency-key')).toBe(JSON.stringify(guard.incarnationId));
   }
   const { captureAnnotationCredential, originalAnnotationCredential } =
     await import('../src/library/rich-private-entry/credential');

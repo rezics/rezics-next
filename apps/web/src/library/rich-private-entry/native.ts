@@ -7,6 +7,8 @@ import type {
   PersonalEntrySourceCorrection,
 } from '@rezics/client';
 
+const idempotencyField = (key: string) => JSON.stringify(key);
+
 export type PrivateEntryRead = { kind: 'ready'; entry: PersonalEntry } | { kind: 'unavailable' };
 
 export async function readPrivateEntry(
@@ -34,7 +36,7 @@ export async function writePrivateAnnotations(
   },
 ): Promise<AnnotationWriteResult> {
   const result = await client.libraryEntries({ subjectId: input.subjectId }).annotations.put(input.body, {
-    headers: { authorization: input.authorization, 'idempotency-key': input.key },
+    headers: { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) },
   });
   if (!result.error && result.data?.personalEntry?.subjectId === input.subjectId)
     return { kind: 'saved', entry: result.data.personalEntry };
@@ -59,7 +61,7 @@ export async function admitPrivateSourceObservation(
   },
 ): Promise<SourceAdmissionResult> {
   const result = await client.libraryEntries({ subjectId: input.subjectId }).sourceObservations.post(input.body, {
-    headers: { authorization: input.authorization, 'idempotency-key': input.key },
+    headers: { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) },
   });
   if (!result.error && result.data?.sourceObservation?.recordId === input.body.recordId)
     return { kind: 'admitted', observation: result.data.sourceObservation };
@@ -84,7 +86,7 @@ export async function correctPrivateSourceObservation(
   },
 ): Promise<SourceCorrectionResult> {
   const result = await client.libraryEntries({ subjectId: input.subjectId }).sourceObservations.patch(input.body, {
-    headers: { authorization: input.authorization, 'idempotency-key': input.key },
+    headers: { authorization: input.authorization, 'idempotency-key': idempotencyField(input.key) },
   });
   if (!result.error && result.data?.sourceObservation?.recordId === input.body.recordId)
     return { kind: 'saved', observation: result.data.sourceObservation };

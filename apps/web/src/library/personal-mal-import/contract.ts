@@ -1,4 +1,5 @@
 import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { SourceAdmissionCustody } from '../rich-private-entry/admission';
 import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
 
 export const MAL_UPLOAD_BYTES = 2_097_152;
@@ -114,6 +115,7 @@ export type MalCommand =
       subjectId: string;
       ordinal: number;
       body: PersonalEntrySourceAdmission;
+      custody?: SourceAdmissionCustody;
     }
   | { kind: 'cancel'; key: string; id: string }
   | { kind: 'delete'; key: string; id: string };
