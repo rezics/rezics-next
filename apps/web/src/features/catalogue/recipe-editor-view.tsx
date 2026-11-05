@@ -1,3 +1,6 @@
+import { candidateContext } from '../../subject/candidates';
+import { recipeSourceHref, type RecipeVisit } from './recipe-current-visit';
+import { RecipeVisitNotice } from './recipe-current-visit-view';
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { hasDocumentContent } from '@rezics/document';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -50,6 +53,7 @@ import {
 } from './recipe-editor';
 import { RecipeCorrectionReview, RecipeCreateReview } from './recipe-editor-review';
 import {
+  correctionProposalAvailability,
   statementInput,
   type ProposalCommand,
   type ProposalResult,
@@ -124,6 +128,9 @@ export const RecipeEditor = catalogueEditor(RecipeEditorLive);
 function RecipeEditorLive({
   id,
   locale,
+  context = candidateContext,
+  visit,
+  sourceHref,
   session,
   transport,
   search,
@@ -131,6 +138,9 @@ function RecipeEditorLive({
 }: {
   id?: string;
   locale: string;
+  context?: string;
+  visit?: RecipeVisit;
+  sourceHref?: string | undefined;
   session: string;
   transport: RecipeTransport;
   search: EntityPickerSearch;
@@ -182,7 +192,7 @@ function RecipeEditorLive({
     }
   }
   const query = useQuery({
-    queryKey: ['recipe-editor', id, locale, lifetime.generation],
+    queryKey: ['recipe-editor', id, context, locale, lifetime.generation],
     queryFn: transport.load,
     retry: false,
     refetchOnWindowFocus: false,
@@ -203,7 +213,8 @@ function RecipeEditorLive({
       retainedRead.current.generation !== lifetime.generation)
   )
     retainedRead.current = undefined;
-  const matchesIdentity = (candidate?: Ready) => !!candidate && (!id || candidate.public?.subject.id === id);
+  const matchesIdentity = (candidate?: Ready) =>
+    !!candidate && (!id || (candidate.public?.subject.id === id && candidate.public.subject.context === context));
   if (query.data?.ok && matchesIdentity(query.data))
     retainedRead.current = { id, locale, generation: lifetime.generation, value: query.data };
   const draftRead = retainedRead.current?.value;
@@ -282,6 +293,42 @@ function RecipeEditorLive({
     readFocus.current = undefined;
     target.focus();
   }, [busy, query.isFetching, read, readUnavailable, readEpoch, lifetime]);
+  const occurrenceFocus = useRef({ pending: !!visit?.occurrence, cancelled: false });
+  useLayoutEffect(() => {
+    if (!occurrenceFocus.current.pending) return;
+    const document = readingHeading.current?.ownerDocument;
+    if (!document) return;
+    const cancel = () => {
+      occurrenceFocus.current.cancelled = true;
+    };
+    document.addEventListener('focusin', cancel, true);
+    document.addEventListener('pointerdown', cancel, true);
+    document.defaultView?.addEventListener('blur', cancel);
+    return () => {
+      document.removeEventListener('focusin', cancel, true);
+      document.removeEventListener('pointerdown', cancel, true);
+      document.defaultView?.removeEventListener('blur', cancel);
+    };
+  }, []);
+  const selectedOccurrence = visit?.occurrence;
+  const occurrenceAvailable =
+    !!read?.public &&
+    !!selectedOccurrence &&
+    selectedOccurrence.holder === read.public.subject.id &&
+    (read.public.subject.statements[selectedOccurrence.property] ?? []).some(
+      (source) => source.id === selectedOccurrence.statement,
+    );
+  useLayoutEffect(() => {
+    if (!occurrenceFocus.current.pending || !read) return;
+    occurrenceFocus.current.pending = false;
+    if (occurrenceFocus.current.cancelled || !lifetime.active()) return;
+    const target = occurrenceAvailable
+      ? workspace.current?.querySelector<HTMLElement>(
+          `[data-recipe-current-statement="${selectedOccurrence!.statement}"]`,
+        )
+      : readingHeading.current;
+    target?.focus();
+  }, [read, occurrenceAvailable, selectedOccurrence, lifetime]);
   const locked = busy || !!pending.current || failure?.refreshDefinitions === true;
   const eligibilityBlocksNewCreate = observesCreate && !pending.current && !isAllowedCreateAuthority(observedAuthority);
   const fieldAdmission = useRef({ read, locked, created, session, rows, property, terms });
@@ -682,14 +729,29 @@ function RecipeEditorLive({
     }
   }
   const currentHref = read?.public
-    ? subjectHref({ id: read.public.subject.id, label: pickText(read.public.subject.labels, locale).text }, locale).href
-    : undefined;
+    ? recipeSourceHref(
+        { id: read.public.subject.id, label: pickText(read.public.subject.labels, locale).text },
+        locale,
+        visit ?? { context },
+      )
+    : sourceHref;
   const Workspace = id ? 'div' : 'form';
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 px-4 py-8 [overflow-wrap:anywhere] sm:px-6 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap">
       <PageHeading ref={readingHeading} tabIndex={-1}>
         {id ? m.recipe_edit({}, o) : m.recipe_title({}, o)}
+        {read?.public && <> · {pickText(read.public.subject.labels, locale).text}</>}
       </PageHeading>
+      {id && (
+        <p>
+          {context === candidateContext ? m.recipe_visit_context_global({}, o) : m.recipe_visit_context_selected({}, o)}
+        </p>
+      )}
+      {id && currentHref && !draftRead && (
+        <a className="inline-flex min-h-11 items-center underline" href={currentHref}>
+          {m.recipe_visit_return({}, o)}
+        </a>
+      )}
       {!id && (
         <a
           className={buttonVariants({ variant: 'outline', className: recipeActionClassName })}
@@ -716,7 +778,13 @@ function RecipeEditorLive({
       {(query.isPending || query.isFetching) && <p role="status">{m.candidate_loading({}, o)}</p>}
       {readUnavailable && (
         <div ref={unavailableReading} tabIndex={-1} className="space-y-3">
-          {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
+          {query.data && !query.data.ok && query.data.reason === 'unsupported-context' ? (
+            <RecipeVisitNotice
+              locale={locale}
+              sourceHref={sourceHref}
+              globalHref={sourceHref ? `${sourceHref.split('?')[0]}/recipe?context=${candidateContext}` : undefined}
+            />
+          ) : query.data && !query.data.ok && query.data.reason === 'concealed' ? (
             <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
           ) : (
             <EditorFailure locale={locale} reason="unavailable" />
@@ -725,6 +793,9 @@ function RecipeEditorLive({
             {m.correction_retry({}, o)}
           </Button>
         </div>
+      )}
+      {read && selectedOccurrence && !occurrenceAvailable && (
+        <p role="status">{m.recipe_visit_occurrence_missing({}, o)}</p>
       )}
       {read && read.fields.length === 0 && (
         <p ref={emptyReading} tabIndex={-1} role="status">
@@ -920,7 +991,12 @@ function RecipeEditorLive({
                       {name(field)}
                     </ContentItemHeading>
                     {(read!.public!.subject.statements[field] ?? []).map((source) => (
-                      <div key={source.id} className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
+                      <div
+                        key={source.id}
+                        tabIndex={-1}
+                        data-recipe-current-statement={source.id}
+                        className="flex min-w-0 flex-col items-start gap-3 sm:flex-row"
+                      >
                         <div data-content-item-slot="preview" className="min-w-0 break-words sm:flex-1">
                           <CandidateValue snak={source} related={read!.public!.related} locale={locale} />
                         </div>
@@ -1331,8 +1407,11 @@ function RecipeFieldLive({
   const currentSource =
     !row.source ||
     (!!currentRead &&
-      (currentRead.public?.subject.statements[property] ?? []).some((statement) => statement.id === row.source!.id));
-  const reviewRequired = !matchesCurrentDefinition || !currentSource;
+      (currentRead.public?.subject.statements[property] ?? []).some(
+        (statement) => statement.id === row.source!.id && JSON.stringify(statement) === JSON.stringify(row.source),
+      ));
+  const proposalAvailable = !currentRead?.actions || correctionProposalAvailability(currentRead.actions) === 'allowed';
+  const reviewRequired = !matchesCurrentDefinition || !currentSource || !proposalAvailable;
   const definition = matchesCurrentDefinition ? currentDefinition! : row.definition;
   const label = pickText(currentDefinition?.labels ?? row.definition.labels, locale).text || property;
   const [authored, setAuthored] = useState<AuthoredField | undefined>(() => row.authored);
@@ -1341,7 +1420,7 @@ function RecipeFieldLive({
   const result = row.result;
   const [reviewing, setReviewing] = useState(false);
   const [statementReview, setStatementReview] = useState<string>();
-  const statementReviewFingerprint = JSON.stringify([row.statement, row.original === true]);
+  const statementReviewFingerprint = JSON.stringify([row.statement, row.original === true, readEpoch]);
   const statementReviewCurrent = statementReview === statementReviewFingerprint;
   const running = useRef(false);
   const command = row.command;
@@ -1486,6 +1565,7 @@ function RecipeFieldLive({
         result: next,
         uncertain: next.ok ? false : wasUncertain || next.reason === 'unavailable',
       });
+      if (next.ok) await refreshDefinitions();
     } catch {
       if (!lifetime.active() || !isReadEpochCurrent(readEpoch)) return;
       onState({ command: pending, result: { ok: false, reason: 'unavailable' }, uncertain: true });

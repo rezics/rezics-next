@@ -1,3 +1,6 @@
+import { recipeVisitSearch, type RecipeVisitInput } from './recipe-current-visit';
+import { RecipeVisitNotice } from './recipe-current-visit-view';
+import { candidateContext } from '../../subject/candidates';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
@@ -15,21 +18,47 @@ import {
 } from './recipe-editor-actions';
 import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 
-function RecipeEditorSessionLive({ id, locale }: { id?: string; locale: string }) {
+function RecipeEditorSessionLive({
+  id,
+  locale,
+  intent,
+  context = candidateContext,
+  sourceHref,
+}: {
+  id?: string;
+  locale: string;
+  intent?: RecipeVisitInput;
+  context?: string;
+  sourceHref?: string | undefined;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
   );
+  if (intent && !intent.valid) return <RecipeVisitNotice locale={locale} invalid />;
+  const visit = intent?.valid ? intent.visit : { context };
   return (
     <RecipeEditor
       {...(id ? { id } : {})}
       locale={locale}
+      context={context}
+      visit={visit}
+      sourceHref={sourceHref}
       session={state}
       search={search}
       transport={{
-        load: () => loadRecipeEditor({ data: id }),
+        load: () =>
+          loadRecipeEditor({
+            data: id
+              ? {
+                  id,
+                  search: recipeVisitSearch(visit),
+                  ...(editorWork.reader ? { expectedReader: editorWork.reader } : {}),
+                }
+              : undefined,
+          }),
         ...(id ? {} : { eligibility: () => readCatalogueCreateEligibility() }),
         create: (data, replay) =>
           createCatalogueRecipe({

@@ -10415,5 +10415,12 @@
   "library_copy_compare_previous_identity": "先前选中的记录标识",
   "library_copy_compare_previous_revision": "先前接收时的修订号",
   "library_copy_compare_current_revision": "当前接收的修订号",
-  "library_copy_compare_find_row": "前往当前行重新选择"
+  "library_copy_compare_find_row": "前往当前行重新选择",
+  "recipe_visit_invalid": "这个食谱修正网址无效。请重新打开食谱，再选择修正入口。",
+  "recipe_visit_unsupported": "修正与候选审查目前仅支持全局。此选定上下文并未作为全局阅读打开。",
+  "recipe_visit_return": "返回选定的食谱阅读",
+  "recipe_visit_global": "另外打开全局食谱编辑器",
+  "recipe_visit_context_global": "上下文：全局",
+  "recipe_visit_context_selected": "上下文：选定的阅读",
+  "recipe_visit_occurrence_missing": "请求的陈述已不在此阅读中公开，或其所属主题已变更。请在下方选择当前的陈述。"
 }

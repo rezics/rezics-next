@@ -10408,5 +10408,12 @@
   "library_copy_compare_previous_identity": "Identité précédemment sélectionnée",
   "library_copy_compare_previous_revision": "Révision précédemment observée",
   "library_copy_compare_current_revision": "Révision actuellement reçue",
-  "library_copy_compare_find_row": "Aller à la ligne actuelle pour la sélectionner à nouveau"
+  "library_copy_compare_find_row": "Aller à la ligne actuelle pour la sélectionner à nouveau",
+  "recipe_visit_invalid": "Cette adresse de correction de recette est invalide. Rouvrez la recette et choisissez son entrée de correction.",
+  "recipe_visit_unsupported": "La correction et la révision des propositions prennent actuellement en charge le contexte global uniquement. Le contexte sélectionné n’a pas été ouvert comme lecture globale.",
+  "recipe_visit_return": "Revenir à la lecture sélectionnée de la recette",
+  "recipe_visit_global": "Ouvrir un éditeur de recette global distinct",
+  "recipe_visit_context_global": "Contexte : global",
+  "recipe_visit_context_selected": "Contexte : lecture sélectionnée",
+  "recipe_visit_occurrence_missing": "L’assertion demandée n’est plus divulguée dans cette lecture, ou son sujet a changé. Choisissez une assertion actuelle ci-dessous."
 }

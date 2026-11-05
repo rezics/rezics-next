@@ -10458,5 +10458,12 @@
   "library_copy_compare_previous_identity": "先前選取的記錄識別碼",
   "library_copy_compare_previous_revision": "先前接收時的修訂編號",
   "library_copy_compare_current_revision": "目前接收的修訂編號",
-  "library_copy_compare_find_row": "前往目前列重新選擇"
+  "library_copy_compare_find_row": "前往目前列重新選擇",
+  "recipe_visit_invalid": "這個食譜修正網址無效。請重新開啟食譜，再選擇修正入口。",
+  "recipe_visit_unsupported": "修正與候選審查目前僅支援全域。此選定脈絡並未作為全域閱讀開啟。",
+  "recipe_visit_return": "返回選定的食譜閱讀",
+  "recipe_visit_global": "另外開啟全域食譜編輯器",
+  "recipe_visit_context_global": "脈絡：全域",
+  "recipe_visit_context_selected": "脈絡：選定的閱讀",
+  "recipe_visit_occurrence_missing": "要求的陳述已不在此閱讀中公開，或其所屬主題已變更。請在下方選擇目前的陳述。"
 }

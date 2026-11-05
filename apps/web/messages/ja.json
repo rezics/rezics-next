@@ -10458,5 +10458,12 @@
   "library_copy_compare_previous_identity": "以前選択した記録の識別子",
   "library_copy_compare_previous_revision": "以前確認したリビジョン",
   "library_copy_compare_current_revision": "現在受信しているリビジョン",
-  "library_copy_compare_find_row": "現在の行に移動して選び直す"
+  "library_copy_compare_find_row": "現在の行に移動して選び直す",
+  "recipe_visit_invalid": "このレシピの修正アドレスは無効です。レシピを開き直して修正を選択してください。",
+  "recipe_visit_unsupported": "修正と候補のレビューは現在グローバルのみ対応しています。選択したコンテキストをグローバルとして開くことはありません。",
+  "recipe_visit_return": "選択したレシピの表示に戻る",
+  "recipe_visit_global": "別のグローバルレシピエディターを開く",
+  "recipe_visit_context_global": "コンテキスト：グローバル",
+  "recipe_visit_context_selected": "コンテキスト：選択した表示",
+  "recipe_visit_occurrence_missing": "指定した記述は現在の表示で公開されていないか、所属する主題が変わりました。以下から現在の記述を選択してください。"
 }

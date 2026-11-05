@@ -4,7 +4,10 @@ import { setResponseHeader } from '@tanstack/react-start/server';
 import { RecipeEditorSession } from '../../features/catalogue/recipe-editor-session';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
-import { canonicalRedirect, keepSearch, subjectHref } from '../../subject/subject-href';
+import { parseRecipeVisit, recipeVisitByteLimit } from '../../features/catalogue/recipe-current-visit';
+import { candidateContext } from '../../subject/candidates';
+import { contextHref } from '../../features/pages/context-navigation';
+import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
 
 const canonicalRecipe = createServerFn({ method: 'GET', strict: false })
   .validator((input: { id: string; slug: string; locale: string; search: string }) => {
@@ -16,37 +19,52 @@ const canonicalRecipe = createServerFn({ method: 'GET', strict: false })
       input.slug.length > 128 ||
       typeof input.locale !== 'string' ||
       typeof input.search !== 'string' ||
-      input.search.length > 2048
+      new TextEncoder().encode(input.search).byteLength > recipeVisitByteLimit
     )
       throw notFound();
     return input;
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const [{ kernelClient }, { loadSubject }] = await Promise.all([
+    const intent = parseRecipeVisit(data.search);
+    if (!intent.valid) return { id: data.id, intent };
+    const [{ kernelClient }, { loadContextSubject }] = await Promise.all([
       import('../../kernel/client'),
-      import('../../subject/load-subject'),
+      import('../../features/pages/context-subject'),
     ]);
-    const canonical = await loadSubject(kernelClient(data.locale), data.id, data.locale as never);
+    const canonical = await loadContextSubject(kernelClient(data.locale), data.id, data.locale, {
+      realm: intent.visit.realm,
+    });
     if (canonical.kind === 'missing') throw notFound();
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug)
-      throw redirect(
-        canonicalRedirect(
-          `${subjectHref({ id: canonical.value.id, label: canonical.value.label }, data.locale).href}/recipe`,
-          data.search,
-        ),
-      );
-    return { id: canonical.value.id };
+      throw redirect(canonicalRedirect(`${canonical.value.href}/recipe`, data.search));
+    return {
+      id: canonical.value.id,
+      intent,
+      sourceHref:
+        intent.visit.context === candidateContext || intent.visit.realm
+          ? contextHref(canonical.value.href, intent.visit.realm)
+          : undefined,
+    };
   });
 export const Route = createFileRoute('/subjects/$id_/$slug_/recipe')({
   staticData: { publicCache: false },
   loader: ({ params, location }) =>
     canonicalRecipe({
-      data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr, location.hash) },
+      data: { ...params, locale: getLocale(), search: keepSearch('', location.searchStr) },
     }),
   head: () => ({ meta: [{ title: m.recipe_edit() }, { name: 'robots', content: 'noindex, nofollow' }] }),
   component: RecipeRoute,
 });
 function RecipeRoute() {
-  return <RecipeEditorSession id={Route.useLoaderData().id} locale={getLocale()} />;
+  const loaded = Route.useLoaderData();
+  return (
+    <RecipeEditorSession
+      id={loaded.id}
+      locale={getLocale()}
+      intent={loaded.intent}
+      context={loaded.intent.valid ? loaded.intent.visit.context : 'invalid'}
+      sourceHref={loaded.sourceHref}
+    />
+  );
 }

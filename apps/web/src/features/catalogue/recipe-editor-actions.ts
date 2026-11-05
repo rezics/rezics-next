@@ -1,3 +1,4 @@
+import { parseRecipeVisit } from './recipe-current-visit';
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
@@ -6,6 +7,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { MediaProblem } from '../../media/kernel';
+import { readCorrectionActions } from './statement-editor';
 import { proposalInput, type ProposalCommand, type ProposalResult } from './statement-editor';
 import {
   createRecipe,
@@ -115,10 +117,30 @@ export const confirmRecipeReview = createServerFn({ method: 'POST', strict: fals
   });
 
 export const loadRecipeEditor = createServerFn({ method: 'GET', strict: false })
-  .validator((id?: string) => (id === undefined || (typeof id === 'string' && recipeUuid.test(id)) ? id : ''))
+  .validator((input?: string | { id: string; search: string; expectedReader?: string }) => {
+    if (input === undefined) return { id: undefined, context: undefined, expectedReader: undefined };
+    if (typeof input === 'string')
+      return { id: recipeUuid.test(input) ? input : '', context: undefined, expectedReader: undefined };
+    if (!input || !recipeUuid.test(input.id) || typeof input.search !== 'string') return null;
+    const parsed = parseRecipeVisit(input.search);
+    return parsed.valid
+      ? {
+          id: input.id,
+          context: parsed.visit.context,
+          expectedReader: input.expectedReader === undefined ? undefined : expectedCandidateReader(input),
+        }
+      : null;
+  })
   .handler(async ({ data }): Promise<RecipeRead> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return readRecipeEditor(kernelClient(), requestLocale() ?? 'en', data);
+    if (!data) return { ok: false, reason: 'invalid' };
+    const client = kernelClient();
+    const authorization = data.expectedReader ? await candidateAuthorization(data.expectedReader) : null;
+    const [read, actions] = await Promise.all([
+      readRecipeEditor(client, requestLocale() ?? 'en', data.id, data.context),
+      data.id ? readCorrectionActions(client, authorization ?? undefined, data.id) : undefined,
+    ]);
+    return read.ok && actions ? { ...read, actions } : read;
   });
 type RecipeCreateRequest = RecipeCommand & { replay?: boolean };
 type RecipeProposalRequest = ProposalCommand & { replay?: boolean };

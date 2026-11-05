@@ -10551,5 +10551,12 @@
   "library_copy_compare_previous_identity": "Previously selected identity",
   "library_copy_compare_previous_revision": "Previous observed revision",
   "library_copy_compare_current_revision": "Current received revision",
-  "library_copy_compare_find_row": "Go to current row to reselect"
+  "library_copy_compare_find_row": "Go to current row to reselect",
+  "recipe_visit_invalid": "This recipe correction address is invalid. Open the recipe again and choose its correction entry.",
+  "recipe_visit_unsupported": "Correction and candidate review currently support Global only. This selected Context has not been opened as a Global reading.",
+  "recipe_visit_return": "Return to the selected recipe reading",
+  "recipe_visit_global": "Open a separate Global recipe editor",
+  "recipe_visit_context_global": "Context: Global",
+  "recipe_visit_context_selected": "Context: selected reading",
+  "recipe_visit_occurrence_missing": "The requested assertion is no longer disclosed in this reading, or its holder changed. Choose a current assertion below."
 }

@@ -367,6 +367,25 @@ terms and explicitly entered facts. The recipe's ordinary subject page links to
 `/{locale}/subjects/{id}/{slug}/recipe` for later field proposals. Both routes use the existing shell and session
 BFF; the correction route resolves the canonical subject address first.
 
+Decision: recipe correction carries the source reading’s observed Context and existing public Realm selector through
+canonical redirects, its private session and native Subject read; only a matching Global read can offer the existing
+Global candidate editor. Other Contexts show an explicit limitation and retain their Realm return address. Opening
+Global is a separately named destination that drops the earlier correction intent. The Subject entry remains an
+overview; an explicit recipe-local property/statement/holder locator selects only a newly disclosed exact occurrence,
+never an equal value or row index. Malformed, duplicate, incomplete or foreign address fields are invalid. The local
+address is capped at 8 KiB and contains no public payload, evidence, native advice, credentials or candidate tokens.
+A reading refresh retires unsent evidence comparison even when its draft is unchanged; a changed or withheld source
+locks fresh submission while sealed uncertain commands keep their original bodies. Recorded proposal success remains
+visible if its subsequent current read fails. Final fresh public return admission/focus and transition/replay coverage
+remain a continuation of this journey.
+
+The explicit Context changes no native read cap: one anchored Subject read (at most 512 descriptive facts, up to 12
+preview rows per admitted relation property and the existing at-most-256 related-summary plan), one active Definition
+pointer and one immutable bundle. Private action advice adds one existing two-resource viewer-action batch. No new
+method document request, per-ingredient fanout or candidate collection is introduced. Existing authored method bodies
+remain with their original document reader. The 8 KiB address bound is independent of those payloads; these UI bounds
+do not establish native SQL growth. Candidate windows retain their native page contract.
+
 Only effective fields present in the active native release appear. Ingredient monolingual text is separate from
 the released material relation `wdt:P186` and dietary Concept claims. Linked targets come from the existing subject
 picker and are admitted against the released targets; typing an ingredient or diet name never creates a claim.
