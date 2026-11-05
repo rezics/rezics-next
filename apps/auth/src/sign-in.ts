@@ -1,5 +1,6 @@
 import { observeLogin, loginResultPhase, type LoginPhaseObserver } from './login-return';
-import { authPost, type AuthPostResult } from './api';
+import type { AuthPostResult } from './api';
+import { submitSignIn } from './sign-in-transport';
 import { accountOperationProfile, type AccountOperationStepUpKind } from './account-operation-step-up';
 
 // Keep the provisional Auth contract together until the issuer contract is confirmed.
@@ -12,18 +13,18 @@ const DEFAULT_RETURN_PATH = '/security';
 
 export type SignInResult =
   | { ok: true }
-  | { ok: false; reason: 'credentials' | 'unavailable' }
+  | { ok: false; reason: 'credentials' | 'suspended' | 'unavailable' }
   | { ok: false; reason: 'rate-limited'; retryAfter: string | null };
 
 export async function signIn(email: string, password: string, onPhase?: LoginPhaseObserver): Promise<SignInResult> {
   observeLogin(onPhase, 'dispatched');
+  const profile = { client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE };
   const result = signInResult(
-    await authPost('/signin', {
+    await submitSignIn('/signin', {
       email,
       password,
-      client_id: SIGN_IN_CLIENT_ID,
-      scope: SIGN_IN_SCOPE,
-    }),
+      ...profile,
+    }, profile),
   );
   observeLogin(onPhase, loginResultPhase(result));
   return result;
@@ -36,15 +37,16 @@ export async function signInForAccountOperation(
   kind: AccountOperationStepUpKind,
 ): Promise<SignInResult> {
   const profile = accountOperationProfile(kind);
-  return signInResult(await authPost('/signin', { email, password, ...profile }));
+  return signInResult(await submitSignIn('/signin', { email, password, ...profile }, profile));
 }
 
 // `/signin` and `/signin/passkey` answer alike, so both reduce to the same result.
 export function signInResult(result: AuthPostResult): SignInResult {
   if (result.ok) return { ok: true };
   if (result.status === 401 && result.code === 'authentication_denied') return { ok: false, reason: 'credentials' };
-  if (result.status === 429 && result.code === 'rate_limited')
+  if (result.status === 429 && ['authentication_denied', 'rate_limited'].includes(result.code))
     return { ok: false, reason: 'rate-limited', retryAfter: result.retryAfter };
+  if (result.status === 403 && result.code === 'ACCOUNT_SUSPENDED') return { ok: false, reason: 'suspended' };
   return { ok: false, reason: 'unavailable' };
 }
 

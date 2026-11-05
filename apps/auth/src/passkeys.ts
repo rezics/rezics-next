@@ -5,14 +5,14 @@ import {
   startAuthentication,
   startRegistration,
   WebAuthnAbortService,
-  type PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser';
-import { AUTH_POST_TIMEOUT_MS, authPost, failureMessage, type AuthPostResult } from './api';
+import { AUTH_POST_TIMEOUT_MS, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
 import { securityDevice, type SecurityPasskey } from './security';
 import { performSecurityAction, type SecurityActionResult } from './security-reconciliation';
 import { accountOperationProfile, type AccountOperationStepUpKind } from './account-operation-step-up';
 import { SIGN_IN_CLIENT_ID, SIGN_IN_SCOPE, signInResult, type SignInResult } from './sign-in';
+import { receiveSignInOptions, submitSignIn } from './sign-in-transport';
 import {
   managementOperationProfile,
   type ManagementOperationKind,
@@ -34,14 +34,14 @@ export type PasskeySignInResult = SignInResult | { ok: false; reason: 'cancelled
 // Auth keeps a challenge for a few minutes, so options are shared between the autofill ceremony and the prompt only
 // while they are younger. Sharing keeps a sign-in at two Auth calls however the person starts it.
 const OPTIONS_MAX_AGE_MS = 4 * 60_000;
-type SignInOptions = AuthPostResult<PublicKeyCredentialRequestOptionsJSON>;
-let held: { fetchedAt: number; result: Promise<SignInOptions> } | null = null;
+type SignInOptionsResult = Awaited<ReturnType<typeof receiveSignInOptions>>;
+let held: { fetchedAt: number; result: SignInOptionsResult } | null = null;
 
 function signInOptions(): Promise<SignInOptions> {
   if (!held || Date.now() - held.fetchedAt >= OPTIONS_MAX_AGE_MS) {
     const entry = {
       fetchedAt: Date.now(),
-      result: authPost<PublicKeyCredentialRequestOptionsJSON>('/signin/passkey/options', {}),
+      result: receiveSignInOptions(),
     };
     held = entry;
     void entry.result.then((result) => {
@@ -98,13 +98,13 @@ export async function signInWithPasskey({
       ? accountOperationProfile(operation)
       : { client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE };
   observe('dispatched');
-  const result = signInResult(await authPost('/signin/passkey', { response, ...profile }));
+  const result = signInResult(await submitSignIn('/signin/passkey', { response, ...profile }, profile));
   observe(loginResultPhase(result));
   return result;
 }
 
 export function passkeySignInFailure(result: Exclude<PasskeySignInResult, { ok: true } | { reason: 'cancelled' }>) {
-  if (result.reason === 'credentials') return m.auth_passkey_denied();
+  if (result.reason === 'credentials' || result.reason === 'suspended') return m.auth_passkey_denied();
   if (result.reason === 'rate-limited') return failureMessage(429, 'rate_limited', result.retryAfter);
   return failureMessage(503, 'unavailable', null);
 }

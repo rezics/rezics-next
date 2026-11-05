@@ -481,7 +481,7 @@ function LoginForm({ query, attempt, restored }: { query: string; attempt: Login
       return;
     }
     setMessage(
-      result.reason === 'credentials'
+      result.reason === 'credentials' || result.reason === 'suspended'
         ? failureMessage(401, 'authentication_denied', null)
         : result.reason === 'rate-limited'
           ? failureMessage(429, 'rate_limited', result.retryAfter)

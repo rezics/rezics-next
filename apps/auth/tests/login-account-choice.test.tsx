@@ -10,6 +10,7 @@ import { creationFixture, button, dom, fill, flush, open, send } from './creatio
 import { Route } from '../src/routes/login';
 import * as passkeys from '../src/passkeys';
 import * as stepUp from '../src/step-up';
+import { nativeSignInProof } from './sign-in-fixture';
 creationFixture();
 const scroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
 beforeAll(() =>
@@ -106,7 +107,8 @@ test.each(['password', 'passkey'])(
     expect(p.reads).toHaveLength(1);
     expect(p.calls).toHaveLength(method === 'password' ? 1 : 0);
     await flush(() => {
-      if (method === 'password') p.calls[0]!.resolve(Response.json({}));
+      if (method === 'password')
+        p.calls[0]!.resolve(Response.json(nativeSignInProof(p.calls[0]!.body)));
       else p.ceremony.resolve({ ok: true });
     });
     expect(p.assign).toHaveBeenCalledTimes(1);

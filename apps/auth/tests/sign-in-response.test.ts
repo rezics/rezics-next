@@ -61,6 +61,14 @@ test('native throttle, suspension and denial envelopes remain bounded; ambiguous
     globalThis.fetch = (async () => Response.json(body, { status, headers: { 'retry-after': '37' } })) as typeof fetch;
     expect(await submitSignIn('/signin', {}, ordinary)).toMatchObject({ ok: false, code });
   }
+  globalThis.fetch = (async () =>
+    Response.json({ error: 'authentication_denied' }, { status: 429, headers: { 'retry-after': '37' } })) as typeof fetch;
+  expect(await submitSignIn('/signin', {}, ordinary)).toMatchObject({
+    ok: false,
+    status: 429,
+    code: 'authentication_denied',
+    retryAfter: '37',
+  });
 });
 test('actual bytes, split UTF-8, absent and lying lengths are admitted before JSON decoding', async () => {
   const bytes = new TextEncoder().encode(JSON.stringify(proof()));

@@ -1,4 +1,5 @@
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { nativeSignInProof } from './sign-in-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
@@ -69,13 +70,11 @@ const fake = Bun.serve({
     if (url.pathname === '/signin' && request.method === 'POST') {
       if (signInStatus === 200) {
         headers.append('set-cookie', `auth_session=${session}; Path=/; HttpOnly; SameSite=Lax`);
-        return Response.json({ success: true }, { headers });
+        return Response.json(nativeSignInProof(JSON.parse(call.body)), { headers });
       }
       if (signInStatus === 429) headers.set('retry-after', String(retryAfter));
       return Response.json(
-        {
-          code: signInStatus === 401 ? 'authentication_denied' : signInStatus === 429 ? 'rate_limited' : 'unavailable',
-        },
+        { error: signInStatus === 503 ? 'unavailable' : 'authentication_denied' },
         { status: signInStatus, headers },
       );
     }

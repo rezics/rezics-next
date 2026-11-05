@@ -576,7 +576,7 @@ checks. Credential keys never join Auth's public signing JWKS.
 ## Passkeys and credential freshness
 
 Decision: admit discoverable authentication options at the plugin HTTP boundary using the pinned producer's
-closed output, and share a fixed-profile acknowledgement receiver before migrating installed browser callers.
+closed output, and use the shared fixed-profile acknowledgement receiver in every installed browser sign-in caller.
 Authentication options are exactly `{rpId:"rezics.com", challenge, timeout:60000, userVerification:"required"}`.
 The plugin generates 32 challenge bytes (43 base64url characters), `preferred` UV and no allowCredentials or
 extensions when called without session cookies; the service projects UV to required and preserves Set-Cookie.
@@ -584,14 +584,19 @@ The byte ceiling is the compact JSON size of those fixed fields and the 43-chara
 for plugin ingress and required for browser ingress. Count actual bytes before fatal UTF-8 and JSON decoding;
 malformed/excess plugin output publishes no challenge cookie. Registration retains its separate receiving owner.
 
-The shared acknowledgement contract uses native SessionProof's exact six fields: account_id, client_id, scope,
+Installed ordinary login, account-operation step-up, management and rename review, automated-account creation,
+operator transfer and organization membership reauthentication submit their selected fixed profile through the
+shared receiver. Its acknowledgement contract uses native SessionProof's exact six fields: account_id, client_id, scope,
 authn_epoch, auth_time and amr. Opaque IDs retain the Security 1024-code-unit bound and worst-case six-byte
 escaping; numbers are nonnegative safe integers (17-byte allowance). Scope strings retain Security's 128-unit
 bound. The proof formula is `securityResponseByteBudgets(N).session`, where N is the submitted fixed profile's
 deduplicated scope count, not a catalogue or current-session count. Native normalization sorts/deduplicates the
 submitted scopes; acknowledgement requires that exact ordered scope, fixed client and one pwd or pop method
-matching the submitted path. This receiving contract adds no native authorization or currentness policy and
-does not restrict other native clients. Error receiving admits the native authentication_denied envelope,
+matching the submitted path. Each call has one five-second lifetime through bounded body completion, preserving
+same-origin cookies, no-store, redirect rejection and the installed one-POST password / options-plus-assertion cost.
+The four-minute browser options cache retains only admitted options and is shared by conditional mediation and an
+explicit prompt. This receiving contract adds no native authorization or currentness policy and does not restrict
+other native clients. Error receiving admits the native authentication_denied envelope,
 403 account_suspended/ACCOUNT_SUSPENDED, and supported 429 rate_limited forms; the fixed largest envelope
 provides the byte ceiling. Native 429 authentication_denied retains Retry-After independently of that ceiling.
 Native credential acceptance and real-browser integration remain independently qualified by their existing tests.

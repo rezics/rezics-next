@@ -1,9 +1,12 @@
 import { expect, spyOn, test } from 'bun:test';
 import { signIn } from '../src/sign-in';
 import { retainLoginHistory, type LoginReturnHistory } from '../src/login-return';
+import { nativeSignInProof } from './sign-in-fixture';
 
 test('password phase observation adds no Auth calls and bounded history cannot become a command', async () => {
-  const fetch = spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}));
+  const fetch = spyOn(globalThis, 'fetch').mockImplementation((_input, init) =>
+    Promise.resolve(Response.json(nativeSignInProof(JSON.parse(String(init?.body))))),
+  );
   const phases: string[] = [];
   try {
     expect(await signIn('private@example.test', 'private-password', (phase) => phases.push(phase))).toEqual({

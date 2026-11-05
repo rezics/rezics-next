@@ -3,6 +3,7 @@ import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import { m } from '../src/paraglide/messages.js';
 import type { PasskeySignInResult } from '../src/passkeys';
+import { nativeSignInProof } from './sign-in-fixture';
 
 creationFixture();
 const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
@@ -96,7 +97,7 @@ test('a dispatched password remains generically uncertain after cached form reti
   expect(page.host.textContent).not.toContain('replacement@example.test');
   expect(page.assign).not.toHaveBeenCalled();
 
-  page.calls[0]!.resolve(Response.json({ success: true }));
+  page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
   await settle();
   expect(page.host.textContent).toContain(m.auth_step_up_return_unknown());
   expect(page.assign).not.toHaveBeenCalled();
@@ -122,7 +123,7 @@ test('Stay restores review focus and Leave retires the view without cancelling d
   await page.navigate('/away');
   await flush(() => document.querySelector<HTMLButtonElement>('[data-leave]')!.click());
   expect(page.router.history.location.pathname).toBe('/away');
-  page.calls[0]!.resolve(Response.json({ success: true }));
+  page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
   await settle();
   expect(page.assign).not.toHaveBeenCalled();
   expect(page.calls).toHaveLength(1);
@@ -138,7 +139,7 @@ test('a later credential refusal cannot settle an earlier unknown sign-in', asyn
       attempts++;
       return attempts === 1
         ? Promise.reject(new TypeError('lost response'))
-        : Promise.resolve(Response.json({ code: 'authentication_denied' }, { status: 401 }));
+        : Promise.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
     }
     return original(input, init);
   });
@@ -162,7 +163,7 @@ test('a first known refusal stays distinct from a passkey cancelled before authe
   const original = globalThis.fetch;
   const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     if (String(input) === '/signin')
-      return Promise.resolve(Response.json({ code: 'authentication_denied' }, { status: 401 }));
+      return Promise.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
     return original(input, init);
   });
   typeCredentials(page.host, 'private password');

@@ -1,5 +1,6 @@
 import { isOperatorPageVersion } from '@rezics/auth-contract';
 import { authPost, type AuthPostResult } from './api';
+import { submitSignIn } from './sign-in-transport';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
 import { managementOperationProfile } from '@rezics/auth-contract';
 import {
@@ -438,7 +439,12 @@ export async function reauthenticateTransfer(
   if (current.kind !== 'ready' || current.accountId !== accountId)
     return { kind: 'failure', reason: 'account-changed' };
   if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
-  const result = await authPost('/signin', { email, password, ...OPERATOR_MANAGEMENT_PROFILE });
+  const result = await submitSignIn(
+    '/signin',
+    { email, password, ...OPERATOR_MANAGEMENT_PROFILE },
+    OPERATOR_MANAGEMENT_PROFILE,
+  );
+  if (!isCurrent()) return { kind: 'failure', reason: 'unavailable' };
   if (!result.ok) return failure(result);
   return boundSession(accountId);
 }

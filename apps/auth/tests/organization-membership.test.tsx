@@ -298,7 +298,8 @@ test('determinate refusals preserve review; reauthentication requires confirmati
     input('membership-email', 'owner@example.test');
     input('membership-password', 'secret-password');
   });
-  reply = (path) => (path === '/signin' ? Response.json({}, { status: 401 }) : normal(path));
+  reply = (path) =>
+    path === '/signin' ? Response.json({ error: 'authentication_denied' }, { status: 401 }) : normal(path);
   const beforeRefusal = calls.length;
   await click(m.auth_members_reauthenticate());
   expect(calls.slice(beforeRefusal).map(({ path }) => path)).toEqual(['/signin', '/session']);
@@ -368,7 +369,7 @@ test.each(['signed-out', 'actor', 'profile', 'roster', 'reservation'])(
       reply = (path) =>
         path === '/session'
           ? boundary === 'signed-out'
-            ? Response.json({}, { status: 401 })
+            ? Response.json({ error: 'authentication_denied' }, { status: 401 })
             : Response.json({
                 account_id: boundary === 'actor' ? other : accountId,
                 client_id: boundary === 'profile' ? 'login' : profile.client_id,
