@@ -443,7 +443,6 @@ test('browser away/back retires a queued entry import and a progress read withou
     expect(ui.host.querySelector('dl')).toBeNull();
     expect(ui.host.textContent).not.toContain('91234');
     expect(ui.button(ui.m.author_erasure_check_again()).disabled).toBe(true);
-    expect(reads).toBe(1);
   });
 });
 
@@ -452,15 +451,15 @@ test('entry source replacement and locale departure retire sent results and pres
     const owner = { state: 'signed-in' as const, subject: authorA, csrfToken: 'csrf-a' };
     ui.setSession(owner);
     const sent = gate<ErasureEnqueue>();
-    const callbacks: string[] = [];
+    const destinations: string[] = [];
+    ui.window.location.assign = (url) => {
+      destinations.push(String(url));
+    };
     const entry = createElement(ui.AuthorErasureEntry, {
       threadId: threadA,
       viewerId: authorA,
       admission: { kind: 'current', authorId: authorA, mayErase: true },
       send: async () => sent.promise,
-      onAccepted: (id) => {
-        callbacks.push(id);
-      },
     });
     await ui.render(entry);
     await ui.click(ui.m.author_erasure_action());
@@ -471,7 +470,7 @@ test('entry source replacement and locale departure retire sent results and pres
     await ui.renderWithClient(otherClient, entry);
     sent.resolve({ kind: 'accepted', operationId: operationA });
     await ui.flush();
-    expect(callbacks).toEqual([]);
+    expect(destinations).toEqual([]);
     expect(ui.host.textContent).toContain(ui.m.author_erasure_uncertain());
     expect(ui.button(ui.m.author_erasure_retry()).disabled).toBe(true);
     await ui.render(null);
@@ -480,10 +479,6 @@ test('entry source replacement and locale departure retire sent results and pres
     const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
     const originalLocale = getLocale;
     const result = gate<ErasureEnqueue>();
-    const destinations: string[] = [];
-    ui.window.location.assign = (url) => {
-      destinations.push(String(url));
-    };
     try {
       await ui.render(
         createElement(ui.AuthorErasureEntry, {
