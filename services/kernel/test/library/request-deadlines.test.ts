@@ -20,7 +20,7 @@ test('library code takes every deadline from deadlineFor with one wall-clock wor
   const declarations = sources.flatMap(({ file, lines }) =>
     lines.filter((line) => /\bconst WORK_STEP_DEADLINE_MS = [0-9_]+;/.test(line)).map(() => file),
   );
-  expect(declarations).toEqual(['work-step-policy.ts']);
+  expect(declarations).toEqual(['work-step-deadline.ts']);
   const users = sources.filter(({ lines }) =>
     lines.some((line) => line.includes('deadlineFor(WORK_STEP_DEADLINE_MS)')),
   );
