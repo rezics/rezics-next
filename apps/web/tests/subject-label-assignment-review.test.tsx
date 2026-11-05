@@ -16,7 +16,10 @@ import { SubjectLabelAssignmentReview } from '../src/library/subject-label-assig
 const option = { id: 'catalogue-label-id', name: 'Café reads', revision: 7 };
 const subjectName = 'A long localized Subject title for the review panel';
 
-function origin(options = [option], assignments: { id: string; labelId: string; name: string; revision: number }[] = []) {
+function origin(
+  options = [option],
+  assignments: { id: string; labelId: string; name: string; revision: number }[] = [],
+) {
   return {
     subjectId: 'subject-id',
     locale: 'en',

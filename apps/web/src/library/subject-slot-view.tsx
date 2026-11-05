@@ -498,12 +498,7 @@ function SubjectLibrarySlotView({
   ]);
   useEffect(() => setHydrated(true), []);
   useEffect(() => {
-    if (
-      !labelReview ||
-      labelOrigin.seed !== labelLifetime.seed ||
-      isCurrentLabelReview(labelReview)
-    )
-      return;
+    if (!labelReview || labelOrigin.seed !== labelLifetime.seed || isCurrentLabelReview(labelReview)) return;
     setLabelReview(null);
     setLabelReviewDraft(null);
     setLabelReviewNotice('stale');
@@ -1054,10 +1049,7 @@ function SubjectLibrarySlotView({
   function labelReviewCanApply(review: SubjectLabelReview): boolean {
     if (!isCurrentLabelReview(review) || !data.csrfToken || labelPending || uncertainLabel.current) return false;
     if (review.choice.kind === 'existing')
-      return (
-        labelAssignAdmitted &&
-        labelLifetime.current('library_label.assignment_list', 'library_label.assign')
-      );
+      return labelAssignAdmitted && labelLifetime.current('library_label.assignment_list', 'library_label.assign');
     return (
       labelCreateAdmitted &&
       labelAssignAdmitted &&
@@ -1690,171 +1682,176 @@ function SubjectLibrarySlotView({
                       onDiscard={() => discardLabelReview(currentLabelReview)}
                     />
                   ) : (
-                  <form
-                    data-subject-label-picker
-                    method="post"
-                    action={action}
-                    onSubmit={(event) => void submitLabelName(event)}
-                    className="mt-2 space-y-2 rounded-lg border bg-background p-3"
-                  >
-                    <input type="hidden" name="intent" value="assign-by-name" />
-                    <input type="hidden" name="idempotencyKey" value={data.labelAssignKey} />
-                    <input type="hidden" name="createKey" value={data.labelCreateKey} />
-                    <input type="hidden" name="subjectId" value={subject.id} />
-                    <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
-                    <SubjectLabelInput
-                      value={labelQuery}
-                      issue={labelInputIssue}
-                      inputRef={labelNameInput}
-                      onChange={(value) => {
-                        if (!labelLifetime.current()) return;
-                        invalidateLabelReview();
-                        labelOptionRevision.current++;
-                        searchOrigin.current = {
-                          ...searchOrigin.current,
-                          query: value,
-                          sequence: searchOrigin.current.sequence + 1,
-                        };
-                        setLabelNameSubmitted(false);
-                        setLabelChoices([]);
-                        setLabelNext(null);
-                        setLabelSearchState('idle');
-                        setLabelReadReason(undefined);
-                        latestLabelQuery.current = value;
-                        setLabelQuery(value);
-                      }}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <Exposure operation="library_label.create">
-                        <button
-                          type="submit"
-                          ref={labelSubmitElement}
-                          disabled={!data.csrfToken || (hydrated && labelPending)}
-                          className={labelButtonClass}
-                        >
-                          {m.library_subject_label_add()}
-                        </button>
-                      </Exposure>
-                      <button
-                        type="button"
-                        className={labelButtonClass}
-                        onClick={() => {
+                    <form
+                      data-subject-label-picker
+                      method="post"
+                      action={action}
+                      onSubmit={(event) => void submitLabelName(event)}
+                      className="mt-2 space-y-2 rounded-lg border bg-background p-3"
+                    >
+                      <input type="hidden" name="intent" value="assign-by-name" />
+                      <input type="hidden" name="idempotencyKey" value={data.labelAssignKey} />
+                      <input type="hidden" name="createKey" value={data.labelCreateKey} />
+                      <input type="hidden" name="subjectId" value={subject.id} />
+                      <input type="hidden" name="csrf_token" value={data.csrfToken ?? ''} />
+                      <SubjectLabelInput
+                        value={labelQuery}
+                        issue={labelInputIssue}
+                        inputRef={labelNameInput}
+                        onChange={(value) => {
                           if (!labelLifetime.current()) return;
                           invalidateLabelReview();
                           labelOptionRevision.current++;
                           searchOrigin.current = {
-                            query: '',
-                            open: false,
+                            ...searchOrigin.current,
+                            query: value,
                             sequence: searchOrigin.current.sequence + 1,
                           };
-                          setLabelPickerOpen(false);
-                          setLabelQuery('');
                           setLabelNameSubmitted(false);
-                          latestLabelQuery.current = '';
-                          setLabelReviewNotice(undefined);
-                          labelPickerTrigger.current?.focus();
+                          setLabelChoices([]);
+                          setLabelNext(null);
+                          setLabelSearchState('idle');
+                          setLabelReadReason(undefined);
+                          latestLabelQuery.current = value;
+                          setLabelQuery(value);
                         }}
-                      >
-                        {m.library_collection_cancel()}
-                      </button>
-                    </div>
-                    <SubjectLabelMore
-                      key={searchSequence}
-                      query={labelQuery}
-                      next={labelNext}
-                      isCurrent={() =>
-                        labelLifetime.current('library_label.assignment_list', 'library_label.list') &&
-                        searchOrigin.current.sequence === searchSequence &&
-                        searchOrigin.current.open
-                      }
-                      acceptPage={(page, request) =>
-                        !!page.provenance &&
-                        page.provenance.viewer === data.provenance?.viewer &&
-                        page.provenance.query === request.query &&
-                        page.provenance.cursor === request.cursor
-                      }
-                      onPage={(page) => {
-                        if (!labelLifetime.current() || searchOrigin.current.sequence !== searchSequence) return;
-                        invalidateLabelReview();
-                        labelOptionRevision.current++;
-                        setLabelNext(page.next ?? null);
-                        setLabelChoices(page.labels);
-                        setLabelSearchState(page.state);
-                      }}
-                    />
-                    <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
-                    {labelReviewNotice === 'stale' ? (
-                      <p role="status" className="text-sm text-muted-foreground" data-label-review-stale>
-                        {m.library_subject_label_review_stale()}
-                      </p>
-                    ) : null}
-                    {labelSearchState === 'loaded' ? (
-                      <ul aria-label={m.library_subject_label_input()} className="space-y-1">
-                        {labelChoices.map((choice) => (
-                          <li key={choice.id}>
-                            <Exposure operation="library_label.assign">
-                              <button
-                                type="button"
-                                disabled={!data.csrfToken || (hydrated && labelPending)}
-                                ref={(element) => {
-                                  if (element) labelChoiceElements.current.set(choice.id, element);
-                                  else labelChoiceElements.current.delete(choice.id);
-                                }}
-                                aria-pressed={labelReviewDraft?.kind === 'existing' && labelReviewDraft.label.id === choice.id}
-                                onClick={() =>
-                                  startLabelReview(
-                                    { kind: 'existing', label: choice, rawName: labelQuery },
-                                    { kind: 'existing', id: choice.id },
-                                  )
-                                }
-                                className={`${labelChoiceClass}${
-                                  labelReviewDraft?.kind === 'existing' && labelReviewDraft.label.id === choice.id
-                                    ? ' bg-muted font-medium'
-                                    : ''
-                                }`}
-                              >
-                                {choice.name}
-                              </button>
-                            </Exposure>
-                          </li>
-                        ))}
-                        {normalizeLibraryLabelName(labelQuery) &&
-                        !labelChoices.some(
-                          (choice) => normalizeLibraryLabelName(choice.name) === normalizeLibraryLabelName(labelQuery),
-                        ) ? (
-                          <li>
-                            <Exposure operation="library_label.create">
-                              <button
-                                type="button"
-                                ref={labelCreateElement}
-                                disabled={!data.csrfToken || (hydrated && labelPending)}
-                                aria-pressed={labelReviewDraft?.kind === 'proposed'}
-                                onClick={() => startLabelReview({ kind: 'proposed', name: labelQuery }, { kind: 'proposed' })}
-                                className={`${labelChoiceClass} font-medium text-primary${
-                                  labelReviewDraft?.kind === 'proposed' ? ' bg-muted' : ''
-                                }`}
-                              >
-                                {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
-                              </button>
-                            </Exposure>
-                          </li>
-                        ) : null}
-                        {labelChoices.length === 0 ? (
-                          <li className="px-2 py-1 text-sm text-muted-foreground">
-                            {m.library_subject_label_no_results()}
-                          </li>
-                        ) : null}
-                      </ul>
-                    ) : labelSearchState === 'closed' ? (
-                      <p role="status" className="text-sm text-muted-foreground">
-                        {m.library_subject_label_closed()}
-                      </p>
-                    ) : labelSearchState === 'unavailable' ? (
-                      <p role="alert" className="text-sm text-muted-foreground">
-                        {m.library_subject_label_unavailable()}
-                      </p>
-                    ) : null}
-                  </form>
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Exposure operation="library_label.create">
+                          <button
+                            type="submit"
+                            ref={labelSubmitElement}
+                            disabled={!data.csrfToken || (hydrated && labelPending)}
+                            className={labelButtonClass}
+                          >
+                            {m.library_subject_label_add()}
+                          </button>
+                        </Exposure>
+                        <button
+                          type="button"
+                          className={labelButtonClass}
+                          onClick={() => {
+                            if (!labelLifetime.current()) return;
+                            invalidateLabelReview();
+                            labelOptionRevision.current++;
+                            searchOrigin.current = {
+                              query: '',
+                              open: false,
+                              sequence: searchOrigin.current.sequence + 1,
+                            };
+                            setLabelPickerOpen(false);
+                            setLabelQuery('');
+                            setLabelNameSubmitted(false);
+                            latestLabelQuery.current = '';
+                            setLabelReviewNotice(undefined);
+                            labelPickerTrigger.current?.focus();
+                          }}
+                        >
+                          {m.library_collection_cancel()}
+                        </button>
+                      </div>
+                      <SubjectLabelMore
+                        key={searchSequence}
+                        query={labelQuery}
+                        next={labelNext}
+                        isCurrent={() =>
+                          labelLifetime.current('library_label.assignment_list', 'library_label.list') &&
+                          searchOrigin.current.sequence === searchSequence &&
+                          searchOrigin.current.open
+                        }
+                        acceptPage={(page, request) =>
+                          !!page.provenance &&
+                          page.provenance.viewer === data.provenance?.viewer &&
+                          page.provenance.query === request.query &&
+                          page.provenance.cursor === request.cursor
+                        }
+                        onPage={(page) => {
+                          if (!labelLifetime.current() || searchOrigin.current.sequence !== searchSequence) return;
+                          invalidateLabelReview();
+                          labelOptionRevision.current++;
+                          setLabelNext(page.next ?? null);
+                          setLabelChoices(page.labels);
+                          setLabelSearchState(page.state);
+                        }}
+                      />
+                      <SubjectLabelReadNotice {...(labelReadReason !== undefined ? { reason: labelReadReason } : {})} />
+                      {labelReviewNotice === 'stale' ? (
+                        <p role="status" className="text-sm text-muted-foreground" data-label-review-stale>
+                          {m.library_subject_label_review_stale()}
+                        </p>
+                      ) : null}
+                      {labelSearchState === 'loaded' ? (
+                        <ul aria-label={m.library_subject_label_input()} className="space-y-1">
+                          {labelChoices.map((choice) => (
+                            <li key={choice.id}>
+                              <Exposure operation="library_label.assign">
+                                <button
+                                  type="button"
+                                  disabled={!data.csrfToken || (hydrated && labelPending)}
+                                  ref={(element) => {
+                                    if (element) labelChoiceElements.current.set(choice.id, element);
+                                    else labelChoiceElements.current.delete(choice.id);
+                                  }}
+                                  aria-pressed={
+                                    labelReviewDraft?.kind === 'existing' && labelReviewDraft.label.id === choice.id
+                                  }
+                                  onClick={() =>
+                                    startLabelReview(
+                                      { kind: 'existing', label: choice, rawName: labelQuery },
+                                      { kind: 'existing', id: choice.id },
+                                    )
+                                  }
+                                  className={`${labelChoiceClass}${
+                                    labelReviewDraft?.kind === 'existing' && labelReviewDraft.label.id === choice.id
+                                      ? ' bg-muted font-medium'
+                                      : ''
+                                  }`}
+                                >
+                                  {choice.name}
+                                </button>
+                              </Exposure>
+                            </li>
+                          ))}
+                          {normalizeLibraryLabelName(labelQuery) &&
+                          !labelChoices.some(
+                            (choice) =>
+                              normalizeLibraryLabelName(choice.name) === normalizeLibraryLabelName(labelQuery),
+                          ) ? (
+                            <li>
+                              <Exposure operation="library_label.create">
+                                <button
+                                  type="button"
+                                  ref={labelCreateElement}
+                                  disabled={!data.csrfToken || (hydrated && labelPending)}
+                                  aria-pressed={labelReviewDraft?.kind === 'proposed'}
+                                  onClick={() =>
+                                    startLabelReview({ kind: 'proposed', name: labelQuery }, { kind: 'proposed' })
+                                  }
+                                  className={`${labelChoiceClass} font-medium text-primary${
+                                    labelReviewDraft?.kind === 'proposed' ? ' bg-muted' : ''
+                                  }`}
+                                >
+                                  {m.library_subject_label_create({ name: normalizeLibraryLabelName(labelQuery) })}
+                                </button>
+                              </Exposure>
+                            </li>
+                          ) : null}
+                          {labelChoices.length === 0 ? (
+                            <li className="px-2 py-1 text-sm text-muted-foreground">
+                              {m.library_subject_label_no_results()}
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : labelSearchState === 'closed' ? (
+                        <p role="status" className="text-sm text-muted-foreground">
+                          {m.library_subject_label_closed()}
+                        </p>
+                      ) : labelSearchState === 'unavailable' ? (
+                        <p role="alert" className="text-sm text-muted-foreground">
+                          {m.library_subject_label_unavailable()}
+                        </p>
+                      ) : null}
+                    </form>
                   )
                 ) : null}
               </details>

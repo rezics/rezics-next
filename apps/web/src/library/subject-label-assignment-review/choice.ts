@@ -38,9 +38,7 @@ export function resolveSubjectLabelReviewChoice(
   const normalizedName = normalizeLibraryLabelName(rawName);
   if (!normalizedName) return undefined;
   const existing = options.find((option) => normalizeLibraryLabelName(option.name) === normalizedName);
-  return existing
-    ? { kind: 'existing', label: { ...existing }, rawName }
-    : { kind: 'proposed', name: rawName };
+  return existing ? { kind: 'existing', label: { ...existing }, rawName } : { kind: 'proposed', name: rawName };
 }
 
 export function selectSubjectLabelReviewChoice(
@@ -49,7 +47,8 @@ export function selectSubjectLabelReviewChoice(
   rawName: string,
 ): SubjectLabelReviewChoice | undefined {
   const supplied = options.find(
-    (candidate) => candidate.id === option.id && candidate.name === option.name && candidate.revision === option.revision,
+    (candidate) =>
+      candidate.id === option.id && candidate.name === option.name && candidate.revision === option.revision,
   );
   return supplied ? { kind: 'existing', label: { ...supplied }, rawName } : undefined;
 }
