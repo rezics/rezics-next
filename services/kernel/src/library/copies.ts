@@ -770,42 +770,46 @@ export function createCopyCommands(config: Dependencies) {
               { route, id: owner.accountId },
               { pool, deadline, time: at },
             );
-            return readOnly(owner, async (client) => {
-              const bounded = deadlineClient(client, deadline);
-              if (!(await check(bounded, at))) throw new GrantDeniedError();
-              const partition = await readPartition(bounded, partitionOf(route));
-              const row = await copyDetailReadStatementPlan({
-                route,
-                copy_id: copyId,
-                account_id: owner.accountId,
-              }).run(bounded);
-              if (!partition || !row) throw new LibraryNotFoundError();
-              const {
-                libraryProfilePin,
-                kindProfilePin,
-                statusProfilePin,
-                mediaCondition,
-                packagingCondition,
-                ...value
-              } = row;
-              const conditionFacts = decodeCopyConditionFacts(mediaCondition, packagingCondition);
-              const copy: Copy = {
-                ...value,
-                createdAt: new Date(value.createdAt).toISOString(),
-                updatedAt: new Date(value.updatedAt).toISOString(),
-                ...(conditionFacts === undefined ? {} : { conditionFacts }),
-              };
-              return {
-                fact: {
-                  copy,
-                  compatibilityPin: decodeLibraryProfilePin(libraryProfilePin),
-                  // The old mutable pin proves status only, never original kind.
-                  kindPin: decodeLibraryProfilePin(kindProfilePin),
-                  statusPin: decodeLibraryProfilePin(statusProfilePin ?? libraryProfilePin),
-                },
-                epoch: partition.epoch,
-              };
-            });
+            return readOnly(
+              owner,
+              async (client) => {
+                const bounded = deadlineClient(client, deadline);
+                if (!(await check(bounded, at))) throw new GrantDeniedError();
+                const partition = await readPartition(bounded, partitionOf(route));
+                const row = await copyDetailReadStatementPlan({
+                  route,
+                  copy_id: copyId,
+                  account_id: owner.accountId,
+                }).run(bounded);
+                if (!partition || !row) throw new LibraryNotFoundError();
+                const {
+                  libraryProfilePin,
+                  kindProfilePin,
+                  statusProfilePin,
+                  mediaCondition,
+                  packagingCondition,
+                  ...value
+                } = row;
+                const conditionFacts = decodeCopyConditionFacts(mediaCondition, packagingCondition);
+                const copy: Copy = {
+                  ...value,
+                  createdAt: new Date(value.createdAt).toISOString(),
+                  updatedAt: new Date(value.updatedAt).toISOString(),
+                  ...(conditionFacts === undefined ? {} : { conditionFacts }),
+                };
+                return {
+                  fact: {
+                    copy,
+                    compatibilityPin: decodeLibraryProfilePin(libraryProfilePin),
+                    // The old mutable pin proves status only, never original kind.
+                    kindPin: decodeLibraryProfilePin(kindProfilePin),
+                    statusPin: decodeLibraryProfilePin(statusProfilePin ?? libraryProfilePin),
+                  },
+                  epoch: partition.epoch,
+                };
+              },
+              deadline,
+            );
           }
           const at = await time();
           try {
