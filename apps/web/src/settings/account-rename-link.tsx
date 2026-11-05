@@ -15,8 +15,8 @@ export function AccountRenameLink({
   failure?: AccountRenameFailure | undefined;
 }) {
   const id = useId();
-  const identity = !loading && !failure ? context : null;
-  const href = identity?.available ? (identity.href ?? null) : null;
+  const identity = loading ? null : (context ?? null);
+  const href = !failure && identity?.available ? (identity.href ?? null) : null;
   return (
     <div
       className="min-w-0 max-w-full space-y-3 [overflow-wrap:anywhere]"

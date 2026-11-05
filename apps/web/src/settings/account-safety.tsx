@@ -364,17 +364,17 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
           <>
             <AccountRenameLink
               context={isCurrent() ? (props.renameAccount ?? null) : null}
-              loading={(read?.loading ?? false) || !isCurrent()}
+              loading={read?.loading ?? false}
               failure={isCurrent() ? failure : undefined}
             />
             {props.renameRead ? (
-              <div aria-busy={props.renameRead.loading || !isCurrent()} className="space-y-2">
+              <div aria-busy={props.renameRead.loading} className="space-y-2">
                 <Button
                   ref={renameReload}
                   type="button"
                   variant="outline"
                   className={actionClass}
-                  disabled={props.renameRead.loading || waiting || !isCurrent()}
+                  disabled={props.renameRead.loading || waiting}
                   aria-describedby={waiting ? `${id}-rename-wait` : undefined}
                   onClick={(event) => {
                     restoreRenameFocus.current = event.detail === 0;
