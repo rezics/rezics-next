@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, useState } from 'react';
+import { act, useState, type ReactNode } from 'react';
 import { createKernelClient } from '@rezics/client';
 import { supportedProgressState } from '../src/library/progress-reads';
 import type {
@@ -43,6 +43,14 @@ import { newCsrfToken } from '../src/session/csrf';
 mock.module('../src/session/request', () => ({
   prepareSession: async () => {},
   viewerCredential: () => 'Bearer progress-owner',
+}));
+mock.module('../src/library/progress-server', () => ({
+  recordProgressSession: () => {
+    throw new Error('The mounted visit must use its supplied sender');
+  },
+}));
+mock.module('../src/kernel/exposure', () => ({
+  Exposure: ({ children }: { children: ReactNode }) => children,
 }));
 
 const sessionId = '0192f3a0-6c1e-7b2a-9d4e-000000000020';
