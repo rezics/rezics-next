@@ -173,11 +173,11 @@ type GameReaderReturnResult =
   | { kind: 'current'; statement: GameStatement };
 
 function resolveGameReaderReturn(
-  props: Props,
+  props: Pick<Props, 'id' | 'context' | 'type' | 'locale' | 'realm' | 'reader' | 'spoiler'>,
+  selection: GameClassificationReturn,
   page: GameReaderReady | undefined,
   failure: GameReaderRead | undefined,
 ): GameReaderReturnResult {
-  const selection = props.returnSelection!;
   if (
     selection.holder.toLowerCase() !== props.id.toLowerCase() ||
     selection.context !== props.context ||
@@ -244,7 +244,9 @@ function GameWindow({
   type,
   locale,
   realm,
+  reader,
   spoiler = 0,
+  returnSelection,
   transport,
   initial,
   current,
@@ -308,14 +310,14 @@ function GameWindow({
     ) : (
       body
     );
-  const returnState = props.returnSelection
-    ? resolveGameReaderReturn(props, page, failure)
+  const returnState = returnSelection
+    ? resolveGameReaderReturn({ id, context, type, locale, realm, reader, spoiler }, returnSelection, page, failure)
     : undefined;
   const [missingReturnTarget, setMissingReturnTarget] = useState(false);
-  const returnKey = props.returnSelection ? JSON.stringify(props.returnSelection) : '';
+  const returnKey = returnSelection ? JSON.stringify(returnSelection) : '';
   const settledReturn = useRef('');
   useLayoutEffect(() => {
-    const selection = props.returnSelection;
+    const selection = returnSelection;
     if (
       !selection ||
       settledReturn.current === returnKey ||
@@ -395,13 +397,10 @@ function GameWindow({
         </nav>
       </div>
       {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
-      {returnState &&
-      (missingReturnTarget || (returnState.kind !== 'current' && returnState.kind !== 'pending')) ? (
-        <p role="status">
-          {missingReturnTarget
-            ? m.game_visit_selection_changed({}, o)
-            : gameReaderReturnMessage(returnState.kind, o)}
-        </p>
+      {missingReturnTarget ? (
+        <p role="status">{m.game_visit_selection_changed({}, o)}</p>
+      ) : returnState && returnState.kind !== 'current' && returnState.kind !== 'pending' ? (
+        <p role="status">{gameReaderReturnMessage(returnState.kind, o)}</p>
       ) : null}
       {!page ? <SafeNavigation id={id} locale={locale} realm={realm} /> : null}
       {!page ? failureNotice : null}

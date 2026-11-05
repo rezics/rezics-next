@@ -106,7 +106,14 @@ function GameProfileLive({
     : '';
   const inspectionVisit =
     visit && selectionKey && closedSelection === selectionKey
-      ? { ...visit, selection: undefined }
+      ? {
+          context: visit.context,
+          ...(visit.realm !== undefined ? { realm: visit.realm } : {}),
+          ...(visit.source !== undefined ? { source: visit.source } : {}),
+          ...(visit.type !== undefined ? { type: visit.type } : {}),
+          ...(visit.release !== undefined ? { release: visit.release } : {}),
+          ...(visit.reader !== undefined ? { reader: visit.reader } : {}),
+        }
       : visit;
   const query = useQuery({
     queryKey: ['game-profile', id ?? 'new', locale, address, visit ? gameVisitSearch(visit) : '', lifetime.generation],
@@ -317,7 +324,7 @@ function GameProfileLive({
               key={JSON.stringify([
                 privateReading.current.public.subject.id,
                 privateReading.current.public.subject.context,
-                privateReading.current.release.digest,
+                privateReading.current.digest,
                 locale,
                 session,
                 reader,
@@ -531,7 +538,7 @@ function GameCorrection({
       holder: subject.id,
       type: subject.type,
       locale,
-      release: read.release.digest,
+      release: read.digest,
       reader,
       selection: selected,
       focus,
@@ -549,7 +556,7 @@ function GameCorrection({
         holder: subject.id,
         type: subject.type,
         locale,
-        release: read.release.digest,
+        release: read.digest,
         reader,
         selection: selected,
         focus: 'none',
@@ -683,7 +690,7 @@ function GameCorrection({
           ))}
       {visible && selected && selectedStatement ? (
         <section
-          key={`${projection.current.revision}:${read.public.subject.id}:${read.public.subject.context}:${read.release.digest}:${selected.property}:${selected.statement}`}
+          key={`${projection.current.revision}:${read.public.subject.id}:${read.public.subject.context}:${read.digest}:${selected.property}:${selected.statement}`}
           className="space-y-4 rounded-xl border border-border p-4"
           aria-labelledby="game-current-assertion-heading"
         >
@@ -901,7 +908,7 @@ function resolveGameSelection(
     selection.holder.toLowerCase() !== subject.id.toLowerCase() ||
     visit.context !== subject.context ||
     visit.type !== subject.type ||
-    visit.release !== read.release.digest ||
+    visit.release !== read.digest ||
     visit.reader !== reader ||
     new URL(visit.source, 'https://rezics.invalid').pathname.split('/')[1] !== locale
   )

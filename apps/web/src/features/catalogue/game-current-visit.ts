@@ -56,8 +56,7 @@ export function parseGameVisit(search: string, id: string, locale: string): Game
   const source = params.get('source') ?? undefined;
   const type = params.get('type') ?? undefined;
   const release = params.get('release') ?? undefined;
-  const readerInput = params.has('reader') ? params.get('reader') : undefined;
-  const reader = readerInput === undefined ? undefined : readerInput === 'anonymous' ? null : readerInput;
+  const readerInput = params.has('reader') ? (params.get('reader') ?? '') : undefined;
   const hasSelection = ['holder', 'property', 'statement'].some((key) => params.has(key));
   const selection = hasSelection
     ? {
@@ -98,7 +97,7 @@ export function parseGameVisit(search: string, id: string, locale: string): Game
       ...(source ? { source } : {}),
       ...(type ? { type } : {}),
       ...(release ? { release } : {}),
-      ...(readerInput !== undefined ? { reader } : {}),
+      ...(readerInput !== undefined ? { reader: readerInput === 'anonymous' ? null : readerInput } : {}),
       ...(selection ? { selection } : {}),
     },
   };

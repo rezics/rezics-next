@@ -31,7 +31,7 @@ function GameProfileSessionLive({
   address?: string | undefined;
 }) {
   const editorWork = useCatalogueLifetime('transport');
-  const { state } = useSession();
+  const session = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
@@ -41,10 +41,10 @@ function GameProfileSessionLive({
     <GameProfile
       {...(id ? { id } : {})}
       locale={locale}
-      reader={state.state === 'signed-in' ? (state.subject ?? null) : null}
+      reader={session.state === 'signed-in' ? (session.subject ?? null) : null}
       visit={visit}
       address={address}
-      session={state}
+      session={session.state}
       search={search}
       onNavigate={(href) => {
         window.location.assign(href);
