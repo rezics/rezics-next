@@ -1,4 +1,5 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { dirname } from 'node:path';
 import { act, createElement, Fragment, StrictMode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -6,7 +7,7 @@ import * as storyStart from '../.storybook/react-start';
 
 let currentRequest = new Request('https://site.test/en');
 const sessionEnv: Record<string, unknown> = {};
-let serverFunctionDepth = 0;
+const serverFunctionContext = new AsyncLocalStorage<boolean>();
 
 const testStart = {
   ...storyStart,
@@ -18,19 +19,7 @@ const testStart = {
         return chain;
       },
       handler<T extends (...args: never[]) => unknown>(handler: T): T {
-        const invoke = ((...input: never[]) => {
-          serverFunctionDepth++;
-          let result: unknown;
-          try {
-            result = handler(...input);
-          } catch (error) {
-            serverFunctionDepth--;
-            throw error;
-          }
-          return Promise.resolve(result).finally(() => {
-            serverFunctionDepth--;
-          }) as T;
-        }) as T;
+        const invoke = ((...input: never[]) => serverFunctionContext.run(true, () => handler(...input))) as T;
         return base.handler(invoke);
       },
     };
@@ -40,7 +29,7 @@ const testStart = {
     let serverHandler: (...args: unknown[]) => unknown = () => undefined;
     let clientHandler: (...args: unknown[]) => unknown = serverHandler;
     const invoke = (...args: unknown[]) =>
-      (typeof window === 'undefined' || serverFunctionDepth > 0 ? serverHandler : clientHandler)(...args);
+      (typeof window === 'undefined' || serverFunctionContext.getStore() === true ? serverHandler : clientHandler)(...args);
     const chain = {
       server(handler: (...args: unknown[]) => unknown) {
         serverHandler = handler;
