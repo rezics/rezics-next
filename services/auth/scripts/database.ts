@@ -274,11 +274,11 @@ function waitUntilReady(container: string): void {
     last = inspect;
     const [status] = inspect.split(' ');
     if (status === 'running') {
-      const ready = spawnSync(
-        'docker',
-        ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE],
-        { cwd: directory, encoding: 'utf8', timeout: 5_000 },
-      );
+      const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-U', 'rezics', '-d', TEMPLATE_DATABASE], {
+        cwd: directory,
+        encoding: 'utf8',
+        timeout: 5_000,
+      });
       if (!ready.error && ready.status === 0) return;
     }
     const remaining = deadline - Date.now();
