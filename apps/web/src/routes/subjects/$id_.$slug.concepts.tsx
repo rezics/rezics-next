@@ -1,5 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
-import { SourceConceptSession } from '../../features/catalogue/source-concept-explorer/session';
+import { SourceConceptPublicSession } from '../../features/catalogue/source-concept-explorer/session';
+import { parseConceptPublicVisit } from '../../features/catalogue/source-concept-explorer/public-visit';
 import { getLocale } from '../../paraglide/runtime.js';
 import { originatingConceptReturn } from '../../features/pages/source-concept-reading/origin';
 import {
@@ -14,6 +15,9 @@ import type { ConceptWorksRoutePatch } from '../../features/catalogue/concept-wo
 
 export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
   staticData: { publicCache: false },
+  loader: ({ params, location }) => ({
+    publicVisit: parseConceptPublicVisit(location.searchStr, params.id, getLocale(), location.pathname, location.hash),
+  }),
   validateSearch: (search: Record<string, unknown>) => {
     const role = search.role;
     const returnTo = search.returnTo;
@@ -28,6 +32,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
     const cursor = search.cursor;
     const conceptVisitRaw = search.conceptVisit;
     const hierarchyRaw = search.hierarchy;
+    const origin = search.origin;
+    const publicReturn = search.publicReturn;
     let invalid = false;
     if (
       role !== undefined &&
@@ -72,6 +78,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
       hierarchy: typeof hierarchyRaw === 'string' && hierarchyRaw.length <= 8192 ? hierarchyRaw : undefined,
       hierarchyAddress,
       invalidHierarchy: hierarchyRaw !== undefined && !hierarchyAddress,
+      ...(typeof origin === 'string' ? { origin } : {}),
+      ...(typeof publicReturn === 'string' ? { publicReturn } : {}),
       invalid,
     };
   },
@@ -81,6 +89,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({
 
 function ConceptsRoute() {
   const { id } = Route.useParams();
+  const location = Route.useLocation();
+  const { publicVisit } = Route.useLoaderData();
   const {
     role,
     returnTo,
@@ -213,10 +223,12 @@ function ConceptsRoute() {
     });
   };
   return (
-    <SourceConceptSession
-      key={JSON.stringify([id, getLocale(), roleValue])}
+    <SourceConceptPublicSession
+      key={JSON.stringify([id, getLocale(), roleValue, publicVisit])}
       id={id}
       locale={getLocale()}
+      publicVisit={publicVisit}
+      pathname={location.pathname}
       role={roleValue}
       returnTo={returnTo}
       conceptVisit={conceptVisitDescriptor}

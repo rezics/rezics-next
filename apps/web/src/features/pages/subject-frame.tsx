@@ -24,6 +24,7 @@ import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { ReleaseFidelityEntry } from '../catalogue/release-fidelity/entry';
 import { CatalogueFileProfileEntry } from '../catalogue/catalogue-file-profile/entry';
 import { candidateContext } from '../../subject/candidates';
+import { conceptPublicReturnHref } from '../catalogue/source-concept-explorer/public-visit';
 import type { KernelClient } from '@rezics/client';
 import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import {
@@ -274,6 +275,7 @@ export function SubjectFrame({
   const title = frame.title.text || unlabelled;
   const base = subjectHref({ id: frame.id, label: title }, locale).href;
   const observedContext = context ?? frame.context;
+  const conceptReturnHref = conceptPublicReturnHref(base, frame.id, locale, observedContext, realm);
   const releaseOrigin = `${location.pathname}${observedContext ? `?${new URLSearchParams({ context: observedContext })}` : ''}`;
   const facts = [typeLabel, frame.date].filter((fact): fact is string => !!fact);
   return (
@@ -405,6 +407,7 @@ export function SubjectFrame({
         context={observedContext}
         realm={realm}
         returnTo={returnTo}
+        publicReturnHref={conceptReturnHref}
       />
       <ReleaseFidelitySlot
         subjectId={frame.id}

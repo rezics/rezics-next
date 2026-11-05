@@ -9,6 +9,7 @@ import { addonPublicCorrectionHref, type AddonPublicOrigin } from './addon-publi
 import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation';
 import { isReleaseType } from './release-fidelity/model';
 import { releaseEntryHref, RELEASE_ENTRY_BYTES } from './release-fidelity/navigation';
+import { conceptPublicOriginHref, type ConceptPublicOrigin } from './source-concept-explorer/public-visit';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -373,11 +374,31 @@ export const catalogueEntries = {
     if (!addressFits(href)) return unsupportedQuotation(address, 'address');
     return { group: 'read', label: m.quotation_title({}, options(locale)), href };
   },
-  concepts: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
-    group: 'read',
-    label: m.concept_explore_title({}, options(locale)),
-    href: `${subject({ id, label, locale })}/concepts`,
-  }),
+  concepts: ({
+    id,
+    label = '',
+    locale,
+    context,
+    realm,
+    returnHref,
+  }: Locale & {
+    id: string;
+    label?: string | undefined;
+    context?: string | undefined;
+    realm?: string | undefined;
+    returnHref?: string | undefined;
+  }): CatalogueEntry => {
+    const base = `${subject({ id, label, locale })}/concepts`;
+    const hasObservation = context !== undefined || realm !== undefined || returnHref !== undefined;
+    const origin: ConceptPublicOrigin | undefined = hasObservation
+      ? { subject: id, context: context ?? '', locale, ...(realm ? { realm } : {}), returnHref: returnHref ?? '' }
+      : undefined;
+    return {
+      group: 'read',
+      label: m.concept_explore_title({}, options(locale)),
+      href: origin ? conceptPublicOriginHref(base, origin) : base,
+    };
+  },
   musicContext: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
     group: 'read',
     label: m.music_context_title({}, options(locale)),
