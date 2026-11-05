@@ -400,94 +400,6 @@ async function startDurableWorker(
   }
 }
 
-function ownedPostgresDiagnostics(container: string): string {
-  const inspect = Bun.spawnSync([
-    'docker',
-    'inspect',
-    '-f',
-    '{{.State.Status}} running={{.State.Running}} oom={{.State.OOMKilled}} err={{.State.Error}}',
-    container,
-  ]);
-  const port = Bun.spawnSync(['docker', 'port', container, '5432/tcp']);
-  const logs = Bun.spawnSync(['docker', 'logs', '--tail', '80', container]);
-  return [
-    inspect.stdout.toString().trim(),
-    inspect.stderr.toString().trim(),
-    port.stdout.toString().trim(),
-    port.stderr.toString().trim(),
-    logs.stdout.toString().trim(),
-    logs.stderr.toString().trim(),
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
-function ownedPostgresPublishedUrl(container: string): string | undefined {
-  const portResult = Bun.spawnSync(['docker', 'port', container, '5432/tcp']);
-  const port = Number(portResult.stdout.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
-  if (!Number.isInteger(port) || port <= 0) return undefined;
-  return `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
-}
-
-function ownedPostgresDirectUrl(container: string): string | undefined {
-  const inspect = Bun.spawnSync([
-    'docker',
-    'inspect',
-    '-f',
-    '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',
-    container,
-  ]);
-  const address = inspect.stdout.toString().trim().split(/\s+/).find(Boolean);
-  if (inspect.exitCode !== 0 || !address) return undefined;
-  return `postgres://rezics:rezics@${address}:5432/rezics?sslmode=disable`;
-}
-
-async function probeOwnedPostgres(databaseUrl: string): Promise<void> {
-  const probe = new Pool({
-    connectionString: databaseUrl,
-    connectionTimeoutMillis: 1500,
-    max: 1,
-  });
-  try {
-    await probe.query('SELECT 1');
-  } finally {
-    await probe.end();
-  }
-}
-
-async function waitForOwnedPostgres(container: string): Promise<string> {
-  const deadline = Date.now() + 120_000;
-  let lastError: unknown;
-  while (true) {
-    const inspect = Bun.spawnSync([
-      'docker',
-      'inspect',
-      '-f',
-      '{{.State.Running}} {{.State.Status}} {{.State.OOMKilled}}',
-      container,
-    ]);
-    const state = inspect.stdout.toString().trim();
-    if (inspect.exitCode !== 0 || state.startsWith('false '))
-      throw new Error(`Disposable PostgreSQL did not become ready.\n${ownedPostgresDiagnostics(container)}`);
-    const urls = [ownedPostgresPublishedUrl(container), ownedPostgresDirectUrl(container)].filter(
-      (url): url is string => url !== undefined,
-    );
-    for (const url of urls) {
-      try {
-        await probeOwnedPostgres(url);
-        return url;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    if (Date.now() >= deadline)
-      throw new Error(`Disposable PostgreSQL did not become ready.\n${ownedPostgresDiagnostics(container)}`, {
-        cause: lastError,
-      });
-    await Bun.sleep(500);
-  }
-}
-
 async function startStack(): Promise<
   Omit<NativeWebStack, 'kernel' | 'request' | 'routeAuthPages'> & {
     routeAuthPages(origin?: string): Promise<string>;
@@ -641,22 +553,46 @@ async function startStack(): Promise<
       console.info('Native web stack cleanup: complete');
     })());
   try {
-    if (!process.env.DATABASE_URL) {
-      reportStackProgress('Native web stack startup: starting PostgreSQL');
-      const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
-      postgresContainer = startPostgresContainer();
-      if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
-      process.env.DATABASE_URL = await waitForOwnedPostgres(postgresContainer);
-      reportStackProgress('Native web stack startup: PostgreSQL ready');
-    }
     reportStackProgress('Native web stack startup: registering kernel SQL modules');
     // Match the kernel test preload before evaluating anything that imports SQL.
     await import(new URL('../../../../services/kernel/node_modules/reylo/src/register.js', import.meta.url).href);
     reportStackProgress('Native web stack startup: kernel SQL modules registered');
-    if (postgresContainer) {
+    if (!process.env.DATABASE_URL) {
+      reportStackProgress('Native web stack startup: starting PostgreSQL');
+      const { startPostgresContainer } = await import('../../../../services/kernel/scripts/check.ts');
       const { migrate } = await import('../../../../services/kernel/scripts/database.ts');
+      postgresContainer = startPostgresContainer();
+      if (process.env.NATIVE_WEB_STACK_HOST === '1') process.send?.({ postgresContainer } satisfies HostReply);
+      const portResult = Bun.spawnSync(['docker', 'port', postgresContainer, '5432/tcp']);
+      if (portResult.exitCode !== 0)
+        throw new Error(`Could not get owned PostgreSQL port: ${portResult.stderr.toString()}`);
+      const port = Number(portResult.stdout.toString().match(/127\.0\.0\.1:(\d+)/)?.[1]);
+      if (!Number.isInteger(port) || port <= 0)
+        throw new Error(`Could not parse owned PostgreSQL port: ${portResult.stdout.toString()}`);
+      const databaseUrl = `postgres://rezics:rezics@127.0.0.1:${port}/rezics?sslmode=disable`;
+      const deadline = Date.now() + 60_000;
+      while (true) {
+        const probe = new Pool({
+          connectionString: databaseUrl,
+          connectionTimeoutMillis: 1500,
+          max: 1,
+        });
+        try {
+          await probe.query('SELECT 1');
+          break;
+        } catch (error) {
+          if (Date.now() >= deadline)
+            throw new Error('Disposable PostgreSQL did not become ready.', {
+              cause: error,
+            });
+          await Bun.sleep(500);
+        } finally {
+          await probe.end();
+        }
+      }
+      process.env.DATABASE_URL = databaseUrl;
       reportStackProgress('Native web stack startup: PostgreSQL ready; migrating database');
-      migrate(process.env.DATABASE_URL!);
+      migrate(databaseUrl);
       reportStackProgress('Native web stack startup: PostgreSQL migration complete');
     }
     reportStackProgress('Native web stack startup: preparing SQL analysis');
