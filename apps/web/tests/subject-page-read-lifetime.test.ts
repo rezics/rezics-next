@@ -70,6 +70,7 @@ mock.module('../src/session/request', () => ({
   },
   viewerCredential: () => null,
   sessionSubject: () => null,
+  requestCsrfToken: () => null,
 }));
 mock.module('../src/kernel/client', () => ({
   kernelClient: () => activeClient as never,
