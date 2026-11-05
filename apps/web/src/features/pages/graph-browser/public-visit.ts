@@ -100,7 +100,7 @@ export function graphPublicOriginHref(base: string, origin: GraphPublicOrigin): 
     ...(origin.realm === undefined ? {} : { realm: origin.realm }),
     returnHref: origin.returnHref,
   };
-  const href = `${base}?${new URLSearchParams({ origin: JSON.stringify(value) })}`;
+  const href = `${base}?${new URLSearchParams({ origin: encodeURIComponent(JSON.stringify(value)) })}`;
   const url = new URL(href, 'https://rezics.invalid');
   return graphPublicIntentFits(href) && graphPublicIntentFits(`${url.pathname}${url.search}${url.hash}`)
     ? href
@@ -218,12 +218,14 @@ export function parseGraphPublicVisit(
   if (rawOrigin !== null) {
     let value: unknown;
     try {
-      value = JSON.parse(rawOrigin);
+      value = JSON.parse(decodeURIComponent(rawOrigin));
     } catch {
       return { kind: 'invalid' };
     }
     const origin = originOf(value, id, locale);
-    return origin && JSON.stringify(origin) === rawOrigin ? { kind: 'origin', origin } : { kind: 'invalid' };
+    return origin && encodeURIComponent(JSON.stringify(origin)) === rawOrigin
+      ? { kind: 'origin', origin }
+      : { kind: 'invalid' };
   }
 
   const admitted = validReturn(returnHref, id, locale);
