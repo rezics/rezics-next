@@ -186,9 +186,7 @@ test('the default real Search and Suggest recheck corrected native terms while i
     const safeId = (safe.body.subject as { id: string }).id;
     const filter = { type: { in: ['schema:Book'] } };
 
-    const initial = subjects(
-      await currentPage(driver, { text: oldAlias, filter, sort: 'id', limit: 100 }),
-    );
+    const initial = subjects(await currentPage(driver, { text: oldAlias, filter, sort: 'id', limit: 100 }));
     expect(new Set(initial.map((hit) => hit.id))).toEqual(new Set([changedId, safeId]));
     expect(new Set(subjects(await currentSuggestions(driver, oldAlias)).map((hit) => hit.id))).toEqual(
       new Set([changedId, safeId]),
@@ -211,9 +209,7 @@ test('the default real Search and Suggest recheck corrected native terms while i
     );
     expect(patch.status).toBe(200);
 
-    const duringLag = subjects(
-      await currentPage(driver, { text: oldAlias, filter, sort: 'id', limit: 100 }),
-    );
+    const duringLag = subjects(await currentPage(driver, { text: oldAlias, filter, sort: 'id', limit: 100 }));
     expect(duringLag.map((hit) => hit.id)).toEqual([safeId]);
     expect(subjects(await currentSuggestions(driver, oldAlias)).map((hit) => hit.id)).toEqual([safeId]);
 
