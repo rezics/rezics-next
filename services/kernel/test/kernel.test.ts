@@ -523,6 +523,7 @@ const typed = [
   'GET /v1/realms/:realmId/review-destinations',
   'GET /v1/realms/:realmId/rulesAuthoring',
   'GET /v1/realms/:realmId/settings',
+  'GET /v1/subjectIdentityOperations/:id',
   'GET /v1/subjects/:id/candidates/:candidate/lifecycle',
   'GET /v1/subjects/:id/source-statistics/:source/observations',
   'GET /v1/threads/:id/reading-page',

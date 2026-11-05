@@ -1,9 +1,8 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import {
   assertNoServiceImports,
-  clientCompilerEnvironment,
   clientDeclarations,
   committedDeclarations,
 } from '../scripts/client.ts';
@@ -152,15 +151,37 @@ test('client generation refuses declarations importing a service workspace and n
   }
 });
 
-test("the client compiler ignores the caller's Reylo project", () => {
-  const environment = clientCompilerEnvironment({
-    REYLO_CONFIG: '/somewhere/.reylo.yaml',
-    DATABASE_URL: 'postgres://example/db',
-    PATH: '/usr/bin',
-  });
-  expect(environment).not.toHaveProperty('REYLO_CONFIG');
-  expect(environment.DATABASE_URL).toBe('postgres://example/db');
-  expect(environment.PATH).toBe('/usr/bin');
+test('client compilation preserves prepared SQL analysis without a database URL', () => {
+  const fixture = mkdtempSync(resolve(PROJECT_ROOT, '.temp/kernel-client-environment-'));
+  const kernel = resolve(fixture, 'services/kernel');
+  const previousConfig = process.env.REYLO_CONFIG;
+  const previousDatabase = process.env.DATABASE_URL;
+  try {
+    mkdirSync(resolve(kernel, 'src/http'), { recursive: true });
+    writeFileSync(resolve(kernel, 'tsconfig.json'), JSON.stringify({ compilerOptions: { types: [] } }));
+    writeFileSync(resolve(kernel, 'src/http/kernel.ts'), 'export type Kernel = string;');
+    writeFileSync(resolve(kernel, 'src/http/request.ts'), 'export type Request = string;');
+    const config = resolve(fixture, '.reylo.yaml');
+    writeFileSync(config, 'direct_url: ""\n');
+    const compiler = resolve(fixture, 'compiler');
+    writeFileSync(compiler, `#!/usr/bin/env bun
+if (process.env.REYLO_CONFIG !== ${JSON.stringify(config)} || process.env.DATABASE_URL !== undefined)
+  throw new Error('Prepared SQL analysis environment was lost');
+const result = Bun.spawnSync([${JSON.stringify(resolve(PROJECT_ROOT, 'node_modules/.bin/tsc'))}, ...process.argv.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
+process.exit(result.exitCode);
+`);
+    chmodSync(compiler, 0o755);
+    process.env.REYLO_CONFIG = config;
+    delete process.env.DATABASE_URL;
+    expect([...clientDeclarations(kernel, { repositoryRoot: fixture, compiler }).keys()])
+      .toEqual(['http/kernel.d.ts', 'http/request.d.ts']);
+  } finally {
+    if (previousConfig === undefined) delete process.env.REYLO_CONFIG;
+    else process.env.REYLO_CONFIG = previousConfig;
+    if (previousDatabase === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabase;
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });
 
 test('generated client declarations import no Auth service and declare all package dependencies', async () => {
