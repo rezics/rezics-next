@@ -484,7 +484,9 @@ const correctionPageSchema = t.Object(
     page: t.Integer({ minimum: 0, maximum: 3 }),
     pageCount: t.Integer({ minimum: 1, maximum: 4 }),
     nextPage: t.Union([t.Integer({ minimum: 1, maximum: 3 }), t.Null()]),
-    items: t.Array(correctionItemSchema, { maxItems: ENTRY_ANNOTATION_CORRECTION_LIMITS.page }),
+    items: t.Unsafe<readonly Static<typeof correctionItemSchema>[]>(
+      t.Array(correctionItemSchema, { maxItems: ENTRY_ANNOTATION_CORRECTION_LIMITS.page }),
+    ),
   },
   closed,
 );
@@ -817,7 +819,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     languages: readonly string[] | undefined,
     revalidate: () => Promise<void>,
   ) {
-    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, { languages, revalidate });
+    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, {
+      ...(languages === undefined ? {} : { languages }),
+      revalidate,
+    });
   }
   return app
     .post(
@@ -839,7 +844,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().create(actor, body)),
         );
         set.status = 201;
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .get(
@@ -857,7 +862,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const review = await admission.run('normal', job, () =>
           correctionCommand(() => corrections().readPage(actor, params.reviewId, query.page)),
         );
-        return { review } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...review, items: [...review.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .post(
@@ -884,7 +889,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().confirmItem(actor, params.reviewId, body.epoch, body.position)),
         );
         if (result.commandOutcome) session.record(result.commandOutcome);
-        return { review: result.page } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<typeof correctionPageResponse>;
       },
     )
     .post(
@@ -952,7 +957,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         shelfOwner(actor);
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, () =>
-          command(() => createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders))),
+          command(() =>
+            createShelfScorePreparation(config())(actor, idempotencyKeyOf(requestHeaders[IDEMPOTENCY_HEADER])),
+          ),
         );
       },
     )

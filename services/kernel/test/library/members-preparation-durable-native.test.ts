@@ -136,7 +136,7 @@ test('one History original registers the real native reservation and transfers c
   const fixture = await native.fixture();
   const deadline = Date.now() + 60_000;
   const history = openWorkExecutionOriginal(native.db.pool, deadline, native.workClient);
-  const result = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()], { history });
+  const result = await fixture.store.reserve(fixture.actor, fixture.collectionId, [definition()], { history, deadline });
   expect(result.episodes[0]!.state).toBe('preparing');
   expect(result.history).toBeDefined();
   const transfers = result.history!;
