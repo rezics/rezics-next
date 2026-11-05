@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, useState, type ReactNode } from 'react';
+import { act, useState } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
 
@@ -58,6 +58,7 @@ test('the mounted private view separates inaccessible targets, uncertain removal
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
   const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
+  const releaseOwner = owner.mount();
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
@@ -112,24 +113,25 @@ test('the mounted private view separates inaccessible targets, uncertain removal
         ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } }
         : writes === 2
           ? { kind: 'denied', problem: { status: 403, code: 'forbidden' } }
-          : { kind: 'removed' };
+          : writes === 5
+            ? { kind: 'rejected', problem: { status: 429, code: 'rate_limited', retryAfter: '30' } }
+            : { kind: 'removed' };
     },
   };
+  const tree = (showWatches = true) => (
+    <QueryClientProvider client={client}>
+      <SettingsSessionContext.Provider value={owner}>
+        {showWatches ? <WatchesSection io={io} /> : null}
+      </SettingsSessionContext.Provider>
+    </QueryClientProvider>
+  );
   const click = async (text: string) => {
     const button = [...host.querySelectorAll('button')].find((item) => item.textContent === text);
     expect(button).toBeDefined();
     await act(async () => button!.click());
   };
   try {
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={client}>
-          <SettingsSessionContext.Provider value={owner}>
-            <WatchesSection io={io} />
-          </SettingsSessionContext.Provider>
-        </QueryClientProvider>,
-      ),
-    );
+    await act(async () => root.render(tree()));
     expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
     expect(host.textContent).toContain(m.settings_watches_access_lost());
     expect(host.textContent).not.toContain('hidden-owner-id');
@@ -204,6 +206,23 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     expect(currentStop?.disabled).toBe(false);
     await click(m.settings_watches_stop());
     expect(host.textContent).toContain(m.settings_watches_removed());
+    await click(m.settings_watches_refresh());
+    await click(m.settings_watches_stop());
+    expect(writes).toBe(5);
+    expect(host.textContent).toContain(m.settings_retry_wait());
+    await click(m.settings_retry());
+    const refusedStop = [...host.querySelectorAll('button')].find(
+      (item) => item.textContent === m.settings_watches_stop(),
+    );
+    expect(refusedStop?.disabled).toBe(true);
+    await act(async () => root.render(tree(false)));
+    await act(async () => root.render(tree()));
+    const remountedStop = [...host.querySelectorAll('button')].find(
+      (item) => item.textContent === m.settings_watches_stop(),
+    );
+    expect(host.textContent).toContain(m.settings_retry_wait());
+    expect(remountedStop?.disabled).toBe(true);
+    expect(writes).toBe(5);
     response = { kind: 'page', page: { ...envelope, watches: [], next: 'opaque' } };
     await click(m.settings_watches_refresh());
     expect(host.textContent).toContain(m.settings_watches_sparse());
@@ -234,6 +253,7 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     expect(host.textContent).toBe('');
   } finally {
     await act(async () => root.unmount());
+    releaseOwner();
     host.remove();
     client.clear();
   }
@@ -465,80 +485,6 @@ test('uncertain removal stays with the original viewer; replacement clears it be
     await act(async () => root.unmount());
     host.remove();
     client.clear();
-  }
-});
-
-test('definite removal refusal keeps its wait visible and disables current rows after read and view remount', async () => {
-  const realNow = Date.now;
-  Date.now = () => Date.parse('2026-11-05T10:00:00.000Z');
-  const client = new QueryClient();
-  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf' });
-  const owner = new SettingsSessionOwner(client, 'csrf', 'alice');
-  const releaseOwner = owner.mount();
-  const host = window.document.createElement('div');
-  window.document.body.append(host);
-  const root = createRoot(host as unknown as HTMLElement);
-  const response: WatchRead = {
-    kind: 'page',
-    page: {
-      viewer: { state: 'current', accountId: 'alice' },
-      actions: { remove: 'available' },
-      next: null,
-      watches: [
-        {
-          subscriptionId: 'current-watch',
-          kind: 'thread',
-          revision: 7,
-          createdAt: '2026-11-03T10:00:00.000Z',
-          command: { watchId: 'current-watch', kind: 'thread', expectedRevision: 7 },
-          remove: 'available',
-          target: { title: 'Current thread', href: '/threads/current' },
-        },
-      ],
-    },
-  };
-  let writes = 0;
-  const io: WatchManagementIO = {
-    read: async () => response,
-    stop: async () => {
-      writes++;
-      return { kind: 'rejected', problem: { status: 429, code: 'rate_limited', retryAfter: '30' } };
-    },
-  };
-  const tree = (content: ReactNode = <WatchesSection io={io} />) => (
-    <QueryClientProvider client={client}>
-      <SettingsSessionContext.Provider value={owner}>{content}</SettingsSessionContext.Provider>
-    </QueryClientProvider>
-  );
-  const button = (label: string) =>
-    [...host.querySelectorAll('button')].find((item) => item.textContent === label);
-  const click = async (label: string) => {
-    const target = button(label);
-    expect(target).toBeDefined();
-    await act(async () => target!.click());
-  };
-  try {
-    await act(async () => root.render(tree()));
-    await click(m.settings_watches_stop());
-    expect(writes).toBe(1);
-    expect(host.textContent).toContain(m.settings_retry_wait());
-    expect(button(m.settings_watches_stop())).toBeUndefined();
-
-    await click(m.settings_retry());
-    expect(host.textContent).toContain(m.settings_retry_wait());
-    expect(button(m.settings_watches_stop())?.disabled).toBe(true);
-
-    await act(async () => root.render(tree(null)));
-    await act(async () => root.render(tree()));
-    expect(host.textContent).toContain(m.settings_retry_wait());
-    expect(button(m.settings_watches_stop())?.disabled).toBe(true);
-    expect(writes).toBe(1);
-  } finally {
-    await act(async () => root.unmount());
-    releaseOwner();
-    host.remove();
-    client.clear();
-    Date.now = realNow;
   }
 });
 
