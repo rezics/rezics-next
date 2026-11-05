@@ -19,5 +19,5 @@ export async function acquireBangumiPersonSources(
   } = {},
 ): Promise<CrossMediaPlan> {
   const next = await acquireBangumiPersonCareerSources(plan, options);
-  return { ...next, personSources: next.personCareerSources };
+  return next.personCareerSources ? { ...next, personSources: next.personCareerSources } : next;
 }
