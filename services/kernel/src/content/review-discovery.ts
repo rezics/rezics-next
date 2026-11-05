@@ -21,8 +21,8 @@ import {
   type ReviewCensusStep,
 } from './review-census.ts';
 
-export const REVIEW_DISCOVERY_READ_LIMIT = 100;
-export const REVIEW_DISCOVERY_PAGE_LIMIT = 25;
+import { REVIEW_DISCOVERY_READ_LIMIT, REVIEW_DISCOVERY_PAGE_LIMIT } from './review-discovery-limits.ts';
+export { REVIEW_DISCOVERY_READ_LIMIT, REVIEW_DISCOVERY_PAGE_LIMIT } from './review-discovery-limits.ts';
 export const REVIEW_DISCOVERY_CANDIDATE_FACTOR = 4;
 export const REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES = REVIEW_DISCOVERY_PAGE_LIMIT * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
 export const REVIEW_DISCOVERY_MAX_DEPENDENCIES = 512;

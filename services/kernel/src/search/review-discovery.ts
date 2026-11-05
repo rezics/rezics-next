@@ -1,11 +1,13 @@
 import type { ContentReadDependencies } from '../content/reads.ts';
 import {
   createReviewDiscoverySource as createContentReviewDiscoverySource,
-  REVIEW_DISCOVERY_PAGE_LIMIT as CONTENT_REVIEW_PAGE_LIMIT,
-  REVIEW_DISCOVERY_READ_LIMIT as CONTENT_REVIEW_READ_LIMIT,
   type ReviewDiscoveryCount as NativeReviewDiscoveryCount,
   type ReviewDiscoverySource as NativeReviewDiscoverySource,
 } from '../content/review-discovery.ts';
+import {
+  REVIEW_DISCOVERY_PAGE_LIMIT as CONTENT_REVIEW_PAGE_LIMIT,
+  REVIEW_DISCOVERY_READ_LIMIT as CONTENT_REVIEW_READ_LIMIT,
+} from '../content/review-discovery-limits.ts';
 import type { ReadContext } from '../content/model.ts';
 import { FEED_EXCERPT_LIMIT } from '../content/feed-summary.ts';
 import type { DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';

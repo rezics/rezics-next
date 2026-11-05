@@ -32,6 +32,9 @@ authority. Revocation stops later effects. Progress reports `processedPosts`, `e
 full count; terminal errors keep native `google.rpc.Status` and HTTP RFC 9457 forms. Point erasure and takedown remain
 synchronous. See [Content deletion](../services/kernel/src/content/README.md#deletion) for its native contract.
 
+Decision: retain the existing erasure and disclosure contracts; shared static limits and cost declarations must load
+without importing their runtime producers, so the native worker and served application can start in either import order.
+
 ## Account erasure
 
 1. **Confirmation and T.** Account erasure is final at confirmation, with fresh authentication and the typed
