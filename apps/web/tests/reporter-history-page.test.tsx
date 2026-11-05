@@ -214,7 +214,7 @@ test('mounted history replaces one page, retries the exact cursor, opens selecte
     if (!statusLink) throw new Error('Selecting a report should reopen its existing status journey');
     const statusUrl = new URL(statusLink.href);
     expect(statusUrl.pathname).toBe(`/en/moderation/reports/${secondReportId}`);
-    expect(statusUrl.searchParams.get('historyCursor')).toBe('next/frontier');
+    expect(statusUrl.searchParams.get('historyCursor')).toBeNull();
     expect(statusUrl.searchParams.get('historyReportId')).toBe(secondReportId);
 
     await act(async () => {

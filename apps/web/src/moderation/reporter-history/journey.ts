@@ -83,6 +83,7 @@ export function createReporterHistoryJourney(
     navigation,
   );
   const coordinates = navigation?.coordinates ?? createHistoryCoordinates();
+  const coordinateOwner = Symbol();
   let movementTicket = initial.movement;
   let intentional = false;
   let result: ReporterHistoryState = initial.result;
@@ -116,9 +117,10 @@ export function createReporterHistoryJourney(
       result = retired;
       serverResult = retired;
       source = null;
-      if (!intentional) coordinates.clear();
+      if (!intentional) coordinates.retire(coordinateOwner);
       return retired;
     }
+    coordinates.claim(coordinateOwner);
     if (result.state === 'loaded') {
       if (!owner.available()) return unavailable;
       if (navigation?.coordinates) routeHistoryCoordinates(cache).eligible(locale, result.nativeSourceFingerprint);
@@ -176,7 +178,7 @@ export function createReporterHistoryJourney(
       owner.retire();
       publish(retired);
       source = null;
-      if (!intentional) coordinates.clear();
+      if (!intentional) coordinates.retire(coordinateOwner);
     },
     isConnected: current,
     isCurrent: () => current() && owner.available() && snapshot().state === 'loaded',
@@ -190,7 +192,7 @@ export function createReporterHistoryJourney(
       const stop = owner.subscribe(() => {
         if (!owner.healthy()) {
           source = null;
-          if (!intentional) coordinates.clear();
+          if (!intentional) coordinates.retire(coordinateOwner);
           publish(retired);
         } else listener();
       });

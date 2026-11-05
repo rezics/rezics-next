@@ -11,7 +11,7 @@ import {
   type ReporterHistoryState,
   type ReporterHistoryVisit,
 } from './journey';
-import type { ReporterHistoryEntry, ReporterHistoryPage, ReporterHistoryQuery } from './model';
+import type { ReporterHistoryEntry, ReporterHistoryPage as HistoryPage, ReporterHistoryQuery } from './model';
 import { reporterHistoryStatusHref } from './navigation';
 import type { ReporterHistoryFocus } from './focus';
 import { browserObservation } from '../../session/observation';
@@ -307,7 +307,7 @@ function ReporterHistoryResults({
   onContinue,
   onOpenStatus,
 }: {
-  page: ReporterHistoryPage;
+  page: HistoryPage;
   query: ReporterHistoryQuery;
   onSelect: (reportId: string) => void | Promise<void>;
   onOpenStatus?: (reportId: string, cursor?: string) => Promise<void>;
