@@ -14,6 +14,7 @@ import { createSearchWorkModule } from '../search/work.ts';
 import { ratingWorkModule } from '../rating/work-module.ts';
 import { workflowRetentionWorkModule } from '../work/retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
+import { createKernel } from '../http/kernel.ts';
 
 /** Accounts registration installs the Realm adapter before any Realm workflow runs.
  * Its Access is the production composition, so a step authorizes only the initiator
@@ -45,7 +46,7 @@ export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
   composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
 ): readonly WorkModule[] {
-  const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
+  const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults, createKernel);
   return [
     accountsWorkModule,
     erasureWorkModule,

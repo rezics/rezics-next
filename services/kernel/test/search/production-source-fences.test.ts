@@ -17,7 +17,7 @@ import type { WorkContext } from '../../src/work/registry.ts';
 import { createImportIdentityDriver } from '../imports/identity-driver.ts';
 import { identitySupport } from '../imports/identity-fixture.ts';
 
-const searchWorkModule = createSearchWorkModule(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
+const searchWorkModule = createSearchWorkModule(createDiscoveryProducerEntry, createKernelRuntimeDefaults, createKernel);
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;

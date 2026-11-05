@@ -5,7 +5,6 @@ import { readErasureStatus } from '../access/erasure.ts';
 import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
 import './recent-searches.ts';
 import { trendingSearchStore } from './trending-searches.ts';
-import { createKernel } from '../http/kernel.ts';
 import { createDefaultPublicFilterRuntime } from './public-runtime.ts';
 import { createPublicPreparation, type PublicPreparation } from './public-preparation.ts';
 import { createScopePreparation } from './scope-preparation.ts';
@@ -16,9 +15,11 @@ import { subjectListingSource } from '../library/listing-counts.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createOpenSearch, SearchUnavailableError } from './opensearch.ts';
-import type { Access } from '../request/access.ts';
+import type { Access, AccessFactory } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { WriteRateLimiter } from '../access/write-rate.ts';
+import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import type { Pool } from 'pg';
 import type { DiscoveryProducerEntry } from './index.ts';
 import { REVIEW_DISCOVERY_CHANGED } from '../content/review-discovery-events.ts';
@@ -64,17 +65,29 @@ type SearchDiscoveryComposer = (input: {
   subjects: SubjectSource;
 }) => DiscoveryProducerEntry;
 
-type SearchRuntimeDefaults = Required<
-  Pick<
-    Parameters<typeof createKernel>[0],
-    'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
-  >
->;
+type SearchRuntimeDefaults = {
+  tokens: KeyRing;
+  receiptKeys: KeyRing;
+  writeRate: WriteRateLimiter;
+  rateAttribution: WriteRateStageOptions;
+  clock: () => Date;
+  access: Access | AccessFactory;
+};
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
+/** Composition supplies the kernel mount; the Search module does not import the composition root. */
+type SearchKernelMount = (
+  dependencies: SearchRuntimeDefaults & {
+    pool: Pool;
+    routeKey: Uint8Array;
+    workClient: WorkContext['client'];
+    onAccessReady(access: Access): void;
+  },
+) => unknown;
 
 export function createSearchWorkModule(
   composeDiscovery: SearchDiscoveryComposer,
   composeRuntimeDefaults: SearchRuntimeDefaultsComposer,
+  mountKernel: SearchKernelMount,
 ): WorkModule {
   return {
     name: 'search',
@@ -327,7 +340,7 @@ export function createSearchWorkModule(
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
         let searchAccess: Access | undefined;
-        createKernel({
+        mountKernel({
           pool: context.pool,
           routeKey,
           ...defaults,
