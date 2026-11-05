@@ -139,7 +139,7 @@ export class AuthHostConfigurationError extends Error {
 export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceOptions {
   /** Both pools belong exclusively to this host and are released by stop(). */
   systemDatabasePool?: Pool;
-  /** Defaults to database.options.connectionString; must name the same Auth DB. */
+  /** Defaults to database.options.connectionString; must name the same Auth DB. A Unix-socket `host` query is identity, not a TCP override. */
   systemDatabaseUrl?: string;
   stagingKey: Uint8Array;
   /** Cloudflare Siteverify configuration for the public sign-up endpoint. */
@@ -159,16 +159,21 @@ export interface AuthHostOptions<Context = WorkflowContext> extends AuthServiceO
 function databaseIdentity(value: string | undefined) {
   try {
     const url = new URL(value!);
+    const socket = url.searchParams.get('host');
+    const unixSocket =
+      socket !== null && socket.startsWith('/') && socket.length > 1 && !/[:\n\r,]/.test(socket);
     if (
       !['postgres:', 'postgresql:'].includes(url.protocol) ||
       !url.hostname ||
       url.pathname.length < 2 ||
-      ['host', 'hostaddr', 'port', 'database', 'dbname', 'service', 'options'].some((field) =>
+      ['hostaddr', 'port', 'database', 'dbname', 'service', 'options'].some((field) =>
         url.searchParams.has(field),
-      )
+      ) ||
+      (url.searchParams.has('host') && !unixSocket)
     )
       throw new Error();
-    return `${url.hostname}:${url.port || '5432'}${url.pathname}`;
+    const host = unixSocket ? `${url.hostname}|${socket}` : url.hostname;
+    return `${host}:${url.port || '5432'}${url.pathname}`;
   } catch {
     throw new AuthHostConfigurationError('database');
   }
