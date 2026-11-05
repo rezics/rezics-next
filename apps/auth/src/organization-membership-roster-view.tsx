@@ -20,7 +20,7 @@ export function OrganizationMembershipRoster({
   pending: boolean;
   onSelect: (accountId: string, role: 'owner' | 'member' | null) => void;
   onReload: (cursor?: string) => void;
-  navigation?: RosterNavigationState;
+  navigation?: RosterNavigationState | undefined;
   onNavigate?: (direction: RosterDirection, cursor?: string) => void;
   focusHeading?: boolean;
 }) {
@@ -29,10 +29,14 @@ export function OrganizationMembershipRoster({
   const rows = useRef<HTMLUListElement>(null);
   useLayoutEffect(() => {
     // Disclosure belongs to this observation, including native command readback.
-    rows.current?.querySelectorAll('details').forEach((details) => { details.open = false; });
+    rows.current?.querySelectorAll('details').forEach((details) => {
+      details.open = false;
+    });
     if (focusHeading) heading.current?.focus();
   }, [page, focusHeading]);
-  const navigate = onNavigate ?? ((direction: RosterDirection, cursor?: string) => onReload(direction === 'next' ? cursor : undefined));
+  const navigate =
+    onNavigate ??
+    ((direction: RosterDirection, cursor?: string) => onReload(direction === 'next' ? cursor : undefined));
   return (
     <section aria-labelledby="organization-members-heading" className="space-y-5">
       <div>
@@ -79,11 +83,14 @@ export function OrganizationMembershipRoster({
                     </p>
                     {displayName && handle ? <p className="text-sm text-muted-foreground">@{handle}</p> : null}
                     <p>{holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
-                    <details className="mt-1 text-sm" onToggle={(event) => {
-                      const details = event.currentTarget;
-                      if (!details.open && details.contains(document.activeElement) && details.isConnected)
-                        details.querySelector('summary')?.focus();
-                    }}>
+                    <details
+                      className="mt-1 text-sm"
+                      onToggle={(event) => {
+                        const details = event.currentTarget;
+                        if (!details.open && details.contains(document.activeElement) && details.isConnected)
+                          details.querySelector('summary')?.focus();
+                      }}
+                    >
                       <summary className="cursor-pointer">{m.auth_members_account_address()}</summary>
                       <code className="break-all">{holder.accountId}</code>
                     </details>
@@ -162,38 +169,69 @@ export function OrganizationMembershipRoster({
 
 export function rosterDirectionLabel(direction: Exclude<RosterDirection, 'retry'>) {
   switch (direction) {
-    case 'previous': return m.auth_members_previous_page();
-    case 'first': return m.auth_members_first_page();
-    case 'next': return m.auth_inventory_next();
-    case 'reload': return m.auth_members_reload_current();
+    case 'previous':
+      return m.auth_members_previous_page();
+    case 'first':
+      return m.auth_members_first_page();
+    case 'next':
+      return m.auth_inventory_next();
+    case 'reload':
+      return m.auth_members_reload_current();
   }
 }
-export function RosterPageControls({ navigation, busy, next, failed = false, onNavigate }: {
-  navigation?: RosterNavigationState;
+export function RosterPageControls({
+  navigation,
+  busy,
+  next,
+  failed = false,
+  onNavigate,
+}: {
+  navigation?: RosterNavigationState | undefined;
   busy: boolean;
   next?: string | null;
   failed?: boolean;
   onNavigate: (direction: RosterDirection, cursor?: string) => void;
 }) {
-  return <nav className="space-y-2" aria-label={m.auth_members_holders()}>
-    <div className="flex flex-wrap gap-2">
-      {failed ? <Button type="button" variant="outline" disabled={busy} onClick={() => onNavigate('retry')}>
-        {m.auth_members_recovery_retry()}
-      </Button> : <>
-        <Button type="button" variant="outline" disabled={busy || !navigation?.previous.length} onClick={() => onNavigate('previous')}>
-          {m.auth_members_previous_page()}
+  return (
+    <nav className="space-y-2" aria-label={m.auth_members_holders()}>
+      <div className="flex flex-wrap gap-2">
+        {failed ? (
+          <Button type="button" variant="outline" disabled={busy} onClick={() => onNavigate('retry')}>
+            {m.auth_members_recovery_retry()}
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !navigation?.previous.length}
+              onClick={() => onNavigate('previous')}
+            >
+              {m.auth_members_previous_page()}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              aria-label={m.auth_members_reload_current()}
+              onClick={() => onNavigate('reload')}
+            >
+              {m.auth_inventory_reload()}
+            </Button>
+            {next ? (
+              <Button type="button" variant="outline" disabled={busy} onClick={() => onNavigate('next', next)}>
+                {m.auth_inventory_next()}
+              </Button>
+            ) : null}
+          </>
+        )}
+        <Button type="button" variant="outline" disabled={busy} onClick={() => onNavigate('first')}>
+          {m.auth_members_first_page()}
         </Button>
-        <Button type="button" variant="outline" disabled={busy} aria-label={m.auth_members_reload_current()} onClick={() => onNavigate('reload')}>
-          {m.auth_inventory_reload()}
-        </Button>
-        {next ? <Button type="button" variant="outline" disabled={busy} onClick={() => onNavigate('next', next)}>
-          {m.auth_inventory_next()}
-        </Button> : null}
-      </>}
-      <Button type="button" variant="outline" disabled={busy} onClick={() => onNavigate('first')}>
-        {m.auth_members_first_page()}
-      </Button>
-    </div>
-    {navigation && !navigation.previous.length && navigation.truncated ? <p role="status">{m.auth_members_previous_boundary()}</p> : null}
-  </nav>;
+      </div>
+      {navigation && !navigation.previous.length && navigation.truncated ? (
+        <p role="status">{m.auth_members_previous_boundary()}</p>
+      ) : null}
+    </nav>
+  );
 }

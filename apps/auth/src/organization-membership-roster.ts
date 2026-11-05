@@ -10,7 +10,12 @@ export type RosterNavigationState = Readonly<{
   observation: number;
 }>;
 const empty = (): RosterNavigationState => ({
-  cursor: undefined, previous: [], truncated: false, accepted: false, requested: null, observation: 0,
+  cursor: undefined,
+  previous: [],
+  truncated: false,
+  accepted: false,
+  requested: null,
+  observation: 0,
 });
 export class MembershipRosterNavigation {
   state = empty();
@@ -19,7 +24,14 @@ export class MembershipRosterNavigation {
     if (direction === 'retry' && requested) return requested;
     const request: RosterRequest = {
       direction: direction === 'retry' ? 'reload' : direction,
-      cursor: direction === 'first' ? undefined : direction === 'previous' ? previous.at(-1) : direction === 'next' ? next : cursor,
+      cursor:
+        direction === 'first'
+          ? undefined
+          : direction === 'previous'
+            ? previous.at(-1)
+            : direction === 'next'
+              ? next
+              : cursor,
     };
     this.state = { ...this.state, requested: request };
     return request;
@@ -39,7 +51,14 @@ export class MembershipRosterNavigation {
       previous = [];
       truncated = false;
     }
-    this.state = { cursor: request.cursor, previous, truncated, accepted: true, requested: null, observation: state.observation + 1 };
+    this.state = {
+      cursor: request.cursor,
+      previous,
+      truncated,
+      accepted: true,
+      requested: null,
+      observation: state.observation + 1,
+    };
   }
   clear() {
     this.state = empty();

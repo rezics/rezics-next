@@ -43,12 +43,20 @@ test('whole ordinary call includes route proof and both installed bounded source
     const page = await loadMembershipPage(org, session.accountId, 'opaque/+=');
     console.log(JSON.stringify({ kind: page.kind, calls }));
   `;
-  const child = Bun.spawn([process.execPath, '-e', script], { cwd: `${import.meta.dir}/../../..`, stdout: 'pipe', stderr: 'pipe' });
+  const child = Bun.spawn([process.execPath, '-e', script], {
+    cwd: `${import.meta.dir}/../../..`,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const output = await new Response(child.stdout).text();
   const error = await new Response(child.stderr).text();
   expect(await child.exited, error).toBe(0);
   const result = JSON.parse(output);
   expect(result.kind).toBe('ready');
-  expect(result.calls.map((call: { path: string }) => call.path)).toEqual(['/session', '/session', '/account-management/organizations/page']);
+  expect(result.calls.map((call: { path: string }) => call.path)).toEqual([
+    '/session',
+    '/session',
+    '/account-management/organizations/page',
+  ]);
   expect(result.calls.at(-1).body.cursor).toBe('opaque/+=');
 });

@@ -1,8 +1,16 @@
 import { createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { MembershipRosterNavigation, type RosterRequest, type RosterDirection } from '../organization-membership-roster';
-import { OrganizationMembershipRoster, RosterPageControls, rosterDirectionLabel } from '../organization-membership-roster-view';
+import {
+  MembershipRosterNavigation,
+  type RosterRequest,
+  type RosterDirection,
+} from '../organization-membership-roster';
+import {
+  OrganizationMembershipRoster,
+  RosterPageControls,
+  rosterDirectionLabel,
+} from '../organization-membership-roster-view';
 import { OrganizationMembershipReturnView } from '../organization-membership-return-view';
 import {
   retainMembershipHistory,
@@ -802,13 +810,20 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         <h2 id="membership-current-heading" tabIndex={-1}>
           {m.auth_members_current_heading()}
         </h2>
-        {!recoveryVisible && revoked && !busy && (!page || page.kind === 'signed-out' || page.kind === 'denied' || page.kind === 'missing') ? (
+        {!recoveryVisible &&
+        revoked &&
+        !busy &&
+        (!page || page.kind === 'signed-out' || page.kind === 'denied' || page.kind === 'missing') ? (
           <Button type="button" variant="outline" onClick={refreshCurrent}>
             {m.auth_members_recovery_retry()}
           </Button>
         ) : null}
         {busy && roster.current.state.requested ? (
-          <p role="status">{m.auth_members_navigation_pending({ action: rosterDirectionLabel(roster.current.state.requested.direction) })}</p>
+          <p role="status">
+            {m.auth_members_navigation_pending({
+              action: rosterDirectionLabel(roster.current.state.requested.direction),
+            })}
+          </p>
         ) : null}
         {notice && !recoveryVisible ? (
           <div ref={feedback} tabIndex={-1} role="status">
@@ -834,8 +849,14 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           <div className="space-y-3" role="status">
             <p>{statusMessage(page?.kind ?? (revoked && !busy ? 'unavailable' : 'loading'))}</p>
             {page && page.kind !== 'signed-out' && page.kind !== 'denied' && page.kind !== 'missing' ? (
-              <RosterPageControls navigation={roster.current.state} busy={busy}
-                failed onNavigate={(direction) => { if (rosterActivity()) void browse(direction); }} />
+              <RosterPageControls
+                navigation={roster.current.state}
+                busy={busy}
+                failed
+                onNavigate={(direction) => {
+                  if (rosterActivity()) void browse(direction);
+                }}
+              />
             ) : null}
           </div>
         ) : (
@@ -843,12 +864,18 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             key={roster.current.state.observation}
             page={page}
             navigation={roster.current.state}
-            onNavigate={(direction, cursor) => { if (rosterActivity()) void browse(direction, cursor); }}
+            onNavigate={(direction, cursor) => {
+              if (rosterActivity()) void browse(direction, cursor);
+            }}
             focusHeading={roster.current.state.observation > 1}
             busy={busy}
             pending={!!command}
-            onSelect={(target, role) => { if (rosterActivity()) void select(target, role); }}
-            onReload={(cursor) => { if (rosterActivity()) void browse(cursor === undefined ? 'reload' : 'next', cursor); }}
+            onSelect={(target, role) => {
+              if (rosterActivity()) void select(target, role);
+            }}
+            onReload={(cursor) => {
+              if (rosterActivity()) void browse(cursor === undefined ? 'reload' : 'next', cursor);
+            }}
           />
         )}
 
