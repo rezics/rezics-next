@@ -137,13 +137,16 @@ export function workerPrompt(
 }
 /** Per-attempt variables: the attempt's identity, and the base the kernel check selects affected tests against. */
 export function attemptEnvironment(
-  task: Pick<Task, 'id' | 'base'> & Partial<Pick<Task, 'proofRun'>>,
+  task: Pick<Task, 'id' | 'base'> & Partial<Pick<Task, 'proofRun' | 'brief'>>,
   attempt: Pick<Attempt, 'attempt'>,
   stateDirectory?: string,
 ): Record<string, string> {
+  const requires = task.brief?.acceptance.requires ?? [];
   return {
     GOAL_TASK_ID: task.id,
     GOAL_ATTEMPT: String(attempt.attempt),
+    // The brief's acceptance requirements; native or browser admits one bounded local walk stack.
+    ...(requires.length > 0 ? { GOAL_ACCEPTANCE_REQUIRES: requires.join(',') } : {}),
     ...(task.proofRun?.native && task.proofRun.binding.attempt === attempt.attempt
       ? { GOAL_CHECK_REGISTRY: task.proofRun.native.registry }
       : {}),
