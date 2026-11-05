@@ -37,7 +37,10 @@ const canonicalCharacter = createServerFn({ method: 'GET', strict: false })
     ]);
     const address = parseCharacterCorrectionUrl(data.search);
     if (!address.ok) throw notFound();
-    if (address.value.context && address.value.context !== candidateContext && !address.value.realm)
+    if (
+      (address.value.context && address.value.context !== candidateContext && !address.value.realm) ||
+      (address.value.realm && !address.value.context)
+    )
       return { id: data.id, label: data.slug };
     const canonical = address.value.realm
       ? await loadContextSubject(kernelClient(data.locale), data.id, data.locale, { realm: address.value.realm })
@@ -50,7 +53,7 @@ const canonicalCharacter = createServerFn({ method: 'GET', strict: false })
           data.search,
         ),
       );
-    return { id: canonical.value.id, label: 'label' in canonical.value ? canonical.value.label : data.slug };
+    return { id: canonical.value.id, label: canonical.value.slug };
   });
 export const Route = createFileRoute('/subjects/$id_/$slug_/character')({
   staticData: { publicCache: false },
