@@ -43,8 +43,8 @@ test('mounted personas retain exact opening/reply revisions, cursor, guest contr
   expect(author.response.status, author.text).toBe(200);
   expect(author.response.headers.get('cache-control')).toBe('private, no-store');
   expect(author.value.actions.reply.state).toBe('available');
-  const exactAction = author.value.actions.references.find((reference: any) => reference.id === posts[0].id);
-  expect(exactAction.sourceRevisionId).toBe(posts[0].revisionId);
+  const exactAction = author.value.actions.references.find((reference: any) => reference.id === posts[0]!.id);
+  expect(exactAction.sourceRevisionId).toBe(posts[0]!.revisionId);
   const moderator = f.system.actors.moderator;
   await f.grant(thread.id, moderator.actor.accountId, ['post:create', 'moderation:takedown']);
   const moderated = await f.page(thread.id, moderator.bearer);

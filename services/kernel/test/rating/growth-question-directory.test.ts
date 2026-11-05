@@ -156,7 +156,7 @@ test('rating-question directory pages retain bounded native Access work across s
         const prepared = await prepareScenario(fixture, scenario);
         const name = `rating question directory ${scenario} under ${axis}`;
         const serializedBytes = new Map<number, number[]>();
-        let currentScale = QUESTION_DIRECTORY_SCALES[0]!;
+        let currentScale: number = QUESTION_DIRECTORY_SCALES[0]!;
         const report = await checkGrowth(fixture.database, {
           name,
           scales: QUESTION_DIRECTORY_SCALES,

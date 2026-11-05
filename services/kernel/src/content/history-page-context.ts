@@ -202,7 +202,10 @@ function identityViews(ids: readonly string[], summaries: AccountSummaryMap) {
           state: 'available' as const,
           displayName: summary.displayName,
           handle: summary.handle,
-          avatar: summary.avatar,
+          avatar:
+            summary.avatar === null
+              ? null
+              : { ...summary.avatar, variants: summary.avatar.variants.map((variant) => ({ ...variant })) },
         }
       : { id, state: 'concealed' as const };
   });
@@ -228,7 +231,13 @@ function mediaViews(ids: readonly string[], images: readonly DocumentImagePresen
   const byId = new Map(images.map((image) => [image.id, image]));
   return ids.map((id) => {
     const image = byId.get(id);
-    return image ? { id, state: 'available' as const, image } : { id, state: 'concealed' as const };
+    return image
+      ? {
+          id,
+          state: 'available' as const,
+          image: { ...image, variants: image.variants.map((variant) => ({ ...variant })) },
+        }
+      : { id, state: 'concealed' as const };
   });
 }
 
@@ -559,9 +568,10 @@ export async function readContentHistoryPage(
     mediaState === 'unavailable' ||
     reviewState === 'unavailable' ||
     actions.state === 'unavailable';
+  const viewer: { kind: 'account'; id: string } | { kind: 'anonymous' } =
+    actor.kind === 'account' ? { kind: 'account', id: actor.accountId } : { kind: 'anonymous' };
   const page = {
-    viewer:
-      actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
+    viewer,
     conversation: {
       id: initialThread.id,
       kind: initialThread.kind,
