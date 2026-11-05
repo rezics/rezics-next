@@ -11253,5 +11253,7 @@
   "moderation_manual_hint": "輸入看板 ID，或開啟目錄檢舉。每個佇列都會獨立檢查你目前的存取權限。",
   "moderation_manual_board": "看板 ID",
   "moderation_manual_open": "開啟看板佇列",
-  "moderation_manual_catalogue": "開啟目錄檢舉"
+  "moderation_manual_catalogue": "開啟目錄檢舉",
+  "subject_rating_control_uncertain": "結果尚未確定。你可以重試同一筆請求，或捨棄請求並重新載入目前的評分。",
+  "subject_rating_control_discard": "捨棄請求並重新載入評分"
 }

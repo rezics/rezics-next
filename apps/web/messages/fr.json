@@ -11139,5 +11139,7 @@
   "library_mal_retry_source_evidence": "Réessayer l’admission de la preuve de source",
   "library_mal_score_zero_source": "{value} (zéro signifie non noté)",
   "library_mal_score_source_details": "Valeur : {value} ; échelle MAL : {scale}",
-  "library_mal_score_source_scale": "Échelle MAL de {min} à {max}, pas de {step}"
+  "library_mal_score_source_scale": "Échelle MAL de {min} à {max}, pas de {step}",
+  "subject_rating_control_uncertain": "Le résultat est inconnu. Réessayez la même demande ou abandonnez-la et rechargez votre note actuelle.",
+  "subject_rating_control_discard": "Abandonner la demande et recharger la note"
 }

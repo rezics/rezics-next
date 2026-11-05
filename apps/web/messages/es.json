@@ -11139,5 +11139,7 @@
   "library_mal_retry_source_evidence": "Reintentar la admisión de evidencia de origen",
   "library_mal_score_zero_source": "{value} (cero significa sin calificar)",
   "library_mal_score_source_details": "Valor: {value}; escala de MAL: {scale}",
-  "library_mal_score_source_scale": "Escala de MAL de {min} a {max}, paso {step}"
+  "library_mal_score_source_scale": "Escala de MAL de {min} a {max}, paso {step}",
+  "subject_rating_control_uncertain": "El resultado es desconocido. Reintenta la misma solicitud o descártala y vuelve a cargar tu valoración actual.",
+  "subject_rating_control_discard": "Descartar solicitud y recargar valoración"
 }

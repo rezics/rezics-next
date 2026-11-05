@@ -4,7 +4,8 @@ import { Field } from '@base-ui/react/field';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { changeSubjectRating } from './rating-actions';
+import { changeQuestionBoundRating, type QuestionBoundRatingInput } from './rating-actions';
+import { sessionQueryKey, type BrowserSession } from '../../session/browser-state';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
 import { displayRating, type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
 import type { SubjectPersonalLease } from './subject-personal-reader';
@@ -15,11 +16,12 @@ export type RatingControlState =
   | { kind: 'signed-out' }
   | { kind: 'ready'; units: number | null };
 
-export type RatingWrite = (input: {
+export type RatingWriteInput = Readonly<{
   units: number | null;
   idempotencyKey: string;
   expectedReader: string;
-}) => Promise<boolean>;
+}>;
+export type RatingWrite = (input: RatingWriteInput) => Promise<boolean | 'successful' | 'rejected' | 'uncertain'>;
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -31,6 +33,7 @@ export async function applyOptimisticRatingChange(input: {
   binding: SubjectPersonalLease;
   units: number | null;
   write: RatingWrite;
+  request?: RatingWriteInput;
   onFailure: (result: { uncertain: boolean }) => void;
 }): Promise<boolean> {
   const { queryClient, subjectId, locale, binding, units, write, onFailure } = input;
@@ -43,9 +46,11 @@ export async function applyOptimisticRatingChange(input: {
   if (!operation || !binding.isCurrent()) return false;
   queryClient.setQueryData(ownKey, optimistic);
 
-  let saved = false;
+  let saved: Awaited<ReturnType<RatingWrite>> = false;
   try {
-    saved = await write({ units, idempotencyKey: crypto.randomUUID(), expectedReader: binding.reader });
+    saved = await write(
+      input.request ?? { units, idempotencyKey: crypto.randomUUID(), expectedReader: binding.reader },
+    );
   } catch {
     if (binding.isCurrent()) {
       operation.preserveUncertainty(optimistic);
@@ -54,7 +59,12 @@ export async function applyOptimisticRatingChange(input: {
     return false;
   }
   if (!binding.isCurrent()) return false;
-  if (!saved) {
+  if (saved === 'uncertain') {
+    operation.preserveUncertainty(optimistic);
+    onFailure({ uncertain: true });
+    return false;
+  }
+  if (saved === false || saved === 'rejected') {
     const rollback = operation.rollback({ reader: binding.reader, kind: 'unavailable' });
     if (rollback) queryClient.setQueryData(ownKey, rollback);
     onFailure({ uncertain: false });
@@ -394,7 +404,19 @@ export function SubjectRatingControl({
   write?: RatingWrite;
 }) {
   const queryClient = useQueryClient();
-  const bindingKey = binding?.key ?? `inactive:${subjectId}:${locale}`;
+  const bindingKey = JSON.stringify([binding?.key ?? `inactive:${subjectId}:${locale}`, question]);
+  const sourceRef = useRef(bindingKey);
+  sourceRef.current = bindingKey;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const retained = useRef<{ scope: string; input: QuestionBoundRatingInput } | null>(null);
+  const [uncertainScope, setUncertainScope] = useState<string | null>(null);
+  const uncertain = uncertainScope === bindingKey && binding?.isCurrent();
   const bindingRef = useRef(binding);
   bindingRef.current = binding;
   const pendingId = useRef(0);
@@ -421,33 +443,54 @@ export function SubjectRatingControl({
               ? { kind: 'unavailable' }
               : { kind: 'ready', units: own.units };
 
-  const change = async (units: number | null) => {
+  const change = async (units: number | null, retry?: QuestionBoundRatingInput) => {
     const originatingBinding = bindingRef.current;
     if (!originatingBinding) return;
-    const scope = originatingBinding.key;
-    const isCurrentBinding = () => originatingBinding.isCurrent() && bindingRef.current?.key === scope;
+    const scope = bindingKey;
+    const isCurrentBinding = () => mounted.current && originatingBinding.isCurrent() && sourceRef.current === scope;
     if (!isCurrentBinding()) return;
-    if (activePending.current?.scope === scope) return;
+    if (activePending.current?.scope === scope || (!retry && retained.current?.scope === scope)) return;
+    const command =
+      retry ??
+      Object.freeze({
+        subjectId,
+        units,
+        idempotencyKey: crypto.randomUUID(),
+        expectedReader: originatingBinding.reader,
+        expectedCredential: queryClient.getQueryData<BrowserSession>(sessionQueryKey)?.csrfToken!,
+        question: Object.freeze({
+          id: question.id,
+          revision: question.revision,
+          grain: question.grain,
+          meaning: question.meaning ?? question.canonicalLabel ?? question.label,
+          scale: Object.freeze({ ...question.scale }),
+        }),
+      });
     const id = ++pendingId.current;
     activePending.current = { scope, id };
     setPendingState({ scope, id });
     setFailureState(null);
     try {
-      await applyOptimisticRatingChange({
+      const saved = await applyOptimisticRatingChange({
         queryClient,
         subjectId,
         locale,
-        binding: originatingBinding,
-        units,
-        write:
-          write ??
-          (async ({ idempotencyKey, expectedReader }) =>
-            changeSubjectRating({ data: { subjectId, units, idempotencyKey, expectedReader } })),
-        onFailure: () => {
-          if (isCurrentBinding())
-            setFailureState({ scope, message: m.subject_rating_control_error({}, { locale: locale as never }) });
+        binding: { ...originatingBinding, isCurrent: isCurrentBinding },
+        units: command.units,
+        request: command,
+        write: write ?? (() => changeQuestionBoundRating({ data: command })),
+        onFailure: ({ uncertain }) => {
+          if (!isCurrentBinding()) return;
+          if (uncertain || retry) {
+            retained.current = { scope, input: command };
+            setUncertainScope(scope);
+          } else setFailureState({ scope, message: m.subject_rating_control_error({}, { locale: locale as never }) });
         },
       });
+      if (saved && isCurrentBinding()) {
+        retained.current = null;
+        setUncertainScope(null);
+      }
     } finally {
       if (isCurrentBinding() && activePending.current?.scope === scope && activePending.current.id === id) {
         activePending.current = null;
@@ -456,18 +499,54 @@ export function SubjectRatingControl({
     }
   };
 
+  const discard = () => {
+    retained.current = null;
+    setUncertainScope(null);
+    setFailureState(null);
+    if (binding?.isCurrent()) {
+      void queryClient.invalidateQueries({
+        queryKey: subjectOwnRatingQuery(subjectId, locale, binding.scope).queryKey,
+      });
+      void queryClient.invalidateQueries({ queryKey: subjectRatingQuery(subjectId, locale).queryKey });
+    }
+  };
+  const options = { locale: locale as never };
   return (
-    <RatingControlView
-      key={`${bindingKey}:${question.id}:${question.revision}`}
-      question={question}
-      failure={failure}
-      locale={locale}
-      onClear={() => void change(null)}
-      onSet={(units) => void change(units)}
-      pending={pending}
-      returnTo={returnTo}
-      state={state}
-      subjectId={subjectId}
-    />
+    <>
+      {uncertain && (
+        <div className="space-y-2" data-slot="rating-uncertain">
+          <p role="status">{m.subject_rating_control_uncertain({}, options)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              className={actionClassName}
+              disabled={pending}
+              onClick={() => {
+                const command = retained.current!.input;
+                void change(command.units, command);
+              }}
+            >
+              {m.library_my_ratings_retry_original({}, options)}
+            </Button>
+            <Button className={actionClassName} variant="outline" disabled={pending} onClick={discard}>
+              {m.subject_rating_control_discard({}, options)}
+            </Button>
+          </div>
+        </div>
+      )}
+      <div hidden={!!uncertain}>
+        <RatingControlView
+          key={bindingKey}
+          question={question}
+          failure={failure}
+          locale={locale}
+          onClear={() => void change(null)}
+          onSet={(units) => void change(units)}
+          pending={pending}
+          returnTo={returnTo}
+          state={state}
+          subjectId={subjectId}
+        />
+      </div>
+    </>
   );
 }

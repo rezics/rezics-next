@@ -1,6 +1,10 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { SubjectPersonalLease } from '../src/features/pages/subject-personal-reader';
+import type { RatingWriteInput } from '../src/features/pages/rating-control';
+import { sessionQueryKey } from '../src/session/browser-state';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
 import { QUESTION, type RatingQuestion } from '../src/features/pages/subject-ratings';
@@ -35,7 +39,7 @@ test('composed rating controls label and submit their own question, value and re
   mock.module('@tanstack/react-start/server', () => start);
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { createRoot } = await import('react-dom/client');
-  const { RatingControlView } = await import('../src/features/pages/rating-control');
+  const { RatingControlView, SubjectRatingControl } = await import('../src/features/pages/rating-control');
   const questions: RatingQuestion[] = [
     { id: QUESTION, revision: 1, label: 'Your rating', grain: 'work', scale: { min: 0, max: 20, displayStep: 1 } },
     {
@@ -128,6 +132,77 @@ test('composed rating controls label and submit their own question, value and re
         expect(form.getAttribute('action')).toBe(fields.get('returnTo'));
       }
     }
+    // A lost response must never turn the next click into a new vote command.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader', csrfToken: 'original-credential' });
+    const binding: SubjectPersonalLease = {
+      key: 'reader-lease',
+      reader: 'reader',
+      subjectId: 'subject-0',
+      locale: 'en',
+      view: 'overview',
+      scope: { reader: 'reader', admission: 1, view: 'overview', cacheEpoch: 0 },
+      isCurrent: () => true,
+      retire: () => {},
+      beginRatingWrite: () => ({
+        id: 1,
+        sequence: 1,
+        ownsCache: () => true,
+        commit: () => {},
+        rollback: (fallback) => fallback,
+        preserveUncertainty: () => {},
+      }),
+    };
+    const commands: RatingWriteInput[] = [];
+    const renderRecovery = async (question = questions[0]!) =>
+      act(async () =>
+        root.render(
+          <QueryClientProvider client={client}>
+            <SubjectRatingControl
+              question={question}
+              subjectId="subject-0"
+              locale="en"
+              returnTo="/en/original#rating"
+              session="signed-in"
+              own={{ reader: 'reader', kind: 'ready', units: 10 }}
+              binding={binding}
+              write={async (input) => {
+                commands.push(input);
+                return 'uncertain';
+              }}
+            />
+          </QueryClientProvider>,
+        ),
+      );
+    await renderRecovery();
+    await act(async () => host.querySelector('form')!.querySelectorAll('button')[1]!.click());
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      units: null,
+      expectedReader: 'reader',
+      expectedCredential: 'original-credential',
+      question: { id: questions[0]!.id, revision: 1, meaning: 'Your rating' },
+    });
+    expect(Object.isFrozen(commands[0])).toBe(true);
+    client.setQueryData(sessionQueryKey, {
+      state: 'signed-in',
+      subject: 'reader',
+      csrfToken: 'replacement-credential',
+    });
+    await act(async () => host.querySelector<HTMLButtonElement>('[data-slot="rating-uncertain"] button')!.click());
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toBe(commands[0]);
+    await act(async () =>
+      host.querySelectorAll<HTMLButtonElement>('[data-slot="rating-uncertain"] button')[1]!.click(),
+    );
+    expect(host.querySelector('[data-slot="rating-uncertain"]')).toBeNull();
+    await act(async () => host.querySelector('form')!.querySelectorAll('button')[1]!.click());
+    expect(commands[2]!.idempotencyKey).not.toBe(commands[0]!.idempotencyKey);
+    expect(commands[2]).toMatchObject({ expectedCredential: 'replacement-credential' });
+    await renderRecovery({ ...questions[0]!, revision: 2 });
+    expect(host.querySelector('[data-slot="rating-uncertain"]')).toBeNull();
+    expect(host.querySelector('form')!.getAttribute('action')).toBe('/en/original#rating');
+    client.clear();
   } finally {
     await act(async () => root.unmount());
     mock.restore();
