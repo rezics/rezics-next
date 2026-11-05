@@ -76,6 +76,7 @@ export class QuestionManagementWindows {
       this.retire();
       return;
     }
+    this.directory.target = { cursor: address.cursor };
     this.expected = address;
   }
 }

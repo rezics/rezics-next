@@ -327,6 +327,10 @@ test('direct later visit has First but no invented Previous; Stay preserves draf
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, ' raw draft ');
       input.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
+    await ui.click(ui.directory(), m.home_questions_next(), true);
+    expect(reads).toHaveLength(1);
+    await ui.click(window.document, m.library_my_ratings_stay());
+    expect(input.value).toBe(' raw draft ');
     await ui.click(ui.captions(), m.realm_question_history_more(), true);
     expect(histories).toHaveLength(1);
     await ui.click(window.document, m.library_my_ratings_stay());
