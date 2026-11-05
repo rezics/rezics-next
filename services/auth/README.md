@@ -1110,20 +1110,20 @@ Decision: rename and organization share `account-operation-response-bounds.ts`. 
 `{ reference, expiresAt }`: opaque ASCII base64url body + dot + MAC43, capped at 4,096 units by native unseal/execute.
 Usable canonical ISO expiry is at most 27 ASCII units; JSON costs
 `31 + 4096 + 27 = 4154` bytes. Success/replay is exactly `{ accountId }`, nonempty and at most 4,096 UTF-16
-units: `16 + 6 × 4096 = 24592` bytes with worst-case escaping. Incompatible/incomplete output or mismatched rename
+units: `16 + 6 × 4096 = 24592` bytes with worst-case escaping. Invalid output or mismatched rename
 ID returns `{ error: "unavailable" }`/503, never invented not-applied. Browser custody binds organization
 acknowledgement without new result fields.
 
 Closed `{ error, effect_status: "not_applied" }` pairs: `account_operation_denied`/400,401,403,409,413,415,503;
 `step_up_required`/401; organization `platform_closed`/403. Plus `{ error: "unavailable" }`/503.
-Maximum error JSON is 69 bytes. Bytes are admitted before fatal UTF-8/JSON despite Content-Length.
-Malformed output cannot acknowledge work; refusal/session equality cannot settle prior unknown execution.
+Errors fit 69 bytes. Bytes are admitted before fatal UTF-8/JSON despite Content-Length.
+Malformed output cannot acknowledge; refusal/session equality cannot settle prior unknown.
 
 Each POST retains five seconds through body, even for abort-ignoring I/O. Retirement sends no later command;
 abort cannot undo effects. Native freshness, scope, gate, approval, preparation, uniqueness and CAS/replay stay
 authoritative. Organization retries supported unavailable approval once; execution never automatically retries or
 renews approval. Entry/session/approval/execution/final-session costs five calls, six with approval retry; deliberate
-same-command retry costs four or five. Read Retry/restoration costs one session read, zero commands. Acknowledgement
+same-command retry costs four or five. Read Retry/restoration: one session read, zero commands. Acknowledgement
 survives final-read failure; private results need current original caller/descriptor. Cleanup
 preserves replacements. Rename keeps live reference/expiry, expectedHandle and recovery below. Fixtures grant no
 native/browser/growth pass.
