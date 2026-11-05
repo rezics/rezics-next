@@ -39,6 +39,10 @@ import { enqueuePublicFilterCoverage } from './public-filter-coverage-pending.ts
 import { readPublicFilterProjectionPage as readProjectionPage } from './public-filter-projection.ts';
 import { isDeepStrictEqual } from 'node:util';
 import realmOfBoard from '../content/realm-of-board.sql';
+import ownerRead from './public-filter-collection-reduction-owner.sql';
+import {
+  runPublicFilterCollectionReductionQuery,
+} from './public-filter-collection-reduction-work.ts';
 
 type SourceConfiguration = Parameters<PublicFilterSourceFactory>[0];
 const origins = new WeakMap<PublicFilterSource, SourceConfiguration>();
@@ -433,24 +437,33 @@ export const recordPrivacyReduction: RecordPrivacyReductionType = async (
     )
       throw new TypeError('Board privacy reduction does not bind its native parent Realm');
   }
-  const owner = await readPartition(tx, reduction.partition);
+  const owner =
+    reduction.cause === 'collection'
+      ? await runPublicFilterCollectionReductionQuery('owner', ownerRead, tx, { partition_no: reduction.partition })
+      : await readPartition(tx, reduction.partition);
   if (!owner || owner.writeState !== 'active' || owner.epoch < 1)
     throw new CommandUnavailableError('fenced', reduction.partition);
-  await ensurePrivacyHead.run(tx, { partition_no: reduction.partition, owner_epoch: owner.epoch });
-  const locked = await lockPrivacyHead.run(tx, {
+  const ensureInput = { partition_no: reduction.partition, owner_epoch: owner.epoch };
+  if (reduction.cause === 'collection')
+    await runPublicFilterCollectionReductionQuery('ensure', ensurePrivacyHead, tx, ensureInput);
+  else await ensurePrivacyHead.run(tx, ensureInput);
+  const lockInput = {
     partition_no: reduction.partition,
     owner_epoch: owner.epoch,
-  });
+  };
+  const locked =
+    reduction.cause === 'collection'
+      ? await runPublicFilterCollectionReductionQuery('lock', lockPrivacyHead, tx, lockInput)
+      : await lockPrivacyHead.run(tx, lockInput);
   if (!locked) throw new CommandUnavailableError('fenced', reduction.partition);
-  const advanced = rows(
-    await advancePrivacyHead.run(tx, {
-      partition_no: reduction.partition,
-      owner_epoch: owner.epoch,
-    }),
-  )[0];
+  const advanceInput = { partition_no: reduction.partition, owner_epoch: owner.epoch };
+  const advancedRows = await (reduction.cause === 'collection'
+    ? runPublicFilterCollectionReductionQuery('advance', advancePrivacyHead, tx, advanceInput)
+    : advancePrivacyHead.run(tx, advanceInput));
+  const advanced = rows(advancedRows)[0];
   if (!advanced) throw new CommandUnavailableError('fenced', reduction.partition);
   const position = BigInt(advanced.position);
-  const appended = await appendPrivacyEntry.run(tx, {
+  const appendInput = {
     partition_no: reduction.partition,
     owner_epoch: owner.epoch,
     position: position.toString(),
@@ -459,7 +472,11 @@ export const recordPrivacyReduction: RecordPrivacyReductionType = async (
     affected: reduction.affected,
     impacts: reduction.impacts,
     recorded_at: authoritativeTimeValue(command.time),
-  });
+  };
+  const appended =
+    reduction.cause === 'collection'
+      ? await runPublicFilterCollectionReductionQuery('append', appendPrivacyEntry, tx, appendInput)
+      : await appendPrivacyEntry.run(tx, appendInput);
   if (!appended) throw new AccessUnavailableError('overloaded');
   const entry: PrivacyReductionLogEntry = {
     head: { partition: reduction.partition, epoch: owner.epoch, position },

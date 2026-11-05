@@ -2,6 +2,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { PrivacyReductionLogEntry, PublicFilterDependencyKey } from './public-filter-source-contract.ts';
 import enqueue from './public-filter-coverage-pending.sql';
 import { routeOf } from '../route/route.ts';
+import { runPublicFilterCollectionReductionQuery } from './public-filter-collection-reduction-work.ts';
 
 // These cannot collide with any compiler input. Keys preserve identity rather than a
 // growing home-level union, a hash of an input, or a list of matching subjects.
@@ -59,14 +60,18 @@ export async function enqueuePublicFilterCoverage(
     if (affected.kind === 'subject' || affected.kind === 'selection' || affected.kind === 'consent')
       subjects.set(affected.subject.toLowerCase(), affected.route);
   }
-  const retained = await enqueue.run(tx, {
+  const input = {
     partition_no: entry.head.partition,
     owner_epoch: entry.head.epoch,
     position: entry.head.position.toString(),
     transaction_id: entry.transactionId,
     input_keys: [...keys].sort(),
     subjects: [...subjects].sort(([a], [b]) => a.localeCompare(b)).map(([subject, route]) => ({ subject, route })),
-  });
+  };
+  const retained =
+    entry.cause === 'collection'
+      ? await runPublicFilterCollectionReductionQuery('coverage', enqueue, tx, input)
+      : await enqueue.run(tx, input);
   if (!retained || (Array.isArray(retained) && retained.length !== 1))
     throw new Error('Privacy log append lost its pending coverage barriers');
 }

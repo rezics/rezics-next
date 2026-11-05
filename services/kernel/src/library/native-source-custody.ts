@@ -23,6 +23,7 @@ import {
   nativeSourceCustodyExecutionBound,
   nativeSourceCustodyFootprint,
   nativeSourceCustodyOperationBound,
+  NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND,
   nativeSourceCustodyQueries,
   nativeSourceCustodyWorkDimensions,
   createNativeSourceCustodyOperationUse,
@@ -588,7 +589,7 @@ function nativeLibrarySourceCustody(
   }
   return {
     retireCapture(input) {
-      return account(input, async (work): Promise<NativeSourceRetirementResult> => {
+      return account(input, async (work, operationUse): Promise<NativeSourceRetirementResult> => {
         if (hasLiveOperationalTransaction(input.client)) throw new Refused('binding');
         live(input);
         validate(input.identity);
@@ -598,6 +599,8 @@ function nativeLibrarySourceCustody(
           input.client,
           work,
           Math.min(input.deadline, currentCommandResources(input.client).deadline),
+          false,
+          operationUse!,
         );
         const episode = input.episode;
         if (
@@ -708,7 +711,7 @@ function nativeLibrarySourceCustody(
         removed += (await run(retireProof, values)).length;
         if ((await run(retireCapture, values)).length !== 1) throw new Refused('binding');
         return { status: 'retired', removed: removed + 1, work: work.receipt() };
-      });
+      }, 'retireCapture');
     },
     capturePage(input) {
       return account(
@@ -933,7 +936,7 @@ function nativeLibrarySourceCustody(
   };
 }
 
-/** Fixed local cleanup budget; composed discovery and retirement share one receipt and command deadline. */
+/** Exact native lookup plus closed retirement operation; both share one receipt and deadline. */
 export async function retireNativeCollectionCapturePage(
   client: CommandTransaction,
   input: { accountId: string; collectionId: string; captureId?: string; episode: NativeSourceRetirement['episode'] },
@@ -942,16 +945,7 @@ export async function retireNativeCollectionCapturePage(
   const at = currentCommand(client).time;
   const allowance: WorkAllowance = {
     reservationId: crypto.randomUUID(),
-    remaining: {
-      candidateKeys: 100,
-      nativeRows: 10000,
-      nativePoints: 256,
-      identityMetadataRows: 2, // The existing retirement step reads the partition and completed receipt.
-      witnessKeys: 0,
-      statements: 32,
-      bytes: 1024 * 1024,
-      emptySeeks: 32,
-    },
+    remaining: nativeSourceCustodyWorkDimensions(NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND),
   };
   const work = new NativeCollectionWork(allowance, deadline);
   const run = executor(client, work, deadline);

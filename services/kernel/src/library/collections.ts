@@ -52,6 +52,8 @@ import {
 import { CollectionOrderRepairRequired, planCollectionPlacement } from './collection-order-placement.ts';
 import { assertCollectionOrderWritable, beginCollectionOrderRepair } from './collection-order.ts';
 import { withCollectionOrderDeclaration } from './collection-order-bounds.ts';
+import { withCollectionRetentionDeclaration, executeCollectionRetentionQuery } from './collection-retention-bounds.ts';
+import { consumeShelfMaintenance, shelfMaintenanceCommandPlan } from './shelf-maintenance-bounds.ts';
 import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
 import {
   deleteMember as deleteMemberRow,
@@ -695,16 +697,22 @@ export function createCollectionCommands(config: {
       },
     };
     try {
-      return await runCommand(
+      const operationPath = kind === 'library.collection.delete'
+        ? 'deleteCommand'
+        : kind === 'library.collection.restore'
+          ? 'restoreCommand'
+          : null;
+      const commandOptions = {
+        ...identity,
+        partition: partitionOf(route),
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+        ...(clock ? { clock } : {}),
+        receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
+        authorization,
+      };
+      const dispatch = () => runCommand(
         pool,
-        {
-          ...identity,
-          partition: partitionOf(route),
-          deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-          ...(clock ? { clock } : {}),
-          receipt: { kind, key: requestKey, digest: digest(identity, kind, input) },
-          authorization,
-        },
+        commandOptions,
         async (tx, command) => {
           const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
           if (current.curatorAccountId === null) throw new GrantDeniedError();
@@ -730,6 +738,15 @@ export function createCollectionCommands(config: {
           );
         },
       );
+      const bindCommonCommand = () =>
+        consumeShelfMaintenance(
+          'collection.command',
+          shelfMaintenanceCommandPlan(pool, commandOptions).total,
+          dispatch,
+        );
+      return await (operationPath
+        ? withCollectionRetentionDeclaration(operationPath, bindCommonCommand)
+        : dispatch());
     } catch (error) {
       if (!(error instanceof CollectionOrderRepairRequired)) throw error;
       const repairKind = 'library.collection.order.repair.begin';
@@ -937,7 +954,7 @@ export function createCollectionCommands(config: {
       requestKey,
       { id, deletionId: input.deletionId, revision: expected },
       async (tx, command, route) => {
-        const current = await restoreWindow.run(tx, { route, id, time: command.time });
+        const current = await executeCollectionRetentionQuery('restoreWindow', restoreWindow, tx, { route, id, time: command.time });
         if (!current) throw notFound();
         if (!current.deleted) throw new ProblemError('collection_restore_occupied');
         if (current.revision !== expected || current.deletionId !== input.deletionId)
@@ -1191,7 +1208,10 @@ async function authorizedCollection(
   allowDeleted: boolean,
 ): Promise<NonNullable<Awaited<ReturnType<typeof authorizationCollection.run>>>> {
   authoritativeTimeValue(time);
-  const current = await authorizationCollection.run(client, { route, collection_id: collectionId });
+  const current = await executeCollectionRetentionQuery('authorizedCollection', authorizationCollection, client, {
+    route,
+    collection_id: collectionId,
+  });
   if (!current || (!allowDeleted && current.state === 'deleted')) throw notFound();
   if (allowDeleted && current.visibility === 'private' && actor.accountId !== current.curatorAccountId)
     throw notFound();

@@ -9,16 +9,22 @@ Decision: saved catalogue rules page through the registered Search scope using t
 
 Decision: keep each native repair page at 128 raw original occurrences, independently of Source's 100-key ceiling; charge the failed edit, separately authorized begin, each outbox/DBOS continuation, and deliberate retry as separate stages.
 
-Price the complete operation: request and status reads, checkpoints, activation, preparation, authorization, locks,
-serialization, receipt and effect work, source fences, negative or discarded candidates, and every nested disclosure.
-A short returned page, deduplicated terminal set or fixed candidate declaration does not reduce physical work already
-performed. Apply the existing 100 raw-key and 262,144-row native ceilings and the published Search maxima. Producer
-declarations describe admissible work; they are not native grants, pagination evidence or funding.
+Decision: preserve the existing Collection actor command, exact 720-hour Undo and purge key, ten-minute maintenance
+workflow, and every current page cap. Bind complete nine-axis costs at the existing command, page and segment
+executions, composed with the actual Shelf, public-reduction and native Source owners.
 
 Library owns one immutable closed nine-axis operation set: `candidateKeys`, `nativeRows`,
 `identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks` and `engineRequests`.
-Use `@rezics/bounds` overflow-safe sums/repeats, complete nested costs, explicit aliases and deterministic conflict resolution. Actual
-Progress/Continue and Content Feed callers consume these descriptors.
+Use `@rezics/bounds` overflow-safe sums/repeats, complete nested costs, explicit aliases and deterministic conflict
+resolution. Actual Progress/Continue and Content Feed callers consume these descriptors.
+
+Price the complete reached operation before dispatch: request and status reads, checkpoints, activation, preparation,
+authorization, locks, serialization, receipt and effect work, source fences, negative or discarded candidates, and
+every nested disclosure. Use actual SQL, schema-bounded escaped projections, serialized binds, negative probes,
+trigger work, transaction controls and DBOS calls. A short returned page, deduplicated terminal set, fixed candidate
+declaration or returned row count does not reduce physical work already performed. Apply the existing 100 raw-key
+and 262,144-row native ceilings and the published Search maxima. Declarations describe admissible work; they do not
+grant native execution or reservation authority, pagination evidence or funding.
 
 `collection-history-bounds.ts` now binds each metadata-history SQL leaf to its exact stored operands and bounded
 projection. Capture composes curator reconciliation, transition append, the 129-row prune scan and partial-coverage
@@ -33,6 +39,64 @@ current workflow name, maintenance queue, step identity and return-existing poli
 are charged in the page declaration; the enqueue is a separate `engineRequests: 1` continuation term and is not
 double-counted in the event fence. The page wrapper preserves the existing one-command-attempt-per-DBOS-attempt
 retry composition. `collection-order-bounds.ts` owns complete add/move/begin actor-command ceilings at that binding.
+
+Collection delete and exact restore remain existing `runCommand` transactions and current owner authorization still
+precedes receipt replay. Their paths account for preparation, identity and owner reads, lock and revision checks,
+original SQL, Shelf write/counter, receipt and History, effects, rollback and mounted result. A listed delete composes
+the public-reduction owner's actual writes. Replay and stale, expired or no-effect paths have separate costs and do
+not repeat or rebase the original result.
+
+`collection-retention-bounds.ts` declares each reached SQL object by its imported SQL text and ordered named binds;
+runtime execution checks the actual binds against that immutable ceiling and submits the leaf through the existing
+Library command association. SQL byte cost is UTF-8 text, JSON-serialized binds and the closed returned projection.
+The projection uses database int4/int8, route and UUID widths, native 200/2,000-character title/description checks,
+and PostgreSQL timestamp text. Stored presentation Type keys are bounded by the installed validated Definition
+release's 4 MiB serialized ceiling. The mounted Undo response includes its actual curated Collection shape, the
+Content reader's 12-variant cap and 8,192-byte serialized credit ceiling. Its read and cover authorization remain
+the existing Collection and Content owners; the response declaration accounts for serialization only.
+
+Delete and Undo branches retain current authentication/owner authorization before the five-key receipt lookup,
+then price fresh, exact replay, stale/expired, stale CAS and rollback separately. Fresh delete includes the active
+Collection lock/read, existing Shelf write gate and counter delta, tombstone trigger work, receipt/History/event
+fence and commit. Undo includes the original deletionId/revision/window SQL CAS, restore trigger work, existing
+Shelf counter, event fence and commit. The actor uses the existing common `shelfMaintenanceCommandPlan`; individual
+Collection SQL leaves bind the same command association before dispatch. A public delete also binds
+`public-filter-collection-reduction-work.ts`, which prices the actual epoch/read-state, gate, advance, append and
+coverage statements. It does not replace the publication owner's disposition or custody.
+
+Retention binds the due partition's ordered eight-key seek, exact deletion episode and cutoff. Each cleanup call
+revalidates its key and authoritative time under the locked head, then commits at most one nonempty child page in
+the existing order. Empty probes, row triggers, history cleanup, metadata pin revision, head anti-existence checks
+and the final retirement fence remain priced. Public custody and extant native capture custody retain the head.
+Capture retirement composes the native custody owner's bounded generation/hold/fence checks and its independent
+80-row page. Ordinary cleanup keeps the 64-row member, fact and reference pages, 25-entry metadata-history page,
+4096-byte key ceiling, and existing indexes and source generations.
+
+The ordinary deletion declaration distinguishes member and canonical-fact pages, canonical state, reference source,
+built-in reference/pin metadata, metadata history and state, then head removal/fence. A reached empty probe keeps its
+full statement/projection ceiling; the page's returned count does not refund the index or trigger work. Member
+DELETEs include their retained-parent/order/public/native/history triggers; current pin removal includes its one
+revision mutation and native-source trigger. The final head includes child anti-existence probes, structure-history
+cascade, source-generation/revision CAS and retirement fence. Native capture retirement imports its actual
+`retire*` statements and `retireCapture` composition from `native-source-custody-bounds.ts`; its executor binds the
+same operation through `operationUse`, including the 80-hold page. The terminal participant shares the larger of
+one capture-plus-local page and a local-only page; this does not grant ordinary cleanup terminal authority.
+
+The ten-minute DBOS workflow uses at most 32 iterations per segment. Discovery and page removal remain independent
+retried steps; continuation keeps the original root, cutoff and exact frontier and carries at most one key. The
+segment cost distinguishes empty, pending, stale, not-due, retained and purged paths, repeated delivery and final
+enqueue. It is not a bound on an account's complete retained graph. Dense-order repair's separate stages remain
+composed with their existing Shelf, Source and command owners.
+
+Due discovery stays on the indexed `(purge_after, route, collection_id)` frontier with its eight-key LIMIT, plus the
+partition observation and transaction controls. Discovery and remove use the installed command-step retry count;
+each retry retains its own DBOS history/engine-request charge. The 32-iteration segment includes a full discovery or
+remove branch per iteration, the original bounded payload, and final continuation serialization/enqueue with
+return-existing workflow identity. Only the first key can be carried; the next seek revisits the remaining due keys.
+Growth evidence holds one selected deletion fixed while unrelated owners/Collections/history grow, then grows the
+selected child graph independently at 64, 512 and 4,096 occurrences. The focused retention suites exercise the
+mounted DELETE/Undo response, D1/Undo/D3 replay and stale-page cases, exact expiry, live Source/public custody and
+bounded continuation. The five existing Search receiving suites remain integration acceptance.
 
 ## Follow operation composition
 
