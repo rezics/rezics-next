@@ -660,7 +660,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       await show({ state: 'signed-out', csrfToken: null });
       retired('G');
       // The shared Undo ID now belongs to another journey; retiring G must leave it usable.
-      expect(document.body.textContent).toContain('Another journey Undo');
+      expect(unrelatedUndo.title).toBe('Another journey Undo');
       await act(async () => unrelatedUndo.actionProps!.onClick!({} as never));
       expect(unrelatedUndos).toBe(1);
       expect(hydrationErrors).toEqual([]);
