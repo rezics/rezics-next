@@ -27,6 +27,7 @@ import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';
 
 import { facetProperties, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
+import { pickText } from '@rezics/composition';
 import * as v from 'valibot';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
@@ -43,6 +44,7 @@ import { getLocale, locales } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { kernelClient } from '../kernel/client.ts';
 import { requestLanguages } from '../kernel/languages.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { readRelease, type Release } from '../subject/definitions.ts';
 import { PageHeading } from '../shell/page-heading';
 import { localizedLabel } from './results.tsx';
@@ -943,9 +945,33 @@ export function SearchPage({
   const number = new Intl.NumberFormat(locale);
   const label = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, locale).text.trim() || fallback;
-  const constraints: { key: string; text: string; state: SearchLoaderDeps; details?: unknown; lang?: string }[] = [];
-  const add = (key: string, text: string, state: SearchLoaderDeps, details?: unknown, lang?: string) =>
-    constraints.push({ key, text, state: { ...state, cursor: undefined }, details, ...(lang ? { lang } : {}) });
+  const constraints: {
+    key: string;
+    text: string;
+    state: SearchLoaderDeps;
+    details?: unknown;
+    lang?: string;
+    description?: string;
+    descriptionLang?: string;
+  }[] = [];
+  const add = (
+    key: string,
+    text: string,
+    state: SearchLoaderDeps,
+    details?: unknown,
+    lang?: string,
+    description?: string,
+    descriptionLang?: string,
+  ) =>
+    constraints.push({
+      key,
+      text,
+      state: { ...state, cursor: undefined },
+      details,
+      ...(lang ? { lang } : {}),
+      ...(description ? { description } : {}),
+      ...(descriptionLang ? { descriptionLang } : {}),
+    });
   if (type)
     add(
       'type',
@@ -956,18 +982,23 @@ export function SearchPage({
       },
       { type },
     );
-  for (const kind of navigationState.kinds ?? [])
+  for (const kind of navigationState.kinds ?? []) {
+    const choice = discovery?.status === 'ready' ? discovery.page.kinds.values.find((entry) => entry.id === kind) : undefined;
+    const kindLabel = choice ? localizedLabel(choice.labels, locale) : undefined;
+    const description = pickText(bundledRelease.types[kind]?.descriptions ?? {}, locale);
     add(
       `kind:${kind}`,
       `${m.home_kind_label({}, options)}: ${label(
-        discovery?.status === 'ready'
-          ? discovery.page.kinds.values.find((entry) => entry.id === kind)?.labels
-          : undefined,
+        choice?.labels,
         m.search_constraint_identity_kind_unavailable({}, options),
       )}`,
       { ...navigationState, kinds: navigationState.kinds?.filter((value) => value !== kind) },
       { kind },
+      kindLabel?.lang,
+      description.text,
+      description.lang,
     );
+  }
   for (const [property, values] of Object.entries(selectedFacets))
     for (const value of values) {
       const page = data?.refinement?.initial;
@@ -1250,7 +1281,7 @@ export function SearchPage({
       </Button>
       {constraints.length > 0 && (
         <ul aria-label={m.refinement_selected({}, options)} data-search-constraints className="flex flex-wrap gap-2">
-          {constraints.map(({ key, text, state, lang }, index) => (
+          {constraints.map(({ key, text, state, lang, description, descriptionLang }, index) => (
             <li key={key} className="min-w-0 max-w-full">
               <a
                 className={cn(
@@ -1270,7 +1301,14 @@ export function SearchPage({
                 href={hrefFor(state)}
               >
                 <span lang={lang} className="min-w-0 text-start wrap-anywhere">
-                  {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
+                  <span className="block">
+                    {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
+                  </span>
+                  {description && (
+                    <span lang={descriptionLang} className="block pt-1 text-xs text-muted-foreground">
+                      {description}
+                    </span>
+                  )}
                 </span>
                 <XIcon aria-hidden="true" className="size-3" />
               </a>

@@ -5895,7 +5895,7 @@
   "search_result_kinds_help": "可按类型筛选结果，也可选择账号。不选则包含所有类型，下一页可能还有更多选项。",
   "search_all_kinds": "所有结果类型",
   "search_choose_kinds": "选择具体的结果类型",
-  "search_kind_choice": "{value}类结果",
+  "search_kind_choice": "类型为 {value} 的结果",
   "search_subject_type": "条目类型",
   "search_subject_type_help": "包含子类型。账号请在“结果类型”中选择。",
   "search_all_subject_types": "不限条目类型",
@@ -10868,5 +10868,6 @@
   "library_archive_entry_update": "明确更新已审核的本地条目",
   "library_archive_entry_assign": "添加已审核的分配",
   "library_archive_entry_state_id": "当前支持的状态 ID",
-  "library_archive_entry_select": "选择记录 {ordinal}"
+  "library_archive_entry_select": "选择记录 {ordinal}",
+  "music_context_relations_unavailable": "关系页面暂时无法读取。个人资料事实仍可查看；请重试此页面。"
 }

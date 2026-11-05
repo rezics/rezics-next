@@ -5890,7 +5890,7 @@
   "search_result_kinds_help": "계정을 포함해 원하는 결과 유형을 선택하세요. 선택하지 않으면 모든 유형이 표시됩니다. 다음 페이지에 선택 항목이 더 있을 수 있습니다.",
   "search_all_kinds": "모든 결과 유형",
   "search_choose_kinds": "결과 유형 지정",
-  "search_kind_choice": "{value} 결과",
+  "search_kind_choice": "유형 {value} 결과",
   "search_subject_type": "항목 유형",
   "search_subject_type_help": "하위 유형도 포함합니다. 계정은 ‘결과 유형’에서 선택하세요.",
   "search_all_subject_types": "항목 유형 제한 없음",
@@ -10856,5 +10856,6 @@
   "library_archive_entry_update": "검토한 로컬 항목을 명시적으로 업데이트",
   "library_archive_entry_assign": "검토한 할당 추가",
   "library_archive_entry_state_id": "현재 지원되는 상태 ID",
-  "library_archive_entry_select": "레코드 {ordinal} 선택"
+  "library_archive_entry_select": "레코드 {ordinal} 선택",
+  "music_context_relations_unavailable": "관계 페이지를 읽을 수 없습니다. 프로필 사실은 계속 표시되며 이 페이지를 다시 시도할 수 있습니다."
 }

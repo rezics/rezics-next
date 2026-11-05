@@ -5893,7 +5893,7 @@
   "search_result_kinds_help": "アカウントも含め、表示する結果のタイプを選べます。未選択ならすべてのタイプが対象です。続きのページにも選択肢がある場合があります。",
   "search_all_kinds": "すべての結果タイプ",
   "search_choose_kinds": "結果のタイプを指定する",
-  "search_kind_choice": "{value}の結果",
+  "search_kind_choice": "タイプ {value} の結果",
   "search_subject_type": "項目の型",
   "search_subject_type_help": "下位の型も含みます。アカウントは「結果のタイプ」で選べます。",
   "search_all_subject_types": "項目の型を指定しない",
@@ -10950,5 +10950,6 @@
   "library_archive_entry_update": "レビューしたローカルエントリーを明示的に更新",
   "library_archive_entry_assign": "レビューした割り当てを追加",
   "library_archive_entry_state_id": "現在対応する状態ID",
-  "library_archive_entry_select": "レコード {ordinal} を選択"
+  "library_archive_entry_select": "レコード {ordinal} を選択",
+  "music_context_relations_unavailable": "関連ページを読み込めませんでした。プロフィールの事実は表示したまま、このページを再試行できます。"
 }
