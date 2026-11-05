@@ -1,6 +1,6 @@
 import { accountDiscoverySource } from '../access/index.ts';
-import { createReviewDiscoverySource } from '../content/index.ts';
-import { publicCollectionDiscoverySource } from '../library/index.ts';
+import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/discovery-source.ts';
+import { publicCollectionDiscoverySource } from '../library/discovery.ts';
 import { readSpaceDiscoverySummaries, spaceDiscoverySource } from '../community/index.ts';
 import type { DiscoveryProducerEntry } from '../search/index.ts';
 import { createDiscoveryOwnerAdapters } from '../search/default-discovery.ts';
@@ -8,7 +8,6 @@ import { createRatedSubjectSource } from '../search/rated-source.ts';
 import { createSpaceDiscoveryAdapter } from '../search/space-discovery.ts';
 import type { SubjectSource } from '../search/source.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { ReviewDiscoverySource } from '../content/index.ts';
 import type { Access } from '../request/access.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';

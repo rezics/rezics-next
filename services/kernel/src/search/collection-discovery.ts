@@ -4,14 +4,14 @@ import {
   type CollectionDiscoverySnapshot,
   type CollectionDiscoveryPage,
   type CollectionDiscoveryItem,
-} from '../library/index.ts';
+} from '../library/discovery.ts';
 import {
   readPublicCollectionDiscoverySummaries,
   type PublicCollectionDiscoveryDependencies,
   type PublicCollectionDiscoveryContext,
   type PublicCollectionDiscoveryResult,
   type PublicCollectionDiscoverySummary,
-} from '../library/index.ts';
+} from '../library/discovery.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { DiscoveryOwnerAdapter, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
 

@@ -1,7 +1,7 @@
 import type { Release } from '@rezics/definitions';
 import type { DiscoveryFilterDocument } from '@rezics/filter';
-import type { AvatarSummary, ReviewDiscoverySource } from '../content/index.ts';
-import type { FollowDiscovery, PublicCollectionDiscoverySummary as CollectionDiscoveryCard, ViewerFactsPage } from '../library/index.ts';
+import type { AvatarSummary, ReviewDiscoverySource } from '../content/discovery-source.ts';
+import type { FollowDiscovery, PublicCollectionDiscoverySummary as CollectionDiscoveryCard, ViewerFactsPage } from '../library/discovery.ts';
 import type { PublicFigureView } from '../rating/index.ts';
 import type { SummaryReaderDependencies, SubjectSummary } from '../semantic/index.ts';
 import type { SpaceDiscoveryDependencyReadiness, SpaceEntryPage, SpaceEntryPresentation } from '../community/index.ts';

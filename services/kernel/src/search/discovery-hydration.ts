@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { readAccountDiscoverySummaries } from '../access/index.ts';
+import { accountDiscoverySource, readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import type {
   DiscoveryOwnerHit,
@@ -23,7 +23,8 @@ export function createNativeDiscoveryRegistry(options: {
   routeKey: Uint8Array;
   release: DiscoveryRegistryOptions['release'];
   semantic: Pick<DiscoveryRegistryOptions['semantic'], 'source' | 'icons'>;
-  accounts: Pick<DiscoveryRegistryOptions['accounts'], 'source' | 'labels' | 'icon'>;
+  accounts: Pick<DiscoveryRegistryOptions['accounts'], 'labels' | 'icon'> &
+    Partial<Pick<DiscoveryRegistryOptions['accounts'], 'source'>>;
   ownerAdapters?: DiscoveryOwnerAdapterSlots;
   languages?: readonly string[];
 }) {
@@ -39,7 +40,7 @@ export function createNativeDiscoveryRegistry(options: {
     },
     accounts: {
       ...options.accounts,
-      source: options.accounts.source,
+      source: options.accounts.source ?? accountDiscoverySource(pool),
       async hydrate(ids, context) {
         const summaries = await readAccountDiscoverySummaries({ pool, routeKey, ...context }, ids, {
           languages,

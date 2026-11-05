@@ -6,7 +6,7 @@ import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
 import './recent-searches.ts';
 import { trendingSearchStore } from './trending-searches.ts';
 import { createKernel } from '../http/kernel.ts';
-import { createKernelRuntimeDefaults } from '../server.ts';
+import { createKernelRuntimeDefaults } from '../work/runtime-defaults.ts';
 import { createDefaultPublicFilterRuntime } from './public-runtime.ts';
 import { createPublicPreparation, type PublicPreparation } from './public-preparation.ts';
 import { createScopePreparation } from './scope-preparation.ts';

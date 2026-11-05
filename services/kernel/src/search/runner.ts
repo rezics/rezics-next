@@ -1,5 +1,5 @@
 import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
-import type { ReviewDiscoverySource } from '../content/index.ts';
+import type { ReviewDiscoverySource } from '../content/discovery-source.ts';
 import { withConnection } from '../database/pool.ts';
 import { readErasureStatus, resolveLateErasureItem } from '../access/erasure.ts';
 import {
