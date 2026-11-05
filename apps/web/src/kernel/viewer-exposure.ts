@@ -23,12 +23,14 @@ function expectedSubject(value: unknown): string {
 export const readViewerExposure = createServerFn({ method: 'GET' })
   .validator(expectedSubject)
   .handler(async ({ data: expected }) => {
+    console.log('viewer exposure handler', expected);
     setResponseHeader('Cache-Control', 'private, no-store');
     try {
       const { env } = await import('cloudflare:workers');
       const { prepareSession, sessionSubject, viewerCredential } = await import('../session/request');
       const request = getRequest();
       await prepareSession(request, env as Partial<SessionEnv>);
+      console.log('viewer exposure prepared', request.url, request.headers.get('cookie'));
       const subject = sessionSubject(request);
       const authorization = viewerCredential(request);
       // The expected subject can reject a read, but only the prepared request establishes its identity.
