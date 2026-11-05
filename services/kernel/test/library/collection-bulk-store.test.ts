@@ -28,6 +28,7 @@ const target = (): CollectionBulkTarget => ({
 });
 const preview = (targets: CollectionBulkTarget[]) => {
   const accountId = newId(route);
+  const sourceId = newId(route);
   return {
     route,
     accountId,
@@ -38,7 +39,23 @@ const preview = (targets: CollectionBulkTarget[]) => {
     request: {
       action: 'set_status' as const,
       state: 'completed' as const,
-      selection: { kind: 'query' as const, filter: { state: 'planned' as const } },
+      selection: {
+        kind: 'query' as const,
+        sourceId,
+        filter: '{"state":"planned"}',
+        sort: 'id' as const,
+        capture: {
+          id: sourceId,
+          revision: 1,
+          membershipKind: 'curated' as const,
+          exposure: 'private' as const,
+          sourceDigest: 'c'.repeat(64),
+          filter: '{"state":"planned"}',
+          sort: 'id' as const,
+          scannedCandidates: targets.length,
+          selectedSubjects: targets.length,
+        },
+      },
     },
     // This test exercises the internal storage seam, not initiator capture or authorization.
     initiator: {} as DurableInitiatorRecord,
@@ -94,7 +111,7 @@ test('confirmation and recovery use the persisted preview, skip a changed entry 
     expect((await readCollectionBulk(tx, input))?.phase).toBe('completed');
     for (let ordinal = 0; ordinal < 3; ordinal++) {
       const row = recovered[ordinal]!;
-      if (row.state === 'pending') throw new Error('Expected a terminal result');
+      if (row.state === 'pending' || row.state === 'reconciling') throw new Error('Expected a terminal result');
       expect(
         await applyCollectionBulkTarget(tx, { ...input, ordinal }, async () => {
           throw new Error('A completed effect was repeated');
@@ -167,7 +184,7 @@ test('explicit subjects and duplicate-subject occurrences retain their exact ide
       request: {
         action: 'set_status',
         state: 'completed',
-        selection: { kind: 'explicit', targets: [{ subjectId: subject.subjectId }] },
+        selection: { kind: 'explicit' },
       },
     });
     expect((await readCollectionBulk(tx, input))?.request.selection).toEqual({ kind: 'explicit' });
@@ -176,7 +193,7 @@ test('explicit subjects and duplicate-subject occurrences retain their exact ide
     const occurrences = preview([]);
     await previewCollectionBulk(tx, {
       ...occurrences,
-      request: { action: 'remove_from_collection', collectionId, selection: { kind: 'occurrences', memberIds } },
+      request: { action: 'remove_from_collection', collectionId, selection: { kind: 'occurrences' } },
       targets: memberIds.map((memberId) => ({
         kind: 'occurrence',
         subjectId: subject.subjectId,
