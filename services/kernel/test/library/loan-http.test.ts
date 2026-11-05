@@ -8,7 +8,7 @@ import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
-import { testRouteKey } from '../../support/test-kernel.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 
 const scopes = ['copy:create', 'copy:update', 'copy:delete', 'copy:list', 'copy:read'];
 let now = Date.parse('2026-10-26T12:00:00.000Z');
@@ -120,7 +120,9 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
     expect(response.status).toBe(201);
     return { id: ((await response.json()) as { subject: { id: string } }).subject.id, label };
   }));
-  const [survivor, redirected] = [...people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const sortedPeople = [...people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const survivor = sortedPeople[0]!;
+  const redirected = sortedPeople[1]!;
   const personCopyResponse = await native.send('owner', 'POST', '/v1/copies', {
     subjectId,
     kind: 'physical',
