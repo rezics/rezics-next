@@ -1,8 +1,56 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { git } from './merge.ts';
+import { firstFailure, git } from './merge.ts';
+import type { PromotionRun } from './types.ts';
 import { integrationHarness } from './test-support.ts';
+
+test('a matching failure on main is classified as an environment failure through the promotion entry', async () => {
+  const h = integrationHarness();
+  try {
+    const task = await h.seed('candidate');
+    const mainBase = h.head('main');
+    const devHead = h.head();
+    git(h.root, 'branch', 'stabilize', devHead);
+    const failure = firstFailure('AssertionError: shared baseline failure');
+    const run: PromotionRun = {
+      id: 'promotion-baseline-fixture',
+      phase: 'classify-main',
+      mainBase,
+      devHead,
+      taskIds: [task.id],
+      rootGate: ['fixture-gate'],
+      promotionParallelism: h.settings.promotionParallelism,
+      boundaries: [{ taskId: task.id, commit: task.integratedCommit! }],
+      headResults: [
+        {
+          commit: devHead,
+          command: ['fixture-gate'],
+          passed: false,
+          timedOut: false,
+          firstFailure: failure,
+        },
+      ],
+      prefixResults: [],
+      failedCommand: ['fixture-gate'],
+      firstFailure: failure,
+    };
+    h.store.savePromotion(run);
+    const checked: { commit: string; command: string[] }[] = [];
+
+    await h.promote(async (command, cwd) => {
+      checked.push({ commit: git(cwd, 'rev-parse', 'HEAD'), command: [...command] });
+      return { passed: false, output: 'AssertionError: shared baseline failure', timedOut: false };
+    });
+
+    expect(checked).toEqual([{ commit: mainBase, command: ['fixture-gate'] }]);
+    expect(h.head('main')).toBe(mainBase);
+    expect(h.head()).toBe(devHead);
+    expect(h.store.promotion()).toMatchObject({ phase: 'report-environment', mainResult: { passed: false } });
+  } finally {
+    h.dispose();
+  }
+});
 
 test('a stale verifier ref thousands of commits behind cannot pin promotion or bypass the frozen candidate gate', async () => {
   const h = integrationHarness();
