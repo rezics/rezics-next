@@ -37,6 +37,8 @@ then execute in the normal admission lane with ordinary write rate limiting.
 Commands use the existing generated custom-method transport and an immutable group/action/body/idempotency key.
 A recorded `{ group, open, changed }` is historical, including `changed: false`. Current status needs a fresh native
 read; loss of a response remains unknown. Only an explicit user retry can resend the same immutable operation.
+After a recorded response, the operator can explicitly review the next open or close in the same visit; selecting it
+replaces the settled review and captures its own continuation. Reload and paging alone keep the recorded review.
 Paging and reload retain an unresolved immutable operation. A selected management page may supply a group
 independently of the visible discovery catalogue, but sending still refreshes both that native source selection
 and exact action authority. No automatic write, arbitrary group input, receipt-derived current status or local

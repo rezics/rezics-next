@@ -256,7 +256,7 @@ export class ExposureVisit {
       page.status === 'ready' &&
       Object.values(page.current.actions).some(Boolean) &&
       !this.busy &&
-      !this.operation.intent
+      (!this.operation.intent || this.operation.outcome?.status === 'recorded')
     );
   }
 
@@ -315,7 +315,7 @@ export class ExposureVisit {
   }
 
   review(group: string, action: Action) {
-    if (!this.mutationCurrent() || this.busy || this.operation.intent) return false;
+    if (!this.canReview) return false;
     const reviewed = this.operation.review({ group, action, key: crypto.randomUUID(), body: {} });
     if (reviewed) {
       this.commandIntent = null;

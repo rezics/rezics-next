@@ -7,6 +7,7 @@ import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { securityScopeLimit } from '@rezics/auth-contract';
 import { migrate } from './database.ts';
 import { mountedWebsiteConfiguration } from './website-composition.ts';
+import { websiteWorkerScopes } from '../../../apps/web/scripts/website-configuration.ts';
 import { DEVELOPMENT_SHOWCASE_SCOPES } from '../../../scripts/datasets/showcase-community.ts';
 import { developmentCollectionScopes } from '../../../scripts/datasets/development-showcase.ts';
 import { developmentPersonalListScopes } from '../../importer/src/showcase-personal-list.ts';
@@ -58,6 +59,16 @@ export function developmentAuthPageBindings(website: { AUTH_SECURITY_SCOPE_CONFI
   return { AUTH_SECURITY_SCOPE_CONFIGURATION: website.AUTH_SECURITY_SCOPE_CONFIGURATION };
 }
 
+/** A supplied deployment artifact remains the registration and request ceiling for this stack. */
+export function developmentWebsiteScopeConfiguration(
+  mounted: { scopes: string[]; WEBSITE_SCOPES: string },
+  environment: NodeJS.ProcessEnv = process.env,
+) {
+  if (!environment.WEBSITE_CONFIGURATION_FILE) return mounted;
+  const WEBSITE_SCOPES = websiteWorkerScopes(environment);
+  return { scopes: WEBSITE_SCOPES.split(' '), WEBSITE_SCOPES };
+}
+
 /** Build the Web launch bindings from the same mounted website scope composition. */
 export function developmentWebsiteBindings(
   keys: Pick<DevelopmentKeys, 'website'>,
@@ -96,7 +107,7 @@ export async function developmentWebsiteConfiguration(env?: Record<string, strin
     );
     const siteActions = accessActionCatalogue(catalogue);
     return {
-      ...mountedWebsiteConfiguration(catalogue),
+      ...developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(catalogue)),
       AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(siteActions.keys()),
     };
   } finally {
@@ -383,7 +394,7 @@ export async function assemble(options?: {
     ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
   });
   const actions = accessActionCatalogue(actionCatalogue(kernel));
-  const website = mountedWebsiteConfiguration(actionCatalogue(kernel));
+  const website = developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(actionCatalogue(kernel)));
   let service: import('../src/index.ts').AuthService;
   const access = createAccess({
     actions,

@@ -32,8 +32,10 @@ test('confirmation freezes a copy, rejects newline keys, and excludes double sub
   });
   expect((await first)?.status).toBe('recorded');
   expect(await controller.send(change)).toBeNull();
-  expect(controller.review({ ...input, action: 'close' })).toBe(false);
   expect(controller.cancel()).toBe(false);
+  expect(controller.review({ ...input, action: 'close', key: crypto.randomUUID() })).toBe(true);
+  expect(controller.outcome).toBeNull();
+  expect(controller.intent?.action).toBe('close');
 });
 
 test('explicit retry keeps its first CSRF continuation and retirement preserves an unresolved immutable source record', async () => {

@@ -329,7 +329,13 @@ test('production route and page retire reader-bound work without losing same-own
     await Promise.resolve();
   });
   expect(button(container, m.exposure_confirm()).disabled).toBe(true);
-  await resolveChange(2, { status: 'not-sent', current: readyPage('collections') });
+  await resolveChange(2, {
+    status: 'recorded',
+    operation: changeCalls[2]!.operation,
+    receipt: { group: 'collections', open: false, changed: true },
+    current: readyPage('collections'),
+  });
+  expect(actionButton(container, 'open').disabled).toBe(false);
 
   // A recorded response from a retired owner stays historical and cannot replace a fresh reader's page.
   await click(actionButton(container, 'open'));

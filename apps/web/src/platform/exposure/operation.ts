@@ -14,9 +14,13 @@ export class ExposureOperation {
   private continuation: string | null = null;
 
   review(intent: Intent): boolean {
-    if (this.retired || this.busy || this.intent) return false;
+    if (this.retired || this.busy || (this.intent && this.outcome?.status !== 'recorded')) return false;
     this.intent = parseIntent(intent);
     this.outcome = null;
+    // Only an explicit review replaces a settled command. Unknown delivery keeps its original continuation.
+    this.unresolved = false;
+    this.continuationCaptured = false;
+    this.continuation = null;
     return true;
   }
   cancel(): boolean {
