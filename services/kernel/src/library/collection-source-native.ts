@@ -581,7 +581,8 @@ export async function readNativeCollectionMetadataForWork(
       const requestBytes = Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values));
       if (requestBytes > bound.bytes) throw new ProblemError('dependency_unavailable');
       calls.add(key);
-      const result = await tx.query({ text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) });
+      const request: QueryConfig = { text: sql, values, query_timeout: Math.max(1, deadline - Date.now()) };
+      const result = await tx.query(request);
       const resultBytes = Buffer.byteLength(JSON.stringify(result.rows) ?? '');
       if (result.rows.length > 1 || resultBytes > bound.bytes - requestBytes)
         throw new ProblemError('dependency_unavailable');

@@ -304,7 +304,7 @@ export function collectionSelectedPublicationPlan(selectionCount: number): Colle
       closureAndOwnerFacts,
       ownerFilterMatch,
       scopeCurrentness,
-      sourcePreparation,
+      sourcePreparation: sourcePrepare,
       canonicalDeduplication,
       ownerFilterReauthorization: sumBounds(MEMBERS_PREPARATION_SOURCE_COST, privateAuthority),
       preparation,
