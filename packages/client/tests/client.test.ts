@@ -373,3 +373,35 @@ test('reviewed Person evidence accepts exactly the four source keys with their i
   expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentitySource')).toBe('vndb_cross_media');
   expect(new URL(remote.sent[0]!.url).searchParams.get('reviewIdentityExternalId')).toBe('s123');
 });
+
+test('installed identity operation poll types distinguish pending from published results', async () => {
+  const OTHER = '019a1b2c-3d4e-7f00-8a00-000000000002';
+  const remote = kernel([
+    () => json(200, { operation: { id: ID, done: false } }),
+    () =>
+      json(200, {
+        operation: {
+          id: ID,
+          done: true,
+          result: { survivor: ID, redirected: OTHER, revision: 2 },
+        },
+      }),
+  ]);
+  const reviewed = reviewedPersonRequests(createKernelClient(ORIGIN, { fetch: remote.fetch }));
+  const pending = await reviewed.operation(ID);
+  expect(pending.status).toBe(200);
+  expect(pending.data?.operation).toEqual({ id: ID, done: false });
+  const published = await reviewed.operation(ID);
+  expect(published.data?.operation).toEqual({
+    id: ID,
+    done: true,
+    result: { survivor: ID, redirected: OTHER, revision: 2 },
+  });
+  expect(remote.sent.map((row) => row.url)).toEqual([
+    `${ORIGIN}/v1/subjectIdentityOperations/${ID}`,
+    `${ORIGIN}/v1/subjectIdentityOperations/${ID}`,
+  ]);
+  expectTypeOf(published.data!.operation).toMatchTypeOf<
+    { id: string; done: false } | { id: string; done: true; result: { survivor: string; redirected: string; revision: number } }
+  >();
+});

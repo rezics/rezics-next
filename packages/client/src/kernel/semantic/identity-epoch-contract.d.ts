@@ -159,6 +159,14 @@ export type IdentityAdmissionInput = Readonly<{
 export type IdentityAdmissionAuthority = Readonly<{
     basis?: CommandBasis;
     authorization?: CommandAuthorization;
+    authorizationFor?: (partition: number) => Promise<CommandAuthorization>;
+    deadline?: number;
+    clock?: () => Date;
+}>;
+export declare function commandAuthorityAt(authority: IdentityAdmissionAuthority, partition: number): Promise<{
+    partition: number;
+    basis?: CommandBasis;
+    authorization?: CommandAuthorization;
     deadline?: number;
     clock?: () => Date;
 }>;
