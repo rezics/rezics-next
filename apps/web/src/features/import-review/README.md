@@ -55,6 +55,8 @@ The mounted journey compares exactly two original Person records, Bangumi `perso
 
 An uncertain command retains its original body, ordered endpoints, idempotency key and reader-bound transport for exact retry. Definite refusal requires a fresh comparison before another decision. Admission is reported separately from publication, and acceptance/adoption remain separate editorial operations. Session replacement retires this surface through the existing mounted reader visit.
 
+Decision: retain the strict asynchronous admission check until Semantic delivers its generated admission and publication routes. A synchronous HTTP 200 merge response remains a failure and cannot unlock credit publication.
+
 ## Bounds and retained verification
 
 One explicit directory action reads at most20; no auto-refill or enumeration. Existing queue limit20, selection20,

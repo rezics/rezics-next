@@ -66,7 +66,7 @@ test('namesakes, missing producer, Organization, redirects and denied action rem
   }
 });
 
-test('mounted caller uses paired native observations and sends guarded evidence; stale and denied stay native failures', async () => {
+test('mounted caller uses paired native observations; stale, denied and synchronous merges stay failures', async () => {
   const native = reads();
   const sent: Request[] = [];
   const client = createKernelClient('https://kernel.test', {
@@ -77,7 +77,7 @@ test('mounted caller uses paired native observations and sends guarded evidence;
         const source = new URL(request.url).searchParams.get('reviewIdentitySource');
         return Response.json(native[source === 'bangumi' ? 0 : 1]);
       }
-      return Response.json({}, { status: sent.length === 3 ? 409 : 403 });
+      return Response.json({}, { status: sent.length === 3 ? 409 : sent.length === 4 ? 403 : 200 });
     }) as typeof fetch,
   });
   const comparison = await readPersonComparison(client, 'Bearer reviewer', originals);
@@ -85,9 +85,12 @@ test('mounted caller uses paired native observations and sends guarded evidence;
   const command = { body: comparison.merge, key: uuid(99) };
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: false, reason: 'stale' });
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: false, reason: 'denied' });
+  expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toMatchObject({ ok: false });
   expect(sent[2]!.url).toBe('https://kernel.test/v1/subjects:merge');
   expect(await sent[2]!.text()).toBe(await sent[3]!.text());
+  expect(await sent[2]!.text()).toBe(await sent[4]!.text());
   expect(sent[3]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
+  expect(sent[4]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
 });
 
 test('a current Person page reflects withdrawn and conflicting identifiers even when old credits remain', () => {
