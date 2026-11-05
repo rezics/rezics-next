@@ -10,6 +10,8 @@ import { authorErasureRefreshes, erasureStage, type ErasureOperation, type Erasu
 import { erasureRefusal } from './author-erasure-entry';
 import {
   authorErasureSessionIsAuthenticated,
+  useAuthorErasureBrowserVisit,
+  type AuthorErasureBrowserVisit,
   authorErasureSessionSource,
   type AuthorErasureSessionSource,
 } from './author-erasure-lifetime';
@@ -29,6 +31,7 @@ type OperationVisit = {
   readonly navigationKey: string;
   readonly read: () => Promise<ErasureRead>;
   readonly source: AuthorErasureSessionSource;
+  readonly browser: AuthorErasureBrowserVisit;
   readonly revision: number;
   readonly sessionBound: boolean;
   readonly budget: RefreshBudget;
@@ -77,6 +80,7 @@ function createOperationVisit(input: {
   navigationKey: string;
   read: () => Promise<ErasureRead>;
   source: AuthorErasureSessionSource;
+  browser: AuthorErasureBrowserVisit;
   revision: number;
   sessionBound: boolean;
   budget: RefreshBudget;
@@ -106,6 +110,7 @@ function createOperationVisit(input: {
     isCurrent(serial = visit.serial, connection = visit.connection) {
       if (
         visit.retired ||
+        !visit.browser.current() ||
         !visit.connected ||
         serial !== visit.serial ||
         connection !== visit.connection ||
@@ -119,6 +124,7 @@ function createOperationVisit(input: {
       return !operation || operation.metadata.authorId === session.subject;
     },
     currentState() {
+      if (visit.retired || !visit.browser.current()) return { kind: 'unavailable' };
       if (visit.sessionBound && visit.source.snapshot() !== visit.revision) return { kind: 'unavailable' };
       if (!visit.sessionBound) return visit.state;
       const session = visit.source.read();
@@ -232,6 +238,7 @@ export function AuthorErasureOperationPage({
   const derivedOperationId =
     suppliedOperationId ?? (initial.kind === 'available' ? initial.operation.name.slice('operations/'.length) : '');
   const routeScope = JSON.stringify([derivedOperationId, navigationKey]);
+  const browser = useAuthorErasureBrowserVisit(routeScope);
   const budget = useRef<{ scope: string; value: RefreshBudget } | null>(null);
   const reader = useRef(read);
   reader.current = read;
@@ -260,6 +267,7 @@ export function AuthorErasureOperationPage({
       navigationKey,
       read,
       source,
+      browser,
       revision,
       sessionBound,
       budget: budget.current.value,
@@ -283,6 +291,7 @@ export function AuthorErasureOperationPage({
         navigationKey,
         read,
         source,
+        browser,
         revision,
         sessionBound,
         budget: budget.current.value,
@@ -359,7 +368,7 @@ export function AuthorErasureOperationPage({
           : Clock3;
   const counters = operation?.done && operation.response ? operation.response : operation?.metadata;
   const manual = !automatic || remaining === 0 || !operation;
-  const canManuallyRead = !sessionBound || authorErasureSessionIsAuthenticated(source.read());
+  const canManuallyRead = browser.current() && (!sessionBound || authorErasureSessionIsAuthenticated(source.read()));
   return (
     <article className="mx-auto w-full min-w-0 max-w-3xl space-y-6" data-slot="author-erasure-operation">
       <header className="space-y-2">
