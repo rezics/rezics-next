@@ -8,7 +8,7 @@ import { readRelease } from '../../subject/definitions';
 import { libraryStateOptions } from '../profiles';
 import { VNDB_ROWS, type VndbCommand } from './contract';
 import { requireVndbId as requireId, vndbReviewBody, vndbApplyBody } from './requests';
-import { kernelVndbPort, withVndbSession } from './native';
+import { kernelVndbPort, readVndbTargetEntry, withVndbSession } from './native';
 
 function originConfigured(): boolean {
   return Boolean((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN);
@@ -126,22 +126,39 @@ export const readVndbOccurrences = createServerFn({ method: 'GET' })
     return { kind: 'occurrences' as const, sessions: response.data.progressSessions, next: response.data.next };
   });
 
-/** State labels come only from the currently released profile for the explicitly searched catalogue type. */
+/** Read current private state and released choices before consenting to an explicit match. */
 export const readVndbTargetStates = createServerFn({ method: 'GET' })
-  .validator((input: unknown): string => {
+  .validator((input: unknown) => {
     if (
       !input ||
       typeof input !== 'object' ||
       !('type' in input) ||
+      !('targetId' in input) ||
       typeof input.type !== 'string' ||
       input.type.length === 0 ||
       input.type.length > 128
     )
       throw new Error('Invalid VNDB target type');
-    return input.type;
+    return { type: input.type, targetId: requireId(input.targetId), sender: requireSender(input) };
   })
-  .handler(async ({ data: type }) => {
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const entry = await readVndbTargetEntry(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      originConfigured(),
+      data.sender,
+      data.targetId,
+    );
+    if (entry.kind !== 'target-entry') return entry;
     const release = await readRelease();
-    if (!Object.hasOwn(release.types, type)) return [];
-    return libraryStateOptions(release, type, requestLocale() ?? 'en');
+    return {
+      kind: 'target' as const,
+      targetId: data.targetId,
+      baseline: entry.baseline,
+      states: Object.hasOwn(release.types, data.type)
+        ? libraryStateOptions(release, data.type, requestLocale() ?? 'en')
+        : [],
+    };
   });

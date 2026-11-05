@@ -9,6 +9,7 @@ import { SubjectCover, coverSubject, rowRatio } from '../subject-row';
 import type { ShelfLayout, ShelfSize } from '../shelf-params';
 import { importLibraryWorkHref } from './navigation';
 import type { ImportLibraryRow } from './presentation';
+import { ImportLibraryVote } from './vote';
 import { VndbAction } from '../personal-list-import/controls';
 
 const density: Record<ShelfSize, CoverDensity> = { s: 'small', m: 'medium', l: 'large' };
@@ -84,7 +85,12 @@ export function ImportLibraryRows({
               {...(row.titleLanguage ? { titleLang: row.titleLanguage } : {})}
               status={{ label: row.state }}
               {...(progress(row) ? { progress: progress(row)! } : {})}
-              meta={<Activity row={row} locale={locale} />}
+              meta={
+                <>
+                  <ImportLibraryVote row={row} />
+                  <Activity row={row} locale={locale} />
+                </>
+              }
               menuTrigger={inspect(row, index)}
             />
           </div>
@@ -104,6 +110,7 @@ export function ImportLibraryRows({
               <TableHead>{m.library_column_title()}</TableHead>
               <TableHead>{m.library_column_status()}</TableHead>
               <TableHead>{m.library_entry_progress()}</TableHead>
+              <TableHead>{m.subject_rating_control_label()}</TableHead>
               <TableHead>{m.library_sort_activity()}</TableHead>
               {onInspect ? <TableHead>{m.library_column_actions()}</TableHead> : null}
             </TableRow>
@@ -135,6 +142,9 @@ export function ImportLibraryRows({
                   <TableCell className="min-w-28 whitespace-normal">
                     {progress(row) ? <ProgressRow {...progress(row)!} /> : <span aria-hidden>—</span>}
                   </TableCell>
+                  <TableCell className="min-w-40 whitespace-normal">
+                    <ImportLibraryVote row={row} />
+                  </TableCell>
                   <TableCell className="max-w-48 whitespace-normal text-muted-foreground">
                     <Activity row={row} locale={locale} />
                   </TableCell>
@@ -161,6 +171,7 @@ export function ImportLibraryRows({
                 title={row.title}
                 {...(row.titleLanguage ? { titleLang: row.titleLanguage } : {})}
                 status={<State row={row} />}
+                meta={<ImportLibraryVote row={row} />}
                 {...(progress(row) ? { progress: progress(row)! } : {})}
                 date={<Activity row={row} locale={locale} />}
                 labels={{ select: row.title, menu: row.title }}
@@ -178,6 +189,7 @@ export function ImportLibraryRows({
                 <State row={row} />
               </p>
               {progress(row) ? <ProgressRow {...progress(row)!} /> : null}
+              <ImportLibraryVote row={row} />
               <p className="text-xs text-muted-foreground">
                 <Activity row={row} locale={locale} />
               </p>

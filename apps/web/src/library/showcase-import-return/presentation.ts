@@ -34,9 +34,11 @@ export type ImportLibraryRow = {
   state: string;
   stateLanguage?: string;
   progress: ProgressView | null;
+  vote: NonNullable<ImportLibraryPage['viewerFacts']>['rows'][number]['vote'] | null;
+  voteQuestion: NonNullable<ImportLibraryPage['viewerFacts']>['question'];
 };
 
-/** Only facts supplied by this FULL page participate. No source XML, receipts, votes or point reads. */
+/** Only current facts supplied by this FULL page participate. No source XML, receipts or point reads. */
 export function importLibraryRows(
   page: ImportLibraryPage,
   locale: string,
@@ -55,7 +57,9 @@ export function importLibraryRows(
       ...(title.lang ? { titleLanguage: title.lang } : {}),
       state: labels?.[index]?.state ?? m.library_other({}, { locale: locale as Locale }),
       ...(labels?.[index]?.stateLanguage ? { stateLanguage: labels[index]!.stateLanguage } : {}),
-      // The installed native page has no rating projection. Import score decisions cannot fill that gap.
+      // The native projection preserves input occurrence order, including repeated Subjects.
+      vote: page.viewerFacts?.rows[index]?.vote ?? null,
+      voteQuestion: page.viewerFacts?.question ?? null,
       progress: progressView('activeProgressSession' in entry ? (entry.activeProgressSession ?? null) : null, locale),
     };
   });
