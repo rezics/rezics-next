@@ -7,6 +7,8 @@ explicitly publish only what they choose. Every compatible vertical uses the sam
 
 Decision: Subject Label removal reviews one supplied assignment's exact identity and name; confirmed removal and Undo keep using the existing native unassign and restore path.
 
+Decision: A current-owner new-rule page with an exact null-Collection address enters the editor when Collection admission arrives; released definitions remain usable and Label choices remain independently gated.
+
 ## Done when
 
 - Curated and built-in Collections share identity, visibility, common members/filtering, ordering where applicable,

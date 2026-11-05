@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { CollectionRuleCurrent } from '../src/library/collection-rule-current';
 import { CollectionRuleEditor } from '../src/library/collection-rule-editor';
 import { unavailableRuleChoices, type RuleChoicePage, type RulePage } from '../src/library/collection-rule-read';
 import type { CollectionWriteResult } from '../src/library/collection-records';
 import type { RuleWrite } from '../src/library/collection-rule-actions';
 import { m } from '../src/paraglide/messages.js';
+import { viewerExposureLifetime, viewerExposureQuery } from '../src/kernel/viewer-exposure';
+import { sessionQuery } from '../src/session/query';
 
 type Props = ComponentProps<typeof CollectionRuleEditor>;
 const admitted = ['collection.create', 'collection_rule.get', 'collection_rule.update', 'library_label.list'];
@@ -135,6 +139,69 @@ async function mount(initial: Partial<Props> = {}) {
     },
     async close() {
       if (!unmounted) await act(async () => root.unmount());
+      for (const [key, descriptor] of previous) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+      await window.happyDOM.close();
+    },
+  };
+}
+
+async function mountCurrent(page: RulePage) {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library/rules/new' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-alice' });
+  const lifetime = viewerExposureLifetime(client);
+  const stopLifetime = lifetime.subscribe(() => {});
+  const owner = lifetime.getSnapshot();
+  expect(owner.state).toBe('signed-in');
+  if (owner.state !== 'signed-in') throw new Error('Signed-in session did not create a viewer observation');
+  const exposure = viewerExposureQuery(owner.observation);
+  const exposureValue = (admitted: readonly string[]) => ({ subject: 'alice', admitted });
+  client.setQueryData(exposure.queryKey, exposureValue([]));
+  const host = window.document.createElement('div') as unknown as HTMLDivElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  async function render() {
+    await act(async () =>
+      root.render(
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <CollectionRuleCurrent page={page} collectionId={null} />
+          </QueryClientProvider>
+        </StrictMode>,
+      ),
+    );
+  }
+  await render();
+  return {
+    host,
+    async admit(groups: readonly string[]) {
+      await act(async () => client.setQueryData(exposure.queryKey, exposureValue(groups)));
+      await render();
+    },
+    async close() {
+      await act(async () => root.unmount());
+      stopLifetime();
+      client.clear();
       for (const [key, descriptor] of previous) {
         if (descriptor) Object.defineProperty(globalThis, key, descriptor);
         else Reflect.deleteProperty(globalThis, key);
@@ -373,6 +440,31 @@ describe('Private rule editor data and asynchronous work stay with the originati
       expect(calls[1]).toEqual(calls[0]);
       expect(navigation).toEqual(['created']);
       expect(ui.host.querySelector('a[href$="/created"]')).not.toBeNull();
+    } finally {
+      await ui.close();
+    }
+  });
+
+  test('current new-rule hydration becomes usable on owner admission while Label capability stays unavailable', async () => {
+    const choices = unavailableRuleChoices();
+    choices.release = { state: 'ready', digest: 'released-current', profiles: [] };
+    const page: RulePage = {
+      state: 'new',
+      viewerId: 'alice',
+      address: { collectionId: null },
+      intent: crypto.randomUUID(),
+      choices,
+    };
+    const ui = await mountCurrent(page);
+    try {
+      expect(ui.host.querySelector('form')).toBeNull();
+      await ui.admit(['collections']);
+      expect(ui.host.querySelector('form')).not.toBeNull();
+      expect(ui.host.querySelector('input[required]')).not.toBeNull();
+      expect(ui.host.querySelector('input[id$="-label-search"]')).toBeNull();
+      expect(ui.host.textContent).toContain(m.library_rule_labels_unavailable());
+      expect(ui.host.textContent).not.toContain(m.condition_metadata_unavailable());
+      expect(ui.host.textContent).not.toContain('alice private label');
     } finally {
       await ui.close();
     }
