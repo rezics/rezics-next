@@ -29,9 +29,8 @@ supports them.
 
 Accounts owns native Auth and Access, `apps/auth/**`, `packages/auth-contract/**` and pure `packages/access/**`.
 Native Access lives under `services/kernel/{src,db,test}/access/**`; that placement does not transfer Kernel's
-command, storage, request or
-execution machinery to Accounts. Web and Performance own their Settings and account-page consumers. Content,
-Commerce, Semantic, Search and generated publication retain their module ownership.
+command, storage, request or execution machinery to Accounts. Web and Performance own their Settings and account-page
+consumers. Content, Commerce, Semantic, Search and generated publication retain their module ownership.
 
 [Accounts](../accounts.md) owns identity, delegation, consent and preference policy;
 [deletion](../deletion.md) owns erasure and restore policy;
