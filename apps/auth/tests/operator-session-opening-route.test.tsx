@@ -25,7 +25,6 @@ const opening = await import('../src/operator-session-opening');
 const pending = await import('../src/management-operation-step-up');
 const managementOperations = await import('../src/management-operations');
 const { managementOperationProfile } = managementOperations;
-const approval = () => Response.json({ reference: 'approval', expiresAt: new Date(Date.now() + 60000).toISOString() });
 const { button, fill } = await import('../src/stories/accounts-operations/story');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');
@@ -83,6 +82,9 @@ async function open(
   }) as typeof fetch;
   const read = spyOn(opening, 'loadOpeningMetadata').mockResolvedValue(metadata);
   const session = spyOn(managementOperations, 'loadManagementSession').mockResolvedValue(initialSession);
+  const approve = spyOn(managementOperations, 'approveManagementOperation').mockImplementation(async (input) => ({
+    kind: 'approved', input, reference: 'approval-reference', expiresAt: new Date(Date.now() + 60000).toISOString(),
+  }));
   const host = document.body.appendChild(document.createElement('div')),
     root = createRoot(host);
   const parent = createRootRoute();
@@ -123,9 +125,10 @@ async function open(
         host.remove();
         read.mockRestore();
         session.mockRestore();
+        approve.mockRestore();
       },
     },
-    { session },
+    { session, approve },
   );
 }
 
@@ -140,7 +143,7 @@ test('failed initial and review reads recover the exact identity and key through
     await p.review();
     const selected = p.read.mock.calls[0]![0];
     await p.click('Retry account identity');
-    await p.respond(3);
+    await flush(() => Promise.resolve());
     expect(p.read.mock.calls[1]![0]).toEqual(selected);
     expect(selected).toMatchObject({ accountId: human, operation });
     expect(p.host.textContent).toContain(subject);
@@ -153,12 +156,12 @@ test('failed initial and review reads recover the exact identity and key through
     await p.confirm();
     await p.submit();
     await flush(() => Promise.resolve());
-    await p.respond(0, approval());
-    expect(p.requests[1]!.body).toEqual(selected);
-    await p.respond(1, new Response(null, { status: 503 }));
+    expect(p.requests[0]!.path).toBe('/operator-sessions/open');
+    expect(p.requests[0]!.body).toMatchObject(selected);
+    await p.respond(0, new Response(null, { status: 503 }));
     expect(pending.readPendingManagementOperationStepUp()).toMatchObject({ ...selected, phase: 'submitted' });
     await p.click('Check current session');
-    await p.respond(2, Response.json(proof(true)));
+    await p.respond(1, Response.json(proof(true)));
     expect(p.host.querySelector('[role=status]')!.textContent).toContain(subject);
     expect(p.host.querySelector('a[href="https://rezics.com/en/"]')).not.toBeNull();
     expect(p.requests.filter((r) => r.path === '/operator-sessions/open')).toHaveLength(1);
@@ -185,28 +188,28 @@ test('a changed installed relation retires the confirmed review before approval'
     expect(
       p.requests.some((request) => request.path.includes('/approve') || request.path === '/operator-sessions/open'),
     ).toBe(false);
+    expect(p.approve).not.toHaveBeenCalled();
   } finally {
     await p.close();
   }
 });
 
-for (const stage of ['review', 'session', 'approval', 'issuance', 'readback'] as const)
+for (const stage of ['review', 'approval', 'issuance', 'readback'] as const)
   test(`page replacement retires ${stage} without replaying or losing submitted identity`, async () => {
     const p = await open();
     try {
       const late = Promise.withResolvers<OpeningRead>();
-      const lateSession = Promise.withResolvers<Awaited<ReturnType<typeof managementOperations.loadManagementSession>>>();
+      const lateApproval = Promise.withResolvers<Awaited<ReturnType<typeof managementOperations.approveManagementOperation>>>();
       if (stage === 'review') p.read.mockReturnValueOnce(late.promise);
       await p.review();
       if (stage !== 'review') {
         await p.confirm();
-        if (stage === 'session') p.session.mockReturnValueOnce(lateSession.promise);
+        if (stage === 'approval') p.approve.mockReturnValueOnce(lateApproval.promise);
         await p.submit();
         await flush(() => Promise.resolve());
       }
-      if (['issuance', 'readback'].includes(stage)) await p.respond(0, approval());
       if (stage === 'readback') {
-        await p.respond(1, new Response(null, { status: 503 }));
+        await p.respond(0, new Response(null, { status: 503 }));
         await p.click('Check current session');
       }
       const saved = pending.readPendingManagementOperationStepUp();
@@ -214,8 +217,12 @@ for (const stage of ['review', 'session', 'approval', 'issuance', 'readback'] as
       await p.boundary(stage !== 'approval');
       const count = p.requests.length;
       if (stage === 'review') await flush(() => late.resolve(metadata));
-      else if (stage === 'session') lateSession.resolve(currentHumanSession);
-      else if (stage === 'approval') await p.respond(old, approval());
+      else if (stage === 'approval') {
+        lateApproval.resolve({
+          kind: 'approved', input: p.approve.mock.calls.at(-1)![0], reference: 'approval-reference',
+          expiresAt: new Date(Date.now() + 60000).toISOString(),
+        });
+      }
       else
         await p.respond(
           old,

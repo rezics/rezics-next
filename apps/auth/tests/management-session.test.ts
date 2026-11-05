@@ -34,10 +34,12 @@ test('loadManagementSession bounds the complete human proof and never approves r
     globalThis.setTimeout = (callback, delay, ...args) => originalTimeout(callback, delay === 5000 ? 10 : delay, ...args);
     const calls = [];
     let response;
+    let approvalResponse;
     let fetchStarted;
     globalThis.fetch = async (input, init = {}) => {
       calls.push({ url: String(input), init });
       fetchStarted?.resolve();
+      if (String(input).includes('/account-operations/approve')) return await approvalResponse;
       return await response;
     };
     const unavailable = { kind: 'unavailable' };
@@ -104,6 +106,17 @@ test('loadManagementSession bounds the complete human proof and never approves r
     expect(legal.kind === 'ready' && managementProfileSessionMatches(legal, 'rename', human.account_id)).toBe(true);
     expect(legal.kind === 'ready' && managementProfileSessionMatches({ ...legal, accountId: 'other' }, 'rename', human.account_id)).toBe(false);
     expect(legal.kind === 'ready' && managementProfileSessionMatches({ ...legal, authTime: legal.authTime - 601 }, 'rename', human.account_id)).toBe(false);
+    const validInput = {
+      operationKey: 'stable-operation-key', accountId: human.account_id,
+      operation: { kind: 'rename', accountId: 'managed-account', handle: 'new-name', expectedHandle: null },
+    };
+    response = Response.json(human);
+    approvalResponse = Response.json({
+      reference: 'management-reference', expiresAt: new Date(Date.now() + 60000).toISOString(),
+    });
+    expect(await approveManagementOperation(validInput)).toMatchObject({
+      kind: 'approved', input: validInput, reference: 'management-reference',
+    });
     response = new Response(null, { status: 401 });
     expect(await loadManagementSession()).toEqual({ kind: 'signed-out' });
     response = new Response(null, { status: 503 });
@@ -139,17 +152,17 @@ test('loadManagementSession bounds the complete human proof and never approves r
     await Promise.resolve();
     expect(parsed).toHaveLength(parseCountBeforeRetirement);
 
+    const approvalsBeforeRefusal = calls.filter(call => call.url.includes('/account-operations/approve')).length;
     response = stream(exact + ' ');
-    const approval = await approveManagementOperation({
-      operationKey: 'stable-operation-key', accountId: human.account_id,
-      operation: { kind: 'rename', accountId: 'managed-account', handle: 'new-name', expectedHandle: null },
-    });
+    const approval = await approveManagementOperation(validInput);
     expect(approval).toEqual(unavailable);
-    expect(calls.some(call => call.url.includes('/account-operations/approve'))).toBe(false);
-    expect(calls.every(call => call.init.method === 'GET')).toBe(true);
+    expect(calls.filter(call => call.url.includes('/account-operations/approve'))).toHaveLength(approvalsBeforeRefusal);
+    const nativeGets = calls.filter(call => call.url.endsWith('/session'));
+    expect(nativeGets.every(call => call.init.method === 'GET')).toBe(true);
+    expect(calls.filter(call => call.url.includes('/account-operations/approve')).every(call => call.init.method === 'POST')).toBe(true);
     JSON.parse = jsonParse;
     globalThis.setTimeout = originalTimeout;
-    console.log(JSON.stringify({ nativeGets: calls.length, cap }));
+    console.log(JSON.stringify({ nativeGets: nativeGets.length, cap }));
   `;
   const child = Bun.spawn([process.execPath, '-e', script], {
     cwd: `${import.meta.dir}/../../..`,
@@ -162,5 +175,5 @@ test('loadManagementSession bounds the complete human proof and never approves r
     child.exited,
   ]);
   expect(exit, output + error).toBe(0);
-  expect(JSON.parse(output)).toMatchObject({ nativeGets: 13 });
+  expect(JSON.parse(output)).toMatchObject({ nativeGets: 14 });
 });
