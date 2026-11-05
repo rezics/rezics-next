@@ -31,6 +31,11 @@ explicit local host. Use `127.0.0.1` throughout, including callbacks. Cookies ar
 remains `https://api.rezics.test`; it is an identifier, not an external network dependency. Dependency installation,
 the first Docker image download and dataset downloads still need network access.
 
+When `WEBSITE_CONFIGURATION_FILE` selects a deployment's public registration artifact, local Auth registration,
+generated Web bindings and Web launch use its exact scopes. Setup never rewrites that artifact. Without it, scopes
+come from the mounted Kernel action catalogue. After changing registration scopes, sign in again for new consent;
+changing origins or restarting the stack does not renew existing session authority.
+
 ## Persona and import permissions
 
 ```sh

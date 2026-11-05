@@ -6,6 +6,7 @@ import {
   developmentKeys,
   authSecurityScopeConfiguration,
   developmentAuthPageBindings,
+  developmentWebsiteScopeConfiguration,
   developmentBindings,
   developmentRegistrationPassword,
   developmentContentBindings,
@@ -221,6 +222,24 @@ test('generated Web bindings preserve literal JWK JSON through the actual Vite d
     const { loadEnv } = await import(require.resolve('vite'));
     const bindings = loadEnv('development', directory, 'WEBSITE_');
     expect(JSON.parse(bindings.WEBSITE_CLIENT_KEY!)).toEqual(key);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('local registration and Web requests retain the supplied deployment scope artifact', async () => {
+  const directory = await mkdtemp(resolve(import.meta.dir, '../../../.temp/website-ceiling-'));
+  try {
+    const file = resolve(directory, 'website.json');
+    const WEBSITE_SCOPES = 'openid offline_access exposure:manage_read';
+    await writeFile(file, JSON.stringify({ WEBSITE_SCOPES }));
+    const mounted = { scopes: ['openid', 'offline_access', 'exposure:open'], WEBSITE_SCOPES: 'mounted' };
+    expect(developmentWebsiteScopeConfiguration(mounted, {})).toBe(mounted);
+    expect(developmentWebsiteScopeConfiguration(mounted, { WEBSITE_CONFIGURATION_FILE: file })).toEqual({
+      scopes: WEBSITE_SCOPES.split(' '),
+      WEBSITE_SCOPES,
+    });
+    expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ WEBSITE_SCOPES }));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -632,6 +632,13 @@ Gate state is read at each request's T without caching. Organization creation al
 group through the internal admission port; deletion is never gated. See [gate routes][gate-routes],
 [gate catalogue][gate-catalogue] and [account operation transport][account-transport].
 
+Decision: after a recorded open or close, an explicit new review can select the next operation in the same visit.
+The previous operation and receipt remain visible until that selection. Failed current-state readback requires a
+reload before another review; an unknown command remains bound to its original group, action, key, body and retry
+continuation. A supplied local `WEBSITE_CONFIGURATION_FILE` remains the registered and requested scope ceiling;
+mounted composition supplies the default only when no artifact is selected. Reconfiguration does not expand an
+existing session or refresh grant: the operator signs in again for new consent.
+
 OpenAPI and `visibleOperations(viewer)` omit operations the viewer cannot use. A future MCP adapter must build
 its tool list from that same port. `GET /v1/platform/exposure` returns only sorted admitted mounted groups and
 uses `no-store`; absence means closed, without revealing inaccessible group names. See

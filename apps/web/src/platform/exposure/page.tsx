@@ -136,7 +136,7 @@ function ExposureView({
                     <Button
                       key={action}
                       variant="outline"
-                      disabled={busy || !canReview || intent !== null}
+                      disabled={busy || !canReview}
                       aria-label={m.exposure_action_group({ action: actionLabel(action), group })}
                       onClick={() => onReview(group, action)}
                     >
@@ -226,7 +226,10 @@ export function PlatformExposurePage({ initial, io }: { initial: Page; io: Stand
   const busy = operation.busy || reading;
   const offered =
     page.status === 'ready' ? (['open', 'close'] as const).filter((action) => page.current.actions[action]) : [];
-  const canReview = page.status === 'ready' && Object.values(page.current.actions).some(Boolean);
+  const canReview =
+    page.status === 'ready' &&
+    Object.values(page.current.actions).some(Boolean) &&
+    (!intent || outcome?.status === 'recorded');
   const canSend =
     intent && page.status === 'ready' && hasGroup(page, intent.group) && offered.includes(intent.action) ? true : false;
   const update = () => render((value) => value + 1);
