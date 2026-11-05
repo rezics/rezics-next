@@ -100,8 +100,11 @@ export function useSlowModeVisit(
       credentialMode,
       scopeKey,
       retire() {
+        if (state.retired) return;
         state.retired = true;
-        state.controller.abort();
+        // Render-time owner checks must fence callbacks without synchronously publishing
+        // query cancellation into a sibling composer during its render.
+        queueMicrotask(() => state.controller.abort());
       },
       current(signal = state.controller.signal) {
         if (observation?.getSnapshot() !== owner || !address.isCurrent()) state.retire();
