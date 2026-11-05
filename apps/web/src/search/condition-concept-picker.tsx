@@ -24,7 +24,8 @@ type ReferenceView =
   | Readonly<{ owner: string; phase: 'loading'; retryable: boolean }>
   | Readonly<{ owner: string; phase: 'settled'; result: ConditionConceptReference }>;
 type FocusIntent =
-  | Readonly<{ kind: 'open' | 'close'; visit: number }>
+  | Readonly<{ kind: 'open'; visit: number }>
+  | Readonly<{ kind: 'close'; visit: number }>
   | Readonly<{ kind: 'search'; owner: string; from: HTMLElement }>
   | Readonly<{ kind: 'reference'; owner: string; from: HTMLElement }>;
 
