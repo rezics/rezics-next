@@ -159,19 +159,11 @@ test('budget arithmetic refuses unsafe or nonfinite configuration rather than pr
 });
 
 test('public fixed endpoint budgets need no catalogue count and match every combined-helper formula', () => {
+  expect(Object.keys(securityFixedResponseByteBudgets).sort()).toEqual(['passkeys', 'registrationPage', 'securityPage']);
   for (const scopeLimit of [0, 1, 3, 1000, 1203]) {
-    const combined = securityResponseByteBudgets(scopeLimit);
-    expect({
-      securityPage: combined.securityPage,
-      passkeys: combined.passkeys,
-      registrationPage: combined.registrationPage,
-    }).toEqual(securityFixedResponseByteBudgets);
+    const { securityPage, passkeys, registrationPage } = securityResponseByteBudgets(scopeLimit);
+    expect({ securityPage, passkeys, registrationPage }).toEqual(securityFixedResponseByteBudgets);
   }
-  expect(Object.keys(securityFixedResponseByteBudgets).sort()).toEqual([
-    'passkeys',
-    'registrationPage',
-    'securityPage',
-  ]);
 });
 
 test('registration requirements and current viewer fit the published private registration allowance', async () => {
