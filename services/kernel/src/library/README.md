@@ -517,7 +517,7 @@ nonzero `engineRequests`; zero in the SQL-only declaration does not price an uni
 receiving. Incorporation must derive reached catalogue costs from producer SQL/binds, escaped projections,
 currentness, disclosure and existing attempts, retaining all nine axes.
 
-The selected consumer transfers that finite plan through the existing `NativeCollectionWork` port. It holds the full
+The consumer transfers the plan through `NativeCollectionWork`. It holds the full
 actual-size output, activation, History/events, receipt, serialization and rollback price before verification,
 then dispatches the bounded Source, disclosure and private fact callers from named plan terms. The Work binding's
 per-operation ceilings and measurement capture limits remain independent and unchanged; the selected plan does not
