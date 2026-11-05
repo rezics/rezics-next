@@ -138,7 +138,9 @@ export function ContributionWatch({
           admitted
           initialWatching={watching}
           returnTo={returnTo}
-          {...(source ? { readAuthority: source } : {})}
+          // Advice readback is not a new command owner. The original operation lease
+          // retires with its source episode, while an equal advice echo keeps exact retry alive.
+          readAuthority={lease}
           isCurrent={lease.current}
           {...(refreshAdvice ? { refreshAdvice } : {})}
           {...(native ? { native } : {})}
