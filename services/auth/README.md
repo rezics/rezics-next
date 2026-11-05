@@ -3278,3 +3278,11 @@ PostgreSQL `text` without a column limit, so native output outside the writer co
 truncated or serialized. Nullable identity fields use `null` and do not add to the maximum. The HTTP reader enforces
 this bound on actual streamed success and error bytes before parsing within its one five-second browser read lifetime;
 the native producer keeps the existing three-second whole-call deadline.
+
+Decision: organization command acknowledgement is only the original native `{accountId}` result matching the selected
+organization. The shared command response bounds are `JSON.stringify({reference:'',expiresAt:''}).length + 6×4096 + 27`
+for approval, `JSON.stringify({accountId:''}).length + 6×4096` for execution, and the larger of the two closed refusal
+JSON lengths for errors. Approval references remain opaque strings; the native approval owns their validity. Each
+approval or execution POST has one five-second headers-and-body lifetime and retries only exact 503
+`{error:'unavailable'}` once with the same body. A matching result means tombstone committed and cleanup pending; it
+does not mean adopted retention, backups or external copies are erased. Current advice cannot acknowledge the command.

@@ -1,8 +1,8 @@
 import { AUTOMATED_CREATION_PAGE_MAX_HANDLE_LENGTH } from './automated-page-response-bounds.ts';
 
 /** Browser projections of native account-operation approval and workflow results.
- * Access seals an ASCII base64url body and SHA-256 MAC; both native unseal and
- * execute's text input cap the reference at 4096 units. No UUID assumption.
+ * References stay opaque here; native authorization owns their validity, while
+ * its producer and consumer both cap them at 4096 UTF-16 units.
  */
 export const ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH = 4096;
 export const RENAME_EXECUTION_MAX_ID_LENGTH = 4096;
@@ -34,8 +34,8 @@ export function parseAccountOperationApprovalResponse(value: unknown): AccountOp
     !object(value) ||
     Object.keys(value).sort().join(',') !== 'expiresAt,reference' ||
     typeof value.reference !== 'string' ||
+    !value.reference ||
     value.reference.length > ACCOUNT_OPERATION_MAX_REFERENCE_LENGTH ||
-    /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.exec(value.reference)?.[0] !== value.reference ||
     typeof value.expiresAt !== 'string' ||
     value.expiresAt.length > 27 ||
     !Number.isFinite(Date.parse(value.expiresAt)) ||

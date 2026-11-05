@@ -200,6 +200,13 @@ export async function executeOrganizationDeletion(
       !organizationDeletePendingMatches(continuation.value, target.humanAccountId, target.organizationId, operationKey))
   )
     return { ok: false, reason: 'changed' };
+  const expectedContinuation = continuation.kind === 'pending' ? continuation.value : null;
+  const continuationIsCurrent = () => {
+    const latest = readOrganizationDeleteStepUp();
+    return expectedContinuation === null
+      ? latest.kind === 'absent'
+      : latest.kind === 'pending' && sameOrganizationDeleteDescriptor(latest.value, expectedContinuation);
+  };
   // Persist the fence at the execution boundary, after approval and immediately
   // before sending. A preflight or approval failure is not a submitted deletion.
   const identity = {
@@ -214,6 +221,7 @@ export async function executeOrganizationDeletion(
   let fenceConflict = false;
   let fenceStored = false;
   let fenceMayHaveBeenSubmitted = false;
+  let continuationChanged = false;
   const clearFence = () => {
     const saved = readOrganizationDeleteUnknown(target.organizationId);
     if (saved.kind === 'pending' && sameOrganizationDeleteDescriptor(saved.value, identity))
@@ -221,6 +229,10 @@ export async function executeOrganizationDeletion(
   };
   const onExecutionDispatch = () => {
     if (review && !review.isCurrent()) return false;
+    if (!continuationIsCurrent()) {
+      continuationChanged = true;
+      return false;
+    }
     const saved = readOrganizationDeleteUnknown(target.organizationId);
     if (saved.kind !== 'absent') {
       // The installed executor can make one bounded same-key retry after an
@@ -265,6 +277,7 @@ export async function executeOrganizationDeletion(
     { kind: 'delete', accountId: target.organizationId },
     { isCurrent: () => !review || review.isCurrent(), retryUncertain: true, onExecutionDispatch },
   );
+  if (continuationChanged && !fenceMayHaveBeenSubmitted) return { ok: false, reason: 'changed' };
   if (fenceUnavailable) {
     // Persistence may have committed before reporting failure. Keep both the
     // durable marker (if present) and the caller's exact in-memory custody.

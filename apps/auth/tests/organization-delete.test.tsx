@@ -107,7 +107,7 @@ for (const phase of ['read', 'approval', 'execution', 'step-up'] as const)
                   ? approval()
                   : phase === 'execution'
                     ? Response.json({ accountId: first })
-                    : Response.json({ error: 'step_up_required' }, { status: 401 }),
+                    : Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
               ),
       );
       expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
@@ -210,6 +210,34 @@ test('a replaced continuation during released review retires controls and preser
   expect(page.calls).toHaveLength(0);
   expect(page.host.querySelector('form')).toBeNull();
   expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
+});
+
+test('a continuation replaced while approval is receiving prevents execution and preserves the replacement', async () => {
+  const page = await open(content(first, async () => ready(first)), body);
+  await confirm(page.host, '@first');
+  let finishApproval!: () => void;
+  const approvalBody = JSON.stringify({
+    reference: 'bmF0aXZl.' + 'a'.repeat(43),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const pendingApproval = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(approvalBody));
+        finishApproval = () => controller.close();
+      },
+    }),
+    { headers: { 'content-type': 'application/json' } },
+  );
+  await flush(() => page.calls[0]!.resolve(pendingApproval));
+  expect(page.calls).toHaveLength(1);
+  const replacement = { humanAccountId: human, organizationId: second, operationKey: 'b'.repeat(32) };
+  expect(storeOrganizationDeleteStepUp(replacement)).toBe(true);
+  await flush(finishApproval);
+  expect(page.calls).toHaveLength(1);
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
+  expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
+  expect(page.host.textContent).not.toContain('The deletion result is unknown');
 });
 
 test('current native refusal has no authentication loop or destructive control', async () => {

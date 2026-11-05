@@ -55,6 +55,14 @@ test('closed usable approval and exact original success; malformed output never 
   }
   replies([Response.json(approval()), Response.json({ accountId: 'original' })]);
   expect(await runAccountOperation('key', operation, browser)).toEqual({ ok: true, accountId: 'original' });
+
+  const historicalReference = 'approval-historical-operation-v1';
+  const historicalCalls = replies([
+    Response.json(approval({ reference: historicalReference })),
+    Response.json({ accountId: 'original' }),
+  ]);
+  expect(await runAccountOperation('key', operation, browser)).toEqual({ ok: true, accountId: 'original' });
+  expect(JSON.parse(String(historicalCalls[1]!.body)).reference).toBe(historicalReference);
 });
 
 test('raw bounds precede parsing; legal escaped maximal references and split UTF-8 survive dishonest lengths', async () => {

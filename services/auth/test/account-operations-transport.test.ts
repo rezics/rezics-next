@@ -372,6 +372,20 @@ test('a signed-in person approves and executes organization creation rename and 
   expect(Buffer.byteLength(memberText)).toBeLessThanOrEqual(MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES);
   expect(parseMembershipExecutionResponse(JSON.parse(memberText))).toEqual({ accountId: ordinary.accountId });
 
+  const removeOrganization = { kind: 'delete', accountId: organizationId };
+  const organizationApproval = await ok(await approve(creator, 'delete-created-organization', removeOrganization));
+  const deletionBody = {
+    operationKey: 'delete-created-organization',
+    operation: removeOrganization,
+    reference: organizationApproval.reference,
+  };
+  const deletedOrganization = await done(await execute(creator, deletionBody));
+  expect(deletedOrganization).toEqual({ accountId: organizationId });
+  const afterDeletion = await counts();
+  expect(await done(await execute(creator, deletionBody))).toEqual(deletedOrganization);
+  expect(await counts()).toEqual(afterDeletion);
+  expect(await stateOf(organizationId)).not.toBe('active');
+
   const renamed = `${creator.handle}_renamed`;
   const rename = { kind: 'rename', accountId: creator.accountId, handle: renamed, expectedHandle: creator.handle };
   const renameApproval = await ok(await approve(creator, 'rename-self', rename));
@@ -753,7 +767,7 @@ test('incompatible organization producer output never fabricates a not-applied g
   }
   const handler = accountOperationTransport(host.service, host.workflows, host.handler, {
     ...installedAccess,
-    approve: async () => ({ reference: 'incompatible', expiresAt: approval.expiresAt }),
+    approve: async () => ({ reference: '', expiresAt: approval.expiresAt }),
   });
   await refused(
     await handler(

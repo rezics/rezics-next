@@ -12,6 +12,7 @@ import {
   session,
 } from './creation-page-fixture';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
+import { m } from '../src/paraglide/messages.js';
 import { readOrganizationDeleteUnknown, storeOrganizationDeleteUnknown } from '../src/organization-delete-step-up';
 import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
 
@@ -92,11 +93,11 @@ test('dispatched history survives BFCache and failed review; late acknowledgemen
   expect(page.host.querySelector('form')).toBeNull();
   expect(readOrganizationDeleteUnknown(organization).kind).toBe('absent');
 
-  current = { kind: 'denied' };
+  current = { kind: 'unavailable' };
   await flush(() => page.host.querySelector<HTMLButtonElement>('#organization-delete-return-review')!.click());
   expect(reads).toBe(3);
   expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
-  expect(page.host.textContent).toContain('Current deletion review was denied');
+  expect(page.host.textContent).toContain(m.auth_account_operation_unavailable());
   expect(page.calls).toHaveLength(2);
 
   current = ready(replacementHuman, 'current-name');

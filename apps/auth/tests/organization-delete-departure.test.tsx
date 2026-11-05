@@ -149,6 +149,34 @@ test('accepted deletion releases an open departure prompt', async () => {
   expect(page.unload()).toBe(false);
 });
 
+test('late exact acknowledgement after Leave keeps generic history and clears only its owned fence', async () => {
+  const page = await setup();
+  await flush(() => {
+    fill(page.input, '@first');
+    send(page.host);
+  });
+  await flush(() => page.calls[0]!.resolve(approval()));
+  const operationKey = page.calls[0]!.body.operationKey as string;
+  expect(page.calls[1]!.body).toMatchObject({
+    operationKey,
+    operation: { kind: 'delete', accountId: first },
+  });
+
+  await page.navigate();
+  expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+  await page.choose('Leave');
+  expect(page.router.history.location.pathname).toBe('/away');
+  await flush(() => page.calls[1]!.resolve(Response.json({ accountId: first })));
+
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.host.textContent).toContain('Auth confirmed the organization deletion request');
+  expect(page.host.textContent).not.toContain('@first');
+  expect(page.host.textContent).not.toContain(human);
+  expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
+  expect(page.calls).toHaveLength(2);
+  expect(page.unload()).toBe(false);
+});
+
 test('acknowledgement of an old command preserves an independently replaced unknown descriptor', async () => {
   const page = await setup();
   await flush(() => {
@@ -260,7 +288,11 @@ test('step-up navigation bypasses the departure warning and keeps its continuati
       fill(page.input, '@first');
       send(page.host);
     });
-    await flush(() => page.calls[0]!.resolve(Response.json({ error: 'step_up_required' }, { status: 401 })));
+    await flush(() =>
+      page.calls[0]!.resolve(
+        Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401 }),
+      ),
+    );
     expect(assign).toHaveBeenCalledTimes(1);
     expect(readOrganizationDeleteStepUp().kind).toBe('pending');
     expect(page.unload()).toBe(false);
