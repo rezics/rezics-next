@@ -1,7 +1,13 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnonymousSessionContext, useSession } from '../session/query';
-import { recentBucket, recentHistoryKey, type RecentEntry, type RecentStorage } from './recent-history';
+import {
+  recentBucket,
+  recentHistoryKey,
+  type RecentEntry,
+  type RecentStorage,
+  type RecentHistoryOwner,
+} from './recent-history';
 import { createRecentSearchSyncAdapter, type RecentSearchSyncAdapter } from './recent-sync';
 import {
   currentHeaderSearchSession,
@@ -14,14 +20,31 @@ export function useRecentSearchSyncAdapter(
   bucket: string | null,
   onRemote?: (entries: readonly RecentEntry[]) => void,
   storage?: RecentStorage,
+  owner?: RecentHistoryOwner,
 ): RecentSearchSyncAdapter | undefined {
   const session = useSession();
   const client = useContext(QueryClientContext);
   const anonymous = useContext(AnonymousSessionContext);
   const expected = recentBucket(session.state, session.subject);
   const sessionKey = headerSearchSessionKey(session);
-  const current = useRef({ bucket, expected, sessionKey, onRemote, storage, client, anonymous });
-  current.current = { bucket, expected, sessionKey, onRemote, storage, client, anonymous };
+  const current = useRef({
+    bucket,
+    expected,
+    sessionKey,
+    owner,
+    storage,
+    client,
+    anonymous,
+  });
+  current.current = {
+    bucket,
+    expected,
+    sessionKey,
+    owner,
+    storage,
+    client,
+    anonymous,
+  };
   const previous = useRef<string | null>(null);
   const [epoch, setEpoch] = useState(0);
   const [bound, setBound] = useState<{
@@ -31,9 +54,11 @@ export function useRecentSearchSyncAdapter(
     storage: RecentStorage;
     client: typeof client;
     anonymous: boolean;
+    owner: RecentHistoryOwner | undefined;
     adapter: RecentSearchSyncAdapter;
   }>();
   useEffect(() => {
+    if (owner?.() === false) return;
     const old = previous.current;
     previous.current = expected;
     if (old?.startsWith('account:') && old !== expected) storage?.setItem(recentHistoryKey(old), '[]');
@@ -48,11 +73,12 @@ export function useRecentSearchSyncAdapter(
         /* Memory-only history has no durable native cache. */
       }
     }
-  }, [bucket, expected, session.state, session.subject, storage]);
+  }, [bucket, expected, owner, session.state, session.subject, storage]);
 
   useLayoutEffect(() => {
     if (
       anonymous ||
+      owner?.() === false ||
       !client ||
       !storage ||
       session.state !== 'signed-in' ||
@@ -66,6 +92,8 @@ export function useRecentSearchSyncAdapter(
     }
     const observationIsCurrent = () =>
       !anonymous &&
+      owner?.() !== false &&
+      current.current.owner === owner &&
       current.current.client === client &&
       current.current.storage === storage &&
       current.current.bucket === bucket &&
@@ -79,7 +107,7 @@ export function useRecentSearchSyncAdapter(
       storage,
       currentBucket: () => (!retired && observationIsCurrent() ? expected : null),
       onRemote: (entries) => {
-        if (!retired && observationIsCurrent()) current.current.onRemote?.(entries);
+        if (!retired && observationIsCurrent()) onRemote?.(entries);
       },
     });
     const retire = () => {
@@ -91,7 +119,17 @@ export function useRecentSearchSyncAdapter(
     };
     const unsubscribe = observeHeaderSearchSession(client, retire);
     if (!observationIsCurrent()) retire();
-    else setBound({ bucket, sessionKey, epoch, storage, client, anonymous, adapter });
+    else
+      setBound({
+        bucket,
+        sessionKey,
+        epoch,
+        storage,
+        client,
+        anonymous,
+        owner,
+        adapter,
+      });
     return () => {
       unsubscribe();
       if (!retired) {
@@ -99,15 +137,17 @@ export function useRecentSearchSyncAdapter(
         adapter.dispose();
       }
     };
-  }, [anonymous, bucket, client, epoch, expected, session.state, session.subject, sessionKey, storage]);
+  }, [anonymous, bucket, client, epoch, expected, owner, session.state, session.subject, sessionKey, storage]);
 
   return session.state === 'signed-in' &&
     !anonymous &&
+    owner?.() !== false &&
     client &&
     bucket === expected &&
     sessionKey !== null &&
     headerSearchSessionKey(currentHeaderSearchSession(client)) === sessionKey &&
     bound?.bucket === bucket &&
+    bound.owner === owner &&
     bound.sessionKey === sessionKey &&
     bound.epoch === epoch &&
     bound.storage === storage &&

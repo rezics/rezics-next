@@ -7,6 +7,7 @@ import {
   writeRecentDocument,
   type RecentEntry,
   type RecentHistory,
+  type RecentHistoryOwner,
   type RecentSyncAdapter,
 } from './recent-history';
 import { RecentSyncError, type RecentSearchSyncAdapter } from './recent-sync';
@@ -14,63 +15,116 @@ import { useRecentSearchSyncAdapter } from './recent-sync-hook';
 import { createRecentBrowserStorage, observeRecentHistoryStorageEvent } from './recent-storage';
 
 const changedEvent = 'rezics-search-history-changed';
-type Snapshot = { bucket: string | null; entries: readonly RecentEntry[]; version: number };
+type Snapshot = {
+  owner?: RecentHistoryOwner;
+  bucket: string | null;
+  entries: readonly RecentEntry[];
+  version: number;
+};
 /** The delivered local helper owns both Recent and History. Events notify sibling hooks; they hold no store. */
 export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAdapter): RecentHistory {
   const currentBucket = useRef(bucket);
   currentBucket.current = bucket;
+  const client = useQueryClient();
+  const installedSession = sessionStateSnapshot(client);
+  const installedOwner = useRef<RecentHistoryOwner | undefined>(undefined);
+  const mounted = useRef(true);
+  const owner = useMemo(() => {
+    let retired = false;
+    const isCurrent = () => {
+      // Cache identity sees replacements before React renders, including equal-account and A/B/A changes.
+      // Comparing the installed command owner also permanently retires replaced bucket/render closures.
+      if (
+        !mounted.current ||
+        installedOwner.current !== isCurrent ||
+        currentBucket.current !== bucket ||
+        sessionStateSnapshot(client) !== installedSession
+      )
+        retired = true;
+      return !retired;
+    };
+    return isCurrent;
+  }, [bucket, client, installedSession]);
+  installedOwner.current = owner;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const origin = useRef({});
   const [persistent, setPersistent] = useState(true);
   const [storage] = useState(() => createRecentBrowserStorage(setPersistent));
-  const [snapshot, setSnapshot] = useState<Snapshot>({ bucket: null, entries: [], version: 0 });
+  const [snapshot, setSnapshot] = useState<Snapshot>({
+    bucket: null,
+    entries: [],
+    version: 0,
+  });
   const latest = useRef(snapshot);
   latest.current = snapshot;
-  const [sync, setSync] = useState<RecentHistory['sync']>('local-only');
-  const [failure, setFailure] = useState<RecentHistory['failure']>();
+  const [outcome, setOutcome] = useState<{
+    owner?: RecentHistoryOwner;
+    sync: RecentHistory['sync'];
+    failure?: RecentHistory['failure'];
+  }>({ sync: 'local-only' });
   const [attempt, setAttempt] = useState({ id: 0, reload: false });
   const previousAttempt = useRef(0);
-  const publish = useCallback((entries: readonly RecentEntry[], dirty = false) => {
-    const bucket = currentBucket.current;
-    const next = { bucket, entries, version: latest.current.version + (dirty ? 1 : 0) };
-    latest.current = next;
-    setSnapshot(next);
-    window.dispatchEvent(new CustomEvent(changedEvent, { detail: { bucket, entries, dirty, origin: origin.current } }));
-  }, []);
-  const native = useRecentSearchSyncAdapter(bucket, publish, storage);
-  const client = useQueryClient();
-  const installedSession = sessionStateSnapshot(client);
-  const owner = useMemo(() => {
-    let retired = false;
-    return () => {
-      // Compare the installed observation, even if a session changed and returned before rendering.
-      // Retirement is permanent; matching the account again cannot revive management feedback.
-      if (currentBucket.current !== bucket || sessionStateSnapshot(client) !== installedSession) retired = true;
-      return !retired;
-    };
-  }, [bucket, client, installedSession]);
+  const publish = useCallback(
+    (entries: readonly RecentEntry[], dirty = false) => {
+      if (!owner()) return;
+      const next = {
+        owner,
+        bucket,
+        entries,
+        version: latest.current.version + (dirty ? 1 : 0),
+      };
+      latest.current = next;
+      setSnapshot(next);
+      window.dispatchEvent(
+        new CustomEvent(changedEvent, {
+          detail: { bucket, entries, dirty, owner, origin: origin.current },
+        }),
+      );
+    },
+    [bucket, owner],
+  );
+  const native = useRecentSearchSyncAdapter(bucket, publish, storage, owner);
   const adapter = native ? (supplied ?? native) : undefined;
   useEffect(() => {
     const read = () => {
-      if (currentBucket.current !== bucket) return;
+      if (!owner()) return;
       const entries = bucket ? readRecentDocument(storage, bucket).entries : [];
-      const next = { bucket, entries, version: latest.current.version + 1 };
+      const next = {
+        owner,
+        bucket,
+        entries,
+        version: latest.current.version + 1,
+      };
       latest.current = next;
       setSnapshot(next);
     };
     read();
-    setFailure(undefined);
+    if (!owner()) return;
+    setOutcome({ owner, sync: 'local-only' });
     const changed = (event: Event) => {
       const detail = (event as CustomEvent).detail;
-      if (detail.origin !== origin.current && detail.bucket === bucket) {
-        const next = { bucket, entries: detail.entries, version: latest.current.version + (detail.dirty ? 1 : 0) };
+      if (owner() && detail.owner() && detail.origin !== origin.current && detail.bucket === bucket) {
+        const next = {
+          owner,
+          bucket,
+          entries: detail.entries,
+          version: latest.current.version + (detail.dirty ? 1 : 0),
+        };
         latest.current = next;
         setSnapshot(next);
       }
     };
     const stored = (event: StorageEvent) => {
-      if (observeRecentHistoryStorageEvent(storage, event, bucket)) read();
+      if (owner() && observeRecentHistoryStorageEvent(storage, event, bucket)) read();
     };
-    const refresh = () => setAttempt((a) => ({ id: a.id + 1, reload: false }));
+    const refresh = () => {
+      if (owner()) setAttempt((a) => (owner() ? { id: a.id + 1, reload: false } : a));
+    };
     window.addEventListener(changedEvent, changed);
     window.addEventListener('storage', stored);
     window.addEventListener('online', refresh);
@@ -81,41 +135,49 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
       window.removeEventListener('online', refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [bucket, storage]);
+  }, [bucket, owner, storage]);
   useEffect(() => {
+    if (!owner()) return;
     if (!bucket || latest.current.bucket !== bucket || !adapter) {
-      setSync('local-only');
+      setOutcome({ owner, sync: 'local-only' });
       return;
     }
     const abort = new AbortController();
-    setSync('pending');
-    const owner = adapter as Partial<RecentSearchSyncAdapter>;
+    setOutcome((last) => ({
+      owner,
+      sync: 'pending',
+      failure: last.owner === owner ? last.failure : undefined,
+    }));
+    const native = adapter as Partial<RecentSearchSyncAdapter>;
     const requested = previousAttempt.current !== attempt.id;
     previousAttempt.current = attempt.id;
     const run = requested
-      ? attempt.reload && owner.retry
-        ? owner.retry
-        : (owner.refresh ?? adapter.sync)
+      ? attempt.reload && native.retry
+        ? native.retry
+        : (native.refresh ?? adapter.sync)
       : adapter.sync;
     void run(latest.current.entries, abort.signal).then(
       () => {
-        if (!abort.signal.aborted && currentBucket.current === bucket) {
-          setFailure(undefined);
-          setSync('synced');
+        if (!abort.signal.aborted && owner()) {
+          setOutcome({ owner, sync: 'synced' });
         }
       },
       (error) => {
-        if (!abort.signal.aborted && currentBucket.current === bucket)
-          setFailure(error instanceof RecentSyncError ? error.code : 'unavailable');
+        if (!abort.signal.aborted && owner())
+          setOutcome({
+            owner,
+            sync: 'pending',
+            failure: error instanceof RecentSyncError ? error.code : 'unavailable',
+          });
       },
     );
     return () => abort.abort();
-  }, [bucket, snapshot.bucket, snapshot.version, adapter, attempt]);
+  }, [bucket, owner, snapshot.bucket, snapshot.version, adapter, attempt]);
   const update = (change: 'clear' | string | ((entries: readonly RecentEntry[]) => RecentEntry[])) => {
-    if (!bucket || currentBucket.current !== bucket) return;
+    if (!bucket || !owner()) return;
     const document = readRecentDocument(storage, bucket);
     // Keep current owner hydration in memory; it is deliberately absent from durable browser history.
-    const entries = latest.current.bucket === bucket ? latest.current.entries : document.entries;
+    const entries = latest.current.owner === owner ? latest.current.entries : document.entries;
     if (change === 'clear') {
       document.entries = [];
       document.clear = crypto.randomUUID();
@@ -123,7 +185,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     } else if (typeof change === 'string') {
       if (!entries.some((e) => e.id === change)) return;
       if (document.removed.length >= 100) {
-        setFailure('unavailable');
+        setOutcome((last) => ({ ...last, owner, failure: 'unavailable' }));
         return;
       }
       document.entries = entries.filter((e) => e.id !== change);
@@ -138,14 +200,16 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
   };
   return {
     owner,
-    entries: snapshot.bucket === bucket ? snapshot.entries : [],
+    entries: snapshot.owner === owner ? snapshot.entries : [],
     persistence: !bucket ? 'unavailable' : persistent ? 'local' : 'memory',
-    sync: adapter ? sync : 'local-only',
-    ...(failure ? { failure } : {}),
+    sync: adapter && outcome.owner === owner ? outcome.sync : 'local-only',
+    ...(outcome.owner === owner && outcome.failure ? { failure: outcome.failure } : {}),
     remember: (query, scope, languages) =>
       update((entries) => rememberRecent(entries, query, scope, Date.now(), languages)),
     remove: (id) => update(id),
     clear: () => update('clear'),
-    retry: () => setAttempt((a) => ({ id: a.id + 1, reload: true })),
+    retry: () => {
+      if (owner()) setAttempt((a) => (owner() ? { id: a.id + 1, reload: true } : a));
+    },
   };
 }
