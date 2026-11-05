@@ -168,7 +168,9 @@ function metaFromRow(
             review: previous?.labels?.invalidated ? null : (row.labelReview ?? null),
             invalidated: previous?.labels?.invalidated ?? false,
             outcomes:
-              previous?.labels?.outcomes?.reviewId === row.labelReview?.id ? (previous?.labels?.outcomes ?? null) : null,
+              previous?.labels?.outcomes?.reviewId === row.labelReview?.id
+                ? (previous?.labels?.outcomes ?? null)
+                : null,
           },
         }
       : {}),
@@ -925,6 +927,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       importId,
       ordinal,
       subjectId: review.subjectId,
+      custody: { expectedReader: visit.subject, expectedCredential: visit.csrfToken },
     };
     const response = await run(command, () => port.readLabels(command));
     const visible = page.find((item) => item.ordinal === ordinal);
@@ -978,7 +981,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   async function labelTargets(query: string, cursor?: string) {
     if (!live() || heldUnknown()) return { kind: 'unavailable' as const };
     cost.recordCall('label-targets');
-    return port.labelTargets(query, cursor);
+    return port.labelTargets(query, cursor, { expectedReader: visit.subject, expectedCredential: visit.csrfToken });
   }
 
   function openConfirm(): AniListJourneySnapshot {

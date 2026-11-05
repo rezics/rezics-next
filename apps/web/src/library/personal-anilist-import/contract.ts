@@ -214,7 +214,7 @@ export type AniListCommand =
     }
   | { kind: 'review-labels'; key: string; importId: string; body: AniListLabelReviewBody; custody: AniListLabelCustody }
   | { kind: 'apply-labels'; importId: string; body: AniListLabelApplyBody; custody: AniListLabelCustody }
-  | { kind: 'read-labels'; importId: string; ordinal: number; subjectId: string }
+  | { kind: 'read-labels'; importId: string; ordinal: number; subjectId: string; custody: AniListLabelCustody }
   | { kind: 'cancel'; key: string; importId: string; remove: boolean };
 
 export type AniListUnknown = { kind: 'unknown'; command: AniListCommand };
@@ -252,7 +252,11 @@ export type AniListImportPort = {
   reviewLabels(command: Extract<AniListCommand, { kind: 'review-labels' }>): Promise<AniListLabelReviewResult>;
   applyLabels(command: Extract<AniListCommand, { kind: 'apply-labels' }>): Promise<AniListLabelApplyCallResult>;
   readLabels(command: Extract<AniListCommand, { kind: 'read-labels' }>): Promise<AniListLabelReadResult>;
-  labelTargets(query: string, cursor?: string): Promise<AniListLabelTargetsResult>;
+  labelTargets(
+    query: string,
+    cursor: string | undefined,
+    custody: AniListLabelCustody,
+  ): Promise<AniListLabelTargetsResult>;
   preview(command: Extract<AniListCommand, { kind: 'preview' }>): Promise<AniListPreviewResult>;
   page(command: Extract<AniListCommand, { kind: 'page' }>): Promise<AniListPageResult>;
   review(command: Extract<AniListCommand, { kind: 'review' }>): Promise<AniListReviewResult>;
