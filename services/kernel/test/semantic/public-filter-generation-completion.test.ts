@@ -32,6 +32,9 @@ test('generation restart keeps the original Source proof through lost observatio
   let observationLost = false,
     dispatchLost = false,
     drainLost = false;
+  let book: string;
+  let lateBody: readonly unknown[] | undefined;
+  let lateChanged = false;
   let original:
     | Extract<
         Awaited<ReturnType<typeof readNativePublicFilterPublicationCompletion>>,
@@ -56,6 +59,10 @@ test('generation restart keeps the original Source proof through lost observatio
   const transport: typeof search = {
     request: search.request.bind(search),
     async bulk<T = unknown>(lines: readonly unknown[], options?: Parameters<typeof search.bulk>[1]) {
+      if (observationLost && !lateBody) {
+        const at = lines.findIndex((line) => (line as { index?: { _id: string } }).index?._id === book);
+        if (at >= 0) lateBody = structuredClone(lines.slice(at, at + 2));
+      }
       const result = await search.bulk<T>(lines, options);
       if (observationLost && !dispatchLost) {
         dispatchLost = true;
@@ -142,7 +149,7 @@ test('generation restart keeps the original Source proof through lost observatio
     });
   };
   try {
-    const book = await f.create('schema:Book');
+    book = await f.create('schema:Book');
     await createSubjectIndex(search, prefix, 1);
     await createSubjectIndex(search, prefix, 2);
     await search.request('POST', '/_aliases', {
@@ -187,6 +194,10 @@ test('generation restart keeps the original Source proof through lost observatio
         // A current native change is repaired without substituting a new cut or execution.
         await f.propose(book, await f.create());
       }
+      if (lateBody && !lateChanged) {
+        await f.propose(book, await f.create());
+        lateChanged = true;
+      }
       // Reopen native factories after every bounded call, including all three lost replies.
       await publication.close();
       publication = open();
@@ -218,6 +229,11 @@ test('generation restart keeps the original Source proof through lost observatio
     expect(decodePublicFilterNativeState(proof[0].consumer_work)).toMatchObject({ prepared: [], preparedRows: [] });
     expect(proof[0].expires_at).toBe(String(Number.MAX_SAFE_INTEGER));
     expect((await subjectGenerations(search, prefix)).active).toBe(2);
+    expect(lateChanged).toBe(true);
+    const current = await search.request('GET', `/${target}/_doc/${book}`);
+    const late = await search.bulk<{ items: { index: { status: number } }[] }>(lateBody!);
+    expect(late.items[0]!.index.status).toBe(409);
+    expect((await search.request('GET', `/${target}/_doc/${book}`)).body).toEqual(current.body);
     const restarted = open();
     expect((await restarted.activate(job, readContext())).status).toBe('activated');
     await restarted.close();
