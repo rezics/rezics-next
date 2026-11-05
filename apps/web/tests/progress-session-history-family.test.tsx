@@ -70,7 +70,7 @@ const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterC
 const { within, userEvent } = await import('storybook/test');
 const { ProgressSessionPage } = await import('../src/library/progress-session');
 const { m } = await import('../src/paraglide/messages.js');
-const { setLocale } = await import('../src/paraglide/runtime.js');
+const { setLocale, deLocalizeUrl, localizeUrl } = await import('../src/paraglide/runtime.js');
 
 type LoadedPage = Extract<Page, { signedIn: true }>;
 function change(id: string, values: Partial<ProgressChange> = {}): ProgressChange {
@@ -152,12 +152,13 @@ async function mount(
   const rootRoute = createRootRoute();
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: '/en/library/progress',
+    path: '/library/progress',
     component: () => null,
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([indexRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
+    rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
   await router.load();
   const show = (p = initial) =>
