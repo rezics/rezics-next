@@ -1,0 +1,17 @@
+types:
+  schema:MusicVenue: '음악 공연 장소'
+  schema:MusicEvent: '음악 행사'
+  wd:Q34379: '악기'
+
+properties:
+  schema:performer: '공연자'
+  wdt:P1303: '사용 악기'
+
+typeDescriptions:
+  schema:MusicVenue: '음악 공연에 사용되는 구체적인 장소입니다. 그곳에서 열리는 음악 행사와는 별개의 대상입니다.'
+  schema:MusicEvent: '날짜와 장소가 따로 있는 식별된 음악 행사입니다. 개별 공연이나 공연장과는 별개의 대상입니다.'
+  wd:Q34379: '악기 종류의 식별 대상입니다. 개별 악기나 그것을 사용하는 사람을 뜻하지 않습니다.'
+
+propertyDescriptions:
+  schema:performer: '이 음악 행사의 공연자로 기재된 사람 또는 단체입니다. 크레딧과 출처는 이 명세에 귀속됩니다.'
+  wdt:P1303: '이 명세에서 크레딧을 받은 공연자가 사용한 악기입니다. 공연자의 정체성에 악기가 포함되는 것은 아닙니다.'

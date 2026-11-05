@@ -384,22 +384,6 @@ slots:
     annotations:
       datatype: quantity
       units: '1'
-  startDate:
-    slot_uri: schema:startDate
-    description: The start of the original broadcast or release period.
-    range: date
-    exact_mappings:
-      - wd:P580
-    annotations:
-      datatype: time
-  endDate:
-    slot_uri: schema:endDate
-    description: The end of the original broadcast or release period.
-    range: date
-    exact_mappings:
-      - wd:P582
-    annotations:
-      datatype: time
   originalBroadcaster:
     slot_uri: wdt:P449
     description: The original broadcaster, when the source identifies the first broadcast.

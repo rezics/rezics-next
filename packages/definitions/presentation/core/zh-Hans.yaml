@@ -5,6 +5,9 @@ types:
   schema:Organization: '组织'
   schema:SoftwareApplication: '软件应用程序'
   rezics:ReleaseGroup: '发布组'
+  schema:Place: '地点'
+  schema:AdministrativeArea: '行政区'
+  schema:Event: '活动'
 properties:
   rezics:penNameOf: '笔名使用者'
   wdt:P186: 材料
@@ -74,6 +77,10 @@ properties:
   rezics:codec: '编解码器'
   rezics:fileQuality: '文件质量'
   rezics:releaseGroup: '发布组'
+  schema:containedInPlace: '所属地点'
+  schema:location: '地点'
+  schema:startDate: '开始日期'
+  schema:endDate: '结束日期'
 inverseProperties:
   rezics:penNameOf: '笔名'
   wdt:P186: 用于
@@ -104,6 +111,9 @@ typeDescriptions:
   schema:Organization: '出版社、工作室等组织，或署名的团体。'
   schema:SoftwareApplication: '可独立识别的软件应用，如阅读工具；游戏作品及其发行版使用各自的类型。'
   rezics:ReleaseGroup: '由 AniDB 标识并与其发布的文件关联的来源组。其身份与每个文件及出版发行版分别保留。'
+  schema:Place: '可具体识别的地理地点或建成场所，与在那里举行的活动分别建档。'
+  schema:AdministrativeArea: '以地点表示的具名行政区域，与其中的活动场所分别识别。'
+  schema:Event: '具有自身身份和时间范围的事件，与地点及参与者分别识别。'
 propertyDescriptions:
   rezics:penNameOf: '使用此笔名或共同名义的个人或组织。'
   wdt:P186: '用作材料或组成部分的食物或已制成的食谱，可用限定词补充用量及列表顺序。'
@@ -174,3 +184,7 @@ propertyDescriptions:
   rezics:codec: '原样保存来源给出的编解码器代码，包括尚未识别的代码。'
   rezics:fileQuality: '原样保存来源给出的质量代码，包括尚未识别的代码。'
   rezics:releaseGroup: '与此文件关联的 AniDB 来源组，可独立读取，并与出版发行版和个人副本区分。'
+  schema:containedInPlace: '直接包含此地点的上级地点，例如其所属行政区。'
+  schema:location: '此活动发生的地点；它不代表活动本身或某一场演出。'
+  schema:startDate: '来源所述对象时间范围的起点，保留来源的精度和历法。'
+  schema:endDate: '来源所述对象时间范围的终点，保留来源的精度和历法。'

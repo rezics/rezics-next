@@ -5,6 +5,9 @@ types:
   schema:Organization: '단체'
   schema:SoftwareApplication: '소프트웨어 애플리케이션'
   rezics:ReleaseGroup: '릴리스 그룹'
+  schema:Place: '장소'
+  schema:AdministrativeArea: '행정 구역'
+  schema:Event: '행사'
 properties:
   rezics:penNameOf: '필명 사용자'
   wdt:P186: 재료
@@ -74,6 +77,10 @@ properties:
   rezics:codec: '코덱'
   rezics:fileQuality: '파일 품질'
   rezics:releaseGroup: '릴리스 그룹'
+  schema:containedInPlace: '포함된 장소'
+  schema:location: '장소'
+  schema:startDate: '시작일'
+  schema:endDate: '종료일'
 inverseProperties:
   rezics:penNameOf: '필명'
   wdt:P186: 사용되는 곳
@@ -167,6 +174,10 @@ propertyDescriptions:
   rezics:codec: '출처가 보고한 코덱 코드를 그대로 저장하며 아직 인식되지 않은 코드도 보존합니다.'
   rezics:fileQuality: '출처가 보고한 품질 코드를 그대로 저장하며 아직 인식되지 않은 코드도 보존합니다.'
   rezics:releaseGroup: '이 파일과 연결된 AniDB 출처 그룹입니다. 발행 릴리스 및 개인 사본과 구별되며 독립적으로 읽을 수 있습니다.'
+  schema:containedInPlace: '이 장소를 직접 포함하는 장소입니다. 예를 들어 행정 구역을 기록합니다.'
+  schema:location: '이 행사가 열리는 장소입니다. 행사 자체나 개별 공연을 뜻하지 않습니다.'
+  schema:startDate: '대상의 기간이 시작된다고 출처에 기록된 시점이며, 출처의 정밀도와 달력을 유지합니다.'
+  schema:endDate: '대상의 기간이 끝난다고 출처에 기록된 시점이며, 출처의 정밀도와 달력을 유지합니다.'
 typeDescriptions:
   wd:Q2095: '밀가루 같은 식품이나 먹을 수 있는 물질입니다. 조리법은 이를 준비하는 방법을 설명합니다.'
   wd:Q2620972: '작품의 에피소드나 장을 순서대로 묶은 이름 있는 이야기 구간입니다. 첫 부분과 마지막 부분의 번호로 범위를 나타냅니다.'
@@ -175,3 +186,6 @@ typeDescriptions:
   schema:SoftwareApplication: '독서 도구처럼 개별적으로 식별되는 응용 프로그램입니다. 게임 작품과 출시판에는 별도 유형이 있습니다.'
 
   rezics:ReleaseGroup: 'AniDB가 식별하고 배포 파일과 연결하는 출처 그룹입니다. 각 파일 및 발행 릴리스와 별개의 식별 대상입니다.'
+  schema:Place: '지리적 또는 건축물로 구분되는 구체적인 장소입니다. 그곳에서 열리는 행사와는 별개입니다.'
+  schema:AdministrativeArea: '장소로 나타낸 이름 있는 행정 구역이며, 그 안의 공연장과는 별개입니다.'
+  schema:Event: '고유한 정체성을 가진 시간 범위가 정해진 사건으로, 장소 및 참여자와 구별됩니다.'

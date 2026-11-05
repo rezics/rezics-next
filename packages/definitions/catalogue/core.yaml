@@ -116,6 +116,30 @@ classes:
     description: An organization.
     exact_mappings:
       - wd:Q43229
+  Place:
+    is_a: Thing
+    class_uri: schema:Place
+    description: A specific geographic or constructed place, identified independently from events held there.
+    slots:
+      - containedInPlace
+    annotations:
+      schema_org_type: https://schema.org/Place
+  AdministrativeArea:
+    is_a: Place
+    class_uri: schema:AdministrativeArea
+    description: A named administrative region represented as a place, distinct from a venue within it.
+    annotations:
+      schema_org_type: https://schema.org/AdministrativeArea
+  Event:
+    is_a: Thing
+    class_uri: schema:Event
+    description: A bounded occurrence with its own identity, distinct from its venue and participating people.
+    slots:
+      - location
+      - startDate
+      - endDate
+    annotations:
+      schema_org_type: https://schema.org/Event
     annotations:
       schema_org_type: https://schema.org/Organization
   ReleaseGroup:
@@ -160,6 +184,42 @@ slots:
     annotations:
       datatype: quantity
       units: '*'
+  containedInPlace:
+    slot_uri: schema:containedInPlace
+    description: The immediate containing place of this place, such as its administrative area.
+    range: Place
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: schema:containsPlace
+      relation_order: name
+  location:
+    slot_uri: schema:location
+    description: The place where this event occurs; it does not identify the event or an occurrence within it.
+    range: Place
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: none
+      relation_order: name
+  startDate:
+    slot_uri: schema:startDate
+    description: The stated beginning of the subject's time span, preserving the source's precision and calendar.
+    range: date
+    exact_mappings:
+      - wd:P580
+    annotations:
+      datatype: time
+  endDate:
+    slot_uri: schema:endDate
+    description: The stated end of the subject's time span, preserving the source's precision and calendar.
+    range: date
+    exact_mappings:
+      - wd:P582
+    annotations:
+      datatype: time
   hashAlgorithm:
     slot_uri: rezics:hashAlgorithm
     description: The exact source code naming a checksum's algorithm.

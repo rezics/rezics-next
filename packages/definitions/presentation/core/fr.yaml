@@ -5,6 +5,9 @@ types:
   schema:Organization: 'organisation'
   schema:SoftwareApplication: 'application logicielle'
   rezics:ReleaseGroup: 'groupe de diffusion'
+  schema:Place: 'lieu'
+  schema:AdministrativeArea: 'zone administrative'
+  schema:Event: 'événement'
 properties:
   rezics:penNameOf: 'pseudonyme de'
   wdt:P186: fabriqué à partir de
@@ -74,6 +77,10 @@ properties:
   rezics:codec: 'codec'
   rezics:fileQuality: 'qualité du fichier'
   rezics:releaseGroup: 'groupe de diffusion'
+  schema:containedInPlace: 'situé dans le lieu'
+  schema:location: 'lieu'
+  schema:startDate: 'date de début'
+  schema:endDate: 'date de fin'
 inverseProperties:
   rezics:penNameOf: 'pseudonymes'
   wdt:P186: Utilisé dans
@@ -104,6 +111,9 @@ typeDescriptions:
   schema:Organization: 'Une organisation ou un groupe crédité, par exemple une maison d’édition ou un studio.'
   schema:SoftwareApplication: 'Une application identifiable, comme un logiciel de lecture ; les jeux et leurs éditions ont des types distincts.'
   rezics:ReleaseGroup: 'Un groupe source identifié par AniDB et associé aux fichiers qu’il diffuse. Son identité reste distincte de chaque fichier et de chaque publication.'
+  schema:Place: 'Un lieu géographique ou construit précis, distinct des événements qui s’y déroulent.'
+  schema:AdministrativeArea: 'Une région administrative nommée représentée comme un lieu, distincte d’un établissement qui s’y trouve.'
+  schema:Event: 'Un événement délimité doté de sa propre identité, distinct de son lieu et de ses participants.'
 propertyDescriptions:
   rezics:penNameOf: 'La personne ou organisation derrière ce pseudonyme ou nom collectif.'
   wdt:P186: 'Un aliment ou une recette préparée utilisé comme ingrédient ou composant ; sa quantité et son ordre peuvent être précisés.'
@@ -174,3 +184,7 @@ propertyDescriptions:
   rezics:codec: 'Code de codec exact indiqué par la source, y compris les codes encore inconnus.'
   rezics:fileQuality: 'Code de qualité exact indiqué par la source, y compris les codes encore inconnus.'
   rezics:releaseGroup: 'Groupe source AniDB lisible séparément et associé à ce fichier, distinct d’une publication et d’une copie personnelle.'
+  schema:containedInPlace: 'Le lieu contenant immédiatement ce lieu, par exemple sa zone administrative.'
+  schema:location: 'Le lieu où se déroule cet événement ; il n’identifie ni l’événement ni une représentation particulière.'
+  schema:startDate: 'Le début déclaré de la période du sujet, en conservant la précision et le calendrier de la source.'
+  schema:endDate: 'La fin déclarée de la période du sujet, en conservant la précision et le calendrier de la source.'

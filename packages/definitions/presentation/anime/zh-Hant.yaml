@@ -10,11 +10,9 @@ properties:
   marcrel:fds: '影片發行方'
   schema:copyrightNotice: 版權聲明
   schema:duration: 片長
-  schema:endDate: 結束日期
   schema:episodeNumber: 集數
   schema:isPartOf: 所屬實體
   schema:numberOfEpisodes: 集數
-  schema:startDate: 開始日期
   wdt:P449: 首播平台
   wdt:P973: 詳細描述網址
   schema:associatedMedia: '相關媒體'
@@ -127,11 +125,9 @@ propertyDescriptions:
   marcrel:fds: '被署名為這份影像出版物發行者的個人或組織，不照搬作品上無關的署名。'
   schema:copyrightNotice: '來源記載的著作權聲明，本身不構成再利用授權。'
   schema:duration: '來源明示的片長，以秒（wd:Q11574）為單位的非負整數數量記錄；例如 24 分鐘寫為 1440。'
-  schema:endDate: '原始播出或發行期間的結束日期，維持來源的日期精度。'
   schema:episodeNumber: '來源的單集序號，以文字保存，可含 0、特別篇或小數編號；與單集識別碼分開。'
   schema:isPartOf: '此單集所屬的電視系列或季。'
   schema:numberOfEpisodes: '此作品或季的集數，以無單位的非負整數數量記錄。'
-  schema:startDate: '原始播出或發行期間的開始日期，維持來源的日期精度。'
   wdt:P449: '來源明確指出的首播機構，不泛指後續所有發行者。'
   wdt:P973: '介紹這部動畫作品的頁面 URL，描述性連結不等於身分精確對應。'
 
