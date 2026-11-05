@@ -87,7 +87,11 @@ export const MediumGroupingUnavailable: Story = {
 export const QualifiedRecordingCredit: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click((await canvas.findAllByText(m.album_tracks_inspect()))[0]!);
+    const gate = (await canvas.findAllByText(m.album_tracks_inspect()))[0]!;
+    await userEvent.click(gate);
+    const details = gate.closest('details');
+    if (!details) throw new Error('Missing disclosed occurrence gate');
+    await userEvent.click(within(details).getByRole('button', { name: new RegExp(m.music_release_inspect()) }));
     await canvas.findByText('Mina Kato');
     await canvas.findByText('lead vocals');
   },
@@ -107,7 +111,11 @@ export const SourceUnavailable: Story = { args: { scenario: 'source-unavailable'
 export const ExactContextReturn: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click((await canvas.findAllByText(m.album_tracks_inspect()))[0]!);
+    const gate = (await canvas.findAllByText(m.album_tracks_inspect()))[0]!;
+    await userEvent.click(gate);
+    const details = gate.closest('details');
+    if (!details) throw new Error('Missing disclosed occurrence gate');
+    await userEvent.click(within(details).getByRole('button', { name: new RegExp(m.music_release_inspect()) }));
     const target = await canvas.findByRole('link', { name: m.album_tracks_open() });
     const url = new URL(target.getAttribute('href')!, window.location.origin);
     await expect(url.searchParams.get('context')).toBe(musicAddress.context);
