@@ -1,170 +1,105 @@
 # @rezics/conversion
 
-This pure package deterministically turns one licensed record into bounded source data and portable create/proposal commands. It does not acquire data/media, call APIs, write storage, authorize, accept, adopt or retract. The platform importer owns acquisition, replay, rights and API writes; see the [importer contract](../../services/importer/README.md).
+This pure package deterministically turns one licensed provider record into bounded source data and portable create/proposal commands. It does not acquire data or media, call APIs, write storage, authorize, accept, adopt or retract. The platform importer owns acquisition, replay, rights and API writes; see the [importer contract](../../services/importer/README.md).
 
 ## Package API
 
 The public subpaths are defined in [package.json](package.json).
 
-| Subpath                                 | Public entry                                                                                  |
-| --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| @rezics/conversion                      | Shared source and conversion types, diagnostics, errors, and source-classification projection |
-| @rezics/conversion/bangumi              | Bangumi converter, revision and result                                                        |
-| @rezics/conversion/bangumi-vocabulary   | Bangumi vocabulary mapper and revision                                                        |
-| @rezics/conversion/vndb                 | VNDB converter, revision, limits and result                                                   |
-| @rezics/conversion/vndb-vocabulary      | VNDB vocabulary mapper, revision, tag-weight producer and row types                           |
-| @rezics/conversion/source-vocabulary    | Released binding, identity, row, gap and result types                                         |
-| @rezics/conversion/open-library         | Open Library converter, revision and result                                                   |
-| @rezics/conversion/wikidata             | Wikidata converter, revision, limits and result                                               |
-| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection                    |
+| Subpath | Public entry |
+| --- | --- |
+| @rezics/conversion | Shared source and conversion types, diagnostics, errors and source-classification projection |
+| @rezics/conversion/bangumi | Bangumi converter, revision and result |
+| @rezics/conversion/bangumi-vocabulary | Bangumi vocabulary mapper and revision |
+| @rezics/conversion/vndb | VNDB converter, revision, limits and result |
+| @rezics/conversion/vndb-vocabulary | VNDB vocabulary mapper, revision, tag-weight producer and row types |
+| @rezics/conversion/source-vocabulary | Released binding, identity, row, gap and result types |
+| @rezics/conversion/open-library | Open Library converter, revision and result |
+| @rezics/conversion/wikidata | Wikidata converter, revision, limits and result |
+| @rezics/conversion/cross-media-entities | Cross-source converter, revision, source mapper and Person-name projection |
 
-Current exports: Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Registration imports revisions; source records cannot choose them. Selected Bangumi entities compose cross-media-entities@15+bangumi@15.
+Current exports are Bangumi bangumi@15, VNDB vndb@8, Open Library open-library@5, Wikidata wikidata-6, cross-media entities cross-media-entities@15, Bangumi vocabulary bangumi-vocabulary@3, VNDB vocabulary vndb-vocabulary@4 and source vocabulary source-vocabulary@3. Selected Bangumi entities compose cross-media-entities@15+bangumi@15. Registration imports these revisions; source records cannot choose them.
 
-ConversionInput carries the provider-native external_id, record_revision and record. Revisions are never inferred from dump dates, checksums, row order or converter versions. A missing native revision remains null where permitted; Wikidata uses literal unversioned only when the entity has no lastrevid. Other required provider revisions must match their native record.
+ConversionInput carries the provider-native external ID, record revision and record. Revisions are not inferred from dump dates, checksums, row order or converter versions. A missing native revision stays null where permitted; Wikidata uses unversioned only when the entity has no lastrevid. Other required provider revisions must match the native record. The importer records the source revision or unversioned digest alongside the converter revision.
 
-Context separates trusted caller values from source data: alias, existing subject UUID, resolved references, available media, normalized vocabulary rows and admitted source classifications. Converters do not resolve identities, discover graph rows or treat body values as bindings.
+Context separates trusted caller values from source data: alias, existing subject UUID, resolved references, available media, normalized vocabulary rows and admitted source classifications. Converters do not resolve identities, discover graph rows or treat body values as bindings. Results contain normalized data, a digest, diagnostics and portable commands for the ordinary bulk contract. A converter return proves neither acceptance, adoption nor current public return.
 
-Results contain normalized data, digest, diagnostics and portable commands sent through the ordinary bulk contract. Imports create proposals; separate authorized review accepts/adopts and current reads verify return. A converter return proves none of those states.
+## Source mappings and rights
 
-## Source mappings and limits
+| Provider | Native input, grain and current mapping | Rights and exclusions |
+| --- | --- | --- |
+| Bangumi | One native subject; supported types are Book, TVAnime, Music, Game and admitted live action. Source identity retains its native ID; names retain locale, attributed summaries become Text abstracts, and type facts and citations stay on that subject. Unsupported types remain source records without invented subjects. P5732 is admitted only for the exact Bangumi source-site rule below. | Metadata and attributed summaries use CC BY-SA 3.0. Cover rights are separate and unknown until admitted by the media owner. |
+| VNDB | Grouped native COPY tables or supported API; visual novels, releases, staff, producers and characters retain native keys and exact table origins. | Permitted metadata uses ODbL 1.0 database and LicenseRef-DbCL-1.0 contents terms. Descriptions, posts, images and other creative material are excluded. |
+| Open Library | Native TSV Work and Edition rows map to Book and bf:Instance and retain IDs and relations. Work first_publish_date maps to cited schema:datePublished; page counts, validated ISBN-13 and dates stay on Edition. | CC0-1.0 permits bibliographic metadata only; unknown-licensed prose and covers are excluded. |
+| Wikidata | One JSONL item; exact bundled type, property, rank, datatype, qualifier and time/quantity mappings govern claims. Unresolved relations remain unresolved. | CC0-1.0 structured data. Unsupported properties, instructions, user/talk content and Commons images are excluded. |
 
-| Provider     | Native input, grain and current mapping                                                                                                                                                                                                                                                           | Rights and exclusions                                                                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bangumi      | One native subject; supported types are Book, TVAnime, Music, Game and admitted live action. ID maps to P5732; names retain locale, attributed summaries become Text abstracts, and type facts/citations stay on that subject. Unsupported types remain source records without invented subjects. | Summary text requires CC-BY-SA-3.0 attribution/ShareAlike. Cover rights are separate and unknown unless admitted by the media owner.                    |
-| VNDB         | Grouped native COPY tables or supported API; visual novels, releases, staff, producers and characters retain native keys and exact table origins.                                                                                                                                                 | Permitted metadata uses ODbL-1.0 database and LicenseRef-DbCL-1.0 contents terms. Descriptions, posts, images and other creative material are excluded. |
-| Open Library | Native TSV Work/Edition rows map to Book/bf:Instance and retain IDs/relations. Work `first_publish_date` maps to cited `schema:datePublished`; page counts, validated ISBN-13 and dates stay on Edition.                                                                                          | CC0-1.0 permits bibliographic metadata only; unknown-licensed prose and covers are excluded.                                                            |
-| Wikidata     | One JSONL item; exact bundled type, property, rank, datatype, qualifier and time/quantity mappings govern claims; unresolved relations remain unresolved.                                                                                                                                         | CC0-1.0 structured data. Unsupported properties, instructions, user/talk content and Commons images are excluded.                                       |
+Provider allowlists never traverse unknown or private subtrees or truncate values. Malformed or unadmitted input becomes bounded diagnostics and omissions, not substitutes. IDs, revisions, labels, citations and locales retain explicit provider fields, not spelling or order inference. URLs are descriptive evidence, never identities, fetch instructions or licences.
 
-Provider allowlists never traverse unknown/private subtrees or truncate values. Malformed/unadmitted input becomes bounded diagnostics/omissions, not substitutes. IDs, revisions, labels, citations and locales retain explicit provider fields, not spelling/order inference.
+### Bangumi people, works and games
 
-Bangumi locales follow pinned fields. Type-1 Person `name`→`und`; `name_cn` or exact parsed PersonDetail infobox key `简体中文名`→`zh`. Ambiguous, malformed or over-bound Chinese evidence withholds only `zh`; exact text enters the digest, while ETag/Last-Modified are cache metadata. TVAnime work links are cited descriptive wdt:P973, separate from unfetched schema:url sites. Game website/work-link keep exact URL bytes. Source profile selects Book/BookSeries; ISBN, publisher, volume and edition facts never assert on the work. Character identity, appearance, aliases and physical quantities stay on Character; units and blood-type Concepts are never guessed.
+Type-1 Person name maps to und. name_cn or the exact PersonDetail infobox key 简体中文名 maps to zh. Ambiguous, malformed or over-bound Chinese evidence withholds only zh; exact text enters the digest, while ETag and Last-Modified remain cache metadata. Person identity, biography, names, careers and credits remain independent.
 
-Game uses the pinned template: Chinese name→zh, aliases→und; cited dates preserve admitted precision and unsupported forms omit. Genres remain unsplit source literals; player counts require complete admitted forms. TVAnime run facts, Copyright notices, official sites and descriptive links retain separate properties/citations; malformed fields do not suppress valid siblings.
+The cross-media converter retains at most seven authentic careers only for a type-1 Person and emits no P106. The separate mapper requires that actual Person, exact person:<id> key, source-owned careers Scheme, current bound Concept, released P106 and exact #/career citation. Source Concepts assert no canonical occupation or cross-provider equivalence. Malformed items cannot erase valid neighbors; empty, unknown, malformed or Organization cases create no unsupported occupation.
 
-Only a Work may use optional top-level Open Library first_publish_date. The exact bounded value participates in the normalized digest and yields an independently keyed, cited schema:datePublished proposal after complete released-statement validation. Existing publish_date and Edition behavior remain separate; malformed or unsupported values are diagnosed, never guessed.
+Only admitted source-site rows containing a parsed public Bangumi /subject/N URL can yield its exact numeric P5732 identifier. Person and Character links, other sites, title lookup and adaptation heuristics cannot resolve or merge identity. TVAnime work links remain cited descriptive P973, separate from unfetched schema:url sites. Game website and work-link values keep their exact URL bytes and separate properties. Source profile selects Book or BookSeries; ISBN, publisher, volume and edition facts never assert on the work.
 
-### Bangumi Person careers
+Game names retain locale; cited publication dates preserve admitted precision and unsupported forms omit. Genres remain unsplit source literals; player counts require complete admitted forms. TVAnime run facts, copyright notices, official sites and descriptive links retain separate properties and citations. Malformed fields do not suppress valid siblings. Creator and voice credits retain selected source relationships and exact role/person citations. Character identity, appearance, aliases and physical quantities stay on Character; units and blood-type Concepts are never guessed.
 
-The cross-media converter retains at most seven authentic careers only for a type-1 Person and emits no P106. The separate mapper requires that Person, exact `person:<id>`, source-owned careers Scheme, current bound Concept, released P106 and `#/career` citation; see [Registered source vocabulary mapping](../../services/importer/README.md#registered-source-vocabulary-mapping). Source Concepts claim no canonical occupation or cross-provider equivalence. Malformed items cannot erase valid neighbors; empty, unknown, malformed or Organization cases yield no unsupported occupation. Identifier, biography, credits and career citations stay independent.
+### VNDB
 
-The reviewed career range keeps its original cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 identities; these are not the current registration. The showcase-only fallback is under [Explicit local showcase publication](../../services/importer/README.md#explicit-local-showcase-publication).
+COPY preserves null, empty and missing Latin cells as different source values in the normalized digest. An exactly empty optional Latin cell omits only its Romanized alias; whitespace, missing and wrong-type values remain errors. Selected release names and aliases do not rank from translation flags. Dates retain year/month/day precision; TBA and absent are distinct gaps where no released status property exists. Producer par maps current to selected and sub selected to current under P749; P355 and reciprocal rows are not invented. Spoilers remain qualifiers. Votes, list membership and user data are excluded from catalogue conversion. COPY unknown, absent and malformed values stay distinct.
 
-### Other provider-owned source details
+VNDB tag weights require a current exact Kana response for the same selected visual novel and tag. The decimal rating and API endpoint/digest retain source origin; COPY votes are not weights, confidence or ratings. Validate exact request IDs, unique occurrence, spoiler and rating ranges before ordinary descriptor validation. Unresolved author/work links stay cited external identifiers until actual resolution; Open Library unresolved links use somevalue with the Open Library ID qualifier.
 
-VNDB preserves null/empty Latin cells, selected release names and aliases, and does not rank labels from translation flags. Dates retain year/month/day precision; TBA and absent are distinct gaps without a released status property. Producer par maps current→selected and sub selected→current under P749; neither P355 nor reciprocal rows are invented. Spoilers remain qualifiers; votes, list membership and user data are excluded. COPY unknown, absent and malformed stay distinct. Open Library page counts/ISBNs stay on Editions; unresolved author/work links use somevalue plus the Open Library ID qualifier. Wikidata uses only bundled released claims, never label lookup or approximate mappings. The importer owns source-vocabulary admission.
+### Open Library
 
-### Conservative exact-quantity source handoff
+Only an optional Work first_publish_date is eligible for schema:datePublished. Its exact bounded value participates in the normalized digest and yields an independently keyed, cited proposal only after complete released-statement validation. Existing publish_date and Edition behavior remain separate; malformed or unsupported values are diagnosed, never guessed. Page counts and ISBNs stay on Editions.
 
-For every exact-quantity source assertion, preserve **every actual source
-qualifier losslessly in the same native statement**, through reviewed mappings
-and the admitted property's schema. If any qualifier would be skipped,
-unsupported, unresolved or semantically narrowed, withhold the **entire
-measurement** and diagnose the loss. Never publish a less qualified amount.
-This includes loss during source projection, before emission can see a qualifier.
-Keep the original source input and its references intact; rejecting a proposal
-does not authorize rewriting source evidence or immutable earlier receipts.
+### Wikidata time, quantity and word evidence
 
-Exactness comes from the actual admitted closed fixed quantity value schema:
-required amount and unit, only those two properties, and neither lowerBound nor
-upperBound. The serialized property has no exact flag. Use the
-[Definitions owner API](../definitions/README.md#exact-quantities); this is generic
-exact-quantity validation, independent of property names or holder types.
-Ordinary quantity and default conversion semantics remain unchanged.
+Validate actual cited statements against released properties and public Definitions before emission. Preserve complete signed partial Gregorian or Julian time values, including every present timezone, before and after value even when zero; absent components stay absent. Quantity amount, bounds and unit remain exact lexical strings. Never coerce or normalize. If any exact-quantity qualifier is skipped, unsupported, unresolved or narrowed, withhold the entire measurement, including loss during projection. The serialized exact quantity has only amount and unit and no exactness flag. Somevalue and novalue remain distinct.
 
-Decision: `timezone`, `before` and `after` are presence-sensitive fields; retain
-each explicit value, including zero, and leave absent components absent.
+WordCount requires admitted whole-holder identity, language, version and coverage. Include its digest when text is supplied. Partial or unknown coverage omits WordCount; characterCount is separate. Do not invent vocabulary, options, holder identity or qualifier support. Item qualifiers, new mappings and unresolved discovery remain unsupported. These rules do not deliver a producer, runtime or schema release.
 
-Wikidata `wikidata-6` composes the complete cited candidate using the actual
-bundled property and calls public `checkStatementInput` before emission, retaining
-final batch validation. The same native time value keeps signed 4–16 digit nonzero
-years, Gregorian/Julian calendar, precision 9/10/11 and optional safe timezone and
-nonnegative uncertainty. Quantity amount, bounds and unit remain exact
-lexical strings; validation performs no Number coercion or calendar normalization.
-Unsupported or incomplete values withhold the entire statement with bounded
-source diagnostics. Somevalue/novalue remain distinct. Source projection keeps
-its existing field/byte limits; it does not evaluate unknown qualifier bodies.
+## Reviewed source vocabulary
 
-Exact quantities also withhold the entire measurement when any qualifier is
-unmapped, unsupported, unresolved or narrowed, including loss during projection.
-That rejection survives normalized-record serialization and rebinding. Item
-qualifiers, new mappings and whole-holder word evidence remain unsupported.
-See the [Importer scenarios](../../services/importer/README.md#wikidata-released-time-and-quantity); exact-quantity controls remain unchanged.
+A trusted caller supplies already traversed normalized rows and exact released identity bindings. Each row names its provider path, source code and native identity. The mapper validates the current bundle digest, subject profile, target type, property, qualifier and published source descriptor. It never follows IDs or searches labels. Missing or invalid Schemes, Concepts, endpoints, profile admissions or release pins produce finite addressable SourceVocabularyGap results; valid rows survive malformed neighbors.
 
-The current bundle admits schema:wordCount with exact P6570 mapping, integer
-amount, unit 1, minimum 0 and qualifiers[]. Its mapping alone is unsafe provider
-support: Wikidata now diagnoses projection and emission loss and skips the whole
-exact measurement whenever either stage cannot preserve all qualifiers.
-P1545 maps to the existing string position but is not admitted on wordCount.
-P459 method is unmapped; current P518 has no executable exact mapping and targets
-StoryArc only, so it cannot stand for an arbitrary counted text part. Do not narrow that scope, widen P518, invent
-method/part/digest properties or supply fabricated native identities.
+A request accepts at most 128 source rows, bounded Schemes and Concepts, and only the remaining slots in the existing 100-command batch. Unknown subtrees are not inspected. Bangumi reciprocal relations coalesce by canonical direction and stable source-path order. VNDB tags retain exact tag code and category and map to cited schema:genre only through supplied exact released Scheme and Concept bindings. Producer parent and subsidiary rows keep source direction; no reciprocal association or Person-to-Organization claim is invented.
 
-Positive provider support and whole-scope discovery eligibility remain unresolved. Qualifier rejection proves no measurement/index coverage or double-index exactness.
+Reviewed resolvedReferences keys use v1 plus compact UTF-8 JSON for the exact ordered tuple, with no normalization, hashing or truncation; the complete key retains its 255-byte cap. Platform-seed v1 identities are a separate namespace: unpadded base64url of the UTF-8 tuple JSON. Their external ID and complete public command key are each checked against the 255-byte cap before effects, and native receipts retain the exact owner and command. Neither representation rewrites provider identity.
 
-## Registered source vocabulary rows
+## Exact-quantity handoff
 
-A trusted caller supplies already traversed normalized rows and exact released identity bindings. Each row names its provider path, source code and native identity. The mapper validates the current bundled release digest, subject profile, target type, property, qualifier and published source descriptor before producing ordinary commands. It never follows IDs or searches labels.
+For every exact-quantity assertion, preserve every actual source qualifier losslessly in the same native statement through reviewed mappings and the admitted property's schema. If any qualifier would be skipped, unsupported, unresolved or semantically narrowed, withhold the whole measurement and diagnose the loss. The value schema is closed to amount and unit, with neither lowerBound nor upperBound and no serialized exact flag; see the [Definitions owner API](../definitions/README.md#exact-quantities).
 
-Missing or invalid schemes, Concepts, endpoints, profile admissions or release pins produce finite SourceVocabularyGap results. No fallback label match or substitute property is emitted. A request accepts at most 128 source rows, bounded schemes and Concepts, and only the remaining slots in the existing 100-command bulk limit. Unknown subtrees are not inspected. Bangumi reciprocal relations coalesce by canonical direction and stable source-path order. VNDB `tags_vn` rows retain their exact tag code and content, erotic-content or technical category, and map to cited `schema:genre` only through the supplied exact released Concept and Scheme binding; citations preserve `#/tags_vn/<vid>/<tag>/tag`. VNDB producer parent and subsidiary rows retain their source direction; no reciprocal association or Person-to-Organization claim is invented.
-
-VNDB tag weights require a selected exact Kana response for the same visual novel and tag. The decimal rating and API endpoint/digest retain their source origin; COPY votes are not weights, confidence or ratings. The producer validates exact request IDs, unique occurrence, spoiler and rating ranges before ordinary descriptor validation.
+Wikidata wikidata-6 composes the complete cited candidate with the actual bundled property and calls public checkStatementInput before emission, retaining final batch validation. Time keeps signed 4–16 digit nonzero years, Gregorian/Julian calendar, precision 9/10/11 and optional safe timezone and nonnegative uncertainty. Quantity amount, bounds and unit remain exact lexical strings. Unsupported or incomplete values withhold the entire statement with bounded diagnostics. The complete candidate and all source references remain intact; rejecting a proposal does not authorize rewriting evidence or prior commands.
 
 ## Identity, citations and media boundary
 
-Caller context supplies existing subject IDs and resolved references; source IDs and titles never resolve identity. Statements cite the source record and required field occurrence. URLs are descriptive, not citations, identities, fetch instructions or licences.
+Caller context supplies existing subject IDs and resolved references; source IDs and titles never resolve identity. Statements cite the source record and required field occurrence. Without a bound subject or available media, conversion may return only a deferred cover intent. It never fetches bytes or invents a media ID. The importer owns media admission, publication, replay and takedown; see the [importer media contract](../../services/importer/README.md#shared-showcase-and-media) and [deletion policy](../../docs/deletion.md).
 
-Without a bound subject or available media, conversion may return only a deferred cover intent. It never fetches bytes or invents a media ID; the importer owns media admission, storage, publication, replay and takedown. See [importer media and recovery](../../services/importer/README.md#explicit-local-showcase-publication) and the [deletion policy](../../docs/deletion.md).
+## Cost derivation
 
-## Cost derivation and verification
+For bounded record M, conversion and output are O(M); projection, hashing, validation, citations and commands touch only that record. Logical bounds exclude unrelated catalogue/history and do not claim heap or time measurements.
 
-For bounded record M, conversion/output are O(M); projection, hashing, validation, citations and commands touch only that record. These logical bounds exclude unrelated catalogue/history and are not heap or time measurements.
+| Converter | Static input and output envelope |
+| --- | --- |
+| Bangumi | Projection and infobox at most 64 KiB; summary Text snapshot at most 32 KiB; bounded tag, title, diagnostic and command arrays; at most one cover intent. |
+| VNDB | Grouped normalized record at most 64 KiB; bounded titles, links and source fields; no media assets. |
+| Open Library | Normalized record at most 2 MiB; prose at most 1 MiB; bounded field and relation arrays; at most 100 proposals. |
+| Wikidata | Supported item at most 128 KiB; bounded statements, terms, references and snaks; at most 100 commands. |
+| Source vocabulary | At most 128 input rows, bounded released bindings and no more than the free slots in the 100-command batch. |
 
-| Converter         | Static input and output envelope                                                                                                                               |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bangumi           | Projection and infobox each at most 64 KiB; summary Text snapshot at most 32 KiB; bounded tag, title, diagnostic and command arrays; at most one cover intent. |
-| VNDB              | Grouped normalized record at most 64 KiB; bounded titles, links and source fields; no media assets.                                                            |
-| Open Library      | Normalized record at most 2 MiB; prose at most 1 MiB; bounded field and relation arrays; at most 100 proposals.                                                |
-| Wikidata          | Supported item at most 128 KiB; bounded statements, terms, references and snaks; at most 100 commands.                                                         |
-| Source vocabulary | At most 128 input rows, bounded released bindings, and no more than the free slots in the 100-command batch.                                                   |
+- VNDB citation touches one native revision and optional modification timestamp; each fact carries the exact source-record reference.
+- VNDB release minimum age touches one bounded scalar, at most one quantity proposal and its existing citation; no additional read or identity.
+- Bangumi dispatch is constant work; supported records use the 64 KiB projection and command limits, while unsupported types retain identity-only normalized data.
+- Bangumi Person birth date emits at most one cited day-precision fact from the three admitted date integers on an actual Person, without a source fetch.
+- Bangumi Person Chinese name uses one actual Person, at most two schema:name facts, a 64 KiB record, 64 infobox entries, 4,096 UTF-8 bytes and 500 codepoints per name, and at most 16 diagnostics.
+- Bangumi TVAnime original run uses one bounded infobox and emits at most three cited date, end-date or episode-count facts. Episode, schedule and broadcaster discovery are outside conversion.
+- Bangumi Game player count examines at most 8 count occurrences across 64 fields and emits one count with at most one qualifier.
+- Bangumi Book dispatch uses one bounded Book profile and infobox. Book versus BookSeries follows the admitted source profile; counts do not create volumes or editions.
+- Bangumi Game environment examines at most 64 fields, 16 platform occurrences and 8 engine occurrences with at most 16 omissions; proposals use current released bindings.
+- Open Library Work first publication uses one optional scalar of at most 1,500 characters in the 2 MiB projection, one cited proposal, no Edition lookup or extra read, and the 100-command ceiling.
 
-### Cite a VNDB record
-
-Touches one native revision and optional modification timestamp. The record digest includes native source facts; each fact carries the exact source-record reference.
-
-### Project a VNDB release minimum age
-
-One bounded minimum-age scalar, at most one quantity proposal and the existing release citation. No additional source read or identity is created.
-
-### Dispatch a Bangumi record
-
-Identity and type dispatch are constant work. Unsupported source types retain identity-only normalized data; supported records use the 64 KiB projection and existing command limits.
-
-### Project a Bangumi Person birth date
-
-At most one cited day-precision birthDate from the three admitted date integers on one actual Person. Conversion performs no source fetch.
-
-### Project a Bangumi Person Chinese name
-
-One actual Person; at most two `schema:name` facts, 65,536-byte record, 64 infobox entries, 4,096 UTF-8 bytes/500 codepoints per name and 16 diagnostics. No fetch or identity lookup.
-
-### Project a Bangumi television original run
-
-One bounded TVAnime infobox; at most three cited date, end-date or episode-count facts. Episode, schedule and broadcaster discovery remain outside conversion.
-
-### Project a Bangumi game player count
-
-At most 64 infobox fields and 8 examined count occurrences; one player-count fact and at most one qualifier. Invalid or unsupported count forms produce no count assertion.
-
-### Dispatch a Bangumi book record
-
-One bounded Book profile and infobox dispatch; Book versus BookSeries grain follows the admitted source profile. Counts do not create volumes or editions.
-
-### Project a Bangumi Game environment
-
-At most 64 infobox fields, 16 platform occurrences, 8 engine occurrences and 16 omissions; proposals use current released bindings and the existing batch envelope.
-
-### Project an Open Library Work first publication date
-
-One optional Work scalar, at most 1,500 characters, in the 2 MiB projection; one cited schema:datePublished proposal, no Edition lookup or extra read, within the 100-command ceiling.
-
-Pure behavior is pinned by [Bangumi outcomes](tests/bangumi-outcomes.test.ts), [career mapping](tests/bangumi-person-careers.test.ts) and [Person-name projection](tests/bangumi-person-names.test.ts). These cases do not replace native importer/Kernel acceptance or growth evidence.
+Pure mapping cases establish determinism, provenance and bounds. They do not replace native importer/Kernel acceptance or growth evidence; see [Imports capability acceptance](../../docs/goals/imports.capabilities.md).
