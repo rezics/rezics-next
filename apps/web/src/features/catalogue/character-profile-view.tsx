@@ -8,7 +8,7 @@ import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { pageText } from '../pages/data';
 import { ViewHeadingActions } from '../pages/view-heading';
-import { subjectHref } from '../../subject/subject-href';
+import { candidateContext } from '../../subject/candidates';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import type { RelationTransport } from '../../subject/relation-candidates';
 import { SubjectFacts } from './subject-facts-view';
@@ -25,6 +25,7 @@ import { CharacterProfileCreate } from './character-profile-create';
 import { CharacterClassifications } from './character-profile-classification';
 import { CharacterRelationshipsEntry } from './character-relationships/entry';
 import { DefinitionMeaning } from './definition-meaning';
+import { characterPublicReturnHref, globalCharacterCorrectionHref } from './character-correction-visit';
 import {
   characterFacts,
   characterGroups,
@@ -41,6 +42,7 @@ import {
 
 export type CharacterProfileProps = CharacterAddress & {
   locale: string;
+  label?: string;
   session: string;
   transport: CharacterTransport;
   search: EntityPickerSearch;
@@ -57,6 +59,9 @@ export const CharacterProfile = catalogueEditor(CharacterProfileLive);
 function CharacterProfileLive({
   id: initialId,
   work: initialWork,
+  context,
+  realm,
+  label: initialLabel,
   locale,
   session,
   transport,
@@ -91,8 +96,8 @@ function CharacterProfileLive({
   } | null>(null);
   const mounted = useRef(false);
   const query = useQuery({
-    queryKey: [...['character-profile', id, work, locale], lifetime.generation],
-    queryFn: () => transport.load({ id, work }),
+    queryKey: [...['character-profile', id, work, context, realm, locale], lifetime.generation],
+    queryFn: () => transport.load({ id, work, context, realm }),
     retry: false,
     staleTime: Infinity,
     gcTime: 0,
