@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { IdentifiersProfile } from '../features/catalogue/identifiers-profile-view';
+import { EditorialEntry } from '../features/catalogue/editorial-entry';
 import { IdentifierOriginChoice } from '../features/catalogue/identifier-current-visit-view';
 import {
   identifierOriginHref,
@@ -84,6 +85,25 @@ function OriginVisitExample({ unsupported = false }: { unsupported?: boolean }) 
     </PatternStory>
   );
 }
+
+function OriginEntryExample() {
+  const locale = getLocale();
+  return (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        <EditorialEntry
+          id={identifiersSubject}
+          label="A book"
+          locale={locale}
+          context="0ac7c5d7-1f67-4d02-8a72-0676044ecb19"
+          realm="b7d92525-081e-42e1-9cb8-ef72b1492a25"
+        >
+          {null}
+        </EditorialEntry>
+      </AppShell>
+    </PatternStory>
+  );
+}
 const meta = {
   title: 'Pages/Catalogue/Ordinary identifier evidence editor',
   component: Example,
@@ -114,6 +134,17 @@ export const RouteEntry: Story = {
 export const CurrentEvidence: Story = {};
 export const SelectedRealmOrigin: Story = { render: () => <OriginVisitExample /> };
 export const UnsupportedSelectedContext: Story = { render: () => <OriginVisitExample unsupported /> };
+export const EntryCarriesSelectedOrigin: Story = {
+  render: () => <OriginEntryExample />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.contribute_title() }));
+    await userEvent.click(await canvas.findByRole('menuitem', { name: m.contribute_edit() }));
+    const entry = await canvas.findByRole('menuitem', { name: m.identifiers_title() });
+    expect(entry.getAttribute('href')).toContain('originContext=0ac7c5d7-1f67-4d02-8a72-0676044ecb19');
+    expect(entry.getAttribute('href')).toContain('originRealm=b7d92525-081e-42e1-9cb8-ef72b1492a25');
+  },
+};
 export const DeliberateGlobalCorrection: Story = {
   render: () => <OriginVisitExample />,
   play: async ({ canvasElement }) => {
