@@ -383,8 +383,13 @@ never an equal value or row index. Malformed, duplicate, incomplete or foreign a
 address is capped at 8 KiB and contains no public payload, evidence, native advice, credentials or candidate tokens.
 A reading refresh retires unsent evidence comparison even when its draft is unchanged; a changed or withheld source
 locks fresh submission while sealed uncertain commands keep their original bodies. Recorded proposal success remains
-visible if its subsequent current read fails. Final fresh public return admission/focus and transition/replay coverage
-remain a continuation of this journey.
+visible if its subsequent current read fails. A recipe editor return carries one canonical same-locale public Subject
+address capped at 8 KiB, preserving at most one existing `via`, plus the last explicitly selected source-backed row
+and its keyboard/pointer origin. The Subject page re-reads before admitting that row; keyboard focus returns only
+when Subject, Context/Realm and the exact disclosed occurrence still match. Otherwise it reports the changed,
+removed or unsupported destination and links a fresh recipe entry. Contexts without a public Realm get no guessed
+destination. The mounted route, review retirement and exact uncertain replay continue to use the existing caller and
+session lifetimes.
 
 The explicit Context changes no native read cap: one anchored Subject read (at most 512 descriptive facts, up to 12
 preview rows per admitted relation property and the existing at-most-256 related-summary plan), one active Definition
