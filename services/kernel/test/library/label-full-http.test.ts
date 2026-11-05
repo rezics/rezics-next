@@ -99,3 +99,43 @@ test('label FULL pages name current labels include bounded owner entry tiles and
   expect(parameters('/v1/libraryLabels')).toContain('q');
   expect(parameters('/v1/libraryLabelAssignments')).toContain('view');
 }, 120000);
+
+test('native maximum FULL label page preserves the raw cursor when a Subject summary is withheld', async () => {
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/personal_library:open')).status).toBe(200);
+  const owner = await f.identity(['subject:read', 'library_entry:update', 'library_entry:read', 'library_entry:list']);
+  const send = (method: string, path: string, body?: unknown) => f.send(owner.bearer, method, path, body);
+  const created = await send('POST', '/v1/libraryLabels', { name: 'Maximum withheld page' });
+  expect(created.status).toBe(201);
+  const label = (await created.json()).label as { id: string };
+  for (let index = 0; index < 101; index++) {
+    const subjectId = await f.createSubject('unprofiled');
+    const assigned = await send('POST', `/v1/libraryLabels/${label.id}:assign`, { subjectId });
+    expect(assigned.status).toBe(200);
+  }
+  const firstRaw = await send('GET', `/v1/libraryLabelAssignments?labelId=${label.id}&limit=100`);
+  expect(firstRaw.status).toBe(200);
+  const rawPage = (await firstRaw.json()) as { assignments: { subjectId: string }[] };
+  expect(rawPage.assignments).toHaveLength(100);
+  const withheld = rawPage.assignments[0]!.subjectId;
+  const hidden = await f.send('steward', 'POST', `/v1/subjects/${withheld}:hide`, { reason: 'Withheld label summary' });
+  expect(hidden.status).toBe(200);
+
+  const first = await send('GET', `/v1/libraryLabelAssignments?labelId=${label.id}&view=FULL&limit=100`);
+  expect(first.status).toBe(200);
+  const firstPage = (await first.json()) as {
+    assignments: { subjectId: string; subject: unknown | null }[];
+    next: string | null;
+  };
+  expect(firstPage.assignments).toHaveLength(100);
+  expect(firstPage.assignments.find((row) => row.subjectId === withheld)?.subject).toBeNull();
+  expect(firstPage.next).toBeTruthy();
+  const next = await send(
+    'GET',
+    `/v1/libraryLabelAssignments?labelId=${label.id}&view=FULL&limit=100&cursor=${encodeURIComponent(firstPage.next!)}`,
+  );
+  expect(next.status).toBe(200);
+  const lastPage = (await next.json()) as { assignments: { subjectId: string }[]; next: string | null };
+  expect(lastPage.assignments).toHaveLength(1);
+  expect(lastPage.assignments[0]!.subjectId).not.toBe(withheld);
+  expect(lastPage.next).toBeNull();
+}, 180000);

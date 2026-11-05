@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import type { Static } from 'typebox';
 import { libraryStoredVocabularySchema } from './profile-schemas.ts';
 import { createShelfActiveReader } from './shelf-active.ts';
+import { executeLabelSql, LABEL_PAGE_MAX, labelEntryTilesPlan } from './label-operation-bounds.ts';
 import { shelfSessionSchema } from './shelf-schemas.ts';
 import entryTiles from './library-entry-tiles.sql';
 
@@ -30,7 +31,8 @@ export async function readLibraryEntryTiles(
   input: { route: number; accountId: string; subjectIds: readonly string[] },
 ): Promise<Map<string, LibraryEntryTile>> {
   // Bound raw input before iteration: duplicate keys do not buy unbounded validation work.
-  if (input.subjectIds.length > 100) throw new RangeError('An entry tile batch accepts at most 100 subjects');
+  if (input.subjectIds.length > LABEL_PAGE_MAX)
+    throw new RangeError(`An entry tile batch accepts at most ${LABEL_PAGE_MAX} subjects`);
   const distinct = new Set<string>();
   for (const id of input.subjectIds) {
     if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
@@ -39,9 +41,9 @@ export async function readLibraryEntryTiles(
   }
   const result = new Map<string, LibraryEntryTile>();
   if (distinct.size === 0) return result;
-  const entries = await entryTiles.run(
-    { query: client.query.bind(client) },
-    { route: input.route, account_id: input.accountId, subject_ids: [...distinct] },
+  const entryPlan = labelEntryTilesPlan({ route: input.route, accountId: input.accountId, subjectIds: [...distinct] });
+  const entries = await executeLabelSql(entryPlan, (operands) =>
+    entryTiles.run({ query: client.query.bind(client) }, operands),
   );
   if (entries.length === 0) return result;
   const sessions = await createShelfActiveReader().sessions(

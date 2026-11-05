@@ -4,6 +4,13 @@ import parents from './label-assignment-parents.sql';
 import reclaim from './label-assignment-reclaim.sql';
 import reservations from './label-assignment-reservations.sql';
 import set from './label-assignment-set.sql';
+import {
+  executeLabelOperation,
+  executeLabelSql,
+  LABEL_SUBJECT_RESERVATIONS,
+  labelAssignmentSetPlan,
+  labelSqlPlan,
+} from './label-operation-bounds.ts';
 
 type Assignment = {
   id: string;
@@ -55,21 +62,24 @@ export async function lockLabelAssignmentSubject(
   client: Pick<PoolClient, 'query'>,
   input: { route: number; accountId: string; subjectId: string; labelId?: string },
 ) {
-  return guard.run(
-    { query: client.query.bind(client) },
-    {
-      route: input.route,
-      account_id: input.accountId,
-      subject_id: input.subjectId,
-      label_id: input.labelId ?? input.subjectId,
-    },
-  );
+  const db = { query: client.query.bind(client) };
+  const operands = {
+    route: input.route,
+    account_id: input.accountId,
+    subject_id: input.subjectId,
+    label_id: input.labelId ?? input.subjectId,
+  };
+  const plan = labelSqlPlan('assignment.guard', guard.sql, operands, {
+    candidateKeys: 0, nativeRows: 0, points: 0, emptySeeks: 0,
+    output: { labelId: 'f'.repeat(36) }, outputRows: 1,
+  });
+  return executeLabelSql(plan, (input) => guard.run(db, input));
 }
 
 /** Private admission storage, called inside one admitted SERIALIZABLE native command transaction.
  * The caller owns transaction rollback/retry. A result supplies neither Access nor a receipt capability.
  */
-export async function setLabelAssignment(
+async function setLabelAssignmentInOperation(
   client: Pick<PoolClient, 'query'>,
   input: {
     route: number;
@@ -93,11 +103,18 @@ export async function setLabelAssignment(
   const guarded = await lockLabelAssignmentSubject(client, input);
   const labelId = guarded.labelId;
   if (!labelId) throw new Error('Label assignment guard returned no canonical label identity');
-  const rows = await reservations.run(db, tuple);
+  const reservationPlan = labelSqlPlan('assignment.reservations', reservations.sql, tuple, {
+    candidateKeys: LABEL_SUBJECT_RESERVATIONS + 1, nativeRows: LABEL_SUBJECT_RESERVATIONS + 1, points: 2, emptySeeks: 2,
+    output: { id: 'f'.repeat(36), labelId: 'f'.repeat(36), subjectId: 'f'.repeat(36),
+      revision: 2_147_483_647, slotNo: 31, createdAt: '\u0000'.repeat(64), updatedAt: '\u0000'.repeat(64),
+      deletedAt: '\u0000'.repeat(64), purgeAfter: '\u0000'.repeat(64), desired: false },
+    outputRows: LABEL_SUBJECT_RESERVATIONS + 1,
+  });
+  const rows = await executeLabelSql(reservationPlan, (input) => reservations.run(db, input));
   // Reservation witnesses use only the covering source index; response dates come from the exact tuple point.
   const sources = rows.filter((row) => !row.desired);
   const desired = rows.find((row) => row.desired);
-  const locked = await parents.run(db, {
+  const parentInput = {
     route: input.route,
     account_id: input.accountId,
     label_ids: [
@@ -107,7 +124,15 @@ export async function setLabelAssignment(
         ...(input.expectedSource ? [input.expectedSource.labelId] : []),
       ]),
     ],
+  };
+  const parentPlan = labelSqlPlan('assignment.parents', parents.sql, parentInput, {
+    candidateKeys: parentInput.label_ids.length, nativeRows: parentInput.label_ids.length,
+    points: parentInput.label_ids.length, emptySeeks: parentInput.label_ids.length,
+    output: { labelId: 'f'.repeat(36), revision: 2_147_483_647,
+      deletedAt: '\u0000'.repeat(64), purgeAfter: '\u0000'.repeat(64) },
+    outputRows: parentInput.label_ids.length,
   });
+  const locked = await executeLabelSql(parentPlan, (operands) => parents.run(db, operands));
   const current = new Map(locked.map((parent) => [parent.labelId, parent]));
   const parent = current.get(labelId);
   if (!parent || parent.deletedAt !== null) return { kind: 'not_found' };
@@ -121,17 +146,21 @@ export async function setLabelAssignment(
       sourceParent.revision !== input.expectedSource.labelRevision
     )
       return { kind: 'changed' };
-    const source = await client.query<{
+    const sourceInput = [input.route, input.accountId, input.subjectId, input.expectedSource.labelId] as const;
+    const sourceSql = `SELECT assignment_id AS "assignmentId",revision,slot_no AS "slotNo",deleted_at::text AS "deletedAt"
+       FROM library.label_assignment
+       WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4`;
+    const sourcePlan = labelSqlPlan('assignment.expected-source', sourceSql, sourceInput, {
+      candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1,
+      output: { assignmentId: 'f'.repeat(36), revision: 2_147_483_647, slotNo: 31,
+        deletedAt: '\u0000'.repeat(64) }, outputRows: 1,
+    });
+    const source = await executeLabelSql(sourcePlan, (values) => client.query<{
       assignmentId: string;
       revision: number;
       slotNo: number | null;
       deletedAt: string | null;
-    }>(
-      `SELECT assignment_id AS "assignmentId",revision,slot_no AS "slotNo",deleted_at::text AS "deletedAt"
-       FROM library.label_assignment
-       WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4`,
-      [input.route, input.accountId, input.subjectId, input.expectedSource.labelId],
-    );
+    }>(sourcePlan.sql, [...values]));
     const sourceAssignment = source.rows[0];
     if (
       !sourceAssignment ||
@@ -159,7 +188,7 @@ export async function setLabelAssignment(
     return { kind: 'existing', assignment: liveRecord(desired) };
 
   const occupied = new Set(sources.flatMap((row) => (row.slotNo === null ? [] : [row.slotNo])));
-  let slot = Array.from({ length: 32 }, (_, n) => n).find((n) => !occupied.has(n));
+  let slot = Array.from({ length: LABEL_SUBJECT_RESERVATIONS }, (_, n) => n).find((n) => !occupied.has(n));
   const victim =
     slot === undefined
       ? sources.find((row) => row.slotNo !== null && current.get(row.labelId)?.deletedAt != null)
@@ -172,7 +201,7 @@ export async function setLabelAssignment(
     const hidden = current.get(victim.labelId)!;
     if (victim.id === null || victim.slotNo === null || hidden.deletedAt === null || hidden.purgeAfter === null)
       throw new Error('Invalid hidden label reservation');
-    const reclaimed = await reclaim.run(db, {
+    const reclaimInput = {
       ...tuple,
       label_id: victim.labelId,
       assignment_id: victim.id,
@@ -182,11 +211,16 @@ export async function setLabelAssignment(
       purge_after: hidden.purgeAfter,
       time: context.time,
       transaction_id: context.transactionId,
+    };
+    const reclaimPlan = labelSqlPlan('assignment.reclaim', reclaim.sql, reclaimInput, {
+      candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 0,
+      output: { assignment_id: 'f'.repeat(36) }, outputRows: 1,
     });
+    const reclaimed = await executeLabelSql(reclaimPlan, (operands) => reclaim.run(db, operands));
     if (!reclaimed || reclaimed.assignment_id !== victim.id) lostObservation();
     slot = victim.slotNo;
   }
-  const written = await set.run(db, {
+  const setInput = {
     ...tuple,
     retained: desired !== undefined,
     assignment_id: desired?.id ?? null,
@@ -196,8 +230,39 @@ export async function setLabelAssignment(
     slot_no: slot!,
     time: context.time,
     transaction_id: context.transactionId,
+  };
+  const setPlan = labelSqlPlan('assignment.set', set.sql, setInput, {
+    candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 0,
+    output: { route: 65_535, accountId: 'f'.repeat(36), subjectId: 'f'.repeat(36), labelId: 'f'.repeat(36),
+      id: 'f'.repeat(36), revision: 2_147_483_647, slotNo: 31, createdAt: '\u0000'.repeat(64),
+      updatedAt: '\u0000'.repeat(64), deletedAt: '\u0000'.repeat(64), purgeAfter: '\u0000'.repeat(64),
+      transactionId: 'f'.repeat(36), identityMatches: false, started: false, expired: false }, outputRows: 1,
   });
+  const written = await executeLabelSql(setPlan, (operands) => set.run(db, operands));
   const row = written[0];
   if (!row) lostObservation();
   return { kind: 'applied', assignment: liveRecord(row) };
+}
+
+/** Reserve every admission branch from immutable request operands before the guard dispatch. */
+export async function setLabelAssignment(
+  client: Pick<PoolClient, 'query'>,
+  input: {
+    route: number;
+    accountId: string;
+    subjectId: string;
+    labelId: string;
+    expectedLabelRevision?: number;
+    staleOnRevisionMismatch?: boolean;
+    expectedSource?: { labelId: string; assignmentId: string; revision: number; labelRevision: number };
+    expectedTarget?: { id: string; revision: number; effective: boolean } | null;
+  },
+  context: { transactionId: string; time: string },
+): Promise<SetLabelAssignmentResult> {
+  const plan = labelAssignmentSetPlan({
+    ...input,
+    time: context.time,
+    transactionId: context.transactionId,
+  });
+  return executeLabelOperation(plan, () => setLabelAssignmentInOperation(client, input, context));
 }

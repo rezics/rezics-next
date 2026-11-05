@@ -9,6 +9,7 @@ import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import accountRead from './account-read.sql';
+import commandStateRead from './account-command-state.sql';
 import publicPage from './public-identity-page.sql';
 import publicIdentityObservationRead from './public-identity-observation.sql';
 import publicRead from './account-public-read.sql';
@@ -26,7 +27,23 @@ export type Account = Omit<AccountRow, 'minimumAuthnEpoch'> & {
 };
 export type AccountKind = Account['kind'];
 export type AccountState = Account['state'];
+export type AccountCommandState = Readonly<{
+  kind: AccountKind;
+  state: AccountState;
+  fenced: boolean;
+  minimumAuthnEpoch: bigint;
+}>;
 export type OrganizationRole = NonNullable<Awaited<ReturnType<typeof organizationRoleRead.run>>>['role'];
+
+/** Minimal native Account projection for command and private-read authorization. */
+export async function readAccountCommandState(
+  client: Queryable,
+  route: number,
+  accountId: string,
+): Promise<AccountCommandState | null> {
+  const row = await commandStateRead.run(client, { route, account_id: accountId });
+  return row ? { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) } : null;
+}
 
 export type PublicAccount =
   | {

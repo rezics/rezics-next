@@ -3,7 +3,7 @@ import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import type { Bound } from '@rezics/bounds';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { readAccount } from '../access/account-data.ts';
+import { readAccount, readAccountCommandState } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import {
@@ -133,7 +133,7 @@ function activeAccountAuthorization(accountId: string, route: number): CommandAu
         if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
         throw error;
       }
-      const current = await readAccount(tx, route, accountId);
+      const current = await readAccountCommandState(tx, route, accountId);
       if (!current || current.kind !== 'actor' || current.state !== 'active') throw new GrantDeniedError();
       return 'execute';
     },
@@ -205,7 +205,10 @@ export function createLibraryCommandRunner(config: { pool: Pool; clock?: KernelC
           if (error instanceof LifecycleDeniedError) throw new GrantDeniedError();
           throw error;
         }
-        const current = await readAccount(tx, route, owner.accountId, currentCommandWorkAssociation()?.access);
+        const accessWork = currentCommandWorkAssociation()?.access;
+        const current = accessWork
+          ? await readAccount(tx, route, owner.accountId, accessWork)
+          : await readAccountCommandState(tx, route, owner.accountId);
         if (
           !current ||
           current.kind !== 'actor' ||

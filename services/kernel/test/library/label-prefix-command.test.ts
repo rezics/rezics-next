@@ -15,6 +15,12 @@ test('native label prefix paging uses the live C-name index preserves literal no
     await commands.createLabel(actor, { name: 'Other ' + n.toString().padStart(3, '0') }, entryKey());
   const names = ['Café Shelf', 'A%_ Literal', 'AB_ decoy', '字'.repeat(99) + '甲', '字'.repeat(99) + '乙'];
   for (const name of names) await commands.createLabel(actor, { name }, entryKey());
+  const maximum = await commands.listLabels(actor, { q: 'Other ', limit: 100 });
+  expect(maximum.labels).toHaveLength(100);
+  expect(maximum.next).toBeTruthy();
+  const maximumNext = await commands.listLabels(actor, { q: 'Other ', limit: 100, cursor: maximum.next! });
+  expect(maximumNext.labels).toHaveLength(5);
+  expect(maximumNext.next).toBeNull();
   expect((await commands.listLabels(actor, { q: '  Cafe\u0301  ', limit: 20 })).labels.map((x) => x.name)).toEqual([
     'Café Shelf',
   ]);

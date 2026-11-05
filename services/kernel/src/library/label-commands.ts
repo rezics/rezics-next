@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { readAccount } from '../access/account-data.ts';
+import { readAccountCommandState } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect } from '../command/command.ts';
@@ -24,6 +24,15 @@ import * as store from './label-store.ts';
 import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
 import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import {
+  executeLabelOperation,
+  executeLabelSql,
+  LABEL_PAGE_DEFAULT,
+  LABEL_PAGE_MAX,
+  labelCataloguePlan,
+  labelLifecyclePlan,
+  labelRenamePlan,
+} from './label-operation-bounds.ts';
 
 type Label = { id: string; name: string; revision: number };
 type LabelValue = { label: { id: string; revision: number } };
@@ -128,7 +137,7 @@ export function createPersonalLabelCommands(config: {
     return withConnection(pool, async (client) => {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
-        const current = await readAccount(client, route, owner.accountId);
+        const current = await readAccountCommandState(client, route, owner.accountId);
         if (
           !current ||
           current.kind !== 'actor' ||
@@ -235,21 +244,26 @@ export function createPersonalLabelCommands(config: {
       key,
       async (tx, command) => {
         const route = sameAccountRoute(owner.accountId, labelId);
-        const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId);
-        if (!current) throw new LibraryNotFoundError();
-        if (current.revision !== expected) throw new LibraryConflictError();
-        if (current.name === parsed.normalized) return noEffect(minimal(current));
-        const changed = await store.renamePersonalLabel(
-          tx,
-          route,
-          owner.accountId,
-          labelId,
-          expected,
-          parsed.normalized,
-          { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
-        );
-        if (!changed) throw new LibraryConflictError();
-        return { value: minimal(changed), events: events(owner, labelId) };
+        const operation = labelRenamePlan({ route, accountId: owner.accountId, labelId, name: parsed.normalized,
+          revision: expected, transactionId: command.transactionId,
+          time: authoritativeTimeValue(command.time), includeRead: true });
+        return executeLabelOperation(operation, async () => {
+          const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId);
+          if (!current) throw new LibraryNotFoundError();
+          if (current.revision !== expected) throw new LibraryConflictError();
+          if (current.name === parsed.normalized) return noEffect(minimal(current));
+          const changed = await store.renamePersonalLabel(
+            tx,
+            route,
+            owner.accountId,
+            labelId,
+            expected,
+            parsed.normalized,
+            { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+          );
+          if (!changed) throw new LibraryConflictError();
+          return { value: minimal(changed), events: events(owner, labelId) };
+        });
       },
     );
   }
@@ -271,32 +285,36 @@ export function createPersonalLabelCommands(config: {
       key,
       async (tx, command) => {
         const route = sameAccountRoute(owner.accountId, labelId);
-        const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId, true);
-        if (!current) throw new LibraryNotFoundError();
         const time = authoritativeTimeValue(command.time);
-        if (restore) {
-          if (
-            current.revision !== expected ||
-            current.deletedAt === null ||
-            Date.parse(current.deletedAt) > Date.parse(time)
-          )
-            throw new ProblemError('library_label_restore_stale');
-          if (current.purgeAfter === null || Date.parse(time) >= Date.parse(current.purgeAfter))
-            throw new ProblemError('library_label_restore_expired');
-        } else {
-          if (current.deletedAt !== null) throw new LibraryNotFoundError();
-          if (current.revision !== expected) throw new LibraryConflictError();
-        }
-        const change = restore ? store.restorePersonalLabel : store.deletePersonalLabel;
-        const changed = await change(tx, route, owner.accountId, labelId, expected, {
-          transactionId: command.transactionId,
-          time,
+        const operation = labelLifecyclePlan({ route, accountId: owner.accountId, labelId,
+          revision: expected, transactionId: command.transactionId, time, restore, includeRead: true });
+        return executeLabelOperation(operation, async () => {
+          const current = await store.readPersonalLabel(tx, route, owner.accountId, labelId, true);
+          if (!current) throw new LibraryNotFoundError();
+          if (restore) {
+            if (
+              current.revision !== expected ||
+              current.deletedAt === null ||
+              Date.parse(current.deletedAt) > Date.parse(time)
+            )
+              throw new ProblemError('library_label_restore_stale');
+            if (current.purgeAfter === null || Date.parse(time) >= Date.parse(current.purgeAfter))
+              throw new ProblemError('library_label_restore_expired');
+          } else {
+            if (current.deletedAt !== null) throw new LibraryNotFoundError();
+            if (current.revision !== expected) throw new LibraryConflictError();
+          }
+          const change = restore ? store.restorePersonalLabel : store.deletePersonalLabel;
+          const changed = await change(tx, route, owner.accountId, labelId, expected, {
+            transactionId: command.transactionId,
+            time,
+          });
+          if (!changed) {
+            if (restore) throw new ProblemError('library_label_restore_stale');
+            throw new LibraryConflictError();
+          }
+          return { value: value(changed), events: events(owner, labelId) };
         });
-        if (!changed) {
-          if (restore) throw new ProblemError('library_label_restore_stale');
-          throw new LibraryConflictError();
-        }
-        return { value: value(changed), events: events(owner, labelId) };
       },
     );
   }
@@ -335,9 +353,9 @@ export function createPersonalLabelCommands(config: {
         throw error;
       }
     }
-    const limit = parsed.limit === undefined ? 20 : parsed.limit;
-    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100)
-      throw new RangeError('Page limit must be an integer from 1 to 100');
+    const limit = parsed.limit === undefined ? LABEL_PAGE_DEFAULT : parsed.limit;
+    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > LABEL_PAGE_MAX)
+      throw new RangeError(`Page limit must be an integer from 1 to ${LABEL_PAGE_MAX}`);
     return snapshot(actor, 'library_entry:list', async (client, owner, route) => {
       const partition = await readPartition(client, partitionOf(route));
       if (!partition) throw new Error('Missing owner partition');
@@ -370,23 +388,22 @@ export function createPersonalLabelCommands(config: {
         if (!last || !last.name.startsWith(q)) throw new ProblemError('stale_cursor');
         afterName = last.name;
       }
-      const rows = q
-        ? await prefixPage.run(
-            { query: client.query.bind(client) },
-            {
-              route,
-              account_id: owner.accountId,
-              prefix: q,
-              upper: store.personalLabelPrefixEnd(q),
-              after_name: afterName,
-              after_label_id: after,
-              limit,
-            },
-          )
-        : await page.run(
-            { query: client.query.bind(client) },
-            { route, account_id: owner.accountId, after_label_id: after, limit },
-          );
+      const operation = labelCataloguePlan({
+        route,
+        accountId: owner.accountId,
+        ...(q ? { prefix: q, upper: store.personalLabelPrefixEnd(q), afterName } : {}),
+        afterLabelId: after,
+        limit,
+      });
+      const leaf = operation.leaves[0]!;
+      const db = { query: client.query.bind(client) };
+      const rows = await executeLabelOperation(operation, () =>
+        executeLabelSql(leaf, (operands) =>
+          q
+            ? prefixPage.run(db, operands as Parameters<typeof prefixPage.run>[1])
+            : page.run(db, operands as Parameters<typeof page.run>[1]),
+        ),
+      );
       const last = rows.at(-1);
       return {
         labels: rows.filter((row) => row.deletedAt === null).map(visible),

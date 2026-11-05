@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { readAccount } from '../access/account-data.ts';
+import { readAccountCommandState } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -38,6 +38,13 @@ import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
 import subjectPage from './label-assignment-subject-page.sql';
 import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
+import {
+  executeLabelOperation,
+  executeLabelSql,
+  LABEL_PAGE_DEFAULT,
+  LABEL_PAGE_MAX,
+  labelAssignmentPagePlan,
+} from './label-operation-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type Assignment = { id: string; labelId: string; subjectId: string; revision: number };
@@ -46,6 +53,14 @@ type ExpectedTarget =
   | { id: string; revision: number; effective: boolean }
   | null
   | { labelId: string; assignmentId: string; revision: number; labelRevision: number };
+type AssignmentPageRow = {
+  id: string | null;
+  labelId: string;
+  subjectId: string;
+  revision: number;
+  slotNo: number | null;
+  deletedAt?: string | null;
+};
 export type AssignmentReviewGuard = { subjectId: string; identityEpoch: string; labelRevision: number };
 type ListOptions = { labelId?: string; subjectId?: string; limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' };
 const invalid = () => new ProblemError('invalid_request');
@@ -107,7 +122,7 @@ export function createLabelAssignmentCommands(deps: {
         route = routeOf(actor.accountId)!;
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try {
-        const current = await readAccount(client, route, actor.accountId);
+        const current = await readAccountCommandState(client, route, actor.accountId);
         if (
           !current ||
           current.kind !== 'actor' ||
@@ -455,8 +470,8 @@ export function createLabelAssignmentCommands(deps: {
     if ((parsed.labelId === undefined) === (parsed.subjectId === undefined)) throw invalid();
     const labelId = parsed.labelId === undefined ? undefined : id(parsed.labelId);
     const subjectId = parsed.subjectId === undefined ? undefined : id(parsed.subjectId);
-    const limit = parsed.limit ?? 20;
-    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 100) throw invalid();
+    const limit = parsed.limit ?? LABEL_PAGE_DEFAULT;
+    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > LABEL_PAGE_MAX) throw invalid();
     if (parsed.view !== undefined && parsed.view !== 'BASIC' && parsed.view !== 'FULL') throw invalid();
     const full = parsed.view === 'FULL';
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
@@ -502,58 +517,69 @@ export function createLabelAssignmentCommands(deps: {
           after = cursor.after[0];
         }
         const db = { query: client.query.bind(client) };
-        const rows = labelId
-          ? await labelPage.run(db, {
-              route,
-              account_id: account.accountId,
-              label_id: labelId,
-              after_subject_id: after,
-              limit,
-            })
-          : (await subjectPage.run(db, { route, account_id: account.accountId, subject_id: subjectId! }))
-              .sort((a, b) => (a.labelId < b.labelId ? -1 : a.labelId > b.labelId ? 1 : 0))
-              .filter((row) => row.labelId > after)
-              .slice(0, limit);
-        const assignments: (
-          | Assignment
-          | (Assignment & { label: { name: string } })
-          | (Assignment & { libraryEntry: LibraryEntryTile | null })
-        )[] = [];
-        for (const row of rows) {
-          if ('deletedAt' in row && row.deletedAt !== null) continue;
-          if (row.id === null || row.slotNo === null) throw new ProblemError('index_not_ready');
-          const current = labelId ? parent : await readPersonalLabel(client, route, account.accountId, row.labelId);
-          if (!current) continue;
-          const assignment = { id: row.id, labelId: row.labelId, subjectId: row.subjectId, revision: row.revision };
-          assignments.push(full && !labelId ? { ...assignment, label: { name: current.name } } : assignment);
-        }
-        const tiles =
-          full && labelId
-            ? await readLibraryEntryTiles(client, {
-                route,
-                accountId: account.accountId,
-                subjectIds: assignments.map((row) => row.subjectId),
-              })
-            : null;
-        const last = rows.at(-1);
-        return {
-          ...(full && parent ? { label: { id: parent.id, name: parent.name, revision: parent.revision } } : {}),
-          assignments: tiles
-            ? assignments.map((row) => ({ ...row, libraryEntry: tiles.get(row.subjectId) ?? null }))
-            : assignments,
-          next:
-            rows.length === limit && last
-              ? await encodeListCursor(
-                  tokens,
-                  binding,
-                  {
-                    epoch: partition.epoch,
-                    after: [labelId ? last.subjectId : last.labelId, partition.position.toString()],
-                  },
-                  now,
-                )
-              : null,
-        };
+        const pagePlan = labelAssignmentPagePlan({
+          route,
+          accountId: account.accountId,
+          ...(labelId ? { labelId, after } : { subjectId: subjectId! }),
+          limit,
+          view: full ? 'FULL' : 'BASIC',
+        });
+        const pageLeaf = pagePlan.leaves[0]!;
+        return executeLabelOperation(pagePlan, async () => {
+          const rawRows: AssignmentPageRow[] = labelId
+            ? await executeLabelSql(pageLeaf, (operands) =>
+                labelPage.run(db, operands as Parameters<typeof labelPage.run>[1]),
+              )
+            : await executeLabelSql(pageLeaf, (operands) =>
+                subjectPage.run(db, operands as Parameters<typeof subjectPage.run>[1]),
+              );
+          const rows = labelId
+            ? rawRows
+            : rawRows
+                .sort((a, b) => (a.labelId < b.labelId ? -1 : a.labelId > b.labelId ? 1 : 0))
+                .filter((row) => row.labelId > after)
+                .slice(0, limit);
+          const assignments: (
+            | Assignment
+            | (Assignment & { label: { name: string } })
+            | (Assignment & { libraryEntry: LibraryEntryTile | null })
+          )[] = [];
+          for (const row of rows) {
+            if ('deletedAt' in row && row.deletedAt !== null) continue;
+            if (row.id === null || row.slotNo === null) throw new ProblemError('index_not_ready');
+            const current = labelId ? parent : await readPersonalLabel(client, route, account.accountId, row.labelId);
+            if (!current) continue;
+            const assignment = { id: row.id, labelId: row.labelId, subjectId: row.subjectId, revision: row.revision };
+            assignments.push(full && !labelId ? { ...assignment, label: { name: current.name } } : assignment);
+          }
+          const tiles =
+            full && labelId
+              ? await readLibraryEntryTiles(client, {
+                  route,
+                  accountId: account.accountId,
+                  subjectIds: assignments.map((row) => row.subjectId),
+                })
+              : null;
+          const last = rows.at(-1);
+          return {
+            ...(full && parent ? { label: { id: parent.id, name: parent.name, revision: parent.revision } } : {}),
+            assignments: tiles
+              ? assignments.map((row) => ({ ...row, libraryEntry: tiles.get(row.subjectId) ?? null }))
+              : assignments,
+            next:
+              rows.length === limit && last
+                ? await encodeListCursor(
+                    tokens,
+                    binding,
+                    {
+                      epoch: partition.epoch,
+                      after: [labelId ? last.subjectId : last.labelId, partition.position.toString()],
+                    },
+                    now,
+                  )
+                : null,
+          };
+        });
       });
       if (subjectId && !(await withRequestDeadline(deadline, () => resolveSubject(deps, account, subjectId, time))))
         throw new LibraryNotFoundError();
