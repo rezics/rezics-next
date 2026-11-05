@@ -335,7 +335,6 @@ test('mounted actual routes keep only current viewer/address data across hydrati
   const host = document.createElement('main');
   document.body.append(host);
   let root: ReturnType<typeof createRoot> | undefined;
-  let cachedSession: { state: string; subject?: string; csrfToken: string | null } | undefined;
   const tree = () => {
     const Page = (mode === 'list' ? ListRoute.options.component : DetailRoute.options.component) as ComponentType;
     return (
@@ -356,15 +355,19 @@ test('mounted actual routes keep only current viewer/address data across hydrati
   ) => {
     await act(async () =>
       flushSync(() => {
+        const currentSession = client.getQueryData<{
+          state: string;
+          subject?: string;
+          csrfToken: string | null;
+        }>(['session']);
         if (
           replaceSession ||
-          !cachedSession ||
-          session.state !== cachedSession.state ||
-          session.subject !== cachedSession.subject ||
-          session.csrfToken !== cachedSession.csrfToken
+          !currentSession ||
+          session.state !== currentSession.state ||
+          session.subject !== currentSession.subject ||
+          session.csrfToken !== currentSession.csrfToken
         ) {
           client.setQueryData(['session'], session);
-          cachedSession = { ...session };
         }
         const observation = viewerExposureLifetime(client).getSnapshot();
         if (observation.state === 'signed-in') {
