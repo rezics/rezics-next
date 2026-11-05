@@ -273,6 +273,26 @@ test.serial(
         ]),
       ).toEqual([{ state: 'following' }]);
     }
+    const followPath = `/v1/follows/${publicRealm.spaceId}`;
+    await json(await call('POST', membershipPath(publicRealm), fixture.member), 202);
+    await driver.settle();
+    await json(await call('DELETE', followPath, fixture.member));
+    const explicitlyUnfollowed = await json(await call('GET', followPath, fixture.member));
+    expect(explicitlyUnfollowed).toMatchObject({ follow: { state: 'unfollowed', reason: 'explicit' } });
+    expect(await json(await call('GET', `/v1/realms/${publicRealm.realmId}/members/me`, fixture.member))).toMatchObject(
+      {
+        state: 'member',
+      },
+    );
+    await json(await call('DELETE', membershipPath(publicRealm), fixture.member), 202);
+    await driver.settle();
+    expect(await currentMember(publicRealm, fixture.member)).toEqual([]);
+    expect(await json(await call('GET', followPath, fixture.member))).toEqual(explicitlyUnfollowed);
+    await json(await call('POST', membershipPath(publicRealm), fixture.member), 202);
+    await driver.settle();
+    expect(await currentMember(publicRealm, fixture.member)).toEqual([{ role: 'member' }]);
+    expect(await json(await call('GET', followPath, fixture.member))).toEqual(explicitlyUnfollowed);
+
     await worker.stop();
     try {
       for (const [actor, status] of [
