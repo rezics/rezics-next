@@ -96,6 +96,8 @@ test('empty Subject and cursor mean the first all-copies page; filters and opaqu
   });
   expect(copiesAddress({ kind: '', status: '' }, 'en')).toMatchObject({ kind: '', status: '', issue: 'kind' });
   const opaque = 'not/decoded+%?='.repeat(100).padEnd(2048, 'x');
+  expect(copiesAddress({ cursor: 'x'.repeat(2048) }, 'en').issue).toBeUndefined();
+  expect(copiesAddress({ cursor: 'x'.repeat(2049) }, 'en').issue).toBe('cursor');
   const address = copiesAddress({ subjectId, kind: 'print', status: 'shelf', cursor: opaque }, 'ja');
   expect(address).toEqual({ subjectId, kind: 'print', status: 'shelf', cursor: opaque, locale: 'ja' });
   expect(

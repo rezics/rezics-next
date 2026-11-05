@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
@@ -8,6 +8,7 @@ import { CopiesPage, type CopiesOrigin } from './copies-page';
 import { CopiesAddressRecovery } from './copies-address-recovery';
 import type { CopiesQuery } from './copies-query';
 import { useManagementCurrentOrigin } from './management-current-origin';
+import { useCopiesWindows } from './copies-windows/use-copies-windows';
 import {
   copiesAddress,
   sameCopiesAddress,
@@ -60,8 +61,14 @@ export function CopiesCurrent({
   const { value } = useLibraryWorkspaceAdmission(operations);
   const subject = hydrated ? value.subject : initial.sessionSubject;
   const allowed = !hydrated || value.allowed[0] === true;
-  const address = copiesAddress(search, locale);
+  const address = useMemo(() => copiesAddress(search, locale), [search, locale]);
   const origin = useManagementCurrentOrigin(subject, JSON.stringify(address), 'copy.list', hydrated, operations);
+  const windows = useCopiesWindows({
+    address,
+    reader: origin.id,
+    viewer: value.viewer,
+    active: hydrated && allowed && !address.issue && origin.isCurrent('copy.list'),
+  });
   const [scope, setScope] = useState({ id: origin.id, seed: true, hydrated });
   if (scope.id !== origin.id)
     setScope({ id: origin.id, seed: scope.seed && !scope.hydrated && !!subject && allowed, hydrated });
@@ -92,6 +99,7 @@ export function CopiesCurrent({
           seed={scope.seed}
           hydrated={hydrated}
           origin={origin}
+          windows={windows}
           failure={failure}
         />
       </div>
@@ -106,6 +114,7 @@ function CurrentCopiesRead({
   seed,
   hydrated,
   origin,
+  windows,
   failure,
 }: {
   subject: string;
@@ -114,6 +123,7 @@ function CurrentCopiesRead({
   seed: boolean;
   hydrated: boolean;
   origin: ReturnType<typeof useManagementCurrentOrigin>;
+  windows: ReturnType<typeof useCopiesWindows>;
   failure?: string | undefined;
 }) {
   const [lifetime] = useState(() => crypto.randomUUID());
@@ -171,6 +181,9 @@ function CurrentCopiesRead({
   const guard = accepted
     ? origin.accept(queryKey, (value) => matches(value as CopiesCurrentRead, subject, address), operations)
     : null;
+  useLayoutEffect(() => {
+    if (page && guard) windows.admit(page, () => guard.isCurrent('copy.list'));
+  }, [page, guard, windows.admit]);
   const operand: CopiesOrigin | undefined = guard
     ? {
         isCurrent: guard.isCurrent,
@@ -232,6 +245,7 @@ function CurrentCopiesRead({
       page={page}
       failure={failure}
       originating={operand ?? closed}
+      windows={windows}
       onRetryInventory={() => {
         if (origin.isCurrent('copy.list')) void query.refetch();
       }}
