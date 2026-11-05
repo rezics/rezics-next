@@ -234,7 +234,12 @@ export function extractBangumiTVAnimeEvidence(
     }
     candidate = iterator.next();
   }
-  if (!header || (book ? !isBangumiBookTemplateHead(header.line) : !isBangumiTVAnimeTemplateHead(header.line))) {
+  if (
+    !header ||
+    (book
+      ? !isBangumiBookTemplateHead(header.line) && header.line.trim() !== '{{Infobox animanga/Manga'
+      : !isBangumiTVAnimeTemplateHead(header.line))
+  ) {
     omit('/infobox', 'unsupported_infobox_template');
     return {
       names: names.sort(compareNames),
