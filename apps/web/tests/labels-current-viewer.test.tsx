@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, StrictMode, type ComponentProps } from 'react';
+import { act, StrictMode, useState, type ComponentProps } from 'react';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import type { LabelsCurrentRead } from '../src/library/labels-read-route';
@@ -286,8 +286,14 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     );
     const address = spyOn(Route, 'useSearch').mockImplementation(() => search);
     const Page = Route.options.component!;
+    let rerenderRoute = () => {};
+    function RouteView() {
+      const [, setRevision] = useState(0);
+      rerenderRoute = () => setRevision((revision) => revision + 1);
+      return <Page />;
+    }
     const router = createRouter({
-      routeTree: createRootRoute({ component: Page }),
+      routeTree: createRootRoute({ component: RouteView }),
       history: createMemoryHistory({ initialEntries: ['/en/library/labels'] }),
     });
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -326,7 +332,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
           expect(html).toContain('name="csrf_token" value="prepared-A"');
           host.innerHTML = html;
           root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
-        } else root.render(tree());
+        } else {
+          rerenderRoute();
+          root.render(tree());
+        }
       });
     };
     const settleRead = async (index: number, value: LabelsCurrentRead) => {
