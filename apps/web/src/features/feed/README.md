@@ -268,14 +268,15 @@ Decision: signed-in Home Thread/Post reactions require native per-row action adv
 - Search's current Review summary supplies author name/handle, excerpt and optional reviewed Subject. It supplies no
   avatar or rating; Home does not infer either fact or fetch the Subject separately.
 
-Decision: Home keeps an unavailable native personal-actions seam until Content publishes the admitted page and generated transport; its local receiver joins original occurrence keys and Subjects, displays facts without granting actions, and removes arbitrary control callbacks.
+Home consumes [Content's mixed Home contract](../../../../../services/kernel/src/content/README.md#mixed-home-summaries)
+through the existing Home port. Web adds no second renderer or private Library merge.
 
 The [Home work Library receiver](home-work-library/README.md) defines the single-page boundary, exact association,
 reader retirement and remaining native composition and command integration. Do not mount per-card Subject reads.
 
-- Home receives public Collection, Review and Space cards through the generated Feed response. Collection summaries
-  currently supply title/description only; Space summaries require current title/address and may supply Realm carrier
-  text. Native eligibility still depends on Search's Review coverage and Community's complete Space/Realm tuple.
+- Home receives public Collection, Review and Space cards through the generated Feed response. Search owns its
+  public summaries and eligibility; Community owns the current Space/Realm tuple. Feed does not infer readiness from
+  missing fields or empty pages.
 - For Content review and reply cards, the current native `reviewContext` and `parentContext` control their related
   display. Missing, absent, withheld or unavailable review context never falls back to discovery metadata, and a reply
   shows only its exact immediate parent with the supplied identity, language, spoiler state and native links.
