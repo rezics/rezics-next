@@ -161,7 +161,10 @@ export function createDevelopmentShowcaseClient(options: RequestOptions): Develo
       if (result.state === 'missing') return { state: 'missing_source', operation: path, code: 'http-404' };
       return { state: result.state, operation: path, code: result.code };
     },
-    async command<T>(intent, decode) {
+    async command<T>(
+      intent: DevelopmentCommandIntent,
+      decode: (value: unknown, frozenBody: unknown) => T,
+    ) {
       const sealed = {
         actor: options.actor,
         credential: options.credential,
@@ -306,7 +309,7 @@ export type DevelopmentCommunityOutcome = Readonly<
         visibility: 'published';
         availability: 'available';
       };
-      thread: { id: string; postId: string; revisionId: string; sha256: string };
+      thread: { threadId: string; postId: string; revisionId: string; sha256: string };
     }
 >;
 
