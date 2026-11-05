@@ -1,3 +1,4 @@
+import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
@@ -5,8 +6,9 @@ import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
-import { StoryArcProfile } from './story-arc-profile-view';
+import { StoryArcProfile, StoryArcProfileContextNotice } from './story-arc-profile-view';
 import type { StoryArcAddress } from './story-arc-profile';
+import { storyArcEntry } from './story-arc-profile-entry';
 import { storyArcClassificationCurrent } from './story-arc-classification-review';
 import { loadStoryArcProfile } from './story-arc-profile-actions';
 import {
@@ -23,26 +25,48 @@ import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelati
 function StoryArcProfileSessionLive({
   locale,
   realm,
+  context,
+  definition,
+  via,
+  address,
+  globalChoiceHref,
   classificationHandoffToken,
-  ...address
-}: StoryArcAddress & { locale: string; realm?: string | undefined; classificationHandoffToken?: string }) {
+  id,
+  work,
+}: StoryArcAddress & {
+  locale: string;
+  realm?: string | undefined;
+  context?: string | undefined;
+  definition?: string | undefined;
+  via?: string | undefined;
+  address?: string | undefined;
+  globalChoiceHref?: string | undefined;
+  classificationHandoffToken?: string;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
   );
-  // The current generic contribution producers support Global only. Retain the Realm address at navigation.
-  if (realm)
+  // Observed intent is not a native binding. Refuse before the Global-only profile and its writers mount.
+  if (realm || (context !== undefined && context !== PAGE_GLOBAL_CONTEXT))
     return (
-      <article className="p-6">
-        <h1 className="font-sans text-2xl font-semibold">{m.story_arc_title()}</h1>
-        <p>{m.relation_context()}</p>
-      </article>
+      <StoryArcProfileContextNotice
+        locale={locale}
+        {...(via ? { via } : {})}
+        globalChoiceHref={globalChoiceHref ?? storyArcEntry({ locale }).href}
+      />
     );
   return (
     <StoryArcProfile
-      {...address}
+      id={id}
+      work={work}
+      context={context}
+      realm={realm}
+      definition={definition}
+      via={via}
+      address={address}
       locale={locale}
       session={state}
       search={search}

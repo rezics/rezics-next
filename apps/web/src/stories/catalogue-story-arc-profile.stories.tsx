@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { pickText } from '@rezics/composition';
+import { PAGE_GLOBAL_CONTEXT, pickText } from '@rezics/composition';
 import { useMemo, useState } from 'react';
 import { CandidateReaderBoundary } from '../subject/candidate-lifetime';
 import { Button } from '@rezics/ui/shadcn/button';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { StoryArcProfile } from '../features/catalogue/story-arc-profile-view';
+import { StoryArcProfileContextNotice } from '../features/catalogue/story-arc-profile-view';
+import { storyArcPublicOrigin, storyArcGlobalChoiceHref } from '../features/catalogue/story-arc-public-visit';
 import { storyArcProperty } from '../features/catalogue/story-arc-profile';
 import {
   storyArcProfileFixture,
@@ -15,6 +17,7 @@ import {
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
+import { subjectHref } from '../subject/subject-href';
 import { PageStory, PatternStory } from './page';
 
 function Example({
@@ -23,12 +26,14 @@ function Example({
   work = false,
   workLabel = 'supplied',
   retirement = false,
+  publicOrigin = false,
 }: {
   scenario?: StoryArcScenario;
   existing?: boolean;
   work?: boolean;
   workLabel?: 'supplied' | 'long' | 'absent';
   retirement?: boolean;
+  publicOrigin?: boolean;
 }) {
   const locale = getLocale();
   const [retired, setRetired] = useState(false);
@@ -48,11 +53,21 @@ function Example({
     }),
     [fixture, retired],
   );
+  const origin = publicOrigin
+    ? storyArcPublicOrigin({
+        currentHref: subjectHref({ id: storyArcProfileId, label: 'A named arc' }, locale).href,
+        id: storyArcProfileId,
+        locale,
+      })
+    : undefined;
   const profile = (
     <StoryArcProfile
       key={`${scenario}:${existing}:${work}:${locale}`}
       locale={locale}
       {...fixture.props}
+      {...(publicOrigin
+        ? { context: PAGE_GLOBAL_CONTEXT, definition: 'sha256:story-arc-current', ...(origin ? { via: origin } : {}) }
+        : {})}
       transport={transport}
       {...(retired ? { session: 'signed-out' as const } : {})}
       {...(existing ? { id: storyArcProfileId } : {})}
@@ -93,13 +108,13 @@ const meta = {
     viewport: {
       options: {
         phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '900px' } },
       },
     },
     docs: {
       description: {
         component:
-          'Create an arc under one task heading with read-only released Type metadata, or choose an existing arc. Synthetic native-shaped responses use production creation, scalar and relation adapters. Review the same outcome states at phone390 and desktop1280 with locale, theme and viewport globals. Web visual review and integrated native bindings remain pending.',
+          'Create an arc under one task heading with read-only released Type metadata, or choose an existing arc. Synthetic native-shaped responses use production creation, scalar and relation adapters. Review the outer visit states at phone390 and desktop1440 across all eight locales and both themes with the Storybook globals. Web visual review and integrated native bindings remain pending.',
       },
     },
   },
@@ -126,6 +141,43 @@ async function assertCallerTarget(target: HTMLElement, container: HTMLElement, v
 export const RouteEntry: Story = { render: () => <PageStory visitor="Signed In" path="/catalogue/story-arc" /> };
 export const Create: Story = {};
 export const CurrentArc: Story = { args: { existing: true } };
+export const PublicGlobalOrigin: Story = {
+  args: { existing: true, publicOrigin: true },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('link', { name: m.story_arc_return_public() })).toBeVisible();
+  },
+};
+function UnsupportedOriginExample() {
+  const locale = getLocale();
+  const subject = subjectHref({ id: storyArcProfileId, label: 'A named arc' }, locale);
+  const via = storyArcPublicOrigin({
+    currentHref: `${subject.href}?realm=5d0a0000-0000-4000-8000-000000000005`,
+    id: storyArcProfileId,
+    locale,
+    realm: '5d0a0000-0000-4000-8000-000000000005',
+  })!;
+  return (
+    <PatternStory visitor="Signed In">
+      <AppShell>
+        <StoryArcProfileContextNotice
+          locale={locale}
+          via={via}
+          globalChoiceHref={storyArcGlobalChoiceHref({
+            id: storyArcProfileId,
+            slug: subject.params.slug,
+            locale,
+            via,
+          })}
+        />
+      </AppShell>
+    </PatternStory>
+  );
+}
+export const UnsupportedPublicContext: Story = {
+  render: () => <UnsupportedOriginExample />,
+  globals: { viewport: { value: 'desktop1440', isRotated: false } },
+};
 export const WorkOrder: Story = {
   args: { existing: true, work: true },
   globals: { viewport: { value: 'phone390', isRotated: false } },

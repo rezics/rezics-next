@@ -229,12 +229,25 @@ including target navigation. Unavailable continuation is not an ending, and repl
 Decision: public destinations open in a new tab to preserve the exact originating work/arc window and keyboard
 return; at most one member appearance window opens inline, with Back restoring its member control.
 
+Decision: StoryArc correction entries carry the observed Context, admitted Realm, effective Definition digest and one
+same-locale immediate Subject return as bounded intent. Unsupported Context or Realm is explained before the
+Global-only editor mounts; a separately named Global choice clears correction intent and retains only the public
+return.
+
 ### Story arc Cost
 
 Each deliberate window uses one Subject read, the existing active/immutable definition pair and at most one
 20-row relation page, without target hydration. One outer and one optional appearance window are retained;
 the [reader Cost](../apps/web/src/features/catalogue/story-arc-reader/README.md#cost) defines byte, cursor and stream
 bounds. Current Character, correction/classification and prerequisite-deferred native acceptance remain unchanged.
+
+The public correction entry adds only its Context ID, admitted Realm ID, effective Definition digest and one immediate
+same-locale Subject return to the existing address, bounded together to 2,048 characters and UTF-8 bytes. These values
+are visit intent; the correction still reads and writes through the unchanged Global native contract. Unsupported
+Context or Realm adds no editor reads. Choosing Global retains only the public return and uses the correction's
+existing active/immutable Definition and current advice reads. Returning is a normal navigation to the original
+Subject address and obtains a fresh admitted public reading; it retains no response body or assertion locator. This
+adds no native rows or retained response and does not change the reader's Subject, Definition or relation-page costs.
 
 ## Read a Recording
 
