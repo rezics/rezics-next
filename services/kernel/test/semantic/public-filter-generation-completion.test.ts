@@ -23,6 +23,9 @@ test('generation restart keeps the original Source proof through lost observatio
   const prefix = `source-publish-${crypto.randomUUID().slice(0, 8)}-`;
   const target = subjectIndexName(prefix, 2);
   const custody = createPublicFilterCustody(f.db.pool);
+  let readerBlocked = false;
+  let reader: { observation: string; token: string } | undefined;
+  let readerPayload: string | null;
   let observationLost = false,
     dispatchLost = false,
     drainLost = false;
@@ -67,10 +70,56 @@ test('generation restart keeps the original Source proof through lost observatio
       source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
       listing: subjectListingSource(f.db.pool),
     });
+    const fence = writer.fencePublication.bind(writer);
+    Object.assign(writer, {
+      async fencePublication(...args: Parameters<typeof fence>) {
+        if (!readerBlocked) {
+          const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+          const complete = await readNativePublicFilterPublicationCompletion(
+            binding,
+            { job: args[0].job },
+            readContext(),
+          );
+          if (complete.status !== 'complete') throw new Error(complete.reason);
+          const acquired = await custody.acquire(complete.publication.queried, { deadline: Date.now() + 300000 });
+          if (acquired.status !== 'acquired') throw new Error(acquired.reason);
+          reader = acquired.use;
+          readerPayload = (
+            await f.db.pool.query(
+              'SELECT prepared_rows FROM search.public_filter_observation WHERE partition_no=0 AND observation=$1',
+              [reader.observation],
+            )
+          ).rows[0].prepared_rows;
+        }
+        return fence(...args);
+      },
+    });
     const drain = writer.drainPublication.bind(writer);
     Object.assign(writer, {
       async drainPublication(...args: Parameters<typeof drain>) {
         const result = await drain(...args);
+        if (reader) {
+          expect(result.status).toBe('draining');
+          const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
+          const complete = await readNativePublicFilterPublicationCompletion(
+            binding,
+            { job: args[0].job },
+            readContext(),
+          );
+          if (complete.status !== 'complete') throw new Error(complete.reason);
+          expect((await custody.acquire(complete.publication.queried, readContext())).status).not.toBe('acquired');
+          expect(
+            (
+              await f.db.pool.query(
+                'SELECT prepared_rows FROM search.public_filter_observation WHERE partition_no=0 AND observation=$1',
+                [reader.observation],
+              )
+            ).rows[0].prepared_rows,
+          ).toBe(readerPayload);
+          expect((await custody.release(reader, readContext())).status).toBe('released');
+          reader = undefined;
+          readerBlocked = true;
+        }
         if (result.status === 'drained' && !drainLost) {
           drainLost = true;
           throw new SearchUnavailableError('Lost completed native drain reply');
@@ -150,6 +199,7 @@ test('generation restart keeps the original Source proof through lost observatio
     const completed = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, readContext());
     expect(completed.status).toBe('complete');
     if (completed.status !== 'complete') throw new Error(completed.reason);
+    expect(readerBlocked).toBe(true);
     expect(completed.publication).toEqual(original);
     expect(completed.observation.changed.length).toBeGreaterThan(0);
     expect((await subjectGenerations(search, prefix)).active).toBe(2);
