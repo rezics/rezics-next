@@ -40,8 +40,7 @@ const input = (record: unknown = structuredClone(fixture)): ConversionInput => (
 async function scenario(run: (driver: BangumiDriver) => void | Promise<void>) {
   // Deliberately loaded inside every scenario so the full missing-driver run executes.
   const location =
-    process.env.IMPORT_BANGUMI_DRIVER ??
-    resolve(import.meta.dir, '../packages/conversion/tests/bangumi-driver.ts');
+    process.env.IMPORT_BANGUMI_DRIVER ?? resolve(import.meta.dir, '../packages/conversion/tests/bangumi-driver.ts');
   if (!isAbsolute(location) && !location.startsWith('file:'))
     throw new Error('Expected an absolute driver path or file URL');
   const url = isAbsolute(location) ? pathToFileURL(location) : new URL(location);
