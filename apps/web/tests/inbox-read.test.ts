@@ -238,6 +238,18 @@ test('unread count keeps native zero, lower-bound, bounded Retry-After and signe
       ...lowerBound,
     });
   }
+  const exactCapped = { ...capped, basis: 'current-visible-unread' as const };
+  expect(await loadUnreadCount(countClient(() => Response.json(exactCapped)), owner.request(), owner.env)).toEqual({
+    signedIn: true,
+    state: 'ready',
+    ...exactCapped,
+  });
+  const mismatchedBasis = { ...exactCapped, count: 17 };
+  expect(await loadUnreadCount(countClient(() => Response.json(mismatchedBasis)), owner.request(), owner.env)).toEqual({
+    signedIn: true,
+    state: 'unavailable',
+    failure: { status: 200 },
+  });
   const now = Date.parse('2026-10-31T00:00:00.000Z');
   for (const retryAfter of [
     '30',
