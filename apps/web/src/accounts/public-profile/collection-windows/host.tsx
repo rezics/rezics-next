@@ -11,6 +11,7 @@ type Navigation = {
   visit: CollectionVisit;
   search: string;
   hash: string;
+  cursor: Coordinate;
   move: (event: MouseEvent<HTMLAnchorElement>, movement: Movement, cursor: Coordinate) => void;
 };
 export const CollectionWindowsContext = createContext<Navigation | null>(null);
@@ -34,8 +35,17 @@ export function useCollectionWindows(input: {
   const publication = profile ? JSON.stringify(profile) : null;
   const slot = useRef<{ scope: string | null; owner: string; visit: CollectionVisit }>({ scope: null, owner: JSON.stringify([input.owner, input.view, input.locale]), visit: new CollectionVisit() });
   const owner = JSON.stringify([input.owner, input.view, input.locale]);
+  let admitted = false;
+  let denied = false;
+  if (input.page) {
+    const plan = planReads(platformRegistry, input.page.document as CompositionDocument, pageContext(input.page));
+    const entry = Object.entries(plan.reads).find(([, read]) => read.kind === 'accountCollections');
+    const response = entry ? input.page.reads[entry[0]] : undefined;
+    admitted = response?.status === 200 && isRecord(response.body) && Array.isArray(response.body.collections);
+    denied = response?.status === 401 || response?.status === 403;
+  }
   const scope = slot.current.owner === owner && !input.page && input.failure !== 'denied' && input.view === 'collections' && exposed
-    ? slot.current.scope : profile && input.view === 'collections' && exposed && profile.publicViews.collections
+    ? slot.current.scope : profile && input.view === 'collections' && exposed && profile.publicViews.collections && !denied
     ? JSON.stringify([profile.id, input.view, input.locale, publication]) : null;
   const [, render] = useState(0);
   if (slot.current.scope !== scope || slot.current.owner !== owner) {
@@ -43,14 +53,6 @@ export function useCollectionWindows(input: {
     slot.current = { scope, owner, visit: new CollectionVisit() };
   }
   const { visit } = slot.current;
-  let admitted = false;
-  if (input.page && scope) {
-    const plan = planReads(platformRegistry, input.page.document as CompositionDocument, pageContext(input.page));
-    const entry = Object.entries(plan.reads).find(([, read]) => read.kind === 'accountCollections');
-    const response = entry ? input.page.reads[entry[0]] : undefined;
-    admitted = response?.status === 200 && isRecord(response.body) && Array.isArray(response.body.collections);
-    if (response?.status === 403) visit.retire();
-  }
   useLayoutEffect(() => {
     visit.receive(input.cursor, admitted);
     render((revision) => revision + 1);
@@ -58,7 +60,7 @@ export function useCollectionWindows(input: {
   useEffect(() => () => visit.retire(), [visit]);
   if (!scope) return null;
   return {
-    visit, search: input.search, hash: input.hash,
+    visit, search: input.search, hash: input.hash, cursor: input.cursor,
     move(event: MouseEvent<HTMLAnchorElement>, movement: Movement, cursor: Coordinate) {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
@@ -87,7 +89,7 @@ export function CollectionWindowControls({ next, locale, failed = false, invalid
   return <nav aria-label={m.subject_collections({}, options)} className="flex flex-wrap gap-x-4 gap-y-2">
     {failed ? (
       invalid ? action(m.public_account_start_again({}, options), 'first', null, 'restart') :
-      visit.target && action(m.public_account_retry({}, options), visit.target.movement, visit.target.cursor, 'retry')
+      action(m.public_account_retry({}, options), visit.target?.movement ?? 'next', visit.target ? visit.target.cursor : navigation.cursor, 'retry')
     ) : <>
       {visit.previous !== undefined && action(m.prq_previous({}, options), 'previous', visit.previous, 'previous')}
       {visit.current !== null && action(m.library_collections_first_page({}, options), 'first', null, 'first')}
