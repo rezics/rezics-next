@@ -466,6 +466,10 @@ accepted and selected for Global. The common publisher rereads the exact subject
 before acceptance, then checks the public statement and authored document separately; an unadopted proposal never
 becomes public synopsis text.
 
+The retained doctor readback uses these original Bangumi bindings and document citations, applies native candidate
+acceptance and Global adoption, and independently checks public statements and documents for anonymous and member
+readers while an unadopted summary remains concealed.
+
 Ordinary imports prepare proposals only. Selected showcase plans reuse the source records, current bindings and common journal; they do not add a second converter, publisher or identity resolver. Source records retain exact keys, source and converter digests, selected candidate identities and caller routes. Current facts fences apply to unchanged and cached results as well as refreshes.
 
 Creator and voice candidates retain their exact selected source relationships, credited Person identity and released role qualifiers. Candidate preparation withholds a dependent credit when current source-to-Person reconciliation fails; it does not suppress unrelated facts. Source aggregate weights, votes or ranks are not native votes, confidence, acceptance, adoption or publication.
