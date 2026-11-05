@@ -22,7 +22,7 @@ export type IdentifierVisitOrigin = {
 export type IdentifierInspection = { property: string; statement: string };
 
 export type IdentifierCurrentVisit = {
-  origin?: IdentifierVisitOrigin;
+  origin?: IdentifierVisitOrigin | undefined;
   initialReview?: { property: string; candidate: string };
   initialInspection?: IdentifierInspection;
 };
