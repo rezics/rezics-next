@@ -2950,10 +2950,6 @@ export class MergeTrain {
     const observe = () => {
       if (controller.signal.aborted) return;
       if (devPending()) controller.abort(new ControlPlaneProofInterrupted('Product dev request needs the dev lane'));
-      else if (o.codeIsCurrent && !o.codeIsCurrent())
-        controller.abort(
-          new ControlPlaneProofInterrupted('Control-plane code changed; current controller must hand off'),
-        );
       else {
         try {
           o.fence.assertCurrent(entry.request);
@@ -2964,6 +2960,9 @@ export class MergeTrain {
     };
     const checkpoint = () => {
       observe();
+      // Stale code lets the command already running finish; the next boundary hands the request to a current controller.
+      if (o.codeIsCurrent && !o.codeIsCurrent())
+        controller.abort(new ControlPlaneProofInterrupted('Control-plane code changed; current controller must hand off'));
       controller.signal.throwIfAborted();
       if (this.git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}`) !== source) {
         const error = new Error(

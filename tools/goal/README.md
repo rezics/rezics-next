@@ -171,7 +171,8 @@ cleanup supplied by the receiving tree; parallel proof commands all settle befor
 positively owned dev lease. The same existing dev drain then takes a turn,
 even if the initial idle dev drain returned or found another live owner. No manager signal or extra enqueue is needed.
 The main request stays pending and unpublished; it is not retried again in that drain. Another live dev owner is never
-removed or replaced. Stale code cancels its own proof and uses the existing current-code handoff.
+removed or replaced. Stale code lets the proof command already running finish, then stops at the next command boundary,
+before any publication, and uses the existing current-code handoff; the successor reruns the proof with current code.
 
 `control-plane-proof-<queue-id>.json` retains each ordinary attempt's exact source, candidate, captured refs, status and
 separate log. An interrupted or crashed proof remains non-green, with no reusable proof or release record. A later
@@ -943,7 +944,7 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 | `policy.cpSync.failureLines`                       | `30`        | cpSync: failure lines.                       |
 | `policy.cpSync.conflictPaths`                      | `10`        | cpSync: conflict paths.                      |
 | `policy.cpSync.changedPaths`                       | `10`        | cpSync: changed paths.                       |
-| `policy.cpSync.residentSamples`                    | `10`        | cpSync: resident samples.                    |
+| `policy.cpSync.residentSamples`                    | `4`         | cpSync: resident samples.                    |
 | `policy.cpSync.residentSampleMs`                   | `60000`     | cpSync: resident sample ms.                  |
 | `policy.cpSync.statColumns`                        | `120`       | cpSync: stat columns.                        |
 | `policy.gateParity.budgetMs`                       | `270000`    | gateParity: budget ms.                       |
@@ -2570,6 +2571,16 @@ Processes hand over on the new `main:tools/goal`. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
 
+A release takes the checks, publication, the restart and three minutes. There is no observation window before
+publication: cp-sync reads one instant of live-worker width and landing requests, then publishes. After the restart,
+which checks each resident unit started after publication, it observes four readings a minute apart for three minutes
+(`policy.cpSync.residentSamples` and `residentSampleMs`). It rolls back only on a real regression: live workers fell by
+more than half, or landings that were running before publication merged none in that window. A quiet window in which no
+landing was running never rolls back. Trains and attempt supervisors started from the previous `tools/goal` notice the
+published revision: a stale train lets its running command finish, stops at the next command boundary, releases its
+lanes and exits, and its successor runs the published code. The resident host finishes its active requests on SIGTERM
+before systemd starts the new one, and workers keep their scopes. No process is killed by hand.
+
 cp-sync refuses when the main checkout has uncommitted or untracked files under the synced paths, when `main`
 moved, when stabilize changed control-plane paths that dev lacks, or while another run holds `.temp/goal/cp-sync.lock`.
 `--dry-run` does everything except moving refs and the checkout, prints the diff stat, step results and the ref moves
@@ -2776,11 +2787,12 @@ systemd termination. Daily audit dispatch stays with manager recovery.
 Decision: keep the minute sweep to 45 seconds by default and run regeneration separately hourly with a ten-minute
 budget; both bounds are configurable under `policy.maintenance` and applied when installing services.
 
-Decision: cp-sync records ten-minute mean live-worker width and successful gates and landings before and after
-publication; only failed host or verifier readiness, a unit whose process did not start after publication, zero live
-workers while ready tasks were observed, or zero landings while current undelivered landing requests were observed
-restores the previous tree in a forward commit. Lower nonzero counts and quiet windows are normal. Demand is sampled
-throughout the post-publication window.
+Decision: cp-sync takes one instant reading before publication and a three-minute post-publication window of four
+readings. Only failed host or verifier readiness, a unit whose process did not start after publication, live workers
+falling by more than half, or no landing merged in the window while landings already running before publication were
+requested restores the previous tree in a forward commit. Lower counts within half and quiet windows are normal.
+Decision: after publication a stale train lets its running control-plane command finish and hands off at the next command
+boundary instead of cancelling it, so the release does not restart a running check; the successor runs the published code.
 After publishing, a missing environment file or resident code unit triggers `goal service install` from the newly published
 main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
 unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual

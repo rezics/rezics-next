@@ -693,7 +693,7 @@
       "failureLines": 30,
       "conflictPaths": 10,
       "changedPaths": 10,
-      "residentSamples": 10,
+      "residentSamples": 4,
       "residentSampleMs": 60000,
       "statColumns": 120
     },
