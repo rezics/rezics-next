@@ -128,7 +128,7 @@ test('actual label shelf list, grid and table retain context, state and progress
         'https://site.test',
       );
       expect(address.searchParams.get('label')).toBe(label.id);
-      expect(address.searchParams.get('layout')).toBe(layout);
+      expect(address.searchParams.get('layout')).toBe(layout === 'grid' ? null : layout);
     }
   } finally {
     admission.mockRestore();
@@ -192,4 +192,37 @@ test('an unavailable Subject keeps its state literal and has no Work or Progress
   expect(output).not.toContain('data-received-entry-work-destination');
   expect(output).not.toContain('data-received-entry-progress-destination');
   expect(output).not.toContain('href=');
+});
+
+test('an uncertain state action leaves the last received value as the reader state', () => {
+  const entry = shelfContextExamples('en')[0]!;
+  const row: ShelfRow = {
+    entry,
+    conflict: false,
+    failure: null,
+    unknownIntent: {
+      subjectId: entry.subjectId,
+      state: 'completed',
+      revision: entry.revision,
+      idempotencyKey: shelfExampleId(999),
+    },
+  };
+  const output = renderToStaticMarkup(
+    createElement(ReceivedEntryReader, {
+      id: 'uncertain-entry-reading-test',
+      headingRef: createRef<HTMLHeadingElement>(),
+      row,
+      locale: 'en',
+      isCurrent: () => true,
+      progressAdmitted: true,
+      close: () => {},
+      openProgress: () => {},
+    }),
+  );
+  const record = output.slice(output.indexOf('data-received-entry-record'));
+
+  expect(record).toContain('In progress');
+  expect(record).toContain(m.library_entry_reading_state_unknown());
+  expect(record).toContain(m.library_entry_reading_last_received());
+  expect(record).not.toContain('Completed');
 });
