@@ -14,6 +14,8 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
   );
   Object.assign(globals, {
     window,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   });
