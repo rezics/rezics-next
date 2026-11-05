@@ -2412,6 +2412,7 @@
   "library_label_draft_navigation_stay": "編集を続ける",
   "library_label_draft_navigation_discard": "破棄",
   "library_label_more": "次のページ",
+  "library_labels_previous": "前のページ",
   "library_label_deleted": "{name}を削除しました",
   "library_label_stale": "ラベルが変更されました。現在の内容を表示しています。",
   "library_label_invalid": "このラベル名は使用できません。",

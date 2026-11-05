@@ -1,11 +1,22 @@
 import { afterAll, expect, mock, test } from 'bun:test';
+import { QueryClient } from '@tanstack/react-query';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToString } from 'react-dom/server';
 import type { LabelInput, LabelResult, LabelsPage } from '../src/library/labels-read';
+import {
+  LABELS_WINDOW_MAX_PREDECESSORS,
+  LABELS_WINDOW_QUERY_KEY,
+  acceptLabelsWindow,
+  labelsWindowHasPrevious,
+  labelsWindowOwner,
+  labelsWindowPrevious,
+  labelsWindowVisit,
+  stageLabelsWindow,
+} from '../src/library/labels-window-navigation';
 import { m } from '../src/paraglide/messages.js';
 
-// UNRUN: focused presentation and deferred-result cases; native/browser acceptance belongs to integration.
+// Focused presentation and deferred-result cases; native/browser acceptance belongs to integration.
 const writes: { data: LabelInput; headers: HeadersInit }[] = [];
 let send: (input: LabelInput) => Promise<LabelResult> = async () => {
   throw new Error('Unexpected Labels write');
@@ -82,6 +93,152 @@ function link(host: Element, name: string) {
   expect(links).toHaveLength(1);
   return links[0]!;
 }
+
+test('Accepted cursor windows support Previous and First, preserve failed targets, bound history, and start fresh by raw prefix', () => {
+  const client = new QueryClient();
+  const source = {};
+  const owner = labelsWindowOwner(client, { locale: 'fr', query, source, viewer: 3, listEpoch: 5 });
+  const visitId = 'three-windows';
+  const move = (current: string | null, target: string | null, direction: 'next' | 'previous' | 'first') => {
+    expect(
+      stageLabelsWindow(client, {
+        visitId,
+        owner,
+        current,
+        target,
+        direction,
+        restoreHeadingFocus: false,
+      }),
+    ).toBe(true);
+  };
+  const accept = (current: string | null, loaded = true) =>
+    acceptLabelsWindow(client, { visitId, owner, current, loaded });
+
+  move(null, 'cursor-one', 'next');
+  expect(accept('cursor-one').committed).toBe(true);
+  move('cursor-one', 'cursor-two', 'next');
+  expect(accept('cursor-two').committed).toBe(true);
+  move('cursor-two', 'cursor-three', 'next');
+  expect(accept('cursor-three').committed).toBe(true);
+  let visit = labelsWindowVisit(client, visitId, owner)!;
+  expect(visit.path).toEqual([null, 'cursor-one', 'cursor-two', 'cursor-three']);
+  expect(labelsWindowHasPrevious(visit, 'cursor-three')).toBe(true);
+
+  move('cursor-three', 'cursor-two', 'previous');
+  expect(accept('cursor-two', false).committed).toBe(false);
+  visit = labelsWindowVisit(client, visitId, owner)!;
+  expect(visit.path).toEqual([null, 'cursor-one', 'cursor-two', 'cursor-three']);
+  expect(visit.staged?.target).toBe('cursor-two');
+  expect(accept('cursor-two').committed).toBe(true); // Retry accepts the same staged target.
+  expect(labelsWindowVisit(client, visitId, owner)?.path).toEqual([null, 'cursor-one', 'cursor-two']);
+  move('cursor-two', null, 'first');
+  expect(accept(null).committed).toBe(true);
+  expect(labelsWindowVisit(client, visitId, owner)?.path).toEqual([null]);
+  expect(labelsWindowPrevious(labelsWindowVisit(client, visitId, owner), null)).toBeUndefined();
+
+  const otherPrefix = labelsWindowOwner(client, {
+    locale: 'fr',
+    query: `${query} `,
+    source,
+    viewer: 3,
+    listEpoch: 5,
+  });
+  expect(labelsWindowVisit(client, visitId, otherPrefix)).toBeUndefined();
+  expect(
+    stageLabelsWindow(client, {
+      visitId: 'direct-later-entry',
+      owner: otherPrefix,
+      current: 'supplied-cursor',
+      target: 'supplied-next',
+      direction: 'next',
+      restoreHeadingFocus: false,
+    }),
+  ).toBe(true);
+  const fresh = labelsWindowVisit(client, 'direct-later-entry', otherPrefix)!;
+  expect(fresh.path).toEqual(['supplied-cursor']);
+  expect(labelsWindowHasPrevious(fresh, 'supplied-cursor')).toBe(false);
+  expect(acceptLabelsWindow(client, {
+    visitId: 'direct-later-entry',
+    owner: otherPrefix,
+    current: 'supplied-next',
+    loaded: true,
+  }).committed).toBe(true);
+  expect(labelsWindowHasPrevious(labelsWindowVisit(client, 'direct-later-entry', otherPrefix), 'supplied-next')).toBe(
+    true,
+  );
+
+  const boundedId = 'bounded-history';
+  let current: string | null = null;
+  for (let index = 1; index <= LABELS_WINDOW_MAX_PREDECESSORS + 2; index++) {
+    const target = `cursor-${index}`;
+    expect(
+      stageLabelsWindow(client, {
+        visitId: boundedId,
+        owner,
+        current,
+        target,
+        direction: 'next',
+        restoreHeadingFocus: false,
+      }),
+    ).toBe(true);
+    expect(acceptLabelsWindow(client, { visitId: boundedId, owner, current: target, loaded: true }).committed).toBe(
+      true,
+    );
+    current = target;
+  }
+  expect(client.getQueryData<{ path: unknown[] }>(LABELS_WINDOW_QUERY_KEY)?.path).toHaveLength(
+    LABELS_WINDOW_MAX_PREDECESSORS + 1,
+  );
+  client.clear();
+});
+
+test('A dirty later-cursor Previous waits for Leave; Stay preserves the exact raw create draft and focus', async () => {
+  await withDocument(async (window) => {
+    const { createRoot } = await import('react-dom/client');
+    const { LabelsPageView } = await import('../src/library/labels-page');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    const moves: unknown[][] = [];
+    const previous = () =>
+      [...host.querySelectorAll('button')].find((button) => button.textContent === m.library_labels_previous())!;
+    const dialogButton = (name: string) =>
+      [...host.querySelectorAll('[role="alertdialog"] button')].find((button) => button.textContent === name)!;
+    const draftValue = '  unsent e\u0301 + %_  ';
+    try {
+      await act(async () =>
+        root.render(
+          <LabelsPageView
+            page={emptyPage({ query })}
+            cursor={cursor}
+            canPrevious
+            locale="fr"
+            onWindowMove={(...args) => moves.push(args)}
+          />,
+        ),
+      );
+      const input = host.querySelector('#new-label') as HTMLInputElement;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, draftValue);
+        input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+      await act(async () => previous().click());
+      expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
+      expect(moves).toEqual([]);
+      await act(async () => dialogButton(m.library_label_draft_navigation_stay()).click());
+      expect((host.querySelector('#new-label') as HTMLInputElement).value).toBe(draftValue);
+      expect(document.activeElement).toBe(host.querySelector('#new-label'));
+      expect(moves).toEqual([]);
+
+      await act(async () => previous().click());
+      await act(async () => dialogButton(m.library_label_draft_navigation_discard()).click());
+      expect(moves).toEqual([['previous', false]]);
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+    }
+  });
+});
 
 test('First-page emptiness, prefix no-results and bounded later-page emptiness remain distinct before and after hydration', async () => {
   await withDocument(async () => {

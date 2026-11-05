@@ -2412,6 +2412,7 @@
   "library_label_draft_navigation_stay": "留下",
   "library_label_draft_navigation_discard": "捨棄",
   "library_label_more": "下一頁",
+  "library_labels_previous": "上一頁",
   "library_label_deleted": "已刪除 {name}",
   "library_label_stale": "此標籤已變更，現在顯示目前版本。",
   "library_label_invalid": "無法使用此標籤名稱。",

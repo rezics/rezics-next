@@ -7,8 +7,8 @@ import type { LabelsCurrentRead } from '../src/library/labels-read-route';
 import type { LabelInput, LabelResult } from '../src/library/labels-read';
 import type { MenuProps } from '@rezics/ui/menu';
 
-// UNRUN: one focused mounted/deferred management journey for integration. Controlled BFF
-// responses exercise the actual route and handlers, not native authority or browser/visual proof.
+// One focused mounted/deferred management journey. Controlled BFF responses exercise the actual
+// route and handlers, not native authority or browser/visual proof.
 const operations = [
   'personal_library',
   'library_label.list',
@@ -124,6 +124,9 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const reads = await import('../src/library/labels-read-route');
     const kernel = await import('../src/kernel/client');
     const { Route } = await import('../src/routes/library/labels');
+    const { LABELS_WINDOW_QUERY_KEY, labelsWindowOwner } = await import('../src/library/labels-window-navigation');
+    const { libraryWorkspaceAdmission } = await import('../src/library/library-workspace-admission');
+    const { sessionQueryKey } = await import('../src/session/browser-state');
     const nativeCalls: Request[] = [];
     let failure: { status: number; code: string } | undefined;
     let admitted = [...operations];
@@ -352,6 +355,26 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     try {
       await show(session('A'));
       expect(pendingReads).toHaveLength(0); // Genuine loader provenance hydrates without an added read.
+      const labelsAdmission = libraryWorkspaceAdmission(queryClient, [
+        'library_label.list',
+        'library_label.create',
+        'library_label.rename',
+        'library_label.delete',
+      ]);
+      const admittedA = labelsAdmission.read();
+      const retainedA = {
+        visitId: 'A-before-replacement',
+        owner: labelsWindowOwner(queryClient, {
+          locale: 'en',
+          query: search.q ?? null,
+          source: reads.readLabelsCurrent,
+          viewer: admittedA.viewer,
+          listEpoch: admittedA.dispatch[0]!,
+        }),
+        path: [null, 'A-cursor-one', 'A-cursor-two'],
+        staged: null,
+      };
+      queryClient.setQueryData(LABELS_WINDOW_QUERY_KEY, retainedA);
       await act(async () => select('rename')());
       const oldSelect = select('delete');
       const oldFocus = dialogProps.at(-1)!.finalFocus as () => unknown;
@@ -371,6 +394,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
         csrf: 'prepared-A',
       });
       await show(session('B'));
+      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toBeUndefined();
       retired('A');
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       expect(host.querySelector('input[name="q"]')).toBeNull();
@@ -593,6 +617,10 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
       expect(document.body.textContent).toContain('Another journey Undo');
       await act(async () => unrelatedUndo.actionProps!.onClick!({} as never));
       expect(unrelatedUndos).toBe(1);
+      await act(async () => queryClient.setQueryData(sessionQueryKey, session('B')));
+      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toBeUndefined();
+      await act(async () => queryClient.setQueryData(sessionQueryKey, session('A')));
+      expect(queryClient.getQueryData(LABELS_WINDOW_QUERY_KEY)).toBeUndefined();
       expect(hydrationErrors).toEqual([]);
     } finally {
       if (root) await act(async () => root!.unmount());

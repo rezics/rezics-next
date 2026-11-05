@@ -2412,6 +2412,7 @@
   "library_label_draft_navigation_stay": "Bleiben",
   "library_label_draft_navigation_discard": "Verwerfen",
   "library_label_more": "Nächste Seite",
+  "library_labels_previous": "Vorherige Seite",
   "library_label_deleted": "{name} gelöscht",
   "library_label_stale": "Dieses Schlagwort wurde geändert. Die aktuelle Version wird angezeigt.",
   "library_label_invalid": "Dieser Name kann nicht verwendet werden.",

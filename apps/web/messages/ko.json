@@ -2412,6 +2412,7 @@
   "library_label_draft_navigation_stay": "머무르기",
   "library_label_draft_navigation_discard": "버리기",
   "library_label_more": "다음 페이지",
+  "library_labels_previous": "이전 페이지",
   "library_label_deleted": "{name} 삭제됨",
   "library_label_stale": "라벨이 변경되었습니다. 현재 버전을 표시합니다.",
   "library_label_invalid": "이 라벨 이름은 사용할 수 없습니다.",
