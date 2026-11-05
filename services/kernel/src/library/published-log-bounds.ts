@@ -293,7 +293,6 @@ export type PublishedLogOperationPlan = Readonly<{
   controls?: Readonly<Record<string, number | string>>;
 }>;
 
-const uuid = 'f'.repeat(36);
 const accountEpoch = '9223372036854775807';
 const maximumCursorBytes = 4096;
 export const PUBLISHED_LOG_RETENTION_PAGE_BOUND = 100;
