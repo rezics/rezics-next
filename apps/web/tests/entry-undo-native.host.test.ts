@@ -51,6 +51,48 @@ test('mounted native parser preserves exact removal receipts, uncertain commands
     expect(response.status).toBe(200);
     return (await response.json()).libraryEntry;
   };
+  const post = (path: string, body: unknown) =>
+    stack.kernel(path, {
+      method: 'POST',
+      headers: {
+        ...Object.fromEntries(request.headers),
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+      },
+      body: JSON.stringify(body),
+    });
+  expect(
+    (
+      await stack.kernel(
+        '/v1/platform/exposure/reading_progress:open',
+        {
+          method: 'POST',
+          headers: { 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+        },
+        'governor',
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (await post('/v1/copies', { subjectId: subject.id, kind: 'physical', status: 'owned', note: 'Independent copy' }))
+      .status,
+  ).toBe(201);
+  const progress = await post('/v1/progressSessions', {
+    subjectId: subject.id,
+    mode: 'scalar_amount',
+    unit: 'page',
+    total: '300',
+  });
+  expect(progress.status).toBe(201);
+  const independent = async () =>
+    Promise.all(
+      ['/v1/copies', '/v1/progressSessions'].map(async (path) => {
+        const response = await stack.kernel(`${path}?subjectId=${subject.id}&view=FULL`, { headers: request.headers });
+        expect(response.status).toBe(200);
+        return response.json();
+      }),
+    );
+  const facts = await independent();
   const initial = await read();
   const changed = await changePersonalLibraryEntry(
     client,
@@ -123,6 +165,7 @@ test('mounted native parser preserves exact removal receipts, uncertain commands
   });
   expect(sent.slice(before).map((call) => call.method)).toEqual(['POST']);
   expect(await read()).toEqual(committed);
+  expect(await independent()).toEqual(facts);
   const deletes = sent.filter((call) => call.method === 'DELETE');
   expect(deletes[0]!.url).toBe(deletes[1]!.url);
   expect(deletes[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.idempotencyKey));
@@ -156,4 +199,5 @@ test('mounted native parser preserves exact removal receipts, uncertain commands
   const restoredHtml = await (await submit(fields)).text();
   expect(restoredHtml).toContain('data-restored-entry');
   expect(restoredHtml).toContain(`data-entry-revision="${(await read()).revision}"`);
+  expect(await independent()).toEqual(facts);
 }, 180_000);
