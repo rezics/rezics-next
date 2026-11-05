@@ -222,18 +222,26 @@ test('retired module loading never issues a later account request, and a late su
       return ready;
     },
   } as unknown as typeof import('../src/settings/account-rename-actions');
-  const pending = readCurrentAccountRename(csrfToken, () => current, () => {
-    imports++;
-    return new Promise((done) => {
-      resolveLoad = done;
-    });
-  });
+  const pending = readCurrentAccountRename(
+    csrfToken,
+    () => current,
+    () => {
+      imports++;
+      return new Promise((done) => {
+        resolveLoad = done;
+      });
+    },
+  );
   current = false;
   resolveLoad(loaded);
   expect(await pending).toEqual({ context: null });
   expect(imports).toBe(1);
   expect(reads).toBe(0);
-  const region = new AccountRenameRegion(async () => ready, accountId, () => current);
+  const region = new AccountRenameRegion(
+    async () => ready,
+    accountId,
+    () => current,
+  );
   const leave = region.mount();
   await region.reload();
   expect(region.snapshot().context).toBeNull();

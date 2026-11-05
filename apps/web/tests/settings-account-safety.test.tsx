@@ -257,7 +257,9 @@ test('a never-settling session recovery finishes visibly without another sign-ou
       await act(async () => host.querySelector<HTMLButtonElement>('button[type="submit"]')!.click());
       expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
       await act(async () =>
-        host.querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)!.click(),
+        host
+          .querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)!
+          .click(),
       );
       await act(async () => new Promise((resolve) => schedule(resolve, 0)));
       expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
@@ -307,7 +309,9 @@ test('old-viewer late completion cannot restore a link or unlock an old form', a
     expect(host.querySelector(`a[href="${renameHref}"]`)).toBeTruthy();
     await act(async () => host.querySelector<HTMLButtonElement>('button[type="submit"]')!.click());
     await act(async () =>
-      host.querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)!.click(),
+      host
+        .querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)!
+        .click(),
     );
     current = false;
     await act(async () =>
@@ -330,7 +334,9 @@ test('old-viewer late completion cannot restore a link or unlock an old form', a
     expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
     expect(host.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true);
     await act(async () =>
-      host.querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)?.click(),
+      host
+        .querySelector<HTMLButtonElement>(`button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`)
+        ?.click(),
     );
     expect(submitted).toBe(1);
     await act(async () => root.unmount());
@@ -370,17 +376,21 @@ test('deliberate current recovery renders the native available destination once 
     expect(host.querySelector(`a[href="${renameHref}"]`)).toBeNull();
     expect(host.textContent).toContain(m.settings_account_rename_failed());
     await act(async () =>
-      host.querySelector<HTMLButtonElement>(
-        `button[aria-label="${m.settings_reload()}: ${m.settings_account_rename_heading()}"]`,
-      )!.click(),
+      host
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="${m.settings_reload()}: ${m.settings_account_rename_heading()}"]`,
+        )!
+        .click(),
     );
     await act(async () => root.render(render()));
     expect(host.querySelectorAll(`a[href="${renameHref}"]`)).toHaveLength(1);
     expect(host.textContent).not.toContain(m.settings_account_rename_failed());
     await act(async () =>
-      host.querySelector<HTMLButtonElement>(
-        `button[aria-label="${m.settings_reload()}: ${m.settings_account_rename_heading()}"]`,
-      )!.click(),
+      host
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="${m.settings_reload()}: ${m.settings_account_rename_heading()}"]`,
+        )!
+        .click(),
     );
     await act(async () => root.render(render()));
     expect(host.querySelector(`a[href="${renameHref}"]`)).toBeNull();
