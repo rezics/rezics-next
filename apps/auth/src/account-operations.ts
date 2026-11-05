@@ -204,22 +204,29 @@ async function organizationPost<T>(
       if (controller.signal.aborted) onAbort();
     });
     const send = async (): Promise<OrganizationReply<T>> => {
-      controller.signal.throwIfAborted();
+      if (controller.signal.aborted) return { kind: 'invalid' };
       if (!dispatch()) return { kind: 'invalid' };
-      const response = await fetch(`/account-operations/${phase}`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        redirect: 'error',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      const value = await readJsonBounded(
-        response,
-        response.status === 200 ? maxBytes : ACCOUNT_OPERATION_MAX_ERROR_BYTES,
-        controller.signal,
-      );
+      const payload = JSON.stringify(body);
+      let response: Response;
+      let value: unknown;
+      try {
+        response = await fetch(`/account-operations/${phase}`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          redirect: 'error',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          signal: controller.signal,
+        });
+        value = await readJsonBounded(
+          response,
+          response.status === 200 ? maxBytes : ACCOUNT_OPERATION_MAX_ERROR_BYTES,
+          controller.signal,
+        );
+      } catch {
+        return { kind: 'invalid' };
+      }
       if (response.status === 200) {
         const result = parse(value);
         return result ? { kind: 'received', value: result } : { kind: 'invalid' };
@@ -237,8 +244,6 @@ async function organizationPost<T>(
       return { kind: 'error', reason };
     };
     return await Promise.race([cancelled, send()]);
-  } catch {
-    return { kind: 'invalid' };
   } finally {
     clearTimeout(timer);
     caller?.removeEventListener('abort', cancel);
