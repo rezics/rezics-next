@@ -56,7 +56,10 @@ export function SubjectTermsPublicVisitNotice({
   return (
     <section className="mx-auto w-full max-w-4xl space-y-3 px-6 py-6" role="status">
       <p>{m.subject_terms_public_unsupported({}, { locale: locale as never })}</p>
-      <nav className="flex flex-wrap gap-3" aria-label={m.subject_terms_public_navigation({}, { locale: locale as never })}>
+      <nav
+        className="flex flex-wrap gap-3"
+        aria-label={m.subject_terms_public_navigation({}, { locale: locale as never })}
+      >
         {showGeneralReturn && (
           <a href={returnHref} className="min-h-11 rounded-sm text-primary underline underline-offset-4">
             {m.subject_terms_public_return({}, { locale: locale as never })}

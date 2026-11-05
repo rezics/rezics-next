@@ -115,7 +115,10 @@ function normalizeOrigin(value: unknown, subject: string, locale: string): Terms
   )
     return;
   const realm = origin.realm as string | undefined;
-  const returned = publicAddress(origin.returnHref, subject, locale, { context: origin.context, ...(realm ? { realm } : {}) });
+  const returned = publicAddress(origin.returnHref, subject, locale, {
+    context: origin.context,
+    ...(realm ? { realm } : {}),
+  });
   if (!returned) return;
   return {
     subject,

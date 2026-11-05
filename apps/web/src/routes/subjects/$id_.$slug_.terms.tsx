@@ -38,10 +38,15 @@ function TermsRoute() {
       </>
     );
   }
-  const returnHref = visit.kind === 'origin' ? visit.origin.returnHref : visit.kind === 'fresh' ? visit.returnHref : undefined;
+  const returnHref =
+    visit.kind === 'origin' ? visit.origin.returnHref : visit.kind === 'fresh' ? visit.returnHref : undefined;
   const showGeneralReturn = returnHref !== undefined && !(visit.kind !== 'legacy' && visit.via);
   const freshSessionKey =
-    visit.kind === 'origin' ? JSON.stringify(['origin', visit.origin]) : visit.kind === 'fresh' ? JSON.stringify(visit) : 'legacy';
+    visit.kind === 'origin'
+      ? JSON.stringify(['origin', visit.origin])
+      : visit.kind === 'fresh'
+        ? JSON.stringify(visit)
+        : 'legacy';
   return (
     <>
       {showGeneralReturn && (

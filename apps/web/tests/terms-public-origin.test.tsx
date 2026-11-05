@@ -80,7 +80,9 @@ test('Terms public origin admits one bounded observation and keeps legacy and Na
     returnHref: observed.returnHref,
     via: names,
   });
-  expect(parseTermsPublicVisit(`${searchOf(href)}&publicReturn=${encodeURIComponent(observed.returnHref)}`, id, locale)).toEqual({
+  expect(
+    parseTermsPublicVisit(`${searchOf(href)}&publicReturn=${encodeURIComponent(observed.returnHref)}`, id, locale),
+  ).toEqual({
     kind: 'invalid',
   });
   expect(parseTermsPublicVisit(`${searchOf(href)}&returnTo=changes`, id, locale)).toEqual({ kind: 'invalid' });
@@ -156,9 +158,8 @@ test('mounted public entry and menu gate the production Terms session until a de
   const { act } = await import('react');
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } = await import(
-    '@tanstack/react-router'
-  );
+  const { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } =
+    await import('@tanstack/react-router');
   const { SubjectTermsEntry } = await import('../src/features/catalogue/subject-terms-entry');
   const { EditorialEntry } = await import('../src/features/catalogue/editorial-entry');
   const { Route } = await import('../src/routes/subjects/$id_.$slug_.terms');
@@ -195,7 +196,10 @@ test('mounted public entry and menu gate the production Terms session until a de
     path: '/subjects/$id/$slug/terms',
     getParentRoute: () => rootRoute,
   } as never);
-  const router = createRouter({ routeTree: rootRoute.addChildren([Route]), history: createMemoryHistory({ initialEntries: ['/'] }) });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([Route]),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
@@ -271,4 +275,3 @@ test('mounted public entry and menu gate the production Terms session until a de
     window.happyDOM.abort();
   }
 });
-
