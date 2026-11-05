@@ -9,7 +9,7 @@ The importer owns source acquisition, run/record state, candidate journals and r
 - **Open Library:** Five-column TSV Work/Edition rows with distinct IDs. CC0-1.0 bibliographic metadata only; no unknown-licensed prose or covers.
 - **Wikidata:** JSONL Q-items with native revisions and exact claims. CC0-1.0 structured data; no user text, unsupported claims or Commons images.
 
-Reviewed source registration fixes licences and attribution; dump fields and caller descriptors cannot. An alias cannot admit a source or default licence. Metadata terms do not grant summary, image or other creative-content rights.
+Registration, not aliases, dump fields or caller descriptors, sets source licences and attribution. Metadata terms do not license summaries, images or other creative content.
 
 ## Registration, identity and ordinary writes
 
@@ -90,7 +90,7 @@ Careers normalize to at most seven strings. Only the vocabulary mapper emits `wd
 
 Ordinary Bangumi dumps use JSONL. Alias `bangumi_cross_media` also accepts five-column PersonDetail TSV: `/type/person`, `person:<id>`, `unversioned`, ETag-or-empty, JSON body. Requested ID and type must match the actual Person; ETag is cache metadata, not a revision.
 
-The career feature review retains its original identities cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 as history. The current source registration uses the checked-in exports above. When the archive omits career data, only the separately authorized local showcase may use the fallback described under [Explicit local showcase publication](#explicit-local-showcase-publication).
+Career review keeps cross-media-entities@12, bangumi-vocabulary@3 and source-vocabulary@3 as history; current exports are above. Only the authorized local showcase fills absent archive careers; see [Explicit local showcase publication](#explicit-local-showcase-publication).
 
 ### Open Library Work first publication date
 
@@ -110,11 +110,11 @@ The immutable receipt binds exact GET `https://api.bgm.tv/v0/persons/{id}`, arch
 
 ### Media rights and replay
 
-Converters return media intent only. Acquisition needs a supported provider source and current subject. A 202 reservation is not an available media ID: the journal records request, receipt and status. Unknown delivery reuses original bytes/key; only confirmed media enters a separately reviewed cover candidate.
+Converters return media intent only; acquisition needs a supported source and current subject. A 202 is a reservation, not media: the journal records request, receipt and status. Unknown delivery reuses original bytes/key; only confirmed media enters separate cover review.
 
-Bangumi covers retain rights-holder credit, “via Bangumi” attribution, unknown image licence and cover-only use. Originals stay private; public output is re-encoded. Cover permission/metadata does not license summary prose. Rejected or missing covers remain addressable gaps without suppressing metadata. The [deletion policy](../../docs/deletion.md) fences withdrawal/takedown against refresh.
+Bangumi covers retain rights-holder credit, “via Bangumi”, unknown licence and cover-only use. Originals stay private; public output is re-encoded. Cover permission does not license summary prose. Rejected/missing covers remain addressable gaps without suppressing metadata. The [deletion policy](../../docs/deletion.md) fences refresh.
 
-Selected Bangumi Person/Organization images use only GET `/v0/persons/{id}` `PersonDetail.images.large` under schema `2026-07-24`, after exact response-ID/archive-type match. Missing, null, blank or placeholder images are absent; alternate sizes/redirects are excluded. Immutable receipts bind archive revision/digest, response SHA-256 and optional ETag; missing revisions stay unversioned. Changed digests append journal entries; pending, unknown and fenced outcomes replay prior evidence. Acquisition stays within the selected graph and shared deadline/pacing.
+Bangumi Person/Organization images use only GET `/v0/persons/{id}` `PersonDetail.images.large` (schema `2026-07-24`) after exact response-ID/archive-type match. Missing/null/blank/placeholders, alternate sizes and redirects omit. Immutable receipts bind archive revision/digest, response SHA-256 and optional ETag; absent revisions stay unversioned. Changed digests append; pending/unknown/fenced outcomes replay. Selected graph and shared deadline/pacing apply.
 
 ## Deletion
 
