@@ -1,4 +1,3 @@
-import { MountedContributionActions } from '../contribution-actions/mounted';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Cover, ReadingDisclosureScope } from '@rezics/ui/cover';
@@ -271,7 +270,6 @@ function ContributionVisit({
               <ContextUnavailable locale={locale} />
             ) : null
           ) : null}
-          {href ? <MountedContributionActions row={item} locale={locale} canonicalHref={href} /> : null}
           {exact ? (
             <a href={exact} className={feedCardLinkClassName}>
               {m.exact_revision_heading({}, options)}
