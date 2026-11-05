@@ -120,8 +120,8 @@ test('native Board and authored thread resume unknown delivery and repeated seed
   expect(resumed).toMatchObject({ state: 'published', source: { subjectId }, board: { id: boardId }, thread: { threadId } });
   expect(repeated).toEqual(resumed);
   expect(effects).toEqual({ board: 1, thread: 1 });
-  const boardCommands = calls.filter((call) => call.path === '/v1/boards');
-  const threadCommands = calls.filter((call) => call.path === '/v1/threads');
+  const boardCommands = calls.filter((call) => call.method === 'POST' && call.path === '/v1/boards');
+  const threadCommands = calls.filter((call) => call.method === 'POST' && call.path === '/v1/threads');
   expect(boardCommands.map(({ key, body }) => ({ key, body }))).toEqual([
     { key: 'local-showcase-board:' + subjectId, body: { conceptId: subjectId, title: 'Development showcase discussion', purpose: 'discussion', visibility: 'published' } },
     { key: 'local-showcase-board:' + subjectId, body: { conceptId: subjectId, title: 'Development showcase discussion', purpose: 'discussion', visibility: 'published' } },
