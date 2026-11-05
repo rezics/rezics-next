@@ -337,12 +337,13 @@ type SafeWithheldEntry = Readonly<{
   sha256: null;
 }>;
 type ControlState = 'available' | 'sign_in_required' | 'denied' | 'withheld' | 'unavailable' | 'not_applicable';
+type OperationState = Exclude<ControlState, 'withheld'>;
 type ReplyState = 'available' | 'sign_in_required' | 'denied' | 'withheld' | 'unavailable';
 type ReadingWatchState =
   | { state: 'current'; watching: boolean }
   | { state: 'sign_in_required' }
   | { state: 'unavailable'; retryable: true };
-type ReadingOperation = { action: string; operationId: string; state: ControlState };
+type ReadingOperation = { action: string; operationId: string; state: OperationState };
 type ReadingReference = {
   type: 'content.thread' | 'content.post';
   id: string;
@@ -482,7 +483,7 @@ export function readingPageOperationState(
     | { state: 'current'; watching: boolean }
     | { state: 'sign_in_required' }
     | { state: 'unavailable'; retryable: true },
-): ControlState {
+): OperationState {
   if (operationId === 'thread.watch_state') return 'not_applicable';
   if (operationId === 'thread.watch' || operationId === 'thread.unwatch') {
     if (watch.state === 'unavailable') return 'unavailable';
