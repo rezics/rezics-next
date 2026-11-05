@@ -45,7 +45,7 @@ async function passwordOperation(caller: string, subjectId: string, password: st
   return { operation, approval };
 }
 
-test('password replacement survives a lost acknowledgement through the exact current-session recovery', async () => {
+test('password replacement retains exact unknown command identity through deliberate current-session recovery', async () => {
   const f = await driver.seed('own-human');
   const native = driver.security;
   let attempt = createPasswordChangeAttempt(f.humanId, f.password);
@@ -81,14 +81,26 @@ test('password replacement survives a lost acknowledgement through the exact cur
   ).toBe(401);
   expect((await native.snapshot(f.humanId)).sessions).toHaveLength(0);
   const resumed = await native.reauthenticate(f.caller, f.password);
-  const replay = await json(
-    await native.request(resumed, '/credential-effects/apply', { ...operation, reference: approved.reference }),
-  );
-  expect(classifyPasswordChangeReply({ ...attempt, uncertain: true }, { ok: true, body: replay })).toEqual({
-    kind: 'complete',
-    receiptId: replay.receiptId,
-    replayed: true,
+  const current = await json(await native.request(resumed, '/security-page'));
+  expect(current.viewer.account_id).toBe(f.humanId);
+  // Reauthentication observes current authority; it cannot renew the original opening's epoch.
+  const retry = await native.request(resumed, '/credential-effects/apply', {
+    ...operation,
+    reference: approved.reference,
   });
+  const refusal = await json(retry, 401);
+  const recovered = classifyPasswordChangeReply(
+    { ...attempt, uncertain: true },
+    {
+      ok: false,
+      status: retry.status,
+      code: refusal.error,
+      effectStatus: refusal.effect_status,
+    },
+  );
+  expect(recovered).toEqual({ kind: 'unknown', attempt: { ...attempt, uncertain: true } });
+  expect(attempt.key).toBe(operation.key);
+  expect(attempt.approval?.reference).toBe(approved.reference);
   const persisted = await native.snapshot(f.humanId);
   expect(
     persisted.effects.filter((effect) => effect.operation_key === attempt.key && effect.committed_at),

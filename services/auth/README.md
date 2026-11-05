@@ -627,7 +627,9 @@ reduction refuse a changed reviewed grant set at the final native writer, includ
 An absent consent row is an empty grant with a null pending reference. Requested-scope queries reach the consent
 read boundary parser; unrelated query parameters remain refused.
 Session/client/consent inventory retains catalogue-derived bounds; Security, passkey and registration projections
-retain their fixed budgets. Enrollment requires the pinned `rezics.com` / `REZICS` RP.
+retain their fixed budgets. Enrollment requires the pinned `rezics.com` / `REZICS` RP. Current-session review after
+a lost password replacement acknowledgement does not renew the original opening epoch or confirm that command;
+its exact retry remains unknown when native revalidation refuses it.
 
 Enrollment responses use `packages/auth-contract/src/passkey-enrollment-response-bounds.ts`.
 Decision: bound the pinned complete creation DTO and exact credential-effect acknowledgement; stop malformed
