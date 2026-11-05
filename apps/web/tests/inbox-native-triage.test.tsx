@@ -35,15 +35,35 @@ mock.module('cloudflare:workers', () => ({
     },
   },
 }));
+const inboxReads = await import('../src/inbox/inbox-read');
 const {
   decodeInboxPage,
   inboxReadFailure,
+  InboxSeenError,
   loadInboxPage,
   markInboxNoticeSeen,
   nativeInboxEnvelope,
+  readyInboxPage,
   resolveInboxItems,
-} = await import('../src/inbox/inbox-read');
-const { InboxRows } = await import('../src/inbox/inbox-page');
+} = inboxReads;
+spyOn(inboxReads, 'readUnreadCount').mockImplementation(async () => ({
+  signedIn: true,
+  state: 'ready',
+  count: 2,
+  capped: false,
+  basis: 'current-visible-unread',
+  witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+}));
+const seenCommands: unknown[] = [];
+spyOn(inboxReads, 'markInboxSeen').mockImplementation(async ({ data }) => {
+  seenCommands.push(data);
+  return { signedIn: true } satisfies InboxSeenResult;
+});
+const markItem = spyOn(inboxReads, 'markInboxItemSeen').mockImplementation(async ({ data }) => {
+  seenCommands.push(data);
+  return { signedIn: true } satisfies InboxSeenResult;
+});
+const { InboxPageView, InboxRows } = await import('../src/inbox/inbox-page');
 const { InboxNoticeDetailView } = await import('../src/inbox/inbox-notice-detail');
 type Notice = NoticeInboxItem;
 
@@ -353,26 +373,6 @@ const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
-const inboxReads = await import('../src/inbox/inbox-read');
-const { InboxSeenError, readyInboxPage } = inboxReads;
-spyOn(inboxReads, 'readUnreadCount').mockImplementation(async () => ({
-  signedIn: true,
-  state: 'ready',
-  count: 2,
-  capped: false,
-  basis: 'current-visible-unread',
-  witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
-}));
-const seenCommands: unknown[] = [];
-spyOn(inboxReads, 'markInboxSeen').mockImplementation(async ({ data }) => {
-  seenCommands.push(data);
-  return { signedIn: true } satisfies InboxSeenResult;
-});
-const markItem = spyOn(inboxReads, 'markInboxItemSeen').mockImplementation(async ({ data }) => {
-  seenCommands.push(data);
-  return { signedIn: true } satisfies InboxSeenResult;
-});
-const { InboxPageView } = await import('../src/inbox/inbox-page');
 const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
