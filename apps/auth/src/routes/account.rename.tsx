@@ -128,6 +128,7 @@ function RenameReview({
   const [renamed, setRenamed] = useState('');
   const attempt = useRef<RenameAttempt | null>(null);
   const busy = useRef(false);
+  const retainedCommand = useRef<RenameContinuation | null>(null);
   const storageRefused = useRef(false);
   const refuseStorage = useCallback(() => {
     storageRefused.current = true;
@@ -143,7 +144,7 @@ function RenameReview({
     setInputError('');
   }, [history]);
   function permitsCommand(expected: RenameContinuation | null = attempt.current): boolean {
-    if (storageRefused.current || !renameContinuationPermits(expected)) {
+    if (storageRefused.current || !renameContinuationPermits(expected ?? retainedCommand.current)) {
       refuseStorage();
       return false;
     }
@@ -167,6 +168,7 @@ function RenameReview({
     busy.current = false;
     const saved = readRenameContinuationState();
     if (saved.kind === 'refused') refuseStorage();
+    retainedCommand.current = saved.kind === 'valid' ? saved.value : null;
     if (saved.kind === 'valid' && saved.value.submitted) {
       attempt.current = saved.value;
       remember('unknown');
@@ -176,6 +178,7 @@ function RenameReview({
       active = false;
       reads.current?.abort();
       attempt.current = null;
+      retainedCommand.current = null;
       currentTarget.current = null;
     };
     const pagehide = () => {
@@ -211,22 +214,28 @@ function RenameReview({
     (result: RenameRead, expected: RenameContinuation | null) => {
       const previous = currentTarget.current;
       const state = readRenameContinuationState();
-      if (storageRefused.current || state.kind === 'refused' ||
-          (state.kind === 'valid' && (!expected || !sameRenameContinuation(state.value, expected)))) {
+      if (
+        storageRefused.current ||
+        state.kind === 'refused' ||
+        (state.kind === 'valid' && (!expected || !sameRenameContinuation(state.value, expected)))
+      ) {
         refuseStorage();
         return;
       }
       const stored = state.kind === 'valid' ? state.value : null;
       const saved = stored && expected && sameRenameContinuation(stored, expected) ? stored : null;
-      const live =
-        !stored || (attempt.current && sameRenameContinuation(stored, attempt.current)) ? attempt.current : null;
+      const candidate = attempt.current ?? retainedCommand.current;
+      const live = !stored || (candidate && sameRenameContinuation(stored, candidate)) ? candidate : null;
       if (live?.submitted || stored?.submitted) remember('unknown');
       const recovered =
         history.current === 'unknown' && saved && !saved.submitted && !live?.submitted
           ? null
           : recoverRenameAttempt(result, saved, live, previous);
       // Later refusal or a replacement viewer cannot settle an earlier unknown send.
-      if (saved && !saved.submitted && !recovered && history.current !== 'unknown') clearRenameContinuation(saved);
+      if (saved && !saved.submitted && !recovered && history.current !== 'unknown') {
+        clearRenameContinuation(saved);
+        retainedCommand.current = null;
+      }
       attempt.current = recovered;
       currentTarget.current = result.kind === 'ready' ? result.target : null;
       setHandle(recovered?.operation.handle ?? '');
@@ -254,7 +263,13 @@ function RenameReview({
     const controller = new AbortController();
     reads.current = controller;
     const stored = readRenameContinuationState();
-    if (stored.kind === 'refused') refuseStorage();
+    if (
+      stored.kind === 'refused' ||
+      (stored.kind === 'valid' &&
+        retainedCommand.current &&
+        !sameRenameContinuation(stored.value, retainedCommand.current))
+    )
+      refuseStorage();
     const expected = stored.kind === 'valid' ? stored.value : null;
     try {
       const result = await source.readCurrent(controller.signal);
@@ -301,6 +316,7 @@ function RenameReview({
     const selected = attempt.current ?? createRenameAttempt(current.target, handle);
     if (!selected) return;
     attempt.current = selected;
+    retainedCommand.current = selected;
     busy.current = true;
     setPending(true);
     setMessage('');
@@ -308,19 +324,31 @@ function RenameReview({
     try {
       const controller = new AbortController();
       reads.current = controller;
-      const result = await source.run(selected, () => isCurrent() && renameContinuationPermits(selected), controller.signal);
+      const result = await source.run(
+        selected,
+        () => isCurrent() && renameContinuationPermits(selected),
+        controller.signal,
+      );
       if (!isCurrent() || !permitsCommand(selected)) return;
       setLocked(selected.submitted);
       if (selected.submitted) remember('unknown');
       if (result.kind === 'renamed') {
-        clearRenameContinuation(selected);
+        // Acknowledgement settles this command even if its submitted-marker write failed.
+        const stored = readRenameContinuationState();
+        if (stored.kind === 'valid' && sameRenameContinuation(stored.value, selected))
+          clearRenameContinuation(stored.value);
         attempt.current = null;
+        retainedCommand.current = null;
         remember('acknowledged');
         revoke?.();
         setRenamed(result.target.handle ?? '');
       } else if (result.kind === 'acknowledged') {
-        clearRenameContinuation(selected);
+        // Acknowledgement settles this command even if its submitted-marker write failed.
+        const stored = readRenameContinuationState();
+        if (stored.kind === 'valid' && sameRenameContinuation(stored.value, selected))
+          clearRenameContinuation(stored.value);
         attempt.current = null;
+        retainedCommand.current = null;
         receiveCurrent(result.current, selected);
         remember('acknowledged');
         setLocked(false);
@@ -537,6 +565,7 @@ function RenameReview({
                     setInputError('');
                     if (attempt.current) clearRenameContinuation(attempt.current);
                     attempt.current = null;
+                    retainedCommand.current = null;
                   }}
                 />
                 {inputError ? <FieldError id="rename-handle-error">{inputError}</FieldError> : null}

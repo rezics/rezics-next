@@ -305,28 +305,40 @@ test('a later conflicting handle preserves unknown work; a replacement draft can
 
 for (const phase of ['mount', 'read', 'submit', 'edit', 'step-up'] as const)
   test(`refused storage on ${phase} keeps recovery read-only and preserves the raw value`, async () => {
-    const key = 'rezics.account-rename.pending', raw = '{private-refused';
+    const key = 'rezics.account-rename.pending',
+      raw = '{private-refused';
     const selected = createRenameAttempt({ ...target, handle: 'private_before' }, 'private_after')!;
     if (phase === 'mount') window.sessionStorage.setItem(key, raw);
     else if (phase !== 'read') saveRenameContinuation(selected);
-    let runs = 0, navigations = 0, reads = 0, keys = 0;
+    let runs = 0,
+      navigations = 0,
+      reads = 0,
+      keys = 0;
     const originalRandom = crypto.getRandomValues;
-    crypto.getRandomValues = ((array) => { keys++; return originalRandom.call(crypto, array); }) as typeof crypto.getRandomValues;
+    crypto.getRandomValues = ((array) => {
+      keys++;
+      return originalRandom.call(crypto, array);
+    }) as typeof crypto.getRandomValues;
     try {
-      const host = await mount(source({
-        readCurrent: async () => {
-          reads++;
-          if (phase === 'read') window.sessionStorage.setItem(key, raw);
-          return ready();
-        },
-        run: async () => { runs++; return { kind: 'step-up' }; },
-        stepUp: async (_, owns) => {
-          await Promise.resolve();
-          window.sessionStorage.setItem(key, raw);
-          if (owns?.()) navigations++;
-          return false;
-        },
-      }));
+      const host = await mount(
+        source({
+          readCurrent: async () => {
+            reads++;
+            if (phase === 'read') window.sessionStorage.setItem(key, raw);
+            return ready();
+          },
+          run: async () => {
+            runs++;
+            return { kind: 'step-up' };
+          },
+          stepUp: async (_, owns) => {
+            await Promise.resolve();
+            window.sessionStorage.setItem(key, raw);
+            if (owns?.()) navigations++;
+            return false;
+          },
+        }),
+      );
       if (phase === 'submit' || phase === 'step-up') {
         await flush(() => host.querySelector<HTMLInputElement>('#rename-confirm')!.click());
         if (phase === 'submit') window.sessionStorage.setItem(key, raw);
@@ -349,5 +361,22 @@ for (const phase of ['mount', 'read', 'submit', 'edit', 'step-up'] as const)
       expect(host.textContent).not.toContain('private_');
       await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
       expect(window.sessionStorage.getItem(key)).toBe(raw);
-    } finally { crypto.getRandomValues = originalRandom; }
+    } finally {
+      crypto.getRandomValues = originalRandom;
+    }
   });
+
+test('an exact live unknown survives failed persistence and unavailable current advice; a replacement never becomes its retry', async () => {
+  const selected = createRenameAttempt({ ...target, handle: 'private_before' }, 'private_after')!;
+  selected.submitted = true;
+  saveRenameContinuation(selected);
+  let current = ready();
+  const host = await mount(source({ readCurrent: async () => current }));
+  const replacement = createRenameAttempt({ ...target, handle: 'private_before' }, 'different')!;
+  replacement.submitted = true;
+  window.sessionStorage.setItem('rezics.account-rename.pending', JSON.stringify(replacement));
+  await flush(() => host.querySelector<HTMLButtonElement>('button[type=button]:last-child')!.click());
+  expect(host.querySelector('form')).toBeNull();
+  expect(host.textContent).toContain(m.auth_rename_unavailable());
+  expect(readRenameContinuation()).toEqual(replacement);
+});

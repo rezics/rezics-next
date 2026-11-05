@@ -202,7 +202,8 @@ const storageKey = 'rezics.account-rename.pending';
 // Compatible with native descriptor/continuation callers (the native page uses 1024).
 export const RENAME_CONTINUATION_MAX_ID_CODE_UNITS = 4096;
 const continuationSkeleton = {
-  accountId: '', operationKey: '',
+  accountId: '',
+  operationKey: '',
   operation: { kind: 'rename', accountId: '', handle: '', expectedHandle: '' },
   submitted: false,
 };
@@ -213,7 +214,6 @@ export type RenameContinuationState =
   | { kind: 'absent' }
   | { kind: 'valid'; value: RenameContinuation }
   | { kind: 'refused' };
-
 
 export function parseRenameContinuation(value: unknown): RenameContinuation | null {
   if (!record(value) || Object.keys(value).sort().join(',') !== 'accountId,operation,operationKey,submitted')
@@ -249,8 +249,14 @@ export function parseRenameContinuation(value: unknown): RenameContinuation | nu
 }
 export function createRenameAttempt(target: RenameTarget, input: string): RenameAttempt | null {
   const handle = normalizeSignupHandle(input);
-  if (!target.accountId || target.accountId.length > RENAME_CONTINUATION_MAX_ID_CODE_UNITS ||
-      !currentHandle(target.handle) || !handle || handle === target.handle) return null;
+  if (
+    !target.accountId ||
+    target.accountId.length > RENAME_CONTINUATION_MAX_ID_CODE_UNITS ||
+    !currentHandle(target.handle) ||
+    !handle ||
+    handle === target.handle
+  )
+    return null;
   return {
     accountId: target.accountId,
     operationKey: createSignupKey(),
@@ -273,8 +279,12 @@ export function saveRenameContinuation(attempt: RenameContinuation): boolean {
   });
   if (!closed) return false;
   const retained = readRenameContinuationState();
-  if (retained.kind === 'refused' || (retained.kind === 'valid' &&
-      (!sameRenameContinuation(retained.value, closed) || (retained.value.submitted && !closed.submitted)))) return false;
+  if (
+    retained.kind === 'refused' ||
+    (retained.kind === 'valid' &&
+      (!sameRenameContinuation(retained.value, closed) || (retained.value.submitted && !closed.submitted)))
+  )
+    return false;
   const raw = JSON.stringify(closed);
   if (raw.length > RENAME_CONTINUATION_MAX_CODE_UNITS) return false;
   try {
@@ -312,8 +322,10 @@ export function readRenameContinuation(): RenameContinuation | null {
 /** An absent slot supports a live attempt after a failed write, never a refused slot. */
 export function renameContinuationPermits(expected: RenameContinuation | null): boolean {
   const state = readRenameContinuationState();
-  return state.kind === 'absent' ||
-    (state.kind === 'valid' && expected !== null && sameRenameContinuation(state.value, expected));
+  return (
+    state.kind === 'absent' ||
+    (state.kind === 'valid' && expected !== null && sameRenameContinuation(state.value, expected))
+  );
 }
 export function sameRenameContinuation(left: RenameContinuation, right: RenameContinuation): boolean {
   return (
@@ -327,8 +339,12 @@ export function clearRenameContinuation(expected?: RenameContinuation): void {
   // No caller can remove an unknown value or an unrelated command/marker.
   if (!expected) return;
   const state = readRenameContinuationState();
-  if (state.kind !== 'valid' || !sameRenameContinuation(state.value, expected) ||
-      state.value.submitted !== expected.submitted) return;
+  if (
+    state.kind !== 'valid' ||
+    !sameRenameContinuation(state.value, expected) ||
+    state.value.submitted !== expected.submitted
+  )
+    return;
   const pending = pendingManagementOperationStepUpState();
   if (pending.kind === 'pending' && pendingManagementOperationMatches(pending.value, expected))
     clearPendingManagementOperationStepUp();
@@ -395,6 +411,11 @@ export async function runRenameAttempt(
   const previouslySubmitted = attempt.submitted;
   attempt.submitted = true;
   saveRenameContinuation(attempt);
+  // A quota error preserves the live send; a refused/replaced slot never does.
+  if (!renameContinuationPermits(attempt)) {
+    attempt.submitted = previouslySubmitted;
+    return { kind: previouslySubmitted ? 'unknown' : 'unavailable' };
+  }
   const executed = await authPost<unknown>('/account-operations/execute', { ...body, reference: attempt.reference });
   if (!isCurrent() || !renameContinuationPermits(attempt)) return { kind: 'unknown' };
   if (!executed.ok) {

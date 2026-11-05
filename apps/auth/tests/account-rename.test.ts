@@ -149,8 +149,12 @@ const renameKey = 'rezics.account-rename.pending';
 const {
   RENAME_CONTINUATION_MAX_ID_CODE_UNITS: maxId,
   RENAME_CONTINUATION_MAX_CODE_UNITS: maxRaw,
-  createRenameAttempt, readRenameContinuationState, saveRenameContinuation,
-  clearRenameContinuation, nativeRenameSource, runRenameAttempt,
+  createRenameAttempt,
+  readRenameContinuationState,
+  saveRenameContinuation,
+  clearRenameContinuation,
+  nativeRenameSource,
+  runRenameAttempt,
 } = await import('../src/account-rename');
 
 test('the canonical writer round-trips maximum escaped IDs and ASCII handles at the raw UTF-16 boundary', () => {
@@ -175,11 +179,16 @@ test('excess raw text never reaches JSON.parse; all refused bytes survive writes
     storage.set(renameKey, raw);
     const parse = JSON.parse;
     let parses = 0;
-    JSON.parse = (...args: Parameters<typeof JSON.parse>) => { parses++; return parse(...args); };
+    JSON.parse = (...args: Parameters<typeof JSON.parse>) => {
+      parses++;
+      return parse(...args);
+    };
     try {
       expect(readRenameContinuationState()).toEqual({ kind: 'refused' });
       if (raw.length > maxRaw) expect(parses).toBe(0);
-    } finally { JSON.parse = parse; }
+    } finally {
+      JSON.parse = parse;
+    }
     expect(saveRenameContinuation(selected)).toBe(false);
     clearRenameContinuation();
     clearRenameContinuation(selected);
@@ -192,28 +201,42 @@ test('excess raw text never reaches JSON.parse; all refused bytes survive writes
 
 test('unreadable storage refuses dispatch; a write failure retains the exact live submitted command', async () => {
   const selected = createRenameAttempt({ accountId, handle: null }, 'after')!;
-  const slot = window.sessionStorage, get = slot.getItem, set = slot.setItem;
-  const ready = async () => ({ kind: 'ready' as const, target: { accountId, handle: null, clientId: RENAME_PROFILE.client_id, scopes: ['account:update'] } });
+  const slot = window.sessionStorage,
+    get = slot.getItem,
+    set = slot.setItem;
+  const ready = async () => ({
+    kind: 'ready' as const,
+    target: { accountId, handle: null, clientId: RENAME_PROFILE.client_id, scopes: ['account:update'] },
+  });
   let posts = 0;
   globalThis.fetch = (async () => {
     posts++;
-    return posts === 1 ? Response.json({ reference: 'secret', expiresAt: new Date(Date.now() + 60000).toISOString() }) : new Response(null, { status: 503 });
+    return posts === 1
+      ? Response.json({ reference: 'secret', expiresAt: new Date(Date.now() + 60000).toISOString() })
+      : new Response(null, { status: 503 });
   }) as typeof fetch;
   try {
-    slot.getItem = () => { throw Error('blocked'); };
+    slot.getItem = () => {
+      throw Error('blocked');
+    };
     expect(readRenameContinuationState()).toEqual({ kind: 'refused' });
     expect((await runRenameAttempt(selected, ready)).kind).toBe('unavailable');
     clearRenameContinuation(selected);
     expect(posts).toBe(0);
     slot.getItem = get;
-    slot.setItem = () => { throw Error('quota'); };
+    slot.setItem = () => {
+      throw Error('quota');
+    };
     expect((await runRenameAttempt(selected, ready)).kind).toBe('unknown');
     expect(selected.submitted).toBe(true);
     expect(readRenameContinuationState()).toEqual({ kind: 'absent' });
     expect(await nativeRenameSource.stepUp(selected)).toBe(false);
     expect((await runRenameAttempt(selected, ready)).kind).toBe('unknown');
     expect(posts).toBe(3); // exact replay reuses the live reference
-  } finally { slot.getItem = get; slot.setItem = set; }
+  } finally {
+    slot.getItem = get;
+    slot.setItem = set;
+  }
 });
 
 for (const phase of ['entry', 'read', 'approval'] as const)
@@ -228,7 +251,10 @@ for (const phase of ['entry', 'read', 'approval'] as const)
     }) as typeof fetch;
     await runRenameAttempt(selected, async () => {
       if (phase === 'read') storage.set(renameKey, '{');
-      return { kind: 'ready', target: { accountId, handle: null, clientId: RENAME_PROFILE.client_id, scopes: ['account:update'] } };
+      return {
+        kind: 'ready',
+        target: { accountId, handle: null, clientId: RENAME_PROFILE.client_id, scopes: ['account:update'] },
+      };
     });
     expect(posts).toBe(phase === 'approval' ? 1 : 0);
     expect(selected.submitted).toBe(false);

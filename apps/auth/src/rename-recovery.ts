@@ -23,7 +23,7 @@ export function recoverRenameAttempt(
   live: RenameAttempt | null,
   previous: RenameTarget | null,
 ): RenameAttempt | null {
-  const descriptor = live?.submitted && (!saved || sameRenameContinuation(live, saved)) ? live : saved ?? live;
+  const descriptor = live?.submitted && (!saved || sameRenameContinuation(live, saved)) ? live : (saved ?? live);
   if (current.kind !== 'ready' || !descriptor || descriptor.accountId !== current.target.accountId) return null;
   if (!descriptor.submitted && descriptor.operation.expectedHandle !== current.target.handle) return null;
   if (live && sameRenameContinuation(live, descriptor) && previous && sameRenameSession(previous, current.target))
