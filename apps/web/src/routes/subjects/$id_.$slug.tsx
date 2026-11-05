@@ -205,6 +205,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   ): {
     realm?: string | undefined;
     via?: string | undefined;
+    recipeReturn?: string | undefined;
     node?: string | undefined;
     streamProperty?: string | undefined;
     streamDirection?: 'forward' | 'inverse' | undefined;
@@ -235,6 +236,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     return {
       realm: validatePageRealm(search.realm),
       via: subjectVisitReturn(search.via, getLocale()),
+      ...(typeof search.recipeReturn === 'string' && search.recipeReturn.length <= 8192
+        ? { recipeReturn: search.recipeReturn }
+        : {}),
       ...(node ? { node } : {}),
       ...(typeof streamProperty === 'string' ? { streamProperty } : {}),
       ...(streamDirection === 'forward' || streamDirection === 'inverse' ? { streamDirection } : {}),
@@ -258,6 +262,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   loaderDeps: ({ search }) => ({
     realm: search.realm,
     via: search.via,
+    recipeReturn: search.recipeReturn,
     node: search.node,
     streamProperty: search.streamProperty,
     streamDirection: search.streamDirection,

@@ -1,5 +1,11 @@
 import { candidateContext } from '../../subject/candidates';
-import { recipeSourceHref, type RecipeVisit } from './recipe-current-visit';
+import {
+  recipeCurrentReturnHref,
+  recipeSourceHref,
+  type RecipeOccurrence,
+  type RecipeReturnFocus,
+  type RecipeVisit,
+} from './recipe-current-visit';
 import { RecipeVisitNotice } from './recipe-current-visit-view';
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { hasDocumentContent } from '@rezics/document';
@@ -36,6 +42,9 @@ import { CandidateReview, type CandidateTransport } from '../../subject/candidat
 import type { CandidateSlot } from '../../subject/candidates';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateValue } from '../pages/data';
+import { spoilerLevel } from '../pages/shared';
+import { SpoilerGate } from '../pages/values';
+import { defaultReader } from '../../subject/reader';
 import { newAuthoredField, authoredFieldValue, type AuthoredField } from './authored-field';
 import { catalogueEntries } from './catalogue-entry';
 import type { CreateFailure, CreateResult } from './create-subject';
@@ -98,6 +107,8 @@ type Row = {
   result?: ProposalResult | undefined;
   uncertain?: boolean;
   source?: NonNullable<Ready['public']>['subject']['statements'][string][number];
+  sourceFocus?: RecipeReturnFocus;
+  returnVisit?: string;
 };
 const newRow = (property: string, definition: RecipeProperty): Row => ({
   id: crypto.randomUUID(),
@@ -234,6 +245,7 @@ function RecipeEditorLive({
   const focusAddedLanguage = useSpecialistLanguageAddFocus();
   const [terms, setTerms] = useState([{ id: 0, language: locale, label: '', description: '', aliases: '' }]);
   const [rows, setRows] = useState<Row[]>([]);
+  const [latestCorrectionRow, setLatestCorrectionRow] = useState<string>();
   const [property, setProperty] = useState('');
   const [failure, setFailure] = useState<CreateFailure>();
   const [corrections, setCorrections] = useState<RecipeCorrection[]>([]);
@@ -316,7 +328,8 @@ function RecipeEditorLive({
     !!selectedOccurrence &&
     selectedOccurrence.holder === read.public.subject.id &&
     (read.public.subject.statements[selectedOccurrence.property] ?? []).some(
-      (source) => source.id === selectedOccurrence.statement,
+      (source) =>
+        source.id === selectedOccurrence.statement && spoilerLevel(source) <= defaultReader.spoilerLevel,
     );
   useLayoutEffect(() => {
     if (!occurrenceFocus.current.pending || !read) return;
@@ -735,6 +748,31 @@ function RecipeEditorLive({
         visit ?? { context },
       )
     : sourceHref;
+  const returnedRow = rows.find(
+    (row) => row.id === latestCorrectionRow && row.source && row.result?.ok && row.returnVisit,
+  );
+  const returnOccurrence: RecipeOccurrence | undefined =
+    returnedRow?.source && id
+      ? {
+          property: returnedRow.source.property.id,
+          statement: returnedRow.source.id,
+          holder: id,
+        }
+      : undefined;
+  const acknowledgedReturnHref = returnedRow?.returnVisit && !visit?.returnUnsupported
+    ? recipeCurrentReturnHref(
+        visit?.returnHref ?? currentHref,
+        {
+          recipe: id ?? read?.public?.subject.id ?? '',
+          context: visit?.context ?? context,
+          ...(visit?.realm ? { realm: visit.realm } : {}),
+          ...(returnOccurrence ? { occurrence: returnOccurrence } : {}),
+          focus: returnedRow.sourceFocus ?? 'pointer',
+          visit: returnedRow.returnVisit,
+        },
+        locale,
+      )
+    : undefined;
   const Workspace = id ? 'div' : 'form';
   return (
     <article className="mx-auto min-w-0 w-full max-w-3xl space-y-6 px-4 py-8 [overflow-wrap:anywhere] sm:px-6 [&_label]:min-w-0 [&_label]:max-w-full [&_label]:flex-wrap">
@@ -751,6 +789,24 @@ function RecipeEditorLive({
         <a className="inline-flex min-h-11 items-center underline" href={currentHref}>
           {m.recipe_visit_return({}, o)}
         </a>
+      )}
+      {returnedRow && (
+        <div className="space-y-2" data-recipe-current-return="">
+          {acknowledgedReturnHref ? (
+            <a className="inline-flex min-h-11 items-center underline" href={acknowledgedReturnHref}>
+              {m.recipe_visit_return({}, o)}
+            </a>
+          ) : (
+            <>
+              <p role="status">{m.recipe_return_unsupported({}, o)}</p>
+              {currentHref && (
+                <a className="inline-flex min-h-11 items-center underline" href={currentHref}>
+                  {m.candidate_view_public({}, o)}
+                </a>
+              )}
+            </>
+          )}
+        </div>
       )}
       {!id && (
         <a
@@ -990,24 +1046,21 @@ function RecipeEditorLive({
                     <ContentItemHeading id={`${termsId}-current-${field}`} className="font-semibold">
                       {name(field)}
                     </ContentItemHeading>
-                    {(read!.public!.subject.statements[field] ?? []).map((source) => (
-                      <div
-                        key={source.id}
-                        tabIndex={-1}
-                        data-recipe-current-statement={source.id}
-                        className="flex min-w-0 flex-col items-start gap-3 sm:flex-row"
-                      >
-                        <div data-content-item-slot="preview" className="min-w-0 break-words sm:flex-1">
-                          <CandidateValue snak={source} related={read!.public!.related} locale={locale} />
-                        </div>
-                        {read!.fields.includes(field) && (
-                          <Button
-                            data-content-item-slot="actions"
-                            type="button"
-                            variant="outline"
-                            className={recipeActionClassName}
-                            disabled={rows.some((row) => row.source?.id === source.id)}
-                            onClick={(event) => {
+                    {(read!.public!.subject.statements[field] ?? []).map((source) => {
+                      const gated = spoilerLevel(source) > defaultReader.spoilerLevel;
+                      const content = (
+                        <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
+                          <div data-content-item-slot="preview" className="min-w-0 break-words sm:flex-1">
+                            <CandidateValue snak={source} related={read!.public!.related} locale={locale} />
+                          </div>
+                          {read!.fields.includes(field) && (
+                            <Button
+                              data-content-item-slot="actions"
+                              type="button"
+                              variant="outline"
+                              className={recipeActionClassName}
+                              disabled={rows.some((row) => row.source?.id === source.id)}
+                              onClick={(event) => {
                               const current = fieldAdmission.current;
                               if (
                                 !lifetime.active() ||
@@ -1026,10 +1079,12 @@ function RecipeEditorLive({
                               const row = {
                                 id: crypto.randomUUID(),
                                 source: admittedSource,
+                                sourceFocus: event.detail === 0 ? ('keyboard' as const) : ('pointer' as const),
                                 definition: structuredClone(definition),
                                 statement: statementInput(admittedSource),
                               };
                               current.rows = [...current.rows, row];
+                              setLatestCorrectionRow(row.id);
                               orientSourceCorrection(
                                 row.id,
                                 admittedSource.id,
@@ -1039,12 +1094,30 @@ function RecipeEditorLive({
                               );
                               setRows(current.rows);
                             }}
-                          >
-                            {m.recipe_correct({}, o)}
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                            >
+                              {m.recipe_correct({}, o)}
+                            </Button>
+                          )}
+                        </div>
+                      );
+                      return (
+                        <div
+                          key={source.id}
+                          {...(!gated ? { tabIndex: -1, 'data-recipe-current-statement': source.id } : {})}
+                        >
+                          {gated ? (
+                            <SpoilerGate
+                              label={m.subject_spoiler_show({}, o)}
+                              hideLabel={m.subject_spoiler_hide({}, o)}
+                            >
+                              {content}
+                            </SpoilerGate>
+                          ) : (
+                            content
+                          )}
+                        </div>
+                      );
+                    })}
                   </ContentItemFrame>
                 </section>
               ))}
@@ -1066,9 +1139,20 @@ function RecipeEditorLive({
                 removalAllowed={() => !running.current && !pending.current && !locked && !created}
                 transport={transport}
                 refreshDefinitions={() => refreshCurrentDefinitions(readEpoch)}
-                onState={(patch) =>
-                  setRows((previous) => previous.map((entry) => (entry.id === row.id ? { ...entry, ...patch } : entry)))
-                }
+                onState={(patch) => {
+                  const returnVisit = patch.result?.ok ? crypto.randomUUID() : undefined;
+                  setRows((previous) =>
+                    previous.map((entry) =>
+                      entry.id === row.id
+                        ? {
+                            ...entry,
+                            ...patch,
+                            ...(returnVisit ? { returnVisit } : {}),
+                          }
+                        : entry,
+                    ),
+                  );
+                }}
                 {...(review ? { review } : {})}
                 onChange={(update) => {
                   if (!fieldEditAllowed(row.id)) return;

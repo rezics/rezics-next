@@ -2,8 +2,12 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { candidateContext } from '../src/subject/candidates';
 import {
+  parseRecipeCurrentReturn,
   parseRecipeVisit,
   recipeCorrectionHref,
+  recipeCurrentReturnHref,
+  recipeCurrentReturnState,
+  recipePublicSubjectHref,
   recipeSourceHref,
   recipeVisitSearch,
 } from '../src/features/catalogue/recipe-current-visit';
@@ -22,6 +26,7 @@ test('recipe entry addresses keep explicit Global, selected Realm and exact occu
   expect(parseRecipeVisit(new URL(href, 'https://site.test').search)).toEqual({ valid: true, visit });
   expect(recipeSourceHref(subject, 'en', visit)).toBe(`/en/subjects/${recipeId}/lentil-soup?realm=${realm}`);
   expect(recipeSourceHref(subject, 'en', { context })).toBeUndefined();
+  expect(recipePublicSubjectHref(subject, 'en', { context })).toBeUndefined();
   expect(recipeCorrectionHref(subject, 'en', { context: candidateContext })).toEndWith(`?context=${candidateContext}`);
   expect(parseRecipeVisit('')).toEqual({ valid: true, visit: { context: candidateContext } });
   for (const invalid of [
@@ -37,6 +42,47 @@ test('recipe entry addresses keep explicit Global, selected Realm and exact occu
   ])
     expect(parseRecipeVisit(invalid)).toEqual({ valid: false });
   expect(new TextEncoder().encode(recipeVisitSearch(visit)).byteLength).toBeLessThan(8192);
+});
+
+test('recipe public return is bounded to one prior visit and admits only the exact current disclosed occurrence', () => {
+  const previous = `/en/subjects/${recipeId}/lentil-soup#connections`;
+  const returnHref = recipePublicSubjectHref(subject, 'en', { context, realm }, previous)!;
+  expect(new URL(returnHref, 'https://site.test').searchParams.getAll('via')).toHaveLength(1);
+  const visit = { context, realm, returnHref };
+  const route = recipeCorrectionHref(subject, 'en', visit);
+  expect(new TextEncoder().encode(route.split('/recipe')[1]!).byteLength).toBeLessThan(8192);
+  expect(parseRecipeVisit(new URL(route, 'https://site.test').search, 'en', recipeId)).toEqual({ valid: true, visit });
+
+  const occurrence = { property: 'schema:recipeIngredient', statement, holder: recipeId };
+  const href = recipeCurrentReturnHref(returnHref, {
+    recipe: recipeId,
+    context,
+    realm,
+    occurrence,
+    focus: 'keyboard',
+    visit: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e23',
+  }, 'en')!;
+  const intent = parseRecipeCurrentReturn(href, 'en');
+  expect(intent.kind).toBe('valid');
+  if (intent.kind !== 'valid') throw new Error('Expected a public recipe return');
+  const observed = {
+    subject: { id: recipeId, type: 'schema:Recipe' },
+    context,
+    realm,
+    occurrences: [occurrence],
+  };
+  expect(recipeCurrentReturnState(intent.value, observed)).toBe('ready');
+  expect(recipeCurrentReturnState(intent.value, { ...observed, context: candidateContext })).toBe('changed');
+  expect(recipeCurrentReturnState(intent.value, { ...observed, realm: context })).toBe('changed');
+  expect(recipeCurrentReturnState(intent.value, { ...observed, occurrences: [] })).toBe('removed');
+  expect(
+    recipeCurrentReturnState(intent.value, { ...observed, subject: { id: recipeId, type: 'schema:Book' } }),
+  ).toBe('unsupported');
+  expect(
+    parseRecipeCurrentReturn(`${href}&recipeReturn=${new URL(href, 'https://site.test').searchParams.get('recipeReturn')}`, 'en'),
+  ).toEqual({ kind: 'invalid' });
+  expect(parseRecipeCurrentReturn(`/fr/subjects/${recipeId}/lentil-soup${new URL(href, 'https://site.test').search}`, 'en'))
+    .toEqual({ kind: 'invalid' });
 });
 
 test('native recipe admission sends the selected Context and rejects mismatched replies before offering editing', async () => {
@@ -120,7 +166,7 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
   const user = userEvent.setup({ document: window.document });
   const { RecipeEditor } = await import('../src/features/catalogue/recipe-editor-view');
   const { RecipeEditorEntry } = await import('../src/features/catalogue/recipe-editor-entry');
-  const { RecipeVisitNotice } = await import('../src/features/catalogue/recipe-current-visit-view');
+  const { RecipeCurrentVisitReturn, RecipeVisitNotice } = await import('../src/features/catalogue/recipe-current-visit-view');
   const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
   const { m } = await import('../src/paraglide/messages.js');
   const host = window.document.createElement('div');
@@ -158,6 +204,7 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
               id={recipeId}
               context={candidateContext}
               locale="en"
+              sourceHref={recipeSourceHref(subject, 'en', { context: candidateContext })}
               session="signed-in"
               transport={transport}
               search={async () => []}
@@ -208,6 +255,14 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
     expect(host.textContent).toContain(m.correction_proposed());
     expect(canvas.getByRole('textbox', { name: m.correction_value() }).value).toBe('250 g lentils');
     expect(host.querySelectorAll('[data-recipe-current-statement]')).toHaveLength(0);
+    const returnAddress = host.querySelector<HTMLAnchorElement>('[data-recipe-current-return] a')?.getAttribute('href');
+    expect(returnAddress).toBeTruthy();
+    const returned = parseRecipeCurrentReturn(returnAddress!, 'en');
+    expect(returned.kind).toBe('valid');
+    if (returned.kind === 'valid') {
+      expect(returned.value.occurrence).toEqual({ property, statement, holder: recipeId });
+      expect(returned.value.focus).toBe('pointer');
+    }
     const sent = fixture.calls.filter((call) => call.method === 'POST' && call.path.endsWith('/candidates'));
     expect(sent).toHaveLength(1);
     expect(sent[0]!.body).toMatchObject({
@@ -226,6 +281,33 @@ test('mounted recipe intent selects the exact duplicate occurrence and explains 
     });
     expect(host.textContent).toContain(m.recipe_visit_occurrence_missing());
     expect(window.document.activeElement?.tagName).toBe('H1');
+
+    if (returned.kind !== 'valid') throw new Error('Expected the acknowledged return intent');
+    const keyboardHref = recipeCurrentReturnHref(returnAddress, { ...returned.value, focus: 'keyboard' }, 'en')!;
+    const keyboard = parseRecipeCurrentReturn(keyboardHref, 'en');
+    if (keyboard.kind !== 'valid') throw new Error('Expected a keyboard return intent');
+    const renderReturn = (state: 'ready' | 'changed') => (
+      <>
+        <RecipeCurrentVisitReturn
+          locale="en"
+          address={keyboardHref}
+          intent={keyboard.value}
+          state={state}
+        />
+        <button type="button">Keep focus</button>
+        <article data-recipe-current-statement={statement} />
+      </>
+    );
+    await act(async () => root.render(renderReturn('ready')));
+    const admittedOccurrence = host.querySelector(`[data-recipe-current-statement="${statement}"]`)!;
+    expect(window.document.activeElement).toBe(admittedOccurrence);
+    await act(async () => {
+      window.document.body.dispatchEvent(new window.PointerEvent('pointerdown', { bubbles: true }));
+      host.querySelector<HTMLButtonElement>('button')!.focus();
+    });
+    await act(async () => root.render(renderReturn('changed')));
+    await act(async () => root.render(renderReturn('ready')));
+    expect(window.document.activeElement?.textContent).toBe('Keep focus');
   } finally {
     await act(async () => root.unmount());
     client.clear();

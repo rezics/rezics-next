@@ -606,12 +606,47 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
           )}
         </>
       );
+      const actions = (
+        <div className="flex min-w-0 flex-wrap items-start gap-x-3 [&_a]:ms-0">
+          <StatementCorrectionLink
+            id={read.subject.id}
+            title={pageText(read.subject.labels, options.locale).text}
+            statement={statement.id}
+            property={property}
+            datatype={statement.property.data_type}
+            locale={options.locale}
+          />
+          <ValueExplanationEntry
+            id={read.subject.id}
+            title={pageText(read.subject.labels, options.locale, original).text}
+            statement={statement.id}
+            property={property}
+            context={read.subject.context}
+            locale={options.locale}
+          />
+          {(() => {
+            const bound = bindDisclosedClassificationAssociation({
+              subjectId: read.subject.id,
+              contextId: read.subject.context,
+              statement,
+              related: read.related,
+            });
+            if ('kind' in bound) return null;
+            return <ClassificationAssessControl identity={bound} locale={options.locale} />;
+          })()}
+        </div>
+      );
+      const wholeRecipe = read.subject.type === 'schema:Recipe' && gated;
       return [
         <dd
           key={statement.id}
+          {...(read.subject.type === 'schema:Recipe' && !gated
+            ? { 'data-recipe-current-statement': statement.id }
+            : {})}
+          tabIndex={read.subject.type === 'schema:Recipe' ? -1 : undefined}
           className="min-w-0 space-y-2 [overflow-wrap:anywhere] sm:col-start-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-ring [&_a]:focus-visible:outline-offset-2"
         >
-          {gated ? (
+          {wholeRecipe ? (
             <SpoilerGate
               key={JSON.stringify([
                 read.subject.id,
@@ -627,38 +662,33 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
               hideLabel={options.labels.spoilerHide}
             >
               {body}
+              {actions}
             </SpoilerGate>
           ) : (
-            body
+            <>
+              {gated ? (
+                <SpoilerGate
+                  key={JSON.stringify([
+                    read.subject.id,
+                    read.subject.context,
+                    options.locale,
+                    reader.spoilerLevel,
+                    statement.id,
+                    statement.property,
+                    statement.value,
+                    statement.qualifiers,
+                  ])}
+                  label={options.messages.spoilerShow}
+                  hideLabel={options.labels.spoilerHide}
+                >
+                  {body}
+                </SpoilerGate>
+              ) : (
+                body
+              )}
+              {actions}
+            </>
           )}
-          <div className="flex min-w-0 flex-wrap items-start gap-x-3 [&_a]:ms-0">
-            <StatementCorrectionLink
-              id={read.subject.id}
-              title={pageText(read.subject.labels, options.locale).text}
-              statement={statement.id}
-              property={property}
-              datatype={statement.property.data_type}
-              locale={options.locale}
-            />
-            <ValueExplanationEntry
-              id={read.subject.id}
-              title={pageText(read.subject.labels, options.locale, original).text}
-              statement={statement.id}
-              property={property}
-              context={read.subject.context}
-              locale={options.locale}
-            />
-            {(() => {
-              const bound = bindDisclosedClassificationAssociation({
-                subjectId: read.subject.id,
-                contextId: read.subject.context,
-                statement,
-                related: read.related,
-              });
-              if ('kind' in bound) return null;
-              return <ClassificationAssessControl identity={bound} locale={options.locale} />;
-            })()}
-          </div>
         </dd>,
       ];
     });

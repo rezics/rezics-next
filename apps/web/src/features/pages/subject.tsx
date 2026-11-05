@@ -12,6 +12,13 @@ import type { PublicFigure } from './subject-ratings';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
+import { RecipeCurrentVisitReturn } from '../catalogue/recipe-current-visit-view';
+import {
+  parseRecipeCurrentReturn,
+  recipeCorrectionHref,
+  recipeCurrentReturnState,
+  recipePublicSubjectHref,
+} from '../catalogue/recipe-current-visit';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
@@ -765,6 +772,41 @@ export function SubjectPage({
         return `${url.pathname}${url.search}${url.hash}`;
       })()
     : '';
+  const recipeReturnInput = useMemo(
+    () => parseRecipeCurrentReturn(currentAddress, locale),
+    [currentAddress, locale],
+  );
+  const recipeReturn = recipeReturnInput.kind === 'valid' ? recipeReturnInput.value : undefined;
+  const recipeReturnState = recipeReturn
+    ? recipeCurrentReturnState(
+        recipeReturn,
+        read && !page.account
+          ? {
+              subject: { id: read.subject.id, type: read.subject.type },
+              context: page.context?.id ?? read.subject.context,
+              ...(realm ? { realm } : {}),
+              occurrences: Object.entries(read.subject.statements).flatMap(([property, statements]) =>
+                statements
+                  .filter((statement) => spoilerLevel(statement) <= (reader ?? defaultReader).spoilerLevel)
+                  .map((statement) => ({ property, statement: statement.id, holder: read.subject.id })),
+              ),
+            }
+          : undefined,
+      )
+    : undefined;
+  const recipeRestartHref =
+    read && !page.account && read.subject.type === 'schema:Recipe'
+      ? (() => {
+          const identity = { id: read.subject.id, label: subjectPageTitle(page, locale) };
+          const context = page.context?.id ?? read.subject.context;
+          const returnHref = recipePublicSubjectHref(identity, locale, { context, ...(realm ? { realm } : {}) }, visitReturn);
+          return recipeCorrectionHref(identity, locale, {
+            context,
+            ...(realm ? { realm } : {}),
+            ...(returnHref ? { returnHref } : {}),
+          });
+        })()
+      : undefined;
   const returnDescriptor = currentAddress
     ? gameClassificationReturn(new URL(currentAddress, 'https://rezics.invalid').hash)
     : undefined;
@@ -1002,6 +1044,7 @@ export function SubjectPage({
               locale={locale}
               context={page.context?.id ?? read.subject.context}
               realm={realm}
+              previous={visitReturn}
             />
           )}
           {isScreenType(read.subject.type) && (
@@ -1160,6 +1203,16 @@ export function SubjectPage({
                 root={PageRoot}
               />
             ) : null}
+            {overview && recipeReturnInput.kind !== 'absent' && (
+              <RecipeCurrentVisitReturn
+                locale={locale}
+                address={currentAddress}
+                {...(recipeReturn ? { intent: recipeReturn } : {})}
+                {...(recipeReturnState ? { state: recipeReturnState } : {})}
+                {...(recipeReturnInput.kind === 'invalid' ? { invalid: true } : {})}
+                {...(recipeRestartHref ? { restartHref: recipeRestartHref } : {})}
+              />
+            )}
             {read && !page.account && read.subject.type === 'schema:MusicAlbum' && (
               <AlbumCurrentVisitReturn
                 locale={locale}
