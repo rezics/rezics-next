@@ -273,8 +273,10 @@ test('verification departures preserve all reviewed drafts and original commands
     const selectedMovements = movements;
     await click(detachedNext);
     expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1);
-    viewerId = 'reviewer-b';
-    await render();
+    await act(async () => {
+      viewerId = 'reviewer-b';
+      rerenderReview();
+    });
     expect(page).toBe(selectedPage);
     expect(history).toEqual(selectedHistory);
     expect(movements).toBe(selectedMovements);
@@ -284,12 +286,14 @@ test('verification departures preserve all reviewed drafts and original commands
     await formSubmit();
     await formSubmit();
     caller = (input) => submit(input);
-    await render();
+    await act(async () => rerenderReview());
     const beforeReplacement = refreshes;
     await act(async () => calls[3]!.resolve({ state: 'accepted' }));
     expect(refreshes).toBe(beforeReplacement);
-    allowed = false;
-    await render();
+    await act(async () => {
+      allowed = false;
+      rerenderReview();
+    });
     expect(unload()).toBe(false);
     expect(popup()).toBeNull();
   } finally {
