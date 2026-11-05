@@ -11,6 +11,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -54,6 +55,7 @@ const kernel = createKernel({
   pool,
   access: realAccess.access,
   tokens,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
 });

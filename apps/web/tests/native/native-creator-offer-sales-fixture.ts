@@ -1,6 +1,5 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { Pool } from 'pg';
 import type { Page } from 'playwright';
 import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootstrap-governance.ts';
 import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
@@ -53,7 +52,6 @@ export async function startNativeCreatorOfferSalesFixture(): Promise<NativeCreat
   const stripe = startFakeStripe();
   let stack: NativeWebStack | undefined;
   let auth: NativeAuthStack | undefined;
-  let observer: Pool | undefined;
   try {
     stack = await startNativeWebStack({
       commerce: {
@@ -64,12 +62,6 @@ export async function startNativeCreatorOfferSalesFixture(): Promise<NativeCreat
       },
     });
     auth = await startAuthStack(stack);
-    observer = new Pool({
-      connectionString: stack.databaseUrl,
-      max: 1,
-      options: '-c statement_timeout=5000',
-    });
-    observer.on('error', () => {});
     const native = stack;
     const sessions = auth;
     for (const group of ['purchases', 'selling']) {
@@ -142,14 +134,7 @@ export async function startNativeCreatorOfferSalesFixture(): Promise<NativeCreat
         if (last.status === 200 && found) return found as Record<string, unknown>;
         await Bun.sleep(200);
       }
-      // Reylo SQL modules are registered only after the native stack starts.
-      const { projectSubjectOffer } = await import('../../../../services/kernel/src/commerce/subject-offer-work.ts');
-      await projectSubjectOffer(observer!, offerId, Date.now() + 5_000);
-      const projected = await kernel<{ offers: Record<string, unknown>[] }>(path);
-      const found = projected.body.offers?.find((row) => row.id === offerId);
-      if (projected.status !== 200 || !found)
-        throw new Error(`Subject directory did not list ${offerId}: ${JSON.stringify(last ?? projected)}`);
-      return found;
+      throw new Error(`Subject directory did not list ${offerId}: ${JSON.stringify(last)}`);
     }
     async function waitCreatorSale(orderId: string): Promise<Record<string, unknown>> {
       const deadline = Date.now() + 30_000;
@@ -212,12 +197,7 @@ export async function startNativeCreatorOfferSalesFixture(): Promise<NativeCreat
       waitCreatorSale,
       async close() {
         const errors: unknown[] = [];
-        for (const action of [
-          async () => sessions.stop(),
-          async () => observer?.end(),
-          async () => native.stop(),
-          async () => stripe.stop(),
-        ]) {
+        for (const action of [async () => sessions.stop(), async () => native.stop(), async () => stripe.stop()]) {
           try {
             await action();
           } catch (error) {
@@ -230,9 +210,6 @@ export async function startNativeCreatorOfferSalesFixture(): Promise<NativeCreat
   } catch (error) {
     try {
       await auth?.stop();
-    } catch {}
-    try {
-      await observer?.end();
     } catch {}
     try {
       await stack?.stop();

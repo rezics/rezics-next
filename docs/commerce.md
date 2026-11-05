@@ -118,4 +118,6 @@ an active row on the received page.
 
 Decision: the creator offer and historical sales walk binds a published Content edition through creator inventory,
 ordinary create/revise/delist, Subject discovery and a signed test-mode sale. Historical sale identities stay the
-captured order, offer and subject locators; later offer terms do not rewrite them.
+captured order, offer and subject locators; later offer terms do not rewrite them. Global board:create for that walk
+is installed through the local showcase helper before ordinary grants; Subject-offer listing waits for the durable
+worker rather than compiling kernel SQL from the Web test graph.

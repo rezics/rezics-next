@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
+import { bootstrapLocalShowcaseBoardCreation } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
@@ -43,6 +44,7 @@ beforeAll(async () => {
   seller = await f.identity(publisherScopes);
   other = await f.identity(publisherScopes);
   buyer = await f.identity(['order:create', 'order:read']);
+  await bootstrapLocalShowcaseBoardCreation(f.pool, f.steward.actor.accountId);
   const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
   for (const person of [seller, other]) {
     await grants.create(
@@ -50,7 +52,17 @@ beforeAll(async () => {
       {
         resource: { route: 0, id: GLOBAL_CONTEXT },
         subject: { kind: 'account', id: person.actor.accountId },
-        actions: ['offer:create', 'board:create', 'subject:create'],
+        actions: ['offer:create', 'subject:create'],
+        valid: '(,)',
+        key: entryKey(),
+      },
+    );
+    await grants.create(
+      { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30_000) },
+      {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: person.actor.accountId },
+        actions: ['board:create'],
         valid: '(,)',
         key: entryKey(),
       },
