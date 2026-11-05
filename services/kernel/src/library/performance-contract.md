@@ -59,6 +59,8 @@ permits refill, account-history scans, cap increases or a second native admissio
 
 # Library performance contract
 
+Decision: preserve the existing private editor and history journey while landing immutable schema-bounded metadata-journal SQL plans at their current DAO owner. The full create/edit/reopen/HTTP operation composition remains a continuation; the journal plans do not claim parent-command admission or execution evidence.
+
 This leaf owns Collection operation bounds and custody across Library consumers. The detailed SQL derivations and
 operation-specific growth suites remain in the [Library Cost sections](README.md#cost); this contract does not claim
 those suites have passed. Shared native bounds and evidence are owned by the [Kernel performance contract](../../performance-contract.md).
@@ -75,6 +77,14 @@ Library owns one immutable closed nine-axis operation set: `candidateKeys`, `nat
 `identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks` and `engineRequests`.
 Use overflow-safe sums, complete nested costs, explicit aliases and deterministic conflict resolution. Actual
 Progress/Continue and Content Feed callers consume these descriptors.
+
+`collection-history-bounds.ts` now binds each metadata-history SQL leaf to its exact stored operands and bounded
+projection. Capture composes curator reconciliation, transition append, the 129-row prune scan and partial-coverage
+update once; the snapshot projection reserves escaped schema maxima for both sides of all five metadata fields.
+First/next page, empty page, state and exact-revision leaves retain the 128-entry journal bound and 51-row page
+sentinel. These are DAO declarations only. The complete Collection command, private reopen, authorization/gate,
+authoritative-time, media-read and HTTP cost composition is recorded as a continuation at
+`.temp/continuation/collection-editor-plans.md`.
 
 ## Whole-query publication
 

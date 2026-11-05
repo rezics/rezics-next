@@ -1,19 +1,27 @@
 import type { PoolClient } from 'pg';
 import type { Collection, CollectionDraft, CollectionVisibility } from './collection-model.ts';
 import type { CoverSummary } from '../semantic/summaries.ts';
-import append from './collection-metadata-history-append.sql';
-import init from './collection-metadata-history-init.sql';
-import owner from './collection-metadata-history-owner.sql';
-import page from './collection-metadata-history-page.sql';
-import prune from './collection-metadata-history-prune.sql';
-import pruned from './collection-metadata-history-pruned.sql';
-import read from './collection-metadata-history-read.sql';
-import state from './collection-metadata-history-state.sql';
+import {
+  COLLECTION_METADATA_HISTORY_LIMIT,
+  COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE,
+  COLLECTION_METADATA_HISTORY_PAGE_SIZE,
+  collectionMetadataHistoryCapturePlan,
+  collectionMetadataHistoryEntryPlan,
+  collectionMetadataHistoryInitializePlan,
+  collectionMetadataHistoryPagePlan,
+  collectionMetadataHistoryStatePlan,
+  executeCollectionMetadataHistoryAppend,
+  executeCollectionMetadataHistoryEntry,
+  executeCollectionMetadataHistoryInitialize,
+  executeCollectionMetadataHistoryOwner,
+  executeCollectionMetadataHistoryPage,
+  executeCollectionMetadataHistoryPrune,
+  executeCollectionMetadataHistoryPruned,
+  executeCollectionMetadataHistoryState,
+} from './collection-history-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
-export const COLLECTION_METADATA_HISTORY_LIMIT = 128;
-export const COLLECTION_METADATA_HISTORY_PAGE_SIZE = 25;
-export const COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE = 50;
+export { COLLECTION_METADATA_HISTORY_LIMIT, COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE, COLLECTION_METADATA_HISTORY_PAGE_SIZE };
 
 export const COLLECTION_METADATA_FIELDS = [
   'title',
@@ -74,16 +82,6 @@ export type CollectionMetadataHistoryDetail = {
   actions: { review: true; reapply: false };
 };
 
-function snapshot(collection: Collection): CollectionMetadataSnapshot {
-  return {
-    title: collection.title,
-    description: collection.description,
-    visibility: collection.visibility,
-    presentationKind: collection.presentationKind,
-    coverMediaId: collection.coverMediaId,
-  };
-}
-
 export async function initializeCollectionMetadataHistory(
   client: Client,
   input: {
@@ -92,14 +90,9 @@ export async function initializeCollectionMetadataHistory(
     transactionId: string;
     time: string;
   },
+  plan = collectionMetadataHistoryInitializePlan(input),
 ): Promise<void> {
-  await init.run(client, {
-    route: input.route,
-    collection_id: input.collection.id,
-    curator_account_id: input.collection.curatorAccountId,
-    transaction_id: input.transactionId,
-    updated_at: input.time,
-  });
+  await executeCollectionMetadataHistoryInitialize(client, plan);
 }
 
 /** Capture one committed metadata transition; replay and no-op metadata commands add no row. */
@@ -112,52 +105,21 @@ export async function captureCollectionMetadataHistory(
     transactionId: string;
     time: string;
   },
+  plan = collectionMetadataHistoryCapturePlan(input),
 ): Promise<void> {
-  const before = snapshot(input.before);
-  const after = snapshot(input.after);
-  const changedFields = COLLECTION_METADATA_FIELDS.filter((field) => !Object.is(before[field], after[field]));
-  if (changedFields.length === 0) return;
-
   const curatorAccountId = input.after.curatorAccountId;
   if (curatorAccountId === null) throw new Error('A metadata write needs a current Collection curator');
-  await owner.run(client, {
-    route: input.route,
-    collection_id: input.after.id,
-    curator_account_id: curatorAccountId,
-    revision: input.after.revision,
-    transaction_id: input.transactionId,
-    updated_at: input.time,
-  });
-  const rows = await append.run(client, {
-    route: input.route,
-    collection_id: input.after.id,
-    curator_account_id: curatorAccountId,
-    revision: input.after.revision,
-    transaction_id: input.transactionId,
-    recorded_at: input.time,
-    changed_fields: changedFields,
-    before_title: before.title,
-    after_title: after.title,
-    before_description: before.description,
-    after_description: after.description,
-    before_visibility: before.visibility,
-    after_visibility: after.visibility,
-    before_presentation_kind: before.presentationKind,
-    after_presentation_kind: after.presentationKind,
-    before_cover_media_id: before.coverMediaId,
-    after_cover_media_id: after.coverMediaId,
-  });
+  if (plan.changedFields.length === 0) return;
+  const { owner: ownerPlan, append: appendPlan, prune: prunePlan, pruned: prunedPlan } = plan.leaves;
+  if (!ownerPlan || !appendPlan || !prunePlan || !prunedPlan)
+    throw new Error('Metadata transition plan is incomplete');
+  await executeCollectionMetadataHistoryOwner(client, ownerPlan);
+  const rows = await executeCollectionMetadataHistoryAppend(client, appendPlan);
   if (rows.length !== 1) throw new Error('Collection metadata history did not record one native change');
-  const removed = await prune.run(client, { route: input.route, collection_id: input.after.id });
+  const removed = await executeCollectionMetadataHistoryPrune(client, prunePlan);
   if (removed.length > 1) throw new Error('Collection metadata history exceeded its one-row prune bound');
   if (removed.length === 1)
-    await pruned.run(client, {
-      route: input.route,
-      collection_id: input.after.id,
-      curator_account_id: curatorAccountId,
-      transaction_id: input.transactionId,
-      updated_at: input.time,
-    });
+    await executeCollectionMetadataHistoryPruned(client, prunedPlan);
 }
 
 export type CollectionMetadataHistoryState = {
@@ -169,12 +131,9 @@ export type CollectionMetadataHistoryState = {
 export async function readCollectionMetadataHistoryState(
   client: Client,
   input: { route: number; collectionId: string; curatorAccountId: string },
+  plan = collectionMetadataHistoryStatePlan(input),
 ): Promise<CollectionMetadataHistoryState> {
-  const row = await state.run(client, {
-    route: input.route,
-    collection_id: input.collectionId,
-    curator_account_id: input.curatorAccountId,
-  });
+  const row = await executeCollectionMetadataHistoryState(client, plan);
   if (!row) return { coverage: 'unknown', knownFromRevision: null, prunedBeforeRevision: null };
   if (row.coverage !== 'complete' && row.coverage !== 'partial' && row.coverage !== 'unknown')
     throw new Error('Invalid Collection metadata history coverage');
@@ -194,20 +153,15 @@ export async function pageCollectionMetadataHistory(
     afterRevision: number | null;
     limit: number;
   },
-) {
-  if (
-    !Number.isSafeInteger(input.limit) ||
-    input.limit < 1 ||
-    input.limit > COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE + 1
-  )
-    throw new RangeError('Invalid Collection metadata history page size');
-  return page.run(client, {
+  plan = collectionMetadataHistoryPagePlan({
     route: input.route,
-    collection_id: input.collectionId,
-    curator_account_id: input.curatorAccountId,
-    after_revision: input.afterRevision,
-    page_limit: input.limit,
-  });
+    collectionId: input.collectionId,
+    curatorAccountId: input.curatorAccountId,
+    afterRevision: input.afterRevision,
+    limit: input.limit,
+  }),
+) {
+  return executeCollectionMetadataHistoryPage(client, plan);
 }
 
 export function collectionMetadataHistoryFields(value: readonly (string | null)[]): CollectionMetadataField[] {
@@ -224,13 +178,9 @@ export function collectionMetadataHistoryFields(value: readonly (string | null)[
 export async function readCollectionMetadataHistoryEntry(
   client: Client,
   input: { route: number; collectionId: string; curatorAccountId: string; revision: number },
+  plan = collectionMetadataHistoryEntryPlan(input),
 ) {
-  return await read.run(client, {
-    route: input.route,
-    collection_id: input.collectionId,
-    curator_account_id: input.curatorAccountId,
-    revision: input.revision,
-  });
+  return await executeCollectionMetadataHistoryEntry(client, plan);
 }
 
 export function collectionMetadataHistoryEntry(row: {
