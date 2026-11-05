@@ -3267,10 +3267,16 @@ physical custody or infer destination erasure.
   current account/Collection/Core owner, capture and commit receipt; prearm input/group/bridge/directory locks;
   derived references; and the actual command event/native receipt/COMMIT or ROLLBACK. No receiving SQL is
   dispatched by this producer; the receiving owner must price its own reached bodies.
-- Bound: `identity-native-planner-statements.ts` lists literal SQL identities and per-operation bounds;
-  `libraryIdentityFootprint` in `identity-native-planner-work.ts` recognizes only those exact statements and
-  the imported literal framework/job/mapping statements. Every declaration contains `candidateKeys`,
-  `nativeRows`, `identityMetadataRows`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `emptySeeks`.
+- Bound: `identity-native-bounds.ts` owns one immutable set of Library SQL, Source-basis and selected-plan
+  declarations. `identity-native-planner-statements.ts` retains the exact planner SQL text;
+  `libraryIdentityFootprint` dispatches from the same declarations that original composition reads. Each internal
+  term is a complete nine-axis `@rezics/bounds` value (`candidateKeys`, `nativeRows`, `identityMetadataRows`,
+  `emptySeeks`, `nativePoints`, `witnessKeys`, `statements`, `bytes`, `engineRequests`); SQL terms explicitly set
+  `engineRequests=0`, then adapters project the existing eight-axis native receipt. A point term is exact SQL
+  UTF-8 bytes plus JSON-serialized original bind bytes plus its closed schema/native projection bound. Repeats and
+  page ranges use `sumBounds`, `repeatBound` and `withinCeiling`; overflow and unrecognized SQL remain refused.
+  Native Source basis declarations take each imported query's own `params`, so arity and serialized bind bytes
+  track the actual query owner.
   A range admits LIMIT plus one indexed EOF slot, not result count. Effects page: `n` candidate keys,
   `n+1` native rows, zero identity metadata, one native point, zero witnesses, one statement,
   SQL+serialized binds+`512n` bytes, one empty seek. The native page projects only the producer's
@@ -3296,24 +3302,31 @@ physical custody or infer destination erasure.
   The input query pays for a third rejection sentinel and refuses more than two generations before
   original seeks. One input reads <=100 originals; two read <=50 each. The minimum full-page cutoff,
   ordering, deduplication, original-generation filter and immutable transform remain intact. No whole
-  intent/release/undoJob/verificationReceipt is projected, capped or truncated, and no saved-job size
-  query is needed by this Library helper. Its ordinary store counterpart is unaffected. Native metadata
+  intent/release/undoJob/verificationReceipt is projected, capped or truncated. This plan uses the bounded
+  input-generation transform rather than the full saved-job result. The retained `savedJob` compatibility literal
+  requires `NativeCollectionWork.resultByteBound` for the same job/epoch on the same work object and adds that paid
+  result bound to its SQL, original binds and row framing; missing or overflowing evidence stays unavailable. A
+  selected prepaid path also refuses the full Core partition projection because it has no same-snapshot size
+  evidence. The ordinary store counterpart is unaffected. Native metadata
   now reads only partition state/epoch/position, paying its fixed point rather than projecting unused
   node or move addresses. Native metadata,
   raw and custody descendants now execute on the exact supplied ledger, including their own checkouts,
   explicit native statement reservations and terminal controls. Their SQL/projection bounds remain in
   `collection-source-native.ts` and `native-source-custody.ts`, including capture/receipt/retention. Custody reserves point-miss slots even for a positive outer result;
   native Core ownership/publication/proof controls also declare their identity-metadata row.
-- Growth check: `test/library/identity-scope-effects.test.ts` supplies focused native outcome cases for all
-  six drivers, bounded positive pages, omitted enrollment/rollback, genuine exhaustive zero, late first apply,
-  writer/rekey/prearm changes, repeat and failure accounting. These tests are authored, not executed in this
-  source delivery. No new growth harness or measured native bound is claimed; integrated native/growth
-  acceptance remains required.
+- Growth check: `test/library/identity-scope-effects.test.ts` covers all six drivers, bounded positive pages,
+  interrupted-plan resume, final writer-fence refusal, omitted enrollment/rollback, genuine exhaustive zero,
+  late first apply, rekey/prearm changes, repeat and failure accounting. `identity-original-work.test.ts` pins
+  same-work saved-job result-byte evidence. Focused worker checks are implementation checks, not native receiving
+  passes; controller still owns integrated native receiving, the five Search receiving checks, gates and retries.
 
 The real `NativeCollectionWork` reservation is cumulative. Its original ID, Pool, deadline and command resources
 are retained; dispatched misses, SQL failures, repeated calls, rollbacks and settlement cannot refill native rows.
 Command cleanup is reserved before BEGIN. Custody holds distinct COMMIT and ROLLBACK slots; a failed COMMIT
-still dispatches the separately paid ROLLBACK. `advancePrepaid`,
+still dispatches the separately paid ROLLBACK. Standalone planning and page reads retain their independent
+admission; standalone discovery remains sixteen route-leading indexed seeks and page limits remain 1..100.
+Selected Source maintenance consumes its existing original and irreversible schedule, with no discovery or planner
+steps and one effect page at limit 1. `advancePrepaid`,
 `advanceLibraryIdentityNativePlanWithWork`, `readLibraryScopeEffectsPageWithWork` and
 `nextLibraryIdentityNativePlanWithWork` use the existing live Source Library partition in place. The prepaid page
 input omits allowance and retains the source-discriminant generic seal/page union. Library rechecks the exact
@@ -3406,33 +3419,22 @@ has not been established by source presence or typing.
 
 ### Identity retirement dependency retained
 
-This live-business protocol does not implement `identity-scope-effects.ts`. Its actual `readLibraryScopeEffectsPage`
-currently returns unavailable and `verifyLibraryScopeEffectsSeal` returns false: that is pending, never an empty
-successful page, replacement receiving receipt, effect seal or discharged Source. The original owner must first
-complete supported custody reconciliation and receive a separate admitted continuation. Its unchanged obligation
-is the actual native admitted original job/source/scope, exhaustive six-driver expected effects and a current seal;
-verification must use the SAME Source home with no foreign IO, with actual receiving/custody placement and every
-intermediate-page and final sealed-zero verification plus durable writer/replay/restore fences.
+Library now exposes the native six-driver planner and current sealed-effect pages. Planning stays pending until the
+raw drivers, retained OLD references, mapping claims, generation/frontier updates and final locked writer/capture/job
+fence all complete in the native transaction that records `library-private-follow-counts` and the seal. The Source
+consumer follows the exact effect-key/disposition cursor until an explicit short page proves exhaustion, then
+rechecks the same current seal. Missing, changed or unsealed evidence remains pending or unavailable; it cannot
+produce an empty completion. Failed reads preserve the previously committed Source result and receipt.
 
 The positive retirement chain still requires the installed original SDK/Work same-configured-pool writer locks
 through Source commit, original durable Source custody/terminal transfer and current source/writer/restore fences,
 actual receiving commit/copy guards, current Account reversal settlement and every repeated same-home native
 verification, exhaustive Library pages/current same-home seal, then History recording and independent final
-maintenance/root/all-copy closure. Existing adapters and receiving bodies cover their own branches only. Missing
-Library effects/seal, historical SDK recording/coverage, original Source terminal-transfer or external restore
-proof retain their own exact pending branch; neither this transition nor provisional helper types discharge them.
-
-The original Library owner still owes final exact page/verifier/nested-current-plan SQL, native receiving/fence
-placement and per-axis rows/points/statements/bytes/engine bounds, including failed dispatches, repeated native
-verification and its local ledger interaction. The held Semantic consumer may reconcile its exact footprint/final
-SAME frame only after that original producer and its required live Source continuation are actually integrated.
-That Source continuation is stopped with a paid interface/cost body awaiting Accounts review; it is not an
-installed dependency. Accounts' complete positive History preflight waits for those actual bodies. The interrupted
-Library producer and Members remain stopped under operations recovery, without a supported custody reconciliation
-release or product retry authority. Semantic's stopped Source producer and held consumer are unchanged.
-The old History aggregate funds only its documented body; directory envelope,
-all child caps and verification remain independent. No new aggregate total, funding or runtime pass follows from a
-local ledger, ACK or this live-copy result. Foreign SDK/History/Source retirement is not implemented here.
+maintenance/root/all-copy closure. Those owners retain their own exact pending branches; this Library planner does
+not discharge historical SDK recording, terminal transfer, external restore proof or final root closure. The
+focused identity tests exercise this implementation's native contract; controller integration still must run the
+deferred native receiving journey, five unchanged Search receiving checks, full Kernel check, gates and retries.
+No integration or publication pass is claimed here, and the acceptance remains failing until those owners report it.
 
 ### Cost: foreign listing copy and negative cleanup
 

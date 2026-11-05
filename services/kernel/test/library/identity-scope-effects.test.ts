@@ -294,16 +294,27 @@ test('default native plans expose all six drivers with bounded positive pages an
   const seen = new Set<string>();
   for (const id of [curated, privateId, explicit]) {
     const key = { job, sourceIdentity: await identity(id), scope: 'collection-source' };
+    if (id === curated) {
+      const interrupted = await planner.advance({ ...key, ...budget(), limit: 1 });
+      charged(interrupted.work);
+      expect(interrupted.status).toBe('pending');
+    }
     await seal(key);
     const expected = await effects(key);
     expect(expected.rows.length).toBeGreaterThan(0);
     expect(await verify(key, expected.seal)).toBe(true);
     const operations = (
       await native.pool.query(
-        'SELECT operation FROM library.identity_scope_effect WHERE route=$1 AND collection_id=$2',
+        'SELECT effect_key,disposition,operation FROM library.identity_scope_effect WHERE route=$1 AND collection_id=$2',
         [route, id],
       )
     ).rows;
+    if (id === curated) {
+      const stored = operations.map(({ effect_key, disposition }) => `${effect_key}:${disposition}`).sort();
+      const enrolled = expected.rows.map(({ effectKey, disposition }) => `${effectKey}:${disposition}`).sort();
+      expect(stored).toEqual(enrolled);
+      expect(new Set(stored).size).toBe(stored.length);
+    }
     for (const { operation } of operations) seen.add(operation.raw.driver);
     for (const driver of new Set(operations.map(({ operation }) => operation.raw.driver))) {
       expect(
@@ -362,6 +373,73 @@ test('omitting an expected native effect rolls back enrollment and cannot seal, 
   const current = await effects(key);
   expect(await verify(key, current.seal)).toBe(true);
   expect(await verify(key, { ...current.seal, frontier: { after: [], segment: 0 } })).toBe(false);
+}, 600_000);
+
+test('a writer change at the final seal fence rolls back the seal and preserves Collection membership', async () => {
+  const id = await collection('curated');
+  await member(id);
+  const key = { job, sourceIdentity: await identity(id), scope: 'collection-source' };
+  const before = (
+    await native.pool.query(
+      'SELECT subject_id::text,ordinal_key,note FROM library.collection_member WHERE route=$1 AND collection_id=$2 ORDER BY ordinal_key,member_id',
+      [route, id],
+    )
+  ).rows;
+  const interrupted = await planner.advance({ ...key, ...budget(), limit: 1 });
+  charged(interrupted.work);
+  expect(interrupted.status).toBe('pending');
+
+  const suffix = randomUUID().replaceAll('-', ''),
+    functionName = `library.bump_scope_fence_${suffix}`,
+    triggerName = `bump_scope_fence_${suffix}`;
+  await native.pool.query(`CREATE FUNCTION ${functionName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW.route=${route} AND NEW.collection_id='${id}'::uuid AND NEW.driver='done' THEN
+      UPDATE library.native_source_fence SET generation=generation+1
+      WHERE route=${route} AND kind='account' AND owner_id='${owner.actor.accountId}'::uuid;
+    END IF;
+    RETURN NEW;
+  END; $$`);
+  await native.pool.query(
+    `CREATE TRIGGER ${triggerName} BEFORE UPDATE ON library.identity_scope_plan FOR EACH ROW EXECUTE FUNCTION ${functionName}()`,
+  );
+  try {
+    let failure: unknown;
+    try {
+      const result = await planner.advance({ ...key, ...budget(), limit: 1 });
+      charged(result.work);
+    } catch (error) {
+      failure = error;
+      charged((error as Error & { work: WorkReceipt }).work);
+    }
+    expect(failure).toMatchObject({ code: 'identity_effect_stale' });
+    const plan = (
+      await native.pool.query(
+        'SELECT state,driver FROM library.identity_scope_plan WHERE route=$1 AND collection_id=$2',
+        [route, id],
+      )
+    ).rows[0];
+    expect(plan).toMatchObject({ state: 'building' });
+    expect(plan.driver).not.toBe('done');
+    expect(
+      (
+        await native.pool.query('SELECT 1 FROM library.identity_scope_seal WHERE route=$1 AND collection_id=$2', [
+          route,
+          id,
+        ])
+      ).rows,
+    ).toHaveLength(0);
+    expect(
+      (
+        await native.pool.query(
+          'SELECT subject_id::text,ordinal_key,note FROM library.collection_member WHERE route=$1 AND collection_id=$2 ORDER BY ordinal_key,member_id',
+          [route, id],
+        )
+      ).rows,
+    ).toEqual(before);
+  } finally {
+    await native.pool.query(`DROP TRIGGER ${triggerName} ON library.identity_scope_plan`);
+    await native.pool.query(`DROP FUNCTION ${functionName}()`);
+  }
 }, 600_000);
 
 test('a genuine exhaustive zero seals, while late first apply, writer fence, rekey and prearm writer change cannot verify it', async () => {

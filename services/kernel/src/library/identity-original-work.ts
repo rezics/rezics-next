@@ -1,3 +1,4 @@
+import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './collection-source.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 import { libraryIdentityFootprint } from './identity-native-planner-work.ts';
@@ -12,16 +13,6 @@ import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
 
 /** Producer composition only. A component is neither an allowance nor an original grant. */
 export type LibraryIdentityStatementOwner = 'planner' | 'native-collection' | 'native-custody';
-const axes = [
-  'candidateKeys',
-  'nativeRows',
-  'identityMetadataRows',
-  'nativePoints',
-  'witnessKeys',
-  'statements',
-  'bytes',
-  'emptySeeks',
-] as const satisfies readonly (keyof WorkDimensions)[];
 const component: unique symbol = Symbol('Library original work component');
 export type LibraryIdentityOriginalComponent = Readonly<{
   [component]: true;
@@ -29,19 +20,55 @@ export type LibraryIdentityOriginalComponent = Readonly<{
   engineRequests: 0;
 }>;
 const components = new WeakSet<LibraryIdentityOriginalComponent>();
+const componentBounds = new WeakMap<LibraryIdentityOriginalComponent, Bound>();
 
-function declared(work: WorkDimensions): LibraryIdentityOriginalComponent {
-  if (
-    Reflect.ownKeys(work).length !== axes.length ||
-    axes.some((axis) => !Object.hasOwn(work, axis) || !Number.isSafeInteger(work[axis]) || work[axis] < 0)
-  )
-    throw new TypeError('Invalid Library native declaration');
+function asBound(work: WorkDimensions): Bound {
+  if (Reflect.ownKeys(work).length !== 8) throw new TypeError('Invalid Library native declaration');
+  return declareBound({
+    candidateKeys: work.candidateKeys,
+    nativeRows: work.nativeRows,
+    identityMetadataRows: work.identityMetadataRows,
+    emptySeeks: work.emptySeeks,
+    nativePoints: work.nativePoints,
+    witnessKeys: work.witnessKeys,
+    statements: work.statements,
+    bytes: work.bytes,
+    engineRequests: 0,
+  });
+}
+function asWork(bound: Bound): WorkDimensions {
+  if (bound.engineRequests !== 0) throw new TypeError('Library SQL cannot declare engine requests');
+  return Object.freeze({
+    candidateKeys: bound.candidateKeys,
+    nativeRows: bound.nativeRows,
+    identityMetadataRows: bound.identityMetadataRows,
+    emptySeeks: bound.emptySeeks,
+    nativePoints: bound.nativePoints,
+    witnessKeys: bound.witnessKeys,
+    statements: bound.statements,
+    bytes: bound.bytes,
+  });
+}
+function declared(bound: Bound): LibraryIdentityOriginalComponent {
+  const value = declareBound({
+    candidateKeys: bound.candidateKeys,
+    nativeRows: bound.nativeRows,
+    identityMetadataRows: bound.identityMetadataRows,
+    emptySeeks: bound.emptySeeks,
+    nativePoints: bound.nativePoints,
+    witnessKeys: bound.witnessKeys,
+    statements: bound.statements,
+    bytes: bound.bytes,
+    engineRequests: bound.engineRequests,
+  });
+  if (value.engineRequests !== 0) throw new TypeError('Library SQL cannot declare engine requests');
   const result = Object.freeze({
     [component]: true as const,
-    work: Object.freeze({ ...work }),
+    work: asWork(value),
     engineRequests: 0 as const,
   });
   components.add(result);
+  componentBounds.set(result, value);
   return result;
 }
 
@@ -63,20 +90,21 @@ export function declareLibraryIdentityStatement(
         : owner === 'native-custody'
           ? nativeSourceCustodyFootprint(sql, values)
           : undefined;
-  return bound ? declared(bound) : undefined;
+  return bound ? declared(asBound(bound)) : undefined;
 }
 
 /** Pool checkout itself has no SQL, result projection, candidate or witness. */
-export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared({
+export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared(declareBound({
   candidateKeys: 0,
   nativeRows: 0,
   identityMetadataRows: 0,
+  emptySeeks: 0,
   nativePoints: 1,
   witnessKeys: 0,
   statements: 0,
   bytes: 0,
-  emptySeeks: 0,
-});
+  engineRequests: 0,
+}));
 
 /** Inclusive component algebra. A caller cannot splice an arbitrary vector into it.
  * Repeats (including rejected SQL and failed COMMIT followed by ROLLBACK) are separate
@@ -86,26 +114,13 @@ export const LIBRARY_IDENTITY_CHECKOUT_WORK = declared({
 export function assembleLibraryIdentityOriginalComponents(
   terms: readonly Readonly<{ component: LibraryIdentityOriginalComponent; multiplicity: number }>[],
 ): LibraryIdentityOriginalComponent {
-  const work: Record<keyof WorkDimensions, number> = {
-    candidateKeys: 0,
-    nativeRows: 0,
-    identityMetadataRows: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-    emptySeeks: 0,
-  };
-  for (const term of terms) {
+  const parts = terms.map((term) => {
     if (!components.has(term.component)) throw new TypeError('Foreign Library native declaration');
     if (!Number.isSafeInteger(term.multiplicity) || term.multiplicity < 0)
       throw new TypeError('Unbounded Library invocation multiplicity');
-    for (const axis of axes) {
-      work[axis] += term.component.work[axis] * term.multiplicity;
-      if (!Number.isSafeInteger(work[axis])) throw new RangeError('Library original work overflow');
-    }
-  }
-  return declared(work);
+    return repeatBound(componentBounds.get(term.component)!, term.multiplicity);
+  });
+  return declared(sumBounds(...parts));
 }
 
 /** Source owns invocation scheduling. These are distinct calls even when they run the
@@ -166,14 +181,14 @@ export const LIBRARY_IDENTITY_SELECTED_MISSING_OPERANDS: readonly LibraryIdentit
 export function assembleLibraryIdentitySelectedBodies() {
   const statement = (name: keyof typeof LIBRARY_IDENTITY_SELECTED_STATEMENTS) => {
     const { sql, values } = LIBRARY_IDENTITY_SELECTED_STATEMENTS[name];
-    const bound = libraryIdentitySelectedFootprint(sql, values);
-    const value = bound && declared(bound);
+    const footprint = libraryIdentitySelectedFootprint(sql, values);
+    const value = footprint && declared(asBound(footprint));
     if (!value) throw new TypeError(`Unknown Library selected ${name} declaration`);
     return value;
   };
   const basis = assembleLibraryIdentityOriginalComponents(
     declareNativeIdentitySourceBasisStatements().map((value) => ({
-      component: declared(value.work),
+      component: declared(asBound(value.work)),
       multiplicity: 1,
     })),
   );

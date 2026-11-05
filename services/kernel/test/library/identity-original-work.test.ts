@@ -14,6 +14,8 @@ import {
 } from '../../src/library/identity-scope-effects.ts';
 import {
   bindLibraryIdentityPrepaidWork,
+  bindLibraryIdentityDeadline,
+  libraryIdentityFootprint,
   withLibraryIdentityWork,
 } from '../../src/library/identity-native-planner-work.ts';
 import {
@@ -137,6 +139,43 @@ test('unknown statements, unadmitted job projections, invalid multiplicities and
     statements: 34,
     emptySeeks: 70,
   });
+});
+
+test('saved-job bytes require same-work size evidence and reject overflow instead of using a fixed estimate', () => {
+  const makeWork = (reservationId: string) => {
+    const deadline = Date.now() + 5000;
+    return bindLibraryIdentityDeadline(
+      new NativeCollectionWork(
+        {
+          reservationId,
+          remaining: {
+            candidateKeys: 1,
+            nativeRows: 1,
+            identityMetadataRows: 1,
+            emptySeeks: 1,
+            nativePoints: 1,
+            witnessKeys: 0,
+            statements: 1,
+            bytes: 1_000_000,
+          },
+        },
+        deadline,
+      ),
+      deadline,
+    );
+  };
+  const values = [0, id, '1'];
+  const key = `library-job:${id}:1`;
+  const work = makeWork('saved-job-sized');
+  work.admitResultBytes(key, 321);
+  expect(libraryIdentityFootprint(savedJob.sql, values)).toBeUndefined();
+  expect(libraryIdentityFootprint(savedJob.sql, values, work)?.bytes).toBe(
+    Buffer.byteLength(savedJob.sql) + Buffer.byteLength(JSON.stringify(values)) + 321 + 256,
+  );
+
+  const overflow = makeWork('saved-job-overflow');
+  overflow.admitResultBytes(key, Number.MAX_SAFE_INTEGER);
+  expect(libraryIdentityFootprint(savedJob.sql, values, overflow)).toBeUndefined();
 });
 
 test('failed COMMIT retains its charge and a separately held ROLLBACK uses the same reservation', async () => {

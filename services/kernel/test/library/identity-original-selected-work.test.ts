@@ -11,6 +11,7 @@ import {
 import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity-native-planner-projection.ts';
 import { nativeSourceCustodyFootprint } from '../../src/library/native-source-custody.ts';
 import { libraryIdentityFootprint } from '../../src/library/identity-native-planner-work.ts';
+import { LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS } from '../../src/library/identity-native-bounds.ts';
 
 test('installed selected Library declaration is own frozen data, covers the enforced schedule and excludes Source controls', () => {
   const field = Object.getOwnPropertyDescriptor(installed, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
@@ -50,12 +51,60 @@ test('installed pricing and actual dispatch share every selected literal and bou
     expect(libraryIdentitySelectedFootprint(sql + '; SELECT 1', values)).toBeUndefined();
     expect(libraryIdentitySelectedFootprint(sql, [...values, 'extra'])).toBeUndefined();
   }
-  for (const item of declareNativeIdentitySourceBasisStatements()) {
+  const statements = declareNativeIdentitySourceBasisStatements();
+  for (const item of statements) {
     // The declaring producer uses the actual maximum original binds; no caller
     // observation or configured balance participates in this comparison.
     expect(item.engineRequests).toBe(0);
     expect(nativeIdentitySourceBasisFootprint(item.sql + '; SELECT 1', [])).toBeUndefined();
     expect(nativeSourceCustodyFootprint(item.sql + '; SELECT 1', [])).toBeUndefined();
+  }
+  const basis = LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.sourceBasis;
+  expect(basis).toHaveLength(statements.length);
+  const axes = [
+    'candidateKeys',
+    'nativeRows',
+    'identityMetadataRows',
+    'emptySeeks',
+    'nativePoints',
+    'witnessKeys',
+    'statements',
+    'bytes',
+    'engineRequests',
+  ];
+  for (const declaration of [
+    ...Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.sql),
+    ...Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected),
+    ...basis,
+  ]) {
+    expect(Reflect.ownKeys(declaration.work).sort()).toEqual(axes.slice().sort());
+    expect(declaration.work.engineRequests).toBe(0);
+  }
+  for (const [index, declaration] of basis.entries()) {
+    expect(nativeIdentitySourceBasisFootprint(declaration.sql, declaration.values)).toEqual({
+      candidateKeys: declaration.work.candidateKeys,
+      nativeRows: declaration.work.nativeRows,
+      identityMetadataRows: declaration.work.identityMetadataRows,
+      emptySeeks: declaration.work.emptySeeks,
+      nativePoints: declaration.work.nativePoints,
+      witnessKeys: declaration.work.witnessKeys,
+      statements: declaration.work.statements,
+      bytes: declaration.work.bytes,
+    });
+    expect(statements[index]).toMatchObject({
+      sql: declaration.sql,
+      work: {
+        candidateKeys: declaration.work.candidateKeys,
+        nativeRows: declaration.work.nativeRows,
+        identityMetadataRows: declaration.work.identityMetadataRows,
+        emptySeeks: declaration.work.emptySeeks,
+        nativePoints: declaration.work.nativePoints,
+        witnessKeys: declaration.work.witnessKeys,
+        statements: declaration.work.statements,
+        bytes: declaration.work.bytes,
+      },
+      engineRequests: 0,
+    });
   }
 });
 

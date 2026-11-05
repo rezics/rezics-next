@@ -2,7 +2,7 @@
  * Range descriptors add one EOF slot to the admitted LIMIT; point descriptors never scale with result rows.
  * Zero witnessKeys: these are structural native operations, never permission or membership witnesses.
  */
-export const libraryIdentitySQL = {
+export const libraryIdentitySQL = Object.freeze({
   oldFacts:
     'SELECT stored_subject_id::text AS "storedSubjectId",fact_id::text AS "factId"\n        FROM library.canonical_source_fact WHERE route=$1 AND collection_id=$2 AND generation=$3 AND basis_digest=$7\n        AND driver=$4 AND (stored_subject_id,fact_id)>($5::uuid,$6::uuid)\n        ORDER BY stored_subject_id,fact_id LIMIT $8',
   oldReferences:
@@ -50,94 +50,4 @@ export const libraryIdentitySQL = {
     "SELECT source_identity,scope FROM library.identity_scope_plan\n        WHERE route=$1 AND job_id=$2 AND job_epoch=$3 AND state='building'\n        ORDER BY collection_id,plan_key LIMIT 1",
   effectPage:
     'SELECT effect_key,disposition,original::text FROM library.identity_scope_effect\n         WHERE route=$1 AND collection_id=$2 AND plan_key=$3\n         AND (effect_key,disposition)>($4::text COLLATE "C",$5::text COLLATE "C")\n         ORDER BY effect_key,disposition LIMIT $6',
-} as const;
-
-export const libraryIdentitySQLCost = {
-  oldFacts: {
-    rows: 'range',
-    limitParameter: 8,
-    identityMetadataRows: 0,
-    nativePoints: 1,
-    resultBytes: 256,
-    seek: true,
-  },
-  oldReferences: {
-    rows: 'range',
-    limitParameter: 7,
-    identityMetadataRows: 0,
-    nativePoints: 1,
-    resultBytes: 256,
-    seek: true,
-  },
-  invalidateKey: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 64, seek: true },
-  invalidateKeyInline: {
-    rows: 1,
-    limitParameter: 0,
-    identityMetadataRows: 0,
-    nativePoints: 1,
-    resultBytes: 64,
-    seek: true,
-  },
-  retainedGenerations: {
-    rows: 3,
-    limitParameter: 0,
-    identityMetadataRows: 0,
-    nativePoints: 1,
-    resultBytes: 256,
-    seek: true,
-  },
-  oldHead: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 128, seek: true },
-  oldState: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 1024, seek: true },
-  invalidateGeneration: {
-    rows: 1,
-    limitParameter: 0,
-    identityMetadataRows: 0,
-    nativePoints: 1,
-    resultBytes: 64,
-    seek: true,
-  },
-  abandonWorking: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 64, seek: true },
-  insertGeneration: {
-    rows: 2,
-    limitParameter: 0,
-    identityMetadataRows: 0,
-    nativePoints: 2,
-    resultBytes: 64,
-    seek: true,
-  },
-  insertPlan: { rows: 4, limitParameter: 0, identityMetadataRows: 0, nativePoints: 4, resultBytes: 64, seek: true },
-  advanceCapture: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 64, seek: true },
-  mappingClaim: { rows: 2, limitParameter: 0, identityMetadataRows: 2, nativePoints: 2, resultBytes: 256, seek: true },
-  insertEffect: { rows: 2, limitParameter: 0, identityMetadataRows: 0, nativePoints: 2, resultBytes: 64, seek: true },
-  readEffect: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 4608, seek: true },
-  insertReference: {
-    rows: 2,
-    limitParameter: 0,
-    identityMetadataRows: 0,
-    nativePoints: 2,
-    resultBytes: 64,
-    seek: true,
-  },
-  advanceGeneration: {
-    rows: 1,
-    limitParameter: 0,
-    identityMetadataRows: 0,
-    nativePoints: 1,
-    resultBytes: 64,
-    seek: true,
-  },
-  advancePlan: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 64, seek: true },
-  detachHead: { rows: 2, limitParameter: 0, identityMetadataRows: 0, nativePoints: 2, resultBytes: 64, seek: true },
-  detachState: { rows: 2, limitParameter: 0, identityMetadataRows: 0, nativePoints: 2, resultBytes: 64, seek: true },
-  insertSeal: { rows: 2, limitParameter: 0, identityMetadataRows: 0, nativePoints: 2, resultBytes: 64, seek: true },
-  sealPlan: { rows: 1, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 64, seek: true },
-  nextPlan: { rows: 2, limitParameter: 0, identityMetadataRows: 0, nativePoints: 1, resultBytes: 2304, seek: true },
-  effectPage: {
-    rows: 'range',
-    limitParameter: 6,
-    identityMetadataRows: 0,
-    nativePoints: 1,
-    resultBytes: 512,
-    seek: true,
-  },
-} as const;
+} as const);
