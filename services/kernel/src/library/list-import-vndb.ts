@@ -19,6 +19,7 @@ import {
   type Vote,
   type VoteReview,
   type VoteCommandAdmission,
+  type PreparedPutVote,
 } from '../rating/votes.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
@@ -130,6 +131,7 @@ type ScoreDecision = {
   sourceDigest: string;
   matchDigest: string;
   commandActor?: AccountActor;
+  command?: PreparedPutVote;
 };
 export type VndbDateReviewInput = {
   ordinal: number;
@@ -2004,6 +2006,29 @@ export function createVndbImport(config: Config) {
     };
   }
 
+  function scoreCommandInput(score: ScoreDecision): PreparedPutVote['input'] {
+    return {
+      questionId: score.question.id,
+      targetId: score.targetId,
+      units: score.units,
+      guard: score.nativeGuard,
+      observation: {
+        subjectId: score.nativeGuard.subject.canonicalId,
+        question: {
+          id: score.question.id,
+          revision: score.question.revision,
+          grain: score.question.grain,
+          meaning: score.question.meaning!,
+          scale: {
+            min: score.question.scale.min,
+            max: score.question.scale.max,
+            displayStep: score.question.scale.step,
+          },
+        },
+      },
+    };
+  }
+
   async function applyScore(
     actor: Actor,
     id: string,
@@ -2027,8 +2052,16 @@ export function createVndbImport(config: Config) {
         review ? nativeVoteView(review.currentVote.state === 'absent' ? null : review.currentVote) : undefined,
       );
     }
+    const retry = !!score.commandActor;
     if (!score.commandActor) {
-      const frozen = { ...score, status: 'applying' as const, commandActor: structuredClone(owner(actor)) };
+      const commandActor = structuredClone(owner(actor));
+      const command = votes.preparePutVote(
+        commandActor,
+        scoreCommandInput(score),
+        score.commandKey,
+        scoreAdmission(commandActor, score),
+      );
+      const frozen = { ...score, status: 'applying' as const, commandActor, command };
       const started = await mutation(
         actor,
         'score-start',
@@ -2050,34 +2083,22 @@ export function createVndbImport(config: Config) {
         },
       );
       score = started.value;
+      record(started);
     }
     let status = 'applied';
     try {
-      const result = await votes.putVoteOutcome(
-        score.commandActor!,
-        {
-          questionId: score.question.id,
-          targetId: score.targetId,
-          units: score.units,
-          guard: score.nativeGuard,
-          observation: {
-            subjectId: score.nativeGuard.subject.canonicalId,
-            question: {
-              id: score.question.id,
-              revision: score.question.revision,
-              grain: score.question.grain,
-              meaning: score.question.meaning!,
-              scale: {
-                min: score.question.scale.min,
-                max: score.question.scale.max,
-                displayStep: score.question.scale.step,
-              },
-            },
-          },
-        },
-        score.commandKey,
-        scoreAdmission(score.commandActor!, score),
-      );
+      // Pending dispatches may settle their exact receipt without re-admitting a fresh effect.
+      // Historical dispatches predate producer-prepared receipt retention.
+      const reconciled =
+        retry && score.command ? await votes.reconcilePutVote(score.commandActor!, score.command.receipt) : null;
+      const result =
+        reconciled ??
+        (await votes.putVoteOutcome(
+          score.commandActor!,
+          score.command?.input ?? scoreCommandInput(score),
+          score.commandKey,
+          scoreAdmission(score.commandActor!, score),
+        ));
       if (result.component) record(result.component);
     } catch (error) {
       if (error instanceof VoteReviewUnavailableError) return outcome('unavailable');

@@ -9,6 +9,10 @@ import { createSessionCommands } from '../../src/library/sessions.ts';
 import { OWNED_PHASES } from '../../src/library/erasure-owned-graph.ts';
 import { createVndbImport, type VndbDateApplyInput } from '../../src/library/list-import-vndb.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
+import { subjectTarget } from '../../src/semantic/subject.ts';
+import { partitionOf } from '../../src/route/route.ts';
+import { installIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap-install.ts';
+import { stepIdentityEpochBootstrap } from '../../src/semantic/identity-epoch-bootstrap.ts';
 let f: NativeProfileFixture, matched: string;
 const vnId = `v${Date.now()}${Math.floor(Math.random() * 100000)}`;
 const base = '/v1/libraryImports/vndb';
@@ -364,24 +368,71 @@ test('reviewed conflicts preserve facts, revision and release guards reject stal
   await json('DELETE', `${base}/${next.uploadId}`);
   await f.activate(f.originalDigest);
 }, 120000);
-test('VNDB score review freezes native counted operands and dispatches guarded commands with explicit units and clear consent', async () => {
-  const scorer = await f.identity([
-    'subject:create',
-    'subject:read',
-    'library_entry:read',
-    'library_entry:list',
-    'library_entry:update',
-    'library_entry:delete',
-    'rating:vote',
-  ]);
+async function sameHomeScoreCaller() {
+  const scorer = await f.identity(
+    [
+      'subject:create',
+      'subject:read',
+      'library_entry:read',
+      'library_entry:list',
+      'library_entry:update',
+      'library_entry:delete',
+      'rating:vote',
+    ],
+    0,
+  );
   await f.grantLibraryGate(scorer.actor.accountId);
-  const source = xml(vn(vnId, '<vote>7.3</vote>'), '<reviews><review id="r1"><text>private</text></review></reviews>');
-  const created = await f.send(scorer.bearer, 'POST', base + ':preview', { xml: source }, entryKey());
-  expect(created.status).toBe(200);
-  const { uploadId } = await created.json();
-  const pageResponse = await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`);
-  expect(pageResponse.status).toBe(200);
-  const page = await pageResponse.json();
+  let key = entryKey();
+  while (partitionOf(subjectTarget(testRouteKey(), scorer.actor.accountId, key).route) !== 0) key = entryKey();
+  const created = await f.send(
+    scorer.bearer,
+    'POST',
+    '/v1/subjects',
+    {
+      type: 'ex:Child',
+      labels: { en: 'Explicit score target' },
+    },
+    key,
+  );
+  expect(created.status).toBe(201);
+  const target = (await created.json()).subject.id as string;
+  await installIdentityEpochBootstrap(f.pool);
+  let state;
+  do {
+    state = (await stepIdentityEpochBootstrap(f.pool, 0)).state;
+  } while (state !== 'caught-up');
+  const send = (method: string, path: string, body?: unknown) => json(method, path, body, scorer.bearer);
+  const votes = createVoteCommands({ pool: f.pool, access: f.access });
+  const service = createVndbImport({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
+  const scoreReview = (id: string, units: number | null) =>
+    send('POST', `${base}/${id}:review`, {
+      ordinal: 0,
+      action: 'score',
+      targetId: target,
+      questionId: STANDARD_QUESTION_ID,
+      questionRevision: 1,
+      selection: units === null ? { kind: 'clear' } : { kind: 'vote', units },
+      consent: units === null ? 'clear-native-vote' : 'adopt-native-vote',
+    });
+  const stored = async (id: string) =>
+    (
+      await f.pool.query(
+        "SELECT decisions->'0'->'score' AS score FROM library.vndb_import WHERE account_id=$1 AND upload_id=$2",
+        [scorer.actor.accountId, id],
+      )
+    ).rows[0].score;
+  return { ...scorer, target, send, votes, service, scoreReview, stored };
+}
+
+test('VNDB explicit unmatched score choice commits chosen units, zero and clear with counted current readback and independent Entry state', async () => {
+  const c = await sameHomeScoreCaller();
+  const source = xml(
+    vn('v999999999991', '<vote>7.3</vote>'),
+    '<reviews><review id="r1"><text>private</text></review></reviews>',
+  );
+  const { uploadId } = await c.send('POST', base + ':preview', { xml: source });
+  const page = await c.send('GET', `${base}/${uploadId}`);
+  expect(page.rows[0].match.status).toBe('unmatched');
   expect(page.rows[0].fields.score).toEqual({
     kind: 'value',
     raw: '7.3',
@@ -390,21 +441,19 @@ test('VNDB score review freezes native counted operands and dispatches guarded c
   });
   expect(page.rows[0].nativeScore).toMatchObject({
     question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { min: 0, max: 20, step: 1 } },
-    currentVote: { state: 'absent' },
     exactUnits: null,
     admission: { status: 'conditional', reason: null },
   });
   expect(page.rows[0].nativeScore.sourceReason).toContain('no exact standard half-point value');
   expect(page.rows[1].nativeScore.admission.reason).toBe('source-not-vn-score');
-
   const missingConsent = await f.send(
-    scorer.bearer,
+    c.bearer,
     'POST',
     `${base}/${uploadId}:review`,
     {
       ordinal: 0,
       action: 'score',
-      targetId: matched,
+      targetId: c.target,
       questionId: STANDARD_QUESTION_ID,
       questionRevision: 1,
       selection: { kind: 'vote', units: 0 },
@@ -412,125 +461,213 @@ test('VNDB score review freezes native counted operands and dispatches guarded c
     entryKey(),
   );
   expect(missingConsent.status).toBe(422);
-
-  const adopted = await f.send(
-    scorer.bearer,
-    'POST',
-    `${base}/${uploadId}:review`,
-    {
-      ordinal: 0,
-      action: 'score',
-      targetId: matched,
-      questionId: STANDARD_QUESTION_ID,
-      questionRevision: 1,
-      selection: { kind: 'vote', units: 0 },
-      consent: 'adopt-native-vote',
-    },
-    entryKey(),
-  );
-  expect(adopted.status).toBe(200);
-  const adoptedReview = await adopted.json();
-  expect(adoptedReview).toMatchObject({
+  const retired = await c.scoreReview(uploadId, 0);
+  const chosen = await c.scoreReview(uploadId, 15);
+  expect(chosen).toMatchObject({
     status: 'reviewed',
-    action: 'vote',
-    units: 0,
+    units: 15,
     consent: 'adopt-native-vote',
     nativeAdmission: 'conditional',
   });
-
-  const stateReview = await f.send(
-    scorer.bearer,
-    'POST',
-    `${base}/${uploadId}:review`,
-    { ordinal: 0, action: 'state', targetId: matched, state: 'playing', replace: false },
-    entryKey(),
-  );
-  expect(stateReview.status).toBe(200);
-  const afterStateReview = await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`);
-  expect((await afterStateReview.json()).rows[0].scoreDecision.reviewId).toBe(adoptedReview.reviewId);
-  const cleared = await f.send(
-    scorer.bearer,
-    'POST',
-    `${base}/${uploadId}:review`,
-    {
-      ordinal: 0,
-      action: 'score',
-      targetId: matched,
-      questionId: STANDARD_QUESTION_ID,
-      questionRevision: 1,
-      selection: { kind: 'clear' },
-      consent: 'clear-native-vote',
-    },
-    entryKey(),
-  );
-  expect(cleared.status).toBe(200);
-  const clearReview = await cleared.json();
-  expect(clearReview).toMatchObject({ action: 'clear', units: null, consent: 'clear-native-vote' });
-  const oldConfirmation = await f.send(
-    scorer.bearer,
-    'POST',
-    `${base}/${uploadId}:apply`,
-    { rows: [{ ordinal: 0, scoreReviewId: adoptedReview.reviewId }] },
-    entryKey(),
-  );
-  expect((await oldConfirmation.json()).outcomes[0].status).toBe('stale');
-  const result = await f.send(
-    scorer.bearer,
-    'POST',
-    `${base}/${uploadId}:apply`,
-    { rows: [{ ordinal: 0, scoreReviewId: clearReview.reviewId }] },
-    entryKey(),
-  );
-  expect(result.status).toBe(200);
-  expect(await result.json()).toMatchObject({
-    outcomes: [{ ordinal: 0, scoreReviewId: clearReview.reviewId, status: 'unavailable' }],
+  const state = await c.send('POST', `${base}/${uploadId}:review`, {
+    ordinal: 0,
+    action: 'state',
+    targetId: c.target,
+    state: 'playing',
+    replace: false,
   });
+  expect((await c.send('GET', `${base}/${uploadId}`)).rows[0].scoreDecision.reviewId).toBe(chosen.reviewId);
   expect(
-    await createVoteCommands({ pool: f.pool, access: f.access }).readOwnVote(
-      scorer.actor,
-      STANDARD_QUESTION_ID,
-      matched,
-    ),
-  ).toBeNull();
-  const storedScore = async () =>
     (
-      await f.pool.query(
-        "SELECT decisions->'0'->'score' AS score FROM library.vndb_import WHERE account_id=$1 AND upload_id=$2",
-        [scorer.actor.accountId, uploadId],
-      )
-    ).rows[0].score;
-  const frozen = await storedScore();
-  expect(frozen).toMatchObject({
-    status: 'applying',
-    nativeGuard: { ownVote: { state: 'absent' } },
-    commandActor: scorer.actor,
+      await c.send('POST', `${base}/${uploadId}:apply`, {
+        rows: [{ ordinal: 0, scoreReviewId: retired.reviewId }],
+      })
+    ).outcomes[0].status,
+  ).toBe('stale');
+  const reviewed = await c.stored(uploadId);
+  expect(reviewed.nativeGuard).toMatchObject({
+    ownVote: { state: 'absent' },
+    subject: { identity: { version: 1, requestedOriginalId: c.target, sourceHomes: [0] } },
   });
+  const applied = await c.send('POST', `${base}/${uploadId}:apply`, {
+    rows: [{ ordinal: 0, reviewId: state.reviewId, scoreReviewId: chosen.reviewId }],
+  });
+  expect(applied.outcomes).toMatchObject([
+    { status: 'applied' },
+    { status: 'applied', currentVote: { state: 'set', units: 15 } },
+  ]);
+  const entry = await f.commands.readEntry(c.actor, c.target);
+  const inventory = await f.inspect(c.actor.accountId);
+  expect(entry.state).toBe('playing');
+  expect((await c.votes.readVoteReview(c.actor, STANDARD_QUESTION_ID, c.target)).currentVote).toMatchObject({
+    state: 'counted',
+    units: 15,
+  });
+  const frozen = await c.stored(uploadId);
+  expect(frozen).toMatchObject({ status: 'applied', nativeGuard: reviewed.nativeGuard, commandActor: c.actor });
   expect(frozen.sourceDigest).toHaveLength(64);
   expect(frozen.matchDigest).toHaveLength(64);
-  expect(JSON.stringify(await (await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`)).json())).not.toContain(
-    'nativeGuard',
-  );
-  // An original command may retry unchanged after unavailable admission, but may
-  // not acquire a new own-vote witness after somebody changes the native vote.
-  await createVoteCommands({ pool: f.pool, access: f.access }).putVoteOutcome(
-    scorer.actor,
-    { questionId: STANDARD_QUESTION_ID, targetId: matched, units: 0 },
-    entryKey(),
-  );
-  const replay = await f.send(
-    scorer.bearer,
-    'POST',
-    `${base}/${uploadId}:apply`,
-    { rows: [{ ordinal: 0, scoreReviewId: clearReview.reviewId }] },
-    entryKey(),
-  );
-  expect(replay.status).toBe(200);
-  expect((await replay.json()).outcomes[0].status).toBe('stale');
-  expect(await storedScore()).toEqual({ ...frozen, status: 'stale' });
-  const currentPage = await (await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`)).json();
-  expect(currentPage.rows[0].nativeScore.currentVote).toMatchObject({ state: 'set', units: 0 });
-  await f.send(scorer.bearer, 'DELETE', `${base}/${uploadId}`, undefined, entryKey());
-}, 120000);
+  expect(JSON.stringify(await c.send('GET', `${base}/${uploadId}`))).not.toContain('nativeGuard');
+
+  for (const units of [0, null]) {
+    const next = await c.send('POST', base + ':preview', { xml: xml(vn('v999999999991', '<vote>8.2</vote>')) });
+    const choice = await c.scoreReview(next.uploadId, units);
+    const selection = { rows: [{ ordinal: 0, scoreReviewId: choice.reviewId }] };
+    const expected = units === null ? { state: 'cleared' } : { state: 'set', units: 0 };
+    expect((await c.send('POST', `${base}/${next.uploadId}:apply`, selection)).outcomes[0]).toMatchObject({
+      status: 'applied',
+      currentVote: expected,
+    });
+    const current = (await c.votes.readVoteReview(c.actor, STANDARD_QUESTION_ID, c.target)).currentVote;
+    expect(current).toMatchObject(units === null ? { state: 'clear', units: null } : { state: 'counted', units: 0 });
+    expect((await c.send('POST', `${base}/${next.uploadId}:apply`, selection)).outcomes[0].currentVote).toMatchObject(
+      expected,
+    );
+    expect(await f.commands.readEntry(c.actor, c.target)).toEqual(entry);
+    expect((await f.inspect(c.actor.accountId)).sessions).toEqual(inventory.sessions);
+    await c.send('DELETE', `${base}/${next.uploadId}`);
+  }
+  // Applied confirmations report the current counted value, not the old receipt's value.
+  expect(
+    (
+      await c.send('POST', `${base}/${uploadId}:apply`, {
+        rows: [{ ordinal: 0, scoreReviewId: chosen.reviewId }],
+      })
+    ).outcomes[0].currentVote,
+  ).toMatchObject({ state: 'cleared' });
+  await c.send('DELETE', `${base}/${uploadId}`);
+}, 180000);
+
+test('lost score acknowledgements reconcile the original credential and exact native effect after cancellation or expiry', async () => {
+  const c = await sameHomeScoreCaller();
+  for (const [index, terminal] of ['cancel', 'expire'].entries()) {
+    const { uploadId } = await c.send('POST', base + ':preview', {
+      xml: xml(vn('v999999999992', '<vote>7.3</vote>') + vn('v999999999993', '<vote>8</vote>')),
+    });
+    const chosen = await c.scoreReview(uploadId, 15 + index);
+    let acknowledgements = 0;
+    await expect(
+      c.service.apply(c.actor, uploadId, [{ ordinal: 0, scoreReviewId: chosen.reviewId }], () => {
+        if (++acknowledgements === 2) throw new Error('Lost score acknowledgement');
+      }),
+    ).rejects.toThrow('Lost score acknowledgement');
+    const frozen = await c.stored(uploadId);
+    expect(frozen).toMatchObject({ status: 'applying', commandActor: c.actor });
+    expect(frozen.command.input).toMatchObject({ units: 15 + index, guard: frozen.nativeGuard });
+    expect(frozen.command.receipt.requestKey).toBe(frozen.commandKey);
+    const committed = await c.votes.reconcilePutVote(c.actor, frozen.command.receipt);
+    expect(committed?.vote).toMatchObject({ units: 15 + index });
+    expect(committed?.component).not.toBeNull();
+    // Current authority is required even when the exact receipt already exists.
+    await f.pool.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [c.actor.accountId]);
+    try {
+      await expect(
+        c.service.apply(c.actor, uploadId, [{ ordinal: 0, scoreReviewId: chosen.reviewId }], () => {}),
+      ).rejects.toMatchObject({ name: 'GrantDeniedError' });
+    } finally {
+      await f.pool.query('UPDATE access.account SET minimum_authn_epoch=1 WHERE account_id=$1', [c.actor.accountId]);
+    }
+    // A receipt is historical evidence; readback must use the current counted reader.
+    await c.votes.putVoteOutcome(
+      c.actor,
+      { questionId: STANDARD_QUESTION_ID, targetId: c.target, units: 18 },
+      entryKey(),
+    );
+    const snapshot = async () =>
+      (
+        await f.pool.query(
+          `SELECT
+      (SELECT jsonb_agg(to_jsonb(v)) FROM rating.vote v WHERE voter_id=$1) AS votes,
+      (SELECT count(*)::int FROM core.receipt WHERE principal_id=$1 AND command_kind='rating.vote.put') AS receipts`,
+          [c.actor.accountId],
+        )
+      ).rows[0];
+    const effects = await snapshot();
+    if (terminal === 'cancel') await c.send('POST', `${base}/${uploadId}:cancel`);
+    else {
+      await f.pool.query(
+        "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
+        [c.actor.accountId, uploadId],
+      );
+      for (const suffix of ['', '/source'])
+        expect((await f.send(c.bearer, 'GET', `${base}/${uploadId}${suffix}`)).status).toBe(404);
+    }
+    expect(
+      await c.service.apply(
+        c.actor,
+        uploadId,
+        [
+          { ordinal: 0, scoreReviewId: chosen.reviewId },
+          { ordinal: 1, scoreReviewId: entryKey() },
+        ],
+        () => {},
+      ),
+    ).toMatchObject({
+      outcomes: [{ status: 'applied', currentVote: { state: 'set', units: 18 } }],
+      stopped: 'cancelled',
+    });
+    expect(await snapshot()).toEqual(effects);
+    expect(await c.stored(uploadId)).toEqual({ ...frozen, status: 'applied' });
+    expect(await c.votes.reconcilePutVote(c.actor, frozen.command.receipt)).toEqual(committed);
+    await c.send('DELETE', `${base}/${uploadId}`);
+    expect((await f.send(c.bearer, 'GET', `${base}/${uploadId}/source`)).status).toBe(404);
+    expect(await snapshot()).toEqual(effects);
+  }
+}, 180000);
+
+test('an original score intent cannot admit a fresh effect after source change, cancellation, expiry or removal', async () => {
+  const c = await sameHomeScoreCaller();
+  for (const change of ['source', 'review', 'own-vote', 'question', 'cancel', 'expire', 'remove']) {
+    const { uploadId } = await c.send('POST', base + ':preview', { xml: xml(vn('v999999999994', '<vote>7.3</vote>')) });
+    const chosen = await c.scoreReview(uploadId, 14);
+    await expect(
+      c.service.apply(c.actor, uploadId, [{ ordinal: 0, scoreReviewId: chosen.reviewId }], () => {
+        throw new Error('Interrupted before score dispatch');
+      }),
+    ).rejects.toThrow('Interrupted before score dispatch');
+    const frozen = await c.stored(uploadId);
+    expect(frozen).toMatchObject({ status: 'applying', commandActor: c.actor });
+    expect(await c.votes.reconcilePutVote(c.actor, frozen.command.receipt)).toBeNull();
+    if (change === 'source')
+      await f.pool.query(
+        "UPDATE library.vndb_import SET rows=jsonb_set(rows,'{0,fields,score,raw}','\"8.1\"') WHERE account_id=$1 AND upload_id=$2",
+        [c.actor.accountId, uploadId],
+      );
+    if (change === 'review')
+      await f.pool.query(
+        "UPDATE library.vndb_import SET decisions=jsonb_set(decisions,'{0,score,sourceDigest}',to_jsonb(repeat('f',64))) WHERE account_id=$1 AND upload_id=$2",
+        [c.actor.accountId, uploadId],
+      );
+    if (change === 'own-vote')
+      await c.votes.putVoteOutcome(
+        c.actor,
+        { questionId: STANDARD_QUESTION_ID, targetId: c.target, units: 3 },
+        entryKey(),
+      );
+    if (change === 'question')
+      await f.pool.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+    if (change === 'cancel') await c.send('POST', `${base}/${uploadId}:cancel`);
+    if (change === 'expire')
+      await f.pool.query(
+        "UPDATE library.vndb_import SET expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1 AND upload_id=$2",
+        [c.actor.accountId, uploadId],
+      );
+    if (change === 'remove') await c.send('DELETE', `${base}/${uploadId}`);
+    const before = await c.votes.readOwnVote(c.actor, STANDARD_QUESTION_ID, c.target);
+    try {
+      const pending = c.service.apply(c.actor, uploadId, [{ ordinal: 0, scoreReviewId: chosen.reviewId }], () => {});
+      if (change === 'remove') await expect(pending).rejects.toMatchObject({ name: 'LibraryNotFoundError' });
+      else expect((await pending).outcomes[0]?.status).toBe('stale');
+      expect(await c.votes.readOwnVote(c.actor, STANDARD_QUESTION_ID, c.target)).toEqual(before);
+      expect(await c.votes.reconcilePutVote(c.actor, frozen.command.receipt)).toBeNull();
+      if (change !== 'remove') expect((await c.stored(uploadId)).command).toEqual(frozen.command);
+    } finally {
+      if (change === 'question')
+        await f.pool.query('UPDATE rating.question SET revision=revision-1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+      if (change !== 'remove') await c.send('DELETE', `${base}/${uploadId}`);
+    }
+  }
+}, 180000);
 
 test('VNDB typed dates select one repeat, preserve precision, and clear only with explicit consent', async () => {
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens }),
