@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { act, useState } from 'react';
 import { dirname } from 'node:path';
 import type { SearchPageData } from '../src/search/search';
@@ -42,6 +42,10 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
+const start = await import('../.storybook/react-start');
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { SearchPage } = await import('../src/search/search');
