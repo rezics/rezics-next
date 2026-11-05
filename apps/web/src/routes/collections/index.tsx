@@ -1,3 +1,4 @@
+import { parsePublicCollectionCursor } from '../../library/public-collection-discovery/address';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { pageHead } from '../../shell/head';
@@ -9,10 +10,8 @@ import { publicCollectionDiscoveryQueryOptions } from '../../library/public-coll
 import type { PublicCollectionDiscoveryState } from '../../library/public-collection-discovery/read';
 
 function validateCollectionSearch(search: Record<string, unknown>) {
-  const cursor = search.cursor;
-  if (cursor === undefined) return {};
-  if (typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 4864) return { cursor };
-  return { invalidCursor: true };
+  const parsed = parsePublicCollectionCursor(search.cursor);
+  return parsed.state === 'invalid' ? { invalidCursor: true } : { cursor: parsed.cursor };
 }
 
 export const Route = createFileRoute('/collections/')({

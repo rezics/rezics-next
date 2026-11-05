@@ -7,3 +7,16 @@ The localized route accepts one opaque `cursor` query value (up to 4,864 charact
 The existing Collection page remains the authority for whether a destination is readable. A discovery hit is not inferred from a follow edge and does not disclose members, owner-only facts, saved rules or private counts. Preparing, empty, denied, unavailable and stale/refused continuation states are localized; a failed continuation can be retried or restarted from the first page where its state permits.
 
 The caller binds to Search's current `subjects.$search.post` method. Search's current native mixed-discovery runtime still needs its production `semantic/public-filter-source.ts` and `search/public-filter-consumer.ts` providers; without them it returns `index_not_ready`. Commerce's documented remaining public dynamic-Collection boundary is the complete explicit Publication provider; Commerce also owns emitting public Collection summaries for Search indexing. This route does not fabricate successful rows while either boundary is unavailable.
+
+## Directory selection address
+
+Decision: the pending native directory extension uses `presentationKind`, `curator`, `subject` and `order`
+(`recent` or `popular`) in the public address. An omitted kind means all kinds; explicit `mixed` selects unset
+presentation kind. Curator and Subject values are canonical identities, never mutable labels. A committed
+selection starts at page one; continuation and restart preserve all selection values. The address helper owns
+this round trip and the existing mounted cursor validation and links reuse it.
+
+The full selection parser is staged for the native query integration; the mounted route still admits only its
+existing cursor. Do not expose filter controls until Search consumes Commerce's listing operands and validates
+the whole query's current membership and order. Native recency units/nullability remain Commerce's decision;
+this browser address represents only the order name, never a fabricated timestamp or count.
