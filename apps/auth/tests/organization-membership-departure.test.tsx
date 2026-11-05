@@ -363,7 +363,11 @@ test('restoration creates a new read generation; released old page never replace
       }),
   );
   await click(m.auth_inventory_reload());
-  await flush(() => transition('pagehide'));
+  const retiredRead = list.mock.calls.at(-1)![3]!;
+  await flush(() => {
+    transition('pagehide');
+    expect(retiredRead.aborted).toBe(true);
+  });
   expect(document.activeElement?.id).toBe('membership-current-heading');
   list.mockResolvedValueOnce({ kind: 'denied' });
   await flush(() => transition('pageshow'));
