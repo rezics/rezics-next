@@ -336,8 +336,9 @@ test('Following management has a genuine discovery destination after the last un
       await new Promise((resolve) => window.setTimeout(resolve, 20));
     });
   const awaitFollowAction = async () => {
-    for (let i = 0; i < 20 && !followButton(); i++) await settle();
+    for (let i = 0; i < 20 && (!followButton() || followButton()!.disabled); i++) await settle();
     expect(followButton()).not.toBeNull();
+    expect(followButton()!.disabled).toBe(false);
   };
   const remove = async () => {
     await awaitFollowAction();
