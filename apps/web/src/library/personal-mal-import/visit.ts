@@ -1,3 +1,5 @@
+import { useLocation } from '@tanstack/react-router';
+import { getLocale } from '../../paraglide/runtime';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
 import { sessionQuery } from '../../session/query';
@@ -28,6 +30,8 @@ function useSessionValue(): SessionValue | undefined {
 /** Private visit bound to the current signed-in viewer and CSRF. Replacement retires rendered MAL state. */
 export function useMalVisit(): MalVisit | null {
   const session = useSessionValue();
+  const address = useLocation({ select: (location) => location.href });
+  const locale = getLocale();
   const owner = sessionIdentity(session);
   const ready =
     session?.state === 'signed-in' &&
@@ -54,5 +58,5 @@ export function useMalVisit(): MalVisit | null {
       },
     };
     return state;
-  }, [csrfToken, owner, ready, subject]);
+  }, [csrfToken, owner, ready, subject, address, locale]);
 }
