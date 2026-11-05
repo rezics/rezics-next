@@ -50,7 +50,12 @@ const sectionsV1 = t.Tuple([
   t.Literal('occurrences'),
   t.Literal('malEvidence'),
 ]);
-const sectionsV2 = t.Tuple([...sectionsV1.items, t.Literal('annotations'), t.Literal('provenance'), t.Literal('journals')]);
+const sectionsV2 = t.Tuple([
+  ...sectionsV1.items,
+  t.Literal('annotations'),
+  t.Literal('provenance'),
+  t.Literal('journals'),
+]);
 const sectionsV3 = t.Tuple([...sectionsV2.items]);
 const sectionsV4 = t.Tuple([
   ...sectionsV3.items,

@@ -958,7 +958,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           correctionCommand(() => corrections().confirmItem(actor, params.reviewId, body.epoch, body.position)),
         );
         if (result.commandOutcome) session.record(result.commandOutcome);
-        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<typeof correctionPageResponse>;
+        return { review: { ...result.page, items: [...result.page.items] } } satisfies Static<
+          typeof correctionPageResponse
+        >;
       },
     )
     .post(
@@ -1808,9 +1810,11 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                 revision: item.copy.revision,
                 kind: item.copy.kind,
                 status: item.copy.status,
-                context: context ? copyListContextView(context.context) : {
-                  state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
-                },
+                context: context
+                  ? copyListContextView(context.context)
+                  : {
+                      state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
+                    },
               };
               return {
                 loan: loanView(item.loan, page.boundary, people, item.actions.extend.allowed),

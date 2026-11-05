@@ -97,7 +97,11 @@ export async function createCopyListContextFixture(options: { db?: GrowthDatabas
     async function suspend(accountId: string) {
       const operator = await native.deps('operator');
       if (operator.actor.kind !== 'account') throw new Error('Copy context fixture requires an account operator');
-      await createSuspensionCommands({ pool: native.pool, access: native.auth.access, clock: () => new Date() }).suspend(
+      await createSuspensionCommands({
+        pool: native.pool,
+        access: native.auth.access,
+        clock: () => new Date(),
+      }).suspend(
         { pool: native.pool, actor: operator.actor, deadline: deadlineFor(30_000) },
         { accountId, key: randomUUID() },
       );
