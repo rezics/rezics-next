@@ -89,7 +89,17 @@ function LiteraryAuthored({ id, locale }: { id: string; locale: string }) {
     />
   );
 }
-function LiteraryProfileSessionLive({ id, locale, address, expectedType }: { id?: string; locale: string; address?: string | undefined; expectedType?: string | undefined }) {
+function LiteraryProfileSessionLive({
+  id,
+  locale,
+  address,
+  expectedType,
+}: {
+  id?: string;
+  locale: string;
+  address?: string | undefined;
+  expectedType?: string | undefined;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   return (
@@ -135,12 +145,27 @@ function LiteraryProfileSessionLive({ id, locale, address, expectedType }: { id?
   );
 }
 
-function LiteraryProfileVisit({ id, locale, visit = { kind: 'direct' }, address }: {
-  id?: string; locale: string; visit?: LiteraryVisitInput; address?: string;
+function LiteraryProfileVisit({
+  id,
+  locale,
+  visit = { kind: 'direct' },
+  address,
+}: {
+  id?: string;
+  locale: string;
+  visit?: LiteraryVisitInput;
+  address?: string;
 }) {
   const globalHref = id ? `${subjectHref({ id, label: '' }, locale).href}/literary` : `/${locale}/catalogue/literary`;
-  return <LiteraryCurrentVisitAdmission input={visit} locale={locale} globalHref={globalHref}>
-    <LiteraryProfileSessionLive id={id} locale={locale} address={address} expectedType={visit.kind === 'visit' ? visit.visit.type : undefined} />
-  </LiteraryCurrentVisitAdmission>;
+  return (
+    <LiteraryCurrentVisitAdmission input={visit} locale={locale} globalHref={globalHref}>
+      <LiteraryProfileSessionLive
+        id={id}
+        locale={locale}
+        address={address}
+        expectedType={visit.kind === 'visit' ? visit.visit.type : undefined}
+      />
+    </LiteraryCurrentVisitAdmission>
+  );
 }
 export const LiteraryProfileSession = candidateSession(LiteraryProfileVisit);
