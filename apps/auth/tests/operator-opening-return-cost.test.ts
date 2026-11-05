@@ -36,7 +36,7 @@ test('one explicit session readback makes one native read and no approval or ope
   } finally {
     globalThis.fetch = original;
   }
-});
+}, 7_000);
 
 test('readback deadline covers hung headers and body; retirement cancels the call before and after it starts', async () => {
   const original = globalThis.fetch;

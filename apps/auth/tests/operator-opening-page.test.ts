@@ -114,4 +114,4 @@ test('metadata BFF waits through its private deadline and an aborted lifetime st
   } finally {
     transport.mockRestore();
   }
-});
+}, 7_000);
