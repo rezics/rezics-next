@@ -88,6 +88,13 @@ async function open(
       { name: 'auth_session', value: session, domain: '127.0.0.1', path: '/', httpOnly: true, sameSite: 'Lax' },
     ]);
   const page = await context.newPage();
+  page.on('pageerror', (error) => console.error('Account-operation page error:', error));
+  page.on('console', (message) => {
+    if (message.type() === 'error') console.error('Account-operation console:', message.text());
+  });
+  page.on('requestfailed', (request) =>
+    console.error('Account-operation request failed:', request.url(), request.failure()),
+  );
   page.setDefaultTimeout(10_000);
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
