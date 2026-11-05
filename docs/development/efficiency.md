@@ -50,7 +50,7 @@ Audit every pipeline step from dispatch to promotion daily. Justify each step by
 against its cost. Move, merge or remove steps with low catches and high cost. For example, dev landings re-ran every
 check even though dev is the unstable branch; those checks moved to post-merge verification.
 
-Decision: check-result planning derives workspace manifests, package tree IDs and global inputs from one cached commit-tree projection; the default reuse policy stays unchanged.
+Decision: check-result planning batch-reads committed workspace manifests into one cached tree projection for closure, package tree IDs and global inputs; the default reuse policy stays unchanged.
 
 Trust agents. In the delivery workflow, efficiency outranks defensive safety: REZICS is a community product, and a
 mistake on dev is caught and returned after integration. A guard that distrusts agent work is defensive programming

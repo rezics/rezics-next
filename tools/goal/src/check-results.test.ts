@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { CHECK_RESULT_SCHEMA, CheckResults, checkResultKey, reusableCommand } from './check-results.ts';
 import { gateRunner } from './merge.ts';
 import { openDb } from './db.ts';
+import { defaultPolicy } from './policy.ts';
 
 let root: string;
 let db: ReturnType<typeof openDb>;
@@ -99,12 +100,13 @@ describe('check result reuse keys', () => {
     );
     chmodSync(wrapper, 0o755);
     const originalPath = process.env.PATH;
-    const measure = (commit: string, cwd = join(root, 'apps/app')) => {
+    const cachePolicy = { ...defaultPolicy.storage, globalInputCacheClearAboveEntries: 0 };
+    const measure = (commit: string, cwd = join(root, 'apps/app'), policy = cachePolicy) => {
       process.env.PATH = `${bin}${delimiter}${originalPath}`;
       process.env.CHECK_RESULTS_TEST_GIT_LOG = log;
       process.env.CHECK_RESULTS_TEST_REAL_GIT = gitPath;
       try {
-        return checkResultKey({ root, commit, cwd, command: ['bun', 'test'], env: {} });
+        return checkResultKey({ root, commit, cwd, command: ['bun', 'test'], env: {}, policy });
       } finally {
         if (originalPath === undefined) delete process.env.PATH;
         else process.env.PATH = originalPath;
@@ -142,12 +144,14 @@ describe('check result reuse keys', () => {
     expect(large.key).not.toBe(small.key);
     expect(measure(largeCommit)).toEqual(large);
     expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(4);
+    expect(measure(smallCommit)).toEqual(small);
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(6);
 
     write('packages/no-manifest/src.ts', 'export const outsideWorkspace = true;');
     commit();
     const missingManifest = measure(command('rev-parse', 'HEAD'), join(root, 'packages/no-manifest'));
     expect(missingManifest.unit).toBe('packages/no-manifest');
-    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(7);
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(9);
   });
 
   test('a passing check records its result under command, allowlisted environment, workspace closure, global inputs, and toolchain', () => {
