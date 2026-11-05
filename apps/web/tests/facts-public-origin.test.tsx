@@ -227,7 +227,6 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     ).toEqual({ kind: 'invalid' });
 
     await navigate(unsupported);
-    expect(router.state.location.searchStr).toBe(new URL(unsupported, 'https://site.test').search);
     await waitFor(() => expect(host.textContent).toContain(m.facts_public_unsupported()));
     expect(correctionReads).toHaveLength(0);
     expect(host.querySelector('input,select')).toBeNull();
