@@ -61,7 +61,14 @@ export function isWatchReturnReceipt(value: unknown): value is WatchReturnReceip
   if (Object.keys(receipt).length !== 3 || typeof receipt.focusRequested !== 'boolean') return false;
   const locator = receipt.locator;
   const identity = receipt.identity;
-  if (!locator || typeof locator !== 'object' || Array.isArray(locator) || !identity || typeof identity !== 'object' || Array.isArray(identity))
+  if (
+    !locator ||
+    typeof locator !== 'object' ||
+    Array.isArray(locator) ||
+    !identity ||
+    typeof identity !== 'object' ||
+    Array.isArray(identity)
+  )
     return false;
   const location = locator as Record<string, unknown>;
   const selected = identity as Record<string, unknown>;
@@ -197,8 +204,7 @@ export class WatchController {
     };
     return this.load(request);
   };
-  first = () =>
-    this.load({ kind: this.state.kind, cursor: null, previousAfter: [], previousOnStart: [] });
+  first = () => this.load({ kind: this.state.kind, cursor: null, previousAfter: [], previousOnStart: [] });
   next = () =>
     this.state.read === 'ready' && this.state.next !== null
       ? this.load({

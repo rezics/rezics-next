@@ -52,13 +52,7 @@ export function WatchesSection({
     return null;
   }
   if (!entry.controller) return null;
-  return (
-    <OwnedWatches
-      controller={entry.controller}
-      initialReturn={initialReturn}
-      onVisitTarget={onVisitTarget}
-    />
-  );
+  return <OwnedWatches controller={entry.controller} initialReturn={initialReturn} onVisitTarget={onVisitTarget} />;
 }
 
 function OwnedWatches({

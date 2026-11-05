@@ -13,11 +13,7 @@ import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
 import { ShelfPreferencesCard } from './shelf-preferences';
-import {
-  ReadingNavigation,
-  SettingsNavigationProvider,
-  useSettingsNavigationOwner,
-} from './reading-navigation';
+import { ReadingNavigation, SettingsNavigationProvider, useSettingsNavigationOwner } from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
@@ -264,7 +260,9 @@ export function SettingsWatchesOwner({ io }: { io?: WatchManagementIO | undefine
   const location = useLocation();
   const navigation = useSettingsNavigationOwner();
   const [watchReturnEntry] = useState(() =>
-    typeof globalThis.window === 'undefined' ? { receipt: null, present: false } : readSettingsWatchReturn(window.history.state),
+    typeof globalThis.window === 'undefined'
+      ? { receipt: null, present: false }
+      : readSettingsWatchReturn(window.history.state),
   );
   useLayoutEffect(() => {
     if (watchReturnEntry.present && typeof globalThis.window !== 'undefined') {
