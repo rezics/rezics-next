@@ -364,11 +364,11 @@ export function personalLabelRoutes(
         },
       },
       async ({ actor, query, admission, job }) => {
-        const body = await admission.run('normal', job, () =>
-          command(() => assignments().listAssignments(actor, query)),
-        );
-        // The owner RR connection is released before standard per-partition summary readers acquire theirs.
-        return fullView({ ...deps, access: deps.access() }, actor, query.labelId ? query.view : 'BASIC', body);
+        return admission.run('normal', job, async () => {
+          const body = await command(() => assignments().listAssignments(actor, query));
+          // The owner RR connection is released before standard per-partition summary readers acquire theirs.
+          return fullView({ ...deps, access: deps.access() }, actor, query.labelId ? query.view : 'BASIC', body);
+        });
       },
     )
     .post(

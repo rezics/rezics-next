@@ -1,5 +1,6 @@
 import { MAX_SHELF_PAGE_SIZE, type ShelfActiveReader, type ShelfSession } from './shelf-contract.ts';
 import activeSessions from './shelf-active.sql';
+import { executeLabelSql, labelActiveSessionsPlan } from './label-operation-bounds.ts';
 
 function member<T extends string>(value: string, values: readonly T[]): T {
   const matched = values.find((candidate) => candidate === value);
@@ -19,9 +20,9 @@ export function createShelfActiveReader(): ShelfActiveReader {
       const result = new Map<string, ShelfSession>();
       if (distinct.size === 0) return result;
 
-      const rows = await activeSessions.run(
-        { query: client.query.bind(client) },
-        { route, account_id: accountId, subject_ids: [...distinct] },
+      const plan = labelActiveSessionsPlan({ route, accountId, subjectIds: [...distinct] });
+      const rows = await executeLabelSql(plan, (operands) =>
+        activeSessions.run({ query: client.query.bind(client) }, operands),
       );
       for (const row of rows) {
         if (row.startedAt === null) throw new Error('Progress session start timestamp is missing');

@@ -285,3 +285,44 @@ This is a leaf, not the complete reverse-discovery operation or a native grant. 
 count, partition/currentness, repeated curator checks, connection controls and FULL disclosure still belong to the
 enclosing immutable operation. Count and pair observations remain independent; no atomic snapshot, refill or
 count recomputation is introduced. Directory/preview composition retains its existing callers and limits.
+
+## Private label operations
+
+Decision: private label operations use closed service-owned nine-axis plans built from immutable request operands and
+bound at existing native command/read callers; import guards add only their reached preparation and source-fence
+branches, with current limits and authority unchanged.
+
+`label-operation-bounds.ts` keeps SQL and Library meaning with the existing owners. Each SQL leaf captures its exact
+compiled SQL, detached original binds, native row shape and finite page/identity inputs. `bytes` includes SQL UTF-8,
+JSON-serialized binds, maximum escaped projected rows and array framing. The public page default/max stay 20/100; the
+label-name ceiling stays 100 Unicode scalars; prefix continuation keeps normalized text and C collation. Assignment
+admission prices the raw 32-reservation seek plus the exact desired tuple, up to 34 sorted current parent points, an
+optional exact source recheck, and at most one reclaim and one set. Negative parent lookups and the desired but
+ineffective reservation remain in those bounds. The subject page retains its 32-key raw frontier before sorting,
+cursor filtering and slicing.
+
+Create, rename with its no-change read branch, label delete/restore, catalogue pages, assignment set, exact unassign,
+exact retained restore, and BASIC/FULL assignment SQL pages are consumed by the existing stores and callers. A
+composed local operation reserves once on the current `CommandWorkAssociation`; its nested SQL leaves execute on the
+same client without duplicate reservation. A direct leaf still uses its exact SQL declaration. The explicit bridge
+to the existing eight-axis Source port checks `engineRequests === 0`; these SQL leaves make no Search request and do
+not mint permission, a native grant, replay authority or execution evidence.
+
+FULL by-label storage reads charge the bounded assignment page, current parent, entry tiles and active-session query
+for at most 100 subject IDs. Their projection bounds follow the stored vocabulary ID ceiling, profile unit ID limit,
+numeric input grammar, locator limit, UUID/revision widths and PostgreSQL timestamp text. The active-session seek is
+the existing partial index on `(route, account_id, subject_id, last_changed_at DESC, session_id)`. FULL subject
+summaries remain Semantic-owned and the current `fullView` fanout is outside this local plan.
+
+The existing native prefix journey now takes a full 100-row prefix page and its five-row continuation. The FULL HTTP
+journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after
+the raw frontier without refill; existing assignment, lifecycle and catalogue journeys retain their replay, CAS,
+capacity and later-edit assertions.
+
+These declarations are not yet complete enclosing operations: each plan reports `complete: false`. The existing
+command root still owns access/action/group preparation, account floor/fence, source identity and parent currentness,
+receipt/replay, History/events/outbox, transaction controls, retries, rollback and serialized response bytes. The
+catalogue root also owns partition/cursor decoding and continuation-name rereads. AniList, MAL and custom import
+preparation/fence branches remain with their import callers. Semantic FULL disclosure and its repeated source/profile
+probes remain with the Semantic owner. Add those reached terms at those existing boundaries before calling the
+operation family complete; keep the current request deadline, attempts, receipt semantics and capacity unchanged.

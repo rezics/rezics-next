@@ -255,86 +255,12 @@ still exposes only its returned subject IDs and the Collection's ordinary public
 private or deleting it revokes that Collection disclosure according to the existing Collection/listing protocol;
 it does not change the owner's label facts.
 
-## Mutation and cleanup cost
+## Performance
 
-The following are policy bounds, not claims of passing native measurements. Charge raw source keys BEFORE filters,
-including rejected, internal, lookahead and reread work across every Access, source, catalogue and summary pool.
-Necessary parent/cursor/fence metadata points, statements, retries, bytes and physical heap/buffer work are additional
-measured dimensions. Shrink raw windows to fit owner<=100 and aggregate caller<=256, retaining the existing separate
-semantic identity allowance. No emitted-row count can substitute for these charges.
-
-### Catalogue list and literal prefix search
-
-- Touches: owner admission, live-name B-tree range, cursor basis and exact continuation-name reread.
-- Bound: <=100 raw candidates, O(P) memory, fixed metadata points; long legal names require no linear catalogue work.
-- Growth check: native prefix/catalogue growth suites exist; current q/continuation and Unicode-boundary measurements are unrecorded.
-
-### Create label
-
-- Touches: owner admission, exact definition/name uniqueness, shared receipt/outbox and source metadata as needed.
-- Bound: fixed keys/statements; unrelated catalogue growth adds at most logarithmic index work, with no catalogue cap.
-- Growth check: native catalogue growth source exists; end-to-end create measurements remain unrecorded; [catalogue tests][catalogue-tests] are narrower.
-
-### Rename label
-
-- Touches: exact label CAS, old/new name keys, receipt/outbox and source evidence; never child rows.
-- Bound: fixed keys/statements independent of assignment population; unchanged canonical name has no domain effect.
-- Growth check: [outcome acceptance][outcomes] has a native adapter; unrelated-data rename traces remain unmeasured.
-
-### Delete label
-
-- Touches: exact parent CAS/tombstone, source fence and shared receipt/outbox/durable cleanup intent.
-- Bound: fixed keys/statements with no assignment fanout; child count affects only eventual paged cleanup.
-- Growth check: [outcome acceptance][outcomes] retains delete growth/crash/replay; current integrated results remain unmeasured.
-
-### Restore label
-
-- Touches: exact historic parent CAS/deadline/name uniqueness, source fence and minimal receipt/outbox.
-- Bound: fixed keys/statements; restore unchanged reservations implicitly, never enumerate or revive reclaimed children.
-- Growth check: [catalogue tests][catalogue-tests] cover DAO undo/name collision; native lifecycle growth exists but current restore measurements are unrecorded.
-
-### Assign label
-
-- Touches: admitted subject/owner, guard, reserved-source seek, exact desired tuple, sorted current parents, optional reclaim.
-- Bound: <=32 reservations, <=33 parent locks, one reclaim and fixed command metadata; duplicates precede capacity work.
-- Growth check: [native admission plans][admission-plans] measure 64/512/4096 inactive histories, including rejected paths.
-
-### Unassign label
-
-- Touches: owner/subject admission, guard, current parent, exact assignment-ID/tuple/revision CAS, fence and receipt/outbox.
-- Bound: fixed points/statements; clear one reservation and retain only that episode for 720 hours.
-- Growth check: native assignment lifecycle growth source exists; [outcome acceptance][outcomes] remains unmeasured.
-
-### Restore assignment
-
-- Touches: historic assignment-ID/tuple/revision/deadline, guard, <=32 reservations/current parents and shared command keys.
-- Bound: <=33 parent locks and one reclaim to reacquire capacity; no history scan or renewal of the original undo deadline.
-- Growth check: native undo/admission source exists; reassignment evidence alone is not measured Undo proof.
-
-### BASIC assignment list
-
-- Touches: owner/subject admission, exact parent metadata and indexed label or reserved-subject source candidates.
-- Bound: <=100 raw page candidates; subject source <=32 plus necessary current-parent/metapoints, charged separately.
-- Growth check: native read/growth source exists; current deep-cursor measurements remain unrecorded; DAO admission is not read proof.
-
-### FULL assignments by subject
-
-- Touches: BASIC sources and <=32 exact current-parent name points; no progress or display-summary reads.
-- Bound: same bounded reservation window plus separately charged metadata points; no retained-history or catalogue scan.
-- Growth check: FULL-by-subject HTTP source and growth cases exist; complete all-pool measurements remain unrecorded.
-
-### FULL assignments by label
-
-- Touches: admission/gates, parent/page and owner entry/session batch in one RR snapshot, then standard subject summaries.
-- Bound: raw page<=100 and native subject-ID batch<=100; fixed per-subject points, finite summary concurrency, all pools charged.
-- Growth check: batch/FULL HTTP source and growth cases exist; end-to-end all-pool measurements remain unrecorded.
-
-### Automatic purge and terminal account cleanup
-
-- Touches: bounded raw due/owner-label keys, account barrier, episode CAS/locks, child then parent and owned private payload.
-- Bound: <=100 raw keys per durable page, O(P) memory/O(N) total; effects/checkpoint/next intent commit together.
-- Growth check: [outcome acceptance][outcomes] requires crash/replay/terminal traces; native retention source exists,
-  while complete cleanup/inspection bindings and execution evidence remain missing.
+The current nine-axis native declarations and their receiving scope are maintained in the
+[Kernel private-label operation cost contract](../services/kernel/src/library/performance-contract.md#private-label-operations).
+This page remains authoritative for label behavior, privacy and supported limits; the Kernel contract owns SQL
+derivations, caller composition and receiving evidence.
 
 An ordinary create, rename, assignment, or unassignment touches a fixed set of keys in one owner partition: the
 exact label or assignment key, its bounded reservation/parent keys, the generic owner fact-source fence,
@@ -443,7 +369,3 @@ undo and finite assignment identity with ID-bound CAS. Alternative revision allo
 and duplicated source tables are not adopted. Native admission plan tests and HTTP source exist; complete
 source/HTTP/cleanup acceptance proof remains outstanding.
 
-[catalogue-tests]: ../services/kernel/test/library/label-store.test.ts
-[admission-tests]: ../services/kernel/test/library/label-assignment-store.test.ts
-[admission-plans]: ../services/kernel/test/library/label-assignment-growth.test.ts
-[outcomes]: ../specs/library-labels-outcomes.test.ts

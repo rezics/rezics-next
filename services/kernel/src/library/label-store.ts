@@ -3,6 +3,15 @@ import insertLabel from './label-store-insert.sql';
 import lifecycleLabel from './label-store-lifecycle.sql';
 import readLabel from './label-store-read.sql';
 import renameLabel from './label-store-rename.sql';
+import {
+  executeLabelOperation,
+  executeLabelSql,
+  LABEL_NAME_SCALARS,
+  labelCreatePlan,
+  labelLifecyclePlan,
+  labelRenamePlan,
+  labelSqlPlan,
+} from './label-operation-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };
@@ -29,7 +38,8 @@ function normalize(input: unknown, allowEmpty: boolean): string {
     throw new TypeError('A personal label name must be nonempty and contain no controls or lone surrogates');
   let scalars = 0;
   for (const _scalar of name) {
-    if (++scalars > 100) throw new RangeError('A personal label name is at most 100 Unicode scalars');
+    if (++scalars > LABEL_NAME_SCALARS)
+      throw new RangeError(`A personal label name is at most ${LABEL_NAME_SCALARS} Unicode scalars`);
   }
   return name;
 }
@@ -78,14 +88,20 @@ export async function insertPersonalLabel(
   label: { accountId: string; id: string; name: unknown },
   context: WriteContext,
 ): Promise<LabelRecord> {
-  const rows = await insertLabel.run(queryClient(client), {
+  const input = {
     route,
     account_id: label.accountId,
     label_id: label.id,
     name: normalizePersonalLabelName(label.name),
     transaction_id: context.transactionId,
     time: context.time,
-  });
+  };
+  const operation = labelCreatePlan({ route, accountId: label.accountId, labelId: label.id, name: input.name,
+    transactionId: context.transactionId, time: context.time });
+  const plan = operation.leaves[0]!;
+  const rows = await executeLabelOperation(operation, () =>
+    executeLabelSql(plan, (operands) => insertLabel.run(queryClient(client), operands)),
+  );
   const row = rows[0];
   if (!row) throw new Error('Personal label insert returned no row');
   return asRecord(row);
@@ -98,12 +114,19 @@ export async function readPersonalLabel(
   labelId: string,
   includeDeleted = false,
 ): Promise<LabelRecord | null> {
-  const row = await readLabel.run(queryClient(client), {
+  const input = {
     route,
     account_id: accountId,
     label_id: labelId,
     include_deleted: includeDeleted,
+  };
+  const plan = labelSqlPlan('label.read', readLabel.sql, input, {
+    candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1,
+    output: { id: 'f'.repeat(36), name: '\u{10ffff}'.repeat(LABEL_NAME_SCALARS), revision: 2_147_483_647,
+      createdAt: '\u0000'.repeat(64), updatedAt: '\u0000'.repeat(64),
+      deletedAt: '\u0000'.repeat(64), purgeAfter: '\u0000'.repeat(64) }, outputRows: 1,
   });
+  const row = await executeLabelSql(plan, (operands) => readLabel.run(queryClient(client), operands));
   return row ? asRecord(row) : null;
 }
 
@@ -116,15 +139,13 @@ export async function renamePersonalLabel(
   name: unknown,
   context: WriteContext,
 ): Promise<LabelRecord | null> {
-  const rows = await renameLabel.run(queryClient(client), {
-    route,
-    account_id: accountId,
-    label_id: labelId,
-    revision: expectedRevision,
-    name: normalizePersonalLabelName(name),
-    transaction_id: context.transactionId,
-    time: context.time,
-  });
+  const normalizedName = normalizePersonalLabelName(name);
+  const operation = labelRenamePlan({ route, accountId, labelId, revision: expectedRevision,
+    name: normalizedName, transactionId: context.transactionId, time: context.time, includeRead: false });
+  const plan = operation.leaves[0]!;
+  const rows = await executeLabelOperation(operation, () =>
+    executeLabelSql(plan, (operands) => renameLabel.run(queryClient(client), operands)),
+  );
   return rows[0] ? asRecord(rows[0]) : null;
 }
 
@@ -137,15 +158,12 @@ async function lifecycle(
   context: WriteContext,
   restore: boolean,
 ): Promise<LabelRecord | null> {
-  const rows = await lifecycleLabel.run(queryClient(client), {
-    route,
-    account_id: accountId,
-    label_id: labelId,
-    revision: expectedRevision,
-    transaction_id: context.transactionId,
-    time: context.time,
-    restore,
-  });
+  const operation = labelLifecyclePlan({ route, accountId, labelId, revision: expectedRevision,
+    transactionId: context.transactionId, time: context.time, restore, includeRead: false });
+  const plan = operation.leaves[0]!;
+  const rows = await executeLabelOperation(operation, () =>
+    executeLabelSql(plan, (operands) => lifecycleLabel.run(queryClient(client), operands)),
+  );
   return rows[0] ? asRecord(rows[0]) : null;
 }
 
