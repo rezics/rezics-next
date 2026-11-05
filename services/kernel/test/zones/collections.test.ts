@@ -4,7 +4,7 @@ import type { Access } from '../../src/request/access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { decodeListCursor, encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { createBody, problem, resourceFixture, type ResourceFixture } from './resource-fixture.ts';
 
