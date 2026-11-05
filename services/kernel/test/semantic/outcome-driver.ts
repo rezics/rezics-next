@@ -550,16 +550,30 @@ async function startDriver(
       }
     }
 
-    await grantAccount(accounts.editor, ['subject:create', 'statement:propose', 'context:create']);
-    await grantAccount(accounts.acceptor, ['context:accept', 'context:adopt', 'subject:merge']);
-    await grantAccount(accounts.steward, ['definitions:publish', 'definitions:activate']);
+    // The governor's route refuses these actions on Global: it must hold each granted action at that resource, and the
+    // declared revision, context and definition types exclude the platform resource (its single-action probes return
+    // 403 for statement:propose and context:create while subject:create returns 201). Fixture setup therefore inserts
+    // the same grant rows that the real-access fixture inserts; subject creation still goes through the native route.
+    async function grantDirect(account: Account, actions: readonly string[]) {
+      for (const action of actions)
+        await pool!.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+VALUES (0,$1,$2,$3,'(,)',$2) ON CONFLICT DO NOTHING`,
+          [GLOBAL_CONTEXT, account.accountId, action],
+        );
+    }
+
+    await grantAccount(accounts.editor, ['subject:create']);
+    await grantDirect(accounts.editor, ['statement:propose', 'context:create']);
+    await grantDirect(accounts.acceptor, ['context:accept', 'context:adopt', 'subject:merge']);
+    await grantDirect(accounts.steward, ['definitions:publish', 'definitions:activate']);
     if (options.originalCapabilities) {
       await grantAccount(accounts.steward, ['gate:definition_publication']);
       await grantAccount(accounts.acceptor, ['gate:subject_identity']);
       await grantAccount(accounts.editor, ['gate:definition_publication', 'gate:subject_identity']);
     }
-    await grantAccount(accounts.suspended, [
-      'subject:create',
+    await grantAccount(accounts.suspended, ['subject:create']);
+    await grantDirect(accounts.suspended, [
       'statement:propose',
       'context:create',
       'context:accept',
