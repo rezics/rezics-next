@@ -53,7 +53,7 @@ export const Route = createFileRoute('/@{$handle}_/$view')({
   validateSearch: (search: Record<string, unknown>): { cursor?: string } => ({
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
   }),
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
+  loaderDeps: ({ search }): { cursor: string | undefined } => ({ cursor: search.cursor }),
   // Realms replaces its native loader page; other named views keep their existing query cache.
   loader: async ({ params, deps, location, context }) => {
     const view = agentPathView(params.view);
