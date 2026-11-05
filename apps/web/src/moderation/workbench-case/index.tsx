@@ -264,7 +264,7 @@ export function WorkbenchCaseDetail({
   return (
     <AuthoringDepartureBoundary sessionBound={false} navigationContext={reportReviewNavigationContext}>
       <main className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
-        <WorkbenchCaseReturnLink href={queueHref} onReturnQueue={onReturnQueue}>
+        <WorkbenchCaseReturnLink href={queueHref} {...(onReturnQueue ? { onReturnQueue } : {})}>
           {m.moderation_workbench_history_return()}
         </WorkbenchCaseReturnLink>
         <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
@@ -342,7 +342,7 @@ export function WorkbenchCaseStatus({
               : m.moderation_target_unavailable();
   return (
     <main className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
-      <WorkbenchCaseReturnLink href={queueHref} onReturnQueue={onReturnQueue}>
+      <WorkbenchCaseReturnLink href={queueHref} {...(onReturnQueue ? { onReturnQueue } : {})}>
         {m.moderation_workbench_history_return()}
       </WorkbenchCaseReturnLink>
       <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>

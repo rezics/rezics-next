@@ -48,10 +48,10 @@ type WindowState = {
   addresses: WorkbenchAddress[];
   index: number;
   mode: WorkbenchWindowMode;
-  pending?: PendingTransition;
+  pending?: PendingTransition | undefined;
   transitionApproved: boolean;
-  reportId?: string;
-  focus?: FocusTicket;
+  reportId?: string | undefined;
+  focus?: FocusTicket | undefined;
 };
 
 export type WorkbenchWindowView = {
@@ -231,7 +231,7 @@ function allowedCaseReturnSearch(state: WindowState, raw: Record<string, unknown
 
 /** One tab-local coordinate chain. Queue rows and action advice never enter this store. */
 export class WorkbenchQueueWindowHistory {
-  private state?: WindowState;
+  private state: WindowState | undefined;
   private revision = 0;
   private readonly listeners = new Set<() => void>();
 
@@ -493,7 +493,7 @@ export class WorkbenchQueueWindowHistory {
     visitId: string | undefined,
     target: WorkbenchNavigationTarget,
     current: WorkbenchSearch | WorkbenchCaseSearch,
-    page: WorkbenchPrivateVisit & { state?: WorkbenchQueuePage['state']; next?: string | null },
+    page: WorkbenchPrivateVisit & { state?: string; next?: string | null },
   ) {
     const state = this.state;
     if (!visitId || !state || state.visitId !== visitId || !state.pending) {
