@@ -550,7 +550,11 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     closed(input, ['owner', 'kind', 'requestKey']);
     ownerCheck(input.owner);
     if (input.kind !== 'backfill' && input.kind !== 'counters') throw new TypeError('Invalid shelf rebuild kind');
-    const owner = { ...input.owner };
+    // The receipt and the body must describe the same request across authorization
+    // awaits. Retain values, rather than the caller's mutable request container.
+    const owner = Object.freeze({ ...input.owner });
+    const request = Object.freeze({ owner, kind: input.kind, requestKey: input.requestKey });
+    const deadline = workStepDeadline();
     const identity = principalCommandIdentity(actor);
     const resource = { route: owner.route, id: owner.accountId };
     const authorization = resourceAuthorization({
@@ -564,16 +568,16 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           return true;
         },
       },
-      context: { pool, deadline: workStepDeadline(), partition: partitionOf(owner.route) },
+      context: { pool, deadline, partition: partitionOf(owner.route) },
     });
     const result = await runCommand(
       pool,
       {
         ...identity,
         partition: partitionOf(owner.route),
-        deadline: workStepDeadline(),
+        deadline,
         clock,
-        receipt: { kind: 'library.shelf-maintenance.request', key: input.requestKey, digest: digest(input) },
+        receipt: { kind: 'library.shelf-maintenance.request', key: request.requestKey, digest: digest(request) },
         authorization,
       },
       async (tx) => {
@@ -584,12 +588,12 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           const current = await runLock.run(tx, runArgs(owner, gate.runId));
           if (current && current.phase !== 'complete' && !current.cancelled) {
             if (current.phase === 'retire-counts' || current.phase === 'retire-reservations') unavailable(owner);
-            if (current.kind !== input.kind) unavailable(owner);
+            if (current.kind !== request.kind) unavailable(owner);
             return noEffect(bindingFor(owner, current));
           }
         }
-        if (input.kind === 'counters' && !gate.ready) unavailable(owner);
-        const requested = await createRun(tx, owner, gate, input.kind);
+        if (request.kind === 'counters' && !gate.ready) unavailable(owner);
+        const requested = await createRun(tx, owner, gate, request.kind);
         return { value: requested, events: [event(owner)] };
       },
     );
@@ -667,9 +671,11 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     );
     return result.value;
   }
-  async function executePage(binding: ShelfMaintenanceBinding, retry: number): Promise<ShelfMaintenanceReceipt> {
-    binding = Object.freeze({ ...binding });
-    validateShelfMaintenanceBinding(binding);
+  async function executePage(
+    binding: ShelfMaintenanceBinding,
+    retry: number,
+    deadline: number,
+  ): Promise<ShelfMaintenanceReceipt> {
     const owner = { route: binding.route, accountId: binding.accountId };
     const args = { ...runArgs(owner, binding.runId), epoch: BigInt(binding.epoch), sequence: BigInt(binding.sequence) };
     const header = await withConnection(pool, (client) => stepRead.run(client, args));
@@ -701,7 +707,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         pool,
         {
           partition: partitionOf(owner.route),
-          deadline: workStepDeadline(),
+          deadline,
           clock,
           receipt: {
             actorAccountId: owner.accountId,
@@ -1018,12 +1024,16 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     } catch (error) {
       // A concurrent winner may have captured another current observation. Its
       // immutable native header, never that losing observation, defines replay.
-      if (retry === 0 && error instanceof IdempotencyConflictError) return executePage(binding, 1);
+      if (retry === 0 && error instanceof IdempotencyConflictError) return executePage(binding, 1, deadline);
       throw error;
     }
   }
   async function page(binding: ShelfMaintenanceBinding) {
-    return executePage(binding, 0);
+    const original = Object.freeze({ ...binding });
+    validateShelfMaintenanceBinding(original);
+    // Preparation and the one conflict reconciliation share the original page
+    // budget. Re-reading a winner's header must not renew command execution time.
+    return executePage(original, 0, workStepDeadline());
   }
   async function recover(input: Parameters<ShelfMaintenanceOps['recover']>[0]) {
     closed(input, ['after', 'limit']);

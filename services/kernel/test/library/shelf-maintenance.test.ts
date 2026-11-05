@@ -47,11 +47,21 @@ test('default native empty owner initializes, drains, fences a late writer and a
     generationId: '00000000-0000-0000-0000-000000000000',
     requested: null,
   });
-  const requested = await ops().requestRebuild(as, {
-    owner: account,
-    kind: 'backfill',
+  const request = {
+    owner: { ...account },
+    kind: 'backfill' as 'backfill' | 'counters',
     requestKey: crypto.randomUUID(),
-  });
+  };
+  const requesting = ops().requestRebuild(as, request);
+  // Authorization yields before the native body. Its receipt must retain the
+  // original request even if the caller reuses its input container meanwhile.
+  request.kind = 'counters';
+  request.owner.accountId = f.people.bob.accountId;
+  const requested = await requesting;
+  expect(
+    (await f.db.admin.query('SELECT kind FROM library.shelf_maintenance_run WHERE run_id=$1', [requested.runId]))
+      .rows[0].kind,
+  ).toBe('backfill');
   const recovered = await ops().recover({ after: null, limit: 100 });
   expect(recovered.enqueued.some((binding) => binding.runId === requested.runId)).toBe(true);
   expect((await f.client.getWorkflow(`shelf:${account.accountId}:${requested.runId}:0:0:0:0`))?.workflowName).toBe(
@@ -68,6 +78,7 @@ test('default native empty owner initializes, drains, fences a late writer and a
   ).rejects.toThrow();
   const terminal = await finish(drained.next!);
   expect(terminal.terminal).toBe(true);
+  expect(await ops().requestRebuild(as, { ...request, owner: account, kind: 'backfill' })).toEqual(requested);
   expect(await ops().page(requested)).toEqual(drained);
   const gate = (
     await f.db.admin.query(
