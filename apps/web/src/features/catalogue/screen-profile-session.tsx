@@ -196,7 +196,11 @@ function ScreenReadOnlyVisit({
     refetchOnReconnect: false,
   });
   if (query.isPending) {
-    return <p role="status" className="mx-auto w-full max-w-4xl px-4 py-8">{m.candidate_loading({}, { locale: locale as never })}</p>;
+    return (
+      <p role="status" className="mx-auto w-full max-w-4xl px-4 py-8">
+        {m.candidate_loading({}, { locale: locale as never })}
+      </p>
+    );
   }
   const read = query.data;
   const current =
@@ -209,16 +213,15 @@ function ScreenReadOnlyVisit({
       ? read
       : undefined;
   if (!current?.public) {
-    const message =
-      !read
-        ? 'unavailable'
-        : !read.ok
-          ? read.reason === 'concealed'
-            ? 'concealed'
-            : read.reason === 'invalid'
-              ? 'invalid'
-              : 'unavailable'
-          : 'invalid';
+    const message = !read
+      ? 'unavailable'
+      : !read.ok
+        ? read.reason === 'concealed'
+          ? 'concealed'
+          : read.reason === 'invalid'
+            ? 'invalid'
+            : 'unavailable'
+        : 'invalid';
     return (
       <ScreenCurrentVisitRecovery
         locale={locale}
@@ -248,7 +251,11 @@ function ScreenReadOnlyVisit({
   const admittedVisit = screenCurrentVisitAvailable(readerEntry, currentVisit) ? currentVisit : undefined;
   return (
     <>
-      {definitionChanged ? <p role="status" className="mx-auto w-full max-w-4xl px-4 pt-6">{m.screen_visit_reading_changed({}, { locale: locale as never })}</p> : null}
+      {definitionChanged ? (
+        <p role="status" className="mx-auto w-full max-w-4xl px-4 pt-6">
+          {m.screen_visit_reading_changed({}, { locale: locale as never })}
+        </p>
+      ) : null}
       <ScreenProfileReader
         locale={locale}
         public={current.public}

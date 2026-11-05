@@ -39,10 +39,7 @@ function ScreenCurrentVisitStory({ state = 'selected-reading' }: { state?: Scree
   const selected = statements[0];
   const duplicateId = '00000000-0000-4000-8000-000000000904';
   if (state === 'duplicate-evidence' && selected && !statements.some((statement) => statement.id === duplicateId)) {
-    reading.subject.statements[property] = [
-      ...statements,
-      { ...structuredClone(selected), id: duplicateId },
-    ];
+    reading.subject.statements[property] = [...statements, { ...structuredClone(selected), id: duplicateId }];
   }
   reading.subject.id = subjectId;
   reading.subject.context = state === 'unsupported-context' ? editorialContext : PAGE_GLOBAL_CONTEXT;
@@ -78,14 +75,20 @@ function ScreenCurrentVisitStory({ state = 'selected-reading' }: { state?: Scree
     <PatternStory path={`/subjects/${subjectId}/the-observatory/screen`} visitor="Signed In">
       <AppShell>
         {state === 'recorded-success-read-recovery' ? (
-          <ScreenCurrentVisitRecovery locale={locale} message="unavailable" globalHref={`/${locale}/subjects/${subjectId}/the-observatory/screen`} />
+          <ScreenCurrentVisitRecovery
+            locale={locale}
+            message="unavailable"
+            globalHref={`/${locale}/subjects/${subjectId}/the-observatory/screen`}
+          />
         ) : (
           <main className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6">
             {state === 'classification-handoff' ? (
               <p role="status">{m.classification_create_created_identity({ label: 'Night', type: 'Concept' })}</p>
             ) : null}
             {state === 'cancelled-return-focus' ? (
-              <p className="text-sm text-muted-foreground">Pointer or keyboard interaction cancels the pending return focus.</p>
+              <p className="text-sm text-muted-foreground">
+                Pointer or keyboard interaction cancels the pending return focus.
+              </p>
             ) : null}
             <ScreenProfileReader
               locale={locale}
@@ -101,10 +104,15 @@ function ScreenCurrentVisitStory({ state = 'selected-reading' }: { state?: Scree
                 : {})}
               {...(returnHref ? { returnHref } : {})}
               visitIdentity={`screen-current-visit:${state}`}
-              returnNotice={state === 'duplicate-evidence' && !reading.subject.statements[property]?.some((item) => item.id === occurrence?.statement)}
+              returnNotice={
+                state === 'duplicate-evidence' &&
+                !reading.subject.statements[property]?.some((item) => item.id === occurrence?.statement)
+              }
             />
             {state === 'duplicate-evidence' && occurrence ? (
-              <p id={screenCurrentInspectionId(occurrence.statement)} className="sr-only">{m.screen_visit_inspect()}</p>
+              <p id={screenCurrentInspectionId(occurrence.statement)} className="sr-only">
+                {m.screen_visit_inspect()}
+              </p>
             ) : null}
           </main>
         )}

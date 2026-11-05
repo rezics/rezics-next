@@ -66,9 +66,9 @@ function statementOf(read: SubjectRead, occurrence: ScreenCurrentOccurrence): St
   if (occurrence.holder !== read.subject.id) return undefined;
   const statements = read.subject.statements[occurrence.property];
   return Array.isArray(statements)
-    ? (statements.find((statement) => statement.id === occurrence.statement && statement.property.id === occurrence.property) as
-        | Stmt
-        | undefined)
+    ? (statements.find(
+        (statement) => statement.id === occurrence.statement && statement.property.id === occurrence.property,
+      ) as Stmt | undefined)
     : undefined;
 }
 
@@ -120,9 +120,16 @@ function ScreenOccurrence({
   const o = options(locale);
   const propertyLabel = pickText(release.properties[property]?.labels ?? {}, locale);
   const content = (
-    <div id={targetId} data-screen-current-evidence={inspect ? 'selected' : undefined} tabIndex={targetId ? -1 : undefined} className="min-w-0 space-y-2 rounded-lg border border-border p-4">
+    <div
+      id={targetId}
+      data-screen-current-evidence={inspect ? 'selected' : undefined}
+      tabIndex={targetId ? -1 : undefined}
+      className="min-w-0 space-y-2 rounded-lg border border-border p-4"
+    >
       {propertyLabel.text ? (
-        <h3 lang={propertyLabel.lang ?? undefined} className="font-medium">{propertyLabel.text}</h3>
+        <h3 lang={propertyLabel.lang ?? undefined} className="font-medium">
+          {propertyLabel.text}
+        </h3>
       ) : null}
       <CandidateValue
         snak={statement}
@@ -148,8 +155,12 @@ function ScreenOccurrence({
             if (!label.text) return null;
             return (
               <div key={`${part.property.id}:${index}`} className="min-w-0 space-y-1">
-                <dt lang={label.lang ?? undefined} className="text-sm text-muted-foreground">{label.text}</dt>
-                <dd><ScreenPart part={part} read={read} locale={locale} /></dd>
+                <dt lang={label.lang ?? undefined} className="text-sm text-muted-foreground">
+                  {label.text}
+                </dt>
+                <dd>
+                  <ScreenPart part={part} read={read} locale={locale} />
+                </dd>
               </div>
             );
           })}
@@ -159,15 +170,21 @@ function ScreenOccurrence({
         <ol className="min-w-0 space-y-3">
           {statement.references.map((reference, referenceIndex) => (
             <li key={referenceIndex} className="min-w-0 space-y-2 border-s-2 ps-3">
-              <p className="text-sm text-muted-foreground">{m.correction_references({}, o)} {referenceIndex + 1}</p>
+              <p className="text-sm text-muted-foreground">
+                {m.correction_references({}, o)} {referenceIndex + 1}
+              </p>
               <dl className="min-w-0 space-y-2">
                 {reference.parts.map((part, index) => {
                   const label = pickText(release.properties[part.property.id]?.labels ?? {}, locale);
                   if (!label.text) return null;
                   return (
                     <div key={`${part.property.id}:${index}`} className="min-w-0 space-y-1">
-                      <dt lang={label.lang ?? undefined} className="text-sm text-muted-foreground">{label.text}</dt>
-                      <dd><ScreenPart part={part} read={read} locale={locale} /></dd>
+                      <dt lang={label.lang ?? undefined} className="text-sm text-muted-foreground">
+                        {label.text}
+                      </dt>
+                      <dd>
+                        <ScreenPart part={part} read={read} locale={locale} />
+                      </dd>
                     </div>
                   );
                 })}
@@ -196,7 +213,9 @@ function ScreenOccurrence({
     >
       {content}
     </SpoilerGate>
-  ) : content;
+  ) : (
+    content
+  );
 }
 
 function ScreenCurrentEvidence({
@@ -220,7 +239,9 @@ function ScreenCurrentEvidence({
   const hidden = occurrence && spoilerLevel(occurrence) > readerSpoilerLevel;
   return (
     <section data-slot="screen-current-evidence" className="min-w-0 space-y-3">
-      <ContentItemHeading level={2} className="text-xl font-semibold">{m.screen_visit_inspect({}, options(locale))}</ContentItemHeading>
+      <ContentItemHeading level={2} className="text-xl font-semibold">
+        {m.screen_visit_inspect({}, options(locale))}
+      </ContentItemHeading>
       {!occurrence || hidden ? (
         <p role="status">{m.screen_visit_occurrence_missing({}, options(locale))}</p>
       ) : (
@@ -303,7 +324,12 @@ export function ScreenProfileReader({
   return (
     <article data-slot="screen-profile-reader" className="min-w-0 space-y-6">
       <header className="min-w-0 space-y-2">
-        <ContentItemHeading id="screen-profile-reader-heading" tabIndex={-1} level={2} className="text-xl font-semibold">
+        <ContentItemHeading
+          id="screen-profile-reader-heading"
+          tabIndex={-1}
+          level={2}
+          className="text-xl font-semibold"
+        >
           <span lang={visit.grain.lang ?? undefined}>{visit.grain.text}</span>
         </ContentItemHeading>
         <p className="text-muted-foreground">{m.screen_intro({}, o)}</p>
@@ -364,7 +390,9 @@ export function ScreenProfileReader({
         <>
           {visit.groups.map((group) => (
             <section key={group.id} data-slot={`profile-group-${group.id}`} className="min-w-0 space-y-3">
-              <ContentItemHeading level={2} className="text-xl font-semibold">{titles(group.id, locale)}</ContentItemHeading>
+              <ContentItemHeading level={2} className="text-xl font-semibold">
+                {titles(group.id, locale)}
+              </ContentItemHeading>
               {group.fields.map((field) => (
                 <div key={field.property} className="min-w-0 space-y-3">
                   {field.values.map((value) => {
@@ -621,15 +649,29 @@ export function ScreenProfileOverview({
     if (!returnVisit || !returnMatches || query.isFetching || query.isPending || returnFocusCancelled.current) return;
     const params = new URLSearchParams(location.searchStr);
     if (params.has('screenSelection') || params.has('via')) return;
-    const occurrence = returnVisit.occurrence && currentPublic ? statementOf(currentPublic, returnVisit.occurrence) : undefined;
+    const occurrence =
+      returnVisit.occurrence && currentPublic ? statementOf(currentPublic, returnVisit.occurrence) : undefined;
     const visibleOccurrence = occurrence && spoilerLevel(occurrence) <= readerSpoilerLevel ? occurrence : undefined;
-    const target = document.getElementById(
-      visibleOccurrence ? screenCurrentInspectionId(visibleOccurrence.id) : screenCurrentEntryId(publicRead.subject.id),
-    ) ?? document.getElementById('screen-profile-reader-heading');
+    const target =
+      document.getElementById(
+        visibleOccurrence
+          ? screenCurrentInspectionId(visibleOccurrence.id)
+          : screenCurrentEntryId(publicRead.subject.id),
+      ) ?? document.getElementById('screen-profile-reader-heading');
     if (!target?.isConnected || document.activeElement !== document.body) return;
     returnFocusCancelled.current = true;
     target.focus();
-  }, [returnFocusKey, returnVisit, returnMatches, query.isFetching, query.isPending, currentPublic, publicRead.subject.id, readerSpoilerLevel, location.searchStr]);
+  }, [
+    returnFocusKey,
+    returnVisit,
+    returnMatches,
+    query.isFetching,
+    query.isPending,
+    currentPublic,
+    publicRead.subject.id,
+    readerSpoilerLevel,
+    location.searchStr,
+  ]);
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
   const episodeRead: ScreenEpisodeRead | undefined =
     cursorIntent.kind === 'invalid'

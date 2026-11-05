@@ -36,7 +36,12 @@ export function ScreenProfileEntry({
 }) {
   const entry = catalogueEntries.screen({ id, label, locale });
   let admittedVisit = visit;
-  const hasReadingAddress = context !== undefined || realm !== undefined || source !== undefined || type !== undefined || definition !== undefined;
+  const hasReadingAddress =
+    context !== undefined ||
+    realm !== undefined ||
+    source !== undefined ||
+    type !== undefined ||
+    definition !== undefined;
   if (!admittedVisit && id && context && source && type && definition && isScreenType(type)) {
     const address = new URL(source, 'https://rezics.invalid');
     const previous =

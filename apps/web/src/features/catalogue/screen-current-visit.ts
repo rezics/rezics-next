@@ -70,7 +70,8 @@ function validOccurrence(value: unknown, subject: string): value is ScreenCurren
 }
 
 function validSource(value: unknown, subject: string, locale: string, realm?: string): value is string {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || bytes(value) > maxAddress) return false;
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || bytes(value) > maxAddress)
+    return false;
   try {
     const address = new URL(value, origin);
     const segments = address.pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -261,4 +262,3 @@ export function screenCurrentIdentity(visit: ScreenCurrentVisit | ScreenCurrentR
     incarnation,
   ]);
 }
-

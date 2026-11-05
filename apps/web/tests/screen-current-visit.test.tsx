@@ -100,7 +100,9 @@ function reading(context = contextId): SubjectRead {
 }
 
 async function browser() {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: `https://site.invalid/en/subjects/${subjectId}/the-observatory` });
   const keys = [
     'window',
@@ -172,8 +174,13 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
   queryContexts = [];
   responseContext = contextId;
   const actions = await import('../src/features/catalogue/screen-profile-actions');
-  const loadValidator = serverFns.find((entry) => entry.validator?.toString().includes('Invalid Screen profile address'));
-  expect(loadValidator?.validator?.({ id: subjectId, context: contextId })).toEqual({ id: subjectId, context: contextId });
+  const loadValidator = serverFns.find((entry) =>
+    entry.validator?.toString().includes('Invalid Screen profile address'),
+  );
+  expect(loadValidator?.validator?.({ id: subjectId, context: contextId })).toEqual({
+    id: subjectId,
+    context: contextId,
+  });
   expect(() => loadValidator?.validator?.({ id: subjectId, context: 'wrong' })).toThrow();
   expect(loadValidator?.validator?.({ id: subjectId })).toEqual({ id: subjectId });
   const selectedRead = await actions.loadScreenProfile({ data: { id: subjectId, context: contextId } });
@@ -215,7 +222,8 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
     const globalHref = visitContract.screenCurrentVisitHref(correctionAddress.pathname, globalVisit);
     expect(globalHref).toBeDefined();
     expect(
-      screenCurrentRouteVisit(new URL(globalHref!, 'https://site.invalid').search, 'existing-classification-handoff').kind,
+      screenCurrentRouteVisit(new URL(globalHref!, 'https://site.invalid').search, 'existing-classification-handoff')
+        .kind,
     ).toBe('current');
 
     const fixtureModule = await import('../src/kernel/fake/catalogue-screen-profile');
@@ -238,8 +246,16 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
     const returned = screenCurrentReturnValue(new URL(returnHref!, 'https://site.invalid').search);
     expect(returned.kind).toBe('current');
     if (returned.kind !== 'current') throw new Error('Expected bounded Screen return');
-    expect(returned.visit).toMatchObject({ subject: subjectId, context: contextId, realm: realmId, occurrence: currentVisit.occurrence });
-    const redirect = subjectHref.canonicalRedirect(`/en/subjects/${subjectId}/the-observatory/screen`, correctionAddress.search);
+    expect(returned.visit).toMatchObject({
+      subject: subjectId,
+      context: contextId,
+      realm: realmId,
+      occurrence: currentVisit.occurrence,
+    });
+    const redirect = subjectHref.canonicalRedirect(
+      `/en/subjects/${subjectId}/the-observatory/screen`,
+      correctionAddress.search,
+    );
     expect(redirect.href).toContain(correctionAddress.search);
 
     responseContext = contextId;
@@ -270,7 +286,10 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
     expect(ui.host.querySelector(`#${screenCurrentInspectionId(duplicateId)}`)).not.toBeNull();
     expect(ui.host.textContent).toContain(ui.m.screen_visit_return());
 
-    const staleVisit = { ...currentVisit, occurrence: { holder: subjectId, property, statement: '00000000-0000-4000-8000-000000000999' } };
+    const staleVisit = {
+      ...currentVisit,
+      occurrence: { holder: subjectId, property, statement: '00000000-0000-4000-8000-000000000999' },
+    };
     await act(async () =>
       ui.root.render(
         h(ScreenProfileReader, {

@@ -68,7 +68,9 @@ function ScreenRoute() {
   if (
     visitSearch.kind === 'invalid' ||
     (visitSearch.kind === 'current' &&
-      (visitSearch.visit.subject !== id || visitSearch.visit.locale !== locale || !screenCurrentReturnHref(visitSearch.visit)))
+      (visitSearch.visit.subject !== id ||
+        visitSearch.visit.locale !== locale ||
+        !screenCurrentReturnHref(visitSearch.visit)))
   )
     return <ScreenCurrentVisitRecovery locale={locale} globalHref={globalHref} />;
   if (visitSearch.kind === 'current')

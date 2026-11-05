@@ -130,7 +130,8 @@ export async function readScreenProfile(client: KernelClient, address: ScreenAdd
     if (active.status !== 200 || !active.data || (id && (subject?.status !== 200 || subject.data?.subject.id !== id)))
       return { ok: false, reason: 'unavailable' };
     if (subject?.data && subject.data.subject.context !== context) return { ok: false, reason: 'invalid' };
-    if (subject?.data && subject.data.subject.release !== active.data.digest) return { ok: false, reason: 'unavailable' };
+    if (subject?.data && subject.data.subject.release !== active.data.digest)
+      return { ok: false, reason: 'unavailable' };
     if (subject?.data && !isScreenType(subject.data.subject.type)) return { ok: false, reason: 'invalid' };
     const bundle = await client.definitions.releases({ digest: active.data.digest }).get();
     if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== active.data.digest)

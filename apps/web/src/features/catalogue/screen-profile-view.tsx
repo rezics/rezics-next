@@ -339,10 +339,7 @@ function ScreenProfileLive({
     query.data.public?.subject.id === id &&
     query.data.public.subject.context === context &&
     query.data.public.subject.release === releaseDigest(query.data.release) &&
-    (!visit ||
-      (visit.subject === id &&
-        visit.context === context &&
-        visit.type === query.data.public.subject.type))
+    (!visit || (visit.subject === id && visit.context === context && visit.type === query.data.public.subject.type))
       ? query.data
       : undefined;
   const currentInspection: ScreenCurrentOccurrence | undefined =
@@ -351,7 +348,8 @@ function ScreenProfileLive({
     admitted?.public &&
     visit.occurrence.holder === admitted.public.subject.id &&
     admitted.public.subject.statements[visit.occurrence.property]?.some(
-      (statement) => statement.id === visit.occurrence!.statement && statement.property.id === visit.occurrence!.property,
+      (statement) =>
+        statement.id === visit.occurrence!.statement && statement.property.id === visit.occurrence!.property,
     )
       ? visit.occurrence
       : undefined;
@@ -396,9 +394,7 @@ function ScreenProfileLive({
           result.data.public.subject.context === context &&
           result.data.public.subject.release === releaseDigest(result.data.release) &&
           (!visit ||
-            (visit.subject === id &&
-              visit.context === context &&
-              visit.type === result.data.public.subject.type))
+            (visit.subject === id && visit.context === context && visit.type === result.data.public.subject.type))
         )
           setRetired(false);
       })
@@ -413,7 +409,18 @@ function ScreenProfileLive({
   if (id)
     return (
       <ScreenCorrection
-        key={JSON.stringify([id, context, realm ?? '', locale, visit?.source ?? '', visit?.definition ?? '', visit?.occurrence?.statement ?? '', classificationHandoffToken ?? '', admitted?.public?.subject.release ?? '', lifetime.generation])}
+        key={JSON.stringify([
+          id,
+          context,
+          realm ?? '',
+          locale,
+          visit?.source ?? '',
+          visit?.definition ?? '',
+          visit?.occurrence?.statement ?? '',
+          classificationHandoffToken ?? '',
+          admitted?.public?.subject.release ?? '',
+          lifetime.generation,
+        ])}
         id={id}
         context={context}
         realm={realm}
@@ -440,7 +447,19 @@ function ScreenProfileLive({
         readingChanged={readingChanged}
         {...(currentVisit ? { currentVisit } : {})}
         focusRequested={!!visit?.occurrence}
-        visitIdentity={visit ? JSON.stringify([visit.source, visit.subject, visit.context, visit.realm ?? '', visit.locale, visit.definition, lifetime.generation]) : ''}
+        visitIdentity={
+          visit
+            ? JSON.stringify([
+                visit.source,
+                visit.subject,
+                visit.context,
+                visit.realm ?? '',
+                visit.locale,
+                visit.definition,
+                lifetime.generation,
+              ])
+            : ''
+        }
         {...(classificationHandoffToken ? { classificationHandoffToken } : {})}
         {...(handoffReader ? { handoffReader } : {})}
         {...(handoffReaderLive ? { handoffReaderLive } : {})}
@@ -451,8 +470,7 @@ function ScreenProfileLive({
             next.public.subject.id === id &&
             next.public.subject.context === context &&
             next.public.subject.release === releaseDigest(next.release) &&
-              (!visit ||
-                (visit.type === next.public.subject.type && visit.context === next.public.subject.context))
+            (!visit || (visit.type === next.public.subject.type && visit.context === next.public.subject.context))
               ? { ok: true, release: next.release, public: next.public }
               : { ok: false, reason: !next.ok && next.reason === 'denied' ? 'concealed' : 'unavailable' };
           client.setQueryData<ScreenRead>(queryKey, observed);
@@ -787,8 +805,7 @@ function ScreenCorrection({
   const subject = current?.public.subject;
   const label = pickText(subject?.labels ?? {}, locale);
   const href =
-    returnHref ??
-    (subject ? contextHref(subjectHref({ id: subject.id, label: label.text }, locale).href, realm) : '');
+    returnHref ?? (subject ? contextHref(subjectHref({ id: subject.id, label: label.text }, locale).href, realm) : '');
   const visible = !!current && session === 'signed-in';
   const readingTitle = m.candidate_current({}, o);
   const focusCancelled = useRef(false);
@@ -826,7 +843,11 @@ function ScreenCorrection({
   }, [focusRequested, visitIdentity, read, pending, fetching, inspection]);
   return (
     <CatalogueCurrentReading visible={visible} ready={visible} revision={revision}>
-      <article id="screen-correction-entry" tabIndex={-1} className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans">
+      <article
+        id="screen-correction-entry"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-4xl min-w-0 space-y-6 px-4 py-8 sm:px-6 [&_h2]:font-sans [&_h3]:font-sans"
+      >
         <ViewHeadingActions label={m.screen_edit({}, o)} headingClassName="font-sans" />
         <div className="min-w-0 space-y-2" aria-busy={fetching}>
           {!current && !pending && (
@@ -897,7 +918,10 @@ function ScreenCorrection({
                           <div key={property} className="min-w-0 space-y-2">
                             {!statements.length ? (
                               <>
-                                <dt lang={name.lang ?? undefined} className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]">
+                                <dt
+                                  lang={name.lang ?? undefined}
+                                  className="min-w-0 max-w-full font-medium [overflow-wrap:anywhere]"
+                                >
                                   {name.text}
                                 </dt>
                                 <dd className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</dd>
@@ -906,7 +930,11 @@ function ScreenCorrection({
                               statements.map((statement, index) => {
                                 const content = (
                                   <div
-                                    id={inspection?.statement === statement.id ? screenCurrentInspectionId(statement.id) : undefined}
+                                    id={
+                                      inspection?.statement === statement.id
+                                        ? screenCurrentInspectionId(statement.id)
+                                        : undefined
+                                    }
                                     tabIndex={inspection?.statement === statement.id ? -1 : undefined}
                                     className="min-w-0 space-y-2 rounded-lg border border-border p-3"
                                   >
@@ -953,7 +981,9 @@ function ScreenCorrection({
                                 );
                                 return (
                                   <div key={statement.id} className="min-w-0">
-                                    <dt className="sr-only" lang={name.lang ?? undefined}>{name.text}</dt>
+                                    <dt className="sr-only" lang={name.lang ?? undefined}>
+                                      {name.text}
+                                    </dt>
                                     <dd className="min-w-0 max-w-full space-y-3 text-sm [overflow-wrap:anywhere]">
                                       {spoilerLevel(statement) > 0 ? (
                                         <SpoilerGate
@@ -964,7 +994,9 @@ function ScreenCorrection({
                                         >
                                           {content}
                                         </SpoilerGate>
-                                      ) : content}
+                                      ) : (
+                                        content
+                                      )}
                                     </dd>
                                   </div>
                                 );
