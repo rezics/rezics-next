@@ -65,6 +65,33 @@ function insertAttempt(db: Database, taskId: string, attempt: number, state: str
   );
 }
 
+function createTransitionTable(db: Database): void {
+  db.exec(`
+    CREATE TABLE lifecycle_transition_events (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      attempt INTEGER NOT NULL,
+      phase TEXT NOT NULL,
+      entered_at TEXT
+    );
+    CREATE INDEX lifecycle_transition_current ON lifecycle_transition_events(entity, entity_id, attempt, sequence);
+  `);
+}
+
+function insertTransition(
+  db: Database,
+  entity: 'task' | 'attempt' | 'promotion',
+  entityId: string,
+  attempt: number,
+  phase: string,
+  enteredAt: string | null,
+): void {
+  db.query(
+    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
+  ).run(entity, entityId, attempt, phase, enteredAt);
+}
+
 function insertLandingRequest(db: Database, taskId: string, attempt: number, delivered?: number): void {
   db.query('INSERT INTO worker_events(task_id, attempt, kind, at, body) VALUES (?, ?, ?, ?, ?)').run(
     taskId,
@@ -83,13 +110,26 @@ function insertLandingRequest(db: Database, taskId: string, attempt: number, del
 }
 
 function countedDatabase(db: Database) {
-  const counts = { schemaReads: 0, columnReads: 0, landingReads: 0, landingSetReads: 0 };
+  const counts = {
+    schemaReads: 0,
+    columnReads: 0,
+    landingReads: 0,
+    landingSetReads: 0,
+    queryCalls: 0,
+    currentWaitReads: 0,
+  };
+  const currentWaitQueries: string[] = [];
   const counted = new Proxy(db, {
     get(target, property) {
       const value = Reflect.get(target, property, target);
       if (property !== 'query') return typeof value === 'function' ? value.bind(target) : value;
       return (sql: string) => {
         const normalized = sql.toLowerCase();
+        counts.queryCalls++;
+        if (normalized.includes('with current_waits as')) {
+          counts.currentWaitReads++;
+          currentWaitQueries.push(sql);
+        }
         if (normalized.includes('from sqlite_master')) counts.schemaReads++;
         if (normalized.startsWith('pragma table_info')) counts.columnReads++;
         if (normalized.includes('landing_queue') && normalized.includes('delivered')) counts.landingReads++;
@@ -101,11 +141,15 @@ function countedDatabase(db: Database) {
   return {
     db: counted,
     counts,
+    currentWaitQueries,
     reset: () => {
       counts.schemaReads = 0;
       counts.columnReads = 0;
       counts.landingReads = 0;
       counts.landingSetReads = 0;
+      counts.queryCalls = 0;
+      counts.currentWaitReads = 0;
+      currentWaitQueries.length = 0;
     },
   };
 }
@@ -128,6 +172,20 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   insertTask(db, 'superseded-wait', 6, 'ready', 2);
   insertAttempt(db, 'superseded-wait', 1, 'waiting');
   insertAttempt(db, 'superseded-wait', 2, 'pending');
+  for (const [sequence, id, taskState] of [
+    [11, 'dual', 'waiting'],
+    [12, 'terminal-wait', 'integrated'],
+    [13, 'latest-nonwaiting', 'running'],
+    [14, 'null-wait', 'running'],
+    [15, 'invalid-wait', 'running'],
+    [16, 'future-wait', 'running'],
+  ] as const) {
+    insertTask(db, id, sequence, taskState);
+    insertAttempt(db, id, 1, 'waiting');
+  }
+  insertTask(db, 'attempt-two', 17, 'running', 2);
+  insertAttempt(db, 'attempt-two', 1, 'waiting');
+  insertAttempt(db, 'attempt-two', 2, 'waiting');
   insertTask(db, 'orphan', 7, 'landing', 2);
   insertAttempt(db, 'orphan', 2, 'exited');
   insertTask(db, 'queued', 8, 'landing');
@@ -184,6 +242,12 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
       ageMs: 22 * 60_000,
     },
   ]);
+  expect(withoutLifecycleSchema.waiting).toMatchObject({
+    count: 11,
+    oldestAgeMs: null,
+    oldestKnownAgeMs: 25 * 60_000,
+    unknownAgeCount: 9,
+  });
   expect(withoutLifecycleSchema.waiting.entries.find((entry) => entry.taskId === 'unknown-wait-start')).toMatchObject({
     enteredAt: null,
     ageMs: null,
@@ -238,16 +302,8 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
   });
   expect(afterQueueSchema.waiting.queues).toEqual([]);
 
+  createTransitionTable(db);
   db.exec(`
-    CREATE TABLE lifecycle_transition_events (
-      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-      entity TEXT NOT NULL,
-      entity_id TEXT NOT NULL,
-      attempt INTEGER NOT NULL,
-      phase TEXT NOT NULL,
-      entered_at TEXT
-    );
-    CREATE INDEX lifecycle_transition_current ON lifecycle_transition_events(entity, entity_id, attempt, sequence);
     CREATE TABLE lifecycle_quarantines (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       task_id TEXT NOT NULL,
@@ -257,18 +313,20 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
       released_at TEXT
     );
   `);
-  db.query(
-    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
-  ).run('attempt', 'wait', 1, 'waiting', at(-30 * 60_000));
-  db.query(
-    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
-  ).run('promotion', 'prom-1', 0, 'gate-head', at(-90 * 60_000));
-  db.query(
-    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
-  ).run('promotion', 'prom-1', 0, 'classify-main', at(-40 * 60_000));
-  db.query(
-    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
-  ).run('promotion', 'prom-1', 0, 'gate-head', at(-15 * 60_000));
+  insertTransition(db, 'attempt', 'wait', 1, 'waiting', at(-30 * 60_000));
+  insertTransition(db, 'task', 'dual', 1, 'waiting', at(-5 * 60_000));
+  insertTransition(db, 'task', 'dual', 1, 'waiting', at(-20 * 60_000));
+  insertTransition(db, 'attempt', 'dual', 1, 'waiting', at(-12 * 60_000));
+  insertTransition(db, 'attempt', 'latest-nonwaiting', 1, 'waiting', at(-50 * 60_000));
+  insertTransition(db, 'attempt', 'latest-nonwaiting', 1, 'running', at(-40 * 60_000));
+  insertTransition(db, 'attempt', 'null-wait', 1, 'waiting', null);
+  insertTransition(db, 'attempt', 'invalid-wait', 1, 'waiting', 'not-a-date');
+  insertTransition(db, 'attempt', 'future-wait', 1, 'waiting', at(5 * 60_000));
+  insertTransition(db, 'attempt', 'attempt-two', 1, 'waiting', at(-45 * 60_000));
+  insertTransition(db, 'attempt', 'attempt-two', 2, 'waiting', at(-6 * 60_000));
+  insertTransition(db, 'promotion', 'prom-1', 0, 'gate-head', at(-90 * 60_000));
+  insertTransition(db, 'promotion', 'prom-1', 0, 'classify-main', at(-40 * 60_000));
+  insertTransition(db, 'promotion', 'prom-1', 0, 'gate-head', at(-15 * 60_000));
   db.query(
     'INSERT INTO lifecycle_quarantines(task_id, attempt, cause, quarantined_at, released_at) VALUES (?, ?, ?, ?, ?)',
   ).run('old-quarantine', 1, 'old-cause', at(-2 * 60 * 60_000), at(-90 * 60_000));
@@ -284,6 +342,43 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
     enteredAt: at(-30 * 60_000),
     ageMs: 30 * 60_000,
   });
+  expect(metrics.waiting).toMatchObject({
+    count: 11,
+    oldestAgeMs: null,
+    oldestKnownAgeMs: 30 * 60_000,
+    unknownAgeCount: 4,
+  });
+  expect(metrics.waiting.entries.find((entry) => entry.taskId === 'attempt-two')).toMatchObject({
+    attempt: 2,
+    enteredAt: at(-6 * 60_000),
+    ageMs: 6 * 60_000,
+  });
+  expect(metrics.waiting.entries.find((entry) => entry.taskId === 'dual' && entry.kind === 'task')).toMatchObject({
+    enteredAt: at(-20 * 60_000),
+    ageMs: 20 * 60_000,
+  });
+  expect(metrics.waiting.entries.find((entry) => entry.taskId === 'dual' && entry.kind === 'attempt')).toMatchObject({
+    enteredAt: at(-12 * 60_000),
+    ageMs: 12 * 60_000,
+  });
+  expect(metrics.waiting.entries.find((entry) => entry.taskId === 'latest-nonwaiting')).toMatchObject({
+    enteredAt: null,
+    ageMs: null,
+  });
+  expect(metrics.waiting.entries.find((entry) => entry.taskId === 'null-wait')).toMatchObject({
+    enteredAt: null,
+    ageMs: null,
+  });
+  expect(metrics.waiting.entries.find((entry) => entry.taskId === 'invalid-wait')).toMatchObject({
+    enteredAt: 'not-a-date',
+    ageMs: null,
+  });
+  expect(metrics.waiting.entries.find((entry) => entry.taskId === 'future-wait')).toMatchObject({
+    enteredAt: at(5 * 60_000),
+    ageMs: 0,
+  });
+  expect(metrics.waiting.entries.some((entry) => ['superseded-wait', 'terminal-wait'].includes(entry.taskId))).toBe(false);
+  expect(formatLifecycleMetrics(metrics)).toContain('Current waits: 11; oldest age unknown; unknown ages 4.');
   expect(metrics.waiting.entries.find((entry) => entry.taskId === 'unknown-wait-start')?.ageMs).toBeNull();
   expect(metrics.promotion).toEqual({ available: true, phase: 'gate-head', phaseAgeMs: 15 * 60_000 });
   expect(metrics.quarantines).toMatchObject({
@@ -292,6 +387,11 @@ test('Hourly report exposes attempts per task per trailing hour, waiting age, or
     currentByCause: { 'invariant-a': 1 },
     recentNewCount: 2,
     recentNewByCause: { 'invariant-a': 1, recovered: 1 },
+  });
+  insertTransition(db, 'attempt', 'unknown-wait-start', 1, 'waiting', at(-7 * 60_000));
+  expect(lifecycleMetrics(db, now).waiting.entries.find((entry) => entry.taskId === 'unknown-wait-start')).toMatchObject({
+    enteredAt: at(-7 * 60_000),
+    ageMs: 7 * 60_000,
   });
 });
 
@@ -346,6 +446,55 @@ test('pending queue waits stay identical as settled event history grows', () => 
   }).immediate();
 
   expect(lifecycleMetrics(db, now).waiting.queues).toEqual(before);
+});
+
+test('current-state waits use one indexed latest-transition projection as the cohort and old history grow', () => {
+  const { db } = database('state-wait-cohort.sqlite');
+  const now = Date.UTC(2026, 9, 30, 12, 0);
+  const at = (offsetMs: number) => stamp(now, offsetMs);
+  createTransitionTable(db);
+  insertTask(db, 'current-0', 1, 'running');
+  insertAttempt(db, 'current-0', 1, 'waiting');
+  insertTransition(db, 'attempt', 'current-0', 1, 'waiting', at(-5 * 60_000));
+
+  const tracked = countedDatabase(db);
+  tracked.reset();
+  const one = lifecycleMetrics(tracked.db, now);
+  const oneStatementCount = tracked.counts.queryCalls;
+  expect(one.waiting.count).toBe(1);
+  expect(tracked.counts.currentWaitReads).toBe(1);
+
+  for (let index = 1; index <= 20; index++) {
+    const id = `current-${index}`;
+    insertTask(db, id, index + 1, 'running');
+    insertAttempt(db, id, 1, 'waiting');
+    insertTransition(db, 'attempt', id, 1, 'waiting', at(-index * 60_000));
+  }
+  tracked.reset();
+  const many = lifecycleMetrics(tracked.db, now);
+  const manyStatementCount = tracked.counts.queryCalls;
+  expect(many.waiting.count).toBe(21);
+  expect(manyStatementCount).toBe(oneStatementCount);
+  expect(tracked.counts.currentWaitReads).toBe(1);
+
+  const insertOld = db.query(
+    'INSERT INTO lifecycle_transition_events(entity, entity_id, attempt, phase, entered_at) VALUES (?, ?, ?, ?, ?)',
+  );
+  db.transaction(() => {
+    for (let index = 0; index < 3_000; index++)
+      insertOld.run('attempt', `settled-${index}`, 1, 'exited', at(-2 * 60 * 60_000));
+  }).immediate();
+  tracked.reset();
+  expect(lifecycleMetrics(tracked.db, now).waiting).toEqual(many.waiting);
+  expect(tracked.counts.queryCalls).toBe(manyStatementCount);
+  const query = tracked.currentWaitQueries[0]!;
+  const plan = db.query(`EXPLAIN QUERY PLAN ${query}`).all() as { detail: string }[];
+  expect(
+    plan.some(({ detail }) =>
+      detail.includes('SEARCH candidate USING COVERING INDEX lifecycle_transition_current') &&
+      detail.includes('entity=? AND entity_id=? AND attempt=?'),
+    ),
+  ).toBe(true);
 });
 
 test('pending landing delivery reads stay set-based as current queue waits grow', () => {

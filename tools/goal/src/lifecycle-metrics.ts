@@ -381,36 +381,40 @@ function currentStateWaits(
   if (!hasTable(schema, 'worker_tasks') || !hasTable(schema, 'worker_attempts')) return [];
   const rows = db
     .query(`
-      SELECT a.task_id, a.attempt, 'attempt' AS kind
-      FROM worker_attempts AS a
-      JOIN worker_tasks AS t ON t.id = a.task_id AND t.current_attempt = a.attempt
-      WHERE json_extract(a.body, '$.state') = 'waiting'
-        AND json_extract(t.body, '$.state') NOT IN ('integrated', 'merged', 'stopped', 'cancelled', 'verified')
-      UNION ALL
-      SELECT t.id AS task_id, t.current_attempt AS attempt, 'task' AS kind
-      FROM worker_tasks AS t
-      WHERE json_extract(t.body, '$.state') = 'waiting'
+      WITH current_waits AS (
+        SELECT a.task_id, a.attempt, 'attempt' AS kind
+        FROM worker_attempts AS a
+        JOIN worker_tasks AS t ON t.id = a.task_id AND t.current_attempt = a.attempt
+        WHERE json_extract(a.body, '$.state') = 'waiting'
+          AND json_extract(t.body, '$.state') NOT IN ('integrated', 'merged', 'stopped', 'cancelled', 'verified')
+        UNION ALL
+        SELECT t.id AS task_id, t.current_attempt AS attempt, 'task' AS kind
+        FROM worker_tasks AS t
+        WHERE json_extract(t.body, '$.state') = 'waiting'
+      )
+      SELECT w.task_id, w.attempt, w.kind,
+        ${hasTransitions ? "CASE WHEN latest.phase = 'waiting' THEN latest.entered_at END" : 'NULL'} AS entered_at
+      FROM current_waits AS w
+      ${
+        hasTransitions
+          ? `LEFT JOIN lifecycle_transition_events AS latest
+              ON latest.entity = w.kind AND latest.entity_id = w.task_id AND latest.attempt = w.attempt
+             AND latest.sequence = (
+               SELECT candidate.sequence FROM lifecycle_transition_events AS candidate
+               WHERE candidate.entity = w.kind AND candidate.entity_id = w.task_id AND candidate.attempt = w.attempt
+               ORDER BY candidate.sequence DESC LIMIT 1
+             )`
+          : ''
+      }
     `)
-    .all() as { task_id: string; attempt: number; kind: 'task' | 'attempt' }[];
-  return rows.map((row) => {
-    let enteredAt: string | null = null;
-    if (hasTransitions) {
-      const transition = db
-        .query(`
-          SELECT phase, entered_at FROM lifecycle_transition_events
-          WHERE entity=? AND entity_id=? AND attempt=? ORDER BY sequence DESC LIMIT 1
-        `)
-        .get(row.kind, row.task_id, row.attempt) as { phase: string; entered_at: string | null } | null;
-      if (transition?.phase === 'waiting') enteredAt = transition.entered_at;
-    }
-    return {
-      taskId: row.task_id,
-      attempt: row.attempt,
-      kind: row.kind,
-      enteredAt,
-      ageMs: age(enteredAt, nowMs),
-    };
-  });
+    .all() as { task_id: string; attempt: number; kind: 'task' | 'attempt'; entered_at: string | null }[];
+  return rows.map((row) => ({
+    taskId: row.task_id,
+    attempt: row.attempt,
+    kind: row.kind,
+    enteredAt: row.entered_at,
+    ageMs: age(row.entered_at, nowMs),
+  }));
 }
 
 function orphanedLandings(db: Database, schema: SchemaCapabilities): LifecycleMetrics['orphanedLandings'] {

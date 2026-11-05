@@ -989,6 +989,8 @@ records. Missing source history is `unknown`; an empty counter is not inferred f
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
 product work.
 
+Decision: Current waiting-state ages use one report-local task/attempt cohort projection with indexed latest-transition lookups by sequence; the report stays uncached and lifecycle ownership stays unchanged.
+
 Decision: Guard-ending buckets use each worker record's own `endedAt` through a bounded index, independently of attempt timestamps, while retaining historical classifications and exact report text.
 
 Set `integration.hourlyReportNotifier` in untracked local settings to an argv array to enable one report per completed
