@@ -160,10 +160,12 @@ function ReporterHistoryVisit({
       <ReporterHistoryPage
         result={result}
         query={journey.operands()}
-        {...(navigation?.openStatus ? { onOpenStatus: navigation.openStatus } : {})}
+        {...(navigation?.openStatus ? { onOpenStatus: journey.openStatus } : {})}
         onRefresh={() => journey.refresh()}
         onRetry={() => journey.retry()}
         onContinue={() => journey.next()}
+        {...(journey.hasPrevious() ? { onPrevious: journey.previous } : {})}
+        {...(journey.operands().cursor !== undefined ? { onFirst: journey.first } : {})}
         onSelect={(reportId) => journey.select(reportId)}
         onRestart={() => journey.restart()}
       />
@@ -181,6 +183,8 @@ export function ReporterHistoryPage({
   onSelect = () => undefined,
   onRestart = () => undefined,
   onRefresh,
+  onPrevious,
+  onFirst,
   onOpenStatus,
 }: {
   result: ReporterHistoryState;
@@ -190,6 +194,8 @@ export function ReporterHistoryPage({
   onSelect?: (reportId: string) => void | Promise<void>;
   onRestart?: Retry;
   onRefresh?: Retry;
+  onPrevious?: Retry;
+  onFirst?: Retry;
   onOpenStatus?: (reportId: string, cursor?: string) => Promise<void>;
 }) {
   return (
@@ -238,6 +244,12 @@ export function ReporterHistoryPage({
         </div>
       ) : null}
       {result.state === 'retired' ? <p role="status">{m.reporter_history_denied()}</p> : null}
+      {result.state === 'loaded' && result.page.state === 'ready' ? (
+        <nav aria-label={m.reporter_history_heading()} className="flex flex-wrap gap-3">
+          {onPrevious ? <button type="button" className="min-h-11 rounded-md border px-4 font-medium" onClick={() => void onPrevious()}>{m.library_collections_previous()}</button> : null}
+          {onFirst ? <button type="button" className="min-h-11 rounded-md border px-4 font-medium" onClick={() => void onFirst()}>{m.library_collections_first_page()}</button> : null}
+        </nav>
+      ) : null}
       {result.state === 'loaded' ? (
         <ReporterHistoryResults
           page={result.page}

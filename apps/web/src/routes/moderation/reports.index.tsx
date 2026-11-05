@@ -1,6 +1,7 @@
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import { useLayoutEffect, useMemo } from 'react';
 import { browserObservation } from '../../session/observation';
+import { routeHistoryCoordinates } from '../../moderation/reporter-history/coordinates';
 import { reporterHistoryFocusFor } from '../../moderation/reporter-history/focus';
 import { prepareExposure } from '../../kernel/exposure';
 import { ReporterHistoryCurrent, ReporterHistoryPage } from '../../moderation/reporter-history/view';
@@ -51,9 +52,18 @@ function ReporterHistoryRoute() {
   const router = useRouter();
   const location = useLocation();
   const focus = reporterHistoryFocusFor(router);
+  const { queryClient } = Route.useRouteContext();
+  const coordinates = routeHistoryCoordinates(queryClient);
+  if (coordinates.bind(router)) {
+    router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+      coordinates.navigating(toLocation.pathname, toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
+        ? reporterHistoryQuery(toLocation.search) : null);
+    });
+  }
   const navigationKey = location.state.__TSR_key ?? location.href;
   const navigation = useMemo(
     () => ({
+      coordinates,
       request: async (query: Parameters<typeof reporterHistoryQuery>[0]) => {
         const operands = reporterHistoryQuery(query);
         focus.request(operands);
@@ -64,6 +74,7 @@ function ReporterHistoryRoute() {
         }
       },
       openStatus: async (reportId: string, cursor?: string) => {
+        coordinates.status(reportId);
         focus.requestStatus(reportId);
         await router.navigate({ href: reporterHistoryStatusHref(reportId, cursor) });
       },

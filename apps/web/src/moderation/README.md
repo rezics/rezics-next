@@ -175,3 +175,13 @@ Decision: My reports opens at `/moderation/reports`; its status return uses a fi
 `reporter-history/journey.ts` owns prepared browser admission and page replacement through the shared private-reader lifetime; the localized Reports route mounts it through `view.tsx`.
 
 Decision: served history next/select/restart commit closed route operands; retry/refresh reload the same address. The loader alone publishes each new private visit, and sparse frontiers retain continuation without claiming completed emptiness. Invalid status return operands recover to My reports.
+
+Decision: My reports retains up to eight admitted predecessor coordinates, current and one staged target per eligible
+Router/QueryClient visit. Coordinates contain only opaque cursor and report selection operands; there is no cursor
+length or response-byte bound. Previous rereads exact operands; First preserves selection, while changed selection
+starts its own first window. Only an admitted ready private page commits staged movement; failure retains its exact
+Retry target. Forward movement after Previous abandons the old branch. The loader remains the sole served publisher.
+The fixed exact status return preserves coordinates, never the old reader. Browser incarnation, locale, source or
+independent navigation replacement clears them. Existing localized Previous and First page vocabulary is reused.
+Cost remains one replacing page (twenty ordinary rows plus one selected row), no page cache, replay or extra read;
+coordinate retention adds at most ten operand records, whose native opaque cursors have no declared byte bound.

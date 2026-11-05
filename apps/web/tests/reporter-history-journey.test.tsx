@@ -158,3 +158,37 @@ test('fetching and invalidation retire the shared browser incarnation even if th
     s.stop();
   }
 });
+
+test('three admitted windows reread exact predecessors, preserve a failed target and reset selection binding', async () => {
+  const s = await setup();
+  const ready = (nextCursor: string | null): ReporterHistoryRead => {
+    if (s.loaded.result.state !== 'loaded') throw new Error('fixture');
+    return { ...s.loaded, result: { ...s.loaded.result, page: { ...s.loaded.result.page, nextCursor } } };
+  };
+  s.respond(ready('third'));
+  await s.journey.next();
+  expect(s.journey.snapshot().state).toBe('loaded');
+  s.respond(ready(null));
+  await s.journey.next();
+  expect(s.journey.snapshot().state).toBe('loaded');
+  expect(s.journey.hasPrevious()).toBe(true);
+  s.respond({ readerOrigin: s.loaded.readerOrigin, result: { state: 'unavailable' } });
+  await s.journey.previous();
+  expect(s.calls.at(-1)).toEqual({ cursor: 'opaque/+?next', reportId: id });
+  expect(s.journey.hasPrevious()).toBe(true);
+  s.respond(ready('branch'));
+  await s.journey.retry();
+  expect(s.journey.snapshot().state).toBe('loaded');
+  await s.journey.next();
+  expect(s.journey.snapshot().state).toBe('loaded');
+  await s.journey.previous();
+  expect(s.calls.at(-1)).toEqual({ cursor: 'opaque/+?next', reportId: id });
+  expect(s.journey.snapshot().state).toBe('loaded');
+  await s.journey.first();
+  expect(s.calls.at(-1)).toEqual({ reportId: id });
+  expect(s.journey.snapshot().state).toBe('loaded');
+  expect(s.journey.hasPrevious()).toBe(false);
+  await s.journey.select('33333333-3333-8333-8333-345633333333');
+  expect(s.calls.at(-1)).toEqual({ reportId: '33333333-3333-8333-8333-345633333333' });
+  s.stop();
+});
