@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { jsonParameter } from '../database/json.ts';
 import { profileDigest, platformRegistry, validateProfileFilters, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { activeRelease } from '../semantic/definitions.ts';
@@ -99,7 +100,7 @@ export async function publishProfile(pool: Pool, options: WriteOptions & { profi
     const rows = await publish.run(tx, {
       route: resource.route,
       digest,
-      body: profile,
+      body: jsonParameter(profile),
       transaction_id: transactionId,
     });
     return {
@@ -183,7 +184,12 @@ export async function bootstrapProfile(pool: Pool, profile: PresentationProfile)
         release?.release ?? { types: {}, properties: {} },
       );
       if (violations.length) throw new ProfileInputError(violations);
-      await publish.run(tx, { route: resource.route, digest, body, transaction_id: transactionId });
+      await publish.run(tx, {
+        route: resource.route,
+        digest,
+        body: jsonParameter(body),
+        transaction_id: transactionId,
+      });
       const rows = await activate.run(tx, {
         route: resource.route,
         digest,

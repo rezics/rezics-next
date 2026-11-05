@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import type { PoolClient } from 'pg';
 import append from './entry-state-history-append.sql';
 import markIncomplete from './entry-state-history-mark-incomplete.sql';
@@ -41,9 +42,9 @@ export async function captureEntryStateChange(
     prior_revision: input.priorRevision,
     revision: input.revision,
     before_state: input.beforeState,
-    before_profile_pin: input.beforeProfilePin,
+    before_profile_pin: jsonParameter(input.beforeProfilePin),
     after_state: input.afterState,
-    after_profile_pin: input.afterProfilePin,
+    after_profile_pin: jsonParameter(input.afterProfilePin),
     command_id: input.commandId,
     command_kind: input.commandKind,
     changed_at: input.changedAt,

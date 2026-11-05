@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import accountShare from '../access/account-share.sql';
@@ -185,7 +186,7 @@ function sqlBound(
     throw new TypeError('Invalid Collection retention statement binds');
   if (!Number.isSafeInteger(projectedRows) || projectedRows < 0)
     throw new TypeError('Invalid Collection retention result ceiling');
-  const requestBytes = Buffer.byteLength(query.sql) + Buffer.byteLength(JSON.stringify(values)) + bindExtraBytes;
+  const requestBytes = statementBytes(query) + Buffer.byteLength(JSON.stringify(values)) + bindExtraBytes;
   const projectionBytes = projectedRows ? ROW(projection, projectedRows) + projectionExtraBytes * projectedRows : 0;
   return dimensions({
     ...work,

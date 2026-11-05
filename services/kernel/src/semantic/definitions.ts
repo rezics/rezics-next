@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import {
   publicationLimits,
   releaseAdmission,
@@ -151,7 +152,7 @@ export async function publishRelease(pool: Pool, options: WriteOptions & { relea
       const rows = await publish.run(tx, {
         route: resource.route,
         digest,
-        body: release,
+        body: jsonParameter(release),
         transaction_id: transactionId,
       });
       return {
@@ -245,7 +246,7 @@ export async function bootstrapRelease(pool: Pool, release: Release, clock: () =
       await publish.run(tx, {
         route: resource.route,
         digest,
-        body,
+        body: jsonParameter(body),
         transaction_id: transactionId,
       });
       await stageReleaseTypeDirectory(tx, digest, body);

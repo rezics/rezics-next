@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import {
@@ -58,16 +59,16 @@ const price = (rows: number, statements: number, bytes: number): WorkDimensions 
 export function identityScopeNativeAssociationPrices() {
   return memoizedValue(identityScopeNativeAssociationPrices, () =>
     Object.freeze({
-      native: price(2, 1, Buffer.byteLength(native.sql) + 256 + 64),
-      association: price(8, 1, Buffer.byteLength(insert.sql) + 6656 + 64),
-      event: price(2, 1, Buffer.byteLength(fence.sql) + 2048 + 64),
+      native: price(2, 1, statementBytes(native) + 256 + 64),
+      association: price(8, 1, statementBytes(insert) + 6656 + 64),
+      event: price(2, 1, statementBytes(fence) + 2048 + 64),
       // time point, checkout, BEGIN, lock timeout, two statement timeouts, COMMIT,
       // ROLLBACK. Both terminals stay charged on success as well as rollback.
       control: Object.freeze({
         ...price(
           1,
           7,
-          Buffer.byteLength(time.sql) +
+          statementBytes(time) +
             Buffer.byteLength('BEGIN ISOLATION LEVEL SERIALIZABLE') +
             Buffer.byteLength("SET LOCAL lock_timeout = '200ms'") +
             2 * Buffer.byteLength("SET LOCAL statement_timeout = '9999999999999999ms'") +

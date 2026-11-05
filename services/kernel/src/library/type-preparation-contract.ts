@@ -1,3 +1,13 @@
+import type {
+  TypePreparationBinding,
+  TypePreparationOrigin,
+  TypePreparationIdentity,
+} from './type-preparation-schema.ts';
+export type {
+  TypePreparationBinding,
+  TypePreparationOrigin,
+  TypePreparationIdentity,
+} from './type-preparation-schema.ts';
 /** Native preparation ports; final work registration composes the bounded continuation runner. */
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -15,18 +25,6 @@ export interface TypePreparationInput {
   readonly ownerEpoch: bigint;
 }
 
-/** Bounded internal workflow identity. Neither a source proof nor an authorization token. */
-export interface TypePreparationBinding {
-  readonly accountId: string;
-  readonly subjectId: string;
-  readonly requestKey: string;
-  readonly sourceId: string;
-  readonly sourcePartition: number;
-  readonly sourceEpoch: number;
-  readonly sourcePosition: string;
-  readonly ownerEpoch: string;
-}
-
 export function typePreparationBinding(input: TypePreparationInput): TypePreparationBinding {
   if (input.source.position < 0n || input.ownerEpoch < 0n)
     throw new RangeError('Preparation positions and owner epochs must be nonnegative');
@@ -40,25 +38,6 @@ export function typePreparationBinding(input: TypePreparationInput): TypePrepara
     sourcePosition: input.source.position.toString(10),
     ownerEpoch: input.ownerEpoch.toString(10),
   });
-}
-
-/** Requested-source binding retained even if it redirects to the resolved source in binding. */
-export interface TypePreparationOrigin {
-  readonly sourceId: string;
-  readonly partition: number;
-  readonly epoch: number;
-  readonly position: string;
-  readonly survivorId: string | null;
-}
-
-/** Fixed visible create/identity version; partition position is ordering, not an item version or Access proof. */
-export interface TypePreparationIdentity {
-  readonly sourceId: string;
-  readonly partition: number;
-  readonly epoch: number;
-  readonly revision: number;
-  readonly transactionId: string;
-  readonly redirect: string | null;
 }
 
 /** Immutable native row header. Exact input text/bytes and their equality evidence stay native. */

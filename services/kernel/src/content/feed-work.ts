@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -69,7 +70,7 @@ export async function feedEventSource(
       id: event.id,
       type: event.type,
       subject: event.subject ?? null,
-      data: event.data,
+      data: jsonParameter(event.data),
     });
     const row = rows[0];
     if (

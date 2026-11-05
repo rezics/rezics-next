@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { jsonParameter } from '../database/json.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';
@@ -864,7 +865,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
             requested_by: actor.requestedBy,
             authn_epoch: actor.authnEpoch,
             operation_key: operationKey,
-            operation: businessOperation(operation),
+            operation: jsonParameter(businessOperation(operation)),
             digest,
             at: authoritativeTimeValue(command.time),
             jwt_expires_at: new Date(expires).toISOString(),

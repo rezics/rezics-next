@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import type { ConceptStatementReader } from '../search/concept-browse-statements.ts';
 import { indexedStatement, selectedRank } from './scope-leaf-selection.ts';
 export { indexedStatement } from './scope-leaf-selection.ts';
@@ -241,7 +242,10 @@ export function subjectSource(
 
         const visible = routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
         const statements = visible.length
-          ? ((await readStatements.run(client, { partition_no: partition, entries: visible })) as StatementRow[])
+          ? ((await readStatements.run(client, {
+              partition_no: partition,
+              entries: jsonParameter(visible),
+            })) as StatementRow[])
           : [];
         const digests = new Set<string>();
         for (const row of rows) if (row.currentRelease) digests.add(row.currentRelease);

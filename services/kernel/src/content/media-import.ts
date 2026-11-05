@@ -1,3 +1,4 @@
+import { jsonParameter } from '../database/json.ts';
 import {
   checkMediaImportRequest,
   checkMediaImportStatus,
@@ -280,7 +281,7 @@ export async function importMediaFromUrl(
         key: `m/${resource.id}/original`,
         source_url: body.sourceUrl,
         credit: body.credit,
-        provenance: body.provenance,
+        provenance: jsonParameter(body.provenance),
         crop: mediaCropTuple(body.crop),
         focal_x: body.focalPoint?.x ?? null,
         focal_y: body.focalPoint?.y ?? null,

@@ -1,4 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
+import { statementBytes } from '../database/statement-bytes.ts';
 /** Immutable nine-axis declarations for the existing Collection metadata journal SQL. */
 import { declareBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { PoolClient } from 'pg';
@@ -95,7 +96,7 @@ function sqlPoint<Input>(
     witnessKeys: 0,
     statements: 1,
     bytes:
-      Buffer.byteLength(query.sql) +
+      statementBytes(query) +
       escapedBindBytes(input as object, stringWidths) +
       resultArrayBytes(shape.rowBytes, shape.resultRows),
     engineRequests: 0,
