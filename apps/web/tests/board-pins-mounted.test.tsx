@@ -6,14 +6,10 @@ import { createKernelClient } from '@rezics/client';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { continuationBoardId, continuationCursor } from '../src/kernel/fake/board-continuation';
 import type { BoardPinAdviceQuery, BoardPinAdviceResult } from '../src/threads/board-pins/advice';
-import type {
-  BoardPinBoardRead,
-  BoardPinCommand,
-  BoardPinProducer,
-  BoardPinSender,
-} from '../src/threads/board-pins/contract';
+import type { BoardPinCommand, BoardPinProducer, BoardPinSender } from '../src/threads/board-pins/contract';
 import type { BoardFeedThread, CommunityBoardPage } from '../src/threads/board-feed-data';
 import { loadBoardPageWithAuthors } from '../src/identity/page-loaders';
+import { changeBoardPinRequest, readBoardPinBoardRequest } from '../src/threads/board-pins/native';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -264,30 +260,36 @@ test('unknown retry keeps its original command and missing rows move focus to th
       })),
     };
   };
-  const currentBoard: BoardPinBoardRead = {
-    state: 'ready',
-    boardId: page.board.id,
-    management: 'allowed',
-    pinRevision: '13',
-    pinnedThreads: [],
-    threads: [],
-    next: null,
-    rankRefreshedAt: null,
-    authors: null,
-  };
+  const requests: Request[] = [];
+  const native = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      if (request.method === 'POST') {
+        if (requests.length === 1) throw new TypeError('Connection lost after sending the original command');
+        return Response.json({ boardId: page.board.id, threadId: ordinary.id, pinned: true, pinPosition: 1 });
+      }
+      return Response.json({
+        board: page.board,
+        pinnedThreads: [],
+        threads: [],
+        next: null,
+        pinRevision: '13',
+        rankRefreshedAt: null,
+        reactionsAsOf: null,
+        viewer: { participation: 'allowed' },
+        actions: { createThread: 'allowed' },
+      });
+    }) as typeof fetch,
+  });
+  const request = new Request('https://site.test/en/boards/current', { headers: { authorization: 'Bearer original' } });
   const feed = await mount(page, advice, {
     async change(command) {
       commands.push(command);
-      return commands.length === 1
-        ? { state: 'unknown' }
-        : {
-            state: 'applied',
-            boardId: page.board.id,
-            thread: { threadId: ordinary.id, pinned: true, actions: ['unpin'] },
-          };
+      return changeBoardPinRequest(command, request, {}, native, true);
     },
-    async readBoard() {
-      return currentBoard;
+    async readBoard(query) {
+      return readBoardPinBoardRequest(query, request, {}, native, true);
     },
   });
   const toggles = feed.host.querySelectorAll<HTMLButtonElement>('[data-board-pin-focus="toggle"]');
@@ -310,6 +312,13 @@ test('unknown retry keeps its original command and missing rows move focus to th
   await settle(() => feed.host.querySelector('[data-slot="board-pin-focus-recovery"]') !== null);
   expect(commands).toHaveLength(2);
   expect(commands[1]).toBe(commands[0]);
+  expect(requests.map((request) => request.method)).toEqual(['POST', 'POST', 'GET']);
+  expect(requests[1]!.url).toBe(requests[0]!.url);
+  expect(requests[1]!.headers.get('idempotency-key')).toBe(requests[0]!.headers.get('idempotency-key'));
+  expect(requests.every((request) => request.headers.get('authorization') === 'Bearer original')).toBe(true);
+  expect(await requests[1]!.json()).toEqual(await requests[0]!.json());
+  expect(new URL(requests[2]!.url).pathname).toBe(`/v1/boards/${page.board.id}/page`);
+  expect(new URL(requests[2]!.url).searchParams.has('cursor')).toBe(false);
   expect(commands[0]).toMatchObject({ boardId: page.board.id, threadId: ordinary.id, action: 'pin', sender });
   expect(inspections).toHaveLength(1);
   expect(inspections[0]?.selected).toEqual([

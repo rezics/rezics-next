@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import { MediaProblem } from '../../media/kernel.ts';
 import { isPlatformClosedError } from '../../kernel/platform-closed.ts';
 import type { SessionEnv } from '../../session/client.ts';
 import { prepareSession, viewerCredential } from '../../session/request.ts';
@@ -15,45 +16,9 @@ import {
   type BoardPinCommandResult,
 } from './contract';
 
-type NativeOptions = {
-  query?: { cursor?: string; sort?: 'active' | 'hot' };
-  headers?: { authorization?: string; 'idempotency-key'?: string };
-  fetch?: { signal?: AbortSignal };
-};
-
-type NativeResult = Promise<{
-  data?: unknown;
-  error?: unknown;
-  status: number;
-}>;
-
-type NativeBoardThreads = { get: (options: NativeOptions) => NativeResult };
-type NativeBoardPin = { post: (body: { pinned: boolean }, options: NativeOptions) => NativeResult };
-
 /** Keep selected advice closed until the published KernelClient exposes its root-derived callable. */
 export async function readBoardPinAdviceRequest(): Promise<BoardPinAdviceResult> {
   return { state: 'unavailable' };
-}
-
-/** Bind generated Content methods when present. Do not invent a path or a successful body. */
-export function nativeBoardThreads(client: KernelClient, boardId: string): NativeBoardThreads | undefined {
-  const threads = client.boards({ id: boardId }).threads as unknown as NativeBoardThreads | undefined;
-  if (!threads || typeof threads.get !== 'function') return undefined;
-  return threads;
-}
-
-export function nativeBoardThreadPin(
-  client: KernelClient,
-  boardId: string,
-  threadId: string,
-): NativeBoardPin | undefined {
-  const threads = client.boards({ id: boardId }).threads as unknown as
-    | ((params: { threadId: string }) => { pin?: NativeBoardPin })
-    | NativeBoardThreads;
-  if (typeof threads !== 'function') return undefined;
-  const pin = threads({ threadId }).pin;
-  if (!pin || typeof pin.post !== 'function') return undefined;
-  return pin;
 }
 
 function readOutcome(boardId: string, status: number, body: unknown): BoardPinBoardRead {
@@ -89,7 +54,7 @@ export async function readBoardPinBoardRequest(
     return reading.state === 'ready' ? { ...reading, opening } : reading;
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'unavailable' };
-    return { state: 'unavailable' };
+    throw error;
   }
 }
 
@@ -106,18 +71,22 @@ export async function changeBoardPinRequest(
   if (action !== 'pin' && action !== 'unpin') return { state: 'unavailable' };
   try {
     await prepareSession(request, sessionEnv);
-    const authorization = viewerCredential(request);
-    if (!authorization) return { state: 'denied' };
-    const resource = nativeBoardThreadPin(client, command.boardId, command.threadId);
-    if (!resource) return { state: 'unavailable' };
-    const result = await resource.post(
+  } catch (error) {
+    if (error instanceof MediaProblem && error.problem.status === 403) return { state: 'denied' };
+    throw error;
+  }
+  const authorization = viewerCredential(request);
+  if (!authorization) return { state: 'denied' };
+  const resource = client.boards({ id: command.boardId }).threads({ threadId: command.threadId }).pin;
+  let result: Awaited<ReturnType<typeof resource.post>>;
+  try {
+    result = await resource.post(
       { pinned: action === 'pin' },
       { headers: { authorization, 'idempotency-key': JSON.stringify(command.key) } },
     );
-    if (result.error) return parseBoardPinCommandResult(result.status, result.error, command);
-    return parseBoardPinCommandResult(result.status, result.data, command);
   } catch (error) {
     if (isPlatformClosedError(error)) return { state: 'unavailable' };
     return { state: 'unknown' };
   }
+  return parseBoardPinCommandResult(result.status, result.error ?? result.data, command);
 }

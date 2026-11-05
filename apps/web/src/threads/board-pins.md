@@ -57,3 +57,8 @@ owns declaration generation and installation.
 Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId` and the admitted Board page's observed `pinRevision`; production actions stay unavailable until both page metadata and advice callable are installed in the public client.
 
 Decision: Pin/unpin confirmation is an expandable in-row group tied to its toggle; cancel restores toggle focus, while completion focuses the current status or the Board's announced recovery target.
+
+Decision: Bind pin commands directly to the installed KernelClient callable. A forbidden session request returns
+`denied` before transport; only a failure during command transport can be uncertain. The mounted retry and regional
+focus journey uses installed page and command callables, while selected advice remains unavailable in production
+until publication supplies both required declarations.
