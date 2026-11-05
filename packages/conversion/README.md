@@ -329,7 +329,7 @@ unchanged dumps offer the new facts; names, dates, player count, book grain,
 cover and source-link support are preserved. No infobox-field scheme URI is
 minted.
 
-Cross-media entity revision `cross-media-entities@14` retains an admitted
+Cross-media entity revision `cross-media-entities@15` retains an admitted
 Bangumi `person.summary` for the source-selected `schema:Person` or
 `schema:Organization` identity. Its exact bytes enter the normalized digest;
 nonempty text becomes an `und` `schema:abstract` document proposal with the
@@ -341,7 +341,7 @@ cited day-precision `schema:birthDate` in the released 4–16 digit year range.
 Partial, invalid and Organization dates are withheld; Character `生日` stays
 omitted. `last_modified` is comment time, not a record revision. Ordinary
 `person:<id>` JSON uses this entity revision; selected-family envelopes keep
-`cross-media-entities@14+bangumi@14`.
+`cross-media-entities@15+bangumi@15`.
 Decision: selected PersonDetail birth dates reuse the existing career
 `GET /v0/persons/{id}` acquisition rather than a second HTTP client.
 
@@ -461,7 +461,7 @@ and `o`; the official
 [VNDB schema](https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=55866ce6cb150d2de85e5f204828eafae5e50bc5)
 defines `blood_type` as `unknown`, `a`, `b`, `ab` and `o`.
 
-`cross-media-entities@14` retains the classification input in the deterministic
+`cross-media-entities@15` retains the classification input in the deterministic
 digest, preserves measurement cells when the character-name projection is
 present, and records actual versus spoiler gender as separate source variants.
 Only the four explicit blood types reach `vndb-vocabulary@4`; the bounded
@@ -483,7 +483,7 @@ assert Wikidata equivalence. The native gender qualifier gap stays explicit.
 
 ### VNDB release titles
 
-`cross-media-entities@14` projects admitted `releases_titles` rows onto
+`cross-media-entities@15` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -505,7 +505,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@14` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@15` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -583,7 +583,7 @@ Decision: source-specific schemes are `https://vndb.org/releases/platforms` and 
 
 ### VNDB character names and aliases
 
-`cross-media-entities@14` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@15` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -604,26 +604,23 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@14` reads the selected Character's `name`, `name_cn` and
+`cross-media-entities@15` reads the selected Character's `name`, `name_cn` and
 either the pinned Crt string or the exact type-1 CharacterDetail `infobox`
-array of `{key, value}` rows. The captured response has `name_cn: null` and a
-`简体中文名` field; the fixture is an excerpt of
-[CharacterDetail](https://api.bgm.tv/v0/characters/1), defined by the
-[Bangumi API schema](https://bangumi.github.io/api/dist.json). Top-level `name`
-remains `und`, explicit `name_cn` is `zh`, and `简体中文名` is `zh-Hans`; exact
-alias labels use `zh`, `en`, `ja`, `und-Latn` or `und`. API scalar punctuation
-stays intact. The Crt path retains its observed full-width-comma nickname
-splitting. Exact Chinese duplicates reconcile; conflicting or ambiguous entries
-withhold only their projection. Unknown and unlabelled labels are diagnosed.
-Normalized evidence preserves API name presence and fingerprints bounded parsed
-name fields. The normalized record retains bounded raw infobox input so durable
-replay reproduces names, aliases and measurements. Statements cite the Character
-URL; names never resolve or merge identity.
+array of `{key, value}` rows. Top-level `name` remains `und`, explicit
+`name_cn` is `zh`, and `简体中文名` is `zh-Hans`; exact alias labels use `zh`, `en`,
+`ja`, `und-Latn` or `und`. The Crt path retains its observed full-width-comma
+nickname splitting; API scalar punctuation stays intact. Exact Chinese
+duplicates reconcile; conflicting or ambiguous entries withhold only their
+projection. Unknown and unlabelled labels are diagnosed. Normalized evidence
+preserves API name presence and fingerprints bounded parsed name fields. The
+normalized record retains bounded raw infobox input so durable replay reproduces
+names, aliases and measurements. Statements cite the Character URL; names never
+resolve or merge identity.
 
 Decision: admit exact parsed CharacterDetail arrays beside the existing Crt grammar; reuse an already captured selected Character response in the same converter and journal, with no name-only fetch or graph expansion.
 
 - Touches: one selected character projection, at most 16 preferred-name facts,
-  64 alternate-name facts and 85 public commands, including up to two existing
+  64 alternate-name facts and 86 public commands, including up to two existing
   physical-profile facts; each fact uses the existing Character profile and
   ordinary importer/publication flow.
 - Bound: 32 KiB infobox, nesting depth 2, 64 fields, 64 aliases, 4 KiB and 500
@@ -636,7 +633,7 @@ Decision: admit exact parsed CharacterDetail arrays beside the existing Crt gram
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@14` encodes VNDB alias spoiler levels as released dimensionless quantities and retains replayable Bangumi character infobox input, so durable reconversion keeps aliases and measurements under the original digest. It preserves Bangumi character names, physical profiles, person biographies, type-1 Person birth dates, bounded Person careers and selected Person/Organization image intents while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
+Combined revision decision: `cross-media-entities@15` encodes VNDB alias spoiler levels as released dimensionless quantities and retains replayable Bangumi character infobox input, so durable reconversion keeps aliases and measurements under the original digest. It preserves Bangumi character names, physical profiles, person biographies, type-1 Person birth dates, bounded Person careers and selected Person/Organization/Character cover intents while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
 
 ### Bangumi Person careers
 
@@ -769,7 +766,7 @@ or double-index exactness.
 
 ## Covers, candidate identity, and trust boundaries
 
-`cross-media-entities@14` maps admitted Bangumi Person and Organization
+`cross-media-entities@15` maps admitted Bangumi Person and Organization
 images through the existing cover intent. The importer supplies only a
 validated `PersonDetail.images.large` URL for the exact `person:<id>` record;
 the converter preserves the record's archive-selected native type and omits
@@ -791,6 +788,17 @@ Each cover request has structured `rightsHolder`, `via`, and
 Image rights are independent of metadata rights; a source metadata license does
 not grant a cover license. The request and status shapes are defined in
 [`media-import.ts`](../definitions/src/media-import.ts).
+
+The selected-family Bangumi Character mapping returns this same deferred cover
+shape only when the importer has admitted a Character detail image URL. The
+importer validates `GET /v0/characters/{id}` against the pinned
+[Bangumi OpenAPI Character schema](https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml),
+including its distinct `large`, `medium`, `small`, and `grid` image fields,
+then passes only the admitted large URL through `character:<id>`. The converter
+keeps the Character page and image URL as separate provenance references and
+derives a cover-only digest from the source projection and admitted image URL,
+so an image change refreshes only the existing cover lifecycle. It carries no
+metadata licence into the image request.
 
 For platform imports, the caller uses the public content
 `media:importFromUrl` operation with action `media:importFromUrl` and bearer
@@ -1090,9 +1098,9 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 ## Bangumi TVAnime subject profiles
 
 Decision: `bangumi@12` adds official websites to the integrated `bangumi@11`
-Game-name mapping; the combined registration keeps `cross-media-entities@14`.
+Game-name mapping; the combined registration keeps `cross-media-entities@15`.
 
-Current `bangumi@14` shares one bounded infobox scan for the exact pinned
+Current `bangumi@15` shares one bounded infobox scan for the exact pinned
 `{{Infobox animanga/TVAnime` template on selected type-2 `schema:TVSeries`
 records. It preserves the existing cited name, original-run and work-evidence
 mappings while adding the explicit `官方网站` URL fact. The top-level `name` and
@@ -1130,7 +1138,7 @@ not retract independently adopted assertions.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@14` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@15` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an
@@ -1190,13 +1198,13 @@ identity; the connected native acceptance is
 
 ## Bangumi book grain
 
-The current `bangumi@14` converter dispatches type 1 Book versus BookSeries from
+The current `bangumi@15` converter dispatches type 1 Book versus BookSeries from
 the source series flag, novel platform and wiki template. Comic/manga stays
 generic Book so a novel family is never filled with manga. Type 1 cites a
 parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
-Decision: type 1 Book/BookSeries dispatch remains in current `bangumi@14`,
+Decision: type 1 Book/BookSeries dispatch remains in current `bangumi@15`,
 preserving TVAnime names, Book-template names, original-run, Game player-count,
 Game source genres and names, TVAnime work evidence, and official websites. One
 Bangumi subject stays one identity; ISBN does not create a `bf:Instance`.
@@ -1208,7 +1216,7 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 only horizontal template/list boundary whitespace.
 
 `bangumi@10` introduced the exact pinned TVAnime `链接` and `Copyright`
-mapping, retained by current `bangumi@14`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
+mapping, retained by current `bangumi@15`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
 source text preserved. Both facts cite only the exact Bangumi subject record.
@@ -1223,8 +1231,8 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: ordinary `bangumi@14` and selected-family
-  `cross-media-entities@14+bangumi@14` publication for one TVAnime source record,
+- Touches: ordinary `bangumi@15` and selected-family
+  `cross-media-entities@15+bangumi@15` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
@@ -1267,13 +1275,13 @@ platform, genre, player-count, summary or cover ownership.
 Decision: each complete scalar `游戏类型` occurrence stays one exact literal;
 separators are not inferred, and nested or continued values are withheld whole.
 
-Current `bangumi@14` proposes `schema:genre` on a type-4 `schema:VideoGame`
+Current `bangumi@15` proposes `schema:genre` on a type-4 `schema:VideoGame`
 only when the caller supplies the Concept UUID for that exact literal after a
 current public read confirms the Concept, source URI, and membership in
 `https://rezics.com/schemes/bangumi/genres`. The pinned source field declares
 this meaning but supplies no native UUID or taxonomy equivalence. Ordinary
 registration remains proposal-only; the selected-family caller uses the
-combined `cross-media-entities@14+bangumi@14` registration and existing
+combined `cross-media-entities@15+bangumi@15` registration and existing
 manifest, separate review/adoption, and public-read path.
 
 Missing, wrong-scheme, refused, concealed, retracted, and unavailable bindings
@@ -1296,7 +1304,7 @@ bind this source field.
 
 ## Bangumi Game web destinations
 
-Decision: earlier sections retain their mapping revisions; current Game destinations use `cross-media-entities@14+bangumi@15`, preserving every integrated mapping including `bangumi@14` source genres.
+Decision: earlier sections retain their mapping revisions; current Game destinations use `cross-media-entities@15+bangumi@15`, preserving every integrated mapping including `bangumi@15` source genres.
 
 Decision: preserve admitted URL bytes and withhold labelled destinations until a
 released source contract can preserve their platform, region or edition meaning.
@@ -1311,7 +1319,7 @@ names, dates, player counts, appearances, performer credits or covers. The two
 properties remain independent when they contain the same URL.
 
 Ordinary conversion uses `bangumi@15`; selected-family imports use the existing
-combined `cross-media-entities@14+bangumi@15` registration and journal. Each
+combined `cross-media-entities@15+bangumi@15` registration and journal. Each
 occurrence keeps its exact field pointer in bounded evidence and admitted citations. A conversion
 offers at most 16 destination candidates across both fields; overflow produces
 an explicit bounded omission. No links are fetched or followed.

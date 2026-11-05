@@ -8,9 +8,11 @@ import type { CrossMediaPlan } from './cross-media-seed.ts';
 const BANGUMI_ORIGIN = 'https://api.bgm.tv';
 const SUBJECT_PATH = '/v0/subjects/';
 const PERSON_PATH = '/v0/persons/';
+const CHARACTER_PATH = '/v0/characters/';
 const COVER_LIMIT = 256;
 const CREATOR_LIMIT = 64;
-const MEDIA_SOURCE_LIMIT = COVER_LIMIT + CREATOR_LIMIT;
+const CHARACTER_LIMIT = 256;
+export const BANGUMI_MEDIA_BATCH_LIMIT = COVER_LIMIT + CREATOR_LIMIT + CHARACTER_LIMIT;
 const REQUEST_GAP_MS = 250;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -96,19 +98,35 @@ function etagValue(value: string | null): string | undefined {
 
 function endpointFor(externalId: string): string {
   const person = /^person:([1-9][0-9]*)$/u.exec(externalId);
+  const character = /^character:([1-9][0-9]*)$/u.exec(externalId);
   const subject = /^[1-9][0-9]*$/u.test(externalId) ? externalId : undefined;
-  ensure(person || subject, 'Invalid selected Bangumi media identity');
-  return `${BANGUMI_ORIGIN}${person ? PERSON_PATH + person[1] : SUBJECT_PATH + subject}`;
+  ensure(person || character || subject, 'Invalid selected Bangumi media identity');
+  const id = person?.[1] ?? character?.[1] ?? subject!;
+  ensure(Number.isSafeInteger(Number(id)), 'Invalid selected Bangumi media identity');
+  const path = person ? PERSON_PATH : character ? CHARACTER_PATH : SUBJECT_PATH;
+  return `${BANGUMI_ORIGIN}${path}${id}`;
 }
 
-async function readResponse(response: Response): Promise<Uint8Array> {
+async function readResponse(response: Response, signal: AbortSignal): Promise<Uint8Array> {
   const reader = response.body?.getReader();
   if (!reader) return new Uint8Array();
   let output = new Uint8Array(0);
   let size = 0;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      signal.throwIfAborted();
+      let aborted: (() => void) | undefined;
+      const interrupted = new Promise<never>((_resolve, reject) => {
+        aborted = () => reject(signal.reason);
+        signal.addEventListener('abort', aborted, { once: true });
+      });
+      let chunk: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        chunk = await Promise.race([reader.read(), interrupted]);
+      } finally {
+        if (aborted) signal.removeEventListener('abort', aborted);
+      }
+      const { done, value } = chunk;
       if (done) return output.subarray(0, size);
       ensure(value instanceof Uint8Array, 'Invalid Bangumi API response body');
       ensure(
@@ -182,7 +200,7 @@ async function lookupCover(
     return { ...base, sourceStatus: 'unavailable', code: 'source-api-http' };
   }
   try {
-    const bytes = await readResponse(response);
+    const bytes = await readResponse(response, signal);
     const responseDigest = createHash('sha256').update(bytes).digest('hex');
     const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     const subject = object(parsed);
@@ -217,7 +235,102 @@ async function lookupCover(
       ...(responseEtag ? { etag: responseEtag } : {}),
     };
   } catch {
-    return { ...base, sourceStatus: 'unavailable', code: 'source-payload-invalid' };
+    return {
+      ...base,
+      sourceStatus: signal.aborted ? 'unavailable' : 'invalid',
+      code: signal.aborted ? 'source-api-unavailable' : 'source-payload-invalid',
+    };
+  }
+}
+
+async function lookupCharacterImage(
+  row: SourceRecord,
+  get: (url: string, signal?: AbortSignal) => Promise<Response>,
+  signal: AbortSignal,
+): Promise<BangumiMediaSource> {
+  const match = /^character:([1-9][0-9]*)$/u.exec(row.key);
+  ensure(match && Number.isSafeInteger(Number(match[1])), 'Invalid selected Bangumi Character identity');
+  const endpoint = `${BANGUMI_ORIGIN}${CHARACTER_PATH}${match[1]}`;
+  const base = {
+    sourceAlias: 'bangumi_cross_media' as const,
+    externalId: row.key,
+    sourceRevision: row.revision ?? 'unversioned',
+    archiveDigest: sourceDigest(row.payload),
+    endpoint,
+  };
+  let response: Response;
+  try {
+    response = await get(endpoint, signal);
+  } catch {
+    return { ...base, sourceStatus: 'unavailable', code: 'source-api-unavailable' };
+  }
+  const responseEtag = etagValue(response.headers.get('etag'));
+  let responseDigest: string | undefined;
+  try {
+    const bytes = await readResponse(response, signal);
+    responseDigest = createHash('sha256').update(bytes).digest('hex');
+    if (response.status !== 200)
+      return {
+        ...base,
+        sourceStatus: 'unavailable',
+        code: 'source-api-http',
+        responseDigest,
+        ...(responseEtag ? { etag: responseEtag } : {}),
+      };
+    const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    const character = object(parsed);
+    ensure(
+      character &&
+        character.id === Number(match[1]) &&
+        typeof character.name === 'string' &&
+        Number.isSafeInteger(character.type) &&
+        [1, 2, 3, 4].includes(character.type as number) &&
+        character.type === (row.payload as { type?: unknown }).type,
+      'Bangumi CharacterDetail identity or type did not match the selected archive row',
+    );
+    const imagesValue = character.images;
+    if (imagesValue === undefined || imagesValue === null)
+      return {
+        ...base,
+        sourceStatus: 'absent',
+        responseDigest,
+        ...(responseEtag ? { etag: responseEtag } : {}),
+      };
+    const images = object(imagesValue);
+    ensure(images !== null, 'Invalid Bangumi CharacterDetail image schema');
+    for (const size of ['large', 'medium', 'small', 'grid'])
+      ensure(typeof images[size] === 'string', 'Invalid Bangumi CharacterDetail image schema');
+    const large = images.large as string;
+    if (!large.trim())
+      return {
+        ...base,
+        sourceStatus: 'absent',
+        responseDigest,
+        ...(responseEtag ? { etag: responseEtag } : {}),
+      };
+    const sourceUrl = safeSourceUrl(large, ['lain.bgm.tv']);
+    if (/\/no_icon_(?:person|subject)\./iu.test(new URL(sourceUrl).pathname))
+      return {
+        ...base,
+        sourceStatus: 'absent',
+        responseDigest,
+        ...(responseEtag ? { etag: responseEtag } : {}),
+      };
+    return {
+      ...base,
+      sourceStatus: 'available',
+      sourceUrl,
+      responseDigest,
+      ...(responseEtag ? { etag: responseEtag } : {}),
+    };
+  } catch {
+    return {
+      ...base,
+      sourceStatus: signal.aborted ? 'unavailable' : 'invalid',
+      code: signal.aborted ? 'source-api-unavailable' : 'source-payload-invalid',
+      ...(responseDigest ? { responseDigest } : {}),
+      ...(responseEtag ? { etag: responseEtag } : {}),
+    };
   }
 }
 
@@ -246,7 +359,7 @@ async function lookupCreatorImage(
   let responseDigest: string | undefined;
   let responseEtag: string | undefined;
   try {
-    const bytes = await readResponse(response);
+    const bytes = await readResponse(response, signal);
     responseDigest = createHash('sha256').update(bytes).digest('hex');
     responseEtag = etagValue(response.headers.get('etag'));
     const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
@@ -313,7 +426,7 @@ function payloadWithoutArchiveImages<T extends Record<string, unknown>>(payload:
   return copy;
 }
 
-/** Enrich selected Bangumi works and finite selected creators from their pinned detail responses. */
+/** Enrich selected works, capped creators and direct-appearance Characters from pinned detail responses. */
 export async function acquireBangumiCoverSources(
   plan: CrossMediaPlan,
   options: {
@@ -350,6 +463,12 @@ export async function acquireBangumiCoverSources(
     ...(options.fetch ? { fetch: options.fetch } : {}),
     ...(options.sleep ? { sleep: (ms) => options.sleep!(ms, signalForBatch) } : {}),
   });
+  const getCharacter = createBoundedPublicGet({
+    origin: BANGUMI_ORIGIN,
+    pathPrefix: CHARACTER_PATH,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+    ...(options.sleep ? { sleep: (ms) => options.sleep!(ms, signalForBatch) } : {}),
+  });
   const selectedWorks = new Set(
     plan.members
       .filter((member) => member.source === 'bangumi' && member.kind === 'work' && member.membership === 'family')
@@ -367,27 +486,57 @@ export async function acquireBangumiCoverSources(
   const selectedCreators = new Set(creatorKeys);
   const creatorRows = plan.entities.bangumi.filter((row) => selectedCreators.has(row.key));
   ensure(creatorRows.length === selectedCreators.size, 'Selected Bangumi creator image row is missing');
-  ensure(workRows.length + creatorRows.length <= MEDIA_SOURCE_LIMIT, 'Selected Bangumi media source limit exceeded');
+  const selectedCharacterIds = [
+    ...new Set(
+      [...(plan.characterAppearances ?? []), ...(plan.gameCharacterAppearances ?? [])].map(
+        (appearance) => appearance.characterId,
+      ),
+    ),
+  ].sort((left, right) => left - right);
+  const selectedCharacterKeys = selectedCharacterIds.slice(0, CHARACTER_LIMIT).map((id) => `character:${id}`);
+  if (selectedCharacterIds.length > CHARACTER_LIMIT)
+    plan.gaps.push({
+      source: 'bangumi',
+      fields: [],
+      record: { limit: CHARACTER_LIMIT, omitted: selectedCharacterIds.length - CHARACTER_LIMIT },
+      reason: 'Direct selected Bangumi Character image lookup limit exceeded',
+      code: 'source-limit',
+    });
+  const characterRowsByKey = new Map(plan.entities.bangumi.map((row) => [row.key, row]));
+  const characterRows = selectedCharacterKeys.map((key) => characterRowsByKey.get(key)!);
+  ensure(
+    workRows.length + creatorRows.length + characterRows.length <= BANGUMI_MEDIA_BATCH_LIMIT,
+    'Selected Bangumi media source limit exceeded',
+  );
   const results = new Map<string, BangumiMediaSource>();
-  const tasks = [
-    ...workRows.map((row) => ({ row, creator: false })),
-    ...creatorRows.map((row) => ({ row, creator: true })),
+  const tasks: { row: SourceRecord; kind: 'work' | 'creator' | 'character' }[] = [
+    ...workRows.map((row) => ({ row, kind: 'work' as const })),
+    ...creatorRows.map((row) => ({ row, kind: 'creator' as const })),
+    ...characterRows.map((row) => ({ row, kind: 'character' as const })),
   ];
   let requests = 0;
   let pacingFailed = false;
-  for (const { row, creator } of tasks) {
+  for (const { row, kind } of tasks) {
     const endpoint = endpointFor(row.key);
     const archiveDigest = sourceDigest(row.payload);
     const prior = options.journal?.coverSource('bangumi_cross_media', row.key, archiveDigest);
-    const lastStatus = creator ? options.journal?.latestMediaStatus?.('bangumi_cross_media', row.key) : null;
+    const lastStatus =
+      kind === 'creator' || kind === 'character'
+        ? options.journal?.latestMediaStatus?.('bangumi_cross_media', row.key)
+        : null;
     const refreshCreator =
-      creator &&
+      kind === 'creator' &&
       prior !== null &&
       prior !== undefined &&
       lastStatus !== null &&
       lastStatus !== undefined &&
       !['pending', 'unknown', 'fenced'].includes(lastStatus);
-    if (prior && !refreshCreator) {
+    const reuseCharacterReservation =
+      kind === 'character' &&
+      prior?.sourceStatus === 'available' &&
+      (lastStatus === null || lastStatus === undefined || ['pending', 'unknown'].includes(lastStatus));
+    const shouldRefresh = kind === 'creator' ? refreshCreator : kind === 'character' ? !reuseCharacterReservation : false;
+    if (prior && !shouldRefresh) {
       results.set(row.key, cachedSource(prior, row, endpoint));
       continue;
     }
@@ -406,7 +555,8 @@ export async function acquireBangumiCoverSources(
     if (requests > 0) {
       try {
         await pause(REQUEST_GAP_MS, signalForBatch);
-      } catch {
+      } catch (error) {
+        if (!signalForBatch.aborted) throw error;
         pacingFailed = true;
         results.set(row.key, {
           sourceAlias: 'bangumi_cross_media',
@@ -420,17 +570,20 @@ export async function acquireBangumiCoverSources(
         continue;
       }
     }
-    const evidence = creator
-      ? await lookupCreatorImage(row, getPerson, signalForBatch)
-      : await lookupCover(row, getSubject, signalForBatch);
-    if (evidence.sourceStatus !== 'unavailable') options.journal?.sealCoverSource(evidence);
+    const evidence =
+      kind === 'creator'
+        ? await lookupCreatorImage(row, getPerson, signalForBatch)
+        : kind === 'character'
+          ? await lookupCharacterImage(row, getCharacter, signalForBatch)
+          : await lookupCover(row, getSubject, signalForBatch);
+    if (evidence.responseDigest) options.journal?.sealCoverSource(evidence);
     results.set(row.key, evidence);
     requests++;
   }
-  const coverSources = workRows.map((row) => results.get(row.key)!).filter(Boolean);
+  const coverSources = [...workRows, ...characterRows].map((row) => results.get(row.key)!).filter(Boolean);
   const creatorImageSources = creatorRows.map((row) => results.get(row.key)!).filter(Boolean);
   const sources = [...coverSources, ...creatorImageSources];
-  ensure(sources.length <= MEDIA_SOURCE_LIMIT, 'Selected Bangumi media evidence limit exceeded');
+  ensure(sources.length <= BANGUMI_MEDIA_BATCH_LIMIT, 'Selected Bangumi media evidence limit exceeded');
   ensure(
     Buffer.byteLength(JSON.stringify(sources), 'utf8') <= MAX_IMPORT_RESPONSE_BYTES,
     'Selected Bangumi media evidence exceeds its byte limit',
@@ -442,9 +595,10 @@ export async function acquireBangumiCoverSources(
     if (evidence?.sourceStatus === 'available' && evidence.sourceUrl) payload.images = { large: evidence.sourceUrl };
     return { ...row, payload };
   });
+  const selectedCharacters = new Set(selectedCharacterKeys);
   const entities = plan.entities.bangumi.map((row) => {
     const payload = payloadWithoutArchiveImages(row.payload as Record<string, unknown>);
-    const evidence = selectedCreators.has(row.key) ? byKey.get(row.key) : undefined;
+    const evidence = selectedCreators.has(row.key) || selectedCharacters.has(row.key) ? byKey.get(row.key) : undefined;
     if (evidence?.sourceStatus === 'available' && evidence.sourceUrl) payload.images = { large: evidence.sourceUrl };
     return { ...row, payload };
   });
