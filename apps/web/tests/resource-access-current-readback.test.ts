@@ -52,13 +52,21 @@ test.each(['reload', 'readback'] as const)(
   'retired %s cannot replace a later disclosure; missing readback is not write failure',
   async (source) => {
     const deferred = Promise.withResolvers<AccessState>();
+    const firstReadStarted = Promise.withResolvers<void>();
     let reads = 0;
     const first = structuredClone(snapshot);
     first.next = 'next-page';
     const initial = source === 'reload' ? { status: 'ready' as const, page: first } : ready;
     const restarted = Promise.withResolvers<void>();
     const controller = new AccessRecovery(initial, {
-      read: () => (++reads === 1 ? deferred.promise : Promise.reject(new Error('Unavailable'))),
+      read: () => {
+        reads++;
+        if (reads === 1) {
+          firstReadStarted.resolve();
+          return deferred.promise;
+        }
+        return Promise.reject(new Error('Unavailable'));
+      },
       save: async () => ({ status: 'saved' }),
       lookup: async () => null,
     });
@@ -67,7 +75,7 @@ test.each(['reload', 'readback'] as const)(
       if (state.page.status === 'unavailable' && !state.busy) restarted.resolve();
     });
     const reading = source === 'reload' ? controller.next() : controller.submit(change);
-    await Promise.resolve();
+    await firstReadStarted.promise;
     controller.dispose();
     controller.activate();
     deferred.resolve(ready);
