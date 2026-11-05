@@ -70,8 +70,9 @@ async function eventually<T>(read: () => Promise<T>, accepts: (value: T) => bool
 const workerProgram = `
   import { startWorker, readWorkerConfig } from './src/worker.ts';
   import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
+  import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
     import { createKernelWorkModules } from './src/work/modules.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry);
+    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
   import { createOutcomeRpc } from './test/search/support/outcome-rpc.ts';
   import { createSearchRunnerSlot } from './test/search/support/runner-slot.ts';
   const slot = createSearchRunnerSlot();

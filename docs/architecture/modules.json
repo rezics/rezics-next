@@ -413,8 +413,7 @@
         "services/kernel/src/clock.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/route/route.ts",
-        "services/kernel/src/tokens/seal.ts",
-        "services/kernel/src/work/runtime-defaults.ts"
+        "services/kernel/src/tokens/seal.ts"
       ],
       "allowedDependencies": [
         "auth-contract",

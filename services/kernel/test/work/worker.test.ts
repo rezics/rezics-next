@@ -121,8 +121,9 @@ test('a worker missing or rejecting commerce configuration names the variable an
     import { ConfigError } from './src/commerce/config.ts';
     import { readWorkerConfig, startWorker } from './src/worker.ts';
     import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
+    import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
     import { createKernelWorkModules } from './src/work/modules.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry);
+    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
 
     const env = { ...process.env };
     const { variable, value } = JSON.parse(process.env.WORKER_CONFIG_CASE);

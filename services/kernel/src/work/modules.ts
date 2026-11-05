@@ -43,8 +43,9 @@ const accountsWorkModule: WorkModule = {
 /** Add each module's registration here, in dependency order, once. */
 export function createKernelWorkModules(
   composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
+  composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
 ): readonly WorkModule[] {
-  const searchWorkModule = createSearchWorkModule(composeDiscovery);
+  const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
   return [
     accountsWorkModule,
     erasureWorkModule,

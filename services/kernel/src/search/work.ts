@@ -6,7 +6,6 @@ import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
 import './recent-searches.ts';
 import { trendingSearchStore } from './trending-searches.ts';
 import { createKernel } from '../http/kernel.ts';
-import { createKernelRuntimeDefaults } from '../work/runtime-defaults.ts';
 import { createDefaultPublicFilterRuntime } from './public-runtime.ts';
 import { createPublicPreparation, type PublicPreparation } from './public-preparation.ts';
 import { createScopePreparation } from './scope-preparation.ts';
@@ -65,7 +64,16 @@ type SearchDiscoveryComposer = (input: {
   subjects: SubjectSource;
 }) => DiscoveryProducerEntry;
 
-export function createSearchWorkModule(composeDiscovery: SearchDiscoveryComposer): WorkModule {
+type SearchRuntimeDefaults = Pick<
+  Parameters<typeof createKernel>[0],
+  'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
+>;
+type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
+
+export function createSearchWorkModule(
+  composeDiscovery: SearchDiscoveryComposer,
+  composeRuntimeDefaults: SearchRuntimeDefaultsComposer,
+): WorkModule {
   return {
     name: 'search',
     async register(context) {
@@ -310,7 +318,7 @@ export function createSearchWorkModule(composeDiscovery: SearchDiscoveryComposer
         { name: PUBLIC_PREPARATION_WORKFLOW },
       );
       context.addService(async () => {
-        const defaults = createKernelRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
+        const defaults = composeRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
         let searchAccess: Access | undefined;
