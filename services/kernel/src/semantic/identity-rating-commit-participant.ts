@@ -458,7 +458,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
   return Object.freeze({
     prepare(input: IdentityRatingReviewOperand) {
       const operand = normalizeOperand(input);
-      const prepared = Object.freeze({ [preparation]: true as const });
+      const prepared = Object.freeze({}) as IdentityRatingCommitPreparation;
       inputs.set(prepared, operand);
       return prepared;
     },
