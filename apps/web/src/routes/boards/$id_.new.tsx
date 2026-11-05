@@ -342,6 +342,7 @@ function NewThreadEditor({
             <Link
               to="/boards/$id"
               params={{ id: origin.boardId }}
+              search={origin.returnTo ? { returnTo: origin.returnTo } : {}}
               className={buttonVariants({ variant: 'outline', size: 'lg' })}
             >
               {m.board_threads_heading()}

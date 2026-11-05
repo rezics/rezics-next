@@ -280,6 +280,14 @@ test('real new-thread composition preserves a selected review citation and retri
     expect(page.host.querySelector('[data-slot="thread-create-return"]')?.getAttribute('href')).toBe(
       `/en/subjects/${id(2)}/work/reviews?realm=${id(18)}#subject-community-reviews`,
     );
+    const backToBoard = [...page.host.querySelectorAll('a')].find(
+      (link) => link.textContent?.trim() === page.m.board_threads_heading(),
+    );
+    const backAddress = new URL(backToBoard!.getAttribute('href')!, 'https://site.test');
+    expect(backAddress.pathname).toBe(`/boards/${id(1)}`);
+    expect(backAddress.searchParams.get('returnTo')).toBe(
+      `/en/subjects/${id(2)}/work/reviews?realm=${id(18)}#subject-community-reviews`,
+    );
     expect(page.voteReads.map(({ subjectId }) => subjectId)).toEqual([id(2)]);
     await act(async () => {
       page.voteReads[0]!.work.resolve(vote);
