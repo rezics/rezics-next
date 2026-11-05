@@ -370,6 +370,11 @@ test('three windows return through exact Previous and failed Restart retry witho
     );
     expect(requested).toEqual([undefined]);
     await click('Older sales', true, true);
+    const firstRouteLoad = router.state.matches.at(-1)!.loaderData as { loadId: string };
+    expect(await admissions[0]!.promise).toEqual({
+      locationKey: router.state.location.key,
+      loadId: firstRouteLoad.loadId,
+    });
     expect(host.textContent).toContain('Previous sales');
     expect(document.activeElement?.id).toBe('creator-sales-heading');
     await click('Inspect sale');
@@ -571,6 +576,8 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     await click('Older sales');
     const delayedAdmission = await admissions[0]!.promise;
     expect(delayedAdmission?.locationKey).toBe(router.state.location.key);
+    const initialTargetLoad = router.state.matches.at(-1)!.loaderData as { loadId: string };
+    expect(delayedAdmission?.loadId).toBe(initialTargetLoad.loadId);
     expect(requested.at(-1)).toBe('second+/=');
     expect(host.textContent).not.toContain('Previous sales');
     await act(async () => {
@@ -594,6 +601,8 @@ test('a delayed move superseded at the same cursor retires its path before a fre
     await click('Older sales', true);
     const freshAdmission = await admissions[1]!.promise;
     expect(freshAdmission?.locationKey).toBe(router.state.location.key);
+    const freshTargetLoad = router.state.matches.at(-1)!.loaderData as { loadId: string };
+    expect(freshAdmission?.loadId).toBe(freshTargetLoad.loadId);
     await tick();
     expect(host.textContent).toContain('Previous sales');
     expect(document.activeElement?.id).toBe('creator-sales-heading');
