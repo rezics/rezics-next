@@ -25,6 +25,8 @@ export function membershipCommandState(value: unknown, selection: MembershipSele
   if (
     !record(value) ||
     !fields(value, ['organizationId', 'memberAccountId', 'membership']) ||
+    !id(value.organizationId) ||
+    !id(value.memberAccountId) ||
     value.organizationId !== selection.organizationId ||
     value.memberAccountId !== selection.memberAccountId
   )

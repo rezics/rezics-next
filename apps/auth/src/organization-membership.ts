@@ -1,6 +1,8 @@
 import { createServerFn } from '@tanstack/react-start';
 import * as contract from '@rezics/auth-contract';
-import { authPost } from './api';
+import { readJsonBounded } from './private-auth-json';
+import { parseAccountSession } from './account-session';
+import { trustedSecurityResponseConfiguration } from './security-response-config';
 import { privateAuthRead } from './private-auth-read';
 import { loadAccountSession, type AccountSessionResult } from './account-operations';
 import { membershipReservationMatches, sameMembershipCommand } from './membership-recovery';
@@ -244,15 +246,21 @@ const readPage = createServerFn({ method: 'POST' })
         Origin: issuer,
         Cookie: request.headers.get('cookie') ?? '',
       };
+      const configuration = await trustedSecurityResponseConfiguration();
+      if (!configuration) return { kind: 'unavailable' };
+      const signal = request.signal;
+      signal.throwIfAborted();
       const sessionResponse = await fetch(new URL('/session', issuer), {
         headers,
         redirect: 'error',
         cache: 'no-store',
-        signal: AbortSignal.timeout(5000),
+        signal,
       });
+      const sessionBody = await readJsonBounded(sessionResponse, configuration.sessionBytes, signal);
       if (sessionResponse.status !== 200) return readFailure(sessionResponse.status);
-      const session: unknown = await sessionResponse.json();
-      if (!record(session) || session.account_id !== data.accountId) return { kind: 'denied' };
+      const session = parseAccountSession(sessionBody, configuration.scopeLimit);
+      if (session.kind !== 'ready' || session.accountId !== data.accountId) return { kind: 'denied' };
+      signal.throwIfAborted();
       // Auth binds the fresh management proof to its trusted native page port.
       // The caller cannot supply a principal, client, scope or kernel target.
       const pageResponse = await fetch(new URL('/account-management/organizations/page', issuer), {
@@ -261,10 +269,12 @@ const readPage = createServerFn({ method: 'POST' })
         body: JSON.stringify({ organizationId: data.organizationId, ...(data.cursor ? { cursor: data.cursor } : {}) }),
         redirect: 'error',
         cache: 'no-store',
-        signal: AbortSignal.timeout(8000),
+        signal,
       });
+      const pageBody = await readJsonBounded(pageResponse, contract.membershipResponseBytes.roster, signal);
+      signal.throwIfAborted();
       return pageResponse.status === 200
-        ? parseMembershipPage(await pageResponse.json(), data.organizationId, data.accountId)
+        ? parseMembershipPage(pageBody, data.organizationId, data.accountId)
         : readFailure(pageResponse.status);
     } catch {
       return { kind: 'unavailable' };
@@ -326,12 +336,28 @@ export function parseSelectedMembership(
 export async function loadSelectedMembership(
   organizationId: string,
   memberAccountId: string,
+  signal?: AbortSignal,
 ): Promise<SelectedMembership> {
   if (!membershipId(organizationId) || !membershipId(memberAccountId)) return { kind: 'unavailable' };
-  const response = await authPost('/account-management/organizations/member', { organizationId, memberAccountId });
-  return response.ok
-    ? parseSelectedMembership(response.body, organizationId, memberAccountId)
-    : readFailure(response.status);
+  try {
+    return await privateAuthRead(async (readSignal) => {
+      const response = await fetch('/account-management/organizations/member', {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'error',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId, memberAccountId }),
+        signal: readSignal,
+      });
+      const body = await readJsonBounded(response, contract.membershipResponseBytes.selected, readSignal);
+      return response.status === 200
+        ? parseSelectedMembership(body, organizationId, memberAccountId)
+        : readFailure(response.status);
+    }, signal);
+  } catch {
+    return { kind: 'unavailable' };
+  }
 }
 export function membershipReadback(command: MembershipCommand, current: SelectedMembership): boolean {
   return (

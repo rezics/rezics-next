@@ -881,11 +881,23 @@ existing lifetime to reject delayed replies. Disclosure is local and adds zero r
 Decision: the exported browser membership read uses `privateAuthRead` with one five-second allowance through
 BFF completion, forwarding its effective signal through the installed server-function options. An already-aborted
 caller makes zero calls; timeout, cancellation and transport rejection become the existing unavailable result.
-Native session and page service allowances remain five and eight seconds. The route aborts local read ownership
+The same effective signal covers native session preflight, page headers and both streamed bodies; neither leg renews it. The native page service deadline remains eight seconds. The route aborts local read ownership
 on lifetime replacement, private retirement and unmount, retaining generation checks for transports that ignore
 abort. Timeout retains the exact organization, initiating account and failed opaque target for deliberate Retry;
 only an accepted replacement commits cursor history. This adds no requests, commands or automatic retry and
 makes no claim that a dispatched command was cancelled.
+
+Decision: receiving uses the shared fixed closed JSON bounds: roster 97,089 UTF-8 bytes
+(`4,929 + 6 × (1,024 + 20 × 512 + 4,096)`) and selected member 200 bytes. The constant
+includes JSON punctuation, keys, longest closed variants and ASCII UUIDs. Each row has two
+36-character UUID fields and two nullable 256-UTF-16-unit labels; the cursor is 4,096 units.
+Native viewer proof identity remains opaque up to the established 1,024-unit session ceiling;
+browser selection still requires UUID identity and exact viewer matching. Six bytes per unit
+covers worst-case escaping. No label is truncated. Actual bytes, including error bodies, are
+counted before JSON parsing regardless of Content-Length. The selected read keeps its exact
+POST and result mapping under one five-second whole-call lifetime and installed cancellation.
+Refusal adds zero command effects, point reads or implicit retries. Native authority and real
+browser transport qualifications remain for integrated acceptance; focused fixtures prove receiving.
 
 The browser sends only the organization and cursor to Auth. Auth binds the fresh human management proof to the
 dedicated Kernel page source. The roster and its action advice are observations only. Before a selected change, the

@@ -1,4 +1,4 @@
-import { AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES, type SessionProof } from '@rezics/auth-contract';
+import { AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES, securityResponseLimits, type SessionProof } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
 
@@ -69,9 +69,11 @@ export function organizationMembershipPage(
   if (
     !record(value) ||
     !fields(value, ['organizationId', 'viewer', 'members']) ||
+    !id(value.organizationId) ||
     value.organizationId !== organizationId ||
     !record(value.viewer) ||
     !fields(value.viewer, ['accountId', 'role', 'leave']) ||
+    !text(value.viewer.accountId, securityResponseLimits.id) ||
     value.viewer.accountId !== viewerAccountId ||
     (value.viewer.role !== 'owner' && value.viewer.role !== 'member') ||
     !advice(value.viewer.leave) ||

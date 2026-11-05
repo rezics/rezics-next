@@ -471,7 +471,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       if (knownAcknowledgement && saved && result.kind === 'ready') {
         // A known native acknowledgement permits a separate current observation,
         // never an inference that an unknown request caused matching state.
-        const current = await loadSelectedMembership(organizationId, saved.operation.memberAccountId);
+        const current = await loadSelectedMembership(organizationId, saved.operation.memberAccountId, readSignal);
         if (!isActive()) return;
         if (!sameMembershipCommand(readMembershipCommand(), saved)) {
           retirePrivateAuthority('unavailable');
@@ -542,7 +542,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setPage({ kind: 'denied' });
         return;
       }
-      const currentMember = await loadSelectedMembership(organizationId, expected.operation.memberAccountId);
+      const currentMember = await loadSelectedMembership(organizationId, expected.operation.memberAccountId, readSignal);
       if (!isActive()) return;
       if (currentMember.kind !== 'ready') {
         installPage(currentMember);
@@ -610,7 +610,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     setBusy(true);
     setSelecting(true);
     try {
-      const current = await loadSelectedMembership(organizationId, memberAccountId);
+      const current = await loadSelectedMembership(organizationId, memberAccountId, readSignal);
       if (!isActive()) return;
       if (current.kind !== 'ready') {
         if (current.kind === 'denied' || current.kind === 'signed-out') installPage(current);
@@ -697,7 +697,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       setNotice(result);
       setConfirmed(false);
       if (result === 'step-up') setReauth(true);
-      const current = await loadSelectedMembership(organizationId, command.operation.memberAccountId);
+      const current = await loadSelectedMembership(organizationId, command.operation.memberAccountId, readSignal);
       if (!isActive()) return;
       if (current.kind !== 'ready') {
         installPage(current);

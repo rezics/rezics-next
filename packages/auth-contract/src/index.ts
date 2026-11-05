@@ -1,3 +1,4 @@
+export * from './membership-response-bounds';
 export * from './passkey-enrollment-response-bounds';
 export * from './operator-page-response-bounds';
 export * from './rename-response-bounds';

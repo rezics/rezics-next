@@ -76,3 +76,12 @@ test('selected membership transport denies extra fields, cross-site requests, wr
   expect((await fixture(human, { ...selection, membership: null, holders: [] }).handler(request())).status).toBe(503);
   expect((await fixture(human, { ...selection, membership: { role: 'member' } }).handler(request())).status).toBe(503);
 });
+
+test('selected response fits its own ceiling and invalid reservations never become absence', async () => {
+  const { membershipResponseBytes } = await import('@rezics/auth-contract');
+  const response = await fixture().handler(request());
+  expect(new TextEncoder().encode(await response.text()).length).toBe(membershipResponseBytes.selected);
+  for (const membership of [{ role: 'admin', reservationId }, { role: 'member', reservationId: 'opaque' }, {}]) {
+    expect((await fixture(human, { ...selection, membership }).handler(request())).status).toBe(503);
+  }
+});

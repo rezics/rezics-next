@@ -2922,6 +2922,23 @@ outside DBOS, so final purge, executor loss and lost replies cannot erase them.
 Neither proof phase is an Auth/shared-history participant ACK. Kernel's own
 producer/minimizer closure remains necessary; Search cleanup remains undelivered.
 
+## Membership response receiving
+
+The closed native roster projection and selected-member projection publish separate fixed
+UTF-8 maxima through `membershipResponseBytes`: 97,089 and 200 bytes. Roster is
+`4,929 + 6 × (1,024 + 20 × (256 + 256) + 4,096)`: JSON punctuation, keys, longest
+closed role/action/readiness and identity kind spellings, UUID organization/row/disclosed
+identity fields (36 ASCII bytes each), opaque native viewer proof (1,024 UTF-16 units),
+nullable labels and cursor. Selected is the longest present membership with three ASCII
+UUIDs and role `member`; null is shorter. Native viewer identity is not newly UUID-qualified;
+the browser retains its existing UUID selection restriction. Invalid or excess dependency
+output returns unavailable, without truncation, fabricated absence or new action advice.
+Native roster and selected deadlines remain eight and three seconds; exact fresh human
+profile and current proof revalidation remain in their native owners. Browser receiving uses
+one five-second allowance through preflight and body, with no timer reset or automatic retry.
+This adds zero native calls or scans. Native engine cost and real browser qualification remain
+unchanged and require integrated acceptance.
+
 ## Selected organization member command state
 
 `POST /account-management/organizations/member` accepts only
