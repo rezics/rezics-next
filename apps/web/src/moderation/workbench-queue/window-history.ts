@@ -547,6 +547,7 @@ export class WorkbenchQueueWindowHistory {
       return false;
     }
     this.clearAppeal();
+    const focus = focusTicket('appeal-return', input.source, input.keyboard, false, true);
     this.appealVisit = {
       visitId: input.visitId,
       appealId: input.appealId,
@@ -556,7 +557,7 @@ export class WorkbenchQueueWindowHistory {
       mode: 'queue',
       pending: 'open',
       transitionApproved: false,
-      focus: focusTicket('appeal-return', input.source, input.keyboard, false, true),
+      ...(focus ? { focus } : {}),
     };
     this.publish();
     return true;
@@ -637,7 +638,7 @@ export class WorkbenchQueueWindowHistory {
         state.visitId = input.visitId;
         state.mode = 'detail';
         state.generation = input.page.generation;
-        state.pending = undefined;
+        delete state.pending;
         state.transitionApproved = false;
         this.publish();
       }
