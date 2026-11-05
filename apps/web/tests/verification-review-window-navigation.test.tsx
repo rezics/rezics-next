@@ -21,6 +21,7 @@ mock.module('../src/account-verification/actions', () => ({
   readAccountManagement: async () => ({ state: 'denied' }),
   decideVerification: async () => ({ state: 'accepted' }),
 }));
+mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({}) }));
 afterAll(() => mock.restore());
 
 const ready = (viewerId: string, next: string | null, requests: ReviewPage['requests'] = []): ReviewRead => ({
@@ -54,6 +55,7 @@ test('review windows browse only admitted targets, retry exact failures, cap his
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     matchMedia: window.matchMedia.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
