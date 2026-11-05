@@ -273,11 +273,19 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   function restoreRowOutcome(row: VndbRow): void {
     const score = scoreDecision(row);
     if (score && ['applied', 'stale', 'failed'].includes(score.status)) {
-      const outcome: VndbOutcome = { ordinal: row.ordinal, scoreReviewId: score.reviewId,
-        status: score.status as 'applied' | 'stale' | 'failed' };
+      const outcome: VndbOutcome = {
+        ordinal: row.ordinal,
+        scoreReviewId: score.reviewId,
+        status: score.status as 'applied' | 'stale' | 'failed',
+      };
       outcomes.set(outcomeKey(outcome), outcome);
-      effectReferences.set(outcomeKey(outcome), { ordinal: row.ordinal, kind: 'score',
-        reviewId: score.reviewId, targetId: score.targetId, status: score.status });
+      effectReferences.set(outcomeKey(outcome), {
+        ordinal: row.ordinal,
+        kind: 'score',
+        reviewId: score.reviewId,
+        targetId: score.targetId,
+        status: score.status,
+      });
     }
     const decision = row.decision;
     if (
@@ -402,10 +410,12 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     let response: T | VndbFailure | VndbUnknown;
     try {
       response = await send();
-    } catch {
+    } catch (error) {
+      if (!(error instanceof TypeError || error instanceof DOMException || error instanceof SyntaxError)) throw error;
       response = { kind: 'unknown', command };
+    } finally {
+      pending -= 1;
     }
-    pending -= 1;
     if (!live()) return undefined;
     if (isVndbUnknown(response)) {
       unknown = command;

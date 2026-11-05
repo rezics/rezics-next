@@ -168,6 +168,61 @@ test('current refusal and unavailable readback never restore private rows or cre
   }
 });
 
+test('reopen reconciles deliberate zero votes and restores acknowledged score results', async () => {
+  const source = authoredRow();
+  source.scoreDecision = {
+    reviewId,
+    status: 'applying',
+    targetId,
+    action: 'vote',
+    units: 0,
+    question: {
+      id: targetId,
+      revision: 1,
+      meaning: 'enjoyment',
+      label: 'Enjoyment',
+      grain: 'work',
+      scale: { min: 0, max: 20, step: 1 },
+      aggregateEffect: 'public-standard-aggregate',
+    },
+    currentVote: { state: 'absent' },
+    consent: 'adopt-native-vote',
+    sourceReason: 'deliberate units',
+    nativeAdmission: 'conditional',
+  };
+  const commands: VndbCommand[] = [];
+  const { journey } = setup([source], {
+    apply: async (command) => {
+      commands.push(command);
+      return {
+        kind: 'applied',
+        value: { uploadId, outcomes: [{ ordinal: 0, scoreReviewId: reviewId, status: 'applied' }], stopped: null },
+      };
+    },
+  });
+  expect((await journey.reopen(address)).selectedEffects).toBe(1);
+  journey.openConfirm();
+  expect((await journey.confirm()).applied).toBe(1);
+  expect(commands).toEqual([{ kind: 'apply', uploadId, body: { rows: [{ ordinal: 0, scoreReviewId: reviewId }] } }]);
+  source.scoreDecision.status = 'applied';
+  const restored = await setup([source]).journey.reopen(address);
+  expect(restored.outcomes).toEqual([{ ordinal: 0, scoreReviewId: reviewId, status: 'applied' }]);
+  expect(restored.settledEffects[0]?.targetId).toBe(targetId);
+  expect(restored.selectedEffects).toBe(0);
+});
+
+test('journey propagates internal defects and releases busy state', async () => {
+  const error = new Error('internal defect');
+  const { journey } = setup([], {
+    page: async () => {
+      throw error;
+    },
+  });
+  await expect(journey.reopen(address)).rejects.toBe(error);
+  expect(journey.snapshot().busy).toBe(false);
+  expect(journey.snapshot().retryCommand).toBeNull();
+});
+
 test('review keeps an explicit unmatched target selectable only while native readback discloses it', async () => {
   const source = authoredRow();
   source.decision = {
