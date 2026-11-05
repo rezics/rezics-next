@@ -7239,6 +7239,7 @@
   "quotation_unavailable": "この引用を現在読めません。",
   "quotation_denied": "現在のセッションではこの引用を利用できません。",
   "quotation_stale": "この文書の選択は古くなっています。",
+  "quotation_reading_changed": "この引用の読み取り内容は変更されたか、現在は閲覧できません。現在のコンテキストを読むには、最初から再開してください。",
   "quotation_empty": "このページに引用はありません。",
   "quotation_more": "引用を続ける",
   "quotation_correct": "引用の修正を提案",

@@ -234,7 +234,7 @@ export const StaleReturn: Story = {
   args: { state: 'stale' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText(m.quotation_stale())).toBeTruthy();
+    await expect(canvas.getByText(m.quotation_reading_changed())).toBeTruthy();
     await userEvent.click(canvas.getByRole('button', { name: m.quotation_restart() }));
     await expect(await canvas.findByText('I will return. The source and the speaker remain distinct.')).toBeTruthy();
   },

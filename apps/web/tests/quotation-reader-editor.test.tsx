@@ -6,6 +6,7 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { quotationTypeAdmitted, readQuotationPage } from '../src/features/catalogue/quotation';
 import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
+import { candidateContext } from '../src/subject/candidates';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -24,6 +25,7 @@ function item(
   labels: Record<string, string>,
   statements: SubjectRead['subject']['statements'],
   related: SubjectRead['related'] = {},
+  context = candidateContext,
 ): SubjectRead {
   return {
     subject: {
@@ -31,7 +33,7 @@ function item(
       type,
       revision: 1,
       release: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      context: '00000000-0000-4000-8000-000000000001',
+      context,
       labels,
       descriptions: {},
       aliases: {},
@@ -122,6 +124,8 @@ function admit(release: Release) {
 
 function client(
   mode: 'ok' | 'missing' | 'restricted' | 'stale' | 'unavailable' | 'withheld-source' | 'unsafe-source' | 'wrong-type',
+  observe?: (kind: string, input: unknown) => void,
+  wrongContext?: { id: string; value: string },
 ) {
   const quotation = item(
     quote,
@@ -204,14 +208,30 @@ function client(
   );
   return {
     subjects: ({ id }: { id: string }) => ({
-      get: async () => {
+      get: async ({ query }: { query?: { context?: string; includeViewerActions?: boolean } } = {}) => {
+        observe?.('subject', { id, query });
         if (mode === 'unavailable') return { status: 503 };
-        if (id === work) return { status: 200, data: item(work, 'schema:Book', { en: 'Work' }, {}) };
-        if (id === quote) return { status: 200, data: quotation };
+        const context = (wrongContext?.id === id ? wrongContext.value : query?.context) ?? candidateContext;
+        const withAdvice = <T extends SubjectRead>(data: T) => ({
+          ...data,
+          ...(query?.includeViewerActions
+            ? {
+                viewerActions: {
+                  state: 'available' as const,
+                  actions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
+                },
+              }
+            : {}),
+        });
+        if (id === work)
+          return { status: 200, data: withAdvice(item(work, 'schema:Book', { en: 'Work' }, {}, {}, context)) };
+        if (id === quote)
+          return { status: 200, data: withAdvice({ ...quotation, subject: { ...quotation.subject, context } }) };
         return { status: 404 };
       },
       relations: {
-        get: async ({ query }: { query: { cursor?: string } }) => {
+        get: async ({ query }: { query: { cursor?: string; context?: string } }) => {
+          observe?.('relations', { id, query });
           if (mode === 'stale') return { status: 409 };
           return {
             status: 200,
@@ -241,6 +261,20 @@ function client(
         },
       },
     }),
+    viewerActions: {
+      post: async ({ resources }: { resources: { type: string; id: string }[] }) => {
+        observe?.('viewerActions', resources);
+        return {
+          status: 200,
+          data: {
+            resources: resources.map((resource) => ({
+              ...resource,
+              viewerActions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
+            })),
+          },
+        };
+      },
+    },
   } as unknown as KernelClient;
 }
 
@@ -319,6 +353,55 @@ test('quotation reading keeps multilingual text, two contexts, missing and restr
     reason: 'unavailable',
   });
   expect(catalogueEntries.quotations({ id: work, label: 'Work', locale: 'en' }).href).toContain('/quotations');
+});
+
+test('quotation reads bind the relation page, selected Subject and viewer permission to Context', async () => {
+  const definitions = admit({ types: {}, properties: {} } as unknown as Release);
+  const context = '00000000-0000-4000-8000-00000000c001';
+  const calls: { kind: string; input: unknown }[] = [];
+  const result = await readQuotationPage(
+    client('ok', (kind, input) => calls.push({ kind, input })),
+    'Bearer reader',
+    definitions,
+    work,
+    'en',
+    { context },
+  );
+  if (!result.ok) throw new Error('expected a current quotation');
+  expect(calls.filter((call) => call.kind === 'subject').map((call) => call.input)).toEqual([
+    { id: work, query: { context } },
+    { id: quote, query: { context } },
+  ]);
+  expect(calls.find((call) => call.kind === 'relations')?.input).toEqual({
+    id: work,
+    query: { property: 'schema:hasPart', language: 'en', limit: 20, context },
+  });
+  expect(calls.find((call) => call.kind === 'viewerActions')?.input).toEqual([
+    { type: 'semantic.subject', id: quote },
+    { type: 'semantic.context', id: context },
+  ]);
+  expect(result.selected?.observation).toContain(`\u0000${context}\u0000`);
+  expect(result.actions?.[0]?.state).toBe('unsupported');
+  expect(
+    await readQuotationPage(
+      client('ok', undefined, { id: work, value: candidateContext }),
+      'Bearer reader',
+      definitions,
+      work,
+      'en',
+      { context },
+    ),
+  ).toEqual({ ok: false, reason: 'stale' });
+  expect(
+    await readQuotationPage(
+      client('ok', undefined, { id: quote, value: candidateContext }),
+      'Bearer reader',
+      definitions,
+      work,
+      'en',
+      { context },
+    ),
+  ).toEqual({ ok: false, reason: 'stale' });
 });
 
 test('quotation page returns from candidate review and names unavailable configuration', async () => {

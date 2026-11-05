@@ -5,13 +5,29 @@ import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { browserObservation } from '../../../session/observation';
 import { sessionQueryKey } from '../../../session/browser-state';
 import { subjectHref } from '../../../subject/subject-href';
+import { candidateContext } from '../../../subject/candidates';
 import type { QuotationRead } from '../../catalogue/quotation';
 import type { QuotationTransport } from '../quotation-view';
 
 type Intent = Parameters<QuotationTransport['read']>[0];
 type Success = Extract<QuotationRead, { ok: true }>;
 type Failure = Extract<QuotationRead, { ok: false }>;
-type Page = { cursor?: string | undefined; session?: string | undefined; quote?: string | undefined };
+type Page = {
+  cursor?: string | undefined;
+  session?: string | undefined;
+  quote?: string | undefined;
+  context?: string | undefined;
+  selection?: Selection | undefined;
+};
+type Selection = {
+  quote: string;
+  observation?: string | undefined;
+  statementId?: string | undefined;
+  property?: string | undefined;
+  context?: string | undefined;
+  release?: string | undefined;
+  revision?: number | undefined;
+};
 type Visit = {
   intent: Intent;
   previous?: Page | undefined;
@@ -29,13 +45,70 @@ let receipt:
       token: string;
       id: string;
       locale: string;
+      context: string;
+      reader: string;
+      readerGeneration: number;
       page: Page;
-      text?: string | undefined;
+      selection?: Selection | undefined;
       previous?: Page | undefined;
       origin?: string | undefined;
       current: () => boolean;
     }
   | undefined;
+
+function selectedText(read: Success, statementId: string | undefined, locale: string) {
+  const row = read.selected;
+  if (!row) return undefined;
+  return statementId
+    ? row.statements.find((text) => text.statementId === statementId)
+    : (row.statements.find((text) => text.language === locale) ?? row.statements[0]);
+}
+
+function selectionOf(read: Success, statementId: string | undefined, locale: string): Selection | undefined {
+  const row = read.selected;
+  if (!row) return;
+  const text = selectedText(read, statementId, locale);
+  if (statementId && !text) return { quote: row.id, observation: row.observation, statementId };
+  return {
+    quote: row.id,
+    observation: row.observation,
+    ...(text?.statementId ? { statementId: text.statementId } : {}),
+    ...(text?.property ? { property: text.property } : {}),
+    ...(text?.assertion
+      ? {
+          context: text.assertion.context,
+          release: text.assertion.release,
+          revision: text.assertion.revision,
+        }
+      : {}),
+  };
+}
+
+function selectionMatches(read: Success, expected: Selection) {
+  const row = read.selected;
+  if (!row || row.id !== expected.quote || row.observation !== expected.observation) return false;
+  if (!expected.statementId) return true;
+  const text = row.statements.find(
+    (candidate) =>
+      candidate.statementId === expected.statementId &&
+      (expected.property === undefined || candidate.property === expected.property),
+  );
+  return !!text &&
+    (!expected.context || text.assertion?.context === expected.context) &&
+    (!expected.release || text.assertion?.release === expected.release) &&
+    (expected.revision === undefined || text.assertion?.revision === expected.revision);
+}
+
+function readingMatchesContext(read: Success, context: string) {
+  return (
+    read.public.subject.context === context &&
+    read.rows.every(
+      (row) =>
+        row.contexts.every((entry) => !entry.assertion || entry.assertion.context === context) &&
+        row.statements.every((statement) => !statement.assertion || statement.assertion.context === context),
+    )
+  );
+}
 
 function safePath(value?: string) {
   return value && value.length <= 2048 && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\')
@@ -43,9 +116,15 @@ function safePath(value?: string) {
     : undefined;
 }
 
+function returnContext(value: string | null) {
+  const match = value && /~([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.exec(value);
+  return match?.[1];
+}
+
 export function useQuotationVisit(props: {
   id: string;
   locale: string;
+  context?: string | undefined;
   quote?: string | undefined;
   returnTo?: string | undefined;
   transport: QuotationTransport;
@@ -54,15 +133,13 @@ export function useQuotationVisit(props: {
   const { id, locale, quote, initial } = props;
   const client = useQueryClient();
   const router = useRouter({ warn: false });
-  const work = useCatalogueLifetime(JSON.stringify(['quotation-visit', id, locale]));
-  const token = useId();
+  const localToken = useId();
   const selectedRef = useRef<HTMLHeadingElement>(null);
   const transport = useRef(props.transport);
   transport.current = props.transport;
   const sequence = useRef(0);
   const mounted = useRef(false);
   const focus = useRef<{ owner: number; element: Element | null } | undefined>(undefined);
-  const address = `${id}:${locale}`;
   const url = typeof window === 'undefined' ? undefined : new URL(window.location.href);
   const returnToken = url?.searchParams.get('quotationReturn');
   const [restoration] = useState(() => {
@@ -73,22 +150,44 @@ export function useQuotationVisit(props: {
       saved.id === id &&
       saved.locale === locale &&
       saved.page.quote === quote &&
+      (!props.context || saved.context === props.context) &&
       saved.current()
       ? saved
       : null;
   });
+  const context = restoration && restoration !== null
+    ? restoration.context
+    : (props.context ?? returnContext(returnToken) ?? candidateContext);
+  const lostReceipt = returnToken !== null && restoration === null;
+  const initialResult =
+    initial?.ok && !readingMatchesContext(initial, context) ? ({ ok: false, reason: 'stale' } as const) : initial;
+  // Context is a public native address. The bounded marker can recover that address after a lost receipt;
+  // it carries no admission, session, cursor, or authorized reading authority.
+  const token = `${localToken}~${context}`;
+  const work = useCatalogueLifetime(JSON.stringify(['quotation-visit', id, locale, context]));
+  const address = `${id}:${locale}:${context}`;
   const safeOrigin = safePath(props.returnTo) ?? restoration?.origin;
-  const [text, setText] = useState<string | undefined>(restoration?.text);
+  const [text, setText] = useState<string | undefined>(restoration?.selection?.statementId);
+  const restorePending = useRef(!!restoration);
+  const selectedIntent = useRef<Selection | undefined>(restoration?.selection);
   const chosenText = useRef(text);
   chosenText.current = text;
   const [visit, setVisit] = useState<Visit>(() => ({
     intent: restoration?.page ?? {
-      quote: quote ?? (initial?.ok ? initial.selected?.id : undefined),
-      session: initial?.ok ? initial.session : undefined,
+      ...(!lostReceipt ? { quote: quote ?? (initial?.ok ? initial.selected?.id : undefined) } : {}),
+      session: initialResult?.ok ? initialResult.session : undefined,
+      context,
     },
     previous: restoration?.previous,
-    phase: restoration === null ? 'failed' : initial === undefined ? 'loading' : initial.ok ? 'ready' : 'failed',
-    result: restoration === null ? { ok: false, reason: 'stale' } : initial,
+    phase:
+      restoration === null
+        ? 'failed'
+        : initialResult === undefined
+          ? 'loading'
+          : initialResult.ok
+            ? 'ready'
+            : 'failed',
+    result: restoration === null ? { ok: false, reason: 'stale' } : initialResult,
     observation: 0,
   }));
   const current = useRef(visit);
@@ -105,27 +204,50 @@ export function useQuotationVisit(props: {
     const destination = new URL(window.location.href);
     if (intent.quote) destination.searchParams.set('quote', intent.quote);
     else destination.searchParams.delete('quote');
+    if (props.context || context !== candidateContext) destination.searchParams.set('context', context);
+    else destination.searchParams.delete('context');
     destination.searchParams.delete('quotationReturn');
     // Router history retains ordinary Back/Forward intent. Native page descriptors stay private.
     router.history.push(`${destination.pathname}${destination.search}`);
   }
 
-  async function request(intent: Intent, previous?: Page, focusSelected = false, push = false) {
+  async function request(
+    intent: Intent,
+    previous?: Page,
+    focusSelected = false,
+    push = false,
+    expectedSelection?: Selection | null,
+  ) {
     if (!work.active() || !mounted.current) return;
     receipt = undefined;
     const owner = ++sequence.current;
+    const expected = expectedSelection === undefined ? (restorePending.current ? restoration?.selection : undefined) : expectedSelection;
+    if (!expected) selectedIntent.current = undefined;
+    const requestIntent = { ...intent, context };
     focus.current = focusSelected ? { owner, element: document.activeElement } : undefined;
-    publish({ intent: { ...intent }, previous, phase: 'loading', observation: owner });
+    publish({ intent: requestIntent, previous, phase: 'loading', observation: owner });
     let result: QuotationRead;
     try {
-      result = await transport.current.read({ ...intent });
+      result = await transport.current.read(requestIntent);
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
     if (!mounted.current || !work.active() || owner !== sequence.current || source.current !== address) return;
+    if (result.ok && !readingMatchesContext(result, context)) result = { ok: false, reason: 'stale' };
+    if (expected && result.ok) {
+      restorePending.current = false;
+      selectedIntent.current = undefined;
+      if (!selectionMatches(result, expected)) result = { ok: false, reason: 'stale' };
+      else setText(expected.statementId);
+    } else if (expected && result.ok === false && result.reason !== 'unavailable') {
+      restorePending.current = false;
+      selectedIntent.current = undefined;
+    } else if (expected && !result.ok) {
+      selectedIntent.current = expected;
+    }
     publish({
       intent: {
-        ...intent,
+        ...requestIntent,
         ...(result.ok ? { session: result.session, quote: result.selected?.id ?? intent.quote } : {}),
       },
       previous,
@@ -133,7 +255,7 @@ export function useQuotationVisit(props: {
       result,
       observation: owner,
     });
-    if (push && result.ok) history({ ...intent, quote: result.selected?.id });
+    if (push && result.ok) history({ ...requestIntent, quote: result.selected?.id });
   }
 
   useEffect(() => {
@@ -145,8 +267,8 @@ export function useQuotationVisit(props: {
     };
     document.addEventListener('focusin', focusElsewhere);
     // Supplied native data remains initial data: never refetch it on mount.
-    if (initial === undefined && restoration !== null)
-      void request(restoration?.page ?? { quote }, restoration?.previous, !!restoration);
+    if ((initial === undefined || restoration) && restoration !== null)
+      void request(restoration?.page ?? { quote, context }, restoration?.previous, !!restoration);
     return () => {
       mounted.current = false;
       sequence.current += 1;
@@ -185,6 +307,7 @@ export function useQuotationVisit(props: {
   }, [visit, work]);
 
   const read: Success | undefined = visit.phase === 'ready' && visit.result?.ok ? visit.result : undefined;
+  if (read?.selected) selectedIntent.current = selectionOf(read, text, locale);
   const error: Failure | undefined =
     visit.phase === 'failed' && visit.result && !visit.result.ok ? visit.result : undefined;
   const facts = subjectHref({ id, label: read?.public.subject.labels[locale] ?? '' }, locale).href;
@@ -200,15 +323,28 @@ export function useQuotationVisit(props: {
     const store = browserObservation(client);
     const observed = store.getSnapshot();
     const sessionState = client.getQueryState(sessionQueryKey);
+    const readerGeneration = observed.state === 'signed-in' ? observed.observation.id : 0;
+    const reader = work.reader;
     receipt = {
       token,
       id,
       locale,
+      context,
+      reader,
+      readerGeneration,
       page: { ...current.current.intent, quote: read.selected.id },
-      text: chosenText.current,
+      selection: selectionOf(read, chosenText.current, locale),
       previous: current.current.previous,
       origin: safeOrigin,
-      current: () => store.getSnapshot() === observed && client.getQueryState(sessionQueryKey) === sessionState,
+      current: () => {
+        const currentObservation = store.getSnapshot();
+        return (
+          reader === (currentObservation.state === 'signed-in' ? currentObservation.observation.subject : '') &&
+          readerGeneration === (currentObservation.state === 'signed-in' ? currentObservation.observation.id : 0) &&
+          currentObservation === observed &&
+          client.getQueryState(sessionQueryKey) === sessionState
+        );
+      },
     };
     // Departure retires every pending focus ticket without changing the admitted page.
     focus.current = undefined;
@@ -228,6 +364,7 @@ export function useQuotationVisit(props: {
 
   return {
     read,
+    context,
     text,
     chooseText: (id?: string) => setText(id),
     error,
@@ -246,15 +383,21 @@ export function useQuotationVisit(props: {
       read?.next
         ? request(
             { cursor: read.next, session: read.session },
-            { ...current.current.intent, quote: read.selected?.id },
+            { ...current.current.intent, quote: read.selected?.id, selection: selectedIntent.current },
             false,
             true,
           )
         : Promise.resolve(),
-    previous: () => (visit.previous ? request(visit.previous, undefined, true, true) : Promise.resolve()),
-    restart: () => request({}, undefined, false, true),
-    refresh: () => request(current.current.intent, current.current.previous),
+    previous: () => {
+      if (!visit.previous) return Promise.resolve();
+      const { selection, ...intent } = visit.previous;
+      return request(intent, undefined, true, true, selection ?? null);
+    },
+    restart: () => request({}, undefined, false, true, null),
+    refresh: () => request(current.current.intent, current.current.previous, false, false, selectedIntent.current),
     retry: () =>
-      error?.reason === 'unavailable' ? request(current.current.intent, current.current.previous) : Promise.resolve(),
+      error?.reason === 'unavailable'
+        ? request(current.current.intent, current.current.previous, false, false, selectedIntent.current)
+        : Promise.resolve(),
   };
 }

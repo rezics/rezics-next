@@ -19,12 +19,18 @@ export const readSubjectQuotations = createServerFn({ method: 'POST', strict: fa
       throw new Error('Invalid quotation address');
     if (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 8192))
       throw new Error('Invalid quotation address');
+    if (
+      input.context !== undefined &&
+      (typeof input.context !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.context))
+    )
+      throw new Error('Invalid quotation address');
     return {
       expectedReader: input.expectedReader === null ? null : expectedCandidateReader(input),
       id: input.id,
       locale: input.locale,
       quote: input.quote as string | undefined,
       cursor: input.cursor as string | undefined,
+      context: input.context as string | undefined,
       session: typeof input.session === 'string' && input.session.length <= 16384 ? input.session : undefined,
     };
   })

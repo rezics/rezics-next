@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider, focusManager, onlineManager } from '@
 import type { SubjectRead } from '@rezics/client';
 import type { QuotationRead, QuotationRow } from '../src/features/catalogue/quotation';
 import type { QuotationTransport } from '../src/features/pages/quotation-view';
+import { candidateContext } from '../src/subject/candidates';
 import recorded from '../src/kernel/recorded/subject.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -59,6 +60,10 @@ function page(ids = [first], selected = ids[0], next: string | null = null): Quo
     unsupportedCount: 0,
     session: 'private-session',
     actions: [{ action: 'statement:propose', operationId: 'subject.propose', state: 'allowed' }],
+    viewerActions: {
+      subject: { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] },
+      context: { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] },
+    },
   };
 }
 
@@ -134,7 +139,12 @@ test('mounted reader owns later-page selection, explicit recovery, return and re
     expect(calls).toHaveLength(0); // Native initial data does not refetch on mount.
     await click(m.quotation_more());
     await click(m.quotation_open({ number: 2 }));
-    expect(calls.at(-1)).toEqual({ cursor: 'native-page-two', quote: first, session: 'private-session' });
+    expect(calls.at(-1)).toEqual({
+      cursor: 'native-page-two',
+      quote: first,
+      session: 'private-session',
+      context: candidateContext,
+    });
     expect(host.querySelector('[data-quotation-id]')?.getAttribute('data-quotation-id')).toBe(first);
     expect(host.querySelector('[data-source-reference-hash]')?.getAttribute('data-statement-id')).toBe(`text:${first}`);
     expect(document.activeElement?.tagName).toBe('H2');
@@ -158,7 +168,7 @@ test('mounted reader owns later-page selection, explicit recovery, return and re
     const correction = [...host.querySelectorAll('a')].find((node) => node.textContent === m.quotation_correct())!;
     const destination = new URL(correction.href);
     expect(destination.pathname).toContain(first);
-    const returnUrl = new URL(destination.searchParams.get('returnTo')!, window.location.origin);
+    const returnUrl = new URL(destination.searchParams.get('via')!, window.location.origin);
     expect(returnUrl.searchParams.get('quote')).toBe(first);
     expect(returnUrl.searchParams.get('returnTo')).toBe('/en/origin');
     expect(returnUrl.href).not.toContain('private-session');
@@ -169,15 +179,20 @@ test('mounted reader owns later-page selection, explicit recovery, return and re
     await act(async () => root.render(null));
     window.history.replaceState(null, '', returnUrl.href);
     await mount(first);
-    expect(calls.at(-1)).toEqual({ cursor: 'native-page-two', quote: first, session: 'private-session' });
+    expect(calls.at(-1)).toEqual({
+      cursor: 'native-page-two',
+      quote: first,
+      session: 'private-session',
+      context: candidateContext,
+    });
     // A consumed/lost receipt does not guess which page held a quotation.
     await act(async () => root.render(null));
     const before = calls.length;
     await mount(first);
     expect(calls).toHaveLength(before);
-    expect(host.textContent).toContain(m.quotation_stale());
+    expect(host.textContent).toContain(m.quotation_reading_changed());
     await click(m.quotation_restart());
-    expect(calls.at(-1)).toEqual({});
+    expect(calls.at(-1)).toEqual({ context: candidateContext });
     // The standalone fixture mirrors the router's successful Restart URL transition.
     window.history.replaceState(null, '', `/en/subjects/${id}/work/quotations`);
     // Delayed selection cannot steal focus after the reader moves to an unrelated input.
