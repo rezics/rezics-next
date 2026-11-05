@@ -309,6 +309,14 @@ test('The default Subject reader does not describe admitted incoming editions as
   expect(bounded).toContain(`${subjectHref(continuationSubject, 'en').href}/editions`);
   const full = await loadViewPages(client, continuationSubject.id, 'editions');
   if (full.kind !== 'page') throw new Error('Expected the complete editions view.');
+  const fullPlan = planReads(platformRegistry, full.page.document as CompositionDocument, pageContext(full.page));
+  const fullKey = fullPlan.nodes.editions;
+  console.log('selected edition read', JSON.stringify({
+    node: full.node,
+    key: fullKey,
+    planned: fullKey ? fullPlan.reads[fullKey] : undefined,
+    result: fullKey ? full.page.reads[fullKey] : undefined,
+  }));
   const frame = subjectFrame(full.overview, 'en');
   if (!frame) throw new Error('Expected the subject identity from the existing overview read.');
   content = (
