@@ -97,6 +97,12 @@ test('Character correction address and native read retain exact Context and Real
   expect(globalUrl.searchParams.get('work')).toBe(workId);
   expect(globalUrl.searchParams.get('classificationHandoff')).toBe(handoff);
   expect(characterPublicReturnHref({ id: characterProfileId, label: 'The traveler', locale: 'en', context: contextA })).toBeUndefined();
-  expect(characterPublicReturnHref({ id: characterProfileId, label: 'The traveler', locale: 'en', context: contextA, realm: realmA }))
-    ?.endsWith(`?realm=${realmA}`).toBe(true);
+  const publicReturn = characterPublicReturnHref({
+    id: characterProfileId,
+    label: 'The traveler',
+    locale: 'en',
+    context: contextA,
+    realm: realmA,
+  });
+  expect(publicReturn?.endsWith(`?realm=${realmA}`)).toBe(true);
 });
