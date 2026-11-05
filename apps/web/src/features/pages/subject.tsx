@@ -706,12 +706,8 @@ export function SubjectPage({
   const albumVisit =
     read?.subject.type === 'schema:MusicAlbum'
       ? workAddress
-        ? createAlbumCurrentVisitLink(
-            `${workAddress.href}/album`,
-            albumOrigin,
-            locale,
-            validateAlbumReturnAddress,
-          ).token
+        ? createAlbumCurrentVisitLink(`${workAddress.href}/album`, albumOrigin, locale, validateAlbumReturnAddress)
+            .token
         : 'unsupported'
       : undefined;
   const albumCurrent = useMemo<AlbumCurrentReading | undefined>(
@@ -996,7 +992,11 @@ export function SubjectPage({
         >
           <div className="flex w-full flex-col gap-8">
             {read && !page.account && read.subject.type === 'schema:MusicAlbum' && (
-              <AlbumCurrentVisitReturn locale={locale} current={albumCurrent} validateAddress={validateAlbumReturnAddress} />
+              <AlbumCurrentVisitReturn
+                locale={locale}
+                current={albumCurrent}
+                validateAddress={validateAlbumReturnAddress}
+              />
             )}
             {literarySubject && (overview || view === 'contents' || view === 'editions') ? (
               <LiteraryReaderEntry

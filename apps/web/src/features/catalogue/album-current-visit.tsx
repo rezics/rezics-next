@@ -115,9 +115,7 @@ export function AlbumCurrentVisitReturn({
     const frame = window.requestAnimationFrame(() => {
       if (cancelled) return;
       const matches = !!marker.origin && !!current && albumCurrentVisitMatches(marker.origin, current);
-      const address = matches
-        ? marker.origin!.address
-        : `${window.location.pathname}${window.location.search}`;
+      const address = matches ? marker.origin!.address : `${window.location.pathname}${window.location.search}`;
       window.history.replaceState(window.history.state, '', address);
       const heading = document.querySelector('main h1, h1');
       if (heading instanceof HTMLElement) heading.focus();

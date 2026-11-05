@@ -40,7 +40,9 @@ function bytes(value: string) {
 }
 
 function boundedText(value: unknown, limit: number): value is string {
-  return typeof value === 'string' && value.length > 0 && bytes(value) <= limit && !/[\u0000-\u001f\u007f]/u.test(value);
+  return (
+    typeof value === 'string' && value.length > 0 && bytes(value) <= limit && !/[\u0000-\u001f\u007f]/u.test(value)
+  );
 }
 
 function exactKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []) {
@@ -96,7 +98,10 @@ function normalizeOrigin(
   locale: string,
   validateAddress: (value: unknown, locale: string) => string | undefined,
 ): AlbumCurrentVisitOrigin | undefined {
-  if (!isRecord(value) || !exactKeys(value, ['version', 'subject', 'address', 'locale', 'context'], ['release', 'reader']))
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ['version', 'subject', 'address', 'locale', 'context'], ['release', 'reader'])
+  )
     return;
   if (value.version !== 1 || value.locale !== locale) return;
   if (!isRecord(value.subject) || !exactKeys(value.subject, ['id', 'type', 'label'])) return;

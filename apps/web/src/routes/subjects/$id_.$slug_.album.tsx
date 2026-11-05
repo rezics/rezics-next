@@ -25,7 +25,13 @@ const canonicalAlbum = createServerFn({ method: 'GET', strict: false })
       (input.identityOnly === true && !albumUuid.test(input.id))
     )
       throw notFound();
-    return { id: input.id, slug: input.slug, locale: input.locale, search: input.search, identityOnly: !!input.identityOnly };
+    return {
+      id: input.id,
+      slug: input.slug,
+      locale: input.locale,
+      search: input.search,
+      identityOnly: !!input.identityOnly,
+    };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');

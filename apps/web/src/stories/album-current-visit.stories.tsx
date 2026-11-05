@@ -3,7 +3,10 @@ import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
 import { pickText } from '@rezics/composition';
 import { AlbumCurrentVisitGate } from '../features/catalogue/album-current-visit';
-import { createAlbumCurrentVisitLink, type AlbumCurrentVisitOrigin } from '../features/catalogue/album-current-visit-model';
+import {
+  createAlbumCurrentVisitLink,
+  type AlbumCurrentVisitOrigin,
+} from '../features/catalogue/album-current-visit-model';
 import { AlbumProfile } from '../features/catalogue/album-profile-view';
 import type { AlbumEditors, AlbumTransport } from '../features/catalogue/album-profile';
 import { albumFixture, albumId, artistId, roleId, seriesId, partId } from '../kernel/fake/catalogue-album-profile';
@@ -19,7 +22,11 @@ function CurrentCorrection() {
   const fixture = useMemo(() => albumFixture('ready', locale), [locale]);
   const origin: AlbumCurrentVisitOrigin = {
     version: 1,
-    subject: { id: albumId, type: 'schema:MusicAlbum', label: pickText(fixture.publicRead.subject.labels, locale).text },
+    subject: {
+      id: albumId,
+      type: 'schema:MusicAlbum',
+      label: pickText(fixture.publicRead.subject.labels, locale).text,
+    },
     address: `/en/subjects/${albumId}/harbour-sessions#connections`,
     locale,
     context: { id: candidateContext, population: 'global', label: 'Global' },
