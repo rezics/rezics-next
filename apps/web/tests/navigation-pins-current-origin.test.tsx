@@ -374,25 +374,6 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(cache).toHaveBeenCalledWith({ queryKey: navigation.pinsOrigin.queryKey, exact: true });
     expect(control.pending).toBe(false);
 
-    const beforeRefusal = response('C', ['a', 'x', 'b', 'c']);
-    const refusalRead = pendingReads.length;
-    await refetch();
-    await settle(refusalRead, {
-      ...beforeRefusal,
-      pins: { state: 'denied', origin: beforeRefusal.origin },
-    });
-    expect(navigation.data.pins).toMatchObject({ state: 'denied' });
-    expect(navigation.data.collections).toEqual(beforeRefusal.collections);
-    expect(host.textContent).toContain(m.library_pin_denied());
-    expect(host.querySelectorAll('[data-library-pin]')).toHaveLength(0);
-    expect(navigation.pinsOrigin.isCurrent()).toBe(false);
-    expect(control.entries).toHaveLength(0);
-    expect(control.canUpdate).toBe(false);
-
-    const restoredRead = pendingReads.length;
-    await refetch();
-    await settle(restoredRead, response('C', ['a', 'x', 'b', 'c']));
-
     // Unrelated owner Collections admission cannot revoke this same-viewer removal of a null target.
     await act(async () => admit(['personal_library']));
     await tick();
@@ -468,6 +449,29 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(writes[6]!.operation).toBe(writes[5]!.operation);
     expect(new Headers(writes[6]!.input.headers).get('X-CSRF-Token')).toBe('rotated-csrf');
     await act(async () => writes[6]!.work.resolve({ ok: true, revision: 8 }));
+
+    await show();
+    const loadedRead = pendingReads.length;
+    await refetch();
+    const beforeRefusal = response('C', ['a', 'x', 'b', 'c']);
+    await settle(loadedRead, beforeRefusal);
+    expect(navigation.data.pins).toMatchObject({ state: 'loaded' });
+    expect(host.querySelectorAll('[data-library-pin]').length).toBeGreaterThan(0);
+    expect(navigation.pinsOrigin.isCurrent()).toBe(true);
+
+    const refusalRead = pendingReads.length;
+    await refetch();
+    await settle(refusalRead, {
+      ...beforeRefusal,
+      pins: { state: 'denied', origin: beforeRefusal.origin },
+    });
+    expect(navigation.data.pins).toMatchObject({ state: 'denied' });
+    expect(navigation.data.collections).toEqual(beforeRefusal.collections);
+    expect(host.textContent).toContain(m.library_pin_denied());
+    expect(host.querySelectorAll('[data-library-pin]')).toHaveLength(0);
+    expect(navigation.pinsOrigin.isCurrent()).toBe(false);
+    expect(control.entries).toHaveLength(0);
+    expect(control.canUpdate).toBe(false);
   } finally {
     await act(async () => root.unmount());
     stopViewer();
