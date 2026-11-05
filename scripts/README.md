@@ -311,19 +311,18 @@ Kernel SQL analysis uses the immutable host-local Reylo cache described in the [
 Phase receipts separate database image, migrations, SQL analysis and TypeScript checking so the measured cache effect
 can be compared without timing assertions.
 
-Observation: A same-tree cold comparison on 2026-11-06, check host b, used one migrated database, fresh Reylo
-projects and 2,001 Kernel queries. `bun services/kernel/scripts/benchmark-reylo.ts` isolates 0.6.0 plus its Postgres
-engine in temporary dependencies; 0.7.0 uses the workspace native engine. Both runs use the same SQL and TypeScript.
+Observation: A cold same-tree comparison on 2026-11-06, host b, used one migrated database, fresh Reylo projects
+and 2,001 Kernel queries. Reproduce with `bun services/kernel/scripts/benchmark-reylo.ts`; 0.6.0 and its Postgres
+engine use isolated temporary dependencies. Both versions analyze and compile the same source.
 
 | Reylo | SQL analysis | TypeScript | Kernel typecheck (sum) |
 | --- | ---: | ---: | ---: |
 | 0.6.0 | 197.24 s | 23.47 s | 220.71 s |
 | 0.7.0 | 213.52 s | 22.05 s | 235.57 s |
 
-SQL analysis was 8.3% slower and the sum 6.7% slower; this single cold sample shows no native-engine speedup.
-Times exclude slot wait, dependency setup, database image, migrations and cleanup. Both compilers returned exit 2:
-0.6.0 already had diagnostics; 0.7.0 additionally exposed JSON contracts subsequently adapted at database I/O.
-The benchmark retains both diagnostic strings. These are times to compiler diagnostics, not passing acceptance.
+Analysis was 8.3% slower and the sum 6.7% slower: this sample shows no speedup. Times exclude admission, dependencies,
+database setup and cleanup. Both compilers exited 2 (base diagnostics; additional 0.7 JSON errors later adapted).
+The script retains diagnostics; these are times to diagnostics, not passing acceptance.
 
 Decision: Web's public typecheck delegates workspace selection, placement and the shared migrated compiler database to
 root; root runs its `typecheck:root` entrypoint so Web compiles with its own Reylo mapper configuration.
