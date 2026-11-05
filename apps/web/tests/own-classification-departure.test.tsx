@@ -54,15 +54,13 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
     );
   }
   const startNavigation = async () => {
-    let finish!: (value: boolean) => void;
-    const promise = new Promise<boolean>((resolve) => {
-      finish = resolve;
-    });
+    let promise!: Promise<boolean>;
     await act(async () => {
-      void Promise.resolve(block({ current: { pathname: '/library/classification-assessments' }, next: { pathname: '/away' } }))
-        .then(finish);
+      promise = Promise.resolve(
+        block({ current: { pathname: '/library/classification-assessments' }, next: { pathname: '/away' } }),
+      );
     });
-    return promise;
+    return { promise };
   };
   const button = (label: string) => {
     const value = [...host.querySelectorAll('button')].find((node) => node.textContent?.trim() === label);
@@ -74,14 +72,14 @@ test('Stay keeps the exact draft; confirmed Leave retires the original visit bef
     const draft = host.querySelector('input') as HTMLInputElement;
     expect(draft.value).toBe('Keep this exact unsent draft');
 
-    const stayAttempt = await startNavigation();
+    const { promise: stayAttempt } = await startNavigation();
     expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
     await act(async () => button(m.library_my_ratings_stay()).click());
     expect(await stayAttempt).toBe(true);
     expect(draft.value).toBe('Keep this exact unsent draft');
     expect(retired).toBe(false);
 
-    const leaveAttempt = await startNavigation();
+    const { promise: leaveAttempt } = await startNavigation();
     await act(async () => button(m.library_my_ratings_leave()).click());
     const admission = leaveAttempt.then((shouldBlock) => {
       if (!shouldBlock) sequence.push('admitted');

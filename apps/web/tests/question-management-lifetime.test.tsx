@@ -136,6 +136,9 @@ mock.module('../src/ratings/question-management/intent', () => ({
     return typeof body.label === 'string' && body.label.trim().length > 0;
   },
 }));
+mock.module('../src/session/query', () => ({
+  useSession: () => ({ state: 'signed-in', subject: viewerId, csrfToken }),
+}));
 mock.module('../src/ratings/own-votes/departure', () => ({
   OwnVotesDeparture: (props: { dirty: boolean; locked: boolean; onLeave?: () => void }) => {
     departures.push(props);
