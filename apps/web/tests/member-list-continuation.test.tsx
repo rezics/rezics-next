@@ -641,14 +641,14 @@ test('Default composed member recovery admits only its live reader and preserves
       })),
     ).toEqual([
       {
-        node: 'members',
+        node: document.content[0]!.props.id,
         cursor: 'aba-cursor',
         authorization: 'Bearer native-reader-one',
         context: '00000000-0000-8000-8000-000000000011',
         populationId: '00000000-0000-8000-8000-000000000012',
       },
       {
-        node: 'members',
+        node: document.content[0]!.props.id,
         cursor: 'aba-cursor',
         authorization: 'Bearer native-reader-one',
         context: '00000000-0000-8000-8000-000000000011',
