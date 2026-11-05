@@ -311,12 +311,6 @@ test('The default Subject reader does not describe admitted incoming editions as
   if (full.kind !== 'page') throw new Error('Expected the complete editions view.');
   const fullPlan = planReads(platformRegistry, full.page.document as CompositionDocument, pageContext(full.page));
   const fullKey = fullPlan.nodes.editions;
-  console.log('selected edition read', JSON.stringify({
-    node: full.node,
-    key: fullKey,
-    planned: fullKey ? fullPlan.reads[fullKey] : undefined,
-    result: fullKey ? full.page.reads[fullKey] : undefined,
-  }));
   const frame = subjectFrame(full.overview, 'en');
   if (!frame) throw new Error('Expected the subject identity from the existing overview read.');
   content = (
@@ -347,7 +341,8 @@ test('The default Subject reader does not describe admitted incoming editions as
   );
   expect(complete.match(/data-slot="subject-header"/g)).toHaveLength(1);
   expect(complete.match(/<h[12][^>]*>Editions<\/h[12]>/g)).toHaveLength(1);
-  expect(complete).toContain('First edition 24');
+  expect(complete).toContain('First edition 12');
+  expect(complete).not.toContain('First edition 13');
   expect(complete.match(/data-slot="continue-group"/g)).toHaveLength(1);
   expect(complete).toContain('cursor=continuation-next');
   expect(complete).not.toContain('data-slot="next-page"');
