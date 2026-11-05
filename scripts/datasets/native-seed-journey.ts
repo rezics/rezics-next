@@ -1,5 +1,6 @@
 /** Real local-stack acceptance. Run through scripts/worker-check.ts on a check host. */
 import assert from 'node:assert/strict';
+import { closeSync, openSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
@@ -38,27 +39,35 @@ function redactLog(value: string): string {
 }
 
 async function command(name: string, argv: string[]): Promise<number> {
-  const log = Bun.file(resolve(privateLogs, `${name}.log`));
-  const child = Bun.spawn(argv, { cwd: root, env, stdout: log, stderr: log });
-  const code = await child.exited;
+  const logPath = resolve(privateLogs, `${name}.log`);
+  const descriptor = openSync(logPath, 'a', 0o600);
+  let code: number;
+  try {
+    const child = Bun.spawn(argv, { cwd: root, env, stdout: descriptor, stderr: descriptor });
+    code = await child.exited;
+  } finally {
+    closeSync(descriptor);
+  }
   console.log(`${name}: exit ${code}`);
   if (code) {
     // Persona provisioning prints a password. Its output always remains private.
-    if (name !== 'persona') console.error(redactLog(await log.text()).slice(-16000));
+    if (name !== 'persona') console.error(redactLog(await readFile(logPath, 'utf8')).slice(-16000));
   }
   return code;
 }
 
 async function ready(url: string, child: ReturnType<typeof Bun.spawn>) {
   const deadline = Date.now() + 180_000;
+  let lastResponse = 'No HTTP response';
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`Stack exited ${child.exitCode} before ${url}`);
     // Cold app startup is an external availability boundary.
     const response = await fetch(url, { signal: AbortSignal.timeout(3000) }).catch(() => undefined);
     if (response?.ok) return;
+    if (response) lastResponse = `HTTP ${response.status}: ${(await response.text()).slice(0, 4000)}`;
     await Bun.sleep(500);
   }
-  throw new Error(`Stack readiness deadline: ${url}`);
+  throw new Error(`Stack readiness deadline: ${url}; ${lastResponse}`);
 }
 
 type SeedReport = CrossMediaSeedReport & { developmentShowcase: DevelopmentShowcaseReport };
@@ -138,9 +147,10 @@ await writeFile(kernelEnvironmentFile, (await readFile(kernelEnvironmentFile, 'u
   .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${issuer}/.well-known/jwks.json`), { mode: 0o600 });
 assert.equal(await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']), 0);
 assert.equal(await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']), 0);
-const stackLog = Bun.file(resolve(privateLogs, 'stack.log'));
+const stackLog = resolve(privateLogs, 'stack.log');
+const stackDescriptor = openSync(stackLog, 'a', 0o600);
 const stack = Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', 'start'], {
-  cwd: root, env, stdout: stackLog, stderr: stackLog,
+  cwd: root, env, stdout: stackDescriptor, stderr: stackDescriptor,
 });
 try {
   await ready(`${issuer}/.well-known/openid-configuration`, stack);
@@ -164,6 +174,7 @@ try {
 } finally {
   stack.kill('SIGTERM');
   await stack.exited;
+  closeSync(stackDescriptor);
   // Only this attempt's application children are stopped. Runner custody owns its infrastructure.
-  await writeFile(resolve(evidence, 'stack.log'), redactLog(await stackLog.text()));
+  await writeFile(resolve(evidence, 'stack.log'), redactLog(await readFile(stackLog, 'utf8')));
 }
