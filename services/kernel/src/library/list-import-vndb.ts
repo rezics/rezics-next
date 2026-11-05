@@ -1189,7 +1189,8 @@ export function createVndbImport(config: Config) {
         (pending?.patch && (!pending.outcome || pending.outcome.status === 'failed'))
       )
         throw new ProblemError('conflict');
-      const next = { ...current, consumptionDateReview: reviewed, consumptionDateIntent: undefined };
+      const next = { ...current, consumptionDateReview: reviewed };
+      delete next.consumptionDateIntent;
       await save(tx, account, id, input.ordinal, next);
       return publicImportConsumptionDateReview(reviewed);
     });
@@ -1360,7 +1361,7 @@ export function createVndbImport(config: Config) {
               },
               patch: (sessionId, patch, requestKey, admission) =>
                 sessions.patchSessionJournal(actor, sessionId, patch, requestKey, admission),
-              record,
+              record: (outcome) => record(outcome as CommandOutcome<unknown>),
               ...(signal ? { signal } : {}),
               isStaleError: (error) =>
                 error instanceof ProgressConflictError ||
