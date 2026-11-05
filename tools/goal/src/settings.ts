@@ -275,6 +275,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
       'checkScriptReaderRoot',
       'devPrelandingTypecheck',
       'devLandingBootCheck',
+      'devKernelImport',
       'hourlyReportNotifier',
     ],
     'integration',
@@ -431,6 +432,15 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
               if (typeof integration.devLandingBootCheck !== 'boolean')
                 throw new Error('devLandingBootCheck must be a boolean');
               return integration.devLandingBootCheck;
+            })(),
+          }),
+      ...(integration.devKernelImport === undefined
+        ? {}
+        : {
+            devKernelImport: (() => {
+              if (typeof integration.devKernelImport !== 'boolean')
+                throw new Error('devKernelImport must be a boolean');
+              return integration.devKernelImport;
             })(),
           }),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),

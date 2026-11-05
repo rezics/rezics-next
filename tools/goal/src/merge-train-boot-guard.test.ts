@@ -10,6 +10,7 @@ const docsFile = 'docs/note.md';
 
 test('the landing boot paths and command come from policy', () => {
   expect(defaults.integration.devLandingBootCheck).toBe(false);
+  expect(defaults.integration.devKernelImport).toBe(false);
   expect(boot).toEqual({
     paths: ['services/kernel/**', 'services/auth/**', 'packages/**'],
     command: ['bun', 'test', 'services/kernel/test/boot'],

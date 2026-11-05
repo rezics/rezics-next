@@ -152,7 +152,8 @@
     },
     "termspacesCommand": "termspaces",
     "devPrelandingTypecheck": false,
-    "devLandingBootCheck": false
+    "devLandingBootCheck": false,
+    "devKernelImport": false
   },
   "codex": {
     "serviceTier": "default",
