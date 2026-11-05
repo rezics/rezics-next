@@ -680,3 +680,5 @@ export {
   securityFixedResponseByteBudgets,
   securityResponseByteBudgets,
 } from './security-response-bounds.ts';
+
+export * from './automated-page-response-bounds.ts';

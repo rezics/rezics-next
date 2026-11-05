@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import {
   creationFixture,
   automatedOperatorPage,
@@ -13,6 +13,7 @@ import {
 import { AutomatedAccountCreatePage } from '../src/routes/automated.new';
 import {
   AUTOMATED_PROFILE,
+  AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16,
   createAutomatedAttempt,
   restoreAutomatedAttempt,
   saveAutomatedAttempt,
@@ -144,6 +145,22 @@ test('invalid fields attach advice without reading the operator; native refusal 
     await flush(() => page.calls[0]!.resolve(Response.json({}, { status })));
     expect(page.host.textContent).toContain(status === 403 ? 'Creation was refused' : 'service is unavailable');
     await page.render(<></>);
+  }
+});
+
+test('oversized retained attempt stays untouched and cannot allocate a new key or issue a command', async () => {
+  const raw = `${' '.repeat(AUTOMATED_ATTEMPT_MAX_SERIALIZED_UTF16 + 1)}null`;
+  window.sessionStorage.setItem('rezics.automated-create.attempt', raw);
+  const randomUUID = spyOn(crypto, 'randomUUID');
+  try {
+    const page = await open(<AutomatedAccountCreatePage />, { ...body });
+    expect(restoreAutomatedAttempt()).toBe('invalid');
+    expect(window.sessionStorage.getItem('rezics.automated-create.attempt')).toBe(raw);
+    expect(randomUUID).not.toHaveBeenCalled();
+    expect(page.calls).toHaveLength(0);
+    expect(page.host.querySelector('#automated-confirm')).toBeNull();
+  } finally {
+    randomUUID.mockRestore();
   }
 });
 test('native acknowledgement survives authority replacement without publishing private result details', async () => {

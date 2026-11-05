@@ -2895,15 +2895,46 @@ reservation and command CAS checks remain final authority.
 ## Selected automated creation operator
 
 `POST /account-management/automated/operator` accepts exactly `{ operatorAccountId }`
-and returns exactly `{ id, kind: 'actor' | 'organization', handle, displayName }`
-or null. This same-origin JSON, private no-store command-precondition read uses
-`withFreshHuman` and the exact management `account:manage` profile (the existing
-local transfer-profile alias). Its local `AutomatedOperatorAccess` port is
-`readAutomatedCreationOperator({ human, operatorAccountId, deadline })`; the
-native binding authenticates the actual Auth-signed live proof. Missing native
+and returns the closed `{ viewer, readiness, operator, handleRules, action }`
+page. `operator` is null except for `review`, where it is exactly
+`{ id, kind: 'actor' | 'organization', handle, displayName }`. This same-origin
+JSON, private no-store command-precondition read uses `withFreshHuman` and the
+exact management `account:manage` profile (the existing local transfer-profile
+alias). Its local `AutomatedOperatorAccess` port is
+`readAutomatedCreationPage({ human, operatorAccountId, deadline })`; the native
+binding authenticates the actual Auth-signed live proof. Missing native
 composition answers 503. Selection and returned labels are never approval or
 creation authority. The existing credentialless native creation writer, fresh
 approval/execute checks and shared opening profile remain unchanged.
+
+The page projection uses the actual Access account shape: UUID identity (36
+characters), nullable current handle (at most 64 UTF-16 code units under the
+stored `^[a-z0-9][a-z0-9_-]{0,63}$` source constraint), and nullable display name
+(at most 4,096 UTF-16 code units). `access.account.handle` has a finite pattern
+constraint; `display_name` is database `text` without a database length check,
+so the Auth projection establishes the 4,096-unit response contract and answers
+503 for invalid dependency output. It does not truncate a label or publish a
+partial review. Historical rows that exceed the current producer ceiling remain
+stored and produce unavailable advice until their source is corrected.
+
+`@rezics/auth-contract` exports these field ceilings and the fixed
+`AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES`. Its UTF-8 budget is the maximum
+over all four readiness/action variants of `UTF8(JSON skeleton) + 6 × variable
+UTF-16 units`. The closed skeleton includes all JSON keys, quotes, syntax, fixed
+handle rules, the 36-unit viewer identity, the optional 36-unit selected UUID,
+and `organization` as the longest kind. Review adds the 64-unit handle and
+4,096-unit display name; non-review variants carry `operator: null`. Six bytes
+per code unit covers UTF-8 and worst-case JSON escaping, including lone
+surrogates; null labels are shorter than their allowed non-null maxima.
+
+The existing browser/Auth admission remains the case-insensitive generic
+8-4-4-4-12 hexadecimal UUID shape. Kernel `routeOf` is narrower: it requires a
+lowercase UUID-v7/v8 version nibble and RFC variant nibble. This page does not
+change either policy; a selection accepted by the browser can still be refused
+by the native route guard. The viewer is projected from `SessionProof.account_id`
+and must match the Auth proof exactly. Transport tests exercise this closed
+projector and byte ceiling; they do not establish real Kernel database
+authorization, which remains native acceptance qualification.
 
 ### Native creation parties
 
