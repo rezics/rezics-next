@@ -470,6 +470,10 @@ The retained doctor readback uses these original Bangumi bindings and document c
 acceptance and Global adoption, and independently checks public statements and documents for anonymous and member
 readers while an unadopted summary remains concealed.
 
+Decision: when two eligible source-bound summaries remain unadopted, the readback adopts the first and retains the
+second as its private control; with one unadopted summary, it preserves that control and reads an already selected
+summary, keeping the retained check repeatable without adding source facts.
+
 Ordinary imports prepare proposals only. Selected showcase plans reuse the source records, current bindings and common journal; they do not add a second converter, publisher or identity resolver. Source records retain exact keys, source and converter digests, selected candidate identities and caller routes. Current facts fences apply to unchanged and cached results as well as refreshes.
 
 Creator and voice candidates retain their exact selected source relationships, credited Person identity and released role qualifiers. Candidate preparation withholds a dependent credit when current source-to-Person reconciliation fails; it does not suppress unrelated facts. Source aggregate weights, votes or ranks are not native votes, confidence, acceptance, adoption or publication.
