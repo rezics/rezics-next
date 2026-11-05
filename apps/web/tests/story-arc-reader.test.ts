@@ -1,4 +1,3 @@
-import './support/cloudflare-workers';
 import { expect, test } from 'bun:test';
 import {
   arcExample,

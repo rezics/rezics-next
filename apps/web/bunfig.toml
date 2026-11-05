@@ -2,3 +2,4 @@
 
 [test]
 pathIgnorePatterns = ["**/*.host.test.ts"]
+preload = ["./tests/support/cloudflare-workers.ts"]

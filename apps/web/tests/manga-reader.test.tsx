@@ -1,4 +1,3 @@
-import './support/cloudflare-workers';
 import { expect, mock, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { dirname } from 'node:path';

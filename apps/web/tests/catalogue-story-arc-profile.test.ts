@@ -1,4 +1,3 @@
-import './support/cloudflare-workers';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
