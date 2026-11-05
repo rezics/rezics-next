@@ -14,18 +14,19 @@ type ReadyCollection = Collection & Required<Pick<Collection, 'previewMembers' |
 type PreviewMember = ReadyCollection['previewMembers'][number];
 
 export function previewMember(subject = subjectSummary()): PreviewMember {
-  return { subjectId: subject.id, subject };
+  return { subjectId: subject.id, subject: structuredClone(subject) };
 }
 
 export function nativeCollection({
   id = '019a0000-0000-7000-8000-000000000004',
   title = 'Reading collection',
+  curatorAccountId = '019a0000-0000-7000-8000-000000000001',
   previewMembers = [previewMember()],
 }: { id?: Collection['id']; title?: Collection['title']; previewMembers?: PreviewMember[] } = {}): ReadyCollection {
   return {
     id,
     membershipKind: 'curated',
-    curatorAccountId: '019a0000-0000-7000-8000-000000000001',
+    curatorAccountId,
     title,
     description: null,
     visibility: 'private',
@@ -51,7 +52,7 @@ export function mineCollection(native = nativeCollection()): MineCollection {
     id: native.id,
     curatorAccountId: native.curatorAccountId,
     title: native.title,
-    curator: native.curator ?? null,
+    curator: native.curator ? { ...native.curator } : null,
     membershipKind: native.membershipKind,
     visibility: native.visibility,
     memberCount: native.memberCount,
@@ -109,6 +110,7 @@ export function mineCollectionsViewerPage(
         mineCollection(
           nativeCollection({
             id: 'shared-private',
+            curatorAccountId: subject,
             title: `Private ${subject}`,
             previewMembers: [
               previewMember(
