@@ -186,7 +186,12 @@ export const readBulkOperationRecovery = createServerFn({ method: 'GET' })
   });
 
 export const readBulkOperationRecoveryPage = createServerFn({ method: 'GET' })
-  .validator(validatePageInput)
+  .validator((input: unknown) => {
+    const address = validateOperationId(input);
+    return (input as { cursor?: unknown }).cursor === undefined
+      ? { ...address, cursor: undefined }
+      : validatePageInput(input);
+  })
   .handler(async ({ data }): Promise<LibraryBulkOutcomePageRead> => {
     const request = getRequest();
     setResponseHeader('cache-control', 'private, no-store');

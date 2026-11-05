@@ -150,11 +150,11 @@ export async function readBulkOperationFromNative(
 export async function readBulkOperationPageFromNative(
   client: KernelClient,
   operationId: string,
-  cursor: string,
+  cursor: string | undefined,
   authorization: string,
 ): Promise<BulkOutcomePageRead> {
   const result = await client.libraryOperations({ operationId }).outcomes.get({
-    query: { limit: 20, cursor },
+    query: { limit: 20, ...(cursor === undefined ? {} : { cursor }) },
     headers: { authorization },
     fetch: { cache: 'no-store', redirect: 'manual' },
   });
