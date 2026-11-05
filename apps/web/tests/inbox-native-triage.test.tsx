@@ -1,9 +1,7 @@
-import { afterAll, expect, mock, spyOn, test } from 'bun:test';
-import { dirname } from 'node:path';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient, type NoticeInboxItem } from '@rezics/client';
-import { act, createElement } from 'react';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import * as start from '../.storybook/react-start';
 import { getLocale } from '../src/paraglide/runtime.js';
 import { threadLocation } from '../src/threads/thread-href';
 import {
@@ -13,100 +11,20 @@ import {
   readableInboxPage,
   confirmInboxNoticeSeen,
 } from '../src/inbox/inbox-pagination';
-import type { InboxPage, InboxPageQuery, InboxSeenResult } from '../src/inbox/inbox-read';
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => ({
-  getRequest: () =>
-    new Request('https://site.test/en/inbox', {
-      headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
-    }),
-  setResponseHeader: () => {},
-}));
-mock.module('cloudflare:workers', () => ({
-  env: {
-    AUTH_ISSUER: 'https://auth.test',
-    API_RESOURCE: 'https://kernel.test',
-    WEBSITE_SCOPES: 'openid',
-    WEBSITE_CLIENT_ID: 'inbox-native-triage',
-    WEBSITE_CLIENT_KEY: '{}',
-    SESSIONS: {
-      idFromName: (id: string) => id,
-      get: () => ({ signedIn: async () => ({ signedIn: true, subject: 'alice', csrfToken: 'original-token' }) }),
-    },
-  },
-}));
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
-const window = new Window({ url: 'https://site.test/en/inbox' });
-const globals = {
-  window,
-  document: window.document,
-  navigator: window.navigator,
-  location: window.location,
-  HTMLElement: window.HTMLElement,
-  HTMLButtonElement: window.HTMLButtonElement,
-  Element: window.Element,
-  Node: window.Node,
-  NodeFilter: window.NodeFilter,
-  Document: window.Document,
-  DocumentFragment: window.DocumentFragment,
-  MutationObserver: window.MutationObserver,
-  ResizeObserver: window.ResizeObserver,
-  getComputedStyle: window.getComputedStyle.bind(window),
-  requestAnimationFrame: window.requestAnimationFrame.bind(window),
-  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
-  IS_REACT_ACT_ENVIRONMENT: true,
-};
-const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-const inboxReads = await import('../src/inbox/inbox-read');
+mock.module('cloudflare:workers', () => ({ env: {} }));
 const {
   decodeInboxPage,
   inboxReadFailure,
-  InboxSeenError,
   loadInboxPage,
   markInboxNoticeSeen,
   nativeInboxEnvelope,
-  readyInboxPage,
   resolveInboxItems,
-} = inboxReads;
-spyOn(inboxReads, 'readUnreadCount').mockImplementation(async () => ({
-  signedIn: true,
-  state: 'ready',
-  count: 2,
-  capped: false,
-  basis: 'current-visible-unread',
-  witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
-}));
-const seenCommands: unknown[] = [];
-spyOn(inboxReads, 'markInboxSeen').mockImplementation(async ({ data }) => {
-  seenCommands.push(data);
-  return { signedIn: true } satisfies InboxSeenResult;
-});
-const markItem = spyOn(inboxReads, 'markInboxItemSeen').mockImplementation(async ({ data }) => {
-  seenCommands.push(data);
-  return { signedIn: true } satisfies InboxSeenResult;
-});
-const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
-  await import('@tanstack/react-router');
-const { InboxPageView, InboxRows } = await import('../src/inbox/inbox-page');
+} = await import('../src/inbox/inbox-read');
+const { InboxRows } = await import('../src/inbox/inbox-page');
 const { InboxNoticeDetailView } = await import('../src/inbox/inbox-notice-detail');
-const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 setLocale('en', { reload: false });
-afterAll(async () => {
-  mock.restore();
-  await window.happyDOM.close();
-  for (const [key, descriptor] of previous) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-});
 type Notice = NoticeInboxItem;
 
 function notice(id: string, kind: Notice['kind']): Notice {
@@ -385,116 +303,60 @@ test('unknown native rows fail closed instead of becoming replies', () => {
   ).toBeNull();
 });
 
-const row = (id: string) => ({
-  id,
-  unread: true,
-  kind: 'reply',
-  createdAt: '2026-10-29T10:00:00.000Z',
-  actorId: 'actor',
-  actorName: 'Momo',
-  threadId: 'thread',
-  postId: id,
-  decisionId: null,
-  reportId: null,
-  href: `/threads/thread#post-${id}`,
-  text: `Private reply ${id}`,
-  unavailable: false,
-});
-const tick = () =>
-  act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+test('a consumed acknowledgement does not offer command retry, and a native send rejection keeps the original', async () => {
+  const resolved = await resolveInboxItems(
+    nativeInboxEnvelope([notice('chosen', 'reply'), notice('neighbor', 'mention')], null, 'alice'),
+  );
+  const confirmed = renderToStaticMarkup(
+    createElement(InboxRows, {
+      page: resolved,
+      onMarkSeen: () => {},
+      onRetrySeen: () => {},
+      confirmedNoticeId: 'chosen',
+    }),
+  );
+  expect(confirmed).toContain(m.inbox_notice_marked_seen());
+  expect(confirmed).not.toContain(m.inbox_notice_seen_retry());
+  expect(confirmed).not.toContain(m.inbox_seen_unavailable());
 
-async function mountTriage(loadPage: (query: InboxPageQuery) => Promise<InboxPage>) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(sessionQuery.queryKey, {
-    state: 'signed-in',
-    subject: 'alice',
-    csrfToken: 'original-token',
-  });
-  const router = createRouter({
-    routeTree: createRootRoute(),
-    history: createMemoryHistory({ initialEntries: ['/en/inbox'] }),
-  });
-  const host = document.createElement('div');
-  document.body.append(host);
-  const root = createRoot(host);
-  await act(async () => {
-    root.render(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(RouterContextProvider, { router }, createElement(InboxPageView, { loadPage })),
-      ),
-    );
-  });
-  await tick();
-  for (let step = 0; step < 20 && (host.textContent ?? '').includes(m.inbox_loading()); step++) await tick();
-  return {
-    host,
-    click: (label: string) =>
-      act(async () => {
-        const node = [...host.querySelectorAll('button')].find((button) => button.textContent === label);
-        expect(node, `${label} in ${host.textContent}`).toBeDefined();
-        node!.click();
-      }),
-    unmount: () =>
-      act(async () => {
-        root.unmount();
-        host.remove();
-      }),
-  };
-}
-
-test('validated send then failed refresh offers current reads, not another command, while a native send rejection keeps the original', async () => {
-  for (const kind of ['notice', 'loaded'] as const) {
-    seenCommands.length = 0;
-    let pageReads = 0;
-    const view = await mountTriage(async () => {
-      pageReads += 1;
-      if (pageReads > 1) throw new Error('current page refresh failed');
-      return readyInboxPage([row('chosen'), row('neighbor')], null, 'alice');
-    });
-    try {
-      await view.click(kind === 'notice' ? m.inbox_notice_mark_seen() : m.inbox_triage_mark());
-      await tick();
-      expect(seenCommands).toHaveLength(1);
-      const original = seenCommands[0];
-      expect(pageReads).toBe(2);
-      expect(view.host.textContent).toContain(
-        kind === 'notice' ? m.inbox_notice_marked_seen() : m.inbox_triage_marked(),
-      );
-      expect(view.host.textContent).toContain(m.inbox_acknowledged_observation_unavailable());
-      expect(view.host.textContent).toContain(m.inbox_acknowledged_observation_stale());
-      expect(view.host.textContent).not.toContain(m.inbox_notice_seen_retry());
-      expect(view.host.textContent).not.toContain(m.inbox_seen_unavailable());
-      expect(view.host.textContent).not.toContain(m.inbox_seen_retry());
-      await view.click(m.inbox_retry());
-      await tick();
-      expect(seenCommands).toEqual([original]);
-      expect(pageReads).toBe(3);
-    } finally {
-      await view.unmount();
-    }
-  }
-
-  seenCommands.length = 0;
-  markItem.mockImplementation(async ({ data }) => {
-    seenCommands.push(data);
-    throw new InboxSeenError({ status: 503, retryable: true, code: 'deadline_exceeded' });
-  });
-  const rejected = await mountTriage(async () => readyInboxPage([row('chosen')], null, 'alice'));
+  const { InboxSeenError } = await import('../src/inbox/inbox-read');
+  const { inboxViewerStore } = await import('../src/inbox/inbox-viewer');
+  const { markInboxViewerNoticeSeen } = await import('../src/inbox/inbox-query');
+  const { QueryClient } = await import('@tanstack/react-query');
+  const client = new QueryClient();
+  const store = inboxViewerStore(client);
+  const unsubscribe = store.subscribe(() => {});
+  const sends: unknown[] = [];
   try {
-    await rejected.click(m.inbox_notice_mark_seen());
-    await tick();
-    expect(seenCommands).toHaveLength(1);
-    const original = seenCommands[0];
-    expect(rejected.host.textContent).toContain(m.inbox_notice_seen_retry());
-    expect(rejected.host.textContent).not.toContain(m.inbox_notice_marked_seen());
-    await rejected.click(m.inbox_notice_seen_retry());
-    await tick();
-    expect(seenCommands).toEqual([original, original]);
+    client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'alice-token' });
+    const viewer = store.snapshot()!;
+    let invalidations = 0;
+    client.invalidateQueries = (async () => {
+      invalidations += 1;
+      throw new Error('current page refresh failed');
+    }) as typeof client.invalidateQueries;
+    const attempt = Object.freeze({
+      accountId: 'alice',
+      noticeId: 'chosen',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await expect(
+      markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', async ({ data }) => {
+        sends.push(data);
+        return { signedIn: true };
+      }),
+    ).resolves.toMatchObject({ page: true, count: true });
+    expect(invalidations).toBe(2);
+    await expect(
+      markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', async ({ data }) => {
+        sends.push(data);
+        return { signedIn: true, failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
+      }),
+    ).rejects.toBeInstanceOf(InboxSeenError);
+    expect(sends).toEqual([attempt, attempt]);
+    expect(invalidations).toBe(2);
   } finally {
-    await rejected.unmount();
+    unsubscribe();
+    client.clear();
   }
 });

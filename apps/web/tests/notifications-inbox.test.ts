@@ -982,7 +982,7 @@ test('validated acknowledgement stays consumed when later current reads fail, an
       }
       expect(sends).toHaveLength(2);
       expect(sends[1]).toBe('rejected');
-      expect(invalidation).toHaveBeenCalled();
+      expect(invalidation).toHaveBeenCalledTimes(2);
       invalidation.mockRestore();
     } finally {
       unsubscribe();
