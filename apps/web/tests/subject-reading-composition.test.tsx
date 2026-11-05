@@ -181,7 +181,9 @@ test('The default Subject reader does not describe admitted incoming editions as
       node: loadedPlan.nodes.editions,
       planned: loadedPlan.reads[loadedPlan.nodes.editions!],
       result: loaded.page.reads[loadedPlan.nodes.editions!],
-      sections: [...html.matchAll(/<section\\b[^>]*>/g)].map(([section]) => section),
+      sections: [...html.matchAll(/id="([^"]+)"/g)]
+        .map(([, id]) => id)
+        .filter((id) => ['editions', 'summary', 'sources', 'edition-work'].includes(id ?? '')),
     }));
     return html;
   };
