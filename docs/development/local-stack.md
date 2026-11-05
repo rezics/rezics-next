@@ -206,16 +206,20 @@ Kernel over loopback HTTP. Later runs reuse the dump cache; state and the import
 `.temp/cross-media-seed/`. The cache defaults to `/home/edge/projects/rezics/rezics-datasets/dumps/`;
 set `REZICS_DATASETS_DUMP_CACHE` to choose another location. Bangumi is pinned by URL and SHA-256.
 
-VNDB rotates dated files under https://dl.vndb.org/dump/. `seed:dev` first tries the inventoried dump URL. When that
-file is gone (HTTP 404 or 410), it reads that dump index, selects the current `vndb-db-YYYY-MM-DD.tar.zst` (the Latest
-versions destination, or the newest dated file listed), downloads it over HTTPS, and verifies tar integrity plus the
-required tables and `.header` files. It records the resolved file name and SHA-256 in `vndb/manifest.json` in the dump
-cache so later runs on the same machine reuse that verified archive. If the index, download or verification fails, the
-seed stops; it does not continue with Bangumi alone. README.txt and schema_vndbid.sql hashes remain inventory
-provenance for the inventoried dump; they are not a fetch gate for a rotated file.
+Decision: `seed:dev` uses the exact November 4 VNDB snapshot, ignoring other manifest-selected dumps and never
+substituting a rotated archive. General VNDB acquisition retains its rotating-dump behavior.
 
-Decision: local VNDB seed resolves a rotated dump from dl.vndb.org/dump, verifies structure, and pins the resolved file
-plus SHA-256 in the machine cache manifest.
+The development pin is `vndb-db-2026-11-04.tar.zst` from https://dl.vndb.org/dump/, SHA-256
+`fadbe611c4d6475ef63a0c1861512bc9ff64d21c6c9804a988522c7c65f6fa85`, with archive `TIMESTAMP`
+`2026-11-04 08:00:24+00`. Both cached and downloaded archive bytes must match the pin. Extraction checks tar
+integrity, required tables and `.header` files, and the exact timestamp before recording `vndb/manifest.json`.
+Missing or changed pinned bytes stop the seed; it does not continue with Bangumi alone. Restore the exact archive
+in the dump cache when the provider rotates it away. Changing the pin is an explicit source-generation change.
+VNDB's dump metadata licence remains independent of image rights.
+
+The general `fetchVndbDump` helper, when called without a pin, first tries the inventoried URL and resolves a rotated
+404/410 through the provider's dump index. It verifies structure and records the resolved filename and SHA-256 for
+machine-local reuse. This mode does not establish the development seed's pinned acceptance generation.
 
 The seed's `REZICS_DEV_PERSONA_*`, `AUTH_ORIGIN` and `KERNEL_ORIGIN` environment seam also works with a manually
 configured local account. Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).
