@@ -7,7 +7,11 @@ import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion
 import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
-import { bangumiAppearanceSource } from './cross-media-bindings.ts';
+import {
+  bangumiAppearanceSource,
+  graphEdgeCommandKey,
+  graphEdgeSource,
+} from './cross-media-bindings.ts';
 import type { CrossMediaMediaOutcome } from './showcase-media.ts';
 import { validAvailableCover } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
@@ -49,6 +53,12 @@ export type ShowcaseAssertion = Readonly<{
   statement: BatchStatement;
   rights?: Extract<BatchCommand, { op: 'propose' }>['rights'];
   citations: readonly string[];
+  graphTarget?: Readonly<{
+    provider: 'bangumi' | 'vndb';
+    sourceKey: string;
+    subjectId: string;
+    nativeType: string;
+  }>;
 }>;
 
 export type ShowcaseRecord = Readonly<{
@@ -111,7 +121,9 @@ export type ShowcaseOmission = Readonly<{
     | 'cover-rejected'
     | 'cover-fenced'
     | 'cover-candidate-missing'
-    | 'cover-not-public';
+    | 'cover-not-public'
+    | 'graph-endpoint-unavailable'
+    | 'graph-endpoint-mismatch';
 }>;
 
 export type ShowcaseMediaRecord = Readonly<{
@@ -189,6 +201,14 @@ function citations(statement: BatchStatement): string[] {
   return [...new Set(values)].sort();
 }
 
+function graphEdgeCitationsMatch(edge: CrossMediaPlan['edges'][number], actual: readonly string[]): boolean {
+  const expected =
+    edge.source === 'vndb' && edge.table === 'releases_supersedes' && edge.property === 'rezics:releaseSupersedes'
+      ? [vndbRecordUrl(edge.holder), vndbRecordUrl(edge.target)].sort()
+      : [edge.url];
+  return actual.length === expected.length && expected.every((uri, index) => uri === actual[index]);
+}
+
 function currentSubject(reading: CrossMediaReading | undefined): { id: string; type: string } | null {
   const subject = reading?.subject.subject as { id?: unknown; type?: unknown } | undefined;
   return typeof subject?.id === 'string' && typeof subject.type === 'string'
@@ -252,6 +272,7 @@ function selectedEnvelopes(
     }
   }
   for (const edge of plan.edges) {
+    if (!edge.relation && !edge.producerParent) allowed.add(envelopeKey(graphEdgeSource(edge)));
     if (edge.relation) {
       const relation = edge.relation;
       const digest = sourceDigest(relation.evidence);
@@ -484,6 +505,89 @@ export function buildShowcaseManifest(input: {
   }
   const mediaOutcomes = input.mediaOutcomes ?? [];
   const allowedSources = selectedEnvelopes(plan, aliases, vocabularyRequirements, mediaOutcomes, tagWeightObservations);
+  const selectedBySourceKey = new Map(selected.map((row) => [`${row.source}\0${row.key}`, row]));
+  const acknowledgementsByKey = new Map(acknowledgements.map((ack) => [ack.command.key, ack]));
+  const graphEnvelopeKeys = new Set<string>();
+  const eligibleGraphCommandKeys = new Set<string>();
+  const graphTargetsByCommandKey = new Map<string, NonNullable<ShowcaseAssertion['graphTarget']>>();
+  for (const edge of plan.edges) {
+    if (edge.relation || edge.producerParent) continue;
+    const provider = edge.source;
+    const source = graphEdgeSource(edge);
+    const edgeEnvelope = envelopeKey(source);
+    if (edge.alias !== aliases[provider]) continue;
+    graphEnvelopeKeys.add(edgeEnvelope);
+    const acknowledgement = acknowledgementsByKey.get(graphEdgeCommandKey(edge));
+    if (!acknowledgement || !candidateAssertion(acknowledgement)) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'candidate-ack-missing' });
+      continue;
+    }
+    if (!showcaseSourceMatches(acknowledgement.command.source, source)) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'candidate-ack-missing' });
+      continue;
+    }
+    const ownerKey = `${provider}\0${edge.holder}`;
+    const targetKey = `${provider}\0${edge.target}`;
+    const owner = selectedBySourceKey.get(ownerKey);
+    const ownerSubject = currentSubject(readingIndex.get(ownerKey));
+    const command = acknowledgement.command;
+    const value = command.op === 'propose' ? command.statement.value : undefined;
+    const reference = command.op === 'propose' ? citations(command.statement) : [];
+    const referencesMatch = graphEdgeCitationsMatch(edge, reference);
+    if (!owner || !ownerSubject) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-unavailable' });
+      continue;
+    }
+    if (edge.targetKind === 'literal') {
+      const targetProvider = provider === 'vndb' ? 'bangumi' : 'vndb';
+      const targetKey = `${targetProvider}\0${edge.target}`;
+      const target = selectedBySourceKey.get(targetKey);
+      const targetSubject = currentSubject(readingIndex.get(targetKey));
+      if (!target || !targetSubject) {
+        omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-unavailable' });
+        continue;
+      }
+      if (
+        command.op !== 'propose' ||
+        command.key !== graphEdgeCommandKey(edge) ||
+        command.subject !== ownerSubject.id ||
+        command.statement.property.id !== edge.property ||
+        value?.type !== 'value' ||
+        value.content !== edge.target ||
+        !referencesMatch
+      ) {
+        omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-mismatch' });
+        continue;
+      }
+      eligibleGraphCommandKeys.add(command.key);
+      continue;
+    }
+    const target = selectedBySourceKey.get(targetKey);
+    const targetSubject = currentSubject(readingIndex.get(targetKey));
+    if (!target || !targetSubject) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-unavailable' });
+      continue;
+    }
+    if (
+      command.op !== 'propose' ||
+      command.key !== graphEdgeCommandKey(edge) ||
+      command.subject !== ownerSubject.id ||
+      command.statement.property.id !== edge.property ||
+      value?.type !== 'value' ||
+      value.content !== targetSubject.id ||
+      !referencesMatch
+    ) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-mismatch' });
+      continue;
+    }
+    eligibleGraphCommandKeys.add(command.key);
+    graphTargetsByCommandKey.set(command.key, {
+      provider,
+      sourceKey: edge.target,
+      subjectId: targetSubject.id,
+      nativeType: targetSubject.type,
+    });
+  }
 
   const records: ShowcaseRecord[] = [];
   let remainingCandidates: number = showcaseLimits.candidates;
@@ -517,6 +621,7 @@ export function buildShowcaseManifest(input: {
         source.source !== alias ||
         (source.external_id !== row.key && appearanceOwners.get(envelopeKey(source)) !== row.key) ||
         !allowedSources.has(envelopeKey(source)) ||
+        (graphEnvelopeKeys.has(envelopeKey(source)) && !eligibleGraphCommandKeys.has(ack.command.key)) ||
         (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
       )
         continue;
@@ -540,7 +645,12 @@ export function buildShowcaseManifest(input: {
       if (!assertion) continue;
       if (provider === 'vndb' && !currentTagWeight(row, alias, assertion, tagWeightObservations)) continue;
       const ownerKey = appearanceOwners.get(envelopeKey(source));
-      const ownedAssertion = ownerKey === undefined ? assertion : { ...assertion, ownerKey };
+      const graphTarget = graphTargetsByCommandKey.get(ack.command.key);
+      const ownedAssertion = {
+        ...assertion,
+        ...(ownerKey === undefined ? {} : { ownerKey }),
+        ...(graphTarget ? { graphTarget } : {}),
+      };
       if (sourceAssertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
         candidateOverflow = true;
         continue;

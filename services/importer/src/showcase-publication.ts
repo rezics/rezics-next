@@ -910,7 +910,14 @@ export type ShowcasePublicationResult = Readonly<{
     subjectId: string;
     nativeType: string;
     readerRoute: string;
-    assertions: readonly { candidateId: string; property: string; digest: string }[];
+    assertions: readonly {
+      candidateId: string;
+      property: string;
+      digest: string;
+      citations?: readonly string[];
+      qualifiers?: NonNullable<BatchStatement['qualifiers']>;
+      target?: { sourceKey: string; subjectId: string; nativeType: string };
+    }[];
   }[];
   omissions: readonly { provider: 'bangumi' | 'vndb'; sourceKey: string; code: string }[];
   unresolvedCharacterDependencies: readonly {
@@ -959,31 +966,35 @@ export async function publishShowcase(input: {
     const key = acknowledgement.candidateId ?? acknowledgement.command.key;
     acknowledgementByCandidate.set(key, acknowledgement);
   }
-  let manifest = buildShowcaseManifest({
-    plan: input.plan,
-    readings: input.result.readings,
-    acknowledgements: [...acknowledgementByCandidate.values()],
-    aliases: input.aliases,
-    mediaOutcomes,
-    ...(input.tagWeightObservations ? { tagWeightObservations: input.tagWeightObservations } : {}),
-    ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
-    ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
-    ...(genre
-      ? {
-          reviewedVocabulary: genre.vocabulary,
-          currentBangumiGenreCandidateIds: genre.candidateIds,
-          bangumiGenreOwnerKeys: genre.ownerKeys,
-        }
-      : {}),
-    ...(gameGenre
-      ? {
-          currentBangumiGameGenreCandidateIds: gameGenre.candidateIds,
-          bangumiGameGenreOwnerKeys: gameGenre.ownerKeys,
-        }
-      : {}),
-  });
-  input.journal.sealIntent(manifest);
-  const initialIntentDigest = manifest.digest;
+  const buildManifest = (
+    acknowledgements: readonly ShowcaseAcknowledgement[],
+    outcomes: readonly CrossMediaMediaOutcome[] = mediaOutcomes,
+  ) =>
+    buildShowcaseManifest({
+      plan: input.plan,
+      readings: input.result.readings,
+      acknowledgements,
+      aliases: input.aliases,
+      mediaOutcomes: outcomes,
+      ...(input.tagWeightObservations ? { tagWeightObservations: input.tagWeightObservations } : {}),
+      ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
+      ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
+      ...(genre
+        ? {
+            reviewedVocabulary: genre.vocabulary,
+            currentBangumiGenreCandidateIds: genre.candidateIds,
+            bangumiGenreOwnerKeys: genre.ownerKeys,
+          }
+        : {}),
+      ...(gameGenre
+        ? {
+            currentBangumiGameGenreCandidateIds: gameGenre.candidateIds,
+            bangumiGameGenreOwnerKeys: gameGenre.ownerKeys,
+          }
+        : {}),
+    });
+  let manifestAcknowledgements = [...acknowledgementByCandidate.values()];
+  let manifest = buildManifest(manifestAcknowledgements);
 
   const omissions = [
     ...manifest.omissions.map((item) => ({ ...item, code: item.code })),
@@ -1002,9 +1013,9 @@ export async function publishShowcase(input: {
   if (gameGenre?.diagnostics.length)
     for (const item of gameGenre.diagnostics.slice(0, showcaseLimits.omissions - omissions.length))
       omissions.push({ provider: 'bangumi', sourceKey: item.sourceKey, code: 'source-claim-withheld' });
-  const assertions = [
-    ...manifest.records.flatMap((record) => record.assertions.map((assertion) => ({ record, assertion }))),
-    ...manifest.vocabulary.flatMap((record) =>
+  const assertionsFor = (selectedManifest: ShowcaseManifest) => [
+    ...selectedManifest.records.flatMap((record) => record.assertions.map((assertion) => ({ record, assertion }))),
+    ...selectedManifest.vocabulary.flatMap((record) =>
       record.assertions.map((assertion) => ({
         record: {
           provider: record.provider,
@@ -1029,12 +1040,13 @@ export async function publishShowcase(input: {
       phase(left.record, left.assertion) - phase(right.record, right.assertion) ||
       left.assertion.candidateId.localeCompare(right.assertion.candidateId),
   );
+  let assertions = assertionsFor(manifest);
   const currentSubjectCache = new Map<string, ReviewedSubjectRead | null>();
   const pageCache = new Map<string, CandidatePage>();
   const validated = new Map<string, CandidateRead>();
   const blockedSubjects = new Set<string>();
   const blockedCoverCandidates = new Set<string>();
-  const vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
+  let vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
   const observedTagBindings = new Map<string, VndbTagRatingBinding>();
   for (const observation of manifest.tagWeightObservations)
     if (observation.responseDigest)
@@ -1152,6 +1164,40 @@ export async function publishShowcase(input: {
         continue;
       }
     }
+    if (assertion.graphTarget) {
+      const target = manifest.records.find(
+        (candidate) =>
+          candidate.provider === assertion.graphTarget!.provider &&
+          candidate.sourceKey === assertion.graphTarget!.sourceKey,
+      );
+      const targetId = assertion.graphTarget.subjectId;
+      let targetCurrent = currentSubjectCache.get(targetId);
+      if (targetCurrent === undefined) {
+        try {
+          targetCurrent = await input.review.readReviewedSubject(targetId);
+        } catch {
+          targetCurrent = null;
+        }
+        currentSubjectCache.set(targetId, targetCurrent);
+      }
+      if (
+        !target ||
+        target.subjectId !== targetId ||
+        target.nativeType !== assertion.graphTarget.nativeType ||
+        !recordHasSourceIdentity(target) ||
+        blockedSubjects.has(targetId) ||
+        !targetCurrent ||
+        subjectId(targetCurrent) !== targetId ||
+        subjectType(targetCurrent) !== assertion.graphTarget.nativeType
+      ) {
+        omissions.push({
+          provider: record.provider,
+          sourceKey: record.sourceKey,
+          code: 'graph-endpoint-current-read-unavailable',
+        });
+        continue;
+      }
+    }
     if (assertion.property === 'schema:image') {
       const outcome = admittedCoverMedia(input.plan, mediaOutcomes, record, assertion);
       if (!outcome) {
@@ -1247,6 +1293,19 @@ export async function publishShowcase(input: {
     }
     validated.set(assertion.candidateId, candidate);
   }
+
+  manifestAcknowledgements = manifestAcknowledgements.filter(
+    (acknowledgement) => !acknowledgement.candidateId || validated.has(acknowledgement.candidateId),
+  );
+  manifest = buildManifest(manifestAcknowledgements);
+  input.journal.sealIntent(manifest);
+  const initialIntentDigest = manifest.digest;
+  for (const omission of manifest.omissions) omissions.push({ ...omission, code: omission.code });
+  assertions = assertionsFor(manifest);
+  vocabularyById = new Map(manifest.vocabulary.map((record) => [record.subjectId, record]));
+  for (const record of manifest.records)
+    if (!record.subjectId || !recordHasSourceIdentity(record))
+      if (record.subjectId) blockedSubjects.add(record.subjectId);
 
   const stoppedSubjects = new Set<string>();
   for (const { record, assertion } of assertions) {
@@ -1530,6 +1589,31 @@ export async function publishShowcase(input: {
       continue;
     }
     const publicSubject = read.subject as { statements?: Record<string, unknown[]> } | undefined;
+    const withheldGraphCandidates = new Set<string>();
+    const graphAssertions = record.assertions.filter((assertion) => assertion.graphTarget);
+    if (graphAssertions.length && !publicHasSourceIdentity(read, record)) {
+      for (const assertion of graphAssertions) withheldGraphCandidates.add(assertion.candidateId);
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-endpoint-public-read-unavailable' });
+    }
+    for (const assertion of graphAssertions) {
+      const endpoint = assertion.graphTarget!;
+      const target = manifest.records.find(
+        (candidate) => candidate.provider === endpoint.provider && candidate.sourceKey === endpoint.sourceKey,
+      );
+      const targetRead = await publicRead(endpoint.subjectId);
+      if (
+        !target ||
+        target.subjectId !== endpoint.subjectId ||
+        target.nativeType !== endpoint.nativeType ||
+        !targetRead ||
+        subjectId(targetRead) !== endpoint.subjectId ||
+        subjectType(targetRead) !== endpoint.nativeType ||
+        !publicHasSourceIdentity(targetRead, target)
+      ) {
+        withheldGraphCandidates.add(assertion.candidateId);
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-endpoint-public-read-unavailable' });
+      }
+    }
     const imageAssertion = record.assertions.find((assertion) => assertion.property === 'schema:image');
     let imagePublishable = false;
     let cover: CrossMediaMediaOutcome | undefined;
@@ -1563,16 +1647,25 @@ export async function publishShowcase(input: {
       }
     }
     const visible = record.assertions.filter((assertion) => {
-      if (!validated.has(assertion.candidateId)) return false;
+      if (!validated.has(assertion.candidateId) || withheldGraphCandidates.has(assertion.candidateId)) return false;
       const rows = publicSubject?.statements?.[assertion.property] ?? [];
-      return rows.some((row) => statementOnPublicRead(row, assertion.statement));
+      const found = rows.some((row) => statementOnPublicRead(row, assertion.statement));
+      if (!found && assertion.graphTarget) {
+        withheldGraphCandidates.add(assertion.candidateId);
+        omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'graph-relation-not-public' });
+      }
+      return found;
     });
     const imageVisible =
       imagePublishable &&
       !!imageAssertion &&
       visible.some((assertion) => assertion.candidateId === imageAssertion.candidateId);
     const reportable = visible.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
-    const required = record.assertions.filter((assertion) => assertion.property !== 'schema:image' || imageVisible);
+    const required = record.assertions.filter(
+      (assertion) =>
+        !withheldGraphCandidates.has(assertion.candidateId) &&
+        (assertion.property !== 'schema:image' || imageVisible),
+    );
     if (imageAssertion && imagePublishable && !imageVisible) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'cover-not-public' });
     }
@@ -1604,37 +1697,26 @@ export async function publishShowcase(input: {
       nativeType: record.nativeType,
       readerRoute: route,
       kind: record.kind,
-      assertions: reportable.map(({ candidateId, property, candidateDigest }) => ({
+      assertions: reportable.map(({ candidateId, property, candidateDigest, citations: sourceCitations, statement, graphTarget }) => ({
         candidateId,
         property,
         digest: candidateDigest,
+        citations: sourceCitations,
+        ...(statement.qualifiers?.length ? { qualifiers: statement.qualifiers } : {}),
+        ...(graphTarget
+          ? {
+              target: {
+                sourceKey: graphTarget.sourceKey,
+                subjectId: graphTarget.subjectId,
+                nativeType: graphTarget.nativeType,
+              },
+            }
+          : {}),
       })),
     });
   }
 
-  const finalManifest = buildShowcaseManifest({
-    plan: input.plan,
-    readings: input.result.readings,
-    acknowledgements: [...acknowledgementByCandidate.values()],
-    aliases: input.aliases,
-    mediaOutcomes: finalMediaOutcomes,
-    ...(input.tagWeightObservations ? { tagWeightObservations: input.tagWeightObservations } : {}),
-    ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
-    ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
-    ...(genre
-      ? {
-          reviewedVocabulary: genre.vocabulary,
-          currentBangumiGenreCandidateIds: genre.candidateIds,
-          bangumiGenreOwnerKeys: genre.ownerKeys,
-        }
-      : {}),
-    ...(gameGenre
-      ? {
-          currentBangumiGameGenreCandidateIds: gameGenre.candidateIds,
-          bangumiGameGenreOwnerKeys: gameGenre.ownerKeys,
-        }
-      : {}),
-  });
+  const finalManifest = buildManifest(manifestAcknowledgements, finalMediaOutcomes);
   const finalMedia = finalManifest.media.map((item) => {
     const handoff = readHandoffs.get(`${item.sourceAlias}\0${item.sourceKey}`);
     if (handoff) {

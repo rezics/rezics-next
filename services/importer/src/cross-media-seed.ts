@@ -152,6 +152,9 @@ const CREDIT_ASSOCIATIONS = 8192;
 const RELATION_CAP = 4096;
 const APPEARANCE_ROW_BYTES = 16 * 1024;
 const APPEARANCE_EVIDENCE_BYTES = 4 * 1024 * 1024;
+const SELECTED_GRAPH_EDGE_CAP = 8192;
+const SELECTED_GRAPH_EDGE_BYTES = 8 * 1024 * 1024;
+const SELECTED_GRAPH_EDGE_MAX_BYTES = 1024 * 1024;
 
 /** Membership uses titles only, never synopsis mentions, credits or a shared actor. */
 export function crossMediaFranchise(...names: unknown[]): Franchise | undefined {
@@ -529,7 +532,38 @@ export async function planCrossMediaSeed(
   ) => {
     plan.gaps.push({ source, fields: fieldsOf(table, record), record, reason, ...details });
   };
-  const edge = (draft: GraphEdgeDraft) => plan.edges.push(draft);
+  let selectedGraphEdgeBytes = 0;
+  let edgeCountDiagnostic = false;
+  let edgeBytesDiagnostic = false;
+  const edge = (draft: GraphEdgeDraft) => {
+    if (plan.edges.length >= SELECTED_GRAPH_EDGE_CAP) {
+      if (!edgeCountDiagnostic) {
+        plan.gaps.push({
+          source: draft.source,
+          fields: [],
+          record: { limit: SELECTED_GRAPH_EDGE_CAP },
+          reason: 'Selected graph edge count limit exceeded',
+        });
+        edgeCountDiagnostic = true;
+      }
+      return;
+    }
+    const edgeBytes = Buffer.byteLength(JSON.stringify(draft), 'utf8');
+    if (edgeBytes > SELECTED_GRAPH_EDGE_MAX_BYTES || selectedGraphEdgeBytes + edgeBytes > SELECTED_GRAPH_EDGE_BYTES) {
+      if (!edgeBytesDiagnostic) {
+        plan.gaps.push({
+          source: draft.source,
+          fields: [],
+          record: { limit: SELECTED_GRAPH_EDGE_BYTES, maxRow: SELECTED_GRAPH_EDGE_MAX_BYTES },
+          reason: 'Selected graph edge byte limit exceeded',
+        });
+        edgeBytesDiagnostic = true;
+      }
+      return;
+    }
+    selectedGraphEdgeBytes += edgeBytes;
+    plan.edges.push(draft);
+  };
   const member = (entry: CrossMediaMember) => {
     if (!plan.members.some((row) => row.source === entry.source && row.key === entry.key)) plan.members.push(entry);
   };
@@ -1093,7 +1127,7 @@ export async function planCrossMediaSeed(
   });
   plan.entities.bangumi.push(...episodes.entities);
   for (const episode of episodes.members) member(episode);
-  plan.edges.push(...episodes.edges);
+  for (const draft of episodes.edges) edge(draft);
   plan.gaps.push(...episodes.gaps);
 
   const vnIds = new Set<string>();
@@ -1767,7 +1801,7 @@ export async function planCrossMediaSeed(
   });
   plan.records.vndb = workProjection.records;
   plan.workLinks = workProjection.links;
-  plan.edges.push(...workProjection.edges);
+  for (const draft of workProjection.edges) edge(draft);
   for (const missing of workProjection.gaps) gap('vndb', 'vn_extlinks', missing.record, missing.reason);
   for (const entity of plan.entities.vndb) {
     const entry = entityJoins.get(entity.key);

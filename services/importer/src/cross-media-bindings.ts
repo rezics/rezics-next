@@ -58,6 +58,21 @@ export type GraphEdgeDraft = {
     evidence: { path: string; code: string; sourceSubject: string; sourceEndpoint: string; digest: string }[];
   };
 };
+
+/** Exact source envelope used by an ordinary selected graph proposal. */
+export function graphEdgeSource(draft: GraphEdgeDraft): Source {
+  return sourceEnvelope(
+    {
+      source: draft.alias,
+      external_id: draft.holder,
+      record_revision: draft.recordRevision ?? null,
+      converter_revision: draft.converterRevision ?? 'cross-media-entities@1',
+      digest: sourceDigest(draft.record),
+    },
+    'facts',
+  );
+}
+
 export type UnresolvedEdge = GraphEdgeDraft & { reason: string };
 export type ProposedEdge = { key: string; holder: string; target: string; property: string; subject: string };
 export type GraphEdgeEvidence = {
@@ -195,6 +210,11 @@ function isVndbReleaseSupersession(draft: GraphEdgeDraft): boolean {
   return (
     draft.source === 'vndb' && draft.table === 'releases_supersedes' && draft.property === 'rezics:releaseSupersedes'
   );
+}
+
+/** Reuse the graph's existing operation and idempotency identity for an ordinary proposal. */
+export function graphEdgeCommandKey(draft: GraphEdgeDraft): string {
+  return commandKey([draft.alias, draft.holder, graphEdgeKey(draft), 'relation']);
 }
 
 export class CrossMediaGraph {
@@ -668,15 +688,8 @@ export class CrossMediaGraph {
         : statementBase;
       const command: BatchCommand = {
         op: 'propose',
-        key: commandKey([draft.alias, draft.holder, graphEdgeKey(draft), 'relation']),
-        source: {
-          source: draft.alias,
-          external_id: draft.holder,
-          record_revision: draft.recordRevision ?? 'unversioned',
-          converter_revision: draft.converterRevision ?? 'cross-media-entities@1',
-          digest: sourceDigest(draft.record),
-          field_group: 'facts',
-        },
+        key: graphEdgeCommandKey(draft),
+        source: graphEdgeSource(draft),
         subject: holder.subject,
         statement,
       };

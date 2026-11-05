@@ -9,17 +9,18 @@ import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
-  seedCrossMedia,
   type CrossMediaPort,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { createPublicBulkClient } from '../src/public-bulk-client.ts';
+import { buildShowcaseManifest, showcaseDigest } from '../src/showcase-manifest.ts';
 import {
   captureShowcaseCommands,
   publishShowcase,
   ShowcaseJournal,
   type ShowcaseReviewPort,
 } from '../src/showcase-publication.ts';
+import { seedShowcaseVndbReleases } from '../src/showcase-vndb-releases.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
 const globalContext = '00000000-0000-8000-8000-000000000000';
@@ -43,7 +44,9 @@ test('selected dump candidates publish only by exact intent and resume a refused
   >();
   const accepted = new Set<string>();
   const adopted = new Map<string, { head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
+  const publicReadIds = new Set<string>();
   let refuseAcceptance = true;
+  const unavailableReviewSubjects = new Set<string>();
   const metadata = sourceRecordMetadataFixture();
 
   const tables: CrossMediaTables = {
@@ -58,6 +61,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
         yield { id: 'v2', lang: 'ja', official: 't', title: 'CLANNAD', latin: null };
         yield { id: 'v3', lang: 'ja', official: 't', title: 'Fate/stay night', latin: null };
       }
+      if (provider === 'vndb' && table === 'releases_vn') yield { id: 'r1', vid: 'v1', rtype: 'complete' };
+      if (provider === 'vndb' && table === 'releases') yield { id: 'r1', released: null, olang: 'ja' };
+      if (provider === 'vndb' && table === 'releases_titles')
+        yield { id: 'r1', lang: 'ja', mtl: 'f', title: 'STEINS;GATE Release', latin: null };
       if (provider === 'vndb' && table === 'vn') {
         yield { id: 'v1', olang: 'ja', alias: null };
         yield { id: 'v2', olang: 'ja', alias: null };
@@ -76,6 +83,22 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const read = (id: string) => {
     const subject = subjects.get(id);
     if (!subject) throw new Error('Missing fake subject');
+    if (/^[vr][1-9][0-9]*$/u.test(subject.sourceExternalId)) {
+      const property = 'wdt:P3180';
+      const identity = [...candidates.values()].find(
+        (candidate) =>
+          candidate.source?.external_id === subject.sourceExternalId && candidate.statement.property.id === property,
+      );
+      return {
+        subject: {
+          ...subject,
+          statements: {
+            ...subject.statements,
+            ...(identity ? { [property]: [identity.statement] } : {}),
+          },
+        },
+      } as unknown as ReviewedSubjectRead;
+    }
     const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
     if (!identity) return { subject } as unknown as ReviewedSubjectRead;
     const property = identity[1] === 'person' ? 'wdt:P6298' : identity[1] === 'character' ? 'wdt:P6296' : 'wdt:P5732';
@@ -148,15 +171,22 @@ test('selected dump candidates publish only by exact intent and resume a refused
   const journalPath = join(directory, 'showcase.sqlite');
   let journal = new ShowcaseJournal(journalPath);
   try {
-    const result = await seedCrossMedia(
+    const result = await seedShowcaseVndbReleases({
+      tables,
       plan,
-      join(directory, 'import.sqlite'),
-      captureShowcaseCommands(port, journal),
-      { origin: 'https://fixture.test' },
-      { providers: ['bangumi', 'vndb'], mediaDeadlineMs: 0 },
-    );
+      path: join(directory, 'import.sqlite'),
+      port: captureShowcaseCommands(port, journal),
+      destination: { origin: 'https://fixture.test' },
+      extras: { providers: ['bangumi', 'vndb'], mediaDeadlineMs: 0 },
+    });
+    expect(result.gaps).toEqual([]);
+    expect(result.unresolved).toEqual([]);
     const workIds = result.readings.map((reading) => reading.subject.subject!.id!);
     const workId = workIds[0]!;
+    const vndbSourceId = result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'r1')!
+      .subject.subject!.id!;
+    const vndbTargetId = result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'v1')!
+      .subject.subject!.id!;
     const name = [...candidates.values()].find((candidate) => candidate.statement.property.id === 'schema:name')!;
     const unrelatedId = randomUUID();
     candidates.set(unrelatedId, {
@@ -167,7 +197,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
     });
 
     const review: ShowcaseReviewPort = {
-      readReviewedSubject: async (id) => read(id),
+      async readReviewedSubject(id) {
+        if (unavailableReviewSubjects.has(id)) throw new Error('current subject unavailable');
+        return read(id);
+      },
       async reviewedCandidates(id, query) {
         expect(query.context).toBe(globalContext);
         return {
@@ -222,6 +255,7 @@ test('selected dump candidates publish only by exact intent and resume a refused
       origin: 'https://fixture.test',
       fetch: (async (input) => {
         const id = new URL(String(input)).pathname.split('/').at(-1)!;
+        publicReadIds.add(id);
         return Response.json(read(id));
       }) as typeof fetch,
     });
@@ -234,17 +268,110 @@ test('selected dump candidates publish only by exact intent and resume a refused
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     refuseAcceptance = false;
+    unavailableReviewSubjects.add(vndbTargetId);
+    const withheld = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
+    expect(withheld.status).toBe('incomplete');
+    const withheldSource = withheld.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'r1');
+    expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:name')).toBe(true);
+    expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:exampleOfWork')).toBe(false);
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    unavailableReviewSubjects.delete(vndbTargetId);
+    publicReadIds.clear();
     const resumed = await publishShowcase({ plan, result, aliases: crossMediaAliases, journal, review, publicClient });
     expect(resumed.omissions).toEqual([]);
     expect(resumed.status).toBe('published');
     expect(resumed.published.map((record) => record.subjectId).sort()).toEqual([...workIds].sort());
     expect(accepted).toEqual(new Set(acknowledged.map((entry) => entry.candidateId!)));
+    const relation = resumed.published
+      .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
+      ?.assertions.find((assertion) => assertion.property === 'schema:exampleOfWork');
+    expect(relation).toMatchObject({
+      citations: ['https://vndb.org/r1'],
+      target: { sourceKey: 'v1', subjectId: vndbTargetId, nativeType: 'wd:Q689445' },
+    });
+    expect(candidates.get(relation!.candidateId)!.statement).toMatchObject({
+      property: { id: 'schema:exampleOfWork' },
+      value: { type: 'value', content: vndbTargetId },
+    });
+    expect(subjects.get(vndbSourceId)!.statements['schema:exampleOfWork']).toEqual([
+      candidates.get(relation!.candidateId)!.statement,
+    ]);
+    expect(resumed.published.some((record) => record.subjectId === vndbTargetId)).toBe(true);
+    expect(publicReadIds.has(vndbSourceId)).toBe(true);
+    expect(publicReadIds.has(vndbTargetId)).toBe(true);
+    const manifestRelation = resumed.manifest.records
+      .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
+      ?.assertions.find((assertion) => assertion.property === 'schema:exampleOfWork');
+    expect(manifestRelation?.source).toMatchObject({
+      source: crossMediaAliases.vndb,
+      external_id: 'r1',
+      record_revision: 'unversioned',
+      converter_revision: 'cross-media-entities@1',
+      field_group: 'facts',
+    });
     expect(adopted.get(`${workId}\0schema:name`)?.selection.some((item) => item.candidate === unrelatedId)).toBe(false);
     expect(subjects.get(workId)!.statements['schema:name']).toHaveLength(1);
     expect(subjects.get(workId)!.statements['schema:name']?.[0]).toEqual(name.statement);
     expect(first.manifest.digest).toBe(resumed.manifest.digest);
     expect(resumed.manifest.records[0]?.sourceRevision).toBe('unversioned');
     expect(resumed.published[0]?.readerRoute).toBe(`/subjects/${workId}/steins-gate`);
+
+    const finalAcknowledgements = journal.acknowledgedCommands();
+    const relationAck = finalAcknowledgements.find(
+      (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:exampleOfWork',
+    )!;
+    if (relationAck.command.op !== 'propose') throw new Error('Expected the selected relation proposal');
+    const hasRelation = (manifest: ReturnType<typeof buildShowcaseManifest>) =>
+      manifest.records.some((record) =>
+        record.assertions.some((assertion) => assertion.property === 'schema:exampleOfWork'),
+      );
+    expect(
+      hasRelation(
+        buildShowcaseManifest({
+          plan,
+          readings: result.readings,
+          acknowledgements: finalAcknowledgements.filter((entry) => entry.command.key !== relationAck.command.key),
+          aliases: crossMediaAliases,
+        }),
+      ),
+    ).toBe(false);
+    const buildWith = (changed: typeof relationAck) =>
+      buildShowcaseManifest({
+        plan,
+        readings: result.readings,
+        acknowledgements: [
+          ...finalAcknowledgements.filter((entry) => entry.command.key !== relationAck.command.key),
+          changed,
+        ],
+        aliases: crossMediaAliases,
+      });
+    const staleSourceAck = {
+      ...relationAck,
+      command: { ...relationAck.command, source: { ...relationAck.command.source, digest: '0'.repeat(64) } },
+    };
+    expect(hasRelation(buildWith(staleSourceAck))).toBe(false);
+    const foreignCommand = { ...relationAck.command, key: `${relationAck.command.key}-foreign` };
+    expect(
+      hasRelation(
+        buildWith({ ...relationAck, command: foreignCommand, commandDigest: showcaseDigest(foreignCommand) }),
+      ),
+    ).toBe(false);
+    const mismatchedEndpointCommand = {
+      ...relationAck.command,
+      statement: {
+        ...relationAck.command.statement,
+        value: { type: 'value' as const, content: vndbSourceId },
+      },
+    };
+    const mismatchedEndpointAck = {
+      ...relationAck,
+      command: mismatchedEndpointCommand,
+      commandDigest: showcaseDigest(mismatchedEndpointCommand),
+    };
+    const mismatchedManifest = buildWith(mismatchedEndpointAck);
+    expect(hasRelation(mismatchedManifest)).toBe(false);
+    expect(mismatchedManifest.omissions.some((omission) => omission.code === 'graph-endpoint-mismatch')).toBe(true);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
