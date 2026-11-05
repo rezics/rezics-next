@@ -28,6 +28,8 @@ import { SavedQueryManagement } from './saved-query-management';
 import { SavedFilterReviewEntry, SavedFilterReviewScopeBoundary } from './saved-filter-review';
 import type { ManagedSavedQuery } from './saved-query-management/controller';
 import type { QueryKey } from '@tanstack/react-query';
+import type { RulePage } from './collection-rule-read';
+import { DynamicRuleResultsReview } from './dynamic-rule-review';
 
 type DynamicCollectionPageProps = {
   page: DynamicCollectionPageData;
@@ -38,6 +40,7 @@ type DynamicCollectionPageProps = {
   returnTo?: string | undefined;
   layout?: 'grid' | 'list' | undefined;
   viewerId?: string | null;
+  readRule?: ((id: string) => Promise<RulePage>) | undefined;
 };
 
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
@@ -77,6 +80,7 @@ function DynamicCollectionPageLifetime({
   returnTo,
   layout,
   viewerId = null,
+  readRule: propsReadRule,
   pins,
   pinActions,
   collections,
@@ -321,6 +325,15 @@ function DynamicCollectionPageLifetime({
           ))}
         </nav>
         {current.cursorRestarted ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
+        {saved && viewerId && current.curatorAccountId === viewerId ? (
+          <DynamicRuleResultsReview
+            key={observation}
+            page={current}
+            viewerId={viewerId}
+            resultsHref={resultsHref}
+            {...(propsReadRule === undefined ? {} : { read: propsReadRule })}
+          />
+        ) : null}
         <SavedFilterReviewScopeBoundary key={observation} scope={reviewScope}>
           {current.filterProperties && current.filterParams ? (
             <CollectionFilters

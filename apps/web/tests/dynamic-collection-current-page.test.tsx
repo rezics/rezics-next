@@ -6,6 +6,7 @@ import type { RulePage } from '../src/library/collection-rule-read';
 import type { RuleWrite } from '../src/library/collection-rule-actions';
 import type { CollectionWriteResult } from '../src/library/collection-records';
 import type { DynamicMembersResult } from '../src/library/collection-load';
+import type { FilterDocument } from '@rezics/filter';
 import { m } from '../src/paraglide/messages.js';
 
 // UNRUN: mounted default-page regressions for integration, using Puck's installed DOM.
@@ -47,6 +48,8 @@ const { CollectionRuleControls } = await import('../src/library/collection-rule-
 const { renderToStaticMarkup } = await import('react-dom/server');
 const { libraryNavigationQuery } = await import('../src/library/pins-read');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
+const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+const { browserObservation } = await import('../src/session/observation');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
 afterAll(async () => {
@@ -151,13 +154,26 @@ async function mount() {
     if (!timers.delete(Number(id))) nativeClearTimeout(id);
   }) as typeof clearTimeout);
   const commits: string[] = [];
-  const render = (p: Page | null, readMembers = reader('default')) =>
+  const render = (
+    p: Page | null,
+    readMembers = reader('default'),
+    viewerId: string | null = null,
+    readRule?: (id: string) => Promise<RulePage>,
+  ) =>
     settle(() =>
       root.render(
         <StrictMode>
           <QueryClientProvider client={client}>
             <RouterContextProvider router={router}>
-              {p ? <DynamicCollectionPage page={p} readMembers={readMembers} search={{ type: 'schema:Book' }} /> : null}
+              {p ? (
+                <DynamicCollectionPage
+                  page={p}
+                  readMembers={readMembers}
+                  viewerId={viewerId}
+                  search={{ type: 'schema:Book' }}
+                  {...(readRule ? { readRule } : {})}
+                />
+              ) : null}
               <CommitSnapshot
                 observe={() => {
                   commits.push(host.textContent ?? '');
@@ -187,6 +203,16 @@ async function mount() {
       expect(button).toBeDefined();
       button!.click();
     });
+  const authorize = (subject: string, admitted = ['collection.get']) =>
+    settle(() => {
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', csrfToken: `csrf-${subject}`, subject });
+      const snapshot = browserObservation(client).getSnapshot();
+      expect(snapshot.state).toBe('signed-in');
+      if (snapshot.state === 'signed-in')
+        client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, { subject, admitted });
+    });
+  const signOut = () =>
+    settle(() => client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', csrfToken: null, subject: null }));
   return {
     host,
     calls,
@@ -197,6 +223,9 @@ async function mount() {
     click,
     timers,
     commits,
+    client,
+    authorize,
+    signOut,
     async close() {
       await settle(() => root.unmount());
       client.clear();
@@ -490,6 +519,100 @@ test('Explicit recovery replaces current definition-bound results and retires un
     expect(h.host.textContent).not.toContain('Retired A member');
     await h.advance();
     expect(h.calls.at(-1)!.filter).toBe('fresh-A-filter');
+  } finally {
+    await h.close();
+  }
+});
+
+test('Owner results join a current private rule basis and retire it on sign-out', async () => {
+  const h = await mount();
+  const id = 'saved-results';
+  const filter: FilterDocument = { owner: { label: { id: 'private-label' } } };
+  const currentPage = page(id, {
+    title: 'Saved reading',
+    builtinKind: undefined,
+    curatorAccountId: 'alice',
+    cursor: undefined,
+    preparing: false,
+    members: [],
+  });
+  const basis: Extract<RulePage, { state: 'ready' }> = {
+    state: 'ready',
+    id,
+    viewerId: 'alice',
+    address: { collectionId: id },
+    title: 'Saved reading',
+    intent: '10000000-0000-4000-8000-000000000021',
+    choices: {
+      release: { state: 'ready', digest: 'current-release-52', metadata: { types: {}, properties: {} }, profiles: [] },
+      labels: { state: 'ready', values: [{ id: 'private-label', name: 'Alice private label' }], next: null },
+    },
+    accepted: {
+      state: 'ready',
+      digest: 'saved-release-41',
+      metadata: { types: {}, properties: {} },
+      profiles: [],
+    },
+    rule: {
+      filter,
+      sort: 'id',
+      revision: 17,
+      collectionRevision: 22,
+      releaseDigest: 'saved-release-41',
+      sourceGeneration: 'generation-41',
+    },
+  };
+  const reads: Array<ReturnType<typeof deferred<RulePage>> & { id: string }> = [];
+  const readRule = (requestId: string) => {
+    const request = { ...deferred<RulePage>(), id: requestId };
+    reads.push(request);
+    return request.promise;
+  };
+  try {
+    await h.render(currentPage, h.reader('saved'), 'alice', readRule);
+    await h.authorize('alice');
+    expect(h.host.textContent).not.toContain('Alice private label');
+    await h.click(m.library_rule_results_review());
+    expect(reads).toHaveLength(1);
+    expect(reads[0]!.id).toBe(id);
+    await act(async () => {
+      reads[0]!.resolve(basis);
+      await reads[0]!.promise;
+    });
+    expect(h.host.textContent).toContain(m.library_rule_results_heading());
+    expect(h.host.textContent).toContain(m.library_rule_results_response_heading());
+    expect(h.host.textContent).toContain(m.library_rule_results_empty());
+    expect(h.host.textContent).toContain('Alice private label');
+    expect(h.host.textContent).toContain(m.library_rule_review_owner_verified());
+    expect(h.host.textContent).toContain(m.library_rule_revision());
+    expect(h.host.textContent).toContain('17');
+    expect(h.host.textContent).toContain(m.library_rule_collection_revision());
+    expect(h.host.textContent).toContain('22');
+    expect(h.host.textContent).toContain('saved-release-41');
+    expect(h.host.textContent).toContain('current-release-52');
+    expect(h.host.textContent).toContain('generation-41');
+    expect([...h.host.querySelectorAll('details')].some((node) => node.open && node.textContent?.includes('generation-41'))).toBe(true);
+    await h.signOut();
+    expect(h.host.textContent).not.toContain('Alice private label');
+    expect(h.host.textContent).not.toContain('saved-release-41');
+    expect(h.host.textContent).not.toContain(m.library_rule_results_heading());
+    await h.authorize('alice');
+    await h.click(m.library_rule_results_review());
+    const mismatched = { ...basis, viewerId: 'bob' };
+    await act(async () => {
+      reads.at(-1)!.resolve(mismatched);
+      await reads.at(-1)!.promise;
+    });
+    expect(h.host.textContent).toContain(m.library_rule_denied());
+    expect(h.host.textContent).not.toContain('Alice private label');
+    await h.click(m.library_rule_results_retry());
+    const staleRelease = { ...basis, accepted: { ...basis.accepted!, digest: 'different-release' } };
+    await act(async () => {
+      reads.at(-1)!.resolve(staleRelease);
+      await reads.at(-1)!.promise;
+    });
+    expect(h.host.textContent).toContain(m.library_rule_review_metadata_unavailable());
+    expect(h.host.textContent).not.toContain(m.library_rule_results_empty());
   } finally {
     await h.close();
   }

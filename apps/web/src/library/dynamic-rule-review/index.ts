@@ -5,3 +5,4 @@ export {
   type RuleReviewRelease,
   type RuleReviewStage,
 } from './criteria';
+export { DynamicRuleResultsReview } from './results';
