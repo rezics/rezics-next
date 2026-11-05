@@ -37,6 +37,9 @@ and the latest details; a successful page replaces the retained window rather th
 **Decision:** Count Retry-After is observed once as an absolute deadline on the current Inbox viewer; expiry enables
 the page retry control and does not schedule a fetch. The shell badge stays a compact unknown-or-count indicator.
 
+**Decision:** Unread-count setup failures return a private, serializable unavailable result at the server-function
+boundary, and capped native summaries retain their disclosed lower-bound count from zero through 100.
+
 **Decision:** A validated native acknowledgement is consumed even when later page or unread-count refresh fails. Those
 failed observations are current-read recovery with a deliberate reload. They do not reopen the original command or
 label the last loaded notices as a current page.
