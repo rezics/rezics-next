@@ -2,6 +2,7 @@ import {
   ownRecoveryPage,
   ownRecoveryValue,
   RecoverySelection,
+  type RecoveryChoice,
   type RecoveryPage,
   type RecoverySection,
 } from './selection';
@@ -101,8 +102,8 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   #results: RecoveryPage<Result, ResultContext> | null = null;
   #pagePath = emptyReaderPath();
   #resultsPath = emptyReaderPath();
-  #originalSelection: readonly Readonly<{ ordinal: number; section: RecoverySection }>[] | null = null;
-  #resultSelection: readonly Readonly<{ ordinal: number; section: RecoverySection }>[] = [];
+  #originalSelection: readonly RecoveryChoice<Choice>[] | null = null;
+  #resultSelection: readonly RecoveryChoice<Choice>[] = [];
   #review: Readonly<{ revision: number; operand: Confirm }> | null = null;
   #original: Confirm | null = null;
   #cancelNeedsCheckpoint = false;
@@ -329,7 +330,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       this.#phase === 'cancelling' && this.#cancelNeedsCheckpoint && !this.#cancelCheckpointed;
     if (this.#phase === 'reviewed' && this.#review?.revision === this.#selection.revision) {
       this.#original = this.#review.operand;
-      this.#originalSelection = this.#selection.choices.map(({ ordinal, section }) => ({ ordinal, section }));
+      this.#originalSelection = this.#selection.choices;
     } else if (!retainsOriginal(this.#phase) && !reconcilingCancellation) {
       throw new Error('fresh_review_required');
     }
@@ -363,10 +364,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
       if (admitted !== undefined && (outcome === 'complete' || outcome === 'failed')) this.#cancelCheckpointed = true;
     } else this.#phase = outcome;
     if (admitted !== undefined) {
-      const selection =
-        this.#originalSelection === null
-          ? null
-          : this.#originalSelection.map(({ ordinal, section }) => ({ ordinal, section }));
+      const selection = this.#originalSelection;
       const changed =
         !samePage(this.#results, admitted) ||
         (selection !== null && JSON.stringify(this.#resultSelection) !== JSON.stringify(selection));
