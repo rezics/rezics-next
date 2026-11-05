@@ -216,9 +216,23 @@ async function mount() {
       if (twice) node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     });
   const checkboxes = () => [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  const querySummary = () =>
+    client.getQueryCache().findAll({ queryKey: ['collection-publication'] }).map((query) => ({
+      key: query.queryKey,
+      status: query.state.status,
+      error: query.state.error instanceof Error ? query.state.error.message : query.state.error,
+      source: query.state.data?.source.state,
+      revision: query.state.data?.source.state === 'ready' ? query.state.data.source.revision : undefined,
+    }));
   const choose = async (indices = [0]) => {
-    for (const index of indices) await flush(() => checkboxes()[index]!.click());
-    await flush(() => checkboxes().at(-1)!.click());
+    for (const index of indices) {
+      const node = checkboxes()[index];
+      if (!node) throw new Error(`Missing candidate checkbox ${index}; page=${host.textContent}; queries=${JSON.stringify(querySummary())}`);
+      await flush(() => node.click());
+    }
+    const confirmation = checkboxes().at(-1);
+    if (!confirmation) throw new Error(`Missing confirmation checkbox; page=${host.textContent}; queries=${JSON.stringify(querySummary())}`);
+    await flush(() => confirmation.click());
   };
   const settle = <T,>(work: ReturnType<typeof deferred<T>>, outcome: T | Error) =>
     flush(() => {
@@ -266,7 +280,7 @@ async function mount() {
         const query = client.getQueryCache().find({
           queryKey: collectionPublicationQuery(credential, currentAddress).queryKey,
         });
-        expect(query).toBeDefined();
+        if (!query) throw new Error(`Missing publication query for ${JSON.stringify(credential)}; queries=${JSON.stringify(querySummary())}`);
         client.setQueryData(query!.queryKey, page);
       }),
     async dispose() {
