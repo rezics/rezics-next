@@ -2076,25 +2076,29 @@ its timeout only bounds a failing test, and establishes no performance or native
 
 ## VNDB durable table materialization
 
-`VndbMaterialization` is the CLI's production facade for validated VNDB table
-entries and ustar archives. It stages the complete generation before ordinary
-`Importer.runRecords` publication, enumerating at most 16 grouped records per
-page. `baseline(key)` reads the completed RunStore row and its durable acquisition
-link; it does not maintain a second record baseline. Failed acquisition cannot
-resume publication or replace that baseline. Unchanged publication retains the
-original acquisition, while interrupted sealed work resumes with its own original
-acquisition even if a subsequent invocation supplies a different archive.
+`VndbMaterialization` stages a complete VNDB table generation, then publishes
+through `Importer.runRecords` in pages of at most 16. The acquisition is bound
+before the first public write; `baseline(key)` reads only the completed RunStore
+row and that link. A page ACK does not advance the complete pointer until every
+required member and native effect is durable. Failed, corrupt, missing,
+changed-pending or mass-loss input cannot replace that baseline. Unchanged
+publication keeps the original acquisition; interrupted sealed work resumes it
+even when a later invocation supplies a different archive.
 
-The staged `vn.alias` field is newline-separated text and survives COPY
-materialization into the pure converter. Nonempty lines become undetermined
-alternate names; alias changes and removals participate in the ordinary
-importer's source digest, candidate reconciliation and durable replay. The
-converter caps a record at 64 alias lines and 162 commands; the importer sends
-those commands in its existing 100-command batches.
+Decision: grouped VN records keep converter-allowlisted `vn.alias` with the
+licensed statistic pair. The fourteen-case oracle asserts that field. Caps stay
+64 alias lines, 162 commands.
 
-The native materialization acceptance binds all fourteen portable table outcomes
-and the account-key CLI publication/reopen/late-invalid journey. Its local SQLite
-row, byte, execution and EQP evidence does not add canonical server growth claims.
+### Publish a completed VNDB table generation
+- Touches: one ready table acquisition, its RunStore generation, licensed
+  observation and immutable ACKs through the existing archive operator.
+- Bound: O(file bytes) to stage; pages of 16; one generation and acquisition
+  link; no second baseline.
+- Growth check: local SQLite row, statement and EQP evidence on the fourteen
+  table outcomes.
+
+Native acceptance binds those fourteen outcomes and the account-key CLI
+publication/reopen/late-invalid journey.
 See [the materialization evidence](../../docs/research/imports-audit/vndb-materialization-native.md).
 
 ## VNDB and Wikidata sealed CLI recovery

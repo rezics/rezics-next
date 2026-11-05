@@ -17,10 +17,10 @@
  * headers, with real columns. They are not SQL, JSON or pregrouped source records.
  * entry_meta's exported column is id, although the generator selects itemid.
  *
- * Grouped payload follows the independently frozen imports-vndb-driver.ts suite:
- * vn {id, olang, c_votecount, c_average}, vn_titles array, entry_meta object with numeric per-entry revision.
+ * Grouped payload follows the converter allowlist and imports-vndb-driver.ts suite:
+ * vn {id, olang, alias, c_votecount, c_average}, vn_titles array, entry_meta object with numeric per-entry revision.
  * Validate all known input columns, then retain only the converter's needed
- * columns, including the explicitly admitted average/count statistic fields. Descriptions, image IDs and unused VN columns are discarded, never
+ * columns, including alias and the explicitly admitted average/count statistic fields. Descriptions, image IDs and unused VN columns are discarded, never
  * reconstructed by this adapter. Preserve native entry_meta dates and counters.
  * entry_meta also contains other entry types: skip those, not orphan v IDs.
  * No auxiliary table is needed for the current converter. Use the
@@ -66,7 +66,7 @@ export interface Entry {
   linkTarget?: string;
 }
 export interface GroupedRecord {
-  vn: { id: string; olang: string; c_votecount: number; c_average: number | null };
+  vn: { id: string; olang: string; alias: string | null; c_votecount: number; c_average: number | null };
   vn_titles: Array<{ id: string; lang: string; official: boolean; title: string; latin: string | null }>;
   entry_meta: { id: string; created: string; lastmod: string; revision: number; num_edits: number; num_users: number };
 }

@@ -532,7 +532,7 @@ export async function runVndbMaterializationPublication() {
     });
     const originalReceiptsAfter = { bulk: await capture.bulkReceipts(), statistic: after.storage.statisticReceipts };
     const db = new Database(state);
-    const markers = ['UNLICENSED_DESCRIPTION_SENTINEL', 'cv123', 'Harbor Sentinel', 'PRIVATE_SENTINEL'];
+    const markers = ['UNLICENSED_DESCRIPTION_SENTINEL', 'cv123', 'PRIVATE_SENTINEL'];
     let unlicensedMarkers: string[];
     try {
       unlicensedMarkers = logicalMarkers(db, markers);

@@ -71,7 +71,7 @@ function at(root: unknown, path: Path): unknown {
 }
 function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver['page']>>['records'][number]) {
   expect(row.key).toBe(row.record.vn.id);
-  expect(Object.keys(row.record.vn).sort()).toEqual(['c_average', 'c_votecount', 'id', 'olang']);
+  expect(Object.keys(row.record.vn).sort()).toEqual(['alias', 'c_average', 'c_votecount', 'id', 'olang']);
   expect(typeof row.record.vn.olang).toBe('string');
   expect(Number.isSafeInteger(row.record.vn.c_votecount)).toBe(true);
   expect(row.record.vn.c_votecount).toBeGreaterThanOrEqual(0);
@@ -127,6 +127,11 @@ function converted(d: VndbTablesDriver, row: Awaited<ReturnType<VndbTablesDriver
   for (const title of row.record.vn_titles) {
     titles.add(JSON.stringify([title.lang, title.title]));
     if (title.latin !== null) titles.add(JSON.stringify([`${title.lang}-Latn`, title.latin]));
+  }
+  if (row.record.vn.alias) {
+    for (const line of row.record.vn.alias.split(/\r?\n/u)) {
+      if (line) titles.add(JSON.stringify(['und', line]));
+    }
   }
   const initialTitles = new Set<string>();
   for (const [language, value] of Object.entries(accepted.subject.labels)) {
@@ -204,8 +209,15 @@ test('the actual VNDB table-file format is grouped into complete source records 
     expect(first.next).toBe('v123');
     const row = first.records[0]!;
     expect(Object.keys(row.record).sort()).toEqual(['entry_meta', 'vn', 'vn_titles']);
-    expect(row.record.vn).toEqual({ id: 'v123', olang: 'en', c_votecount: 2, c_average: 700 });
-    expect(await d.retainedMarkers(['UNLICENSED_DESCRIPTION_SENTINEL', 'cv123', 'Harbor Sentinel'])).toEqual([]);
+    expect(row.record.vn).toEqual({
+      id: 'v123',
+      olang: 'en',
+      alias: 'Harbor Sentinel',
+      c_votecount: 2,
+      c_average: 700,
+    });
+    expect(await d.retainedMarkers(['UNLICENSED_DESCRIPTION_SENTINEL', 'cv123'])).toEqual([]);
+    expect(await d.retainedMarkers(['Harbor Sentinel'])).toEqual(['Harbor Sentinel']);
     expect(row.record.vn_titles).toEqual(
       expect.arrayContaining([
         { id: 'v123', lang: 'en', official: true, title: 'Sentinel Harbor', latin: null },

@@ -29,6 +29,7 @@ test('ordinary VNDB CLI publishes the same durable grouped revision and licensed
     expect(r.cli.code).toBe(0);
     expect(r.grouped.record.vn.c_votecount).toBe(2);
     expect(r.grouped.record.vn.c_average).toBe(700);
+    expect(r.grouped.record.vn.alias).toBe('Harbor Sentinel');
     expect(r.grouped.revision).toBe(7);
     expect(r.publicStatistic.mean).toBe(7);
     expect(r.publicStatistic.count).toBe(2);

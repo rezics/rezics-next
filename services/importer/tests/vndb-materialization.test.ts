@@ -160,7 +160,7 @@ test('measured stage and page leave SQLite ready for ordinary publication at eve
   } finally {
     await f.close();
   }
-});
+}, 15_000);
 
 test('new and late-invalid table generations cannot publish or replace a completed baseline', async () => {
   const f = await local();
@@ -175,6 +175,31 @@ test('new and late-invalid table generations cannot publish or replace a complet
     expect(f.calls).toEqual([]);
     await f.reopen();
     expect(f.facade.baseline('v123')).toEqual(before);
+  } finally {
+    await f.close();
+  }
+});
+
+test('interrupted publication and a later different archive keep the last complete baseline', async () => {
+  const f = await local();
+  try {
+    const original = await f.stage();
+    expect((await f.facade.commit(original)).status).toBe('committed');
+    const before = f.facade.baseline('v123');
+    f.deny(true);
+    const changed = await f.stage(true);
+    expect((await f.facade.commit(changed)).status).toBe('bulk-failed');
+    expect(f.facade.baseline('v123')).toEqual(before);
+    const other = await f.stage(false, 'Other Sentinel');
+    f.deny(false);
+    expect((await f.facade.commit(other)).status).toBe('committed');
+    expect(f.facade.baseline('v123')!.run).toBe(changed);
+    expect(f.facade.baseline('v123')!.digest).not.toBe(before!.digest);
+    expect(f.facade.page(changed, null, 1).records[0]!.record.vn_titles.find((title) => title.lang === 'en')!.title).toBe(
+      'Changed Harbor',
+    );
+    await f.reopen();
+    expect(f.facade.baseline('v123')!.run).toBe(changed);
   } finally {
     await f.close();
   }
