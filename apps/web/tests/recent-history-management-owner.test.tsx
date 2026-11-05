@@ -1,7 +1,7 @@
 import { expect, mock, spyOn, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as start from '../.storybook/react-start';
 import * as sync from '../src/search/recent-sync';
@@ -14,7 +14,7 @@ const account = '019f0000-0000-7000-8000-734100000001';
 let rows: RecentItem[] = [],
   revision = 0,
   nativeCalls = 0;
-let finishRead: ((page: { accountId: string; page: unknown }) => void) | undefined;
+let finishRead: ((page: Awaited<ReturnType<sync.RecentSearchTransport['read']>>) => void) | undefined;
 let holdRead = true;
 const createAdapter = sync.createRecentSearchSyncAdapter;
 mock.module('../src/search/recent-sync', () => ({
@@ -108,10 +108,12 @@ async function mountManagement() {
   const render = () =>
     act(async () =>
       root.render(
-        <QueryClientProvider client={client}>
-          <Reader full={false} />
-          <Reader full />
-        </QueryClientProvider>,
+        <StrictMode>
+          <QueryClientProvider client={client}>
+            <Reader full={false} />
+            <Reader full />
+          </QueryClientProvider>
+        </StrictMode>,
       ),
     );
   const reads = spyOn(window.localStorage, 'getItem'),
@@ -130,6 +132,10 @@ async function mountManagement() {
     history,
     session,
     render,
+    async reopen() {
+      await act(async () => root.render(null));
+      await render();
+    },
     io,
     surface,
     remove,
@@ -236,7 +242,7 @@ test('installed readers alone manage Recent and History through native settlemen
     expect(h.window.document.activeElement).toBe(h.surface(1).querySelector('section'));
     expect(rows).toEqual([]);
     expect(h.history.every((current) => current.sync === 'synced' && !current.entries.length)).toBe(true);
-    await h.render();
+    await h.reopen();
     await act(async () => h.history[1]!.retry!());
     expect(h.history.every((current) => !current.entries.length)).toBe(true);
   } finally {

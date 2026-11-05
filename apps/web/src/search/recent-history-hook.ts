@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { sessionStateSnapshot } from '../session/browser-state';
 import {
@@ -46,7 +46,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     return isCurrent;
   }, [bucket, client, installedSession]);
   installedOwner.current = owner;
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
@@ -67,8 +67,11 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     sync: RecentHistory['sync'];
     failure?: RecentHistory['failure'];
   }>({ sync: 'local-only' });
-  const [attempt, setAttempt] = useState({ id: 0, reload: false });
-  const previousAttempt = useRef(0);
+  const [attempt, setAttempt] = useState<{ owner?: RecentHistoryOwner; id: number; reload: boolean }>({
+    id: 0,
+    reload: false,
+  });
+  const previousAttempt = useRef(attempt);
   const publish = useCallback(
     (entries: readonly RecentEntry[], dirty = false) => {
       if (!owner()) return;
@@ -123,7 +126,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
       if (owner() && observeRecentHistoryStorageEvent(storage, event, bucket)) read();
     };
     const refresh = () => {
-      if (owner()) setAttempt((a) => (owner() ? { id: a.id + 1, reload: false } : a));
+      if (owner()) setAttempt((a) => (owner() ? { owner, id: a.id + 1, reload: false } : a));
     };
     window.addEventListener(changedEvent, changed);
     window.addEventListener('storage', stored);
@@ -149,8 +152,8 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
       failure: last.owner === owner ? last.failure : undefined,
     }));
     const native = adapter as Partial<RecentSearchSyncAdapter>;
-    const requested = previousAttempt.current !== attempt.id;
-    previousAttempt.current = attempt.id;
+    const requested = attempt.owner === owner && previousAttempt.current !== attempt;
+    previousAttempt.current = attempt;
     const run = requested
       ? attempt.reload && native.retry
         ? native.retry
@@ -209,7 +212,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     remove: (id) => update(id),
     clear: () => update('clear'),
     retry: () => {
-      if (owner()) setAttempt((a) => (owner() ? { id: a.id + 1, reload: true } : a));
+      if (owner()) setAttempt((a) => (owner() ? { owner, id: a.id + 1, reload: true } : a));
     },
   };
 }
