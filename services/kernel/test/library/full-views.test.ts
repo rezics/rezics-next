@@ -12,6 +12,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import fullSubjectRead from '../../src/semantic/read-subject.sql';
 import { capture, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 let db: GrowthDatabase;
 let app: ReturnType<typeof createKernel>;
@@ -137,6 +138,7 @@ beforeAll(async () => {
   app = createKernel({
     pool: db.pool,
     routeKey,
+    receiptKeys: testReceiptKeys(),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(96)]]) },
     writeRate: {
       async spend() {
