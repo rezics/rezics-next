@@ -584,6 +584,11 @@ Continue consumes native chronological original seeks and complete Source groups
 canonical ordering, and evaluates the existing accepted-state/session supports after releasing the owner snapshot.
 It creates no preparation, persistent source header or grant, touch, receipt or work intent.
 
+Continue HTTP SQL observation attaches once to each physical client on the Pool's `connect` event and captures its current
+query implementation. Preserve real Pool/client identities and method replacement: native work accounting wraps
+`connect` and `query` in place. A forwarding proxy that dispatches through the mutable target method recursively
+reenters the installed wrapper. The focused HTTP suite checks the process lifetime RSS peak against 1.5 GB.
+
 The existing Continue GET also accepts optional `view=BASIC|FULL`. An omitted view and `BASIC` preserve the original
 closed response exactly. `FULL` adds nullable `subject` using the native `SubjectSummarySchema`; `continue-query.ts`
 calls the existing `readSubjectSummaries` once with only the shown canonical IDs (at most 100), the request Actor,

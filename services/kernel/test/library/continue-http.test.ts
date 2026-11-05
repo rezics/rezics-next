@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
@@ -12,6 +12,13 @@ import { continuePageSchema } from '../../src/library/transport-contract.ts';
 
 type ContinuePage = Static<ReturnType<typeof continuePageSchema>>;
 
+afterAll(() => {
+  // Linux reports the lifetime RSS high-water mark in KiB, including synchronous work between samples.
+  const peakRssBytes = process.resourceUsage().maxRSS * 1024;
+  console.info(`Continue HTTP peak RSS: ${peakRssBytes} bytes`);
+  expect(peakRssBytes).toBeLessThan(1_500_000_000);
+});
+
 function queryText(value: unknown): string | null {
   if (typeof value === 'string') return value;
   if (typeof value === 'object' && value !== null && 'text' in value && typeof value.text === 'string')
@@ -21,36 +28,17 @@ function queryText(value: unknown): string | null {
 
 function observePool(connectionString: string, statements: string[]): Pool {
   const pool = new Pool({ connectionString });
-  const observeClient = (client: PoolClient) =>
-    new Proxy(client, {
-      get(target, property) {
-        if (property === 'query')
-          return (...args: unknown[]) => {
-            const text = queryText(args[0]);
-            if (text !== null) statements.push(text);
-            return (target.query as (...queryArgs: unknown[]) => unknown).apply(target, args);
-          };
-        const value = Reflect.get(target, property, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-  return new Proxy(pool, {
-    get(target, property) {
-      if (property === 'query')
-        return (...args: unknown[]) => {
-          const text = queryText(args[0]);
-          if (text !== null) statements.push(text);
-          return (target.query as (...queryArgs: unknown[]) => unknown).apply(target, args);
-        };
-      if (property === 'connect')
-        return (...args: unknown[]) =>
-          (target.connect as (...connectArgs: unknown[]) => Promise<PoolClient>)
-            .apply(target, args)
-            .then(observeClient);
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  }) as Pool;
+  // Observe each physical client once. Native work accounting replaces connect/query in place;
+  // a proxy that looks up the current method when invoked would recurse into that replacement.
+  pool.on('connect', (client: PoolClient) => {
+    const query = client.query;
+    client.query = function (this: PoolClient, ...args: unknown[]) {
+      const text = queryText(args[0]);
+      if (text !== null) statements.push(text);
+      return (query as (...queryArgs: unknown[]) => unknown).apply(this, args);
+    } as PoolClient['query'];
+  });
+  return pool;
 }
 
 function status(response: HttpResponse, expected: number, code?: string) {
