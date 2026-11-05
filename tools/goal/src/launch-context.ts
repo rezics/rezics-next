@@ -173,11 +173,7 @@ function dependencyProjection(
     for (const record of records.values()) {
       const state = record?.state;
       const commit = record?.task_commit;
-      if (
-        (state === 'integrated' || state === 'merged') &&
-        typeof commit === 'string' &&
-        OBJECT_ID.test(commit)
-      )
+      if ((state === 'integrated' || state === 'merged') && typeof commit === 'string' && OBJECT_ID.test(commit))
         candidates.set(commit.toLowerCase(), commit);
     }
 
@@ -198,7 +194,10 @@ function dependencyProjection(
   for (const [key, commit] of candidates) {
     const object = availability.get(key);
     if (object?.availability !== 'available') {
-      commits.set(key, object ?? { availability: 'unknown', reason: 'Git could not verify dependency commit availability' });
+      commits.set(
+        key,
+        object ?? { availability: 'unknown', reason: 'Git could not verify dependency commit availability' },
+      );
       continue;
     }
     const sourceSeen = observeAncestor(commit, source.head!);
