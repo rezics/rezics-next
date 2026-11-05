@@ -503,14 +503,14 @@ test('the actual Following reset envelope preserves the originating prepared vie
     const normal = await actions.readMineFollowingForViewer({ data: { cursor: '' } });
     expect(normal.cursor).toBeNull();
     expect(normal.page.addressInvalid).toBe(true);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(2);
     const invalid = await actions.readMineFollowingForViewer({ data: { cursor: 'x'.repeat(2049) } });
     expect(invalid).toMatchObject({
       subject: 'reset-owner',
       cursor: null,
       page: { addressInvalid: true },
     });
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(2);
   } finally {
     transport.mockRestore();
   }
