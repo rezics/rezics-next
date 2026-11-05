@@ -127,4 +127,5 @@ current use without rewriting the receipt. Offer review and checkout follow the 
 refresh and return. Queued `order.reconcile` replies `202` with `cache-control: private, no-store`; that receipt
 schedules repair and does not grant bytes. Hosted Checkout in provider test mode remains an operator operand
 (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRETS`, `STRIPE_MANAGED_PAYMENTS`, `CHECKOUT_SUCCESS_URL`,
-`CHECKOUT_CANCEL_URL`); signed fixtures prove native settlement without that live account.
+`CHECKOUT_CANCEL_URL`); signed fixtures prove native settlement without that live account. Buyer host tests
+evaluate without Kernel SQL and use the platform resource identity without loading operator modules.

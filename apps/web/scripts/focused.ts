@@ -11,21 +11,18 @@ const signals = [
   ['SIGHUP', 1],
 ] as const;
 const hostTestFile = /\.host\.test\.[cm]?[jt]sx?$/u;
-const kernelSqlPreload = './tests/native/register-kernel-sql.ts';
 
 function hasFlag(command: string[], name: string): boolean {
   return command.some((argument) => argument === name || argument.startsWith(`${name}=`));
 }
 
-/** bunfig excludes `*.host.test.ts`; named host files use the host-runner path-ignore override and Kernel SQL register. */
+/** bunfig excludes `*.host.test.ts`; named host files use the host-runner path-ignore override. */
 export function admitExplicitHostTestCommand(command: string[]): string[] {
   if (command[0] !== 'bun' || command[1] !== 'test') return command;
   if (!command.slice(2).some((argument) => hostTestFile.test(argument))) return command;
   const rest = command.slice(2);
-  const flags: string[] = [];
-  if (!hasFlag(rest, '--preload')) flags.push('--preload', kernelSqlPreload);
-  if (!hasFlag(rest, '--path-ignore-patterns')) flags.push('--path-ignore-patterns=node_modules/**');
-  return flags.length === 0 ? command : ['bun', 'test', ...flags, ...rest];
+  if (hasFlag(rest, '--path-ignore-patterns')) return command;
+  return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...rest];
 }
 
 export type FocusedRunnerOptions = {
