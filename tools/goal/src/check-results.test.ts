@@ -147,7 +147,7 @@ describe('check result reuse keys', () => {
     commit();
     const missingManifest = measure(command('rev-parse', 'HEAD'), join(root, 'packages/no-manifest'));
     expect(missingManifest.unit).toBe('packages/no-manifest');
-    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(6);
+    expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(7);
   });
 
   test('a passing check records its result under command, allowlisted environment, workspace closure, global inputs, and toolchain', () => {
