@@ -216,7 +216,6 @@ test('SubjectFrame carries its observed Context through the installed quotation 
     expect('unsupported' in oversizedOrigin ? oversizedOrigin.unsupported : undefined).toBe('origin');
   } finally {
     await act(async () => root.unmount());
-    router.dispose();
     client.clear();
     host.remove();
   }
