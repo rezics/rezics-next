@@ -307,6 +307,7 @@ const widgetScript = `window.turnstile={ready:function(callback){callback();},re
 const showcaseOpenings = [
   'search', // M1 path 9: mixed works, characters and people.
   'search_advanced', // M1 path 10: filters and POST /v1/subjects:facets.
+  'personal_library', // M1 paths 2/20: native VN source-statistic writes and the personal Library.
 ] as const;
 
 export async function openLocalShowcase(
