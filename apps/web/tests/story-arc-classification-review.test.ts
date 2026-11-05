@@ -327,6 +327,7 @@ test('projection and reuse stay bounded across 32, 64 and 128 admitted parts', (
       }),
     );
   }
-  expect(scales.map((item) => item.population)).toEqual([32, 64, 128]);
+  // The measured workspace also admits the keyword target's single evidence part.
+  expect(scales.map((item) => item.population)).toEqual([33, 65, 129]);
   expect(scales.every((item) => item.copied === 1 && item.writes === 2 && item.visited >= item.population)).toBe(true);
 });
