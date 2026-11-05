@@ -4,7 +4,7 @@ import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { contextHref } from '../../features/pages/context-navigation';
 import { PendingPage } from '../../shell/pending';
 import { subjectReaderPartition, useSubjectReaderRefresh } from '../../features/pages/context-reader';
-import { validatePageRealm } from '../../features/pages/view-cursor';
+import { validatePageNode, validatePageRealm } from '../../features/pages/view-cursor';
 import { createFileRoute, notFound, redirect, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useSuspenseQuery, useSuspenseQueries, useQueryClient } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
@@ -205,6 +205,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   ): {
     realm?: string | undefined;
     via?: string | undefined;
+    node?: string | undefined;
+    streamProperty?: string | undefined;
+    streamDirection?: 'forward' | 'inverse' | undefined;
     fileSource?: string | undefined;
     slot?: 'collections';
     slotResult?: string;
@@ -214,28 +217,50 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     undoAssignmentId?: string;
     undoRevision?: number;
     undoKey?: string;
-  } => ({
-    realm: validatePageRealm(search.realm),
-    via: subjectVisitReturn(search.via, getLocale()),
-    ...(catalogueFileSourceId(search.fileSource) ? { fileSource: catalogueFileSourceId(search.fileSource) } : {}),
-    ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
-    ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
-    ...(search.ratingFailure === '1' ? { ratingFailure: true as const } : {}),
-    ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
-    ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
-    ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
-    ...(typeof search.undoKey === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.undoKey)
-      ? { undoKey: search.undoKey }
-      : {}),
-    ...(typeof search.undoRevision === 'number' ||
-    (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
-      ? { undoRevision: Number(search.undoRevision) }
-      : {}),
-  }),
+  } => {
+    const node = validatePageNode(search.node);
+    const streamProperty = search.streamProperty;
+    const streamDirection = search.streamDirection;
+    if (
+      (streamProperty !== undefined &&
+        (typeof streamProperty !== 'string' ||
+          !streamProperty.trim() ||
+          streamProperty.length > 256 ||
+          /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
+      (streamDirection !== undefined && streamDirection !== 'forward' && streamDirection !== 'inverse') ||
+      ((streamProperty !== undefined || streamDirection !== undefined) &&
+        (node === undefined || streamProperty === undefined || streamDirection === undefined))
+    )
+      throw notFound();
+    return {
+      realm: validatePageRealm(search.realm),
+      via: subjectVisitReturn(search.via, getLocale()),
+      ...(node ? { node } : {}),
+      ...(typeof streamProperty === 'string' ? { streamProperty } : {}),
+      ...(streamDirection === 'forward' || streamDirection === 'inverse' ? { streamDirection } : {}),
+      ...(catalogueFileSourceId(search.fileSource) ? { fileSource: catalogueFileSourceId(search.fileSource) } : {}),
+      ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
+      ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
+      ...(search.ratingFailure === '1' ? { ratingFailure: true as const } : {}),
+      ...(typeof search.labelResult === 'string' ? { labelResult: search.labelResult } : {}),
+      ...(typeof search.undoLabelId === 'string' ? { undoLabelId: search.undoLabelId } : {}),
+      ...(typeof search.undoAssignmentId === 'string' ? { undoAssignmentId: search.undoAssignmentId } : {}),
+      ...(typeof search.undoKey === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.undoKey)
+        ? { undoKey: search.undoKey }
+        : {}),
+      ...(typeof search.undoRevision === 'number' ||
+      (typeof search.undoRevision === 'string' && /^\d+$/.test(search.undoRevision))
+        ? { undoRevision: Number(search.undoRevision) }
+        : {}),
+    };
+  },
   loaderDeps: ({ search }) => ({
     realm: search.realm,
     via: search.via,
+    node: search.node,
+    streamProperty: search.streamProperty,
+    streamDirection: search.streamDirection,
     slot: search.slot,
     slotResult: search.slotResult,
     labelResult: search.labelResult,
@@ -347,7 +372,19 @@ export function SubjectOverview({
   search: ReturnType<typeof Route.useSearch>;
 }) {
   const { tabs, verification, reader: initialReader, page } = data;
-  const { realm, slot, ratingFailure, labelResult, undoLabelId, undoAssignmentId, undoRevision, undoKey } = search;
+  const {
+    realm,
+    slot,
+    ratingFailure,
+    labelResult,
+    undoLabelId,
+    undoAssignmentId,
+    undoRevision,
+    undoKey,
+    node,
+    streamProperty,
+    streamDirection,
+  } = search;
   const browserSession = useSession();
   const { state: session } = browserSession;
   const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
@@ -471,6 +508,9 @@ export function SubjectOverview({
             <RatingsContext.Provider value={ratings}>
               <SubjectPage
                 page={page}
+                selectedNode={node}
+                selectedStreamProperty={streamProperty}
+                selectedStreamDirection={streamDirection}
                 currentHref={currentHref}
                 readingAdmission={JSON.stringify([
                   browserSession.state,

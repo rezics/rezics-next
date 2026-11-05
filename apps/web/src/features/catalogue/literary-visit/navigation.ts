@@ -2,6 +2,8 @@ export type LiteraryPreviousAddress = {
   view: 'overview' | 'contents' | 'editions';
   node?: string;
   cursor?: string;
+  streamProperty?: string;
+  streamDirection?: 'forward' | 'inverse';
   focus?: string;
 };
 
@@ -25,11 +27,21 @@ function previousAddress(value: unknown): value is LiteraryPreviousAddress {
   const item = value as Record<string, unknown>;
   const keys = Object.keys(item);
   return (
-    keys.every((key) => ['view', 'node', 'cursor', 'focus'].includes(key)) &&
+    keys.every((key) => ['view', 'node', 'cursor', 'streamProperty', 'streamDirection', 'focus'].includes(key)) &&
     (item.view === 'overview' || item.view === 'contents' || item.view === 'editions') &&
     (item.node === undefined || (typeof item.node === 'string' && nodeToken.test(item.node))) &&
     (item.cursor === undefined || (item.node !== undefined && safeCursor(item.cursor))) &&
-    (item.view !== 'overview' || (item.node === undefined && item.cursor === undefined)) &&
+    ((item.streamProperty === undefined && item.streamDirection === undefined) ||
+      (item.node !== undefined &&
+        typeof item.streamProperty === 'string' &&
+        item.streamProperty.trim().length > 0 &&
+        item.streamProperty.length <= 256 &&
+        !/[\u0000-\u001f\u007f]/u.test(item.streamProperty) &&
+        (item.streamDirection === 'forward' || item.streamDirection === 'inverse'))) &&
+    (item.view !== 'overview' ||
+      (item.cursor === undefined &&
+        ((item.node === undefined && item.streamProperty === undefined && item.streamDirection === undefined) ||
+          (item.node !== undefined && item.streamProperty !== undefined && item.streamDirection !== undefined)))) &&
     (item.focus === undefined || (typeof item.focus === 'string' && focusToken.test(item.focus)))
   );
 }
