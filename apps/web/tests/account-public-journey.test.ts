@@ -8,7 +8,8 @@ import type { SubjectPageData } from '../src/features/pages/subject';
 // Render-only tests do not invoke Worker bindings. API assertions below use the actual generated client.
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const { accountOf, viewIsPublic } = await import('../src/features/pages/account-read');
+const { accountOf, viewIsPublic, loadAccountPageContext, accountFollowCountsHref } =
+  await import('../src/features/pages/account-read');
 const { loadPublicAccountJourney, pageProfile } = await import('../src/accounts/public-profile/page-read');
 const { readPublicRealms } = await import('../src/accounts/public-profile/read');
 const { PublicRealmsPage } = await import('../src/accounts/public-profile/view');
@@ -63,6 +64,83 @@ test('public profile only marks a visible verified Subject; pending and deleted 
     const hidden = profile({ publicViews });
     for (const view of ['posts', 'reviews', 'collections', 'realms', 'discussion'])
       expect(viewIsPublic(hidden, view)).toBe(false);
+  }
+});
+
+test('private profile context hydrates the current handle and offers counts only from native target authority', async () => {
+  for (const status of [200, 403, 404, null]) {
+    const bearer = status === null ? null : 'current-viewer';
+    const calls: Request[] = [];
+    let countStatus = status ?? 401;
+    let wrongIdentity = false;
+    const client = clientWith(async (request) => {
+      calls.push(request);
+      const url = new URL(request.url);
+      if (url.pathname === '/v1/accounts') {
+        expect(request.headers.has('authorization')).toBe(false);
+        const identity = { id: accountId, state: 'active', kind: 'actor', handle: 'current-reader' };
+        if (url.searchParams.has('ids')) return Response.json({ accounts: [identity], next: null });
+        expect(url.searchParams.get('handle')).toBe('current-reader');
+        return Response.json({
+          accounts: [
+            {
+              ...identity,
+              id: wrongIdentity ? hiddenId : accountId,
+              bio: 'Persisted biography',
+              automated: true,
+              operatorId: hiddenId,
+              subject: { id: realmId, label: 'Native agent', type: 'schema:SoftwareApplication' },
+              publicViews: { posts: false, reviews: true, collections: false, realms: true },
+              privateEmail: 'private@example.test',
+            },
+          ],
+          next: null,
+        });
+      }
+      expect(request.headers.get('authorization')).toBe(`Bearer ${bearer}`);
+      if (url.pathname === '/v1/viewerActions')
+        return Response.json({
+          resources: [
+            {
+              type: 'access.account',
+              id: accountId,
+              viewerActions: [
+                { action: 'account:manage', operations: ['account.update', 'account.read_editable_profile'] },
+              ],
+            },
+          ],
+        });
+      expect(url.pathname).toBe(`/v1/followCounts/subject/${realmId}`);
+      return countStatus === 200
+        ? Response.json({ targetType: 'subject', targetId: realmId, followerCount: 37 })
+        : Response.json({ code: countStatus === 403 ? 'forbidden' : 'not_found' }, { status: countStatus });
+    });
+    const read = () =>
+      loadAccountPageContext(client, accountId, bearer && `Bearer ${bearer}`, 'https://auth.test/security');
+    const context = await read();
+    expect(context).toMatchObject({
+      state: 'ready',
+      profile: {
+        id: accountId,
+        bio: 'Persisted biography',
+        automated: true,
+        operatorId: null,
+        subject: { id: realmId },
+        publicViews: { posts: false, reviews: true, collections: false, realms: true },
+      },
+    });
+    expect(accountFollowCountsHref(context, 'en')).toBe(
+      status === 200 ? `/en/library/follow-counts?targetType=subject&targetId=${realmId}` : null,
+    );
+    expect(JSON.stringify(context)).not.toContain('private@example.test');
+    expect(JSON.stringify(context)).not.toContain('followerCount');
+    if (!bearer) expect(calls).toHaveLength(2);
+    if (status === 200) {
+      countStatus = 404;
+      expect(accountFollowCountsHref(await read(), 'en')).toBeNull();
+      wrongIdentity = true;
+      expect(await read()).toEqual({ state: 'unavailable' });
+    }
   }
 });
 

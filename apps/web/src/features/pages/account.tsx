@@ -11,7 +11,13 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/sha
 import { useContext, useId, useRef, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
-import { accountOf, viewIsPublic, accountOperationAllowed, readAccountViewerActions } from './account-read';
+import {
+  accountOf,
+  viewIsPublic,
+  accountOperationAllowed,
+  readAccountViewerActions,
+  accountFollowCountsHref,
+} from './account-read';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
 import { browserObservation } from '../../session/observation';
@@ -89,7 +95,8 @@ function AccountManagementLinks({ id, value }: { id: string; value: OverviewValu
   );
   const prefix = `/${encodeURIComponent(value.locale)}`;
   const securityHref = settings && query.data?.state === 'ready' ? query.data.securityHref : null;
-  if (!profile && !settings && !verification) return null;
+  const countsHref = accountFollowCountsHref(query.data, value.locale);
+  if (!profile && !settings && !verification && !countsHref) return null;
   const guardNavigation = (event: SyntheticEvent) => {
     // A retained link cannot dispatch between a cache publication and React's render.
     const permissions = client.getQueryState(queryKey);
@@ -112,6 +119,7 @@ function AccountManagementLinks({ id, value }: { id: string; value: OverviewValu
     >
       {settings && <value.link href={`${prefix}/settings`}>{m.settings_heading({}, options)}</value.link>}
       {profile && <value.link href={`${prefix}/accounts`}>{m.av_accounts({}, options)}</value.link>}
+      {countsHref && <value.link href={countsHref}>{m.library_follow_counts_heading({}, options)}</value.link>}
       {verification && (
         <value.link href={`${prefix}/accounts/${encodeURIComponent(id)}/verification`}>
           {m.av_application({}, options)}
