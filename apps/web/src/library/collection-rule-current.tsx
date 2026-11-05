@@ -7,6 +7,9 @@ import { useCollectionOwnerCurrent } from './collection-owner-current';
 
 export { useCollectionOwnerCurrent } from './collection-owner-current';
 
+const deniedPage: RulePage = { state: 'denied' };
+const unavailablePage: RulePage = { state: 'unavailable' };
+
 function matches(page: RulePage, subject: string | null, collectionId: string | null) {
   return (
     (page.state === 'new' || page.state === 'ready') &&
@@ -40,8 +43,17 @@ export function CollectionRuleCurrent({
   }
   const identity = page.state === 'ready' || page.state === 'new' ? JSON.stringify([page.viewerId, page.intent]) : '';
   const valid = matches(page, owner.subject, collectionId) && !history.current.retired.has(identity);
-  if (valid && owner.admitted) history.current.seen.add(identity);
-  const operations = owner.admitted
+  if (valid && owner.admissionState === 'available') history.current.seen.add(identity);
+  const currentPage: RulePage = !valid
+    ? page.state === 'unavailable'
+      ? unavailablePage
+      : deniedPage
+    : owner.admissionState === 'denied'
+      ? deniedPage
+      : owner.admissionState === 'unavailable'
+        ? unavailablePage
+        : page;
+  const operations = owner.admissionState === 'available'
     ? [
         'collection.create',
         'collection_rule.get',
@@ -52,7 +64,7 @@ export function CollectionRuleCurrent({
   return (
     <CollectionRuleEditor
       key={owner.generation}
-      page={valid ? page : { state: page.state === 'unavailable' ? 'unavailable' : 'denied' }}
+      page={currentPage}
       viewerId={owner.subject}
       collectionId={collectionId}
       resultsHref={resultsHref}

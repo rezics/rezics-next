@@ -61,16 +61,27 @@ const coordinate = v.pipe(v.number(), v.minValue(0), v.maxValue(1));
 const fields = {
   id: v.string(),
   handle: v.nullable(v.string()),
-  displayName: v.nullable(v.string()),
-  bio: v.nullable(v.string()),
-  links: v.pipe(v.array(v.strictObject({ label: v.string(), url: v.string() })), v.maxLength(5)),
+  displayName: v.nullable(v.pipe(v.string(), v.maxLength(4096))),
+  bio: v.nullable(v.pipe(v.string(), v.maxLength(4096))),
+  links: v.pipe(
+    v.array(
+      v.strictObject({
+        label: v.pipe(v.string(), v.check((value) => Array.from(value).length <= 64)),
+        url: v.pipe(v.string(), v.check((value) => Array.from(value).length <= 2048)),
+      }),
+    ),
+    v.maxLength(5),
+  ),
   avatar: v.nullable(
     v.strictObject({
       media: v.string(),
       width: dimension,
       height: dimension,
-      placeholder: v.strictObject({ thumbhash: v.string(), color: v.string() }),
-      variants: v.array(v.strictObject({ format: v.picklist(['avif', 'webp']), width: dimension })),
+      placeholder: v.strictObject({
+        thumbhash: v.pipe(v.string(), v.maxLength(64)),
+        color: v.pipe(v.string(), v.regex(/^#[0-9a-f]{6}$/)),
+      }),
+      variants: v.pipe(v.array(v.strictObject({ format: v.picklist(['avif', 'webp']), width: dimension })), v.maxLength(12)),
       focalPoint: v.nullable(v.strictObject({ x: coordinate, y: coordinate })),
       credit: v.null(),
     }),
@@ -82,52 +93,60 @@ const fields = {
     realms: v.boolean(),
   }),
 };
-const textAdvice = v.strictObject({ applicable: v.literal(true), maxLength: v.literal(4096) });
-const avatarAdvice = v.strictObject({ applicable: v.literal(true) });
+const flags = v.pipe(
+  v.array(v.picklist(['posts', 'reviews', 'collections', 'realms'])),
+  v.maxLength(4),
+  v.check((values) => new Set(values).size === values.length),
+);
+const textAdvice = v.strictObject({ applicable: v.boolean(), maxLength: v.literal(4096) });
+const avatarAdvice = v.strictObject({ applicable: v.boolean() });
 const linksAdvice = v.strictObject({
-  applicable: v.literal(true),
+  applicable: v.boolean(),
   maxItems: v.literal(5),
   labelMaxLength: v.literal(64),
   urlMaxLength: v.literal(2048),
 });
-const publicViewsAdvice = v.strictObject({
-  applicable: v.literal(true),
-  flags: v.tuple([v.literal('posts'), v.literal('reviews'), v.literal('collections'), v.literal('realms')]),
-});
-const identityAdvice = {
-  displayName: textAdvice,
-  biography: textAdvice,
-  avatar: avatarAdvice,
-  links: linksAdvice,
-  publicViews: publicViewsAdvice,
-};
-const viewer = v.strictObject({ accountId: v.string() });
-const response = v.strictObject({
+const viewAdvice = v.strictObject({ applicable: v.boolean(), flags });
+const editing = v.union([
+  v.strictObject({
+    viewer: v.strictObject({ accountId: v.string() }),
+    target: v.strictObject({ accountId: v.string(), kind: v.literal('actor') }),
+    fields: v.strictObject({
+      displayName: textAdvice,
+      biography: textAdvice,
+      avatar: avatarAdvice,
+      links: linksAdvice,
+      publicViews: viewAdvice,
+    }),
+  }),
+  v.strictObject({
+    viewer: v.strictObject({ accountId: v.string() }),
+    target: v.strictObject({ accountId: v.string(), kind: v.literal('organization') }),
+    fields: v.strictObject({
+      displayName: textAdvice,
+      biography: textAdvice,
+      avatar: avatarAdvice,
+      links: linksAdvice,
+      publicViews: viewAdvice,
+      speakersListed: avatarAdvice,
+    }),
+  }),
+]);
+// The envelope is additive; profile and editing remain closed, producer-shaped observations.
+const response = v.object({
   profile: v.variant('kind', [
     v.strictObject({ ...fields, kind: v.literal('actor') }),
     v.strictObject({ ...fields, kind: v.literal('organization'), speakersListed: v.boolean() }),
   ]),
-  editing: v.union([
-    v.strictObject({
-      viewer,
-      target: v.strictObject({ accountId: v.string(), kind: v.literal('actor') }),
-      fields: v.strictObject(identityAdvice),
-    }),
-    v.strictObject({
-      viewer,
-      target: v.strictObject({ accountId: v.string(), kind: v.literal('organization') }),
-      fields: v.strictObject({
-        ...identityAdvice,
-        speakersListed: v.strictObject({ applicable: v.literal(true) }),
-      }),
-    }),
-  ]),
+  editing,
 });
 
 const patchAck = v.strictObject({ accountId: v.string() });
 /** Runtime GET body includes `editing`; the installed client type currently only names `profile`. */
 export type ProfileEditing = v.InferOutput<typeof response>['editing'];
 export type EditableProfileRead = { profile: EditableProfile; editing: ProfileEditing };
+export type EditableProfileEditing = ProfileEditing;
+export type EditableProfileRecord = EditableProfileRead;
 
 /** Closed field advice for the official `{ profile, editing }` observation. */
 export function closedProfileEditing(
@@ -171,9 +190,12 @@ export function officialProfileRead(
 
 export function parseEditableProfileRead(body: unknown, accountId: string): EditableProfileRead {
   const { profile, editing } = v.parse(response, body);
-  if (profile.id !== accountId || editing.target.accountId !== accountId || editing.target.kind !== profile.kind)
-    throw new Error('Profile unavailable');
-  if (!editing.viewer.accountId) throw new Error('Profile unavailable');
+  if (
+    profile.id !== accountId ||
+    editing.viewer.accountId !== accountId ||
+    editing.target.accountId !== accountId ||
+    editing.target.kind !== profile.kind
+  ) throw new Error('Profile unavailable');
   return { profile, editing };
 }
 

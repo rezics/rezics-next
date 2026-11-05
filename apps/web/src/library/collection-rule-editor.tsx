@@ -269,7 +269,6 @@ export function CollectionRuleEditor(props: EditorProps) {
   const { page, viewerId, collectionId, admitted } = props;
   const hasCredential = !!(props.currentCsrf ? props.currentCsrf() : props.csrfToken);
   const canRead =
-    hasCredential &&
     !!viewerId &&
     !!admitted?.includes(collectionId === null ? 'collection.create' : 'collection_rule.get');
   const canSave =
@@ -277,7 +276,7 @@ export function CollectionRuleEditor(props: EditorProps) {
   const canLabel = !!admitted?.includes('library_label.list');
   const scope = JSON.stringify(
     props.isOwnerCurrent
-      ? [viewerId, collectionId, hasCredential]
+      ? [viewerId, collectionId]
       : [viewerId, collectionId, hasCredential, canRead, canSave, canLabel],
   );
   const latest = useRef({ page, scope });
@@ -316,7 +315,7 @@ export function CollectionRuleEditor(props: EditorProps) {
       epoch={boundary.epoch}
       retired={boundary.retired}
       seen={boundary.seen}
-      authorized={canRead && canSave}
+      authorized={canRead}
       canLabel={canLabel}
     />
   );
@@ -697,16 +696,6 @@ function RuleForm({
       operation.finish();
     }
   }
-  // Keep this intent mounted while authority is unavailable, without retaining private UI in the DOM.
-  if (!isCurrent())
-    return (
-      <div role="alert">
-        <p>{m.library_rule_denied()}</p>
-        <Button type="button" disabled={!ownerCurrent() || pending} onClick={() => void refresh()}>
-          {m.library_collection_reload()}
-        </Button>
-      </div>
-    );
   const visibleChoices = useMemo(
     () =>
       canLabel && (canLabelCurrent?.() ?? true)
@@ -739,6 +728,16 @@ function RuleForm({
   const reviewMeaning = reviewUsesSavedMeaning && savedMeaning ? savedMeaning : undefined;
   const reviewProfiles = reviewMeaning?.profiles ?? choices.release.profiles;
   const reviewProfileState = reviewMeaning?.state ?? choices.release.state;
+  // Keep this intent mounted while authority is unavailable, without retaining private UI in the DOM.
+  if (!isCurrent())
+    return (
+      <div role="alert">
+        <p>{m.library_rule_denied()}</p>
+        <Button type="button" disabled={!ownerCurrent() || pending} onClick={() => void refresh()}>
+          {m.library_collection_reload()}
+        </Button>
+      </div>
+    );
   return (
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       {navigation.boundary}

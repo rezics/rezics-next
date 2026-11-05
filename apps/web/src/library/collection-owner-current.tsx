@@ -1,6 +1,7 @@
 import { useContext, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQuery, QueryClientContext, QueryClient } from '@tanstack/react-query';
 import { operationIsAdmitted } from '../kernel/exposure';
+import type { OperationAdmission } from '../kernel/exposure';
 import {
   viewerExposureLifetime,
   viewerExposureQuery,
@@ -15,6 +16,7 @@ type Identity = { subject: string | null; generation: number; lifetime: string; 
 type Snapshot = {
   identity: Identity;
   observation: ViewerObservation | undefined;
+  admissionState: OperationAdmission;
   csrfToken: string;
   admitted: boolean;
   canLabel: boolean;
@@ -30,6 +32,7 @@ const identity = (subject: string | null): Identity => ({
 const serverSnapshot: Snapshot = {
   identity: { subject: null, generation: 0, lifetime: '', active: false },
   observation: undefined,
+  admissionState: 'unknown',
   csrfToken: '',
   admitted: false,
   canLabel: false,
@@ -43,6 +46,7 @@ function ownerStore(client: QueryClient) {
   let signature: readonly unknown[] = [];
   let mounted = false;
   let retired = false;
+  let publicationQueued = false;
   const listeners = new Set<() => void>();
 
   function read() {
@@ -79,16 +83,33 @@ function ownerStore(client: QueryClient) {
     const query = client.getQueryCache().find({ queryKey: key, exact: true });
     const state = query?.state;
     const response = state?.status === 'success' ? (state.data as ViewerExposure | undefined) : undefined;
+    const responseCurrent = !!observation && response?.subject === observation.subject;
+    const exposureState: OperationAdmission = !observation
+      ? 'unknown'
+      : state?.status === 'error' || response?.state === 'unavailable'
+        ? 'unavailable'
+        : !responseCurrent
+          ? 'unknown'
+          : response?.state === 'denied'
+            ? 'denied'
+            : response
+              ? 'available'
+              : 'unknown';
     const groups =
-      observation && response?.subject === observation.subject && Array.isArray(response.admitted)
-        ? response.admitted
-        : undefined;
+      exposureState === 'available' && response && Array.isArray(response.admitted) ? response.admitted : undefined;
+    const admissionState: OperationAdmission =
+      exposureState === 'available'
+        ? operationIsAdmitted('collection.create', groups)
+          ? 'available'
+          : 'denied'
+        : exposureState;
     const next = [
       mounted,
       snapshot.identity,
       session?.status,
       csrf,
       observation,
+      admissionState,
       query,
       state?.status,
       state?.data,
@@ -99,6 +120,7 @@ function ownerStore(client: QueryClient) {
       snapshot = {
         identity: snapshot.identity,
         observation,
+        admissionState,
         csrfToken: csrf ?? '',
         admitted: !!subject && operationIsAdmitted('collection.get', groups),
         canLabel: !!subject && operationIsAdmitted('library_label.list', groups),
@@ -107,10 +129,18 @@ function ownerStore(client: QueryClient) {
     }
     return snapshot;
   }
+  function publishLater() {
+    if (publicationQueued) return;
+    publicationQueued = true;
+    queueMicrotask(() => {
+      publicationQueued = false;
+      listeners.forEach((notify) => notify());
+    });
+  }
   function changed() {
     const previous = snapshot;
     read();
-    if (snapshot !== previous) listeners.forEach((notify) => notify());
+    if (snapshot !== previous) publishLater();
   }
   return {
     read,
@@ -125,7 +155,10 @@ function ownerStore(client: QueryClient) {
       // even during a synchronous A-to-B-to-A before React has committed anything.
       const stopLifetime = exposure.subscribe(changed);
       const stopCache = client.getQueryCache().subscribe(changed);
-      changed();
+      // Publish the mounted observation after this subscription stack, outside React's render phase.
+      const previous = snapshot;
+      read();
+      if (snapshot !== previous) publishLater();
       return () => {
         listeners.delete(notify);
         stopCache();
@@ -163,6 +196,8 @@ export function useCollectionOwnerCurrent(address: string, _withLabels = false) 
   const isCurrent = () => store.current(snapshot) && getLocale() === locale;
   return {
     subject: snapshot.identity.subject,
+    observation: snapshot.observation,
+    admissionState: snapshot.admissionState,
     admitted: snapshot.admitted,
     canLabel: snapshot.canLabel,
     isCurrent,

@@ -1,12 +1,8 @@
 import { createKernelClient, SESSION_HEADER } from '@rezics/client';
-import { Value } from 'typebox/value';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import {
-  OwnVoteActionsSchema,
-  OwnVotesPageSchema,
-} from '../../../../../services/kernel/src/rating/own-votes-schemas.ts';
 import type { OwnVotesPage } from './types';
+import { decodeOwnVotesPage, isOwnVoteActions } from './response';
 import { requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
@@ -44,7 +40,7 @@ function readInput(value: unknown): { cursor: string | null; valid: boolean } {
 }
 
 function isOwnVotesPage(value: unknown): value is OwnVotesPage {
-  return Value.Check(OwnVotesPageSchema, value);
+  return decodeOwnVotesPage(value) !== null;
 }
 
 function isReadbackAction(value: unknown): value is 'PUT' | 'DELETE' | 'REVIEW' {
@@ -169,7 +165,7 @@ async function currentCommand(intent: OwnVoteIntent): Promise<OwnVoteCommandResu
   const authorization = viewerCredential(request);
   if (!authorization) return { kind: 'signed-out' };
   if (sessionSubject(request) !== intent.viewer) return { kind: 'stale' };
-  if (!Value.Check(OwnVoteActionsSchema, intent.actions)) return { kind: 'stale' };
+  if (!isOwnVoteActions(intent.actions)) return { kind: 'stale' };
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   if (!origin) return { kind: 'uncertain' };
   const { client } = createNativeTransport(origin, authorization);
@@ -217,7 +213,7 @@ async function reviewCommand(input: {
   const authorization = viewerCredential(request);
   if (!authorization || sessionSubject(request) !== input.intent.viewer) return { kind: 'unavailable' };
   if (
-    !Value.Check(OwnVoteActionsSchema, input.intent.actions) ||
+    !isOwnVoteActions(input.intent.actions) ||
     input.intent.actions.state === 'unavailable' ||
     input.intent.actions.readback !== input.intent.path
   )

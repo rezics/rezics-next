@@ -150,7 +150,7 @@ function rule(subject = 'alice', collectionId: string | null = 'alpha', revision
   };
   common.choices.labels = {
     state: 'ready',
-    values: [{ id: 'private-label', name: `${subject} private label` }],
+    values: [{ id: 'e2222222-2222-4222-8222-222222222222', name: `${subject} private label` }],
     next: 'label-next',
   };
   return collectionId === null
@@ -161,7 +161,7 @@ function rule(subject = 'alice', collectionId: string | null = 'alpha', revision
         id: collectionId,
         title: `${subject} private title`,
         rule: {
-          filter: { owner: { label: { id: 'private-label' } } },
+          filter: { owner: { label: { id: 'e2222222-2222-4222-8222-222222222222' } } },
           sort: 'id',
           revision,
           collectionRevision: revision,
@@ -188,6 +188,15 @@ function publication(
   };
 }
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+async function waitFor<T>(read: () => T | undefined): Promise<T> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const value = read();
+    if (value !== undefined) return value;
+    await tick();
+  }
+  throw new Error('Timed out waiting for current viewer exposure');
+}
 async function mounted() {
   exposures.length =
     ruleReads.length =
@@ -223,12 +232,16 @@ async function mounted() {
     exposureKey,
     expose: (subject = 'alice', admitted = ['collections', 'library_label.list']) =>
       perform(() => client.setQueryData(exposureKey(), { subject, admitted })),
-    authorize: (subject = 'alice', admitted = ['collections', 'library_label.list']) =>
-      perform(() => {
-        const pending = exposures.filter((call) => call.expected === subject).at(-1);
-        expect(pending).toBeDefined();
-        pending!.resolve({ subject, admitted });
-      }),
+    settleExposure: async (
+      subject: string,
+      result: { subject: string | null; admitted: string[] },
+    ) => settle(await waitFor(() => exposures.filter((call) => call.expected === subject).at(-1)), result),
+    authorize: async (subject = 'alice', admitted = ['collections', 'library_label.list']) => {
+      await settle(await waitFor(() => exposures.filter((call) => call.expected === subject).at(-1)), {
+        subject,
+        admitted,
+      });
+    },
     perform,
     render: (node: ReactNode) =>
       perform(() =>
@@ -261,7 +274,7 @@ async function mounted() {
   };
 }
 function handler(node: Element, name: string): (event?: unknown) => void {
-  const key = Object.keys(node).find((value) => value.startsWith('__reactProps$'))!;
+  const key = Object.getOwnPropertyNames(node).find((value) => value.startsWith('__reactProps$'))!;
   return (node as unknown as Record<string, Record<string, (event?: unknown) => void>>)[key]![name]!;
 }
 const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) =>
@@ -270,7 +283,8 @@ const settle = <T,>(call: ReturnType<typeof deferred<T>>, result: T) =>
     await tick();
   });
 
-const event = { preventDefault() {} };
+const dispatchSubmit = (form: HTMLFormElement) =>
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 const complete = (input: PublicationInput): PublicationResult => ({
   ok: true,
   collection: { id: input.collectionId, revision: input.revision + 1 },
@@ -290,17 +304,20 @@ describe('Complete saved rule and selected Publication owner authority preserves
     try {
       await h.render(<CollectionRuleCurrent page={a} collectionId="alpha" navigate={(id) => navigation.push(id)} />);
       expect(h.host.querySelector('form')).toBeNull(); // The legacy global cache grants nothing.
-      await settle(exposures.at(-1)!, { subject: 'foreign-viewer', admitted: ['collections', 'library_label.list'] });
+      await h.settleExposure('alice', {
+        subject: 'foreign-viewer',
+        admitted: ['collections', 'library_label.list'],
+      });
       expect(h.host.querySelector('form')).toBeNull();
       await h.expose();
-      const oldSubmit = handler(h.host.querySelector('form')!, 'onSubmit');
+      const oldForm = h.host.querySelector('form')!;
       const oldReload = handler(h.button(m.library_collection_reload()), 'onClick');
       const oldLabels = handler(h.button(m.search_apply()), 'onClick');
       await h.submit();
       expect(ruleWrites).toHaveLength(1);
       await h.perform(() => {
         h.client.setQueryData(sessionQuery.queryKey, session('bob', 'csrf-bob'));
-        oldSubmit(event);
+        dispatchSubmit(oldForm);
         oldReload();
         oldLabels();
         expect(ruleWrites).toHaveLength(1);
@@ -316,11 +333,11 @@ describe('Complete saved rule and selected Publication owner authority preserves
       expect(navigation).toEqual([]);
       expect(h.host.textContent).not.toContain('old-A-result');
       expect(h.button(m.library_collection_save_pending()).disabled).toBe(true);
-      const bSubmit = handler(h.host.querySelector('form')!, 'onSubmit');
+      const bForm = h.host.querySelector('form')!;
       await h.perform(() => {
         h.client.setQueryData(sessionQuery.queryKey, session('alice'));
         h.client.setQueryData(sessionQuery.queryKey, session('bob', 'csrf-bob'));
-        bSubmit(event); // ABA is observed before React commits the final B again.
+        dispatchSubmit(bForm); // ABA is observed before React commits the final B again.
         expect(ruleWrites).toHaveLength(2);
       });
       await h.authorize('bob');
@@ -369,6 +386,24 @@ describe('Complete saved rule and selected Publication owner authority preserves
     }
   });
 
+  test('new rule hydration keeps ready native definitions through current viewer admission', async () => {
+    const h = await mounted();
+    const page = rule('alice', null);
+    page.choices.release = { state: 'ready', digest: 'active-release', profiles: [] };
+    try {
+      await h.render(<CollectionRuleCurrent page={page} collectionId={null} />);
+      expect(h.host.querySelector('form')).toBeNull();
+      await h.authorize('alice', ['collections']);
+      expect(h.host.querySelector('form')).not.toBeNull();
+      expect(h.host.querySelector<HTMLInputElement>('input[required]')).not.toBeNull();
+      expect(h.host.textContent).not.toContain(m.condition_metadata_unavailable());
+      expect(h.host.textContent).toContain('active-release');
+      expect(ruleReads).toHaveLength(0);
+    } finally {
+      await h.close();
+    }
+  });
+
   test('new and edited uncertain rule intents survive healthy rotation, equivalent refresh, authority errors and independent admission churn exactly', async () => {
     for (const collectionId of [null, 'alpha']) {
       const h = await mounted();
@@ -388,11 +423,11 @@ describe('Complete saved rule and selected Publication owner authority preserves
         await h.authorize();
         await h.expose('alice', ['collections']);
         expect(h.host.textContent).not.toContain(m.library_rule_label_search());
-        const retry = handler(h.host.querySelector('form')!, 'onSubmit');
+        const retryForm = h.host.querySelector('form')!;
         await h.perform(() => {
           const query = h.client.getQueryCache().find({ queryKey: h.exposureKey(), exact: true })!;
           query.setState({ status: 'error', error: new Error('Scoped exposure failed') });
-          retry(event);
+          dispatchSubmit(retryForm);
           expect(ruleWrites).toHaveLength(1);
         });
         expect(h.host.querySelector('form')).toBeNull();

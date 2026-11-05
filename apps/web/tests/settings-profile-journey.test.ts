@@ -70,6 +70,7 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
               avatar: current.avatar,
               links: current.links,
               publicViews: current.publicViews,
+              ...(current.kind === 'organization' ? { speakersListed: current.speakersListed ?? false } : {}),
             }),
         { headers: { 'cache-control': 'private, no-store' } },
       );
@@ -87,7 +88,12 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
         attempt.idempotencyKey,
       ),
   };
-  return { io, writes, reads, current: () => current };
+  return {
+    io,
+    writes,
+    reads,
+    current: () => ({ ...current }),
+  };
 }
 
 test('An account edits its profile and public-view controls using the real self profile API and reloads confirmed values', async () => {
@@ -531,7 +537,11 @@ test('invalid profile submission keeps the exact draft and local avatar without 
 
 test('organization-only speaker listing and native avatar references use the ordinary patch boundary', async () => {
   const boundary = api();
-  const before = { ...initial(), kind: 'organization' as const, speakersListed: false };
+  const before = {
+    ...initial(),
+    kind: 'organization' as const,
+    speakersListed: false,
+  };
   await saveProfileRecord(
     createKernelClient('https://kernel.example.test', {
       fetch: (async (input, init) => {
