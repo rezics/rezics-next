@@ -113,20 +113,23 @@ const sameInput = (a: LabelInput, b: LabelInput) =>
   a.id === b.id &&
   (a.operation === 'restore' || a.name === b.name) &&
   a.revision === b.revision;
+type LabelSenderInput = NonNullable<Parameters<typeof manageLabel>[0]>;
+type LabelSender = (input: LabelSenderInput) => Promise<LabelResult>;
+async function defaultLabelSender(input: LabelSenderInput): Promise<LabelResult> {
+  const { manageLabel } = await import('./labels-actions');
+  return manageLabel(input);
+}
 type Attempt = {
   input: LabelInput;
   renderedKey: string;
   unresolved: boolean;
   headers: HeadersInit;
-  send: typeof manageLabel;
+  send: LabelSender;
 };
 
 export function LabelsPageView({
   page: initial,
-  sendLabel = async (input) => {
-    const { manageLabel } = await import('./labels-actions');
-    return manageLabel(input);
-  },
+  sendLabel = defaultLabelSender,
   isCurrent = alwaysCurrent,
   refresh,
   originating,
@@ -139,7 +142,7 @@ export function LabelsPageView({
   locale = getLocale(),
 }: {
   page: LabelsPage;
-  sendLabel?: typeof manageLabel;
+  sendLabel?: LabelSender;
   isCurrent?: () => boolean;
   refresh?: () => Promise<LabelsPage | null>;
   originating?: ManagementGuard | undefined;
