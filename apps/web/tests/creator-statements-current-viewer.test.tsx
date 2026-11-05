@@ -555,6 +555,9 @@ test('mounted actual routes keep only current viewer/address data across hydrati
     const moved = pending.length;
     await show(viewer(B));
     privateAbsent(B);
+    expect(pending.slice(moved).map(({ address }) => address)).toEqual([
+      { kind: 'detail', locale: 'fr', id: pointId, cursor: search.cursor!, from: search.from! },
+    ]);
     await settle(moved, detail(B, pointId, search.cursor!, search.from!, locale));
     expect(host.textContent).toContain(`Private payment ${B}`);
     expect(host.querySelector(`a[href^="/fr/creator/statements/${pointId}?"]`)).not.toBeNull();
