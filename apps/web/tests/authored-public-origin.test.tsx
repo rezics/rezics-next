@@ -4,36 +4,29 @@ import { act, createContext, useContext, type ReactNode } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
-import { addonProfileFixture, addonProfileId, addonWorkId } from '../src/kernel/fake/catalogue-addon-profile';
-import { authoredFixture } from '../src/kernel/fake/authored-field';
-import {
-  authoredGlobalVisitHref,
-  authoredPublicCorrectionHref,
-  authoredPublicIntentFits,
-  authoredPublicVisitUnsupported,
-  parseAuthoredPublicVisit,
-  type AuthoredPublicOrigin,
-} from '../src/features/catalogue/authored-public-visit';
-import { AuthoredFieldEntry } from '../src/features/catalogue/authored-field-entry';
-import { EditorialEntry } from '../src/features/catalogue/editorial-entry';
-import { subjectHref } from '../src/subject/subject-href';
-import { candidateContext } from '../src/subject/candidates';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const label = 'Harbor: Northern lights';
-const publicHref = subjectHref({ id: addonProfileId, label }, 'en').href;
-const base = `${publicHref}/authored`;
-const observed: AuthoredPublicOrigin = {
-  subject: addonProfileId,
-  context: candidateContext,
-  locale: 'en',
-  returnHref: publicHref,
-};
-
-test('authored public visit descriptors stay closed, bounded and separate from synopsis selection', () => {
+test('authored public visit descriptors stay closed, bounded and separate from synopsis selection', async () => {
+  const [{ addonProfileId, addonWorkId }, { candidateContext }, { subjectHref }, visitHelpers] = await Promise.all([
+    import('../src/kernel/fake/catalogue-addon-profile'),
+    import('../src/subject/candidates'),
+    import('../src/subject/subject-href'),
+    import('../src/features/catalogue/authored-public-visit'),
+  ]);
+  const {
+    authoredGlobalVisitHref,
+    authoredPublicCorrectionHref,
+    authoredPublicIntentFits,
+    authoredPublicVisitUnsupported,
+    parseAuthoredPublicVisit,
+  } = visitHelpers;
+  const label = 'Harbor: Northern lights';
+  const publicHref = subjectHref({ id: addonProfileId, label }, 'en').href;
+  const base = `${publicHref}/authored`;
+  const observed = { subject: addonProfileId, context: candidateContext, locale: 'en', returnHref: publicHref };
   const href = authoredPublicCorrectionHref(base, observed);
   const visit = parseAuthoredPublicVisit(new URL(href, 'https://site.test').search, addonProfileId, 'en', base);
   expect(visit).toEqual({
@@ -75,6 +68,10 @@ test('authored public visit descriptors stay closed, bounded and separate from s
 });
 
 test('mounted entry, contribution menu and authored route keep public intent out of session and editor reads until supported', async () => {
+  const [{ addonProfileFixture, addonProfileId, addonWorkId }, { authoredFixture }] = await Promise.all([
+    import('../src/kernel/fake/catalogue-addon-profile'),
+    import('../src/kernel/fake/authored-field'),
+  ]);
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test', width: 390, height: 844 });
@@ -103,6 +100,19 @@ test('mounted entry, contribution menu and authored route keep public intent out
   const originalKernel = { ...(await import('../src/kernel/client')) };
   mock.module('../src/kernel/client', () => ({ ...originalKernel, kernelClient: () => profile.client }));
   const originalActions = await import('../src/features/catalogue/authored-field-actions');
+  const [
+    { authoredPublicCorrectionHref, parseAuthoredPublicVisit },
+    { AuthoredFieldEntry },
+    { EditorialEntry },
+    { subjectHref },
+    { candidateContext },
+  ] = await Promise.all([
+    import('../src/features/catalogue/authored-public-visit'),
+    import('../src/features/catalogue/authored-field-entry'),
+    import('../src/features/catalogue/editorial-entry'),
+    import('../src/subject/subject-href'),
+    import('../src/subject/candidates'),
+  ]);
   const authored = authoredFixture();
   const result = await authored.transport.read();
   if (!result.ok) throw new Error('Expected authored fixture data');
@@ -121,6 +131,10 @@ test('mounted entry, contribution menu and authored route keep public intent out
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const reader = '00000000-0000-4000-8000-00000000f101';
   const user = userEvent.setup({ document: window.document });
+  const label = 'Harbor: Northern lights';
+  const publicHref = subjectHref({ id: addonProfileId, label }, 'en').href;
+  const base = `${publicHref}/authored`;
+  const observed = { subject: addonProfileId, context: candidateContext, locale: 'en', returnHref: publicHref };
   const session = (state: 'signed-in' | 'signed-out') =>
     client.setQueryData(sessionQuery.queryKey, {
       state,
