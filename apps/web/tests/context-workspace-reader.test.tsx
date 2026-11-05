@@ -680,7 +680,6 @@ test('personal Context departure keeps creation and delete recovery on Stay and 
   }
 });
 
-
 test('directory admits three exact windows, retains predecessors on failed Previous and bounds coordinates', async () => {
   const { DirectoryWindowNavigation } = await import('../src/features/contexts/directory-window-navigation');
   const navigation = new DirectoryWindowNavigation();
@@ -688,11 +687,22 @@ test('directory admits three exact windows, retains predecessors on failed Previ
   const supplied = contextFixture().initialDirectory(input);
   if (supplied.page.kind !== 'ready') throw new Error('Expected fixture page');
   const first = supplied.page.value;
-  const panel = await mount(<ContextDirectoryView locale="en" input={input} data={supplied} navigation={navigation} reload={noop} />);
-  const show = async (cursor: string | undefined, next: string | null) => panel.render(
-    <ContextDirectoryView locale="en" input={{ ...input, cursor }}
-      data={{ ...supplied, page: { kind: 'ready', value: { ...first, contexts: cursor ? [] : first.contexts, next } } }}
-      navigation={navigation} reload={noop} />);
+  const panel = await mount(
+    <ContextDirectoryView locale="en" input={input} data={supplied} navigation={navigation} reload={noop} />,
+  );
+  const show = async (cursor: string | undefined, next: string | null) =>
+    panel.render(
+      <ContextDirectoryView
+        locale="en"
+        input={directoryInput({ ...input, cursor })}
+        data={{
+          ...supplied,
+          page: { kind: 'ready', value: { ...first, contexts: cursor ? [] : first.contexts, next } },
+        }}
+        navigation={navigation}
+        reload={noop}
+      />,
+    );
   const admit = (direction: 'next' | 'previous' | 'first', cursor: string | undefined) => {
     navigation.stage(direction, cursor);
     navigation.accept(cursor, navigation.request());
@@ -709,8 +719,15 @@ test('directory admits three exact windows, retains predecessors on failed Previ
     navigation.stage('previous', 'second+/=');
     navigation.request();
     navigation.failed();
-    await panel.render(<ContextDirectoryView locale="en" input={{ ...input, cursor: 'second+/=' }}
-      data={{ ...supplied, page: { kind: 'stale' } }} navigation={navigation} reload={noop} />);
+    await panel.render(
+      <ContextDirectoryView
+        locale="en"
+        input={{ ...input, cursor: 'second+/=' }}
+        data={{ ...supplied, page: { kind: 'stale' } }}
+        navigation={navigation}
+        reload={noop}
+      />,
+    );
     expect(visibleText(panel.host)).toContain(m.ctxw_stale({}, o));
     expect(navigation.previous).toEqual({ cursor: 'second+/=' });
     navigation.accept('second+/=', navigation.request()); // Ordinary reload cannot commit the failed movement.
@@ -731,5 +748,23 @@ test('directory admits three exact windows, retains predecessors on failed Previ
     admit('first', undefined);
     expect(navigation.previous).toBeUndefined();
     navigation.dispose();
-  } finally { await panel.dispose(); }
+  } finally {
+    await panel.dispose();
+  }
+});
+
+test('directory denial leaves independently admitted creation permission available', async () => {
+  const { createContextApi } = await import('../src/features/contexts/api');
+  const fixture = contextFixture();
+  const data = await createContextApi(fixture.client, 'Bearer context-fixture', {
+    ...fixture.directory,
+    list: async () => ({ kind: 'denied' }),
+  }).list(directoryInput({}));
+  const panel = await mount(<ContextDirectoryView locale="en" input={directoryInput({})} data={data} reload={noop} />);
+  try {
+    expect(data.page.kind).toBe('denied');
+    expect(panel.host.querySelector(`a[href="${directoryHref('en')}/new"]`)).not.toBeNull();
+  } finally {
+    await panel.dispose();
+  }
 });

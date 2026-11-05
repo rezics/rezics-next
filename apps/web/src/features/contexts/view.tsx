@@ -272,9 +272,13 @@ export function ContextDirectoryView({
     if (live() && data?.page.kind === 'ready' && heading.current) navigation?.handoff(heading.current);
     else if (data?.page && data.page.kind !== 'ready') navigation?.failed();
   }, [data, live, navigation]);
-  const move = (direction: 'next' | 'previous' | 'first', cursor: string | undefined) =>
+  const move =
+    (direction: 'next' | 'previous' | 'first', cursor: string | undefined) =>
     (event: React.MouseEvent<HTMLAnchorElement>) => {
-      if (!live()) { event.preventDefault(); return; }
+      if (!live()) {
+        event.preventDefault();
+        return;
+      }
       if (!router || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       navigation?.stage(direction, cursor, event.detail === 0 ? event.currentTarget : undefined);
@@ -300,7 +304,9 @@ export function ContextDirectoryView({
   return (
     <article className={width} aria-busy={!data}>
       <header className="space-y-3">
-        <PageHeading ref={heading} tabIndex={-1}>{m.ctxw_title({}, o)}</PageHeading>
+        <PageHeading ref={heading} tabIndex={-1}>
+          {m.ctxw_title({}, o)}
+        </PageHeading>
         <p className="max-w-prose text-muted-foreground">{m.ctxw_intro({}, o)}</p>
         {canCreate ? (
           <a className={cn(buttonVariants(), actionClassName)} href={`${directoryHref(locale)}/new`}>
@@ -353,10 +359,21 @@ export function ContextDirectoryView({
       {!page ? (
         <p role="status">{m.ctxw_loading({}, o)}</p>
       ) : page.kind !== 'ready' ? (
-        <><ContextFeedback failure={page} locale={locale} />
-          <Button className={actionClassName} variant="outline" onClick={(event) => { if (live()) { navigation?.retry(input.cursor, event.detail === 0 ? event.currentTarget : undefined); void reload(); } }}>
+        <>
+          <ContextFeedback failure={page} locale={locale} />
+          <Button
+            className={actionClassName}
+            variant="outline"
+            onClick={(event) => {
+              if (live()) {
+                navigation?.retry(input.cursor, event.detail === 0 ? event.currentTarget : undefined);
+                void reload();
+              }
+            }}
+          >
             {m.prq_retry_page({}, o)}
-          </Button></>
+          </Button>
+        </>
       ) : page.value.contexts.length === 0 ? (
         <Empty>
           <EmptyHeader>
@@ -386,23 +403,33 @@ export function ContextDirectoryView({
         </ul>
       )}
       <nav aria-label={m.ctxw_title({}, o)} className="flex flex-wrap gap-2">
-      {navigation?.previous ? <a className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
-        href={directoryHref(locale, { ...input, cursor: navigation.previous.cursor })}
-        onClick={move('previous', navigation.previous.cursor)}>{m.library_collections_previous({}, o)}</a> : null}
-      {page?.kind === 'ready' && page.value.next ? (
-        <a
-          className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
-          href={directoryHref(locale, { ...input, cursor: page.value.next })}
-          onClick={move('next', page.value.next)}
-        >
-          {m.ctxw_next({}, o)}
-        </a>
-      ) : null}
-      {input.cursor ? (
-        <a className={cn(buttonVariants({ variant: 'outline' }), actionClassName)} href={directoryHref(locale, { ...input, cursor: undefined })} onClick={move('first', undefined)}>
-          {m.library_collections_first_page({}, o)}
-        </a>
-      ) : null}
+        {navigation?.previous ? (
+          <a
+            className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
+            href={directoryHref(locale, { ...input, cursor: navigation.previous.cursor })}
+            onClick={move('previous', navigation.previous.cursor)}
+          >
+            {m.library_collections_previous({}, o)}
+          </a>
+        ) : null}
+        {page?.kind === 'ready' && page.value.next ? (
+          <a
+            className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
+            href={directoryHref(locale, { ...input, cursor: page.value.next })}
+            onClick={move('next', page.value.next)}
+          >
+            {m.ctxw_next({}, o)}
+          </a>
+        ) : null}
+        {input.cursor ? (
+          <a
+            className={cn(buttonVariants({ variant: 'outline' }), actionClassName)}
+            href={directoryHref(locale, { ...input, cursor: undefined })}
+            onClick={move('first', undefined)}
+          >
+            {m.library_collections_first_page({}, o)}
+          </a>
+        ) : null}
       </nav>
     </article>
   );

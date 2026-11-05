@@ -57,7 +57,9 @@ export class DirectoryWindowNavigation {
     this.admitted = true;
   }
 
-  failed() { this.cancelFocus(); }
+  failed() {
+    this.cancelFocus();
+  }
   handoff(heading: HTMLElement) {
     if (!this.committedFocus) return;
     const eligible = document.activeElement === this.focus || document.activeElement === document.body;
