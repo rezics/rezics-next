@@ -41,6 +41,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress, win
   const { store } = useLibraryWorkspaceAdmission(operations);
   const router = useRouter();
   const observation = useMemo(() => {
+    let live = true;
     let boundAddress = address;
     let bound = JSON.stringify(address);
     let actual = bound;
@@ -58,7 +59,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress, win
       const scoped = store.read();
       const subject = scoped.subject;
       const admitted = scoped.allowed;
-      windows?.bind(JSON.stringify([subject, scoped.viewer, scoped.episodes[0], scoped.episodes[1], scoped.dispatch[0], scoped.dispatch[1]]), boundAddress);
+      if (live) windows?.bind(JSON.stringify([subject, scoped.viewer, scoped.episodes[0], scoped.episodes[1], scoped.dispatch[0], scoped.dispatch[1]]), boundAddress);
       // A nonempty token rotation belongs to the same viewer; loss and subsequent restoration does not.
       const actor = JSON.stringify([subject, scoped.viewer, actual]);
       if (
@@ -113,6 +114,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress, win
         };
       },
       subscribe: (notify: () => void) => {
+        live = true;
         listeners.add(notify);
         read();
         const cache = store.watch(changed);
@@ -129,6 +131,7 @@ export function usePersonalShelfObservation(address: PersonalLibraryAddress, win
           changed();
         });
         return () => {
+          live = false;
           listeners.delete(notify);
           cache();
           navigation();
