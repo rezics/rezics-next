@@ -23,6 +23,10 @@ const operations = [
   'library_operation.get',
   'library_operation.outcomes',
   'copy.list',
+  'library_entry_annotation_correction.create',
+  'library_entry_annotation_correction.read',
+  'library_entry_annotation_correction.confirm_item',
+  'library_entry_annotation_correction.cancel',
 ] as const satisfies readonly Operation[];
 export type ShelfOrigin = {
   current: () => boolean;

@@ -10905,5 +10905,19 @@
   "library_anilist_score_outcome_failed": "네이티브 투표 실패",
   "library_anilist_score_outcome_unavailable": "네이티브 투표를 사용할 수 없습니다",
   "library_anilist_replace_vote_and_state": "기존 네이티브 투표 및 상태 바꾸기",
-  "library_bulk_recovery_invalid": "이 결과 주소는 유효하지 않습니다."
+  "library_bulk_recovery_invalid": "이 결과 주소는 유효하지 않습니다.",
+  "library_selected_correction_title": "Correct selected notes and priority",
+  "library_selected_correction_help": "Review {count} fixed Entries. Each field starts with preserve. Confirm one reviewed item at a time; no other Entry facts change.",
+  "library_selected_correction_departure": "Leave this selected correction review? Accepted edits remain saved. Return to keep reviewing the same source position.",
+  "library_selected_correction_return": "Return to Entries",
+  "library_selected_correction_rejected": "The native command was not accepted. Reopen current facts and deliberately start a new review if the Entry changed.",
+  "library_selected_correction_retry": "Retry original confirmation or cancellation",
+  "library_selected_correction_create_unknown": "The review response was lost. No confirmation was sent. Return to Entries before starting another review; unused reviews expire after 15 minutes.",
+  "library_selected_correction_page": "Review page {page} of {count}",
+  "library_selected_correction_pages": "Selected correction pages",
+  "library_selected_correction_reopen": "Reopen outcomes and current facts",
+  "library_selected_correction_cancel": "Cancel remaining corrections",
+  "library_selected_correction_fresh_review": "This identity changed or is unavailable. Return to Entries and deliberately review the current Entry. A recreated Entry never inherits this correction.",
+  "library_selected_correction_current": "Current native facts (separate observation)",
+  "library_selected_correction_confirm": "Confirm this reviewed item"
 }
