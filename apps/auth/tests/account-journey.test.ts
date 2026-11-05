@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import {
   ACCOUNT_OPERATION_KEY_STORAGE_LIMIT,
   forgetOperationKey,
@@ -9,9 +9,22 @@ import {
 import { parseInventoryPage, removeConsent, type GrantedConsent } from '../src/security-inventory';
 
 const originalFetch = globalThis.fetch;
+const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+const storedValues = new Map<string, string>();
+const sessionStorage = {
+  getItem: (key: string) => storedValues.get(key) ?? null,
+  setItem: (key: string, value: string) => storedValues.set(key, String(value)),
+  removeItem: (key: string) => void storedValues.delete(key),
+  clear: () => storedValues.clear(),
+};
+Object.defineProperty(globalThis, 'window', { configurable: true, value: { sessionStorage } });
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  window.sessionStorage.removeItem('rezics.account-operation.pending');
+  sessionStorage.removeItem('rezics.account-operation.pending');
+});
+afterAll(() => {
+  if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
+  else Reflect.deleteProperty(globalThis, 'window');
 });
 
 function keyOf(result: OperationKeyResult): string {
