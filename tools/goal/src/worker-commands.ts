@@ -199,21 +199,25 @@ export async function runWorkerCommand(
       const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
       const now = Date.now();
       const readings = readRetainedPoolReadings(settings.stateDirectory);
-      const table = readRouting(settings.routingFile, settings.policy?.routing);
-      const waiting = countAllowanceWaiting(
-        selectedTasks.flatMap((task) => {
-          if (task.state !== 'ready' || task.brief.urgent === true) return [];
-          try {
-            return [admissionProfiles(task.brief, table, task.sequence)];
-          } catch {
-            // Status already shows malformed task rows; they are not allowance waiters.
-            return [];
-          }
-        }),
-        settings.pools ?? [],
-        readings,
-        { now, spanMs, history: readings, policy: settings.policy?.provider },
-      );
+      const table = settings.routingFile
+        ? readRouting(settings.routingFile, settings.policy?.routing)
+        : undefined;
+      const waiting = table
+        ? countAllowanceWaiting(
+            selectedTasks.flatMap((task) => {
+              if (task.state !== 'ready' || task.brief.urgent === true) return [];
+              try {
+                return [admissionProfiles(task.brief, table, task.sequence)];
+              } catch {
+                // Status already shows malformed task rows; they are not allowance waiters.
+                return [];
+              }
+            }),
+            settings.pools ?? [],
+            readings,
+            { now, spanMs, history: readings, policy: settings.policy?.provider },
+          )
+        : {};
       const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs).map((pool) => ({
         ...pool,
         waiting: waiting[pool.name] ?? 0,
