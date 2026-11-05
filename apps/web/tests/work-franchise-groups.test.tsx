@@ -224,13 +224,15 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     expect(new URL(sources.href).pathname).toContain(id(2));
     expect(new URL(why.href).searchParams.get('statement')).toBe(id(20));
     expect(new URL(why.href).searchParams.get('context')).toBe(id(4));
-    for (const link of [sources, why, links.find((a) => a.lang === 'ja')!]) {
+    const peer = links.find((a) => a.lang === 'ja')!;
+    for (const link of [sources, why, peer]) {
       const via = new URL(link.href).searchParams.get('via')!;
       expect(subjectVisitReturn(via, 'en')).toBe(via);
       expect(workFranchiseReturn(new URL(via, 'https://site.test').hash)).toMatchObject({
-        stream: `in:${property}`,
+        stream: `${link === peer ? 'out' : 'in'}:${property}`,
         statement: id(20),
         holder: id(2),
+        focus: link === peer ? 'browse' : 'evidence',
       });
     }
     browser.location.href = `https://site.test${new URL(sources.href).searchParams.get('via')}`;
