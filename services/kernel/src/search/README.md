@@ -1940,6 +1940,9 @@ cleanup, retaining its locator until removal so a restart resumes child-before-p
 The publication's prepared observation remains until explicit custody retirement, independently of serving
 lease expiry. Draining clears both prepared row stores and the consumer work's duplicate preparation arrays.
 Reconciliation retries preserve the original Source tuple and the retained alias intent.
+Current Source changes during drain release the fence for ordinary repair. An interrupted alias intent
+first recovers that exact native admission fence before rollback; Source completion is still required for
+publication, while a pending Source cannot strand the safe abort behind its own completion check.
 
 Cost: pages admit 50 native inputs, preserve the lower owner 100/256-key limits and meter public-filter costs;
 native generation preparation/repair shares one maintenance meter whose point and row multipliers apply to
