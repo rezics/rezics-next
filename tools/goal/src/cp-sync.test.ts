@@ -2,7 +2,7 @@ import { processIdentity } from './process.ts';
 import { installService, RESIDENT_CODE_UNITS, SERVICE_UNITS } from './service.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -497,6 +497,56 @@ test('a timed-out check is stopped and refuses the sync', async () => {
   expect(Date.now() - started).toBeLessThan(30_000);
   expect(f.lines.some((line) => /TIMED OUT/.test(line))).toBe(true);
   expect(git(f.repo, 'rev-parse', 'main')).toBe(f.main);
+});
+
+test('coordinator interruption stops the extracted owned check', async () => {
+  const f = fixture();
+  const pidFile = join(f.root, 'owned-check.pid');
+  const logFile = join(f.root, 'interrupt.log');
+  const runner = join(f.root, 'interrupt-sync.ts');
+  const hold = `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 60000);`;
+  writeFileSync(
+    runner,
+    `import { appendFileSync } from 'node:fs';
+import { sync } from ${JSON.stringify(join(import.meta.dir, '../scripts/cp-sync.ts'))};
+await sync({
+  cwd: ${JSON.stringify(f.repo)},
+  worktreeRoot: ${JSON.stringify(f.options.worktreeRoot)},
+  checks: [{ name: 'owned check', argv: ${JSON.stringify([process.execPath, '-e', hold])}, timeoutMs: 60_000 }],
+  print: (line) => appendFileSync(${JSON.stringify(logFile)}, line + '\\n'),
+  resident: { async observe() { return { liveWorkers: 1, passedGates: 1, landings: 1 }; }, async restart() {} },
+});
+`,
+  );
+  const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
+  closers.push(() => {
+    try {
+      if (child.pid) process.kill(child.pid, 'SIGKILL');
+    } catch {}
+    try {
+      if (existsSync(pidFile)) process.kill(Number(readFileSync(pidFile, 'utf8').trim()), 'SIGKILL');
+    } catch {}
+  });
+  const deadline = Date.now() + 15_000;
+  let pid = 0;
+  while (Date.now() < deadline) {
+    if (existsSync(pidFile)) {
+      pid = Number(readFileSync(pidFile, 'utf8').trim());
+      if (pid > 0) break;
+    }
+    await Bun.sleep(50);
+  }
+  expect(pid).toBeGreaterThan(0);
+  process.kill(child.pid!, 'SIGTERM');
+  await new Promise<void>((done) => child.once('exit', () => done()));
+  expect(readFileSync(logFile, 'utf8')).toContain('SIGTERM; no ref moved by this step');
+  expect(git(f.repo, 'rev-parse', 'main')).toBe(f.main);
+  let alive = false;
+  try {
+    process.kill(pid, 0);
+    alive = true;
+  } catch {}
+  expect(alive).toBe(false);
 });
 
 test('an included root path is synced too', async () => {

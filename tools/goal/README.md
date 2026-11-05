@@ -2464,18 +2464,16 @@ name) must also fail when the installs and suite run on a worktree of unmodified
 the candidate's suite fails and is cached per main commit in `.temp/goal/cp-sync/baseline-<main>-<checks>.json`; a
 full sync records the published commit's result as the next baseline, and `--fresh-baseline` reruns it. Failures
 main lacks get one rerun of their test files; those that pass then are reported as flaky, and any that fail again
-refuse the sync. Each run's step results are in `.temp/goal/cp-sync/<run>/results.json`. Processes still running in
-a temporary worktree, such as detached test fixtures, are stopped before it is removed.
+refuse the sync. Each run's step results are in `.temp/goal/cp-sync/<run>/results.json`. Leftover worktree processes are stopped before removal.
 
 Only when the gate passes does cp-sync publish. It first moves the main checkout's index and files with
 `git read-tree -m -u <old> <new>`, then moves the refs in one `git update-ref --stdin` transaction against their
 captured values: `main` to the sync commit, `stabilize` (when present) to a merge of it that takes main's
 control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
 still fast-forwards and the next sync finds main inside dev. A failed transaction moves the files back.
-(`git merge --ff-only` cannot do this step: once the ref has moved, the checkout's HEAD already names the new commit.)
 Decision: Sync, forward rollback and resident-host recovery share the same ref planner and publisher; stale compares
-re-plan from current branch heads, and failed publication restores the main checkout's files.
-Running processes hand over on the new `main:tools/goal` as after any control-plane release. If
+re-plan from current branch heads, and failed publication restores the main checkout's files. Validation lives in `scripts/cp-sync-checks.ts`; `cp-sync.ts` coordinates publication, re-exports it, and stops the owned check there. Tests keep public-entry assertions and pin coordinator interruption of that child.
+Processes hand over on the new `main:tools/goal`. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
 
