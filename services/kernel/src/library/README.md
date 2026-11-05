@@ -1988,9 +1988,13 @@ and its bounded rows; ordinary deletion keeps history only inside the existing r
 
 Collection `update` writes, explicit curated publication and dynamic output publication record their actual
 visibility transitions. Archive recovery's metadata baseline uses `insertCollection`; saved-rule edits and membership
-or ordering revisions remain outside this finite metadata journal. The page query examines at most 51 rows and returns
-at most 50; append prunes one indexed oldest row after the 129th retained change; terminal cleanup removes 25 rows per
-transaction. An addressed comparison observes at most two distinct historical Media references and performs a final
+or ordering revisions remain outside this finite metadata journal. The page query returns at most 51 rows including
+its sentinel and reserves a scan of the full 128-entry retained set because the primary key does not include the
+current-curator predicate. `collection-history-bounds.ts` binds the exact SQL, original operands and schema-bounded
+projections for history state, first/next page, exact detail, initialization and capture. Capture composes owner
+reconciliation, both metadata snapshots, one transition append, the 129-entry prune probe and conditional
+partial-coverage update. Append prunes one indexed oldest row after the 129th retained change; terminal cleanup
+removes 25 rows per transaction. An addressed comparison observes at most two distinct historical Media references and performs a final
 native owner/lifetime/revision check after those observations. Growth evidence must vary Collections, changes and
 historical Media independently at 64, 512 and 4096, and count every participating database/Access pool, negative
 foreign observations, bytes, retries and cleanup; this source contract is not that runtime measurement.

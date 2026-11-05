@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { checkGrowth } from '../support/growth.ts';
 import { routeOf } from '../../src/route/route.ts';
 import metadataHistoryCleanup from '../../src/library/collection-metadata-history-cleanup.sql';
@@ -101,6 +102,27 @@ test('metadata history stays bounded as unrelated native Collection rows grow', 
     title: 'Addressed metadata change',
   });
   expect(changed.status).toBe(200);
+  const changedCollection = ((await changed.json()) as { collection: { revision: number } }).collection;
+  const noChangeKey = randomUUID();
+  const noChange = {
+    revision: changedCollection.revision,
+    title: 'Addressed metadata change',
+  };
+  expect(
+    (await f.send(f.owner.bearer, 'PATCH', `/v1/collections/${collection.id}`, noChange, noChangeKey)).status,
+  ).toBe(200);
+  expect(
+    (await f.send(f.owner.bearer, 'PATCH', `/v1/collections/${collection.id}`, noChange, noChangeKey)).status,
+  ).toBe(200);
+  const unchangedHistory = await f.send(
+    f.owner.bearer,
+    'GET',
+    `/v1/collections/${collection.id}/metadata-history?limit=25`,
+  );
+  expect(unchangedHistory.status).toBe(200);
+  expect(((await unchangedHistory.json()) as { items: { revision: number }[] }).items.map(({ revision }) => revision)).toEqual([
+    changedCollection.revision,
+  ]);
   const database = f.database;
   await checkGrowth(database, {
     name: 'Collection metadata history over unrelated Collection, member and Access rows',
@@ -112,8 +134,13 @@ test('metadata history stays bounded as unrelated native Collection rows grow', 
       await seedCollectionGrowthPopulation(db, scale / 1024, previous / 1024, f.owner.accountId, cover.subjectId);
     },
     async operation() {
-      const change = await readPageAndChange(collection.id, 2);
-      expect(change).toMatchObject({ revision: 2, before: { title: collection.title } });
+      const change = await readPageAndChange(collection.id, changedCollection.revision);
+      expect(change).toMatchObject({
+        revision: changedCollection.revision,
+        changedFields: ['title'],
+        before: { title: collection.title },
+        after: { title: 'Addressed metadata change' },
+      });
     },
   });
 }, 3_600_000);
