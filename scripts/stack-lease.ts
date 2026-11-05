@@ -139,7 +139,7 @@ async function lock(file: string, blocking = false): Promise<Lock | null> {
   };
 }
 
-function busy(file: string): boolean {
+export function busy(file: string): boolean {
   const result = Bun.spawnSync(['flock', '-n', '-E', String(BUSY), file, 'true'], {
     stdin: 'ignore',
     stdout: 'ignore',
